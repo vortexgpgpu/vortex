@@ -1,0 +1,17 @@
+- .string directive in assembler
+- mmaped mem devices (including ROM and file-backed RAM).
+- Anonymous chunks whose names are not saved by the object writer.
+- 32-bit coding for larger-pointered architecture versions.
+- HOFDump mode for HARPTool/HOFTool
+- Make operation information tables into functions of Instruction, if possible.
+- Anonymous assigned values in the assembler.
+- References (pointers) as .word directive contents in the assembler.
+- .byte directive for assembler.
+  - Make assembler writer capable of writing binary data without making size of
+    output a multiple of word size. Useful in pre-assembled code.
+- Instruction validation before encoding.
+- Make readError in obj.cpp throw something instead of printing the whine and
+  exiting.
+- Limit checking for byte/word encoders (e.g. 255 pRegs, 256 regs for byte)
+- Eliminate the tmp_buf nonsense from the chunk encoder.
+- Loosen arch restrictions imposed for interoperability.
