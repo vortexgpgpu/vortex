@@ -1,5 +1,3 @@
-- .string directive in assembler
-- mmaped mem devices (including ROM and file-backed RAM).
 - Anonymous chunks whose names are not saved by the object writer.
 - 32-bit coding for larger-pointered architecture versions.
 - HOFDump mode for HARPTool/HOFTool
