@@ -230,7 +230,7 @@ int emu_main(int argc, char **argv) {
   }
 
   MemoryUnit mu(4096, arch.getWordSize());
-  Core core(arch, *dec, mu);
+  Core core(arch, *dec, mu/*, ID in multicore implementations*/);
 
   RamMemDevice mem(imgFileName.c_str(), arch.getWordSize());
   ConsoleMemDevice console(arch.getWordSize(), cout, core);

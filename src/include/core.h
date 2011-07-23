@@ -15,7 +15,7 @@
 namespace Harp {
   class Core {
   public:
-    Core(const ArchDef &a, Decoder &d, MemoryUnit &mem);
+    Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id=0);
     void step();
     bool interrupt(Word r0);
     bool running() const { return activeThreads; }
@@ -25,7 +25,7 @@ namespace Harp {
     Decoder &iDec;
     MemoryUnit &mem;
 
-    Word pc, interruptEntry, shadowPc;
+    Word pc, interruptEntry, shadowPc, id;
     Size activeThreads, shadowActiveThreads;
     std::vector<std::vector<Word> > reg;
     std::vector<std::vector<bool> > pred;
