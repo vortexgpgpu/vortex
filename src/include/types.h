@@ -12,8 +12,8 @@ namespace Harp {
   typedef uint64_t Word_u;
   typedef int64_t  Word_s;
 
-  typedef Word     Addr;
-  typedef Word     Size;
+  typedef Word_u   Addr;
+  typedef Word_u   Size;
 
   typedef unsigned RegNum;
   typedef unsigned ThdNum;

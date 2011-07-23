@@ -7,6 +7,7 @@
 #include "include/instruction.h"
 #include "include/obj.h"
 #include "include/core.h"
+#include "include/harpfloat.h"
 
 using namespace Harp;
 using namespace std;
@@ -19,7 +20,8 @@ const char *Instruction::opStrings[] = {
   "ori", "xori", "addi", "subi", "muli", "divi", "modi", "shli", "shri", 
   "jali", "jalr", "jmpi", "jmpr", "clone", "jalis", "jalrs",
   "jmprt", "ld", "st", "ldi", "rtop", "andp", "orp", "xorp", "notp", 
-  "isneg", "iszero", "halt", "trap", "jmpru", "skep", "reti", "tlbrm", 0
+  "isneg", "iszero", "halt", "trap", "jmpru", "skep", "reti", "tlbrm",
+  "itof", "ftoi", "fadd", "fsub", "fmul", "fdiv", "fneg", 0
 };
 
 const bool Instruction::isControlFlow[] = {
@@ -28,7 +30,8 @@ const bool Instruction::isControlFlow[] = {
   false, false, false, false, false, false, false, false, false,
   true,  true,  true,  true,  true,  true,  true,
   true,  false, false, false, false, false, false, false, false,
-  false, false, false, false, true,  false, true,  false
+  false, false, false, false, true,  false, true,  false,
+  false, false, false, false, false, false, false
 };
 
 const bool Instruction::relAddress[] = {
@@ -37,7 +40,8 @@ const bool Instruction::relAddress[] = {
   false, false, false, false, false, false, false, false, false,
   true,  false, true,  false, false, true,  false,
   false, false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false
+  false, false, false, false, false, false, false, false,
+  false, false, false, false, false, false, false
 };
 
 const bool Instruction::allSrcArgs[] = {
@@ -46,7 +50,8 @@ const bool Instruction::allSrcArgs[] = {
   false, false, false, false, false, false, false, false, false,
   false, false, true,  true,  false, false, false,
   true,  false, true,  false, false, false, false, false, false,
-  false, false, false, false, true,  true,  false, false
+  false, false, false, false, true,  true,  false, false,
+  false, false, false, false, false, false, false
 };
 
 const bool Instruction::privileged[] = {
@@ -55,7 +60,8 @@ const bool Instruction::privileged[] = {
   false, false, false, false, false, false, false, false, false,
   false, false, false, false, false, false, false,
   false, false, false, false, false, false, false, false, false,
-  false, false, true,  false, true,  true,  true,  true
+  false, false, true,  false, true,  true,  true,  true,
+  false, false, false, false, false, false, false
 };
 
 const Instruction::ArgClass Instruction::argClasses[] = {
@@ -68,7 +74,8 @@ const Instruction::ArgClass Instruction::argClasses[] = {
   AC_1REG, AC_3IMM, AC_3IMMSRC, AC_2IMM, AC_PREG_REG, AC_3PREG, AC_3PREG, 
   AC_3PREG, AC_2PREG,
   AC_PREG_REG, AC_PREG_REG, AC_NONE, AC_NONE, AC_1REG, AC_1REG, AC_NONE,
-  AC_1REG
+  AC_1REG,
+  AC_2REG, AC_2REG, AC_3REG, AC_3REG, AC_3REG, AC_3REG, AC_2REG
 };
 
 ostream &Harp::operator<<(ostream& os, Instruction &inst) {
@@ -110,6 +117,7 @@ void Instruction::executeOn(Core &c) {
   }
 
   Size nextActiveThreads = c.activeThreads;
+  Size wordSz = c.a.getWordSize();
 
   for (Size t = 0; t < c.activeThreads; t++) {
     vector<Word> &reg(c.reg[t]);
@@ -192,7 +200,7 @@ void Instruction::executeOn(Core &c) {
                  break;
       case NOTP: pReg[pdest] = !(pReg[psrc[0]]);
                  break;
-      case ISNEG: pReg[pdest] = (1ll<<(c.a.getWordSize()*8 - 1))&reg[rsrc[0]];
+      case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
                   break;
       case HALT: c.activeThreads = 0;
                  nextActiveThreads = 0;
@@ -212,6 +220,24 @@ void Instruction::executeOn(Core &c) {
                    pReg = c.shadowPReg;
                    c.pc = c.shadowPc;
                  }
+                 break;
+      case ITOF: reg[rdest] = Float(double(reg[rsrc[0]]), wordSz);
+                 break; 
+      case FTOI: reg[rdest] = Word_s(double(Float(reg[rsrc[0]], wordSz)));
+                 break;
+      case FNEG: reg[rdest] = Float(-double(Float(reg[rsrc[0]],wordSz)),wordSz);
+                 break;
+      case FADD: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) +
+                                    double(Float(reg[rsrc[1]], wordSz)),wordSz);
+                 break;
+      case FSUB: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) -
+                                    double(Float(reg[rsrc[1]], wordSz)),wordSz);
+                 break;
+      case FMUL: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) *
+                                    double(Float(reg[rsrc[1]], wordSz)),wordSz);
+                 break;
+      case FDIV: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) /
+                                    double(Float(reg[rsrc[1]], wordSz)),wordSz);
                  break;
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
