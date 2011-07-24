@@ -109,7 +109,7 @@ Instruction *ByteDecoder::decode(const vector<Byte> &v, Size &n) {
 
   bool usedImm = false;
 
-  switch (Instruction::argClasses[op]) {
+  switch (Instruction::instTable[op].argClass) {
     case Instruction::AC_NONE:
       break;
     case Instruction::AC_2REG:
@@ -276,7 +276,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
   inst.setOpcode(op);
 
   bool usedImm(false);
-  switch(Instruction::argClasses[op]) {
+  switch(Instruction::instTable[op].argClass) {
     case Instruction::AC_NONE: 
       break;
     case Instruction::AC_1IMM:

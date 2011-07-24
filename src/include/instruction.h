@@ -35,9 +35,13 @@ namespace Harp {
       AC_NONE, AC_2REG, AC_2IMM, AC_3REG, AC_3PREG, AC_3IMM, AC_3REGSRC, 
       AC_1IMM, AC_1REG, AC_3IMMSRC, AC_PREG_REG, AC_2PREG
     };
-    static const char *opStrings[];
-    static const bool allSrcArgs[], privileged[], relAddress[], isControlFlow[];
-    static const ArgClass argClasses[];
+
+    // We build a table of instruction information out of this.
+    static struct InstTableEntry {
+      const char *opString;
+      bool controlFlow, relAddress, allSrcArgs, privileged;
+      ArgClass argClass;
+    } instTable[];
 
     Instruction() : 
       predicated(false), nRsrc(0), nPsrc(0), immsrcPresent(false), 
@@ -75,7 +79,7 @@ namespace Harp {
     Ref *getRefLiteral() const { return refLiteral; }
 
     /* Getters used as table lookup. */
-    bool hasRelImm() const { return relAddress[op]; }
+    bool hasRelImm() const { return instTable[op].relAddress; }
 
   private:
     bool predicated;

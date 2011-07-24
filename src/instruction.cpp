@@ -14,68 +14,68 @@ using namespace std;
 
 /* It is important that this stays consistent with the Harp::Instruction::Opcode
    enum. */
-const char *Instruction::opStrings[] = {
-  "nop", "di", "ei", "tlbadd", "tlbflush", "neg", "not", "and", "or", "xor",
-  "add", "sub", "mul", "div", "mod", "shl", "shr","andi", 
-  "ori", "xori", "addi", "subi", "muli", "divi", "modi", "shli", "shri", 
-  "jali", "jalr", "jmpi", "jmpr", "clone", "jalis", "jalrs",
-  "jmprt", "ld", "st", "ldi", "rtop", "andp", "orp", "xorp", "notp", 
-  "isneg", "iszero", "halt", "trap", "jmpru", "skep", "reti", "tlbrm",
-  "itof", "ftoi", "fadd", "fsub", "fmul", "fdiv", "fneg", 0
-};
 
-const bool Instruction::isControlFlow[] = {
-  false, false, false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false, false,
-  true,  true,  true,  true,  true,  true,  true,
-  true,  false, false, false, false, false, false, false, false,
-  false, false, false, false, true,  false, true,  false,
-  false, false, false, false, false, false, false
-};
-
-const bool Instruction::relAddress[] = {
-  false, false, false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false, false,
-  true,  false, true,  false, false, true,  false,
-  false, false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false
-};
-
-const bool Instruction::allSrcArgs[] = {
-  false, false, false, true,  false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false, false,
-  false, false, true,  true,  false, false, false,
-  true,  false, true,  false, false, false, false, false, false,
-  false, false, false, false, true,  true,  false, false,
-  false, false, false, false, false, false, false
-};
-
-const bool Instruction::privileged[] = {
-  false, true,  true,  true,  true,  false, false, false, false, false,
-  false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false,
-  false, false, false, false, false, false, false, false, false,
-  false, false, true,  false, true,  true,  true,  true,
-  false, false, false, false, false, false, false
-};
-
-const Instruction::ArgClass Instruction::argClasses[] = {
-  AC_NONE, AC_NONE, AC_NONE, AC_3REGSRC, AC_NONE, AC_2REG, AC_2REG, AC_3REG,
-  AC_3REG, AC_3REG,
-  AC_3REG, AC_3REG, AC_3REG, AC_3REG, AC_3REG, AC_3REG, AC_3REG, AC_3IMM,
-  AC_3IMM, AC_3IMM, AC_3IMM, AC_3IMM, AC_3IMM, AC_3IMM, AC_3IMM, AC_3IMM,
-  AC_3IMM,
-  AC_2IMM, AC_2REG, AC_1IMM, AC_1REG, AC_1REG, AC_3IMM, AC_3REG,
-  AC_1REG, AC_3IMM, AC_3IMMSRC, AC_2IMM, AC_PREG_REG, AC_3PREG, AC_3PREG, 
-  AC_3PREG, AC_2PREG,
-  AC_PREG_REG, AC_PREG_REG, AC_NONE, AC_NONE, AC_1REG, AC_1REG, AC_NONE,
-  AC_1REG,
-  AC_2REG, AC_2REG, AC_3REG, AC_3REG, AC_3REG, AC_3REG, AC_2REG
+Instruction::InstTableEntry Instruction::instTable[] = {
+  //str        cflow  relad  allsrc priv   argcl
+  {"nop",      false, false, false, false, AC_NONE    },
+  {"di",       false, false, false, true,  AC_NONE    },
+  {"ei",       false, false, false, true,  AC_NONE    },
+  {"tlbadd",   false, false, true,  true,  AC_3REGSRC },
+  {"tlbflush", false, false, false, true,  AC_NONE    },
+  {"neg",      false, false, false, false, AC_2REG    },
+  {"not",      false, false, false, false, AC_2REG    },
+  {"and",      false, false, false, false, AC_3REG    },
+  {"or",       false, false, false, false, AC_3REG    },
+  {"xor",      false, false, false, false, AC_3REG    },
+  {"add",      false, false, false, false, AC_3REG    },
+  {"sub",      false, false, false, false, AC_3REG    },
+  {"mul",      false, false, false, false, AC_3REG    },
+  {"div",      false, false, false, false, AC_3REG    },
+  {"mod",      false, false, false, false, AC_3REG    },
+  {"shl",      false, false, false, false, AC_3REG    },
+  {"shr",      false, false, false, false, AC_3REG    },
+  {"andi",     false, false, false, false, AC_3IMM    },
+  {"ori",      false, false, false, false, AC_3IMM    },
+  {"xori",     false, false, false, false, AC_3IMM    },
+  {"addi",     false, false, false, false, AC_3IMM    },
+  {"subi",     false, false, false, false, AC_3IMM    },
+  {"muli",     false, false, false, false, AC_3IMM    },
+  {"divi",     false, false, false, false, AC_3IMM    },
+  {"modi",     false, false, false, false, AC_3IMM    },
+  {"shli",     false, false, false, false, AC_3IMM    },
+  {"shri",     false, false, false, false, AC_3IMM    },
+  {"jali",     true,  true,  false, false, AC_2IMM    },
+  {"jalr",     true,  false, false, false, AC_2REG    },
+  {"jmpi",     true,  true,  true,  false, AC_1IMM    },
+  {"jmpr",     true,  false, true,  false, AC_1REG    },
+  {"clone",    true,  false, false, false, AC_1REG    },
+  {"jalis",    true,  true,  false, false, AC_3IMM    },
+  {"jalrs",    true,  false, false, false, AC_3REG    },
+  {"jmprt",    true,  false, true,  false, AC_1REG    },
+  {"ld",       false, false, false, false, AC_3IMM    },
+  {"st",       false, false,  true,  false, AC_3IMMSRC },
+  {"ldi",      false, false, false, false, AC_2IMM    },
+  {"rtop",     false, false, false, false, AC_PREG_REG},
+  {"andp",     false, false, false, false, AC_3PREG   },
+  {"orp",      false, false, false, false, AC_3PREG   },
+  {"xorp",     false, false, false, false, AC_3PREG   },
+  {"notp",     false, false, false, false, AC_3PREG   },
+  {"isneg",    false, false, false, false, AC_PREG_REG},
+  {"iszero",   false, false, false, false, AC_PREG_REG},
+  {"halt",     false, false, false, true,  AC_NONE    },
+  {"trap",     true,  false, false, false, AC_NONE    },
+  {"jmpru",    false, false, false, true,  AC_1REG    },
+  {"skep",     false, false, false, true,  AC_1REG    },
+  {"reti",     true,  false, false, true,  AC_NONE    },
+  {"tlbrm",    false, false, false, true,  AC_1REG    },
+  {"itof",     false, false, false, false, AC_2REG    },
+  {"ftoi",     false, false, false, false, AC_2REG    },
+  {"fadd",     false, false, false, false, AC_3REG    },
+  {"fsub",     false, false, false, false, AC_3REG    },
+  {"fmul",     false, false, false, false, AC_3REG    },
+  {"fdiv",     false, false, false, false, AC_3REG    },
+  {"fneg",     false, false, false, false, AC_2REG    },
+  {NULL,false,false,false,false,AC_NONE}/////////////// End of table.
 };
 
 ostream &Harp::operator<<(ostream& os, Instruction &inst) {
@@ -83,7 +83,7 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
     os << "@p" << inst.pred << " ? ";
   }
 
-  os << Instruction::opStrings[inst.op] << ' ';
+  os << Instruction::instTable[inst.op].opString << ' ';
   if (inst.rdestPresent) os << "%r" << inst.rdest << ' ';
   if (inst.pdestPresent) os << "@p" << inst.pdest << ' ';
   for (int i = 0; i < inst.nRsrc; i++) {
@@ -104,12 +104,12 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
 void Instruction::executeOn(Core &c) {
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
-  if (privileged[op] && !c.supervisorMode) {
+  if (instTable[op].privileged && !c.supervisorMode) {
     c.interrupt(3);
     return;
   }
 
-  if (predicated && isControlFlow[op]) {
+  if (predicated && instTable[op].controlFlow) {
     bool p0 = c.pred[0][pred];
     for (Size t = 1; t < c.activeThreads; t++) {
       if (c.pred[t][pred] != p0) throw DivergentBranchException();
@@ -244,7 +244,7 @@ void Instruction::executeOn(Core &c) {
         exit(1);
     }
 
-    if (isControlFlow[op]) break;
+    if (instTable[op].controlFlow) break;
   }
 
   c.activeThreads = nextActiveThreads;

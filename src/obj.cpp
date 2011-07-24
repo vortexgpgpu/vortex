@@ -104,8 +104,9 @@ Obj *AsmReader::read(std::istream &input) {
   map <string, Instruction::Opcode> opMap;
 
   // Build opMap
-  for (size_t i = 0; Instruction::opStrings[i]; i++)
-    opMap[std::string(Instruction::opStrings[i])] = Instruction::Opcode(i);
+  for (size_t i = 0; Instruction::instTable[i].opString; i++)
+    opMap[std::string(Instruction::instTable[i].opString)] 
+                                                       = Instruction::Opcode(i);
 
   enum { 
     ST_INIT, ST_DEF1, ST_DEF2, ST_PERM, ST_WORD1, ST_WORD2, ST_STRING1,
@@ -316,7 +317,7 @@ Obj *AsmReader::read(std::istream &input) {
             nextPred = false;
             curInst->setPred(nextPredNum);
           }
-          state = Instruction::allSrcArgs[opc]?ST_INST2:ST_INST1;
+          state = Instruction::instTable[opc].allSrcArgs?ST_INST2:ST_INST1;
         } else { asmReaderError(yyline, "Unexpected token"); }
         break;
       case ASM_T_PREG:
