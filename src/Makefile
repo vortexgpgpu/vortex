@@ -1,10 +1,22 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS=-g
+CXXFLAGS=-g -fPIC
 
-harptool: harptool.o args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
-	g++ -o $@ args.o obj.o mem.o core.o harptool.o instruction.o enc.o util.o lex.yy.o -pthread
+LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
+
+all: harptool libharplib.so libharplib.a
+
+# Use -static so we don't have to install the library in order to just run
+# Harptool.
+harptool: harptool.o libharplib.a
+	$(CXX) -static -o $@ harptool.o -L. -lharplib  -pthread
+
+libharplib.so: $(LIB_OBJS)
+	$(CXX) -shared -o $@ $(LIB_OBJS)
+
+libharplib.a: $(LIB_OBJS)
+	ar rcs $@ $(LIB_OBJS)
 
 args.o : args.cpp include/args.h
 enc.o : enc.cpp include/types.h include/util.h include/enc.h include/archdef.h include/instruction.h
@@ -19,4 +31,4 @@ lex.yy.cc: scanner.lex
 	flex scanner.lex
 
 clean:
-	rm -f *~ \#* *.o include/*~ include/\#* harptool *.HOF a.out.*
+	rm -f *~ \#* *.o *.a *.so include/*~ include/\#* harptool
