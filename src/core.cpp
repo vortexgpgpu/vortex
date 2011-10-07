@@ -18,7 +18,7 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) :
   a(a), iDec(d), mem(mem), pc(0), interruptEnable(false), supervisorMode(true),
   activeThreads(1),
   reg(a.getNThds(), vector<Word>(a.getNRegs())),
-  pred(a.getNPRegs(), vector<bool>(a.getNPRegs())),
+  pred(a.getNThds(), vector<bool>(a.getNPRegs())),
   shadowReg(), shadowPReg(), interruptEntry(0), id(id)
 { reg[0][0] = (a.getNThds()<<(a.getWordSize()*8 / 2)) | id; }
 
