@@ -53,7 +53,7 @@ Instruction::InstTableEntry Instruction::instTable[] = {
   {"jalrs",    true,  false, false, false, AC_3REG    },
   {"jmprt",    true,  false, true,  false, AC_1REG    },
   {"ld",       false, false, false, false, AC_3IMM    },
-  {"st",       false, false,  true,  false, AC_3IMMSRC },
+  {"st",       false, false, true,  false, AC_3IMMSRC },
   {"ldi",      false, false, false, false, AC_2IMM    },
   {"rtop",     false, false, false, false, AC_PREG_REG},
   {"andp",     false, false, false, false, AC_3PREG   },
@@ -109,6 +109,7 @@ void Instruction::executeOn(Core &c) {
     return;
   }
 
+  /* Also throw exceptions on divergent branches. */
   if (predicated && instTable[op].controlFlow) {
     bool p0 = c.pred[0][pred];
     for (Size t = 1; t < c.activeThreads; t++) {
@@ -120,8 +121,8 @@ void Instruction::executeOn(Core &c) {
   Size wordSz = c.a.getWordSize();
 
   for (Size t = 0; t < c.activeThreads; t++) {
-    vector<Word> &reg(c.reg[t]);
-    vector<bool> &pReg(c.pred[t]);
+    vector<Reg<Word> > &reg(c.reg[t]);
+    vector<Reg<bool> > &pReg(c.pred[t]);
 
     if (predicated && !pReg[pred]) continue;
 
@@ -216,8 +217,10 @@ void Instruction::executeOn(Core &c) {
                    nextActiveThreads = c.shadowActiveThreads;
                    c.interruptEnable = c.shadowInterruptEnable;
                    c.supervisorMode = c.shadowSupervisorMode;
-                   reg = c.shadowReg;
-                   pReg = c.shadowPReg;
+                   for (unsigned i = 0; i < reg.size(); ++i)
+                     reg[i] = c.shadowReg[i];
+                   for (unsigned i = 0; i < pReg.size(); ++i)
+                     pReg[i] = c.shadowPReg[i];
                    c.pc = c.shadowPc;
                  }
                  break;

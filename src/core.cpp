@@ -16,11 +16,24 @@ using namespace std;
 
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) : 
   a(a), iDec(d), mem(mem), pc(0), interruptEnable(false), supervisorMode(true),
-  activeThreads(1),
-  reg(a.getNThds(), vector<Word>(a.getNRegs())),
-  pred(a.getNThds(), vector<bool>(a.getNPRegs())),
-  shadowReg(), shadowPReg(), interruptEntry(0), id(id)
-{ reg[0][0] = (a.getNThds()<<(a.getWordSize()*8 / 2)) | id; }
+  activeThreads(1), reg(0), pred(0), shadowReg(a.getNRegs()), shadowPReg(a.getNPRegs()o),
+  interruptEntry(0), id(id)
+{
+  /* Build the register file. */
+  Word regNum(0);
+  for (Word j = 0; j < a.getNThds(); ++j) {
+    reg.push_back(vector<Reg<Word> >(0));
+    for (Word i = 0; i < a.getNRegs(); ++i)
+      reg[j].push_back(Reg<Word>(id, regNum++));
+
+    pred.push_back(vector<Reg<bool> >(0));
+    for (Word i = 0; i < a.getNPRegs(); ++i)
+      pred[j].push_back(Reg<bool>(id, regNum++));
+  }
+
+  /* Set initial register contents. */
+  reg[0][0] = (a.getNThds()<<(a.getWordSize()*8 / 2)) | id;
+}
 
 void Core::step() {
   Size fetchPos(0), decPos, wordSize(a.getWordSize());
@@ -82,8 +95,10 @@ bool Core::interrupt(Word r0) {
   shadowActiveThreads = activeThreads;
   shadowInterruptEnable = interruptEnable; /* For traps. */
   shadowSupervisorMode = supervisorMode;
-  shadowReg = reg[0];
-  shadowPReg = pred[0];
+  
+  for (Word i = 0; i < reg[0].size(); ++i) shadowReg[i] = reg[0][i];
+  for (Word i = 0; i < pred[0].size(); ++i) shadowPReg[i] = pred[0][i];
+
   shadowPc = pc;
   activeThreads = 1;
   interruptEnable = false;
