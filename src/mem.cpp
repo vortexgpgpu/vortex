@@ -110,6 +110,9 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(Addr vAddr, Word flagMask) {
 }
 
 Word MemoryUnit::read(Addr vAddr, bool sup) {
+#ifdef EMU_INSTRUMENTATION
+#error TODO: instrument Harp::MemoryUnit::read()
+#endif
   Word flagMask = sup?8:1;
   TLBEntry t = tlbLookup(vAddr, flagMask);
   Addr pAddr = t.pfn*pageSize + vAddr%pageSize;
@@ -117,6 +120,9 @@ Word MemoryUnit::read(Addr vAddr, bool sup) {
 }
 
 Word MemoryUnit::fetch(Addr vAddr, bool sup) {
+#ifdef EMU_INSTRUMENTATION
+#error TODO: instrument Harp::MemoryUnit::fetch()
+#endif
   Word flagMask = sup?32:4;
   TLBEntry t = tlbLookup(vAddr, flagMask);
   Addr pAddr = t.pfn*pageSize + vAddr%pageSize;
@@ -124,6 +130,9 @@ Word MemoryUnit::fetch(Addr vAddr, bool sup) {
 }
 
 void MemoryUnit::write(Addr vAddr, Word w, bool sup) {
+#ifdef EMU_INSTRUMENTATION
+#error TODO: instrument Harp::MemoryUnit::write()
+#endif
   Word flagMask = sup?16:2;
   TLBEntry t = tlbLookup(vAddr, flagMask);
   Addr pAddr = t.pfn*pageSize + vAddr%pageSize;

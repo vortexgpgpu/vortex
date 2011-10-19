@@ -90,7 +90,9 @@ void Core::step() {
 bool Core::interrupt(Word r0) {
   if (!interruptEnable) return false;
 
-  //cout << "Interrupt: " << r0 << '\n';
+#ifdef EMU_INSTRUMENTATION
+#error TODO: instrument Harp::Core::interrupt()
+#endif
 
   shadowActiveThreads = activeThreads;
   shadowInterruptEnable = interruptEnable; /* For traps. */

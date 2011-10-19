@@ -35,12 +35,17 @@ namespace Harp {
       AC_NONE, AC_2REG, AC_2IMM, AC_3REG, AC_3PREG, AC_3IMM, AC_3REGSRC, 
       AC_1IMM, AC_1REG, AC_3IMMSRC, AC_PREG_REG, AC_2PREG
     };
+    enum InstType {
+      ITYPE_NULL, ITYPE_INTBASIC, ITYPE_INTMUL, ITYPE_INTDIV, ITYPE_STACK, ITYPE_BR, 
+      ITYPE_CALL, ITYPE_RET, ITYPE_TRAP, ITYPE_FPBASIC, ITYPE_FPMUL, ITYPE_FPDIV
+    };
 
     // We build a table of instruction information out of this.
     static struct InstTableEntry {
       const char *opString;
       bool controlFlow, relAddress, allSrcArgs, privileged;
       ArgClass argClass;
+      InstType iType;
     } instTable[];
 
     Instruction() : 
