@@ -16,7 +16,7 @@ using namespace std;
 
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) : 
   a(a), iDec(d), mem(mem), pc(0), interruptEnable(false), supervisorMode(true),
-  activeThreads(1), reg(0), pred(0), shadowReg(a.getNRegs()), shadowPReg(a.getNPRegs()o),
+  activeThreads(1), reg(0), pred(0), shadowReg(a.getNRegs()), shadowPReg(a.getNPRegs()),
   interruptEntry(0), id(id)
 {
   /* Build the register file. */
