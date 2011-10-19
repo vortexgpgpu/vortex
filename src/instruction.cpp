@@ -194,10 +194,16 @@ void Instruction::executeOn(Core &c) {
                   c.pc = reg[rsrc[0]];
                   break;
       case LD: memAddr = reg[rsrc[0]] + immsrc;
+#ifdef EMU_INSTRUMENTATION
+#error TODO: Instrument memory reads.
+#endif
                reg[rdest] = c.mem.read(memAddr, c.supervisorMode);
                break;
       case ST: memAddr = reg[rsrc[1]] + immsrc;
                c.mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
+#ifdef EMU_INSTRUMENTATION
+#error TODO: Instrument memory writes.
+#endif
                break;
       case LDI: reg[rdest] = immsrc;
                 break;

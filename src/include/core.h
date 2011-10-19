@@ -39,6 +39,9 @@ namespace Harp {
     void step();
     bool interrupt(Word r0);
     bool running() const { return activeThreads; }
+#ifdef EMU_INSTRUMENTATION
+    bool supervisorMode() const { return supervisorMode; }
+#endif
 
   private:
     const ArchDef &a;
