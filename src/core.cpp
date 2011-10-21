@@ -11,8 +11,22 @@
 #include "include/enc.h"
 #include "include/core.h"
 
+#ifdef EMU_INSTRUMENTATION
+#include "include/qsim-harp.h"
+#endif
+
 using namespace Harp;
 using namespace std;
+
+#ifdef EMU_INSTRUMENTATION
+void Harp::reg_doRead(Word cpuId, Word regNum) {
+  Harp::OSDomain::osDomain->do_reg(cpuId, regNum, 8, true);
+}
+
+void Harp::reg_doWrite(Word cpuId, Word regNum) {
+  Harp::OSDomain::osDomain->do_reg(cpuId, regNum, 8, false);
+}
+#endif
 
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) : 
   a(a), iDec(d), mem(mem), pc(0), interruptEnable(false), supervisorMode(true),
@@ -66,6 +80,14 @@ void Core::step() {
   } while (fetchMore);
   //cout << "0x" << hex << pc << ": " << *inst << '\n';
 
+#ifdef EMU_INSTRUMENTATION
+  { Addr pcPhys(mem.virtToPhys(pc));
+    Harp::OSDomain::osDomain->
+      do_inst(0, pc, pcPhys, decPos, mem.getPtr(pcPhys, decPos), 
+              (enum inst_type)inst->instTable[inst->getOpcode()].iType);
+  }
+#endif
+
   /* Update pc */
   pc += decPos;
 
@@ -91,7 +113,7 @@ bool Core::interrupt(Word r0) {
   if (!interruptEnable) return false;
 
 #ifdef EMU_INSTRUMENTATION
-#error TODO: instrument Harp::Core::interrupt()
+  Harp::OSDomain::osDomain->do_int(0, r0);
 #endif
 
   shadowActiveThreads = activeThreads;

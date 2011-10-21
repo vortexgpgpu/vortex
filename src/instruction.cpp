@@ -9,6 +9,10 @@
 #include "include/core.h"
 #include "include/harpfloat.h"
 
+#ifdef EMU_INSTRUMENTATION
+#include "include/qsim-harp.h"
+#endif
+
 using namespace Harp;
 using namespace std;
 
@@ -102,10 +106,6 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
 }
 
 void Instruction::executeOn(Core &c) {
-#ifdef EMU_INSTRUMENTATION
-#error TODO: instrument Harp::Instruction::executeOn()
-#endif
-    
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
@@ -195,14 +195,16 @@ void Instruction::executeOn(Core &c) {
                   break;
       case LD: memAddr = reg[rsrc[0]] + immsrc;
 #ifdef EMU_INSTRUMENTATION
-#error TODO: Instrument memory reads.
+               Harp::OSDomain::osDomain->
+                 do_mem(0, memAddr, c.mem.virtToPhys(memAddr), 8, true);
 #endif
                reg[rdest] = c.mem.read(memAddr, c.supervisorMode);
                break;
       case ST: memAddr = reg[rsrc[1]] + immsrc;
                c.mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
 #ifdef EMU_INSTRUMENTATION
-#error TODO: Instrument memory writes.
+               Harp::OSDomain::osDomain->
+                 do_mem(0, memAddr, c.mem.virtToPhys(memAddr), 8, true);
 #endif
                break;
       case LDI: reg[rdest] = immsrc;

@@ -109,6 +109,13 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(Addr vAddr, Word flagMask) {
   }
 }
 
+#ifdef EMU_INSTRUMENTATION
+Addr MemoryUnit::virtToPhys(Addr vAddr) {
+  TLBEntry t = tlbLookup(vAddr, 077);
+  return t.pfn*pageSize + vAddr%pageSize;
+}
+#endif
+
 Word MemoryUnit::read(Addr vAddr, bool sup) {
   Word flagMask = sup?8:1;
   TLBEntry t = tlbLookup(vAddr, flagMask);

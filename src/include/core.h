@@ -13,6 +13,11 @@
 #include "mem.h"
 
 namespace Harp {
+#ifdef EMU_INSTRUMENTATION
+  void reg_doWrite(Word cpuId, Word regNum);
+  void reg_doRead(Word cpuId, Word regNum);
+#endif
+
   template <typename T> class Reg {
   public:
     Reg(): cpuId(0), regNum(0) {}
@@ -26,7 +31,9 @@ namespace Harp {
     T val;
 
 #ifdef EMU_INSTRUMENTATION
-#error TODO: instrument Harp::Reg.
+    /* Access size here is 8, representing the register size of 64-bit cores. */
+    void doWrite() { reg_doWrite(cpuId, regNum); }
+    void doRead() { reg_doRead(cpuId, regNum); }
 #else
     void doWrite() {}
     void doRead() {}
@@ -40,11 +47,11 @@ namespace Harp {
     bool interrupt(Word r0);
     bool running() const { return activeThreads; }
 #ifdef EMU_INSTRUMENTATION
-    bool supervisorMode() const { return supervisorMode; }
+    bool getSupervisorMode() const { return supervisorMode; }
 #endif
 
   private:
-    const ArchDef &a;
+    const ArchDef a;
     Decoder &iDec;
     MemoryUnit &mem;
 

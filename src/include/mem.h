@@ -127,6 +127,10 @@ namespace Harp {
     void tlbRm(Addr va);
     void tlbFlush() { tlb.clear(); }
 
+#ifdef EMU_INSTRUMENTATION
+    Addr virtToPhys(Addr va);
+#endif
+
   private:
     class ADecoder {
     public:

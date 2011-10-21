@@ -5,7 +5,7 @@ CXXFLAGS=-g -fPIC
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
-all: harptool libharplib.so libharplib.a
+all: harptool libharplib.so libharplib.a qsim-harp.so
 
 # Use -static so we don't have to install the library in order to just run
 # Harptool.

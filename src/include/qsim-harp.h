@@ -22,7 +22,7 @@
 namespace Harp {
   class OSDomain {
   public:
-    OSDomain(Harp::ArchDef arch, std::string imgFile);
+    OSDomain(Harp::ArchDef &arch, std::string imgFile);
 
     bool idle(unsigned i) const { return cpus[i].idle(); }
     int get_tid(unsigned i) const { return cpus[i].get_tid(); }
@@ -89,56 +89,60 @@ namespace Harp {
     template <typename T> void mem_wr(T& d, uint64_t paddr);
     template <typename T> void mem_wr_virt(unsigned i, T& d, uint64_t vaddr);
 
-  private:
+    static OSDomain *osDomain;
+
     bool do_atomic(unsigned c) {
       bool rval(false);
       for (unsigned i = 0; i < atomic_cbs.size(); ++i)
-        if (atomic_cbs[i](c)) rval = true;
+        if ((*atomic_cbs[i])(c)) rval = true;
       return rval;
     }
 
-    void do_inst(unsigned c, uint64_t va, uint64_t pa, uint8_t l, const char *b,
-                 enum inst_type t)
+    void do_inst(unsigned c, uint64_t va, uint64_t pa, uint8_t l, 
+                 const uint8_t *b, enum inst_type t)
     {
       for (unsigned i = 0; i < inst_cbs.size(); ++i)
-        inst_cbs[i](c, va, pa, l, b, t);
+        (*inst_cbs[i])(c, va, pa, l, b, t);
     }
 
     void do_int(unsigned c, int v) {
       for (unsigned i = 0; i < int_cbs.size(); ++i)
-        int_cbs[i](c, v);
+        (*int_cbs[i])(c, v);
     }
 
     void do_mem(unsigned c, uint64_t va, uint64_t pa, uint8_t s, bool w) {
       for (unsigned i = 0; i < mem_cbs.size(); ++i)
-        mem_cbs[i](c, va, pa, s, w);
+        (*mem_cbs[i])(c, va, pa, s, w);
     }
 
-    void do_magic(unsigned c, uint64_t r0) {
+    bool do_magic(unsigned c, uint64_t r0) {
       bool rval(false);
       for (unsigned i = 0; i < magic_cbs.size(); ++i)
-        if (magic_cbs[i](c, r0)) rval = true;
+        if ((*magic_cbs[i])(c, r0)) rval = true;
       return rval;
     }
 
     void do_reg(unsigned c, int r, uint8_t s, bool w) {
       for (unsigned i = 0; i < reg_cbs.size(); ++i)
-        reg_cbs[i](c, r, s, w);
+        (*reg_cbs[i])(c, r, s, w);
     }
 
-    struct Cpu {
+  private:
+    class Cpu {
+    public:
       Cpu(Harp::OSDomain &osd);
+      ~Cpu() { delete dec; delete core; }
 
       bool idle() const { return false; }
       int get_tid() const { return 0; }
-      bool get_prot() const { return core.supervisorMode(); }
+      bool get_prot() const { return core->getSupervisorMode(); }
       uint64_t run(uint64_t n);
-      void interrupt(int vec) { core.interrupt(vec); }
-      bool booted() { return core.running(); }
+      void interrupt(int vec) { core->interrupt(vec); }
+      bool booted() const { return core->running(); }
 
       Harp::Decoder *dec;
-      Harp::Core core;
-      Harp::OSDomain &osd;
+      Harp::Core *core;
+      Harp::OSDomain *osd;
     };
 
     Harp::ArchDef arch;
@@ -149,12 +153,12 @@ namespace Harp {
 
     std::vector <Harp::OSDomain::Cpu> cpus;
 
-    std::vector <Harp::OSdomain::atomic_cb_obj_base*> atomic_cbs;
-    std::vector <Harp::OSdomain::inst_cb_obj_base*>   inst_cbs;
-    std::vector <Harp::OSdomain::int_cb_obj_base*>    int_cbs;
-    std::vector <Harp::OSdomain::mem_cb_obj_base*>    mem_cbs;
-    std::vector <Harp::OSdomain::magic_cb_obj_base*>  magic_cbs;
-    std::vector <Harp::OSdomain::reg_cb_obj_base*>    reg_cbs;
+    std::vector <Qsim::OSDomain::atomic_cb_obj_base*> atomic_cbs;
+    std::vector <Qsim::OSDomain::inst_cb_obj_base*>   inst_cbs;
+    std::vector <Qsim::OSDomain::int_cb_obj_base*>    int_cbs;
+    std::vector <Qsim::OSDomain::mem_cb_obj_base*>    mem_cbs;
+    std::vector <Qsim::OSDomain::magic_cb_obj_base*>  magic_cbs;
+    std::vector <Qsim::OSDomain::reg_cb_obj_base*>    reg_cbs;
   };
 };
 #endif
