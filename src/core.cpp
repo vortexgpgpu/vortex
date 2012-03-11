@@ -30,19 +30,26 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) : 
   a(a), iDec(d), mem(mem), pc(0), interruptEnable(false), supervisorMode(true),
-  activeThreads(1), reg(0), pred(0), shadowReg(a.getNRegs()), shadowPReg(a.getNPRegs()),
-  interruptEntry(0), id(id)
+  activeThreads(1), reg(0), pred(0), shadowReg(a.getNRegs()),
+  shadowPReg(a.getNPRegs()), interruptEntry(0), id(id)
 {
   /* Build the register file. */
   Word regNum(0);
   for (Word j = 0; j < a.getNThds(); ++j) {
+    std::cout << "Pushing back a new register vector.\n";
     reg.push_back(vector<Reg<Word> >(0));
-    for (Word i = 0; i < a.getNRegs(); ++i)
+    for (Word i = 0; i < a.getNRegs(); ++i) {
+      std::cout << "Pushing back a new register in thread " << j << "\n";
       reg[j].push_back(Reg<Word>(id, regNum++));
+    }
 
     pred.push_back(vector<Reg<bool> >(0));
-    for (Word i = 0; i < a.getNPRegs(); ++i)
+    std::cout << "getnpregs returns " << a.getNPRegs() << '\n';
+    for (Word i = 0; i < a.getNPRegs(); ++i) {
+      std::cout << "Pushing back predicate reg " << i << ", thread " << j 
+                << "\n";
       pred[j].push_back(Reg<bool>(id, regNum++));
+    }
   }
 
   /* Set initial register contents. */
@@ -54,6 +61,8 @@ void Core::step() {
   vector<Byte> fetchBuffer(wordSize);
 
   if (activeThreads == 0) return;
+
+  cout << "in step pc=0x" << hex << pc << '\n';
 
   /* Fetch and decode. */
   if (wordSize < sizeof(pc)) pc &= ((1ll<<(wordSize*8))-1);
@@ -78,7 +87,9 @@ void Core::step() {
       interrupt(pf.notFound?1:2);
     }
   } while (fetchMore);
+  cout << "Fetched at 0x" << hex << pc << '\n';
   //cout << "0x" << hex << pc << ": " << *inst << '\n';
+  cout << "sizeof(core)=" << dec << sizeof(*this) << '\n';
 
 #ifdef EMU_INSTRUMENTATION
   { Addr pcPhys(mem.virtToPhys(pc));

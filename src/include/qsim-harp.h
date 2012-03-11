@@ -1,6 +1,10 @@
 /*******************************************************************************
  HARPtools by Chad D. Kersey, Summer 2011
 *******************************************************************************/
+#ifndef EMU_INSTRUMENTATION
+#define EMU_INSTRUMENTATION
+#endif
+
 #ifndef __QSIM_HARP_H
 #define __QSIM_HARP_H
 
@@ -131,7 +135,8 @@ namespace Harp {
     class Cpu {
     public:
       Cpu(Harp::OSDomain &osd);
-      ~Cpu() { delete dec; delete core; }
+      Cpu(): dec(NULL), core(NULL) {}
+      ~Cpu() { if (dec) delete dec; if (core) delete core; }
 
       bool idle() const { return false; }
       int get_tid() const { return 0; }
@@ -140,9 +145,9 @@ namespace Harp {
       void interrupt(int vec) { core->interrupt(vec); }
       bool booted() const { return core->running(); }
 
+      Harp::OSDomain *osd;
       Harp::Decoder *dec;
       Harp::Core *core;
-      Harp::OSDomain *osd;
     };
 
     Harp::ArchDef arch;

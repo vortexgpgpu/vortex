@@ -50,7 +50,7 @@ namespace Harp {
     bool getSupervisorMode() const { return supervisorMode; }
 #endif
 
-  private:
+//  private:
     const ArchDef a;
     Decoder &iDec;
     MemoryUnit &mem;
