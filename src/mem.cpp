@@ -51,7 +51,8 @@ MemDevice &MemoryUnit::ADecoder::doLookup(Addr a, Size &bit) {
   if (range == 0 || (a&((1ll<<bit)-1)) >= range) {
     ADecoder *p(((a>>bit)&1)?oneChild:zeroChild);
     if (p) { bit--; return p->doLookup(a, bit); }
-    else {cout << "lookup failed.\n"; throw BadAddress();}
+    else {cout << "lookup of 0x" << hex << a << " failed.\n";
+          throw BadAddress();}
   } else {
     return *md;
   }
@@ -138,6 +139,7 @@ void MemoryUnit::write(Addr vAddr, Word w, bool sup) {
 }
 
 void MemoryUnit::tlbAdd(Addr virt, Addr phys, Word flags) {
+  cout << "tlbAdd(0x" << hex << virt << ", 0x" << phys << ", 0x" << flags << ")\n";
   tlb[virt/pageSize] = TLBEntry(phys/pageSize, flags);
 }
 

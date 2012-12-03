@@ -15,6 +15,7 @@ printdec:    ldi %r8, #1;
        @p0 ? ldi %r6, #0x2d;
        @p0 ? st %r6, %r8, #0;
        @p0 ? neg %r7, %r7;
+             ldi %r9, #0;
 printdec_l1: modi %r6, %r7, #10;
              divi %r7, %r7, #10;
              addi %r6, %r6, #0x30;
@@ -45,6 +46,6 @@ puts_l:      ld   %r6, %r7, #0;
              jmpi puts_l;
 puts_end:    jmpr %r5
 
-.perm rw
+.perm rwx
 .word digstack 0
 .word 9

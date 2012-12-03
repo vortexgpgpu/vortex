@@ -62,7 +62,7 @@ void Core::step() {
 
   if (activeThreads == 0) return;
 
-  cout << "in step pc=0x" << hex << pc << '\n';
+  //cout << "in step pc=0x" << hex << pc << '\n';
 
   /* Fetch and decode. */
   if (wordSize < sizeof(pc)) pc &= ((1ll<<(wordSize*8))-1);
@@ -87,9 +87,9 @@ void Core::step() {
       interrupt(pf.notFound?1:2);
     }
   } while (fetchMore);
-  cout << "Fetched at 0x" << hex << pc << '\n';
+  //cout << "Fetched at 0x" << hex << pc << '\n';
   //cout << "0x" << hex << pc << ": " << *inst << '\n';
-  cout << "sizeof(core)=" << dec << sizeof(*this) << '\n';
+  //cout << "sizeof(core)=" << dec << sizeof(*this) << '\n';
 
 #ifdef EMU_INSTRUMENTATION
   { Addr pcPhys(mem.virtToPhys(pc));

@@ -344,7 +344,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
     inst.setImmRef(*r);
   }
 
-  cout << "Decoded 0x" << hex << code << " into: " << inst << '\n';
+  //cout << "Decoded 0x" << hex << code << " into: " << inst << '\n';
 
   return &inst;
 }
