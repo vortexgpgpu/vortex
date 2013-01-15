@@ -74,5 +74,5 @@ loop4:       ld   %r1, %r0, array;
 
 .global
 .word array 0 /* Basically, 0 and 1 are pre-cleared. */
-.word _0    0 /* I would love to not have to give this a name. */
-.word SIZE-2
+.word _0    0 /* Given a name, contents are zero. */
+.word 0x1ffe  /* Empty space of size SIZE-2 bytes. */

@@ -4,6 +4,7 @@
 #ifndef __MEM_H
 #define __MEM_H
 
+#include <ostream>
 #include <vector>
 #include <queue>
 #include <map>

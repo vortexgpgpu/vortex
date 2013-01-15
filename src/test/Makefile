@@ -1,38 +1,44 @@
 HARPLD = ../harptool -L
 HARPAS = ../harptool -A
 HARPEM = ../harptool -E
-4WARCH = 6w16/2/2
+4BARCH = 4b16/16/2
 
-all: sieve.bin 2thread.bin sieve.4w.bin 2thread.4w.bin
+all: simple.bin sieve.bin 2thread.bin simple.4b.bin sieve.4b.bin 2thread.4b.bin
 
-run: sieve.out 2thread.out sieve.4w.out 2thread.4w.out
+run: simple.out sieve.out 2thread.out simple.4b.out sieve.4b.out 2thread.4b.out
 
-%.4w.out : %.4w.bin
-	$(HARPEM) -a $(4WARCH) -c $< > $@
+%.4b.out : %.4b.bin
+	$(HARPEM) -a $(4BARCH) -c $< > $@
 
 %.out : %.bin
 	$(HARPEM) -c $< > $@
 
-2thread.bin : lib.HOF 2thread.HOF boot.HOF
-	$(HARPLD) -o 2thread.bin boot.HOF 2thread.HOF lib.HOF
+2thread.bin : boot.HOF lib.HOF 2thread.HOF
+	$(HARPLD) -o 2thread.bin $^
 
-2thread.4w.bin : lib.4w.HOF 2thread.4w.HOF boot.4w.HOF
-	$(HARPLD) --arch $(4WARCH) -o 2thread.4w.bin boot.4w.HOF 2thread.4w.HOF 2thread.4w.HOF lib.4w.HOF
+2thread.4b.bin : boot.4b.HOF lib.4b.HOF 2thread.4b.HOF
+	$(HARPLD) --arch $(4BARCH) -o 2thread.4b.bin $^
 
-sieve.bin : lib.HOF sieve.HOF boot.HOF
-	$(HARPLD) -o sieve.bin boot.HOF sieve.HOF lib.HOF
+simple.bin : boot.HOF lib.HOF simple.HOF
+	$(HARPLD) -o $@ $^
 
-sieve.4w.bin : lib.4w.HOF sieve.4w.HOF boot.4w.HOF
-	$(HARPLD) --arch $(4WARCH) -o sieve.4w.bin boot.4w.HOF sieve.4w.HOF lib.4w.HOF
+sieve.bin : boot.HOF lib.HOF sieve.HOF
+	$(HARPLD) -o $@ $^
 
-%.4w.bin : %.4w.HOF
-	$(HARPLD) --arch $(4WARCH) -o $@ $<
+simple.4b.bin : boot.4b.HOF lib.4b.HOF simple.4b.HOF
+	$(HARPLD) --arch $(4BARCH) -o $@ $^
+
+sieve.4b.bin : boot.4b.HOF lib.4b.HOF sieve.4b.HOF
+	$(HARPLD) --arch $(4BARCH) -o $@ $^
+
+%.4b.bin : %.4b.HOF
+	$(HARPLD) --arch $(4BARCH) -o $@ $<
 
 %.bin : %.HOF
 	$(HARPLD) -o $@ $<
 
-%.4w.HOF : %.s
-	$(HARPAS) --arch $(4WARCH) -o $@ $<
+%.4b.HOF : %.s
+	$(HARPAS) --arch $(4BARCH) -o $@ $<
 
 %.HOF : %.s
 	$(HARPAS) -o $@ $<

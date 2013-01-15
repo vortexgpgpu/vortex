@@ -80,7 +80,9 @@ namespace Harp {
 
       return;
     noFit:
-      std::cout << "Attempt to bind a symbol to an address it cannot reach.\n";
+      std::cout << "Attempt to bind a " << bits << "-bit "
+                << (relative?"":"non-") << "relative symbol to an address"
+                                           " it cannot reach.\n";
       exit(1);
     }
 

@@ -8,6 +8,7 @@
 #include "include/obj.h"
 #include "include/core.h"
 #include "include/harpfloat.h"
+#include "include/debug.h"
 
 #ifdef EMU_INSTRUMENTATION
 #include "include/qsim-harp.h"
@@ -63,7 +64,7 @@ Instruction::InstTableEntry Instruction::instTable[] = {
   {"andp",     false, false, false, false, AC_3PREG,    ITYPE_INTBASIC},
   {"orp",      false, false, false, false, AC_3PREG,    ITYPE_INTBASIC},
   {"xorp",     false, false, false, false, AC_3PREG,    ITYPE_INTBASIC},
-  {"notp",     false, false, false, false, AC_3PREG,    ITYPE_INTBASIC},
+  {"notp",     false, false, false, false, AC_2PREG,    ITYPE_INTBASIC},
   {"isneg",    false, false, false, false, AC_PREG_REG, ITYPE_INTBASIC},
   {"iszero",   false, false, false, false, AC_PREG_REG, ITYPE_INTBASIC},
   {"halt",     false, false, false, true,  AC_NONE,     ITYPE_NULL    },
@@ -106,6 +107,8 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
 }
 
 void Instruction::executeOn(Core &c) {
+  D(1, "Begin instruction execute.");
+
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
@@ -261,6 +264,8 @@ void Instruction::executeOn(Core &c) {
 
     if (instTable[op].controlFlow) break;
   }
+
+  D(3, "End instruction execute.");
 
   c.activeThreads = nextActiveThreads;
 }

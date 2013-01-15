@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+#include "include/debug.h"
 #include "include/types.h"
 #include "include/util.h"
 #include "include/mem.h"
@@ -39,12 +40,14 @@ void RomMemDevice::write(Addr, Word) {
 }
 
 Word RamMemDevice::read(Addr addr) {
-  Word w = readWord(contents, addr, wordSize);
+  D(2, "RAM read, addr=0x" << hex << addr);
+  Word w = readWord(contents, addr, wordSize - addr%wordSize);
   return w;
 }
 
 void RamMemDevice::write(Addr addr, Word w) {
-  writeWord(contents, addr, wordSize, w);
+  D(2, "RAM write, addr=0x" << hex << addr);
+  writeWord(contents, addr, wordSize - addr%wordSize, w);
 }
 
 MemDevice &MemoryUnit::ADecoder::doLookup(Addr a, Size &bit) {
@@ -104,8 +107,12 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(Addr vAddr, Word flagMask) {
   if ((i = tlb.find(vAddr/pageSize)) != tlb.end()) {
     TLBEntry &t = i->second;
     if (t.flags & flagMask) return t;
-    else throw PageFault(vAddr, false);
+    else {
+      D(2, "Page fault on addr 0x" << hex << vAddr << "(bad flags)");
+      throw PageFault(vAddr, false);
+    }
   } else {
+    D(2, "Page fault on addr 0x" << hex << vAddr << "(not in TLB)");
     throw PageFault(vAddr, true);
   }
 }
@@ -139,7 +146,7 @@ void MemoryUnit::write(Addr vAddr, Word w, bool sup) {
 }
 
 void MemoryUnit::tlbAdd(Addr virt, Addr phys, Word flags) {
-  cout << "tlbAdd(0x" << hex << virt << ", 0x" << phys << ", 0x" << flags << ")\n";
+  D(1, "tlbAdd(0x" << hex << virt << ", 0x" << phys << ", 0x" << flags << ')');
   tlb[virt/pageSize] = TLBEntry(phys/pageSize, flags);
 }
 

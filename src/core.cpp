@@ -10,6 +10,7 @@
 #include "include/mem.h"
 #include "include/enc.h"
 #include "include/core.h"
+#include "include/debug.h"
 
 #ifdef EMU_INSTRUMENTATION
 #include "include/qsim-harp.h"
@@ -36,18 +37,13 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) :
   /* Build the register file. */
   Word regNum(0);
   for (Word j = 0; j < a.getNThds(); ++j) {
-    std::cout << "Pushing back a new register vector.\n";
     reg.push_back(vector<Reg<Word> >(0));
     for (Word i = 0; i < a.getNRegs(); ++i) {
-      std::cout << "Pushing back a new register in thread " << j << "\n";
       reg[j].push_back(Reg<Word>(id, regNum++));
     }
 
     pred.push_back(vector<Reg<bool> >(0));
-    std::cout << "getnpregs returns " << a.getNPRegs() << '\n';
     for (Word i = 0; i < a.getNPRegs(); ++i) {
-      std::cout << "Pushing back predicate reg " << i << ", thread " << j 
-                << "\n";
       pred[j].push_back(Reg<bool>(id, regNum++));
     }
   }
@@ -62,7 +58,7 @@ void Core::step() {
 
   if (activeThreads == 0) return;
 
-  //cout << "in step pc=0x" << hex << pc << '\n';
+  D(3, "in step pc=0x" << hex << pc);
 
   /* Fetch and decode. */
   if (wordSize < sizeof(pc)) pc &= ((1ll<<(wordSize*8))-1);
@@ -72,13 +68,14 @@ void Core::step() {
     /* Todo: speed this up for the byte encoder? */
     try {
       fetchMore = false;
-      fetchBuffer.resize(fetchPos + wordSize);
+      unsigned fetchSize(wordSize - (pc+fetchPos)%wordSize);
+      fetchBuffer.resize(fetchPos + fetchSize);
       Word fetched = mem.fetch(pc + fetchPos, supervisorMode);
-      writeWord(fetchBuffer, fetchPos, wordSize, fetched);
+      writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
       decPos = 0;
       inst = iDec.decode(fetchBuffer, decPos);
     } catch (OutOfBytes o) {
-      //cout << "Caught OutOfBytes. Fetching more.\n";
+      D(3, "Caught OutOfBytes. Fetching more.");
       fetchMore = true;
     } catch (MemoryUnit::PageFault pf) {
       fetchPos = 0;
@@ -87,9 +84,8 @@ void Core::step() {
       interrupt(pf.notFound?1:2);
     }
   } while (fetchMore);
-  //cout << "Fetched at 0x" << hex << pc << '\n';
-  //cout << "0x" << hex << pc << ": " << *inst << '\n';
-  //cout << "sizeof(core)=" << dec << sizeof(*this) << '\n';
+  D(3, "Fetched at 0x" << hex << pc);
+  D(3, "0x" << hex << pc << ": " << *inst);
 
 #ifdef EMU_INSTRUMENTATION
   { Addr pcPhys(mem.virtToPhys(pc));

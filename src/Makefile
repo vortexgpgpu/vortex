@@ -5,7 +5,7 @@ CXXFLAGS=-g -fPIC
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
-all: harptool libharplib.so libharplib.a libqsim-harp.so
+all: harptool libharplib.so libharplib.a #libqsim-harp.so
 
 # Use -static so we don't have to install the library in order to just run
 # Harptool.
@@ -19,19 +19,27 @@ libharplib.a: $(LIB_OBJS)
 	ar rcs $@ $(LIB_OBJS)
 
 args.o : args.cpp include/args.h
-enc.o : enc.cpp include/types.h include/util.h include/enc.h include/archdef.h include/instruction.h
-harptool.o : harptool.cpp include/types.h include/core.h include/enc.h include/instruction.h include/mem.h include/obj.h include/archdef.h include/args.h include/help.h
+enc.o : enc.cpp include/types.h include/util.h include/enc.h include/archdef.h\
+                include/instruction.h
+harptool.o : harptool.cpp include/types.h include/core.h include/enc.h \
+             include/instruction.h include/mem.h include/obj.h \
+             include/archdef.h include/args.h include/help.h
 instruction.o : instruction.cpp include/instruction.h include/obj.h
-obj.o : obj.cpp include/types.h include/obj.h include/util.h include/asm-tokens.h
+obj.o : obj.cpp include/types.h include/obj.h include/util.h \
+        include/asm-tokens.h
 util.o : util.cpp include/types.h include/util.h
 mem.o : mem.cpp include/types.h include/util.h include/mem.h
-core.o : core.cpp include/types.h include/util.h include/mem.h include/archdef.h
+core.o : core.cpp include/types.h include/util.h include/mem.h \
+         include/debug.h include/archdef.h
 
 QSIM_CXXFLAGS=-DEMU_INSTRUMENTATION
 
-libqsim-harp.so: args.cpp enc.cpp instruction.cpp obj.cpp util.cpp mem.cpp core.cpp qsim-harp.cpp lex.yy.o include/qsim-harp.h include/types.h include/core.h include/util.h include/enc.h include/archdef.h include/instruction.h include/asm-tokens.h include/mem.h
-	$(CXX) $(CXXFLAGS) $(QSIM_CXXFLAGS) -shared -o $@ args.cpp enc.cpp instruction.cpp obj.cpp util.cpp mem.cpp core.cpp qsim-harp.cpp lex.yy.o
-
+libqsim-harp.so: args.cpp enc.cpp instruction.cpp obj.cpp util.cpp mem.cpp \
+                 core.cpp qsim-harp.cpp lex.yy.o include/qsim-harp.h \
+                 include/types.h include/core.h include/util.h include/enc.h \
+                 include/archdef.h include/instruction.h include/asm-tokens.h \
+                 include/mem.h
+	$(CXX) $(CXXFLAGS) $(QSIM_CXXFLAGS) -shared -o $@ $^
 
 lex.yy.cc: scanner.lex
 	flex scanner.lex
