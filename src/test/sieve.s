@@ -75,7 +75,4 @@ loop4:       ld   %r1, %r0, array;
 .global
 .word array 0 /* Basically, 0 and 1 are pre-cleared. */
 .word _0    0 /* I would love to not have to give this a name. */
-.word 0x1ffe /* Should arithmetic be possible? Technically SIZE-2, but that 
-                would be hard. Should making symbols happen here be possible
-                in general? Currently if it's not a name it must be a
-                literal. */
+.word SIZE-2
