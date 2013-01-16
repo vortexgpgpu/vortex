@@ -1,7 +1,7 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS=-g -fPIC
+CXXFLAGS=-g -fPIC -DUSE_DEBUG=3
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
