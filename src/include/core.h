@@ -20,8 +20,8 @@ namespace Harp {
 
   template <typename T> class Reg {
   public:
-    Reg(): cpuId(0), regNum(0) {}
-    Reg(Word c, Word n): cpuId(c), regNum(n) {}
+    Reg(): cpuId(0), regNum(0), val(0) {}
+    Reg(Word c, Word n): cpuId(c), regNum(n), val(0) {}
 
     Reg &operator=(T r) { val = r; doWrite(); return *this; }
     operator T() { doRead(); return val; }

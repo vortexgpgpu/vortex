@@ -6,24 +6,33 @@
 
 *******************************************************************************/
 /* sieve of erastophanes: Find some primes. */
-.def SIZE 0x2000 /* TODO: How should I write constants? */
+.def SIZE 0x1000
 
 .align 4096
 .perm x
 .entry
 .global
-entry:       ldi %r7, hello
-             jali %r5, puts
+entry:       ldi %r7, hello; jali %r5, puts;
+    
              ldi  %r0, #2; /* i = 2 */
-loop1:       muli %r1, %r0, __WORD;
+loop1:       addi %r7, %r0, #0;
+             jali %r5, printdec;
+    
+             muli %r1, %r0, __WORD;
+             ldi %r7, wrstr;
+             jali %r5, puts;
              st   %r0, %r1, array;
+             ldi %r7, wrfin;
+             jali %r5, puts;
              addi %r0, %r0, #1;
              subi %r1, %r0, SIZE;
              rtop @p0, %r1;
        @p0 ? jmpi loop1;
 
-             ldi  %r0, #1;
-    
+             ldi %r7, xstr;
+            jali %r5, puts;
+
+             ldi  %r0, #1;    
 loop2:       addi %r0, %r0, #1;
              muli %r1, %r0, __WORD;
              ld   %r1, %r1, array;
@@ -69,10 +78,13 @@ loop4:       ld   %r1, %r0, array;
              trap; /* All traps currently cause a halt. */
 
 .perm rw /* TODO: How should I write section permissions? */
-/* TODO: String literals! */
 .string hello "\"Harp!\" is how a harp seal says hello!\n"
+.string wrstr "Doing write\n"
+.string wrfin "Done write\n"
+.string xstr  "Exiting loop\n"
 
 .global
 .word array 0 /* Basically, 0 and 1 are pre-cleared. */
 .word _0    0 /* Given a name, contents are zero. */
-.word 0x1ffe  /* Empty space of size SIZE-2 bytes. */
+_arr:
+.word 0xffe   /* Empty space of size SIZE-2 words. */

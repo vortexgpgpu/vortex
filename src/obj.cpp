@@ -5,6 +5,7 @@
 #include "include/obj.h"
 #include "include/util.h"
 #include "include/asm-tokens.h"
+#include "include/debug.h"
 
 #include <iostream>
 #include <stdlib.h>
@@ -485,9 +486,13 @@ void HOFWriter::write(std::ostream &output, const Obj &obj) {
   for (Size i = 0; i < obj.chunks.size(); i++) {
     offsets[i] = output.tellp();
 
-    /* Chunk name */
+    // Is it a data chunk?
     DataChunk *dc = dynamic_cast<DataChunk*>(obj.chunks[i]);
     if (!dc) { cout << "HOFWriter::write(): invalid chunk type.\n"; exit(1); }
+
+    D(1, "Writing chunk \"" << dc->name << "\", size=" << dc->contents.size());
+
+    // Chunk name
     output.write(dc->name.c_str(), dc->name.length() + 1);
 
     /* Padding */
@@ -624,6 +629,8 @@ Obj *HOFReader::read(std::istream &input) {
                       ibase);
       dc->refs.push_back(r);
     }
+
+    D(1, "Reading chunk \"" << name << "\", size " << dSize);
 
     /* Get the contents. */
     input.read((char*)&dc->contents[0], dSize);

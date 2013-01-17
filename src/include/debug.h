@@ -10,10 +10,14 @@
 #define D(lvl, x) do { \
   using namespace std; \
   if ((lvl) <= USE_DEBUG) { \
-    cout << "DEBUG " << __FILE__ << ':' << dec << __LINE__ << ": " \
+    cerr << "DEBUG " << __FILE__ << ':' << dec << __LINE__ << ": " \
          << x << endl; \
   } \
 } while(0)
+
+#define D_RAW(x) do { \
+  std::cerr << x; \
+} while (0)
 #else
 
 #define D(lvl, x) do {} while(0)

@@ -24,7 +24,7 @@ RamMemDevice::RamMemDevice(const char *filename, Size wordSize) :
   ifstream input(filename);
 
   if (!input) {
-    cout << "Error reading file \"" << filename << "\" into RomMemDevice.\n";
+    cout << "Error reading file \"" << filename << "\" into RamMemDevice.\n";
     exit(1);
   }
 
