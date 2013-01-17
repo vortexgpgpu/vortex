@@ -80,8 +80,8 @@ void Core::step() {
     } catch (MemoryUnit::PageFault pf) {
       fetchPos = 0;
       fetchMore = true;
-      reg[0][1] = pf.faultAddr;
       interrupt(pf.notFound?1:2);
+      reg[0][1] = pf.faultAddr;
     }
   } while (fetchMore);
   D(3, "Fetched at 0x" << hex << pc);
@@ -95,24 +95,40 @@ void Core::step() {
   }
 #endif
 
-  /* Update pc */
+  // Update pc
   pc += decPos;
 
-  /* Execute */
+  // Execute
   try {
     inst->executeOn(*this);
   } catch (MemoryUnit::PageFault pf) {
     pc -= decPos; /* Reset to beginning of faulting address. */
-    reg[0][1] = pf.faultAddr;
     interrupt(pf.notFound?1:2);
+    reg[0][1] = pf.faultAddr;
   } catch (DivergentBranchException e) {
     pc -= decPos;
     interrupt(4);
   } catch (DomainException e) {
     interrupt(5);
   }
+ 
+  // At Debug Level 3, print debug info after each instruction.
+  #ifdef USE_DEBUG
+  if (USE_DEBUG >= 3) {
+    D(3, "Register state:");
+    for (unsigned i = 0; i < reg[0].size(); ++i)
+      D_RAW("  %r" << i << ": " << hex << reg[0][i]
+                   << '(' << shadowReg[i] << ')' << endl);
+    D(3, "Predicate state:");
+    D_RAW("  ");
+    for (unsigned i = 0; i < pred[0].size(); ++i) D_RAW(pred[0][i]);
+    D_RAW(endl << " (");
+    for (unsigned i = 0; i < shadowPReg.size(); ++i) D_RAW(shadowPReg[i]);
+    D_RAW(endl);
+  }
+  #endif
 
-  /* Clean up. */
+  // Clean up.
   delete inst;
 }
 
