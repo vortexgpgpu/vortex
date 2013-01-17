@@ -110,7 +110,7 @@ Obj *AsmReader::read(std::istream &input) {
                                                        = Instruction::Opcode(i);
 
   enum { 
-    ST_INIT, ST_DEF1, ST_DEF2, ST_PERM, ST_WORD1, ST_WORD2, ST_STRING1,
+    ST_INIT, ST_DEF1, ST_DEF2, ST_PERM, ST_WORD1, ST_SPACE, ST_STRING1,
     ST_STRING2, ST_BYTE1, ST_BYTE2, ST_ALIGN, ST_INST1, ST_INST2 
   } state(ST_INIT);
 
@@ -151,6 +151,10 @@ Obj *AsmReader::read(std::istream &input) {
           state = ST_WORD1;
         } else { asmReaderError(yyline, "Unexpected .word"); }
         break;
+      case ASM_T_DIR_SPACE:
+        if (state == ST_INIT) state = ST_SPACE;
+        else                  asmReaderError(yyline, "Unexpected .space");
+        break;
       case ASM_T_DIR_STRING:
         if (state == ST_INIT) {
           state = ST_STRING1;
@@ -172,20 +176,39 @@ Obj *AsmReader::read(std::istream &input) {
       case ASM_T_DIR_ARG_NUM:
         switch (state) {
           case ST_DEF2: defs[string_arg] = yylval.u; state = ST_INIT; break;
-          case ST_WORD1: dc->size += (yylval.u)*wordSize;
-                         state = ST_INIT;
-                         break;
-          case ST_WORD2: if (outstate == OS_DATACHUNK) {
-                           dc->size += wordSize;
-                           dc->contents.resize(dc->size);
-                           wordToBytes(&*(dc->contents.end()-wordSize), 
-                                       yylval.u, wordSize);
-                         } else {
-                           asmReaderError(yyline, "Word not in data chunk"
-                                                  "(internal error)");
-                         }
-                         state = ST_INIT;
-                         break;
+          case ST_WORD1: {
+            if (outstate != OS_DATACHUNK) {
+              outstate = OS_DATACHUNK;
+              dc = new DataChunk(next_chunk_name, next_chunk_align?
+                                                  next_chunk_align:wordSize, 
+                                 flagsToWord(permR, permW, permX));
+              next_chunk_align = 0;
+              o->chunks.push_back(dc);
+              if (entry) o->entry = o->chunks.size() - 1;
+              if (global) dc->setGlobal();
+            }
+            dc->size += wordSize;
+            dc->contents.resize(dc->size); 
+            wordToBytes(&*(dc->contents.end()-wordSize), yylval.u, wordSize);
+          } break;
+          case ST_SPACE: {
+            // TODO: the following statement is basically copied from above. Fix
+            // this.
+            if (outstate != OS_DATACHUNK) {
+              outstate = OS_DATACHUNK;
+              dc = new DataChunk(next_chunk_name, next_chunk_align?
+                                                  next_chunk_align:wordSize,
+                                 flagsToWord(permR, permW, permX));
+              next_chunk_align = 0;
+              o->chunks.push_back(dc);
+              if (entry) o->entry = o->chunks.size() - 1;
+              if (global) dc->setGlobal();
+            }
+            size_t oldSize = dc->size;
+            dc->size += wordSize * yylval.u;
+            dc->contents.resize(dc->size);
+            for (size_t i = oldSize; i < dc->size; ++i) dc->contents[i] = 0;
+          } break;
           case ST_BYTE1: dc->size += yylval.u;
                          state = ST_INIT;
                          break;
@@ -235,17 +258,6 @@ Obj *AsmReader::read(std::istream &input) {
       case ASM_T_DIR_ARG_SYM:
         switch (state) {
           case ST_DEF1: string_arg = yylval.s; state = ST_DEF2; break;
-          case ST_WORD1: {
-            state = ST_WORD2; 
-            outstate = OS_DATACHUNK;
-            dc = new DataChunk(yylval.s, next_chunk_align?
-                                           next_chunk_align:wordSize, 
-                               flagsToWord(permR, permW, permX));
-            next_chunk_align = 0;
-            o->chunks.push_back(dc);
-            if (entry) o->entry = o->chunks.size() - 1;
-            if (global) dc->setGlobal();
-          } break;
           case ST_BYTE1: {
             state = ST_BYTE2;
             outstate = OS_DATACHUNK;

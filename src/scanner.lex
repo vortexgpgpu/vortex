@@ -53,13 +53,14 @@ endl \r?\n
   for (const char *c = YYText(); *c; c++) if (*c == '\n') yyline++;
 }
 
-<INITIAL>\.def    { BEGIN DEFARGS;    return ASM_T_DIR_DEF;   }
-<INITIAL>\.perm   { BEGIN PERMARGS;   return ASM_T_DIR_PERM;  }
-<INITIAL>\.byte   { BEGIN WORDARGS;   return ASM_T_DIR_BYTE;  }
-<INITIAL>\.word   { BEGIN WORDARGS;   return ASM_T_DIR_WORD;  }
+<INITIAL>\.def    { BEGIN DEFARGS;    return ASM_T_DIR_DEF;    }
+<INITIAL>\.perm   { BEGIN PERMARGS;   return ASM_T_DIR_PERM;   }
+<INITIAL>\.byte   { BEGIN WORDARGS;   return ASM_T_DIR_BYTE;   }
+<INITIAL>\.word   { BEGIN WORDARGS;   return ASM_T_DIR_WORD;   }
+<INITIAL>\.space  { BEGIN WORDARGS;   return ASM_T_DIR_SPACE;  }
 <INITIAL>\.string { BEGIN STRINGARGS; return ASM_T_DIR_STRING; }
-<INITIAL>\.align  { BEGIN ALIGNARGS;  return ASM_T_DIR_ALIGN; }
-<INITIAL>\.entry  { BEGIN EMPTYARGS;  return ASM_T_DIR_ENTRY; }
+<INITIAL>\.align  { BEGIN ALIGNARGS;  return ASM_T_DIR_ALIGN;  }
+<INITIAL>\.entry  { BEGIN EMPTYARGS;  return ASM_T_DIR_ENTRY;  }
 <INITIAL>\.global { BEGIN EMPTYARGS;  return ASM_T_DIR_GLOBAL; }
 
 <INITIAL>@p{num}{space}\? { yylval.u = read_number(YYText());
@@ -103,8 +104,6 @@ endl \r?\n
 <PERMARGS>{endl} { BEGIN INITIAL; yyline++; return ASM_T_DIR_END; }
 
 
-<WORDARGS>{sym}  { yylval.s = std::string(YYText());
-                   return ASM_T_DIR_ARG_SYM; }
 <WORDARGS>{num}  { yylval.u = read_number(YYText());
                    return ASM_T_DIR_ARG_NUM; }
 <WORDARGS>{endl} { BEGIN INITIAL; yyline++; return ASM_T_DIR_END; }

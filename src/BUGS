@@ -1,1 +1,2 @@
-_ Large expanses of space intentionally
+_ The BYTE directive was not updated when the word directive was; inconsistent
+  behavior.

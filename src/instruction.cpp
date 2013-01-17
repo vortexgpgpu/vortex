@@ -107,7 +107,7 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
 }
 
 void Instruction::executeOn(Core &c) {
-  D(1, "Begin instruction execute.");
+  D(3, "Begin instruction execute.");
 
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */

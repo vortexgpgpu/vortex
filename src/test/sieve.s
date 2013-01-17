@@ -84,7 +84,4 @@ loop4:       ld   %r1, %r0, array;
 .string xstr  "Exiting loop\n"
 
 .global
-.word array 0 /* Basically, 0 and 1 are pre-cleared. */
-.word _0    0 /* Given a name, contents are zero. */
-_arr:
-.word 0xffe   /* Empty space of size SIZE-2 words. */
+array: .space 0x1000 /* SIZE words of space. */

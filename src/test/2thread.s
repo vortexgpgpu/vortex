@@ -32,20 +32,8 @@ loop:   ld  %r2, %r1, #0;
         jmprt %r5;
 
 .perm rw
-.word Array1    -1
-.word Array1_01 -2
-.word Array1_02 -3
-.word Array1_03 -4
-.word Array1_04 -5
-.word Array1_05 -6
-.word Array1_06 -7
-.word Array1_07 -8
+Array1:
+.word -1 -2 -3 -4 -5 -6 -7 -8
 
-.word Array2    1
-.word Array2_00 2
-.word Array2_01 3
-.word Array2_02 4
-.word Array2_03 5
-.word Array2_04 6
-.word Array2_05 7
-.word Array2_06 8
+Array2:
+.word  1  2  3  4  5  6  7  8
