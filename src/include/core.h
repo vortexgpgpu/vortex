@@ -24,7 +24,13 @@ namespace Harp {
     Reg(Word c, Word n): cpuId(c), regNum(n), val(0) {}
 
     Reg &operator=(T r) { val = r; doWrite(); return *this; }
+
     operator T() { doRead(); return val; }
+
+    void trunc(Size s) {
+      Word mask((~0ull >> (sizeof(Word)-s)*8));
+      val &= mask;
+    }
 
   private:
     Word cpuId, regNum;

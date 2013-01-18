@@ -46,6 +46,7 @@ static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
 {
   uint64_t (* const rPE)(const string&, const map<string, Word>&, int, int) 
     = readParenExpression;
+  if (end == start) return 0;
 
   if (end==-1) end = s.length();
   
@@ -75,6 +76,9 @@ static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
     if (s[i] == '&') return rPE(s, d, start, i) & rPE(s, d, i+1, end);
   } 
 
+  // Unary -
+  if (s[start] == '-') return -rPE(s, d, start+1, end);
+
   if (isdigit(s[start])) {
     unsigned long long u;
     sscanf(s.substr(start, end-start).c_str(), "%lli", &u);
@@ -86,7 +90,7 @@ static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
   map<string, Word>::const_iterator it = d.find(s.substr(start, end-start));
   if (it != d.end()) return it->second;
 
-  cout << "TODO: Error message.\n";
+  cout << "Error on " << yyline << ": ";
   exit(1);
 }
 

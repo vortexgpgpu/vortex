@@ -116,15 +116,21 @@ void Core::step() {
   #ifdef USE_DEBUG
   if (USE_DEBUG >= 3) {
     D(3, "Register state:");
-    for (unsigned i = 0; i < reg[0].size(); ++i)
-      D_RAW("  %r" << i << ": " << hex << reg[0][i]
-                   << '(' << shadowReg[i] << ')' << endl);
+    for (unsigned i = 0; i < reg[0].size(); ++i) {
+      D_RAW("  %r" << i << ':');
+      for (unsigned j = 0; j < reg.size(); ++j) 
+        D_RAW(' ' << hex << reg[j][i] << ' ');
+      D_RAW('(' << shadowReg[i] << ')' << endl);
+    }
     D(3, "Predicate state:");
     D_RAW("  ");
-    for (unsigned i = 0; i < pred[0].size(); ++i) D_RAW(pred[0][i]);
-    D_RAW(endl << " (");
+    for (unsigned j = 0; j < pred.size(); ++j) {
+      for (unsigned i = 0; i < pred[j].size(); ++i) D_RAW(pred[0][i]);
+      D_RAW(endl);
+    }
+    D_RAW(" (");
     for (unsigned i = 0; i < shadowPReg.size(); ++i) D_RAW(shadowPReg[i]);
-    D_RAW(endl);
+    D_RAW(')' << endl);
   }
   #endif
 

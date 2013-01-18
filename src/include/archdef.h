@@ -4,7 +4,6 @@
 #ifndef __ARCHDEF_H
 #define __ARCHDEF_H
 
-#include <iostream>
 #include <string>
 #include <sstream>
 
@@ -16,7 +15,6 @@ namespace Harp {
     struct Undefined {};
 
     ArchDef(const std::string &s) {
-      std::cout << "New archdef for \"" << s << "\"\n";
       std::istringstream iss(s.c_str());
       
       iss >> wordSize;
@@ -31,8 +29,6 @@ namespace Harp {
       iss >> sep >> nThds;
       if (!iss || sep != '/') { extent = EXT_PREGS; return; }
       extent = EXT_THDS;
-
-      std::cout << nRegs << " regs, " << nPRegs << " pred regs.\n";
     }
 
     operator std::string () const {

@@ -1,7 +1,7 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS=-g -DUSE_DEBUG=1 #-fPIC
+CXXFLAGS=-g #-DUSE_DEBUG=3 #-fPIC
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
@@ -24,13 +24,15 @@ enc.o : enc.cpp include/types.h include/util.h include/enc.h include/archdef.h\
 harptool.o : harptool.cpp include/types.h include/core.h include/enc.h \
              include/instruction.h include/mem.h include/obj.h \
              include/archdef.h include/args.h include/help.h
-instruction.o : instruction.cpp include/instruction.h include/obj.h
+instruction.o : instruction.cpp include/instruction.h include/obj.h \
+                include/core.h
 obj.o : obj.cpp include/types.h include/obj.h include/util.h \
         include/asm-tokens.h include/debug.h
 util.o : util.cpp include/types.h include/util.h
-mem.o : mem.cpp include/types.h include/util.h include/mem.h include/debug.h
+mem.o : mem.cpp include/types.h include/util.h include/mem.h include/debug.h \
+        include/core.h
 core.o : core.cpp include/types.h include/util.h include/mem.h \
-         include/debug.h include/archdef.h
+         include/debug.h include/archdef.h include/core.h
 
 QSIM_CXXFLAGS=-DEMU_INSTRUMENTATION
 

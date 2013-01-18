@@ -24,16 +24,13 @@ sumArr: ldi %r3, #0;
         ldi %r4, #8;
 loop:   ld  %r2, %r1, #0;
         add %r3, %r3, %r2;
-        addi %r1, %r1, #8;
+        addi %r1, %r1, __WORD;
         subi %r4, %r4, #1;
         rtop @p0, %r4;
   @p0 ? jmpi loop;
-        st %r3, %r1, #-64;
+        st %r3, %r1, (-__WORD*8)
         jmprt %r5;
 
 .perm rw
-Array1:
-.word -1 -2 -3 -4 -5 -6 -7 -8
-
-Array2:
-.word  1  2  3  4  5  6  7  8
+Array1:  .word -1 -2 -3 -4 -5 -6 -7 -8
+Array2:  .word  1  2  3  4  5  6  7  8

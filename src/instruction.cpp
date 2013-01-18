@@ -145,15 +145,19 @@ void Instruction::executeOn(Core &c) {
       case TLBFLUSH: c.mem.tlbFlush();
                      break;
       case ADD: reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
+                reg[rdest].trunc(wordSz);
                 break;
       case SUB: reg[rdest] = reg[rsrc[0]] - reg[rsrc[1]];
+                reg[rdest].trunc(wordSz);
                 break;
       case MUL: reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
+                reg[rdest].trunc(wordSz);
                 break;
       case DIV: if (reg[rsrc[1]] == 0) throw DomainException();
                 reg[rdest] = reg[rsrc[0]] / reg[rsrc[1]];
                 break;
       case SHL: reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
+                reg[rdest].trunc(wordSz);
                 break;
       case MOD: if (reg[rsrc[1]] == 0) throw DomainException();
                 reg[rdest] = reg[rsrc[0]] % reg[rsrc[1]];
@@ -161,12 +165,16 @@ void Instruction::executeOn(Core &c) {
       case AND: reg[rdest] = reg[rsrc[0]] & reg[rsrc[1]];
                 break;
       case NEG: reg[rdest] = -(Word_s)reg[rsrc[0]];
+                reg[rdest].trunc(wordSz);
                 break;
       case ADDI: reg[rdest] = reg[rsrc[0]] + immsrc;
+                 reg[rdest].trunc(wordSz);
                  break;
       case SUBI: reg[rdest] = reg[rsrc[0]] - immsrc;
+                 reg[rdest].trunc(wordSz);
                  break;
       case MULI: reg[rdest] = reg[rsrc[0]] * immsrc;
+                 reg[rdest].trunc(wordSz);
                  break;
       case DIVI: if (immsrc == 0) throw DomainException();
                  reg[rdest] = reg[rsrc[0]] / immsrc;
@@ -177,6 +185,7 @@ void Instruction::executeOn(Core &c) {
       case SHRI: reg[rdest] = reg[rsrc[0]] >> immsrc;
                  break;
       case SHLI: reg[rdest] = reg[rsrc[0]] << immsrc;
+                 reg[rdest].trunc(wordSz);
                  break;
       case ANDI: reg[rdest] = reg[rsrc[0]] & immsrc;
                  break;
@@ -211,6 +220,7 @@ void Instruction::executeOn(Core &c) {
 #endif
                break;
       case LDI: reg[rdest] = immsrc;
+                reg[rdest].trunc(wordSz);
                 break;
       case RTOP: pReg[pdest] = reg[rsrc[0]];
                  break;
@@ -242,6 +252,7 @@ void Instruction::executeOn(Core &c) {
       case ITOF: reg[rdest] = Float(double(reg[rsrc[0]]), wordSz);
                  break; 
       case FTOI: reg[rdest] = Word_s(double(Float(reg[rsrc[0]], wordSz)));
+                 reg[rdest].trunc(wordSz);
                  break;
       case FNEG: reg[rdest] = Float(-double(Float(reg[rsrc[0]],wordSz)),wordSz);
                  break;
