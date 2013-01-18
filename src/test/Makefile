@@ -1,11 +1,14 @@
-HARPLD = ../harptool -L
-HARPAS = ../harptool -A
-HARPEM = ../harptool -E
-4BARCH = 4b16/16/2
+HARPLD  = ../harptool -L
+HARPAS  = ../harptool -A
+HARPEM  = ../harptool -E
+HARPDIS = ../harptool -D
+4BARCH  = 4b16/16/2
 
 all: simple.bin sieve.bin 2thread.bin simple.4b.bin sieve.4b.bin 2thread.4b.bin
 
 run: simple.out sieve.out 2thread.out simple.4b.out sieve.4b.out 2thread.4b.out
+
+disas: simple.d sieve.d 2thread.d simple.4b.d sieve.4b.d 2thread.4b.d
 
 %.4b.out : %.4b.bin
 	$(HARPEM) -a $(4BARCH) -c $< > $@
@@ -43,5 +46,11 @@ sieve.4b.bin : boot.4b.HOF lib.4b.HOF sieve.4b.HOF
 %.HOF : %.s
 	$(HARPAS) -o $@ $<
 
+%.4b.d : %.4b.HOF
+	$(HARPDIS) -o $@ --arch $(4BARCH) $<
+
+%.d : %.HOF
+	$(HARPDIS) -o $@ $<
+
 clean:
-	rm -f *.HOF *.bin *.out *~
+	rm -f *.HOF *.bin *.out *.d *~

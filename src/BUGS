@@ -1,3 +1,0 @@
-_ The assembly writer for the disassembler uses the old assembly format.
-_ The BYTE directive was not updated when the word directive was; inconsistent
-  behavior.

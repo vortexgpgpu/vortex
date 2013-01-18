@@ -78,10 +78,10 @@ loop4:       ld   %r1, %r0, array;
              trap; /* All traps currently cause a halt. */
 
 .perm rw /* TODO: How should I write section permissions? */
-.string hello "\"Harp!\" is how a harp seal says hello!\n"
-.string wrstr "Doing write\n"
-.string wrfin "Done write\n"
-.string xstr  "Exiting loop\n"
+hello:  .string "\"Harp!\" is how a harp seal says hello!\n"
+wrstr:  .string "Doing write\n"
+wrfin:  .string "Did write\n"
+xstr:   .string "Exiting loop\n"
 
 .global
 array: .space 0x1000 /* SIZE words of space. */

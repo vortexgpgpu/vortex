@@ -213,34 +213,48 @@ Obj *AsmReader::read(std::istream &input) {
             dc->contents.resize(dc->size);
             for (size_t i = oldSize; i < dc->size; ++i) dc->contents[i] = 0;
           } break;
-          case ST_BYTE1: dc->size += yylval.u;
-                         state = ST_INIT;
-                         break;
-          case ST_BYTE2: if (outstate == OS_DATACHUNK) {
-                           dc->size++;
-                           dc->contents.resize(dc->size);
-                           *(dc->contents.end() - 1) = yylval.u;
-                         } else {
-                           asmReaderError(yyline, "Byte not in data chunk"
-                                                  "(internal error)");
-                         }
-                         state = ST_INIT;
-                         break;
-          case ST_ALIGN: next_chunk_align = yylval.u;
-                         if (outstate != OS_NOCHUNK) {
-                           outstate = OS_NOCHUNK;
-                           entry = false;
-                           global = false;
-                         }
-                         state = ST_INIT;
-                         break;
+          case ST_BYTE1:
+            if (outstate != OS_DATACHUNK) {
+              // TODO: more of this pasted code
+              outstate = OS_DATACHUNK;
+              dc = new DataChunk(next_chunk_name, next_chunk_align?
+                                                  next_chunk_align:wordSize,
+                                 flagsToWord(permR, permW, permX));
+              next_chunk_align = 0;
+              o->chunks.push_back(dc);
+              if (entry) o->entry = o->chunks.size() - 1;
+              if (global) dc->setGlobal();
+            }
+            dc->size++;
+            dc->contents.resize(dc->size);
+            *(dc->contents.end() - 1) = yylval.u;
+            state = ST_INIT;
+            break;
+          case ST_ALIGN:
+            next_chunk_align = yylval.u;
+            if (outstate != OS_NOCHUNK) {
+              outstate = OS_NOCHUNK;
+              entry = false;
+              global = false;
+            }
+            state = ST_INIT;
+            break;
           default: asmReaderError(yyline, "Unexpected literal argument");
         }
         break;
       case ASM_T_DIR_ARG_STRING:
-        if (state == ST_STRING2 || 
-             (state == ST_STRING1 && outstate == OS_DATACHUNK)) 
-        {
+        if (state == ST_STRING1) {
+          if (outstate != OS_DATACHUNK) {
+            // TODO: pasted code (see above)
+            outstate = OS_DATACHUNK;
+            dc = new DataChunk(next_chunk_name,
+                               next_chunk_align?next_chunk_align:wordSize,
+                               flagsToWord(permR, permW, permX));
+            next_chunk_align = 0;
+            o->chunks.push_back(dc);
+            if (entry) o->entry = o->chunks.size() - 1;
+            if (global) dc->setGlobal();
+          }
           const char *s = yylval.s.c_str();
           do {
             if (*s == '\\') {
@@ -262,26 +276,6 @@ Obj *AsmReader::read(std::istream &input) {
       case ASM_T_DIR_ARG_SYM:
         switch (state) {
           case ST_DEF1: string_arg = yylval.s; state = ST_DEF2; break;
-          case ST_BYTE1: {
-            state = ST_BYTE2;
-            outstate = OS_DATACHUNK;
-            dc = new DataChunk(yylval.s, next_chunk_align,
-                               flagsToWord(permR, permW, permX));
-            next_chunk_align = 0;
-            o->chunks.push_back(dc);
-            if (entry) o->entry = o->chunks.size() - 1;
-            if (global) dc->setGlobal();
-          } break;
-          case ST_STRING1: {
-            state = ST_STRING2;
-            outstate = OS_DATACHUNK;
-            dc = new DataChunk(yylval.s, next_chunk_align,
-                               flagsToWord(permR, permW, permX));
-            next_chunk_align = 0;
-            o->chunks.push_back(dc);
-            if (entry) o->entry = o->chunks.size() - 1;
-            if (global) dc->setGlobal();
-          } break;
           default: asmReaderError(yyline, "");
         };
         break;
@@ -392,8 +386,6 @@ Obj *AsmReader::read(std::istream &input) {
 }
 
 void AsmWriter::write(std::ostream &output, const Obj &obj) {
-  unsigned anonWordNum(0);
-
   Word prevFlags(0);
 
   for (size_t j = 0; j < obj.chunks.size(); j++) {
@@ -439,10 +431,10 @@ void AsmWriter::write(std::ostream &output, const Obj &obj) {
         }
 
         if (i == tmpWordSize && c->name != "") {
-          output << ".word " << c->name << " 0x" << hex << w << '\n';
+          output << c->name << ':' << endl;
+          output << "  .word " << " 0x" << hex << w << endl;
         } else {
-          output << ".word __anonWord" << anonWordNum++ << " 0x" 
-                 << hex << w << '\n';
+          output << "  .word " << " 0x" << hex << w << endl;
         }
       }
 

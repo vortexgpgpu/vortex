@@ -18,5 +18,7 @@ entry:       ldi %r7, hello
              trap; /* All traps currently cause a halt. */
 
 .perm rw /* TODO: How should I write section permissions? */
-/* TODO: String literals! */
-.string hello "\"Harp!\" is how a harp seal says hello!\n"
+
+hello:
+.byte 0x22
+.string "Harp!\" is how a harp seal says hello!\n"
