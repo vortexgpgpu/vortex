@@ -46,5 +46,5 @@ puts_l:      ld   %r6, %r7, #0;
              jmpi puts_l;
 puts_end:    jmpr %r5
 
-.perm rwx
+.perm rw
 digstack:    .space 10
