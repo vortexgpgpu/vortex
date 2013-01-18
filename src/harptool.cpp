@@ -8,6 +8,7 @@
 #include <fstream>
 #include <stdlib.h>
 
+#include "include/debug.h"
 #include "include/types.h"
 #include "include/core.h"
 #include "include/enc.h"
@@ -31,11 +32,11 @@ HarpToolMode findMode(int argc, char** argv) {
 
   if (argc == 0) return HARPTOOL_MODE_HELP;
 
-  CommandLineArgFlag("--help", "-h", "", mode_help);
-  CommandLineArgFlag("-A", "--asm", "", mode_asm);
-  CommandLineArgFlag("-D", "--disasm", "", mode_disasm);
-  CommandLineArgFlag("-E", "--emu", "", mode_emu);
-  CommandLineArgFlag("-L", "--ld", "", mode_ld);
+  CommandLineArgFlag fh("--help", "-h", "", mode_help);
+  CommandLineArgFlag fa("-A", "--asm", "", mode_asm);
+  CommandLineArgFlag fd("-D", "--disasm", "", mode_disasm);
+  CommandLineArgFlag fe("-E", "--emu", "", mode_emu);
+  CommandLineArgFlag fl("-L", "--ld", "", mode_ld);
 
   CommandLineArg::readArgs((argc == 0?0:1), argv);
   CommandLineArg::clearArgs();
@@ -53,9 +54,9 @@ int asm_main(int argc, char **argv) {
   bool showHelp;  
 
   /* Get command line arguments. */
-  CommandLineArgFlag("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>("-o", "--output", "", outFileName);
-  CommandLineArgSetter<string>("-a", "--arch", "", archString);
+  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
+  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
 
   CommandLineArg::readArgs(argc-1, argv);
 
@@ -65,6 +66,8 @@ int asm_main(int argc, char **argv) {
   }
 
   ArchDef arch(archString);
+
+  D(0, "Created ArchDef for " << string(arch));
 
   /* Create an appropriate encoder. */
   Encoder *enc;
@@ -96,6 +99,7 @@ int asm_main(int argc, char **argv) {
   }
 
   /* Read an Obj from the assembly file. */
+  D(0, "Passing AsmReader ArchDef: " << string(arch));
   AsmReader ar(arch);
   Obj *o = ar.read(asmFile);
 
@@ -120,6 +124,7 @@ int asm_main(int argc, char **argv) {
   delete enc;
 
   /* Write a HOF binary. */
+  D(0, "Creating a HOFWriter, passing it ArchDef: " << string(arch));
   HOFWriter hw(arch);
   hw.write(outFile, *o);
   outFile.close();
@@ -135,9 +140,9 @@ int disasm_main(int argc, char **argv) {
   
 
   /* Get command line arguments. */
-  CommandLineArgFlag("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>("-a", "--arch", "", archString);
-  CommandLineArgSetter<string>("-o", "--output", "", outFileName);
+  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+  CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
 
   if (argc != 0) CommandLineArg::readArgs(argc-1, argv);
 
@@ -205,9 +210,9 @@ int emu_main(int argc, char **argv) {
   bool showHelp;
 
   /* Read the command line arguments. */
-  CommandLineArgFlag("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>("-c", "--core", "", imgFileName);
-  CommandLineArgSetter<string>("-a", "--arch", "", archString);
+  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  CommandLineArgSetter<string>fc("-c", "--core", "", imgFileName);
+  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
   
   CommandLineArg::readArgs(argc, argv);
 
@@ -249,11 +254,11 @@ int ld_main(int argc, char **argv) {
   Addr binOffset(0);
 
   /* Get command line arguments. */
-  CommandLineArgFlag("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>("-a", "--arch", "", archString);
-  CommandLineArgSetter<string>("-f", "--format", "", formatString);
-  CommandLineArgSetter<Addr>("--offset", "", binOffset);
-  CommandLineArgSetter<string>("-o", "--output", "", outFileName);
+  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+  CommandLineArgSetter<string>ff("-f", "--format", "", formatString);
+  CommandLineArgSetter<Addr>  foffset("--offset", "", binOffset);
+  CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
 
   int firstInput(0), newArgc;
   for (size_t i = 0; i < argc; i++) {

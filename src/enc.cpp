@@ -240,7 +240,7 @@ static unsigned ceilLog2(RegNum x) {
 }
 
 static Word mask(Size bits) {
-  return (1l<<bits)-1;
+  return (1ull<<bits)-1;
 }
 
 static void getSizes(const ArchDef &arch, Size &n, Size& o, Size &r, Size &p, 

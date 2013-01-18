@@ -11,6 +11,7 @@
 #include "archdef.h"
 #include "enc.h"
 #include "mem.h"
+#include "debug.h"
 
 namespace Harp {
 #ifdef EMU_INSTRUMENTATION

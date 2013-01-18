@@ -1,7 +1,9 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS=-g #-DUSE_DEBUG=3 #-fPIC
+CXXFLAGS ?= -O3 # -g -DUSE_DEBUG=3 -fPIC
+LDLIBS ?= -lharplib -pthread
+LDFLAGS ?= -L.
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
@@ -10,7 +12,7 @@ all: harptool # libharplib.so libharplib.a libqsim-harp.so
 # Use -static so we don't have to install the library in order to just run
 # Harptool.
 harptool: harptool.o libharplib.a
-	$(CXX) -static -o $@ harptool.o -L. -lharplib  -pthread
+	$(CXX) $(LDFLAGS) -static -o $@ harptool.o $(LDLIBS)
 
 libharplib.so: $(LIB_OBJS)
 	$(CXX) -shared -o $@ $(LIB_OBJS)
@@ -23,9 +25,9 @@ enc.o : enc.cpp include/types.h include/util.h include/enc.h include/archdef.h\
                 include/instruction.h
 harptool.o : harptool.cpp include/types.h include/core.h include/enc.h \
              include/instruction.h include/mem.h include/obj.h \
-             include/archdef.h include/args.h include/help.h
+             include/archdef.h include/args.h include/help.h include/debug.h
 instruction.o : instruction.cpp include/instruction.h include/obj.h \
-                include/core.h
+                include/core.h include/debug.h
 obj.o : obj.cpp include/types.h include/obj.h include/util.h \
         include/asm-tokens.h include/debug.h
 util.o : util.cpp include/types.h include/util.h

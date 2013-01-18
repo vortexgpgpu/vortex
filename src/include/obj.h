@@ -57,18 +57,19 @@ namespace Harp {
     {}
 
     virtual void bind(Addr addr, Addr base = 0) {
-      Size bytes = bits/8, remainder = bits%8, i;
+      Size bytes(bits/8), remainder(bits%8);
 
       if (relative) {
         addr = addr - base;
         Word_s addr_s(addr);
-        if ((addr_s >> bits) != -1 && (addr_s >> bits) != 0) goto noFit;
+        if ((addr_s >> bits) != ~0ull && (addr_s >> bits) != 0) goto noFit;
       } else {
-        Addr mask = (1ll<<bits)-1;
+        Addr mask = (1ull<<bits)-1;
         if (addr > mask) goto noFit;
       }
 
-      { Byte mask((1<<remainder) - 1);
+      { Byte mask((1ull<<remainder) - 1);
+        Size i;
         for (i = 0; i < bytes; i++) {
           data[offset+i] = addr & 0xff;
           addr >>= 8;
@@ -176,7 +177,7 @@ namespace Harp {
    
   class HOFReader : public ObjReader {
   public:
-    HOFReader(ArchDef arch) : arch(arch) {}
+    HOFReader(ArchDef &arch) : arch(arch) {}
     Obj *read(std::istream &input);
   private:
     const ArchDef &arch;
@@ -192,7 +193,7 @@ namespace Harp {
  
   class HOFWriter : public ObjWriter {
   public:
-    HOFWriter(ArchDef arch) : arch(arch) {}
+    HOFWriter(ArchDef &arch) : arch(arch) {}
     virtual void write(std::ostream &output, const Obj &obj);
   private:
     const ArchDef &arch;
