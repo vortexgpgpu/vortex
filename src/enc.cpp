@@ -103,8 +103,8 @@ void Decoder::setRefs(const std::vector<Ref*> &refVec) {
 Instruction *ByteDecoder::decode(const vector<Byte> &v, Size &n) {
   Instruction &inst = *(new Instruction());
 
-  RegNum pred = readByte(v, n);
-  if (pred) inst.setPred(pred - 1);
+  uint8_t pred = readByte(v, n);
+  if (pred != 0xff) inst.setPred(pred);
 
   unsigned op = readByte(v, n);
   inst.setOpcode(Instruction::Opcode(op));
@@ -190,8 +190,8 @@ ByteEncoder::ByteEncoder(const ArchDef &ad) {
 Size ByteEncoder::encode(Ref *&ref, vector<Byte> &v, Size n0, Instruction &i) {
   Size n(n0);
 
-  if (i.hasPred()) writeByte(v, n, i.getPred() + 1);
-  else writeByte(v, n, 0);
+  if (i.hasPred()) writeByte(v, n, i.getPred());
+  else writeByte(v, n, 0xff);
 
   writeByte(v, n, Byte(i.getOpcode()));
 

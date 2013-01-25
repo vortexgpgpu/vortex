@@ -12,25 +12,17 @@
 .perm x
 .entry
 .global
-entry:       ldi %r7, hello; jali %r5, puts;
-    
+entry:
              ldi  %r0, #2; /* i = 2 */
 loop1:       addi %r7, %r0, #0;
              jali %r5, printdec;
     
              muli %r1, %r0, __WORD;
-             ldi %r7, wrstr;
-             jali %r5, puts;
              st   %r0, %r1, array;
-             ldi %r7, wrfin;
-             jali %r5, puts;
              addi %r0, %r0, #1;
              subi %r1, %r0, SIZE;
              rtop @p0, %r1;
        @p0 ? jmpi loop1;
-
-             ldi %r7, xstr;
-            jali %r5, puts;
 
              ldi  %r0, #1;    
 loop2:       addi %r0, %r0, #1;
@@ -78,10 +70,6 @@ loop4:       ld   %r1, %r0, array;
              trap; /* All traps currently cause a halt. */
 
 .perm rw /* TODO: How should I write section permissions? */
-hello:  .string "\"Harp!\" is how a harp seal says hello!\n"
-wrstr:  .string "Doing write\n"
-wrfin:  .string "Did write\n"
-xstr:   .string "Exiting loop\n"
 
 .global
 array: .space 0x1000 /* SIZE words of space. */
