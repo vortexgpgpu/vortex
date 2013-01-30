@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     if (in.eof()) break;
   }
 
-  out << "END;";
+  out << "END;\n";
 
   return 0;
 }
