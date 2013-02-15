@@ -46,9 +46,10 @@ int main(int argc, char** argv) {
 
     out << setw(4) << setfill('0') << hex << j << " : ";
     for (unsigned i = 0; i < word; ++i) {
-      if (!in.eof()) bytes.push(in.get());
-      else           bytes.push(0);
+      bytes.push(in.get());
+      if (in.eof()) { bytes.pop(); while(i++ < word) bytes.push(0); }
     }
+
     for (unsigned i = 0; i < word; ++i) {
       out << hex << setw(2) << setfill('0') << unsigned(bytes.top());
       bytes.pop();
