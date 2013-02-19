@@ -148,7 +148,7 @@ After this, the operands of the instruction are ordered corresponding to their o
 \begin{itemize}
   \item Register operands are $log_2(\mathrm{\#GPRs})$ bits long, or just enough bits to uniquely identify a register.
   \item Predicate register operands are $log_2(\mathrm{\#pred\_regs})$ bits long, or just enough bits to uniquely identify a predicate register.
-  \item Immediate fields are always the last field and occupy the remaining bits of the instruction. All immediate fields are assumed to be sign extended.
+  \item Immediate fields are always the last field and occupy the remaining bits of the instruction. All immediate fields are sign extended to the length of a machine word.
 \end{itemize}
 
 \begin{center}
@@ -306,6 +306,9 @@ The flags register used by \texttt{tlbadd} stores, in its least-significant four
 \end{center}
 
 \subsection{Floating Point Arithmetic}
+These operations operate on real numbers in an implementation-determined
+format, which can be fixed point or floating point.
+
 \begin{center}
 \begin{tabular}{cl}
 \textbf{Instruction}&\textbf{Description}\\
