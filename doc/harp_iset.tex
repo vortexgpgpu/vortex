@@ -393,7 +393,7 @@ If 8 or more registers are available, the frame pointer may be the register one 
   \item The upper-numbered half are therefore callee-saved.
   \item The callee is responsible for adjusting the stack and frame pointers, if such adjustment is required.
   \item The stack grows toward smaller addresses (subtract to push, add to pop).
-  \item Pointer function arguemts and numerical arguments that can fit in a single register are passed through temporary registers, starting with register \texttt{\%r0}. If more registers are required than there are temporary registers available, stack space at addresses less than the stack pointer is used.
+  \item Pointer function arguments and numerical arguments that can fit in a single register are passed through temporary registers, starting with register \texttt{\%r0}. If more registers are required than there are temporary registers available, stack space at addresses less than the stack pointer is used.
   \item Record (struct) return values and numerical return values larger than the word size are always passed on the stack. The caller is responsible for allocating the necessary space. The stack pointer at the time of call is a pointer to the returned structure. All other return values are returned in \texttt{\%r0}.
 \end{itemize}
 
