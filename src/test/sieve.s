@@ -5,7 +5,7 @@
  Sample HARP assmebly program.
 
 *******************************************************************************/
-/* sieve of erastophanes: Find some primes. */
+/* sieve of eratosthanes: Find some primes. */
 .def SIZE 0x1000
 
 .align 4096
