@@ -68,7 +68,7 @@ loop4:       ld   %r1, %r0, array;
              jali %r5, printdec;
              trap; /* All traps currently cause a halt. */
 
-.perm rw /* TODO: How should I write section permissions? */
+.perm rw
 
 .global
 array: .space 0x1000 /* SIZE words of space. */

@@ -13,11 +13,10 @@
 .global
 entry:       ldi %r7, hello
              jali %r5, puts
-             ldi  %r0, #2; /* i = 2 */
 
              trap; /* All traps currently cause a halt. */
 
-.perm rw /* TODO: How should I write section permissions? */
+.perm rw
 
 hello:
 .byte 0x22
