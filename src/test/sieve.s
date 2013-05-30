@@ -13,7 +13,7 @@
 .entry
 .global
 entry:
-             ldi  %r0, #2; /* i = 2 */
+             ldi  %r0, #2;
 loop1:       addi %r7, %r0, #0;
     
              muli %r1, %r0, __WORD;
@@ -48,7 +48,7 @@ loop3:       muli  %r4, %r2, __WORD;
        @p0 ? jmpi  loop2;
              jmpi  loop3;
 
-end:         ldi  %r0, __WORD; /* i = 2 */
+end:         ldi  %r0, __WORD;
              shli %r0, %r0, #1;
              ldi  %r11, #0;
 loop4:       ld   %r1, %r0, array;
