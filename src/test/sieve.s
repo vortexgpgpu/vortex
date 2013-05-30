@@ -15,7 +15,6 @@
 entry:
              ldi  %r0, #2; /* i = 2 */
 loop1:       addi %r7, %r0, #0;
-             jali %r5, printdec;
     
              muli %r1, %r0, __WORD;
              st   %r0, %r1, array;
