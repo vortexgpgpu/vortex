@@ -1,13 +1,14 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS ?= -O3 # -g -DUSE_DEBUG=3 -fPIC
+CXXFLAGS ?= -fPIC -O3 # -g -DUSE_DEBUG=3
 LDLIBS ?= -lharplib -pthread
 LDFLAGS ?= -L.
+PREFIX ?= /usr/local
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
-all: harptool # libharplib.so libharplib.a libqsim-harp.so
+all: harptool libharplib.so libharplib.a libqsim-harp.so
 
 # Use -static so we don't have to install the library in order to just run
 # Harptool.
@@ -47,6 +48,11 @@ libqsim-harp.so: args.cpp enc.cpp instruction.cpp obj.cpp util.cpp mem.cpp \
 
 lex.yy.cc: scanner.lex
 	flex scanner.lex
+
+install:
+	cp libharplib.so $(PREFIX)/lib
+	cp harptool $(PREFIX)/bin
+	cp -r include $(PREFIX)/include/harp
 
 clean:
 	rm -f *~ \#* *.o *.a *.so include/*~ include/\#* harptool
