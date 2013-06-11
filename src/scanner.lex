@@ -37,7 +37,7 @@ using namespace HarpTools;
 %start DEFARGS PERMARGS WORDARGS STRINGARGS ALIGNARGS EMPTYARGS INSTARGS
 %start EATCOLON
 
-sym [A-Za-z_][A-Za-z0-9_]*
+sym [A-Za-z_.][A-Za-z0-9_.]*
 decnum [1-9][0-9]* 
 hexnum 0x[0-9a-f]+
 octnum 0[0-9]*
