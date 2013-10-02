@@ -228,6 +228,8 @@ void Instruction::executeOn(Core &c) {
                 break;
       case RTOP: pReg[pdest] = reg[rsrc[0]];
                  break;
+      case ISZERO: pReg[pdest] = !reg[rsrc[0]];
+                   break;
       case NOTP: pReg[pdest] = !(pReg[psrc[0]]);
                  break;
       case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
