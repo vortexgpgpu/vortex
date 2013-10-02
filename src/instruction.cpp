@@ -189,6 +189,10 @@ void Instruction::executeOn(Core &c) {
                  break;
       case ANDI: reg[rdest] = reg[rsrc[0]] & immsrc;
                  break;
+      case ORI:  reg[rdest] = reg[rsrc[0]] | immsrc;
+                 break;
+      case XORI: reg[rdest] = reg[rsrc[0]] ^ immsrc;
+                 break;
       case JMPI: c.pc += immsrc;
                  break;
       case JALI: reg[rdest] = c.pc;
