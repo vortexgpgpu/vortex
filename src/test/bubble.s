@@ -11,6 +11,7 @@ entry:  ldi %r1, Array;          /* p = array;               */
 
 oloop:                           /* do {                     */
         ldi %r2, Array;          /*   q = array;             */
+        ldi %r7, #1;             /*   sorted = 1;            */
 iloop:
         sub %r3, %r2, %r6;       /*   while (q != lim) {     */
         iszero @p0, %r3;
@@ -24,12 +25,15 @@ iloop:
   @p0 ? jmpi inext;
         st %r3, %r2, __WORD;     /*       *(q + 1) = *q;     */
         st %r4, %r2, #0;         /*       *q = temp;         */
+        ldi %r7, #0;             /*       sorted = 0;        */
                                  /*     }                    */
 inext:  addi %r2, %r2, __WORD;   /*     q++;                 */
         jmpi iloop;              /*   }                      */
 onext:  addi %r1, %r1, __WORD;   /*   p++;                   */
         subi %r6, %r6, __WORD;   /*   lim--;                 */
-        subi %r3, %r1, ArrayEnd; /* } while (p != array+N)   */
+        rtop @p0, %r7;           /* } while (!sorted && p != array+N)   */
+  @p0 ? jmpi printresults;
+        subi %r3, %r1, ArrayEnd;
         rtop @p0, %r3;
   @p0 ? jmpi oloop;
 
