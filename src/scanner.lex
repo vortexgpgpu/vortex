@@ -14,14 +14,23 @@
 #include <iostream>
 
 #include "include/asm-tokens.h"
+#include "include/harpfloat.h"
 
+extern int lexerBits;
 static int64_t read_number(const char *s) {
-  long long u;
   while (!isdigit(*s) && *s != '-' && *s != '+') s++;
 
-  sscanf(s, "%lli", &u);
-  return u;
+  if (strchr(s, 'f') || strchr(s, '.')) {
+    double d;
+    sscanf(s, "%f", &d);
+    return Harp::Word_u(Harp::Float(d, lexerBits));
+  } else {
+    long long u;
+    sscanf(s, "%lli", &u);
+    return u;
+  }
 }
+
 
 static std::string label_name(const char *cs) {
   return std::string(cs, strlen(cs)-1);
@@ -40,8 +49,9 @@ using namespace HarpTools;
 sym [A-Za-z_.][A-Za-z0-9_.]*
 decnum [1-9][0-9]* 
 hexnum 0x[0-9a-f]+
-octnum 0[0-9]*
-num [+-]?({decnum}|{hexnum}|{octnum})
+octnum 0[0-7]*
+floatnum ([0-9]+f|[0-9]*\.[0-9]+)
+num [+-]?({decnum}|{hexnum}|{octnum}|{floatnum})
 space [ \t]*
 peoperator ("+"|"-"|"*"|"/"|"%"|"&"|"|"|"^"|"<<"|">>")
 parenexp "("({num}|{sym}|{peoperator}|{space}|"("|")")+")"
@@ -52,7 +62,7 @@ endl \r?\n
   /* Ignore comments but keep line count consistent. */
   for (const char *c = YYText(); *c; c++) if (*c == '\n') yyline++;
 }
-
+to
 <INITIAL>\.def    { BEGIN DEFARGS;    return ASM_T_DIR_DEF;    }
 <INITIAL>\.perm   { BEGIN PERMARGS;   return ASM_T_DIR_PERM;   }
 <INITIAL>\.byte   { BEGIN WORDARGS;   return ASM_T_DIR_BYTE;   }
