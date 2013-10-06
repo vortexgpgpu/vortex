@@ -12,7 +12,13 @@
 .perm x
 .entry
 .global
-entry: /* . . . */
+entry: ldi %r0, array_a;
+       ldi %r1, array_b;
+       ldi %r2, #1;
+       jali %r5, dotprod
+
+       ori %r7, %r0, #0;
+       jali %r5, printhex;
 
        trap;
  
@@ -20,14 +26,16 @@ entry: /* . . . */
    length in r2 */
 dotprod: ldi %r3, #0;
 dploop:  ld %r4, %r0, #0;
-         ld %r5, %r1, #0;
+         ld %r6, %r1, #0;
          subi %r2, %r2, #1;
          addi %r0, %r0, __WORD;
          addi %r1, %r1, __WORD;
          rtop @p0, %r2;
-         fadd %r4, %r4, %r5;
+         fadd %r4, %r4, %r6;
          fadd %r3, %r3, %r4;
    @p0 ? jmpi dploop;
+         ori %r0, %r3, #0;
+         jmpr %r5;
 
 .perm rw
 

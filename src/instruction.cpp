@@ -159,6 +159,9 @@ void Instruction::executeOn(Core &c) {
       case SHL: reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
                 reg[rdest].trunc(wordSz);
                 break;
+      case SHR: reg[rdest] = reg[rsrc[0]] >> reg[rsrc[1]];
+                reg[rdest].trunc(wordSz);
+                break;
       case MOD: if (reg[rsrc[1]] == 0) throw DomainException();
                 reg[rdest] = reg[rsrc[0]] % reg[rsrc[1]];
                 break;

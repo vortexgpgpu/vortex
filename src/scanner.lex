@@ -16,14 +16,14 @@
 #include "include/asm-tokens.h"
 #include "include/harpfloat.h"
 
-extern int lexerBits;
+extern int lexerBytes;
 static int64_t read_number(const char *s) {
   while (!isdigit(*s) && *s != '-' && *s != '+') s++;
 
   if (strchr(s, 'f') || strchr(s, '.')) {
     double d;
     sscanf(s, "%f", &d);
-    return Harp::Word_u(Harp::Float(d, lexerBits));
+    return Harp::Word_u(Harp::Float(d, lexerBytes));
   } else {
     long long u;
     sscanf(s, "%lli", &u);

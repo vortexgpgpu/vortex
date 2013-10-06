@@ -94,9 +94,9 @@ static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
   exit(1);
 }
 
-int lexerBits;
+int lexerBytes;
 Obj *AsmReader::read(std::istream &input) {
-  lexerBits = wordSize;
+  lexerBytes = wordSize;
   FlexLexer *f = new yyFlexLexer(&input);
   Obj *o = new Obj();
   std::vector<Chunk>::reverse_iterator cur;

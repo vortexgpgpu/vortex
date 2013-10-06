@@ -7,6 +7,24 @@
 *******************************************************************************/
 /* Library: print decimals and strings! */
 .perm x
+
+.global
+printhex:    ldi %r8, (__WORD * 8);
+             ldi %r11, #1;
+             shli %r11, %r11, (__WORD*8 - 1);
+printhex_l1: subi %r8, %r8, #4;
+             shr %r9, %r7, %r8;
+             andi %r9, %r9, #15;
+             subi %r10, %r9, #9;
+             isneg @p0, %r10;
+             notp @p1, @p0;
+       @p0 ? addi %r9, %r9, #0x30
+       @p1 ? addi %r9, %r10, #0x61
+             rtop @p0, %r8;
+             st %r9, %r11, #0;
+       @p0 ? jmpi printhex_l1;
+             jmpr %r5;
+
 .global
 printdec:    ldi %r8, #1;
              shli %r8, %r8, (__WORD*8 - 1);
