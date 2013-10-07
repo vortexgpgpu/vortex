@@ -19,14 +19,48 @@ printhex_l1: subi %r8, %r8, #4;
              isneg @p0, %r10;
              notp @p1, @p0;
        @p0 ? addi %r9, %r9, #0x30
-       @p1 ? addi %r9, %r10, #0x61
+       @p1 ? addi %r9, %r10, #0x60
              rtop @p0, %r8;
              st %r9, %r11, #0;
        @p0 ? jmpi printhex_l1;
+             ldi %r9, #0x0a;
+             st %r9, %r11, #0;
              jmpr %r5;
 
 .global
-printdec:    ldi %r8, #1;
+printfloat:  ori %r10, %r5, #0;
+             ori %r11, %r7, #0;
+             ftoi %r7, %r7;
+             jali %r5, printdecint; /* Print whole part */
+
+             ldi %r8, #1;
+             shli %r8, %r8, (__WORD*8 -1 );
+
+             /* Print dot */
+             ldi %r7, #0x2e;
+             st %r7, %r8, #0;
+
+             ldi %r7, #10;
+             itof %r7, %r7;
+
+             ldi %r12, #3
+
+pfloop:      /* Print next decimal place */
+             subi %r12, %r12, #1;
+             rtop @p0, %r12;
+             fmul %r11, %r11, %r7;
+             ftoi %r9, %r11;
+             modi %r9, %r9, #10;
+             addi %r9, %r9, #0x30;
+             st %r9, %r8, #0;
+       @p0 ? jmpi pfloop;
+
+             ldi %r9, #0x0a;
+             st %r9, %r8, #0;
+
+             jmpr %r10;
+
+printdecint: ldi %r8, #1;
              shli %r8, %r8, (__WORD*8 - 1);
              and %r6, %r8, %r7;
              rtop @p0, %r6;
@@ -46,9 +80,15 @@ printdec_l2: subi %r9, %r9, __WORD;
              st %r6, %r8, #0;
              rtop @p0, %r9;
        @p0 ? jmpi printdec_l2;
-             ldi %r6, #0x0a;
-             st %r6, %r8, #0;
+
              jmpr %r5
+
+.global
+printdec: ori %r10, %r5, #0;
+          jali %r5, printdecint;
+          ldi %r6, #0x0a;
+          st %r6, %r8, #0;
+          jmpr %r10;
 
 .global
 puts:        ldi %r8, #1;

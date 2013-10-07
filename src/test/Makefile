@@ -43,7 +43,7 @@ simple.4b.bin : boot.4b.HOF lib.4b.HOF simple.4b.HOF
 sieve.4b.bin : boot.4b.HOF lib.4b.HOF sieve.4b.HOF
 	$(HARPLD) --arch $(4BARCH) -o $@ $^
 
-dotprod.4b.bin : boot.4b.HOF lib.4b.HOF sieve.4b.HOF
+dotprod.4b.bin : boot.4b.HOF lib.4b.HOF dotprod.4b.HOF
 	$(HARPLD) --arch $(4BARCH) -o $@ $^
 
 %.4b.bin : %.4b.HOF
