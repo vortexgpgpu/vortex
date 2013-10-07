@@ -5,7 +5,7 @@
  Sample HARP assmebly program.
 
 *******************************************************************************/
-/* sieve of eratosthanes: Find some primes. */
+/* Dot product: find scalar product of two vectors */
 .def SIZE 0x1000
 
 .align 4096
