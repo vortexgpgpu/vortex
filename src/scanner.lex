@@ -53,7 +53,7 @@ octnum 0[0-7]*
 floatnum ([0-9]+f|[0-9]*\.[0-9]+)
 num [+-]?({decnum}|{hexnum}|{octnum}|{floatnum})
 space [ \t]*
-peoperator ("+"|"-"|"*"|"/"|"%"|"&"|"|"|"^"|"<<"|">>")
+peoperator ("+"|"-"|"*"|"/"|"%"|"&"|"|"|"^"|"<<"|">>"|"`")
 parenexp "("({num}|{sym}|{peoperator}|{space}|"("|")")+")"
 endl \r?\n
 

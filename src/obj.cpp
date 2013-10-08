@@ -13,6 +13,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cmath>
 
 #include <map>
 
@@ -76,8 +77,9 @@ static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
     if (s[i] == '&') return rPE(s, d, start, i) & rPE(s, d, i+1, end);
   } 
 
-  // Unary -
+  // Unary operators
   if (s[start] == '-') return -rPE(s, d, start+1, end);
+  if (s[start] == '`') return log2(rPE(s, d, start+1, end));
 
   if (isdigit(s[start])) {
     unsigned long long u;
