@@ -150,7 +150,7 @@ void Instruction::executeOn(Core &c) {
       case SUB: reg[rdest] = reg[rsrc[0]] - reg[rsrc[1]];
                 reg[rdest].trunc(wordSz);
                 break;
-      case MUL: reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
+      case MUL: reg[rdest] = reg[rsrc[0]] * reg[rsrc[1]];
                 reg[rdest].trunc(wordSz);
                 break;
       case DIV: if (reg[rsrc[1]] == 0) throw DomainException();
