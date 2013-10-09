@@ -104,5 +104,27 @@ puts_l:      ld   %r6, %r7, #0;
              jmpi puts_l;
 puts_end:    jmpr %r5
 
+.global
+rand: ldi %r0, #0;
+      ld %r0, %r0, rseed;
+      mul %r0, %r0, %r0;
+      shri %r0, %r0, #8;
+      ldi %r9, #0xffff;
+      and %r0, %r0, %r9;
+      ldi %r9, #0;
+      st %r0, %r9, rseed;
+      jmpr %r5;
+
+.global
+randf: ori %r10, %r5, #0;
+       jali %r5, rand;
+       ldi %r9, #1;
+       shli %r9, %r9, #16;
+       itof %r9, %r9;
+       itof %r0, %r0;
+       fdiv %r0, %r0, %r9;
+       jmpr %r10;
+
 .perm rw
+rseed:       .word 0xface
 digstack:    .space 10
