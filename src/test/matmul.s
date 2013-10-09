@@ -70,7 +70,7 @@ iloop:  ld %r7, %r11, #0;
   @p0 ? jmpi cloop;
 
         addi %r9, %r9, #1;
-        sub %r7, %r9, %r4;
+        sub %r7, %r9, %r14;
         rtop @p0, %r7;
   @p0 ? jmpi rloop;
 
