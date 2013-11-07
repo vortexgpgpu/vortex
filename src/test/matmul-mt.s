@@ -41,7 +41,7 @@ ploop: ld %r7, %r1, #0;
 matgen: ldi %r2, #0;
         st %r5, %r2, retaddr;
         ldi %r2, #1;
-        shli %r2, %r2, (`__WORD + 1); /* Multiply r0 by 2*__WORD */
+        shl %r2, %r2, %r1;
         shl %r2, %r2, %r1;
         ori %r3, %r0, #0;
 
@@ -59,7 +59,8 @@ mgloop: jali %r5, randf;
 /* Write the matrix product of square matrix at (%r0) and (%r1) to (%r2). The
    size of these matrices is 2^Nx2^N, where N = %r3 */
 
-matmul: ldi %r4, #1;
+matmul: ori %r22, %r5, #0;
+        ldi %r4, #1;
         ldi %r10, (`__WORD); /* ` is the log base 2 operator */
         shl %r4, %r4, %r3;
         add %r10, %r10, %r3;
@@ -67,9 +68,25 @@ matmul: ldi %r4, #1;
         shl %r14, %r14, %r10;
 
         divi %r17, %r14, THREADS; /* Spawn threads */
-sloop:  
+        ori %r18, %r0, #0;
+        ori %r19, %r2, #0;
+        ldi %r20, #0;
+sloop:  add %r0, %r0, %r17;
+        add %r2, %r2, %r17;
+        addi %r20, %r20, #1;
+        subi %r21, %r20, THREADS;
+        rtop @p0, %r21;
+        notp @p1, @p0;
+  @p1 ? clone %r20;
+  @p0 ? jmpi sloop;
 
-        jmpr %r5;
+        ori %r0, %r18, #0;
+        ori %r2, %r19, #0;
+        clone %r20;
+
+         jalis %r5, matmulthd;  
+
+        jmpr %r22;
 
 /* One thread of matrix multiplication. Expected register values at start:
  *   %r0 - matrix a pointer (plus offset)
@@ -115,10 +132,11 @@ iloop:     ld %r7, %r11, #0;
 
            jmprt %r5;
 
-.align 4096
 .perm rw
-matrix_a: .space 64;
-matrix_b: .space 64;
+.align 4096
+
+matrix_a: .space 64
+matrix_b: .space 64
 matrix_r: .space 64
 
 retaddr: .word 0
