@@ -117,7 +117,7 @@ void Core::step() {
   if (USE_DEBUG >= 3) {
     D(3, "Register state:");
     for (unsigned i = 0; i < reg[0].size(); ++i) {
-      D_RAW("  %r" << i << ':');
+      D_RAW(dec << "  %r" << i << ':');
       for (unsigned j = 0; j < reg.size(); ++j) 
         D_RAW(' ' << hex << reg[j][i] << ' ');
       D_RAW('(' << shadowReg[i] << ')' << endl);

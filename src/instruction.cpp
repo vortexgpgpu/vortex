@@ -84,6 +84,8 @@ Instruction::InstTableEntry Instruction::instTable[] = {
 };
 
 ostream &Harp::operator<<(ostream& os, Instruction &inst) {
+  os << dec;
+
   if (inst.predicated) {
     os << "@p" << inst.pred << " ? ";
   }
