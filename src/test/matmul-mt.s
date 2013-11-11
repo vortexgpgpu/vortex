@@ -6,7 +6,7 @@
 
 *******************************************************************************/
 /* Matrix multiply: find matrix product */
-.def THREADS 2
+.def THREADS 4
 
 .align 4096
 .perm x
@@ -68,6 +68,7 @@ matmul: ori %r22, %r5, #0;
         shl %r14, %r14, %r10;
         shl %r17, %r14, %r3;
 
+        divi %r24, %r4, THREADS;
         divi %r17, %r17, THREADS; /* Spawn threads */
         divi %r24, %r4, THREADS;
         ori %r18, %r0, #0;
@@ -79,11 +80,10 @@ sloop:  add %r0, %r0, %r17;
         subi %r21, %r20, THREADS;
         rtop @p0, %r21;
   @p0 ? clone %r20;
+  @p0 ? jmpi sloop;
 
         ori %r0, %r18, #0;
         ori %r2, %r19, #0;
-
-  @p0 ? jmpi sloop;
 
         ldi %r20, THREADS;
         jalis %r5, %r20, matmulthd;  
