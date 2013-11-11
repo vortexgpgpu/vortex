@@ -66,8 +66,10 @@ matmul: ori %r22, %r5, #0;
         add %r10, %r10, %r3;
         ldi %r14, #1;
         shl %r14, %r14, %r10;
+        shl %r17, %r14, %r3;
 
-        divi %r17, %r14, THREADS; /* Spawn threads */
+        divi %r17, %r17, THREADS; /* Spawn threads */
+        divi %r24, %r4, THREADS;
         ori %r18, %r0, #0;
         ori %r19, %r2, #0;
         ldi %r20, #0;
@@ -76,15 +78,15 @@ sloop:  add %r0, %r0, %r17;
         addi %r20, %r20, #1;
         subi %r21, %r20, THREADS;
         rtop @p0, %r21;
-        notp @p1, @p0;
-  @p1 ? clone %r20;
-  @p0 ? jmpi sloop;
+  @p0 ? clone %r20;
 
         ori %r0, %r18, #0;
         ori %r2, %r19, #0;
-        clone %r20;
 
-         jalis %r5, matmulthd;  
+  @p0 ? jmpi sloop;
+
+        ldi %r20, THREADS;
+        jalis %r5, %r20, matmulthd;  
 
         jmpr %r22;
 
@@ -92,7 +94,7 @@ sloop:  add %r0, %r0, %r17;
  *   %r0 - matrix a pointer (plus offset)
  *   %r1 - matrix b pointer
  *   %r2 - destination matrix pointer (plus offset)
- *   %r17 - row count
+ *   %r24 - row count
  */
 matmulthd: ldi %r9, #0; /* result row: %r9 */
 rloop:     ldi %r6, #0; /* result col: %r6 */
@@ -105,8 +107,8 @@ cloop:     shli %r16, %r6, (`__WORD);
 
            ldi %r8, #0 /* dot prod position: %r8 */
 iloop:     ld %r7, %r11, #0;
-           ld %r17, %r12, #0;
-           fmul %r7, %r7, %r17
+           ld %r23, %r12, #0;
+           fmul %r7, %r7, %r23
            fadd %r13, %r13, %r7;
 
            addi %r8, %r8, #1;
@@ -126,7 +128,7 @@ iloop:     ld %r7, %r11, #0;
      @p0 ? jmpi cloop;
 
            addi %r9, %r9, #1;
-           sub %r7, %r9, %r17;
+           sub %r7, %r9, %r24;
            rtop @p0, %r7;
      @p0 ? jmpi rloop;
 
