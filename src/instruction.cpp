@@ -87,17 +87,17 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
   os << dec;
 
   if (inst.predicated) {
-    os << "@p" << inst.pred << " ? ";
+    os << "@p" << dec << inst.pred << " ? ";
   }
 
   os << Instruction::instTable[inst.op].opString << ' ';
-  if (inst.rdestPresent) os << "%r" << inst.rdest << ' ';
+  if (inst.rdestPresent) os << "%r" << dec << inst.rdest << ' ';
   if (inst.pdestPresent) os << "@p" << inst.pdest << ' ';
   for (int i = 0; i < inst.nRsrc; i++) {
-    os << "%r" << inst.rsrc[i] << ' ';
+    os << "%r" << dec << inst.rsrc[i] << ' ';
   }
   for (int i = 0; i < inst.nPsrc; i++) {
-    os << "@p" << inst.psrc[i] << ' ';
+    os << "@p" << dec << inst.psrc[i] << ' ';
   }
   if (inst.immsrcPresent) {
     if (inst.refLiteral) os << inst.refLiteral->name;
@@ -290,4 +290,9 @@ void Instruction::executeOn(Core &c) {
   D(3, "End instruction execute.");
 
   c.activeThreads = nextActiveThreads;
+  if (nextActiveThreads > c.reg.size()) {
+    cerr << "Error: attempt to spawn " << nextActiveThreads << " threads. "
+         << c.reg.size() << " available.\n";
+    abort();
+  }
 }

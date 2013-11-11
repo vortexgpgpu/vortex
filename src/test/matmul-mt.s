@@ -12,7 +12,8 @@
 .perm x
 .entry
 .global
-entry: ldi %r0, matrix_a;
+entry:
+       ldi %r0, matrix_a;
        ldi %r1, #3;
        jali %r5, matgen;
 
@@ -98,14 +99,15 @@ sloop:  add %r0, %r0, %r17;
  */
 matmulthd: ldi %r9, #0; /* result row: %r9 */
 rloop:     ldi %r6, #0; /* result col: %r6 */
+
 cloop:     shli %r16, %r6, (`__WORD);
            shl %r15, %r9, %r10;
 
            add %r11, %r15, %r0;
            add %r12, %r16, %r1;
-           ldi %r13, #0;
 
            ldi %r8, #0 /* dot prod position: %r8 */
+           ldi %r13, #0;
 iloop:     ld %r7, %r11, #0;
            ld %r23, %r12, #0;
            fmul %r7, %r7, %r23
@@ -129,6 +131,7 @@ iloop:     ld %r7, %r11, #0;
 
            addi %r9, %r9, #1;
            sub %r7, %r9, %r24;
+
            rtop @p0, %r7;
      @p0 ? jmpi rloop;
 
