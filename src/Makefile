@@ -2,18 +2,18 @@
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
 CXXFLAGS ?= -fPIC -O3 # -g -DUSE_DEBUG=3
-LDLIBS ?= -lharplib -pthread
+LDLIBS ?= -pthread
 LDFLAGS ?= -L.
 PREFIX ?= /usr/local
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
 
-all: harptool libharplib.so libharplib.a libqsim-harp.so
+all: harptool libharplib.so libharplib.a #libqsim-harp.so
 
 # Use -static so we don't have to install the library in order to just run
 # Harptool.
 harptool: harptool.o libharplib.a
-	$(CXX) $(LDFLAGS) -static -o $@ harptool.o $(LDLIBS)
+	$(CXX) $(LDFLAGS) -o $@ harptool.o libharplib.a $(LDLIBS)
 
 libharplib.so: $(LIB_OBJS)
 	$(CXX) -shared -o $@ $(LIB_OBJS)
@@ -37,14 +37,14 @@ mem.o : mem.cpp include/types.h include/util.h include/mem.h include/debug.h \
 core.o : core.cpp include/types.h include/util.h include/mem.h \
          include/debug.h include/archdef.h include/core.h
 
-QSIM_CXXFLAGS=-DEMU_INSTRUMENTATION
-
-libqsim-harp.so: args.cpp enc.cpp instruction.cpp obj.cpp util.cpp mem.cpp \
-                 core.cpp qsim-harp.cpp lex.yy.o include/qsim-harp.h \
-                 include/types.h include/core.h include/util.h include/enc.h \
-                 include/archdef.h include/instruction.h include/asm-tokens.h \
-                 include/mem.h
-	$(CXX) $(CXXFLAGS) $(QSIM_CXXFLAGS) -shared -o $@ $^
+#QSIM_CXXFLAGS=-DEMU_INSTRUMENTATION
+#
+#libqsim-harp.so: args.cpp enc.cpp instruction.cpp obj.cpp util.cpp mem.cpp \
+#                 core.cpp qsim-harp.cpp lex.yy.o include/qsim-harp.h \
+#                 include/types.h include/core.h include/util.h include/enc.h \
+#                 include/archdef.h include/instruction.h include/asm-tokens.h \
+#                 include/mem.h
+#	$(CXX) $(CXXFLAGS) $(QSIM_CXXFLAGS) -shared -o $@ $^
 
 lex.yy.cc: scanner.lex
 	flex scanner.lex
