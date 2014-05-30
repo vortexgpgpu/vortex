@@ -29,6 +29,8 @@ RamMemDevice::RamMemDevice(const char *filename, Size wordSize) :
   }
 
   do { contents.push_back(input.get()); } while (input);
+
+  while (contents.size() % wordSize) contents.push_back(0x00);
 }
 
 RamMemDevice::RamMemDevice(Size size, Size wordSize) : 
