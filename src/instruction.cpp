@@ -169,6 +169,10 @@ void Instruction::executeOn(Core &c) {
                 break;
       case AND: reg[rdest] = reg[rsrc[0]] & reg[rsrc[1]];
                 break;
+      case OR:  reg[rdest] = reg[rsrc[0]] | reg[rsrc[1]];
+                break;
+      case XOR: reg[rdest] = reg[rsrc[0]] ^ reg[rsrc[1]];
+                break;
       case NEG: reg[rdest] = -(Word_s)reg[rsrc[0]];
                 reg[rdest].trunc(wordSz);
                 break;
