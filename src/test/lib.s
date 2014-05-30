@@ -15,11 +15,11 @@ printhex:    ldi %r8, (__WORD * 8);
 printhex_l1: subi %r8, %r8, #4;
              shr %r9, %r7, %r8;
              andi %r9, %r9, #15;
-             subi %r10, %r9, #9;
+             subi %r10, %r9, #10;
              isneg @p0, %r10;
              notp @p1, @p0;
        @p0 ? addi %r9, %r9, #0x30
-       @p1 ? addi %r9, %r10, #0x60
+       @p1 ? addi %r9, %r10, #0x61
              rtop @p0, %r8;
              st %r9, %r11, #0;
        @p0 ? jmpi printhex_l1;
