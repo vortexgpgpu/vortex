@@ -3,7 +3,6 @@
 ################################################################################
 CXXFLAGS ?= -fPIC -O3 # -g -DUSE_DEBUG=3
 LDLIBS ?= -pthread
-LDFLAGS ?= -L.
 PREFIX ?= /usr/local
 
 LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
