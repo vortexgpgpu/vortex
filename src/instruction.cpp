@@ -81,6 +81,8 @@ Instruction::InstTableEntry Instruction::instTable[] = {
   {"fdiv",     false, false, false, false, AC_3REG,     ITYPE_FPDIV   },
   {"fneg",     false, false, false, false, AC_2REG,     ITYPE_FPBASIC },
   {"wspawn",   false, false, true,  false, AC_2REGSRC,  ITYPE_NULL    },
+  {"split",    false, false, true,  false, AC_NONE,     ITYPE_NULL    },
+  {"join",     false, false, true,  false, AC_NONE,     ITYPE_NULL    },
   {NULL,false,false,false,false,AC_NONE,ITYPE_NULL}/////// End of table.
 };
 

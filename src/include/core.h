@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <stack>
 
 #include "types.h"
 #include "archdef.h"
@@ -47,6 +48,12 @@ namespace Harp {
 #endif
   };
 
+  // Entry in the IPDOM Stack
+  struct DomStackEntry {
+    std::vector<bool> tmask;
+    Word pc;
+  };
+
   class Core {
   public:
     Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id=0);
@@ -66,6 +73,9 @@ namespace Harp {
     Size activeThreads, shadowActiveThreads;
     std::vector<std::vector<Reg<Word> > > reg;
     std::vector<std::vector<Reg<bool> > > pred;
+
+    std::vector<bool> tmask;
+    std::stack<DomStackEntry> domStack;
 
     std::vector<Word> shadowReg;
     std::vector<bool> shadowPReg;
