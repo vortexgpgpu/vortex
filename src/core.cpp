@@ -46,6 +46,8 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) :
     for (Word i = 0; i < a.getNPRegs(); ++i) {
       pred[j].push_back(Reg<bool>(id, regNum++));
     }
+
+    tmask.push_back(true);
   }
 
   /* Set initial register contents. */
@@ -131,6 +133,11 @@ void Core::step() {
     D_RAW(" (");
     for (unsigned i = 0; i < shadowPReg.size(); ++i) D_RAW(shadowPReg[i]);
     D_RAW(')' << endl);
+
+    D(3, "Thread mask:");
+    D_RAW("  ");
+    for (unsigned i = 0; i < tmask.size(); ++i) D_RAW(tmask[i] << ' ');
+    D_RAW(endl);
   }
   #endif
 

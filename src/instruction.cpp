@@ -121,12 +121,16 @@ void Instruction::executeOn(Core &c) {
     return;
   }
 
-  /* Also throw exceptions on divergent branches. */
-  if (predicated && instTable[op].controlFlow) {
-    bool p0 = c.pred[0][pred];
-    for (Size t = 1; t < c.activeThreads; t++) {
-      if (c.pred[t][pred] != p0) throw DivergentBranchException();
+  /* Also throw exceptions on non-masked divergent branches. */
+  if (instTable[op].controlFlow) {
+    Size t, count, active;
+    for (t = 0, count = 0, active = 0; t < c.activeThreads; ++t) {
+      if ((!predicated || c.pred[t][pred]) && c.tmask[t]) ++count;
+      if (c.tmask[t]) ++active;
     }
+
+    if (count != 0 && count != active)
+      throw DivergentBranchException();
   }
 
   Size nextActiveThreads = c.activeThreads;
@@ -135,8 +139,12 @@ void Instruction::executeOn(Core &c) {
   for (Size t = 0; t < c.activeThreads; t++) {
     vector<Reg<Word> > &reg(c.reg[t]);
     vector<Reg<bool> > &pReg(c.pred[t]);
+    stack<DomStackEntry> &domStack(c.domStack);
 
-    if (predicated && !pReg[pred]) continue;
+    // If this thread is masked out, don't execute the instruction, unless it's
+    // a split or join.
+    if (((predicated && !pReg[pred]) || !c.tmask[t]) &&
+          op != SPLIT && op != JOIN) continue;
 
     Word memAddr;  
     switch (op) {
@@ -282,6 +290,23 @@ void Instruction::executeOn(Core &c) {
       case FDIV: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) /
                                     double(Float(reg[rsrc[1]], wordSz)),wordSz);
                  break;
+      case SPLIT:if (t == 0) {
+                   // TODO: if mask becomes all-zero, fall through
+                   DomStackEntry e(pred, c.pred, c.pc);
+                   c.domStack.push(c.tmask);
+                   c.domStack.push(e);
+                   for (unsigned i = 0; i < e.tmask.size(); ++i)
+                     c.tmask[i] = !e.tmask[i];
+                 }
+                 break;
+      case JOIN: if (t == 0) {
+                   // TODO: if mask becomes all-zero, fall through
+                   if (!c.domStack.top().fallThrough)
+                     c.pc = c.domStack.top().pc;
+		   c.tmask = c.domStack.top().tmask;
+                   c.domStack.pop();
+                 }
+	         break;
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
