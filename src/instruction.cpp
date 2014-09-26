@@ -170,6 +170,10 @@ void Instruction::executeOn(Core &c) {
                 break;
       case AND: reg[rdest] = reg[rsrc[0]] & reg[rsrc[1]];
                 break;
+      case OR: reg[rdest] = reg[rsrc[0]] | reg[rsrc[1]];
+               break;
+      case XOR: reg[rdest] = reg[rsrc[0]] ^ reg[rsrc[1]];
+                break;
       case NEG: reg[rdest] = -(Word_s)reg[rsrc[0]];
                 reg[rdest].trunc(wordSz);
                 break;
@@ -238,6 +242,10 @@ void Instruction::executeOn(Core &c) {
                    break;
       case NOTP: pReg[pdest] = !(pReg[psrc[0]]);
                  break;
+      case ANDP: pReg[pdest] = pReg[psrc[0]] & pReg[psrc[1]];
+                 break;
+      case ORP: pReg[pdest] = pReg[psrc[0]] | pReg[psrc[1]];
+                break;
       case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
                   break;
       case HALT: c.activeThreads = 0;
