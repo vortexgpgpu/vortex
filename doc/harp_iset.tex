@@ -132,7 +132,8 @@ The bit fields in the instruction encodings depend heavily on this quality.
   30  "skep"     1REG      31  "reti"     NONE      32  "tlbrm"    1REG
   33  "itof"     2REG      34  "ftoi"     2REG      35  "fadd"     3REG
   36  "fsub"     3REG      37  "fmul"     3REG      38  "fdiv"     3REG
-  39  "fneg"     2REG
+  39  "fneg"     2REG      3a  "wspawn"   2REG      3b  "split"    NONE
+  3c  "join"     NONE
 \end{verbatim}
 
 \subsection{Word Encoding}
@@ -346,6 +347,8 @@ format, which can be fixed point or floating point.
 \texttt{jalis} \%link, \%n, \textsc{\#RelDest}&Jump and link immediate, spawning N active lanes.\\
 \texttt{jalrs} \%link, \%n, \%dest&Jump and link indirect, spawning N active lanes.\\
 \texttt{jmprt} \%addr&Jump indirect, terminating execution on all but a single lane.\\
+\texttt{split}&Control flow diverge.\\
+\texttt{join}&Control flow reconverge.\\
 \end{tabular}
 \end{center}
 
@@ -411,6 +414,14 @@ The current response to this is to trap to the operating system (interrupt numbe
 \subsection{Instructions for SIMD Operation}
 The \texttt{clone}, \texttt{jalis}, \texttt{jalrs}, and \texttt{jmprt} instructions form the basis of SIMD context control in the HARP instruction set.
 Context is created using \texttt{clone}, the waiting threads are spawned using \texttt{jalrs} or \texttt{jalis}, ``jump-and-link immediate/register and spawn'', and finally the parallel section returns using \texttt{jmprt}, ``jump register and terminate'', best thought of as ``return and terminate.''
+
+There are times when a control flow operation will need to be predicated, going one direction on some lanes and the other direction on other lanes.
+For this, the HARP instruction set provides the \texttt{split} and \texttt{join} instructions.
+When a predicated \texttt{split} is first encountered, only the lanes for which the \texttt{split}'s predicate are true are allowed to continue.
+The other lanes are masked out until the corresponding \texttt{join} is encountered.
+The first time \texttt{join} is reached, control flow returns to the instruction following the corresponding \texttt{split} with the set of masked-out lanes complemented.
+The second time the same \texttt{join} is reached, control flow falls through and the original lane mask is restored.
+A hardware stack is maintained to keep track of nested \texttt{split}s.
 
 \section{Default I/O Devices}
 The emulator currently only supports a single I/O device, simple console I/O.
