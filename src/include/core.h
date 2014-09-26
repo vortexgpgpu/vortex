@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <stack>
 
 #include "types.h"
 #include "archdef.h"
@@ -26,7 +27,7 @@ namespace Harp {
 
     Reg &operator=(T r) { val = r; doWrite(); return *this; }
 
-    operator T() { doRead(); return val; }
+    operator T() const { doRead(); return val; }
 
     void trunc(Size s) {
       Word mask((~0ull >> (sizeof(Word)-s)*8));
@@ -39,12 +40,34 @@ namespace Harp {
 
 #ifdef EMU_INSTRUMENTATION
     /* Access size here is 8, representing the register size of 64-bit cores. */
-    void doWrite() { reg_doWrite(cpuId, regNum); }
-    void doRead() { reg_doRead(cpuId, regNum); }
+    void doWrite() const { reg_doWrite(cpuId, regNum); }
+    void doRead() const { reg_doRead(cpuId, regNum); }
 #else
-    void doWrite() {}
-    void doRead() {}
+    void doWrite() const {}
+    void doRead() const {}
 #endif
+  };
+
+  // Entry in the IPDOM Stack
+  struct DomStackEntry {
+    DomStackEntry(
+      unsigned p, const std::vector<std::vector<Reg<bool> > >& m, Word pc
+    ): pc(pc), fallThrough(false)
+    {
+      std::cout << "New DomStackEntry:";
+      for (unsigned i = 0; i < m.size(); ++i) {
+        tmask.push_back(!bool(m[i][p]));
+	std::cout << ' ' << bool(m[i][p]);
+      }
+      std::cout << std::endl;
+    }
+
+    DomStackEntry(const std::vector<bool> &tmask):
+      tmask(tmask), fallThrough(true) {}
+
+    bool fallThrough;
+    std::vector<bool> tmask;
+    Word pc;
   };
 
   class Core {
@@ -66,6 +89,9 @@ namespace Harp {
     Size activeThreads, shadowActiveThreads;
     std::vector<std::vector<Reg<Word> > > reg;
     std::vector<std::vector<Reg<bool> > > pred;
+
+    std::vector<bool> tmask;
+    std::stack<DomStackEntry> domStack;
 
     std::vector<Word> shadowReg;
     std::vector<bool> shadowPReg;
