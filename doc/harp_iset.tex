@@ -132,7 +132,7 @@ The bit fields in the instruction encodings depend heavily on this quality.
   30  "skep"     1REG      31  "reti"     NONE      32  "tlbrm"    1REG
   33  "itof"     2REG      34  "ftoi"     2REG      35  "fadd"     3REG
   36  "fsub"     3REG      37  "fmul"     3REG      38  "fdiv"     3REG
-  39  "fneg"     2REG      3a  "wspawn"   2REG      3b  "split"    NONE
+  39  "fneg"     2REG      3a  "wspawn"   3REG      3b  "split"    NONE
   3c  "join"     NONE
 \end{verbatim}
 
@@ -349,6 +349,15 @@ format, which can be fixed point or floating point.
 \texttt{jmprt} \%addr&Jump indirect, terminating execution on all but a single lane.\\
 \texttt{split}&Control flow diverge.\\
 \texttt{join}&Control flow reconverge.\\
+\end{tabular}
+\end{center}
+
+\subsection{Warp Control}
+\begin{center}
+\begin{tabular}{cl}
+\textbf{Instruction}&\textbf{Description}\\
+\hline
+\texttt{wspawn} \%dest, \%pc, \%src&Create new warp, copying \%src in current warp to to \%dest in new warp.\\
 \end{tabular}
 \end{center}
 
