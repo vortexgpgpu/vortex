@@ -8,8 +8,7 @@
 #include <iomanip>
 #include <vector>
 
-
-
+#include "include/debug.h"
 #include "include/types.h"
 #include "include/util.h"
 #include "include/enc.h"
@@ -271,8 +270,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
   Word code(readWord(v, idx, n/8));
   Instruction &inst = * new Instruction();  
 
-  bool predicated = (code>>(i1+o+p));
-  if (predicated) { inst.setPred((code>>(i1+o))&p); }
+  bool predicated = (code>>(n-1));
+  if (predicated) { inst.setPred((code>>(n-p-1))&pMask); }
 
   Instruction::Opcode op = (Instruction::Opcode)((code>>i1)&oMask);
   inst.setOpcode(op);
@@ -346,7 +345,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
     inst.setImmRef(*r);
   }
 
-  //cout << "Decoded 0x" << hex << code << " into: " << inst << '\n';
+  D(2, "Decoded 0x" << hex << code << " into: " << inst << '\n');
 
   return &inst;
 }
