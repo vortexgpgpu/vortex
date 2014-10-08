@@ -291,7 +291,7 @@ void Instruction::executeOn(Core &c) {
                    c.pc = c.shadowPc;
                  }
                  break;
-      case ITOF: reg[rdest] = Float(double(reg[rsrc[0]]), wordSz);
+      case ITOF: reg[rdest] = Float(double(Word_s(reg[rsrc[0]])), wordSz);
                  break; 
       case FTOI: reg[rdest] = Word_s(double(Float(reg[rsrc[0]], wordSz)));
                  reg[rdest].trunc(wordSz);

@@ -24,6 +24,10 @@ int main() {
     for (unsigned i = 0; i < 2; i++) {
       int n = rand() - RAND_MAX/2;
       double d = n * 0.0000001;
+
+      // Sometimes do negative numbers.
+      if (rand() & 1) d = -d;
+
       try_val(d, sz);
     }
 
