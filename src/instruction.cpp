@@ -187,6 +187,9 @@ void Instruction::executeOn(Core &c) {
       case NEG: reg[rdest] = -(Word_s)reg[rsrc[0]];
                 reg[rdest].trunc(wordSz);
                 break;
+      case NOT: reg[rdest] = ~(Word_s)reg[rsrc[0]];
+                reg[rdest].trunc(wordSz);
+                break;
       case ADDI: reg[rdest] = reg[rsrc[0]] + immsrc;
                  reg[rdest].trunc(wordSz);
                  break;
@@ -218,6 +221,9 @@ void Instruction::executeOn(Core &c) {
       case JALI: reg[rdest] = c.pc;
                  c.pc += immsrc;
                  break;
+      case JALR: reg[rdest] = c.pc;
+                 c.pc = reg[rsrc[0]];
+                 break;
       case JMPR: c.pc = reg[rsrc[0]];
                  break;
       case CLONE: c.reg[reg[rsrc[0]]] = reg;
@@ -225,6 +231,10 @@ void Instruction::executeOn(Core &c) {
       case JALIS: nextActiveThreads = reg[rsrc[0]];
                   reg[rdest] = c.pc;
                   c.pc += immsrc;
+                  break;
+      case JALRS: nextActiveThreads = reg[rsrc[0]];
+                  reg[rdest] = c.pc;
+                  c.pc = reg[rsrc[0]];
                   break;
       case JMPRT: nextActiveThreads = 1;
                   c.pc = reg[rsrc[0]];
@@ -256,6 +266,8 @@ void Instruction::executeOn(Core &c) {
                  break;
       case ORP: pReg[pdest] = pReg[psrc[0]] | pReg[psrc[1]];
                 break;
+      case XORP: pReg[pdest] = pReg[psrc[0]] != pReg[psrc[1]];
+                 break;
       case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
                   break;
       case HALT: c.activeThreads = 0;
