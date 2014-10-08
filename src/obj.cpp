@@ -41,45 +41,51 @@ static int skip_parens(const string &s, int i) {
 }
 
 // Probably the worst recursive descent parser ever written, but it's an easy 
-// way to make our assembly language pretty.
-static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
-                                    int start=0, int end=-1)
+// way to make our assembly language prettier.
+static uint64_t rPE(bool &v, const string &s, const map<string, Word> &d,
+                    int start, int end)
 {
-  uint64_t (* const rPE)(const string&, const map<string, Word>&, int, int) 
-    = readParenExpression;
-  if (end == start) return 0;
+  D(2, "rPE(" << v << ", " << s << ", d, " << start << ", " << end << ");");
 
-  if (end==-1) end = s.length();
-  
+  if (end == start) { v = false; return 0; }
+
   while (isspace(s[start])) start++;
   while (isspace(s[end-1])) end--;
 
   for (int i = start; i < end; i++) {
     if (s[i] == '(') { i = skip_parens(s, i); continue; }
     
-    if (s[i] == '<') return rPE(s, d, start, i) << rPE(s, d, i+2, end);
-    if (s[i] == '>') return rPE(s, d, start, i) >> rPE(s, d, i+2, end);
+    if (s[i] == '<') return rPE(v, s, d, start, i) << rPE(v, s, d, i+2, end);
+    if (s[i] == '>') return rPE(v, s, d, start, i) >> rPE(v, s, d, i+2, end);
   }
 
   for (int i = start; i < end; i++) {
     if (s[i] == '(') { i = skip_parens(s, i); continue; }
-    if (s[i] == '+') return rPE(s, d, start, i) + rPE(s, d, i+1, end);
-    if (s[i] == '-') return rPE(s, d, start, i) - rPE(s, d, i+1, end);
-    if (s[i] == '|') return rPE(s, d, start, i) | rPE(s, d, i+1, end);
-    if (s[i] == '^') return rPE(s, d, start, i) ^ rPE(s, d, i+1, end);
+    if (s[i] == '+') return rPE(v, s, d, start, i) + rPE(v, s, d, i+1, end);
+    if (s[i] == '-') {
+      // If we've already failed, don't try this.
+      if (v == false) return 0;
+
+      // If it works as a binary -, return that. Otherwise, it's a unary -
+      uint64_t x(rPE(v, s, d, start, i) - rPE(v, s, d, i+1, end));
+      if (v) return x;
+      else   v = true;
+    }
+    if (s[i] == '|') return rPE(v, s, d, start, i) | rPE(v, s, d, i+1, end);
+    if (s[i] == '^') return rPE(v, s, d, start, i) ^ rPE(v, s, d, i+1, end);
   }
 
   for (int i = start; i < end; i++) {
     if (s[i] == '(') { i = skip_parens(s, i); continue; }
-    if (s[i] == '*') return rPE(s, d, start, i) * rPE(s, d, i+1, end);
-    if (s[i] == '/') return rPE(s, d, start, i) / rPE(s, d, i+1, end);
-    if (s[i] == '%') return rPE(s, d, start, i) % rPE(s, d, i+1, end);
-    if (s[i] == '&') return rPE(s, d, start, i) & rPE(s, d, i+1, end);
+    if (s[i] == '*') return rPE(v, s, d, start, i) * rPE(v, s, d, i+1, end);
+    if (s[i] == '/') return rPE(v, s, d, start, i) / rPE(v, s, d, i+1, end);
+    if (s[i] == '%') return rPE(v, s, d, start, i) % rPE(v, s, d, i+1, end);
+    if (s[i] == '&') return rPE(v, s, d, start, i) & rPE(v, s, d, i+1, end);
   } 
 
   // Unary operators
-  if (s[start] == '-') return -rPE(s, d, start+1, end);
-  if (s[start] == '`') return log2(rPE(s, d, start+1, end));
+  if (s[start] == '-') return -rPE(v, s, d, start+1, end);
+  if (s[start] == '`') return log2(rPE(v, s, d, start+1, end));
 
   if (isdigit(s[start])) {
     unsigned long long u;
@@ -87,13 +93,22 @@ static uint64_t readParenExpression(const string &s, const map<string, Word> &d,
     return u;
   }
 
-  if (s[start] == '(') return rPE(s, d, start+1, end-1);
+  if (s[start] == '(') return rPE(v, s, d, start+1, end-1);
 
-  map<string, Word>::const_iterator it = d.find(s.substr(start, end-start));
+  string label(s.substr(start, end-start));
+  map<string, Word>::const_iterator it(d.find(label));
   if (it != d.end()) return it->second;
+ 
+  // If nothing else works, set valid to false.
+  v = 0;
+  return 0;
+}
 
-  cout << "Error on " << yyline << ": ";
-  exit(1);
+static uint64_t readParenExpression(bool &valid, const string &s,
+                                    const map<string, Word> &d)
+{
+  valid = true;
+  return rPE(valid, s, d, 0, s.length());
 }
 
 int lexerFloatBytes;
@@ -355,9 +370,12 @@ Obj *AsmReader::read(std::istream &input) {
           default: asmReaderError(yyline, "Unexpected register");
         }
         break;
-      case ASM_T_PEXP:
+      case ASM_T_PEXP: {
         // Decode the paren expression.
-        yylval.u = readParenExpression(yylval.s, defs);
+        bool valid;
+        yylval.u = readParenExpression(valid, yylval.s, defs);
+        if (!valid) asmReaderError(yyline, "Invalid paren expression");
+      }
       case ASM_T_LIT:
         switch (state) {
           case ST_INST1: asmReaderError(yyline, "Unexpected literal");
