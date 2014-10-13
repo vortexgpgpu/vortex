@@ -133,7 +133,7 @@ The bit fields in the instruction encodings depend heavily on this quality.
   33  "itof"     2REG      34  "ftoi"     2REG      35  "fadd"     3REG
   36  "fsub"     3REG      37  "fmul"     3REG      38  "fdiv"     3REG
   39  "fneg"     2REG      3a  "wspawn"   3REG      3b  "split"    NONE
-  3c  "join"     NONE
+  3c  "join"     NONE      3d  "bar"
 \end{verbatim}
 
 \subsection{Word Encoding}
@@ -358,6 +358,7 @@ format, which can be fixed point or floating point.
 \textbf{Instruction}&\textbf{Description}\\
 \hline
 \texttt{wspawn} \%dest, \%pc, \%src&Create new warp, copying \%src in current warp to to \%dest in new warp.\\
+\texttt{bar} \%id, \%n&Barrier of \%n warps. Identified by \%id.\\
 \end{tabular}
 \end{center}
 

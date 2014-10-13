@@ -83,6 +83,7 @@ Instruction::InstTableEntry Instruction::instTable[] = {
   {"wspawn",   false, false, true,  false, AC_3REG,     ITYPE_NULL    },
   {"split",    false, false, true,  false, AC_NONE,     ITYPE_NULL    },
   {"join",     false, false, true,  false, AC_NONE,     ITYPE_NULL    },
+  {"bar",      false, false, true,  false, AC_2REGSRC,  ITYPE_NULL    },
   {NULL,false,false,false,false,AC_NONE,ITYPE_NULL}/////// End of table.
 };
 
