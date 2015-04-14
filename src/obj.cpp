@@ -331,7 +331,10 @@ Obj *AsmReader::read(std::istream &input) {
         break;
       case ASM_T_INST:
         if (state == ST_INIT) {
-          Instruction::Opcode opc = opMap[yylval.s];
+          map<string, Instruction::Opcode>::iterator opcIterator = opMap.find(yylval.s);
+          if (opcIterator == opMap.end())
+            asmReaderError(yyline, "Invalid Instruction");
+          Instruction::Opcode opc = opcIterator->second;
           if (outstate != OS_TEXTCHUNK) {
             tc = new TextChunk(next_chunk_name, next_chunk_align,
                                flagsToWord(permR, permW, permX));
