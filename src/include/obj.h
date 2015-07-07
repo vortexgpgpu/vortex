@@ -169,10 +169,11 @@ namespace Harp {
 
   class AsmReader : public ObjReader {
   public:
-    AsmReader(ArchDef arch) : wordSize(arch.getWordSize()) {}
+    AsmReader(ArchDef arch) :
+      wordSize(arch.getWordSize()), nRegs(arch.getNRegs()) {}
     virtual Obj *read(std::istream &input);
   private:
-    Size wordSize;
+    Size wordSize, nRegs;
   };
    
   class HOFReader : public ObjReader {

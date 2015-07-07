@@ -363,7 +363,21 @@ Obj *AsmReader::read(std::istream &input) {
           default: asmReaderError(yyline, "Unexpected predicate register");
         }
         break;
+
+      case ASM_T_REG_RA:
+        yylval.u = nRegs - 1;
+        goto continue_reg;
+
+      case ASM_T_REG_FP:
+        yylval.u = nRegs - 3;
+        goto continue_reg;
+
+      case ASM_T_REG_SP:
+        yylval.u = nRegs - 2;
+        goto continue_reg;
+
       case ASM_T_REG:
+      continue_reg:
         switch (state) {
           case ST_INST1: curInst->setDestReg(yylval.u);
                          state = ST_INST2;
