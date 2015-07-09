@@ -91,9 +91,9 @@ to
                                 return ASM_T_PREG; }
 <INSTARGS>%r{num}{space}[,;]? { yylval.u = read_number(YYText());
                                 return ASM_T_REG; }
-<INSTARGS>%ra { return ASM_T_REG_RA; }
-<INSTARGS>%sp { return ASM_T_REG_FP; }
-<INSTARGS>%fp { return ASM_T_REG_SP; }
+<INSTARGS>%ra{space}[,;]? { return ASM_T_REG_RA; }
+<INSTARGS>%sp{space}[,;]? { return ASM_T_REG_FP; }
+<INSTARGS>%fp{space}[,;]? { return ASM_T_REG_SP; }
 
 <INSTARGS>#{num}{space}[,;]? { yylval.u = read_number(YYText());
                                return ASM_T_LIT; }
