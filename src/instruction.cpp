@@ -235,7 +235,7 @@ void Instruction::executeOn(Core &c) {
                   break;
       case JALRS: nextActiveThreads = reg[rsrc[0]];
                   reg[rdest] = c.pc;
-                  c.pc = reg[rsrc[0]];
+                  c.pc = reg[rsrc[1]];
                   break;
       case JMPRT: nextActiveThreads = 1;
                   c.pc = reg[rsrc[0]];
