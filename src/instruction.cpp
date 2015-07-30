@@ -136,7 +136,9 @@ void Instruction::executeOn(Core &c) {
 
   Size nextActiveThreads = c.activeThreads;
   Size wordSz = c.a.getWordSize();
+  Word nextPc = c.pc;
 
+  bool sjOnce(true); // Has split or joined once already
   for (Size t = 0; t < c.activeThreads; t++) {
     vector<Reg<Word> > &reg(c.reg[t]);
     vector<Reg<bool> > &pReg(c.pred[t]);
@@ -217,28 +219,28 @@ void Instruction::executeOn(Core &c) {
                  break;
       case XORI: reg[rdest] = reg[rsrc[0]] ^ immsrc;
                  break;
-      case JMPI: c.pc += immsrc;
+      case JMPI: nextPc = c.pc + immsrc;
                  break;
       case JALI: reg[rdest] = c.pc;
-                 c.pc += immsrc;
+                 nextPc = c.pc + immsrc;
                  break;
       case JALR: reg[rdest] = c.pc;
-                 c.pc = reg[rsrc[0]];
+                 nextPc = reg[rsrc[0]];
                  break;
-      case JMPR: c.pc = reg[rsrc[0]];
+      case JMPR: nextPc = reg[rsrc[0]];
                  break;
       case CLONE: c.reg[reg[rsrc[0]]] = reg;
                   break;
       case JALIS: nextActiveThreads = reg[rsrc[0]];
                   reg[rdest] = c.pc;
-                  c.pc += immsrc;
+                  nextPc = c.pc + immsrc;
                   break;
       case JALRS: nextActiveThreads = reg[rsrc[0]];
                   reg[rdest] = c.pc;
-                  c.pc = reg[rsrc[1]];
+                  nextPc = reg[rsrc[1]];
                   break;
       case JMPRT: nextActiveThreads = 1;
-                  c.pc = reg[rsrc[0]];
+                  nextPc = reg[rsrc[0]];
                   break;
       case LD: memAddr = reg[rsrc[0]] + immsrc;
 #ifdef EMU_INSTRUMENTATION
@@ -277,7 +279,7 @@ void Instruction::executeOn(Core &c) {
       case TRAP: c.interrupt(0);
                  break;
       case JMPRU: c.supervisorMode = false;
-                  c.pc = reg[rsrc[0]];
+                  nextPc = reg[rsrc[0]];
                   break;
       case SKEP: c.interruptEntry = reg[rsrc[0]];
                  break;
@@ -289,7 +291,7 @@ void Instruction::executeOn(Core &c) {
                      reg[i] = c.shadowReg[i];
                    for (unsigned i = 0; i < pReg.size(); ++i)
                      pReg[i] = c.shadowPReg[i];
-                   c.pc = c.shadowPc;
+                   nextPc = c.shadowPc;
                  }
                  break;
       case ITOF: reg[rdest] = Float(double(Word_s(reg[rsrc[0]])), wordSz);
@@ -311,7 +313,8 @@ void Instruction::executeOn(Core &c) {
       case FDIV: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) /
                                     double(Float(reg[rsrc[1]], wordSz)),wordSz);
                  break;
-      case SPLIT:if (t == 0) {
+      case SPLIT: if (sjOnce) {
+		   sjOnce = false;
                    // TODO: if mask becomes all-zero, fall through
                    DomStackEntry e(pred, c.pred, c.pc);
                    c.domStack.push(c.tmask);
@@ -320,10 +323,11 @@ void Instruction::executeOn(Core &c) {
                      c.tmask[i] = !e.tmask[i];
                  }
                  break;
-      case JOIN: if (t == 0) {
+      case JOIN: if (sjOnce) {
+		   sjOnce = false;
                    // TODO: if mask becomes all-zero, fall through
                    if (!c.domStack.top().fallThrough)
-                     c.pc = c.domStack.top().pc;
+                     nextPc = c.domStack.top().pc;
 		   c.tmask = c.domStack.top().tmask;
                    c.domStack.pop();
                  }
@@ -332,13 +336,13 @@ void Instruction::executeOn(Core &c) {
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
     }
-
-    if (instTable[op].controlFlow) break;
   }
 
   D(3, "End instruction execute.");
 
   c.activeThreads = nextActiveThreads;
+  c.pc = nextPc;
+  
   if (nextActiveThreads > c.reg.size()) {
     cerr << "Error: attempt to spawn " << nextActiveThreads << " threads. "
          << c.reg.size() << " available.\n";
