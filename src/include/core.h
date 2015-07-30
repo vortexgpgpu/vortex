@@ -51,15 +51,12 @@ namespace Harp {
   // Entry in the IPDOM Stack
   struct DomStackEntry {
     DomStackEntry(
-      unsigned p, const std::vector<std::vector<Reg<bool> > >& m, Word pc
+      unsigned p, const std::vector<std::vector<Reg<bool> > >& m,
+      std::vector<bool> &tm, Word pc
     ): pc(pc), fallThrough(false)
     {
-      std::cout << "New DomStackEntry:";
-      for (unsigned i = 0; i < m.size(); ++i) {
-        tmask.push_back(!bool(m[i][p]));
-	std::cout << ' ' << bool(m[i][p]);
-      }
-      std::cout << std::endl;
+      for (unsigned i = 0; i < m.size(); ++i)
+        tmask.push_back(!bool(m[i][p]) && tm[i]);
     }
 
     DomStackEntry(const std::vector<bool> &tmask):
@@ -90,7 +87,7 @@ namespace Harp {
     std::vector<std::vector<Reg<Word> > > reg;
     std::vector<std::vector<Reg<bool> > > pred;
 
-    std::vector<bool> tmask;
+    std::vector<bool> tmask, shadowTmask;
     std::stack<DomStackEntry> domStack;
 
     std::vector<Word> shadowReg;

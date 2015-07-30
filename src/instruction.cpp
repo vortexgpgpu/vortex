@@ -138,7 +138,8 @@ void Instruction::executeOn(Core &c) {
   Size wordSz = c.a.getWordSize();
   Word nextPc = c.pc;
 
-  bool sjOnce(true); // Has split or joined once already
+  bool sjOnce(true), // Has not yet split or joined once.
+       pcSet(false); // PC has already been set
   for (Size t = 0; t < c.activeThreads; t++) {
     vector<Reg<Word> > &reg(c.reg[t]);
     vector<Reg<bool> > &pReg(c.pred[t]);
@@ -219,28 +220,35 @@ void Instruction::executeOn(Core &c) {
                  break;
       case XORI: reg[rdest] = reg[rsrc[0]] ^ immsrc;
                  break;
-      case JMPI: nextPc = c.pc + immsrc;
+      case JMPI: if (!pcSet) nextPc = c.pc + immsrc;
+                 pcSet = true;
                  break;
       case JALI: reg[rdest] = c.pc;
-                 nextPc = c.pc + immsrc;
+                 if (!pcSet) nextPc = c.pc + immsrc;
+                 pcSet = true;
                  break;
       case JALR: reg[rdest] = c.pc;
-                 nextPc = reg[rsrc[0]];
+                 if (!pcSet) nextPc = reg[rsrc[0]];
+                 pcSet = true;
                  break;
-      case JMPR: nextPc = reg[rsrc[0]];
+      case JMPR: if (!pcSet) nextPc = reg[rsrc[0]];
+                 pcSet = true;
                  break;
       case CLONE: c.reg[reg[rsrc[0]]] = reg;
                   break;
       case JALIS: nextActiveThreads = reg[rsrc[0]];
                   reg[rdest] = c.pc;
-                  nextPc = c.pc + immsrc;
+                  if (!pcSet) nextPc = c.pc + immsrc;
+                  pcSet = true;
                   break;
       case JALRS: nextActiveThreads = reg[rsrc[0]];
                   reg[rdest] = c.pc;
-                  nextPc = reg[rsrc[1]];
+                  if (!pcSet) nextPc = reg[rsrc[1]];
+                  pcSet = true;
                   break;
       case JMPRT: nextActiveThreads = 1;
-                  nextPc = reg[rsrc[0]];
+                  if (!pcSet) nextPc = reg[rsrc[0]];
+                  pcSet = true;
                   break;
       case LD: memAddr = reg[rsrc[0]] + immsrc;
 #ifdef EMU_INSTRUMENTATION
@@ -279,11 +287,13 @@ void Instruction::executeOn(Core &c) {
       case TRAP: c.interrupt(0);
                  break;
       case JMPRU: c.supervisorMode = false;
-                  nextPc = reg[rsrc[0]];
+                  if (!pcSet) nextPc = reg[rsrc[0]];
+                  pcSet = true;
                   break;
       case SKEP: c.interruptEntry = reg[rsrc[0]];
                  break;
       case RETI: if (t == 0) {
+                   c.tmask = c.shadowTmask;
                    nextActiveThreads = c.shadowActiveThreads;
                    c.interruptEnable = c.shadowInterruptEnable;
                    c.supervisorMode = c.shadowSupervisorMode;
@@ -291,7 +301,7 @@ void Instruction::executeOn(Core &c) {
                      reg[i] = c.shadowReg[i];
                    for (unsigned i = 0; i < pReg.size(); ++i)
                      pReg[i] = c.shadowPReg[i];
-                   nextPc = c.shadowPc;
+                   if (!pcSet) nextPc = c.shadowPc;
                  }
                  break;
       case ITOF: reg[rdest] = Float(double(Word_s(reg[rsrc[0]])), wordSz);
@@ -316,18 +326,20 @@ void Instruction::executeOn(Core &c) {
       case SPLIT: if (sjOnce) {
 		   sjOnce = false;
                    // TODO: if mask becomes all-zero, fall through
-                   DomStackEntry e(pred, c.pred, c.pc);
+                   DomStackEntry e(pred, c.pred, c.tmask, c.pc);
                    c.domStack.push(c.tmask);
                    c.domStack.push(e);
                    for (unsigned i = 0; i < e.tmask.size(); ++i)
-                     c.tmask[i] = !e.tmask[i];
+                     c.tmask[i] = !e.tmask[i] && c.tmask[i];
                  }
                  break;
       case JOIN: if (sjOnce) {
 		   sjOnce = false;
                    // TODO: if mask becomes all-zero, fall through
-                   if (!c.domStack.top().fallThrough)
-                     nextPc = c.domStack.top().pc;
+                   if (!c.domStack.top().fallThrough) {
+                     if (!pcSet) nextPc = c.domStack.top().pc;
+                     pcSet = true;
+                   }
 		   c.tmask = c.domStack.top().tmask;
                    c.domStack.pop();
                  }

@@ -48,6 +48,7 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) :
     }
 
     tmask.push_back(true);
+    shadowTmask.push_back(true);
   }
 
   /* Set initial register contents. */
@@ -153,11 +154,13 @@ bool Core::interrupt(Word r0) {
 #endif
 
   shadowActiveThreads = activeThreads;
+  shadowTmask = tmask;
   shadowInterruptEnable = interruptEnable; /* For traps. */
   shadowSupervisorMode = supervisorMode;
   
   for (Word i = 0; i < reg[0].size(); ++i) shadowReg[i] = reg[0][i];
   for (Word i = 0; i < pred[0].size(); ++i) shadowPReg[i] = pred[0][i];
+  for (Word i = 0; i < reg.size(); ++i) tmask[i] = 1;
 
   shadowPc = pc;
   activeThreads = 1;
