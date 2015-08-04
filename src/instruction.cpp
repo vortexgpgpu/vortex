@@ -285,7 +285,6 @@ void Instruction::executeOn(Warp &c) {
                  nextActiveThreads = 0;
                  break;
       case TRAP: c.interrupt(0);
-                 nextPc = c.core->interruptEntry;
                  break;
       case JMPRU: c.supervisorMode = false;
                   if (!pcSet) nextPc = reg[rsrc[0]];
@@ -392,7 +391,10 @@ void Instruction::executeOn(Warp &c) {
   D(3, "End instruction execute.");
 
   c.activeThreads = nextActiveThreads;
-  c.pc = nextPc;
+
+  // This way, if pc was set by a side effect (such as interrupt), it will
+  // retain its new value.
+  if (pcSet) c.pc = nextPc;
   
   if (nextActiveThreads > c.reg.size()) {
     cerr << "Error: attempt to spawn " << nextActiveThreads << " threads. "
