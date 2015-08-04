@@ -301,7 +301,7 @@ void Instruction::executeOn(Warp &c) {
                      reg[i] = c.shadowReg[i];
                    for (unsigned i = 0; i < pReg.size(); ++i)
                      pReg[i] = c.shadowPReg[i];
-                   if (!pcSet) nextPc = c.shadowPc;
+                   if (!pcSet) { nextPc = c.shadowPc; pcSet = true; }
                  }
                  break;
       case ITOF: reg[rdest] = Float(double(Word_s(reg[rsrc[0]])), wordSz);
