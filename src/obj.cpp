@@ -657,7 +657,8 @@ Obj *HOFReader::read(std::istream &input) {
   string archString(inputString(input));
   ArchDef fileArch(archString);
   if (fileArch != arch) {
-    cout << "File arch does not match reader arch in HOFReader::read().\n";
+    cout << "File arch " << archString << " does not match reader arch "
+         << string(arch) << " in HOFReader::read().\n";
     exit(1);
   }
 

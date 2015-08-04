@@ -32,7 +32,7 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   a(a), iDec(d), mem(mem)
 {
-  for (unsigned i = 0; i < 8; ++i)
+  for (unsigned i = 0; i < a.getNWarps(); ++i)
     w.push_back(Warp(this));
 
   w[0].activeThreads = 1;

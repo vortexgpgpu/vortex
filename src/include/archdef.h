@@ -28,7 +28,9 @@ namespace Harp {
       if (!iss || sep != '/') { extent = EXT_REGS; return; }
       iss >> sep >> nThds;
       if (!iss || sep != '/') { extent = EXT_PREGS; return; }
-      extent = EXT_THDS;
+      iss >> sep >> nWarps;
+      if (!iss || sep != '/') { extent = EXT_THDS; return; }
+      extent = EXT_WARPS;
     }
 
     operator std::string () const {
@@ -40,14 +42,25 @@ namespace Harp {
       if (extent >= EXT_REGS    ) oss << nRegs;
       if (extent >= EXT_PREGS   ) oss << '/' << nPRegs;
       if (extent >= EXT_THDS    ) oss << '/' << nThds;
+      if (extent >= EXT_WARPS    ) oss << '/' << nWarps;
 
       return oss.str();
     }
 
     bool operator==(const ArchDef &r) const {
-      return (extent == r.extent)   && (wordSize == r.wordSize) && 
-             (encChar == r.encChar) && (nRegs == r.nRegs) &&
-             (nPRegs == r.nPRegs)   && (nThds == r.nThds);
+      Extent minExtent(r.extent > extent ? extent : r.extent);
+
+      // Can't be equal if we can't specify a binary encoding at all.
+      if (minExtent < EXT_PREGS) return false;
+      
+      if (minExtent >= EXT_WORDSIZE) { if (wordSize!=r.wordSize) return false; }
+      if (minExtent >= EXT_ENC     ) { if (encChar != r.encChar) return false; }
+      if (minExtent >= EXT_REGS    ) { if (nRegs   !=   r.nRegs) return false; }
+      if (minExtent >= EXT_PREGS   ) { if (nPRegs  !=  r.nPRegs) return false; }
+      if (minExtent >= EXT_THDS    ) { if (nThds   !=   r.nThds) return false; }
+      if (minExtent >= EXT_WARPS   ) { if (nWarps  !=  r.nWarps) return false; }
+
+      return true;
     }
 
     bool operator!=(const ArchDef &r) const { return !(*this == r); }
@@ -71,14 +84,20 @@ namespace Harp {
     ThdNum getNThds() const {
       if (extent < EXT_THDS) throw Undefined(); else return nThds;
     }
+
+    ThdNum getNWarps() const {
+      if (extent < EXT_WARPS) throw Undefined(); else return nWarps;
+    }
     
   private:
-    enum { 
-      EXT_NULL, EXT_WORDSIZE, EXT_ENC, EXT_REGS, EXT_PREGS, EXT_THDS
-    } extent;
+    enum Extent { 
+      EXT_NULL, EXT_WORDSIZE, EXT_ENC, EXT_REGS, EXT_PREGS, EXT_THDS, EXT_WARPS
+    };
+
+    Extent extent;
 
     Size wordSize;
-    ThdNum nThds;
+    ThdNum nThds, nWarps;
     RegNum nRegs, nPRegs;
     char encChar;
   };

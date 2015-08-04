@@ -2,7 +2,7 @@ HARPLD  = ../harptool -L
 HARPAS  = ../harptool -A
 HARPEM  = ../harptool -E
 HARPDIS = ../harptool -D
-4BARCH  = 4b16/16/2
+4BARCH  = 4b16/16/2/1
 
 all: simple.bin sieve.bin 2thread.bin simple.4b.bin sieve.4b.bin 2thread.4b.bin bubble.bin bubble.4b.bin dotprod.bin dotprod.4b.bin matmul.bin matmul.4b.bin \
  matmul-mt.s lfsr.bin diverge.bin

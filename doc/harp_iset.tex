@@ -32,7 +32,7 @@ An \texttt{ArchID} uniquely identifies a HARP ISA.
 
 \section{Architecture Identifier String (\texttt{ArchID})}
 The best way to understand the multifaceted parameterizablity of the HARP ISAs is to study the architecture identifier strings used to uniquely identify a single HARP instruction set architecture.
-We'll start by breaking down Harptool's default \texttt{ArchID}: \texttt{8w32/32/8}:
+We'll start by breaking down Harptool's default \texttt{ArchID}: \texttt{8w32/32/8/8}:
 
 \begin{center}
 \begin{tabular}{rl}
@@ -43,10 +43,11 @@ We'll start by breaking down Harptool's default \texttt{ArchID}: \texttt{8w32/32
 \texttt{32}&32 general-purpose registers per lane\\
 \texttt{32}&32 predicate registers per lane\\
 \texttt{8} &8 SIMD lanes\\
+\texttt{8} &8 warps (thread groups)\\
 \end{tabular}
 \end{center}
 
-All ArchIDs have a similar format, although the SIMD lanes field can be omitted, as object files are still fully compatible even if the number of lanes changes. 
+All ArchIDs have a similar format, although the final two fields can be omitted, as object files are still fully compatible even if the dimensions of the core change. 
 
 \section{HarpTool}
 The assembler/linker/emulator/disassembler program for HARP is called HarpTool.

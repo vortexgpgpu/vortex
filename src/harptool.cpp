@@ -49,7 +49,7 @@ HarpToolMode findMode(int argc, char** argv) {
 }
 
 int asm_main(int argc, char **argv) {
-  string archString("8w32/32/8"), outFileName("a.out.HOF"),
+  string archString("8w32/32/8/8"), outFileName("a.out.HOF"),
          inFileName(argv[argc-1]);
   bool showHelp;  
 
@@ -136,7 +136,7 @@ int asm_main(int argc, char **argv) {
 
 int disasm_main(int argc, char **argv) {
   bool showHelp;
-  string outFileName("a.out.s"), archString("8w32/32/8");
+  string outFileName("a.out.s"), archString("8w32/32/8/8");
   
 
   /* Get command line arguments. */
@@ -206,7 +206,7 @@ int disasm_main(int argc, char **argv) {
 }
 
 int emu_main(int argc, char **argv) {
-  string archString("8w32/32/8"), imgFileName("a.out.bin");
+  string archString("8w32/32/8/8"), imgFileName("a.out.bin");
   bool showHelp;
 
   /* Read the command line arguments. */
@@ -249,7 +249,8 @@ int emu_main(int argc, char **argv) {
 
 int ld_main(int argc, char **argv) {
   bool showHelp, mustResolveRefs(true);
-  string outFileName("a.out.bin"), archString("8w32/32/8"), formatString("bin");
+  string outFileName("a.out.bin"), archString("8w32/32/8/8"),
+         formatString("bin");
   Size nObjects;
   Addr binOffset(0);
 
