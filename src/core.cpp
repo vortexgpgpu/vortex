@@ -32,9 +32,10 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   a(a), iDec(d), mem(mem)
 {
-  w.push_back(Warp(this));
+  for (unsigned i = 0; i < 8; ++i)
+    w.push_back(Warp(this));
 
-  // TODO: core-level initialization
+  w[0].activeThreads = 1;
 }
 
 bool Core::interrupt(Word r0) {
@@ -42,21 +43,25 @@ bool Core::interrupt(Word r0) {
 }
 
 void Core::step() {
-  for (unsigned i = 0; i < w.size(); ++i)
-    w[i].step();
+  for (unsigned i = 0; i < w.size(); ++i) {
+    if (w[i].activeThreads) {
+      D(3, "Core step stepping warp " << i << '[' << w[i].activeThreads << ']');
+      w[i].step();
+      D(3, "Now " << w[i].activeThreads << " active threads in " << i);
+    }
+  }
 }
 
 bool Core::running() const {
   for (unsigned i = 0; i < w.size(); ++i)
-    if (!w[i].running()) return false;
-  return true;
+    if (w[i].running()) return true;
+  return false;
 }
 
 Warp::Warp(Core *c, Word id) : 
   core(c), pc(0), interruptEnable(false),
-  supervisorMode(true), activeThreads(1), reg(0), pred(0),
-  shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()),
-  interruptEntry(0), id(id)
+  supervisorMode(true), activeThreads(0), reg(0), pred(0),
+  shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id)
 {
   /* Build the register file. */
   Word regNum(0);
@@ -191,7 +196,7 @@ bool Warp::interrupt(Word r0) {
   interruptEnable = false;
   supervisorMode = true;
   reg[0][0] = r0;
-  pc = interruptEntry;
+  pc = core->interruptEntry;
 
   return true;
 }

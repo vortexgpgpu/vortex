@@ -81,6 +81,8 @@ namespace Harp {
     Decoder &iDec;
     MemoryUnit &mem;
 
+    Word interruptEntry;
+
     std::vector<Warp> w;
   };
 
@@ -98,7 +100,7 @@ namespace Harp {
 //  private:
     Core *core;
 
-    Word pc, interruptEntry, shadowPc, id;
+    Word pc, shadowPc, id;
     Size activeThreads, shadowActiveThreads;
     std::vector<std::vector<Reg<Word> > > reg;
     std::vector<std::vector<Reg<bool> > > pred;

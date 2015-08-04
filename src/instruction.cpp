@@ -67,7 +67,7 @@ Instruction::InstTableEntry Instruction::instTable[] = {
   {"notp",     false, false, false, false, AC_2PREG,    ITYPE_INTBASIC},
   {"isneg",    false, false, false, false, AC_PREG_REG, ITYPE_INTBASIC},
   {"iszero",   false, false, false, false, AC_PREG_REG, ITYPE_INTBASIC},
-  {"halt",     false, false, false, true,  AC_NONE,     ITYPE_NULL    },
+  {"halt",     false, false, false, false, AC_NONE,     ITYPE_NULL    },
   {"trap",     true,  false, false, false, AC_NONE,     ITYPE_TRAP    },
   {"jmpru",    false, false, false, true,  AC_1REG,     ITYPE_RET     },
   {"skep",     false, false, false, true,  AC_1REG,     ITYPE_NULL    },
@@ -281,7 +281,8 @@ void Instruction::executeOn(Warp &c) {
                  break;
       case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
                   break;
-      case HALT: c.activeThreads = 0;
+      case HALT: D(3, "=== EXECUTING halt ===");
+                 c.activeThreads = 0;
                  nextActiveThreads = 0;
                  break;
       case TRAP: c.interrupt(0);
@@ -290,7 +291,7 @@ void Instruction::executeOn(Warp &c) {
                   if (!pcSet) nextPc = reg[rsrc[0]];
                   pcSet = true;
                   break;
-      case SKEP: c.interruptEntry = reg[rsrc[0]];
+      case SKEP: c.core->interruptEntry = reg[rsrc[0]];
                  break;
       case RETI: if (t == 0) {
                    c.tmask = c.shadowTmask;
@@ -344,6 +345,21 @@ void Instruction::executeOn(Warp &c) {
                    c.domStack.pop();
                  }
 	         break;
+    case WSPAWN: if (sjOnce) {
+                   sjOnce = false;
+                   D(0, "Spawning a new warp.");
+                   for (unsigned i = 0; i < c.core->w.size(); ++i) {
+                     Warp &newWarp(c.core->w[i]);
+                     if (newWarp.activeThreads == 0) {
+                       newWarp.pc = reg[rsrc[0]];
+                       newWarp.reg[0][rdest] = reg[rsrc[1]];
+                       newWarp.activeThreads = 1;
+		       newWarp.supervisorMode = false;
+                       break;
+                     }
+                   }
+                 }
+                 break;
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
