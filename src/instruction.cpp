@@ -281,11 +281,11 @@ void Instruction::executeOn(Warp &c) {
                  break;
       case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
                   break;
-      case HALT: D(3, "=== EXECUTING halt ===");
-                 c.activeThreads = 0;
+      case HALT: c.activeThreads = 0;
                  nextActiveThreads = 0;
                  break;
       case TRAP: c.interrupt(0);
+                 nextPc = c.core->interruptEntry;
                  break;
       case JMPRU: c.supervisorMode = false;
                   if (!pcSet) nextPc = reg[rsrc[0]];
