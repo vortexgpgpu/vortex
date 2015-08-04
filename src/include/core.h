@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 #include <stack>
+#include <map>
+#include <set>
 
 #include "types.h"
 #include "archdef.h"
@@ -84,6 +86,7 @@ namespace Harp {
     Word interruptEntry;
 
     std::vector<Warp> w;
+    std::map<Word, std::set<Warp *> > b; // Barriers
   };
 
   class Warp {

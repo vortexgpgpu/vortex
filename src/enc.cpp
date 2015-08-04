@@ -164,7 +164,11 @@ Instruction *ByteDecoder::decode(const vector<Byte> &v, Size &n) {
       inst.setDestPReg(readByte(v, n));
       inst.setSrcPReg(readByte(v, n));
       break;
-    default:
+    case Instruction::AC_2REGSRC:
+      inst.setSrcReg(readByte(v, n));
+      inst.setSrcReg(readByte(v, n));
+      break;
+   default:
       decodeError("Unknown argument class.");
   }
 
@@ -330,6 +334,10 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
       inst.setDestPReg((code>>i2)&pMask);
       inst.setSrcPReg((code>>i3)&pMask);
       inst.setSrcPReg((code>>(i3-r))&pMask);
+      break;
+    case Instruction::AC_2REGSRC:
+      inst.setSrcReg((code>>i2)&rMask);
+      inst.setSrcReg((code>>i3)&rMask);
       break;
     defualt:
       cout << "Unrecognized argument class in word decoder.\n";

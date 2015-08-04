@@ -360,6 +360,29 @@ void Instruction::executeOn(Warp &c) {
                      }
                    }
                    break;
+      case BAR: if (sjOnce) {
+                  sjOnce = false;
+                  Word id(reg[rsrc[0]]), n(reg[rsrc[1]]);
+                  set<Warp*> &b(c.core->b[id]);
+
+                  // Add current warp to the barrier and halt.
+                  b.insert(&c);
+                  c.shadowActiveThreads = c.activeThreads;
+                  nextActiveThreads = 0;
+
+                  D(2, "Barrier " << id << ' ' << b.size() << " of " << n);
+
+                  // If the barrier's full, reactivate warps waiting at it
+                  if (b.size() == n) {
+                    set<Warp*>::iterator it;
+                    for (it = b.begin(); it != b.end(); ++it)
+                      (*it)->activeThreads = (*it)->shadowActiveThreads;
+                    c.core->b.erase(id);
+                    nextActiveThreads = c.shadowActiveThreads;
+                  }
+		}
+                break;
+
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
