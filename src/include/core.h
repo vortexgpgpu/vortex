@@ -115,7 +115,7 @@ namespace Harp {
     std::vector<bool> shadowPReg;
 
     bool interruptEnable, shadowInterruptEnable, supervisorMode, 
-         shadowSupervisorMode;
+         shadowSupervisorMode, spawned;
 
     friend class Instruction;
   };

@@ -36,6 +36,7 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
     w.push_back(Warp(this));
 
   w[0].activeThreads = 1;
+  w[0].spawned = true;
 }
 
 bool Core::interrupt(Word r0) {
@@ -61,7 +62,8 @@ bool Core::running() const {
 Warp::Warp(Core *c, Word id) : 
   core(c), pc(0), interruptEnable(false),
   supervisorMode(true), activeThreads(0), reg(0), pred(0),
-  shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id)
+  shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id),
+  spawned(false)
 {
   /* Build the register file. */
   Word regNum(0);

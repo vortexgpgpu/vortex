@@ -349,11 +349,12 @@ void Instruction::executeOn(Warp &c) {
                      D(0, "Spawning a new warp.");
                      for (unsigned i = 0; i < c.core->w.size(); ++i) {
                        Warp &newWarp(c.core->w[i]);
-                       if (newWarp.activeThreads == 0) {
+                       if (newWarp.spawned == false) {
                          newWarp.pc = reg[rsrc[0]];
                          newWarp.reg[0][rdest] = reg[rsrc[1]];
                          newWarp.activeThreads = 1;
 		         newWarp.supervisorMode = false;
+                         newWarp.spawned = true;
                          break;
                        }
                      }
