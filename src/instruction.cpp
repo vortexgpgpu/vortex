@@ -345,21 +345,21 @@ void Instruction::executeOn(Warp &c) {
                    c.domStack.pop();
                  }
 	         break;
-    case WSPAWN: if (sjOnce) {
-                   sjOnce = false;
-                   D(0, "Spawning a new warp.");
-                   for (unsigned i = 0; i < c.core->w.size(); ++i) {
-                     Warp &newWarp(c.core->w[i]);
-                     if (newWarp.activeThreads == 0) {
-                       newWarp.pc = reg[rsrc[0]];
-                       newWarp.reg[0][rdest] = reg[rsrc[1]];
-                       newWarp.activeThreads = 1;
-		       newWarp.supervisorMode = false;
-                       break;
+      case WSPAWN: if (sjOnce) {
+                     sjOnce = false;
+                     D(0, "Spawning a new warp.");
+                     for (unsigned i = 0; i < c.core->w.size(); ++i) {
+                       Warp &newWarp(c.core->w[i]);
+                       if (newWarp.activeThreads == 0) {
+                         newWarp.pc = reg[rsrc[0]];
+                         newWarp.reg[0][rdest] = reg[rsrc[1]];
+                         newWarp.activeThreads = 1;
+		         newWarp.supervisorMode = false;
+                         break;
+                       }
                      }
                    }
-                 }
-                 break;
+                   break;
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
