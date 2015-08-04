@@ -142,6 +142,7 @@ Obj *AsmReader::read(std::istream &input) {
   DataChunk *dc;
   Instruction *curInst;
   string string_arg, next_chunk_name;
+  bool chunkCreated = true;
   Size next_chunk_align(0);
   uint64_t num_arg;
   RegNum nextPredNum;
@@ -209,6 +210,7 @@ Obj *AsmReader::read(std::istream &input) {
               o->chunks.push_back(dc);
               if (entry) o->entry = o->chunks.size() - 1;
               if (global) dc->setGlobal();
+	      chunkCreated = true;
             }
             dc->size += wordSize;
             dc->contents.resize(dc->size); 
@@ -226,6 +228,7 @@ Obj *AsmReader::read(std::istream &input) {
               o->chunks.push_back(dc);
               if (entry) o->entry = o->chunks.size() - 1;
               if (global) dc->setGlobal();
+	      chunkCreated = true;
             }
             size_t oldSize = dc->size;
             dc->size += wordSize * yylval.u;
@@ -236,13 +239,14 @@ Obj *AsmReader::read(std::istream &input) {
             if (outstate != OS_DATACHUNK) {
               // TODO: more of this pasted code
               outstate = OS_DATACHUNK;
-              dc = new DataChunk(next_chunk_name, next_chunk_align?
-                                                  next_chunk_align:wordSize,
+              dc = new DataChunk(next_chunk_name,
+				 next_chunk_align?next_chunk_align:wordSize,
                                  flagsToWord(permR, permW, permX));
               next_chunk_align = 0;
               o->chunks.push_back(dc);
               if (entry) o->entry = o->chunks.size() - 1;
               if (global) dc->setGlobal();
+	      chunkCreated = true;
             }
             dc->size++;
             dc->contents.resize(dc->size);
@@ -267,7 +271,7 @@ Obj *AsmReader::read(std::istream &input) {
             // TODO: pasted code (see above)
             outstate = OS_DATACHUNK;
             dc = new DataChunk(next_chunk_name,
-                               next_chunk_align?next_chunk_align:wordSize,
+			       next_chunk_align?next_chunk_align:wordSize,
                                flagsToWord(permR, permW, permX));
             next_chunk_align = 0;
             o->chunks.push_back(dc);
@@ -318,12 +322,23 @@ Obj *AsmReader::read(std::istream &input) {
         state = ST_INIT;
         break;
       case ASM_T_LABEL:
+        if (!chunkCreated) {
+	  // We have an empty label; create an empty chunk.
+	  dc = new DataChunk(next_chunk_name, 0,
+			     flagsToWord(permR, permW, permX));
+	  next_chunk_align = 0;
+	  o->chunks.push_back(dc);
+          if (entry) o->entry = o->chunks.size() - 1;
+          if (global) dc->setGlobal();
+        }
+	
         if (outstate != OS_NOCHUNK) {
           entry = false;
           global = false;
           outstate = OS_NOCHUNK;
         }
         next_chunk_name = yylval.s;
+	chunkCreated = false;
         break;
       case ASM_T_PRED:
         nextPred = true;
@@ -343,6 +358,7 @@ Obj *AsmReader::read(std::istream &input) {
             if (entry) o->entry = o->chunks.size() - 1;
             if (global) tc->setGlobal();
             outstate = OS_TEXTCHUNK;
+	    chunkCreated = true;
           }
           curInst = new Instruction();
           curInst->setOpcode(opc);
@@ -421,6 +437,16 @@ Obj *AsmReader::read(std::istream &input) {
     };
   }
 
+  if (!chunkCreated) {
+    // We have an empty label; create an empty chunk.
+    dc = new DataChunk(next_chunk_name, 0,
+		       flagsToWord(permR, permW, permX));
+                       next_chunk_align = 0;
+                       o->chunks.push_back(dc);
+    if (entry) o->entry = o->chunks.size() - 1;
+    if (global) dc->setGlobal();
+  }
+
   return o;
 }
 
@@ -457,7 +483,9 @@ void AsmWriter::write(std::ostream &output, const Obj &obj) {
         output << "\t" << *(tc->instructions[i]) << '\n';
       }
     } else if (dc) {
-      Size i;
+      if (c->name != "") output << c->name << ':' << endl;
+
+      Size i;      
       for (i = 0; i < dc->contents.size();) {
         Size tmpWordSize = (dc->contents.size() - i < wordSize) ? 
                              dc->contents.size() - i : wordSize;
@@ -469,12 +497,10 @@ void AsmWriter::write(std::ostream &output, const Obj &obj) {
           w |= dc->contents[i - j - 1];
         }
 
-        if (i == tmpWordSize && c->name != "") {
-          output << c->name << ':' << endl;
+        if (i == tmpWordSize && c->name != "")
           output << "  .word " << " 0x" << hex << w << endl;
-        } else {
+        else
           output << "  .word " << " 0x" << hex << w << endl;
-        }
       }
 
       if (i % wordSize) i += (wordSize - (i%wordSize));
