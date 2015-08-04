@@ -9,7 +9,7 @@
 #include "types.h"
 
 namespace Harp {
-  class Core;
+  class Warp;
   class Ref;
 
   static const Size MAX_REG_SOURCES(3);
@@ -53,7 +53,7 @@ namespace Harp {
       predicated(false), nRsrc(0), nPsrc(0), immsrcPresent(false), 
       rdestPresent(false), pdestPresent(false), refLiteral(NULL) {}
 
-    void executeOn(Core &core);
+    void executeOn(Warp &warp);
     friend std::ostream &operator<<(std::ostream &, Instruction &);
 
     /* Setters used to "craft" the instruction. */

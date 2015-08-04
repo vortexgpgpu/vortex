@@ -29,21 +29,45 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 }
 #endif
 
-Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) : 
-  a(a), iDec(d), mem(mem), pc(0), interruptEnable(false), supervisorMode(true),
-  activeThreads(1), reg(0), pred(0), shadowReg(a.getNRegs()),
-  shadowPReg(a.getNPRegs()), interruptEntry(0), id(id)
+Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
+  a(a), iDec(d), mem(mem)
+{
+  w.push_back(Warp(this));
+
+  // TODO: core-level initialization
+}
+
+bool Core::interrupt(Word r0) {
+  w[0].interrupt(r0);
+}
+
+void Core::step() {
+  for (unsigned i = 0; i < w.size(); ++i)
+    w[i].step();
+}
+
+bool Core::running() const {
+  for (unsigned i = 0; i < w.size(); ++i)
+    if (!w[i].running()) return false;
+  return true;
+}
+
+Warp::Warp(Core *c, Word id) : 
+  core(c), pc(0), interruptEnable(false),
+  supervisorMode(true), activeThreads(1), reg(0), pred(0),
+  shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()),
+  interruptEntry(0), id(id)
 {
   /* Build the register file. */
   Word regNum(0);
-  for (Word j = 0; j < a.getNThds(); ++j) {
+  for (Word j = 0; j < core->a.getNThds(); ++j) {
     reg.push_back(vector<Reg<Word> >(0));
-    for (Word i = 0; i < a.getNRegs(); ++i) {
+    for (Word i = 0; i < core->a.getNRegs(); ++i) {
       reg[j].push_back(Reg<Word>(id, regNum++));
     }
 
     pred.push_back(vector<Reg<bool> >(0));
-    for (Word i = 0; i < a.getNPRegs(); ++i) {
+    for (Word i = 0; i < core->a.getNPRegs(); ++i) {
       pred[j].push_back(Reg<bool>(id, regNum++));
     }
 
@@ -52,11 +76,11 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id) :
   }
 
   /* Set initial register contents. */
-  reg[0][0] = (a.getNThds()<<(a.getWordSize()*8 / 2)) | id;
+  reg[0][0] = (core->a.getNThds()<<(core->a.getWordSize()*8 / 2)) | id;
 }
 
-void Core::step() {
-  Size fetchPos(0), decPos, wordSize(a.getWordSize());
+void Warp::step() {
+  Size fetchPos(0), decPos, wordSize(core->a.getWordSize());
   vector<Byte> fetchBuffer(wordSize);
 
   if (activeThreads == 0) return;
@@ -73,10 +97,10 @@ void Core::step() {
       fetchMore = false;
       unsigned fetchSize(wordSize - (pc+fetchPos)%wordSize);
       fetchBuffer.resize(fetchPos + fetchSize);
-      Word fetched = mem.fetch(pc + fetchPos, supervisorMode);
+      Word fetched = core->mem.fetch(pc + fetchPos, supervisorMode);
       writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
       decPos = 0;
-      inst = iDec.decode(fetchBuffer, decPos);
+      inst = core->iDec.decode(fetchBuffer, decPos);
     } catch (OutOfBytes o) {
       D(3, "Caught OutOfBytes. Fetching more.");
       fetchMore = true;
@@ -91,9 +115,9 @@ void Core::step() {
   D(3, "0x" << hex << pc << ": " << *inst);
 
 #ifdef EMU_INSTRUMENTATION
-  { Addr pcPhys(mem.virtToPhys(pc));
+  { Addr pcPhys(core->mem.virtToPhys(pc));
     Harp::OSDomain::osDomain->
-      do_inst(0, pc, pcPhys, decPos, mem.getPtr(pcPhys, decPos), 
+      do_inst(0, pc, pcPhys, decPos, core->mem.getPtr(pcPhys, decPos), 
               (enum inst_type)inst->instTable[inst->getOpcode()].iType);
   }
 #endif
@@ -146,7 +170,7 @@ void Core::step() {
   delete inst;
 }
 
-bool Core::interrupt(Word r0) {
+bool Warp::interrupt(Word r0) {
   if (!interruptEnable) return false;
 
 #ifdef EMU_INSTRUMENTATION

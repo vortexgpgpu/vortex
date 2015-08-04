@@ -67,9 +67,27 @@ namespace Harp {
     Word pc;
   };
 
+  class Warp;
+
   class Core {
   public:
     Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id=0);
+
+    bool interrupt(Word r0);
+    bool running() const;
+    void step();
+
+    const ArchDef &a;
+    Decoder &iDec;
+    MemoryUnit &mem;
+
+    std::vector<Warp> w;
+  };
+
+  class Warp {
+  public:
+    Warp(Core *c, Word id=0);
+
     void step();
     bool interrupt(Word r0);
     bool running() const { return activeThreads; }
@@ -78,9 +96,7 @@ namespace Harp {
 #endif
 
 //  private:
-    const ArchDef a;
-    Decoder &iDec;
-    MemoryUnit &mem;
+    Core *core;
 
     Word pc, interruptEntry, shadowPc, id;
     Size activeThreads, shadowActiveThreads;

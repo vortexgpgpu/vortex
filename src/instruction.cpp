@@ -112,7 +112,7 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
   return os;
 }
 
-void Instruction::executeOn(Core &c) {
+void Instruction::executeOn(Warp &c) {
   D(3, "Begin instruction execute.");
 
   /* If I try to execute a privileged instruction in user mode, throw an
@@ -135,7 +135,7 @@ void Instruction::executeOn(Core &c) {
   }
 
   Size nextActiveThreads = c.activeThreads;
-  Size wordSz = c.a.getWordSize();
+  Size wordSz = c.core->a.getWordSize();
   Word nextPc = c.pc;
 
   bool sjOnce(true), // Has not yet split or joined once.
@@ -157,9 +157,9 @@ void Instruction::executeOn(Core &c) {
                break;
       case EI: c.interruptEnable = true;
                break;
-      case TLBADD: c.mem.tlbAdd(reg[rsrc[0]], reg[rsrc[1]], reg[rsrc[2]]);
+      case TLBADD: c.core->mem.tlbAdd(reg[rsrc[0]], reg[rsrc[1]], reg[rsrc[2]]);
                    break;
-      case TLBFLUSH: c.mem.tlbFlush();
+      case TLBFLUSH: c.core->mem.tlbFlush();
                      break;
       case ADD: reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
                 reg[rdest].trunc(wordSz);
@@ -253,15 +253,15 @@ void Instruction::executeOn(Core &c) {
       case LD: memAddr = reg[rsrc[0]] + immsrc;
 #ifdef EMU_INSTRUMENTATION
                Harp::OSDomain::osDomain->
-                 do_mem(0, memAddr, c.mem.virtToPhys(memAddr), 8, true);
+                 do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
 #endif
-               reg[rdest] = c.mem.read(memAddr, c.supervisorMode);
+               reg[rdest] = c.core->mem.read(memAddr, c.supervisorMode);
                break;
       case ST: memAddr = reg[rsrc[1]] + immsrc;
-               c.mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
+               c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
 #ifdef EMU_INSTRUMENTATION
                Harp::OSDomain::osDomain->
-                 do_mem(0, memAddr, c.mem.virtToPhys(memAddr), 8, true);
+                 do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
 #endif
                break;
       case LDI: reg[rdest] = immsrc;
