@@ -60,7 +60,7 @@ bool Core::running() const {
 }
 
 Warp::Warp(Core *c, Word id) : 
-  core(c), pc(0), interruptEnable(false),
+  core(c), pc(0), interruptEnable(true),
   supervisorMode(true), activeThreads(0), reg(0), pred(0),
   shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id),
   spawned(false)
@@ -136,13 +136,16 @@ void Warp::step() {
   try {
     inst->executeOn(*this);
   } catch (MemoryUnit::PageFault pf) {
+    D(2, "Interrupt: Page fault");
     pc -= decPos; /* Reset to beginning of faulting address. */
     interrupt(pf.notFound?1:2);
     reg[0][1] = pf.faultAddr;
   } catch (DivergentBranchException e) {
+    D(2, "Interrupt 4: Divergent branch");
     pc -= decPos;
     interrupt(4);
   } catch (DomainException e) {
+    D(2, "Interrupt: DomainException");
     interrupt(5);
   }
  
