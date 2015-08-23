@@ -176,7 +176,7 @@ void Instruction::executeOn(Warp &c) {
       case SHL: reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
                 reg[rdest].trunc(wordSz);
                 break;
-      case SHR: reg[rdest] = reg[rsrc[0]] >> reg[rsrc[1]];
+      case SHR: reg[rdest] = Word_s(reg[rsrc[0]]) >> reg[rsrc[1]];
                 reg[rdest].trunc(wordSz);
                 break;
       case MOD: if (reg[rsrc[1]] == 0) throw DomainException();
@@ -209,7 +209,7 @@ void Instruction::executeOn(Warp &c) {
       case MODI: if (immsrc == 0) throw DomainException();
                  reg[rdest] = reg[rsrc[0]] % immsrc;
                  break;
-      case SHRI: reg[rdest] = reg[rsrc[0]] >> immsrc;
+      case SHRI: reg[rdest] = Word_s(reg[rsrc[0]]) >> immsrc;
                  break;
       case SHLI: reg[rdest] = reg[rsrc[0]] << immsrc;
                  reg[rdest].trunc(wordSz);
