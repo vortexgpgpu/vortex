@@ -207,12 +207,13 @@ int disasm_main(int argc, char **argv) {
 
 int emu_main(int argc, char **argv) {
   string archString("8w32/32/8/8"), imgFileName("a.out.bin");
-  bool showHelp;
+  bool showHelp, showStats;
 
   /* Read the command line arguments. */
   CommandLineArgFlag          fh("-h", "--help", "", showHelp);
   CommandLineArgSetter<string>fc("-c", "--core", "", imgFileName);
   CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+  CommandLineArgFlag          fs("-s", "--stats", "", showStats);
   
   CommandLineArg::readArgs(argc, argv);
 
@@ -243,6 +244,8 @@ int emu_main(int argc, char **argv) {
   mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
 
   while (core.running()) { console.poll(); core.step(); }
+
+  if (showStats) core.printStats();
 
   return 0;
 }

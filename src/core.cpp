@@ -30,7 +30,7 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 #endif
 
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
-  a(a), iDec(d), mem(mem)
+  a(a), iDec(d), mem(mem), steps(0)
 {
   for (unsigned i = 0; i < a.getNWarps(); ++i)
     w.push_back(Warp(this));
@@ -44,6 +44,8 @@ bool Core::interrupt(Word r0) {
 }
 
 void Core::step() {
+  ++steps;
+
   for (unsigned i = 0; i < w.size(); ++i) {
     if (w[i].activeThreads) {
       D(3, "Core step stepping warp " << i << '[' << w[i].activeThreads << ']');
@@ -59,11 +61,20 @@ bool Core::running() const {
   return false;
 }
 
+void Core::printStats() const {
+  cout << "Steps: " << steps << endl;
+
+  for (unsigned i = 0; i < w.size(); ++i) {
+    cout << "=== Warp " << i << " ===" << endl;
+    w[i].printStats();
+  }
+}
+
 Warp::Warp(Core *c, Word id) : 
   core(c), pc(0), interruptEnable(true),
   supervisorMode(true), activeThreads(0), reg(0), pred(0),
   shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id),
-  spawned(false)
+  spawned(false), steps(0), insts(0), loads(0), stores(0)
 {
   /* Build the register file. */
   Word regNum(0);
@@ -92,6 +103,8 @@ void Warp::step() {
 
   if (activeThreads == 0) return;
 
+  ++steps;
+  
   D(3, "in step pc=0x" << hex << pc);
 
   /* Fetch and decode. */
@@ -204,4 +217,11 @@ bool Warp::interrupt(Word r0) {
   pc = core->interruptEntry;
 
   return true;
+}
+
+void Warp::printStats() const {
+  cout << "Steps: " << steps << endl
+       << "Insts: " << insts << endl
+       << "Loads: " << loads << endl
+       << "Stores: " << stores << endl;
 }

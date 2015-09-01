@@ -150,6 +150,8 @@ void Instruction::executeOn(Warp &c) {
     if (((predicated && !pReg[pred]) || !c.tmask[t]) &&
           op != SPLIT && op != JOIN) continue;
 
+    ++c.insts;
+    
     Word memAddr;  
     switch (op) {
       case NOP: break;
@@ -250,14 +252,16 @@ void Instruction::executeOn(Warp &c) {
                   if (!pcSet) nextPc = reg[rsrc[0]];
                   pcSet = true;
                   break;
-      case LD: memAddr = reg[rsrc[0]] + immsrc;
+      case LD: ++c.loads;
+	       memAddr = reg[rsrc[0]] + immsrc;
 #ifdef EMU_INSTRUMENTATION
                Harp::OSDomain::osDomain->
                  do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
 #endif
                reg[rdest] = c.core->mem.read(memAddr, c.supervisorMode);
                break;
-      case ST: memAddr = reg[rsrc[1]] + immsrc;
+      case ST: ++c.stores;
+	       memAddr = reg[rsrc[1]] + immsrc;
                c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
 #ifdef EMU_INSTRUMENTATION
                Harp::OSDomain::osDomain->

@@ -79,12 +79,15 @@ namespace Harp {
     bool running() const;
     void step();
 
+    void printStats() const;
+    
     const ArchDef &a;
     Decoder &iDec;
     MemoryUnit &mem;
 
     Word interruptEntry;
 
+    unsigned long steps;
     std::vector<Warp> w;
     std::map<Word, std::set<Warp *> > b; // Barriers
   };
@@ -100,6 +103,8 @@ namespace Harp {
     bool getSupervisorMode() const { return supervisorMode; }
 #endif
 
+    void printStats() const;
+    
 //  private:
     Core *core;
 
@@ -117,6 +122,8 @@ namespace Harp {
     bool interruptEnable, shadowInterruptEnable, supervisorMode, 
          shadowSupervisorMode, spawned;
 
+    unsigned long steps, insts, loads, stores;
+    
     friend class Instruction;
   };
 };
