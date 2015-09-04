@@ -138,6 +138,18 @@ void Instruction::executeOn(Warp &c) {
   Size wordSz = c.core->a.getWordSize();
   Word nextPc = c.pc;
 
+  // If we have a load, overwriting a register's contents, we have to make sure
+  // ahead of time it will not fault. Otherwise we may perform an indirect load
+  // by mistake.
+  if (op == LD && rdest == rsrc[0]) {
+    for (Size t = 0; t < c.activeThreads; t++) {
+      if ((!predicated || c.pred[t][pred]) && c.tmask[t]) {
+        Word memAddr = c.reg[t][rsrc[0]] + immsrc;
+        c.core->mem.read(memAddr, c.supervisorMode);
+      }
+    }
+  }
+
   bool sjOnce(true), // Has not yet split or joined once.
        pcSet(false); // PC has already been set
   for (Size t = 0; t < c.activeThreads; t++) {
