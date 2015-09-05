@@ -104,6 +104,13 @@ namespace Harp {
 #endif
 
     void printStats() const;
+
+    struct MemAccess {
+      MemAccess(bool w, Word a): wr(w), addr(a) {}
+      bool wr;
+      Word addr;
+    };
+    std::vector<MemAccess> memAccesses;
     
 //  private:
     Core *core;

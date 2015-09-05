@@ -138,6 +138,8 @@ void Instruction::executeOn(Warp &c) {
   Size wordSz = c.core->a.getWordSize();
   Word nextPc = c.pc;
 
+  c.memAccesses.clear();
+  
   // If we have a load, overwriting a register's contents, we have to make sure
   // ahead of time it will not fault. Otherwise we may perform an indirect load
   // by mistake.
@@ -271,10 +273,12 @@ void Instruction::executeOn(Warp &c) {
                  do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
 #endif
                reg[rdest] = c.core->mem.read(memAddr, c.supervisorMode);
+               c.memAccesses.push_back(Warp::MemAccess(false, memAddr));
                break;
       case ST: ++c.stores;
 	       memAddr = reg[rsrc[1]] + immsrc;
                c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
+               c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
 #ifdef EMU_INSTRUMENTATION
                Harp::OSDomain::osDomain->
                  do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
