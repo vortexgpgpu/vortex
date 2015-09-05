@@ -1,7 +1,7 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS ?= -fPIC -O3 #-g -DUSE_DEBUG=3
+CXXFLAGS ?= -fPIC -O3 # -g -DUSE_DEBUG=3
 LDLIBS ?= -pthread
 PREFIX ?= /usr/local
 
@@ -51,7 +51,8 @@ lex.yy.cc: scanner.lex
 install:
 	cp libharplib.so $(PREFIX)/lib
 	cp harptool $(PREFIX)/bin
-	cp -r include $(PREFIX)/include/harp
+	mkdir -p $(PREFIX)/include/harp
+	cp include/* $(PREFIX)/include/harp
 
 clean:
 	rm -f *~ \#* *.o *.a *.so include/*~ include/\#* harptool
