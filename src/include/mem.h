@@ -106,10 +106,11 @@ namespace Harp {
 
   class MemoryUnit {
   public:
-    MemoryUnit(Size pageSize, Size addrBytes) : 
-      pageSize(pageSize), addrBytes(addrBytes), ad()
+    MemoryUnit(Size pageSize, Size addrBytes, bool disableVm = false) : 
+      pageSize(pageSize), addrBytes(addrBytes), ad(), disableVm(disableVm)
     {
-      tlb[0] = TLBEntry(0, 077);
+      if (!disableVm)
+        tlb[0] = TLBEntry(0, 077);
     }
     void attach(MemDevice &m, Addr base);
 
@@ -162,6 +163,8 @@ namespace Harp {
     TLBEntry tlbLookup(Addr vAddr, Word flagMask);
 
     Size pageSize, addrBytes;
+
+    bool disableVm;
   };
 };
 

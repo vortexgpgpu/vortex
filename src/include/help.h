@@ -17,7 +17,9 @@ namespace HarpTools {
       "  Display contextual help.\n",
       *emuHelp = "HARP Emulator command line arguments:\n"
                   "  -c, --core <filename>    RAM image\n"
-                  "  -a, --arch <arch string> Architecture string\n",
+                  "  -a, --arch <arch string> Architecture string\n"
+                  "  -s, --stats              Print stats on exit.\n"
+                  "  -b, --basic              Disable virtual memory.\n",
       *asmHelp = "HARP Assembler command line arguments:\n"
                   "  -a, --arch <arch string>\n"
                   "  -o, --output <filename>\n",

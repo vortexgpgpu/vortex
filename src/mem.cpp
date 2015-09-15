@@ -80,6 +80,7 @@ Byte *MemoryUnit::ADecoder::getPtr(Addr a, Size sz, Size wordSize) {
   MemDevice &m(doLookup(a, bit));
   a &= (2<<bit)-1;
   if (a + sz <= m.size()) return m.base() + a;
+  return NULL;
 }
 
 Word MemoryUnit::ADecoder::read(Addr a, bool sup, Size wordSize) {
@@ -97,7 +98,7 @@ void MemoryUnit::ADecoder::write(Addr a, Word w, bool sup, Size wordSize) {
 }
 
 Byte *MemoryUnit::getPtr(Addr a, Size s) {
-  ad.getPtr(a, s, addrBytes*8);
+  return ad.getPtr(a, s, addrBytes*8);
 }
 
 void MemoryUnit::attach(MemDevice &m, Addr base) {
@@ -127,23 +128,40 @@ Addr MemoryUnit::virtToPhys(Addr vAddr) {
 #endif
 
 Word MemoryUnit::read(Addr vAddr, bool sup) {
-  Word flagMask = sup?8:1;
-  TLBEntry t = tlbLookup(vAddr, flagMask);
-  Addr pAddr = t.pfn*pageSize + vAddr%pageSize;
+  Addr pAddr;
+  if (disableVm) {
+    pAddr = vAddr;
+  } else {
+    Word flagMask = sup?8:1;
+    TLBEntry t = tlbLookup(vAddr, flagMask);
+    pAddr = t.pfn*pageSize + vAddr%pageSize;
+  }
   return ad.read(pAddr, sup, 8*addrBytes);
 }
 
 Word MemoryUnit::fetch(Addr vAddr, bool sup) {
-  Word flagMask = sup?32:4;
-  TLBEntry t = tlbLookup(vAddr, flagMask);
-  Addr pAddr = t.pfn*pageSize + vAddr%pageSize;
+  Addr pAddr;
+
+  if (disableVm) {
+    pAddr = vAddr;
+  } else {
+    Word flagMask = sup?32:4;
+    TLBEntry t = tlbLookup(vAddr, flagMask);
+    pAddr = t.pfn*pageSize + vAddr%pageSize;
+  }
   return ad.read(pAddr, sup, 8*addrBytes);
 }
 
 void MemoryUnit::write(Addr vAddr, Word w, bool sup) {
-  Word flagMask = sup?16:2;
-  TLBEntry t = tlbLookup(vAddr, flagMask);
-  Addr pAddr = t.pfn*pageSize + vAddr%pageSize;
+  Addr pAddr;
+
+  if (disableVm) {
+    pAddr = vAddr;
+  } else {
+    Word flagMask = sup?16:2;
+    TLBEntry t = tlbLookup(vAddr, flagMask);
+    pAddr = t.pfn*pageSize + vAddr%pageSize;
+  }
   ad.write(pAddr, w, sup, 8*addrBytes);
 }
 
