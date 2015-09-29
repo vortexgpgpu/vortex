@@ -111,6 +111,22 @@ static uint64_t readParenExpression(bool &valid, const string &s,
   return rPE(valid, s, d, 0, s.length());
 }
 
+AsmReader::ArgType AsmReader::operandtype_table[][4] = {
+  {AT_END}, // AC_NONE
+  {AT_REG, AT_REG, AT_END}, // AC_2REG
+  {AT_REG, AT_LIT, AT_END}, // AC_2IMM
+  {AT_REG, AT_REG, AT_REG, AT_END}, // AC_3REG
+  {AT_PREG, AT_PREG, AT_PREG, AT_END}, // AC_3PREG
+  {AT_REG, AT_REG, AT_LIT, AT_END}, // AC_3IMM
+  {AT_REG, AT_REG, AT_REG, AT_END}, // AC_3REGSRC
+  {AT_LIT, AT_END}, // AC_1IMM
+  {AT_REG, AT_END}, // AC_1REG
+  {AT_REG, AT_REG, AT_LIT, AT_END}, // AC_3IMMSRC
+  {AT_PREG, AT_REG, AT_END}, // AC_PREG_REG
+  {AT_PREG, AT_PREG, AT_END}, // AC_2PREG
+  {AT_REG, AT_REG, AT_END}  // AC_2REGSRC
+};
+
 int lexerFloatBytes;
 Obj *AsmReader::read(std::istream &input) {
   lexerFloatBytes = wordSize;
@@ -146,6 +162,8 @@ Obj *AsmReader::read(std::istream &input) {
   Size next_chunk_align(0);
   uint64_t num_arg;
   RegNum nextPredNum;
+  Instruction::ArgClass ac;
+  int argPos;
 
   AsmTokens t;
   while ((t = (AsmTokens)f->yylex()) != 0) {
@@ -346,7 +364,9 @@ Obj *AsmReader::read(std::istream &input) {
         break;
       case ASM_T_INST:
         if (state == ST_INIT) {
-          map<string, Instruction::Opcode>::iterator opcIterator = opMap.find(yylval.s);
+          map<string, Instruction::Opcode>::iterator
+	    opcIterator = opMap.find(yylval.s);
+
           if (opcIterator == opMap.end())
             asmReaderError(yyline, "Invalid Instruction");
           Instruction::Opcode opc = opcIterator->second;
@@ -362,14 +382,18 @@ Obj *AsmReader::read(std::istream &input) {
           }
           curInst = new Instruction();
           curInst->setOpcode(opc);
+	  ac = Instruction::instTable[opc].argClass;
+	  argPos = 0;
           if (nextPred) {
             nextPred = false;
             curInst->setPred(nextPredNum);
           }
           state = Instruction::instTable[opc].allSrcArgs?ST_INST2:ST_INST1;
-        } else { asmReaderError(yyline, "Unexpected token"); }
+        } else { asmReaderError(yyline, "Unexpected instruction"); }
         break;
       case ASM_T_PREG:
+	if (operandtype_table[ac][argPos++] != AT_PREG)
+	  asmReaderError(yyline, "Unexpected predicate register");
         switch (state) {
           case ST_INST1: curInst->setDestPReg(yylval.u);
                          state = ST_INST2;
@@ -394,6 +418,8 @@ Obj *AsmReader::read(std::istream &input) {
 
       case ASM_T_REG:
       continue_reg:
+	if (operandtype_table[ac][argPos++] != AT_REG)
+	  asmReaderError(yyline, "Unexpected register operand.");
         switch (state) {
           case ST_INST1: curInst->setDestReg(yylval.u);
                          state = ST_INST2;
@@ -410,6 +436,8 @@ Obj *AsmReader::read(std::istream &input) {
         if (!valid) asmReaderError(yyline, "Invalid paren expression");
       }
       case ASM_T_LIT:
+	if (operandtype_table[ac][argPos++] != AT_LIT)
+	  asmReaderError(yyline, "Unexpected literal operand.");
         switch (state) {
           case ST_INST1: asmReaderError(yyline, "Unexpected literal");
           case ST_INST2: curInst->setSrcImm(yylval.u);
@@ -418,6 +446,8 @@ Obj *AsmReader::read(std::istream &input) {
         }
         break;
       case ASM_T_SYM:
+	if (operandtype_table[ac][argPos++] != AT_LIT)
+	  asmReaderError(yyline, "Unexpected symbol operand.");
         switch (state) {
           case ST_INST1: asmReaderError(yyline, "Unexpected symbol");
           case ST_INST2: if (defs.find(yylval.s) != defs.end()) {

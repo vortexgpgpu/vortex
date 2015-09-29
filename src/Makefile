@@ -27,9 +27,9 @@ harptool.o : harptool.cpp include/types.h include/core.h include/enc.h \
              include/instruction.h include/mem.h include/obj.h \
              include/archdef.h include/args.h include/help.h include/debug.h
 instruction.o : instruction.cpp include/instruction.h include/obj.h \
-                include/core.h include/debug.h
+                include/core.h include/debug.h include/asm-tokens.h
 obj.o : obj.cpp include/types.h include/obj.h include/util.h \
-        include/asm-tokens.h include/debug.h
+        include/asm-tokens.h include/debug.h include/instruction.h
 util.o : util.cpp include/types.h include/util.h
 mem.o : mem.cpp include/types.h include/util.h include/mem.h include/debug.h \
         include/core.h

@@ -12,7 +12,9 @@
 
 #include "types.h"
 #include "archdef.h"
+#include "instruction.h"
 #include "enc.h"
+#include "asm-tokens.h"
 
 namespace Harp {
   class Decoder;
@@ -174,6 +176,10 @@ namespace Harp {
     virtual Obj *read(std::istream &input);
   private:
     Size wordSize, nRegs;
+
+    // Operand type sequences indexed by argument class
+    enum ArgType {AT_END, AT_REG, AT_PREG, AT_LIT};
+    static ArgType operandtype_table[][4]; // ArgClass -> ArgType[arg_idx]
   };
    
   class HOFReader : public ObjReader {

@@ -1,3 +1,6 @@
+#ifndef HARPTOOL_ASM_TOKENS
+#define HARPTOOL_ASM_TOKENS
+
 namespace HarpTools {
   enum AsmTokens {
     ASM_T_DIR_DEF = 1, ASM_T_DIR_PERM,    ASM_T_DIR_BYTE,  ASM_T_DIR_WORD,
@@ -9,3 +12,5 @@ namespace HarpTools {
     ASM_T_REG_FP,      ASM_T_LIT,         ASM_T_SYM,       ASM_T_PEXP
   };
 };
+
+#endif
