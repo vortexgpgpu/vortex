@@ -46,13 +46,26 @@ bool Core::interrupt(Word r0) {
 void Core::step() {
   ++steps;
 
+  #ifdef PRINT_ACTIVE_THREADS
+  cout << endl << "Threads:";
+  #endif
+
   for (unsigned i = 0; i < w.size(); ++i) {
     if (w[i].activeThreads) {
       D(3, "Core step stepping warp " << i << '[' << w[i].activeThreads << ']');
       w[i].step();
       D(3, "Now " << w[i].activeThreads << " active threads in " << i);
     }
+   
+    #ifdef PRINT_ACTIVE_THREADSx
+    for (unsigned j = 0; j < w[i].tmask.size(); ++j) {
+      if (w[i].activeThreads > j && w[i].tmask[j]) cout << " 1";
+      else cout << " 0";
+      if (j != w[i].tmask.size()-1 || i != w.size()-1) cout << ',';
+    }
+    #endif
   }
+  cout << endl;
 }
 
 bool Core::running() const {

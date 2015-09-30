@@ -1,7 +1,7 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS ?= -fPIC -O3 # -g -DUSE_DEBUG=3
+CXXFLAGS ?= -fPIC -O3 # -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
 LDLIBS ?= -pthread
 PREFIX ?= /usr/local
 
