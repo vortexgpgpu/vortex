@@ -9,6 +9,11 @@
 using namespace Harp;
 using namespace std;
 
+// Make it easy for autotools-based build systems to detect this library.
+extern "C" {
+  int harplib_present = 1;
+};
+
 void Harp::wordToBytes(Byte *b, Word_u w, Size wordSize) {
   while (wordSize--) {
     *(b++) = w & 0xff;
