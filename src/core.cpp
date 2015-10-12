@@ -65,7 +65,9 @@ void Core::step() {
     }
     #endif
   }
+  #ifdef PRINT_ACTIVE_THREADS
   cout << endl;
+  #endif
 }
 
 bool Core::running() const {
