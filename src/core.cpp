@@ -57,7 +57,7 @@ void Core::step() {
       D(3, "Now " << w[i].activeThreads << " active threads in " << i);
     }
    
-    #ifdef PRINT_ACTIVE_THREADSx
+    #ifdef PRINT_ACTIVE_THREADS
     for (unsigned j = 0; j < w[i].tmask.size(); ++j) {
       if (w[i].activeThreads > j && w[i].tmask[j]) cout << " 1";
       else cout << " 0";
