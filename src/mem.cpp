@@ -187,11 +187,15 @@ void *Harp::consoleInputThread(void* arg_vp) {
   exit(4);
 }
 
-ConsoleMemDevice::ConsoleMemDevice(Size wS, std::ostream &o, Core &core) : 
+ConsoleMemDevice::ConsoleMemDevice(Size wS, std::ostream &o, Core &core,
+                                   bool batch) : 
   wordSize(wS), output(o), core(core), cBuf()
 {
-  pthread_t *thread = new pthread_t;
-  pthread_create(thread, NULL, consoleInputThread, (void*)this);
+  // Create a console input thread if we are running in interactive mode.
+  if (!batch) {
+    pthread_t *thread = new pthread_t;
+    pthread_create(thread, NULL, consoleInputThread, (void*)this);
+  }
   pthread_mutex_init(&cBufLock, NULL);
 }
 

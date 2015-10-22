@@ -1,6 +1,6 @@
 HARPLD  = ../harptool -L
 HARPAS  = ../harptool -A
-HARPEM  = ../harptool -E
+HARPEM  = ../harptool -E -i
 HARPDIS = ../harptool -D
 4BARCH  = 4b16/16/2/1
 

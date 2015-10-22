@@ -55,7 +55,7 @@ namespace Harp {
   class Core;
   class ConsoleMemDevice : public MemDevice {
   public:
-    ConsoleMemDevice(Size wS, std::ostream &o, Core &core);
+    ConsoleMemDevice(Size wS, std::ostream &o, Core &core, bool batch = false);
     ~ConsoleMemDevice() {} 
 
     //virtual Size wordSize() const { return wordSize; }

@@ -207,7 +207,7 @@ int disasm_main(int argc, char **argv) {
 
 int emu_main(int argc, char **argv) {
   string archString("8w32/32/8/8"), imgFileName("a.out.bin");
-  bool showHelp, showStats, basicMachine;
+  bool showHelp, showStats, basicMachine, batch;
 
   /* Read the command line arguments. */
   CommandLineArgFlag          fh("-h", "--help", "", showHelp);
@@ -215,6 +215,7 @@ int emu_main(int argc, char **argv) {
   CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
   CommandLineArgFlag          fs("-s", "--stats", "", showStats);
   CommandLineArgFlag          fb("-b", "--basic", "", basicMachine);
+  CommandLineArgFlag          fi("-i", "--batch", "", batch);
   
   CommandLineArg::readArgs(argc, argv);
 
@@ -240,7 +241,7 @@ int emu_main(int argc, char **argv) {
   Core core(arch, *dec, mu/*, ID in multicore implementations*/);
 
   RamMemDevice mem(imgFileName.c_str(), arch.getWordSize());
-  ConsoleMemDevice console(arch.getWordSize(), cout, core);
+  ConsoleMemDevice console(arch.getWordSize(), cout, core, batch);
   mu.attach(mem,     0);
   mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
 

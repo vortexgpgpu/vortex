@@ -19,7 +19,8 @@ namespace HarpTools {
                   "  -c, --core <filename>    RAM image\n"
                   "  -a, --arch <arch string> Architecture string\n"
                   "  -s, --stats              Print stats on exit.\n"
-                  "  -b, --basic              Disable virtual memory.\n",
+                  "  -b, --basic              Disable virtual memory.\n"
+                  "  -i, --batch              Disable console input.\n",
       *asmHelp = "HARP Assembler command line arguments:\n"
                   "  -a, --arch <arch string>\n"
                   "  -o, --output <filename>\n",
