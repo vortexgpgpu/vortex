@@ -190,7 +190,7 @@ void Warp::step() {
     D(3, "Predicate state:");
     D_RAW("  ");
     for (unsigned j = 0; j < pred.size(); ++j) {
-      for (unsigned i = 0; i < pred[j].size(); ++i) D_RAW(pred[0][i]);
+      for (unsigned i = 0; i < pred[j].size(); ++i) D_RAW(pred[j][i]);
       D_RAW(endl);
     }
     D_RAW(" (");
