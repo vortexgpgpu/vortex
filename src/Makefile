@@ -15,7 +15,7 @@ harptool: harptool.o libharplib.a
 	$(CXX) $(LDFLAGS) -o $@ harptool.o libharplib.a $(LDLIBS)
 
 libharplib.so: $(LIB_OBJS)
-	$(CXX) -shared -o $@ $(LIB_OBJS)
+	$(CXX) -shared -o $@ $(LIB_OBJS) $(LDLIBS)
 
 libharplib.a: $(LIB_OBJS)
 	ar rcs $@ $(LIB_OBJS)
