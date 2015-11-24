@@ -295,6 +295,7 @@ Obj *AsmReader::read(std::istream &input) {
             o->chunks.push_back(dc);
             if (entry) o->entry = o->chunks.size() - 1;
             if (global) dc->setGlobal();
+	    chunkCreated = true;
           }
           const char *s = yylval.s.c_str();
           do {
