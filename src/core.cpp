@@ -77,7 +77,12 @@ bool Core::running() const {
 }
 
 void Core::printStats() const {
-  cout << "Steps: " << steps << endl;
+  unsigned long insts = 0;
+  for (unsigned i = 0; i < w.size(); ++i)
+    insts += w[i].insts;
+
+  cout << "Total steps: " << steps << endl;
+  cout << "Total insts: " << insts << endl;
 
   for (unsigned i = 0; i < w.size(); ++i) {
     cout << "=== Warp " << i << " ===" << endl;
