@@ -55,16 +55,17 @@ namespace Harp {
     DomStackEntry(
       unsigned p, const std::vector<std::vector<Reg<bool> > >& m,
       std::vector<bool> &tm, Word pc
-    ): pc(pc), fallThrough(false)
+    ): pc(pc), fallThrough(false), uni(false)
     {
       for (unsigned i = 0; i < m.size(); ++i)
         tmask.push_back(!bool(m[i][p]) && tm[i]);
     }
 
     DomStackEntry(const std::vector<bool> &tmask):
-      tmask(tmask), fallThrough(true) {}
+      tmask(tmask), fallThrough(true), uni(false) {}
 
     bool fallThrough;
+    bool uni;
     std::vector<bool> tmask;
     Word pc;
   };
