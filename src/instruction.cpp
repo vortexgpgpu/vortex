@@ -112,6 +112,28 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
   return os;
 }
 
+bool checkUnanimous(unsigned p, const std::vector<std::vector<Reg<bool> > >& m,
+  const std::vector<bool> &tm) {
+  bool same;
+  unsigned i;
+  for (i = 0; i < m.size(); ++i) {
+    if (tm[i]) {
+      same = m[i][p];
+      break;
+    }
+  }
+  if (i == m.size())
+    throw DivergentBranchException();
+  for (; i < m.size(); ++i) {
+    if (tm[i]) {
+      if (same != (bool(m[i][p]))) {
+        return false;
+      }
+    } 
+  }
+  return true;
+}
+
 void Instruction::executeOn(Warp &c) {
   D(3, "Begin instruction execute.");
 
@@ -345,7 +367,12 @@ void Instruction::executeOn(Warp &c) {
                  break;
       case SPLIT: if (sjOnce) {
 		   sjOnce = false;
-                   // TODO: if mask becomes all-zero, fall through
+                    if (checkUnanimous(pred, c.pred, c.tmask)) {
+                      DomStackEntry e(c.tmask);
+                      e.uni = true;
+                      c.domStack.push(e);
+                      break;
+                    }
                    DomStackEntry e(pred, c.pred, c.tmask, c.pc);
                    c.domStack.push(c.tmask);
                    c.domStack.push(e);
@@ -355,7 +382,12 @@ void Instruction::executeOn(Warp &c) {
                  break;
       case JOIN: if (sjOnce) {
 		   sjOnce = false;
-                   // TODO: if mask becomes all-zero, fall through
+                   if (!c.domStack.empty() && c.domStack.top().uni) {
+                     D(2, "Uni branch at join");
+  		               c.tmask = c.domStack.top().tmask;
+                     c.domStack.pop();
+                     break;
+                   }
                    if (!c.domStack.top().fallThrough) {
                      if (!pcSet) nextPc = c.domStack.top().pc;
                      pcSet = true;
