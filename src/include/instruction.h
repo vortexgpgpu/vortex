@@ -24,14 +24,14 @@ namespace Harp {
 
   class Instruction {
   public:
-    enum Opcode { NOP, DI, EI, TLBADD, TLBFLUSH, NEG, NOT, 
-                  AND, OR, XOR, ADD, SUB, MUL, DIV, MOD, SHL, SHR,
-                  ANDI, ORI, XORI, ADDI, SUBI, MULI, DIVI, MODI, SHLI, SHRI,
-                  JALI, JALR, JMPI, JMPR, CLONE, JALIS, JALRS, 
-                  JMPRT, LD, ST, LDI, RTOP, ANDP, ORP, XORP, NOTP, ISNEG, 
-                  ISZERO, HALT, TRAP, JMPRU, SKEP, RETI, TLBRM,
-                  ITOF, FTOI, FADD, FSUB, FMUL, FDIV, FNEG, WSPAWN,
-                  SPLIT, JOIN, BAR };
+    enum Opcode {   NOP,    DI,     EI, TLBADD, TLBFLUSH,  NEG,   NOT,   AND,
+		     OR,   XOR,    ADD,    SUB,      MUL,  DIV,   MOD,   SHL,
+		    SHR,  ANDI,    ORI,   XORI,     ADDI, SUBI,  MULI,  DIVI,
+		   MODI,  SHLI,   SHRI,   JALI,     JALR, JMPI,  JMPR, CLONE,
+		  JALIS, JALRS,  JMPRT,     LD,       ST,  LDI,  RTOP,  ANDP,
+		    ORP,  XORP,   NOTP,  ISNEG,   ISZERO, HALT,  TRAP, JMPRU,
+		   SKEP,  RETI,  TLBRM,   ITOF,     FTOI, FADD,  FSUB,  FMUL,
+		   FDIV,  FNEG, WSPAWN,  SPLIT,     JOIN,  BAR };
     enum ArgClass {
       AC_NONE, AC_2REG, AC_2IMM, AC_3REG, AC_3PREG, AC_3IMM, AC_3REGSRC, 
       AC_1IMM, AC_1REG, AC_3IMMSRC, AC_PREG_REG, AC_2PREG, AC_2REGSRC
