@@ -1,0 +1,5 @@
+*.o
+src/harptool
+src/lex.yy.cc
+src/libharplib.a
+src/libharplib.so
