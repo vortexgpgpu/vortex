@@ -249,10 +249,10 @@ static Word mask(Size bits) {
 static void getSizes(const ArchDef &arch, Size &n, Size& o, Size &r, Size &p, 
                      Size &i1, Size &i2, Size &i3)
 {
- n = arch.getWordSize() * 8;
- o = 6;
- r = ceilLog2(arch.getNRegs());
- p = ceilLog2(arch.getNPRegs());
+ n  = arch.getWordSize() * 8;
+ o  = 7;
+ r  = ceilLog2(arch.getNRegs());
+ p  = 0;
  i1 = n - 1 - p - o;
  i2 = i1 - r;
  i3 = i2 - r;
@@ -274,7 +274,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
   Word code(readWord(v, idx, n/8));
   Instruction &inst = * new Instruction();  
 
-  bool predicated = (code>>(n-1));
+  // bool predicated = (code>>(n-1));
+  bool predicated = false;
   if (predicated) { inst.setPred((code>>(n-p-1))&pMask); }
 
   Instruction::Opcode op = (Instruction::Opcode)((code>>i1)&oMask);

@@ -219,7 +219,6 @@ int emu_main(int argc, char **argv) {
   CommandLineArgFlag          fi("-i", "--batch", "", batch);
   
   CommandLineArg::readArgs(argc, argv);
-
   if (showHelp) {
     cout << Help::emuHelp;
     return 0;
@@ -233,6 +232,7 @@ int emu_main(int argc, char **argv) {
   switch (arch.getEncChar()) {
     case 'b': dec = new ByteDecoder(arch); break;
     case 'w': dec = new WordDecoder(arch); break;
+    case 'r': dec = new WordDecoder(arch); break;
     default:
       cout << "Unrecognized decoder type: '" << arch.getEncChar() << "'.\n";
       return 1;

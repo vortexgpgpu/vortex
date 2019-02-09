@@ -7,6 +7,8 @@
 #include <string>
 #include <sstream>
 
+#include <cstdlib>
+#include <stdio.h>
 #include "types.h"
 
 namespace Harp {
@@ -16,8 +18,16 @@ namespace Harp {
 
     ArchDef(const std::string &s) {
       std::istringstream iss(s.c_str());
-      
-      iss >> wordSize;
+            
+      wordSize = 4;
+      encChar = 'w';
+      nRegs = 32;
+      nPRegs = 0;
+      nThds = 1;
+      nWarps = 1;
+
+      extent = EXT_REGS;
+
       if (!iss) { extent = EXT_NULL; return; }
       iss >> encChar;
       if (!iss) { extent = EXT_WORDSIZE; return; }
