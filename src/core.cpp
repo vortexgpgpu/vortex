@@ -4,6 +4,9 @@
 
 #include <iostream>
 
+// #define USE_DEBUG 7
+// #define PRINT_ACTIVE_THREADS
+
 #include "include/types.h"
 #include "include/util.h"
 #include "include/archdef.h"
