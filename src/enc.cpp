@@ -28,75 +28,75 @@ static void decodeError(string msg) {
 }
 
 void Encoder::encodeChunk(DataChunk &dest, const TextChunk &src) {
-  typedef vector<Instruction*>::const_iterator vec_it;
-  const vector<Instruction*> &s(src.instructions);
-  vector<Byte> &d(dest.contents);
+  // typedef vector<Instruction*>::const_iterator vec_it;
+  // const vector<Instruction*> &s(src.instructions);
+  // vector<Byte> &d(dest.contents);
 
-  /* Keep encoding the instructions. */
-  Size n = 0;
+  // /* Keep encoding the instructions. */
+  // Size n = 0;
 
-  /* For each instruction. */
-  for (vec_it i = s.begin(); i != s.end(); i++) {
-    Ref *ref;
+  // /* For each instruction. */
+  // for (vec_it i = s.begin(); i != s.end(); i++) {
+  //   Ref *ref;
 
-    /* Perform the encoding. */
-    n += encode(ref, d, n, **i);
+  //   /* Perform the encoding. */
+  //   n += encode(ref, d, n, **i);
     
-    /* Add reference if necessary. */
-    if (ref != NULL) {
-      ref->ibase = n;
-      dest.refs.push_back(ref);
-    }
-  }
+  //   /* Add reference if necessary. */
+  //   if (ref != NULL) {
+  //     ref->ibase = n;
+  //     dest.refs.push_back(ref);
+  //   }
+  // }
 
-  dest.alignment = src.alignment;
-  dest.flags = src.flags;
-  dest.address = src.address;
-  dest.bound = src.bound;
-  if (src.isGlobal()) dest.setGlobal();
+  // dest.alignment = src.alignment;
+  // dest.flags = src.flags;
+  // dest.address = src.address;
+  // dest.bound = src.bound;
+  // if (src.isGlobal()) dest.setGlobal();
 
-  d.resize(n);
-  dest.size = n;
+  // d.resize(n);
+  // dest.size = n;
 }
 
 void Decoder::decodeChunk(TextChunk &dest, const DataChunk &src) {
-  typedef vector<Instruction*>::const_iterator vec_it;
-  const vector<Byte> &v(src.contents);
-  Size n = 0;
+//   typedef vector<Instruction*>::const_iterator vec_it;
+//   const vector<Byte> &v(src.contents);
+//   Size n = 0;
 
-  setRefs(src.refs);
+//   setRefs(src.refs);
 
-  while (n < src.contents.size()) {
-    Instruction *inst = decode(v, n);
-    if (inst->hasRefLiteral()) {
-      dest.refs.push_back(inst->getRefLiteral());
-    }
+//   while (n < src.contents.size()) {
+//     Instruction *inst = decode(v, n);
+//     if (inst->hasRefLiteral()) {
+//       dest.refs.push_back(inst->getRefLiteral());
+//     }
 
-    dest.instructions.push_back(inst);
-  }
+//     dest.instructions.push_back(inst);
+//   }
 
-  dest.alignment = src.alignment;
-  dest.flags = src.flags;
-  dest.address = src.address;
-  dest.bound = src.bound;
-  if (src.isGlobal()) dest.setGlobal();
+//   dest.alignment = src.alignment;
+//   dest.flags = src.flags;
+//   dest.address = src.address;
+//   dest.bound = src.bound;
+//   if (src.isGlobal()) dest.setGlobal();
 
-  clearRefs();
-}
+//   clearRefs();
+// }
 
-void Decoder::setRefs(const std::vector<Ref*> &refVec) {
-  haveRefs = true;
+// void Decoder::setRefs(const std::vector<Ref*> &refVec) {
+//   haveRefs = true;
 
-  typedef std::vector<Ref*>::const_iterator vec_ci;
+//   typedef std::vector<Ref*>::const_iterator vec_ci;
 
-  for (vec_ci i = refVec.begin(); i != refVec.end(); i++) {
-    OffsetRef *oref = dynamic_cast<OffsetRef*>(*i);
-    if (oref) {
-      refMap[oref->getOffset()] = *i;
-    } else {
-      decodeError("Unknown Ref type in Decoder::setRefs");
-    }
-  }
+//   for (vec_ci i = refVec.begin(); i != refVec.end(); i++) {
+//     OffsetRef *oref = dynamic_cast<OffsetRef*>(*i);
+//     if (oref) {
+//       refMap[oref->getOffset()] = *i;
+//     } else {
+//       decodeError("Unknown Ref type in Decoder::setRefs");
+//     }
+//   }
 }
 
 Instruction *ByteDecoder::decode(const vector<Byte> &v, Size &n) {
@@ -242,27 +242,34 @@ static unsigned ceilLog2(RegNum x) {
   return z;
 }
 
-static Word mask(Size bits) {
-  return (1ull<<bits)-1;
-}
-
-static void getSizes(const ArchDef &arch, Size &n, Size& o, Size &r, Size &p, 
-                     Size &i1, Size &i2, Size &i3)
-{
- n  = arch.getWordSize() * 8;
- o  = 7;
- r  = ceilLog2(arch.getNRegs());
- p  = 0;
- i1 = n - 1 - p - o;
- i2 = i1 - r;
- i3 = i2 - r;
-}
 
 WordDecoder::WordDecoder(const ArchDef &arch) {
-  getSizes(arch, n, o, r, p, i1, i2, i3);
-  if (p > r) r = p;
-  oMask  = mask(o);  rMask  = mask(r);  pMask  = mask(p);
-  i1Mask = mask(i1); i2Mask = mask(i2); i3Mask = mask(i3);
+
+    inst_s   = arch.getWordSize() * 8;
+    opcode_s = 7;
+    reg_s    = 5;
+    func3_s  = 3;
+
+    shift_opcode    = 0;
+    shift_rd        = opcode_s;
+    shift_func3     = opcode_s + reg_s;
+    shift_rs1       = opcode_s + reg_s + func3_s;
+    shift_rs2       = opcode_s + reg_s + func3_s + reg_s;
+    shift_func7     = opcode_s + reg_s + func3_s + reg_s + reg_s;
+    shift_j_u_immed = opcode_s + reg_s;
+    shift_s_b_immed = opcode_s + reg_s + func3_s + reg_s + reg_s;
+    shift_i_immed   = opcode_s + reg_s + func3_s + reg_s;
+
+    reg_mask     = 0x1f;
+    func3_mask   = 0x7;
+    func7_mask   = 0x7f;
+    opcode_mask  = 0x7f;
+    i_immed_mask = 0xfff;
+    s_immed_mask = 0xfff;
+    b_immed_mask = 0x1fff;
+    u_immed_mask = 0xfffff;
+    j_immed_mask = 0xfffff;
+
 }
 
 Word signExt(Word w, Size bit, Word mask) {
@@ -278,69 +285,83 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
   bool predicated = false;
   if (predicated) { inst.setPred((code>>(n-p-1))&pMask); }
 
-  Instruction::Opcode op = (Instruction::Opcode)((code>>i1)&oMask);
+  Instruction::Opcode op = (Instruction::Opcode)((code>>shift_opcode)&opcode_mask);
   inst.setOpcode(op);
 
   bool usedImm(false);
-  switch(Instruction::instTable[op].argClass) {
-    case Instruction::AC_NONE: 
+
+  switch(Instruction::instTable[op].iType)
+  {
+    case Instruction::InstType::N_TYPE:
       break;
-    case Instruction::AC_1IMM:
-      inst.setSrcImm(signExt(code&i1Mask, i1, i1Mask));
+    case Instruction::InstType::R_TYPE:
+      inst.setDestReg((code>>shift_rd)   & reg_mask);
+      inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+      inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+      inst.setFunc3 ((code>>shift_func3) & func3_mask);
+      inst.setFunc7 ((code>>shift_func7) & func7_mask);
+      break;
+    case Instruction::InstType::I_TYPE
+      inst.setDestReg((code>>shift_rd)   & reg_mask);
+      inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+      inst.setFunc3 ((code>>shift_func3) & func3_mask);
+      inst.setSrcImm(signExt(code>>shift_i_immed, 12, i_immed_mask));
       usedImm = true;
       break;
-    case Instruction::AC_2IMM:
-      inst.setDestReg((code>>i2)&rMask);
-      inst.setSrcImm(signExt(code&i2Mask, i2, i2Mask));
+    case Instruction::InstType::S_TYPE:
+      
+      inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+      inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+      inst.setFunc3 ((code>>shift_func3) & func3_mask);
+
+      word dest_bits = (code>>shift_rd)  & reg_mask;
+      Word imm_bits  = (code>>shift_s_b_immed & func7_mask);
+      Word imeed     = (imm_bits << reg_s) | dest_bits;
+      inst.setSrcImm(signExt(imeed, 12, s_immed_mask));
       usedImm = true;
       break;
-    case Instruction::AC_3IMM:
-      inst.setDestReg((code>>i2)&rMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      inst.setSrcImm(signExt(code&i3Mask, i3, i3Mask));
+    case Instruction::InstType::B_TYPE:
+
+      inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+      inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+      inst.setFunc3 ((code>>shift_func3) & func3_mask);
+
+      word dest_bits = (code>>shift_rd)  & reg_mask;
+      Word imm_bits  = (code>>shift_s_b_immed & func7_mask);
+
+      Word bit_11   = dest_bits & 0x1;
+      Word bit_4_1  = dest_bits >> 1;
+      Word bit_10_5 = imm_bits & 0x3f;
+      Word bit_12   = imm_bits >> 6;
+
+      Word imeed    = 0 | (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+
+      inst.setSrcImm(signExt(imeed, 13, b_immed_mask));
       usedImm = true;
       break;
-    case Instruction::AC_3IMMSRC:
-      inst.setSrcReg((code>>i2)&rMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      inst.setSrcImm(signExt(code&i3Mask, i3, i3Mask));
+    case Instruction::InstType::U_TYPE:
+      inst.setDestReg((code>>shift_rd)   & reg_mask);
+      inst.setSrcImm(signExt(code>>shift_j_u_immed, 20, u_immed_mask));
       usedImm = true;
       break;
-    case Instruction::AC_1REG:
-      inst.setSrcReg((code>>i2)&rMask);
+    case Instruction::InstType::J_TYPE:
+      inst.setDestReg((code>>shift_rd)   & reg_mask);
+
+      // [20 | 10:1 | 11 | 19:12]
+
+      Word unordered = code>>shift_j_u_immed;
+
+      Word bits_19_12 = unordered & 0xff;
+      Word bit_11     = (unordered>>8) & 0x1;
+      Word bits_10_1  = (unordered >> 9) & 0x3ff;
+      Word bit_20     = (unordered>>19) & 0x1;
+
+      Word imeed  = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit20 << 20);
+
+      inst.setSrcImm(signExt(imeed, 20, j_immed_mask));
+      usedImm = true;
       break;
-    case Instruction::AC_2REG:
-      inst.setDestReg((code>>i2)&rMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      break;
-    case Instruction::AC_3REG:
-      inst.setDestReg((code>>i2)&rMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      inst.setSrcReg((code>>(i3-r))&rMask);
-      break;
-    case Instruction::AC_3REGSRC:
-      inst.setSrcReg((code>>i2)&rMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      inst.setSrcReg((code>>(i3-r))&rMask);
-      break;
-    case Instruction::AC_PREG_REG:
-      inst.setDestPReg((code>>i2)&pMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      break;
-    case Instruction::AC_2PREG:
-      inst.setDestPReg((code>>i2)&pMask);
-      inst.setSrcPReg((code>>i3)&pMask);
-      break;
-    case Instruction::AC_3PREG:
-      inst.setDestPReg((code>>i2)&pMask);
-      inst.setSrcPReg((code>>i3)&pMask);
-      inst.setSrcPReg((code>>(i3-r))&pMask);
-      break;
-    case Instruction::AC_2REGSRC:
-      inst.setSrcReg((code>>i2)&rMask);
-      inst.setSrcReg((code>>i3)&rMask);
-      break;
-    defualt:
+   defualt:
       cout << "Unrecognized argument class in word decoder.\n";
       exit(1);
   }
@@ -359,120 +380,120 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
   return &inst;
 }
 
-WordEncoder::WordEncoder(const ArchDef &arch) {
-  getSizes(arch, n, o, r, p, i1, i2, i3);
-  if (p > r) r = p;
-  oMask  = mask(o);  rMask  = mask(r);  pMask  = mask(p);
-  i1Mask = mask(i1); i2Mask = mask(i2); i3Mask = mask(i3);
-}
+// WordEncoder::WordEncoder(const ArchDef &arch) {
+//   getSizes(arch, n, o, r, p, i1, i2, i3);
+//   if (p > r) r = p;
+//   oMask  = mask(o);  rMask  = mask(r);  pMask  = mask(p);
+//   i1Mask = mask(i1); i2Mask = mask(i2); i3Mask = mask(i3);
+// }
 
-Size WordEncoder::encode(Ref *&ref, std::vector<Byte> &v, 
-                                 Size idx, Instruction &i)
-{
-  Word code = 0;
-  Size bitsWritten = 0;
+// Size WordEncoder::encode(Ref *&ref, std::vector<Byte> &v, 
+//                                  Size idx, Instruction &i)
+// {
+//   Word code = 0;
+//   Size bitsWritten = 0;
 
-  /* Predicate/predicated bit */
-  if (i.hasPred()) {
-    code = 1 << p;
-    code |= (i.getPred()&pMask);
-    if (i.getPred() > pMask) {
-      cout << "Predicate in " << i << " does not fit in encoding.\n";
-      exit(1);
-    }
-  }
-  bitsWritten += (1 + p);
+//   /* Predicate/predicated bit */
+//   if (i.hasPred()) {
+//     code = 1 << p;
+//     code |= (i.getPred()&pMask);
+//     if (i.getPred() > pMask) {
+//       cout << "Predicate in " << i << " does not fit in encoding.\n";
+//       exit(1);
+//     }
+//   }
+//   bitsWritten += (1 + p);
 
-  /* Opcode */
-  code <<= o;
-  code |= (i.getOpcode()&oMask);
-  if (i.getOpcode() > oMask) {
-    cout << "Opcode in " << i << " does not fit in encoding.\n";
-    exit(1);
-  }
-  bitsWritten += o;
+//   /* Opcode */
+//   code <<= o;
+//   code |= (i.getOpcode()&oMask);
+//   if (i.getOpcode() > oMask) {
+//     cout << "Opcode in " << i << " does not fit in encoding.\n";
+//     exit(1);
+//   }
+//   bitsWritten += o;
 
-  if (i.hasRDest()) {
-    code <<= r;
-    code |= i.getRDest();
-    bitsWritten += r;
-    if (i.getRDest() > rMask) {
-      cout << "Destination register in " << i << " does not fit in encoding.\n";
-      exit(1);
-    }
-  }
+//   if (i.hasRDest()) {
+//     code <<= r;
+//     code |= i.getRDest();
+//     bitsWritten += r;
+//     if (i.getRDest() > rMask) {
+//       cout << "Destination register in " << i << " does not fit in encoding.\n";
+//       exit(1);
+//     }
+//   }
 
-  if (i.hasPDest()) {
-    code <<= r;
-    code |= i.getPDest();
-    bitsWritten += r;
-    if (i.getPDest() > rMask) {
-      cout << "Destination predicate in " <<i<< " does not fit in encoding.\n";
-      exit(1);
-    }
-  }
+//   if (i.hasPDest()) {
+//     code <<= r;
+//     code |= i.getPDest();
+//     bitsWritten += r;
+//     if (i.getPDest() > rMask) {
+//       cout << "Destination predicate in " <<i<< " does not fit in encoding.\n";
+//       exit(1);
+//     }
+//   }
 
-  for (Size j = 0; j < i.getNRSrc(); j++) {
-    code <<= r;
-    code |= i.getRSrc(j);
-    bitsWritten += r;
-    if (i.getRSrc(j) > rMask) {
-      cout << "Source register " << j << " in " << i 
-           << " does not fit in encoding.\n";
-      exit(1);
-    }
-  }
+//   for (Size j = 0; j < i.getNRSrc(); j++) {
+//     code <<= r;
+//     code |= i.getRSrc(j);
+//     bitsWritten += r;
+//     if (i.getRSrc(j) > rMask) {
+//       cout << "Source register " << j << " in " << i 
+//            << " does not fit in encoding.\n";
+//       exit(1);
+//     }
+//   }
 
-  for (Size j = 0; j < i.getNPSrc(); j++) {
-    code <<= r;
-    code |= i.getPSrc(j);
-    bitsWritten += r;
-    if (i.getPSrc(j) > rMask) {
-      cout << "Source predicate " << j << " in " << i
-           << " does not fit in encoding.\n";
-      exit(1);
-    }
-  }
+//   for (Size j = 0; j < i.getNPSrc(); j++) {
+//     code <<= r;
+//     code |= i.getPSrc(j);
+//     bitsWritten += r;
+//     if (i.getPSrc(j) > rMask) {
+//       cout << "Source predicate " << j << " in " << i
+//            << " does not fit in encoding.\n";
+//       exit(1);
+//     }
+//   }
 
-  if (i.hasRefLiteral()) {
-    Ref *r = i.getRefLiteral();
-    ref = new OffsetRef(r->name, v, idx, n - bitsWritten, n, i.hasRelImm());
-  } else {
-    ref = NULL;
-  }
+//   if (i.hasRefLiteral()) {
+//     Ref *r = i.getRefLiteral();
+//     ref = new OffsetRef(r->name, v, idx, n - bitsWritten, n, i.hasRelImm());
+//   } else {
+//     ref = NULL;
+//   }
 
-  if (i.hasImm()) {
-    if (bitsWritten == n - i1) {
-      code <<= i1;
-      code |= (i.getImm()&i1Mask);
-      bitsWritten += i1;
-      Word_s ws(i.getImm());
-      if ((ws >> i1) != 0 && (ws >> i1) != -1) goto tooBigImm;
-    } else if (bitsWritten == n - i2) {
-      code <<= i2;
-      code |= (i.getImm()&i2Mask);
-      bitsWritten += i2;
-      Word_s ws(i.getImm());
-      if ((ws >> i2) != 0 && (ws >> i2) != -1) goto tooBigImm;
-    } else if (bitsWritten == n - i3) {
-      code <<= i3;
-      code |= (i.getImm()&i3Mask);
-      bitsWritten += i3;
-      Word_s ws(i.getImm());
-      if ((ws >> i3) != 0 && (ws >> i3) != -1) goto tooBigImm;
-    } else {
-      cout << "WordEncoder::encode() could not encode: " << i << '\n';
-      exit(1);
-    }
-  }
+//   if (i.hasImm()) {
+//     if (bitsWritten == n - i1) {
+//       code <<= i1;
+//       code |= (i.getImm()&i1Mask);
+//       bitsWritten += i1;
+//       Word_s ws(i.getImm());
+//       if ((ws >> i1) != 0 && (ws >> i1) != -1) goto tooBigImm;
+//     } else if (bitsWritten == n - i2) {
+//       code <<= i2;
+//       code |= (i.getImm()&i2Mask);
+//       bitsWritten += i2;
+//       Word_s ws(i.getImm());
+//       if ((ws >> i2) != 0 && (ws >> i2) != -1) goto tooBigImm;
+//     } else if (bitsWritten == n - i3) {
+//       code <<= i3;
+//       code |= (i.getImm()&i3Mask);
+//       bitsWritten += i3;
+//       Word_s ws(i.getImm());
+//       if ((ws >> i3) != 0 && (ws >> i3) != -1) goto tooBigImm;
+//     } else {
+//       cout << "WordEncoder::encode() could not encode: " << i << '\n';
+//       exit(1);
+//     }
+//   }
 
-  if (bitsWritten < n) code <<= (n - bitsWritten);
+//   if (bitsWritten < n) code <<= (n - bitsWritten);
 
-  writeWord(v, idx, n/8, code); 
+//   writeWord(v, idx, n/8, code); 
 
-  return n/8;
+//   return n/8;
 
-tooBigImm:
-  cout << "Immediate in " << i << " too large to encode.\n";
-  exit(1);
-}
+// tooBigImm:
+//   cout << "Immediate in " << i << " too large to encode.\n";
+//   exit(1);
+// }

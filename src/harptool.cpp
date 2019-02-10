@@ -50,158 +50,158 @@ HarpToolMode findMode(int argc, char** argv) {
 }
 
 int asm_main(int argc, char **argv) {
-  string archString("8w32/32/8/8"), outFileName("a.out.HOF"),
-         inFileName(argv[argc-1]);
-  bool showHelp;  
+  // string archString("8w32/32/8/8"), outFileName("a.out.HOF"),
+  //        inFileName(argv[argc-1]);
+  // bool showHelp;  
 
-  /* Get command line arguments. */
-  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
-  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+  // /* Get command line arguments. */
+  // CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  // CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
+  // CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
 
-  CommandLineArg::readArgs(argc-1, argv);
+  // CommandLineArg::readArgs(argc-1, argv);
 
-  if (showHelp || argc == 0) {
-    cout << Help::asmHelp;
-    exit(0);
-  }
+  // if (showHelp || argc == 0) {
+  //   cout << Help::asmHelp;
+  //   exit(0);
+  // }
 
-  ArchDef arch(archString);
+  // ArchDef arch(archString);
 
-  D(0, "Created ArchDef for " << string(arch));
+  // D(0, "Created ArchDef for " << string(arch));
 
-  /* Create an appropriate encoder. */
-  Encoder *enc;
-  switch (arch.getEncChar()) {
-    case 'b': enc = new ByteEncoder(arch); break;
-    case 'w': enc = new WordEncoder(arch); break;
-    defaulet:
-      cout << "Unknown encoding type, \"" << arch.getEncChar() << "\"\n";
-      exit(1);
-  }
+  // /* Create an appropriate encoder. */
+  // Encoder *enc;
+  // switch (arch.getEncChar()) {
+  //   case 'b': enc = new ByteEncoder(arch); break;
+  //   case 'w': enc = new WordEncoder(arch); break;
+  //   defaulet:
+  //     cout << "Unknown encoding type, \"" << arch.getEncChar() << "\"\n";
+  //     exit(1);
+  // }
 
-  /* Open files. */
-  if (outFileName == "") {
-    cout << "HARP Assembler: No output filename given.\n";
-    exit(1);
-  }
+  // /* Open files. */
+  // if (outFileName == "") {
+  //   cout << "HARP Assembler: No output filename given.\n";
+  //   exit(1);
+  // }
 
-  ifstream asmFile(inFileName.c_str());
-  ofstream outFile(outFileName.c_str());
+  // ifstream asmFile(inFileName.c_str());
+  // ofstream outFile(outFileName.c_str());
 
-  if (!asmFile) {
-    cout << "Could not open \"" << inFileName << "\" for reading.\n";
-    exit(1);
-  }
+  // if (!asmFile) {
+  //   cout << "Could not open \"" << inFileName << "\" for reading.\n";
+  //   exit(1);
+  // }
 
-  if (!outFile) {
-    cout << "Could not open \"" << outFileName << "\" for writing.\n";
-    exit(1);
-  }
+  // if (!outFile) {
+  //   cout << "Could not open \"" << outFileName << "\" for writing.\n";
+  //   exit(1);
+  // }
 
-  /* Read an Obj from the assembly file. */
-  D(0, "Passing AsmReader ArchDef: " << string(arch));
-  AsmReader ar(arch);
-  Obj *o = ar.read(asmFile);
+  // /* Read an Obj from the assembly file. */
+  // D(0, "Passing AsmReader ArchDef: " << string(arch));
+  // AsmReader ar(arch);
+  // Obj *o = ar.read(asmFile);
 
-  /* Encode the text chunks read from the assembly file. */
-  for (Size j = 0; j < o->chunks.size(); j++) {
-    Chunk *&c = o->chunks[j];
-    TextChunk *tc;
-    DataChunk *dc;
-    if ((tc = dynamic_cast<TextChunk*>(c)) != NULL) {
-      /* Encode it. */
-      dc = new DataChunk(tc->name);
-      enc->encodeChunk(*dc, *tc);
+  // /* Encode the text chunks read from the assembly file. */
+  // for (Size j = 0; j < o->chunks.size(); j++) {
+  //   Chunk *&c = o->chunks[j];
+  //   TextChunk *tc;
+  //   DataChunk *dc;
+  //   if ((tc = dynamic_cast<TextChunk*>(c)) != NULL) {
+  //     /* Encode it. */
+  //     dc = new DataChunk(tc->name);
+  //     enc->encodeChunk(*dc, *tc);
 
-      /* Delete the text chunk. */
-      delete tc;
+  //     /* Delete the text chunk. */
+  //     delete tc;
 
-      /* Do the switch. */
-      c = dc;
-    }
-  }
-  asmFile.close();
-  delete enc;
+  //     /* Do the switch. */
+  //     c = dc;
+  //   }
+  // }
+  // asmFile.close();
+  // delete enc;
 
-  /* Write a HOF binary. */
-  D(0, "Creating a HOFWriter, passing it ArchDef: " << string(arch));
-  HOFWriter hw(arch);
-  hw.write(outFile, *o);
-  outFile.close();
+  // /* Write a HOF binary. */
+  // D(0, "Creating a HOFWriter, passing it ArchDef: " << string(arch));
+  // HOFWriter hw(arch);
+  // hw.write(outFile, *o);
+  // outFile.close();
 
-  delete o;
+  // delete o;
 
   return 0;
 }
 
 int disasm_main(int argc, char **argv) {
-  bool showHelp;
-  string outFileName("a.out.s"), archString("8w32/32/8/8");
+  // bool showHelp;
+  // string outFileName("a.out.s"), archString("8w32/32/8/8");
   
 
-  /* Get command line arguments. */
-  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
-  CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
+  // /* Get command line arguments. */
+  // CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  // CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+  // CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
 
-  if (argc != 0) CommandLineArg::readArgs(argc-1, argv);
+  // if (argc != 0) CommandLineArg::readArgs(argc-1, argv);
 
-  if (argc == 0 || showHelp) {
-    cout << Help::disasmHelp;
-    exit(0);
-  }
+  // if (argc == 0 || showHelp) {
+  //   cout << Help::disasmHelp;
+  //   exit(0);
+  // }
 
-  ifstream objFile(argv[argc-1]);
-  ofstream outFile(outFileName.c_str());
-  ArchDef arch(archString);
+  // ifstream objFile(argv[argc-1]);
+  // ofstream outFile(outFileName.c_str());
+  // ArchDef arch(archString);
 
-  if (!objFile) {
-    cout << "Disassembler could not open \"" << argv[argc-1] 
-         << "\" for reading.\n";
-    exit(1);
-  }
+  // if (!objFile) {
+  //   cout << "Disassembler could not open \"" << argv[argc-1] 
+  //        << "\" for reading.\n";
+  //   exit(1);
+  // }
 
-  if (!outFile) {
-    cout << "Disassembler could not open \"" << outFileName 
-         << "\" for output.\n";
-    exit(1);
-  }
+  // if (!outFile) {
+  //   cout << "Disassembler could not open \"" << outFileName 
+  //        << "\" for output.\n";
+  //   exit(1);
+  // }
 
-  HOFReader hr(arch);
-  Obj *o = hr.read(objFile);
-  objFile.close();
-  Decoder *dec;
+  // HOFReader hr(arch);
+  // Obj *o = hr.read(objFile);
+  // objFile.close();
+  // Decoder *dec;
 
-  switch (arch.getEncChar()) {
-    case 'b': dec = new ByteDecoder(arch); break;
-    case 'w': dec = new WordDecoder(arch); break;
-    default:
-      cout << "Unrecognized encoding character for disassembler.\n";
-      exit(1);
-  }
+  // switch (arch.getEncChar()) {
+  //   case 'b': dec = new ByteDecoder(arch); break;
+  //   case 'w': dec = new WordDecoder(arch); break;
+  //   default:
+  //     cout << "Unrecognized encoding character for disassembler.\n";
+  //     exit(1);
+  // }
 
-  /* Decode the chunks read from the object. */
-  for (Size j = 0; j < o->chunks.size(); j++) {
-    Chunk *&c = o->chunks[j];
-    if (c->flags & EX_USR) {
-      TextChunk *tc;
-      DataChunk *dc;
-      if ((dc = dynamic_cast<DataChunk*>(c)) != NULL) {
-        TextChunk *tc = new TextChunk(dc->name);
-        dec->decodeChunk(*tc, *dc);
-        delete dc;
-        c = tc;
-      }
-    }
-  }
-  delete dec;
+  // /* Decode the chunks read from the object. */
+  // for (Size j = 0; j < o->chunks.size(); j++) {
+  //   Chunk *&c = o->chunks[j];
+  //   if (c->flags & EX_USR) {
+  //     TextChunk *tc;
+  //     DataChunk *dc;
+  //     if ((dc = dynamic_cast<DataChunk*>(c)) != NULL) {
+  //       TextChunk *tc = new TextChunk(dc->name);
+  //       dec->decodeChunk(*tc, *dc);
+  //       delete dc;
+  //       c = tc;
+  //     }
+  //   }
+  // }
+  // delete dec;
 
-  AsmWriter aw(arch);
-  aw.write(outFile, *o);
-  outFile.close();
+  // AsmWriter aw(arch);
+  // aw.write(outFile, *o);
+  // outFile.close();
 
-  delete o;
+  // delete o;
 
   return 0;
 }
@@ -254,117 +254,117 @@ int emu_main(int argc, char **argv) {
 }
 
 int ld_main(int argc, char **argv) {
-  bool showHelp, mustResolveRefs(true);
-  string outFileName("a.out.bin"), archString("8w32/32/8/8"),
-         formatString("bin");
-  Size nObjects;
-  Addr binOffset(0);
+  // bool showHelp, mustResolveRefs(true);
+  // string outFileName("a.out.bin"), archString("8w32/32/8/8"),
+  //        formatString("bin");
+  // Size nObjects;
+  // Addr binOffset(0);
 
-  /* Get command line arguments. */
-  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
-  CommandLineArgSetter<string>ff("-f", "--format", "", formatString);
-  CommandLineArgSetter<Addr>  foffset("--offset", "", binOffset);
-  CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
+  // /* Get command line arguments. */
+  // CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+  // CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+  // CommandLineArgSetter<string>ff("-f", "--format", "", formatString);
+  // CommandLineArgSetter<Addr>  foffset("--offset", "", binOffset);
+  // CommandLineArgSetter<string>fo("-o", "--output", "", outFileName);
 
-  int firstInput(0), newArgc;
-  for (size_t i = 0; i < argc; i++) {
-    if (*(argv[i]) != '-') { firstInput = i; newArgc = i; break; }
-    else if (string(argv[i]) == "--") { firstInput = i+1; newArgc = i; break; }
-    else i++; /* Skip both the switch and its argument. */
-  }
-  nObjects = argc - firstInput;
+  // int firstInput(0), newArgc;
+  // for (size_t i = 0; i < argc; i++) {
+  //   if (*(argv[i]) != '-') { firstInput = i; newArgc = i; break; }
+  //   else if (string(argv[i]) == "--") { firstInput = i+1; newArgc = i; break; }
+  //   else i++; /* Skip both the switch and its argument. */
+  // }
+  // nObjects = argc - firstInput;
 
-  if (argc != 0) CommandLineArg::readArgs(newArgc, argv);
+  // if (argc != 0) CommandLineArg::readArgs(newArgc, argv);
 
-  if (argc == 0 || showHelp) {
-    cout << Help::ldHelp;
-    exit(0);
-  }
+  // if (argc == 0 || showHelp) {
+  //   cout << Help::ldHelp;
+  //   exit(0);
+  // }
 
-  if (firstInput == argc) {
-    cout << "Linker: no input files given.\n";
-    exit(1);
-  }
+  // if (firstInput == argc) {
+  //   cout << "Linker: no input files given.\n";
+  //   exit(1);
+  // }
 
-  ArchDef arch(archString);
+  // ArchDef arch(archString);
 
-  /* Read all of the objects, assign addresses to their chunks, and place them
-     in an address map.*/
-  vector<Obj *> objects(nObjects);
-  vector<DataChunk*> chunks;
-  map<string, Addr> gChunkMap;
-  Addr nextOffset(binOffset);
+  // /* Read all of the objects, assign addresses to their chunks, and place them
+  //    in an address map.*/
+  // vector<Obj *> objects(nObjects);
+  // vector<DataChunk*> chunks;
+  // map<string, Addr> gChunkMap;
+  // Addr nextOffset(binOffset);
 
-  for (Size i = 0; i < nObjects; i++) {
-    map <string, Addr> lChunkMap;
+  // for (Size i = 0; i < nObjects; i++) {
+  //   map <string, Addr> lChunkMap;
 
-    /* Read the object. */
-    HOFReader hr(arch);
-    ifstream objFile(argv[firstInput + i]);
-    if (!objFile) {
-      cout << "Could not open \"" << argv[firstInput + i] 
-           << "\" for reading.\n";
-      exit(1);
-    }
-    objects[i] = hr.read(objFile);
+  //   /* Read the object. */
+  //   HOFReader hr(arch);
+  //   ifstream objFile(argv[firstInput + i]);
+  //   if (!objFile) {
+  //     cout << "Could not open \"" << argv[firstInput + i] 
+  //          << "\" for reading.\n";
+  //     exit(1);
+  //   }
+  //   objects[i] = hr.read(objFile);
 
-    /* Assign addresses to chunks. */
-    Obj &obj = *objects[i];
-    for (Size j = 0; j < obj.chunks.size(); j++) {
-      DataChunk *c = dynamic_cast<DataChunk*>(obj.chunks[j]);
-      if (c->alignment != 0 && nextOffset % c->alignment)
-        nextOffset += c->alignment - (nextOffset % c->alignment);
-      c->bind(nextOffset);
-      chunks.push_back(c);
-      if (obj.chunks[j]->name != "") {
-        if (c->isGlobal()) gChunkMap[c->name] = nextOffset;
-        else               lChunkMap[c->name] = nextOffset;
-      }
-      nextOffset += (c->size);
-    }
+  //   /* Assign addresses to chunks. */
+  //   Obj &obj = *objects[i];
+  //   for (Size j = 0; j < obj.chunks.size(); j++) {
+  //     DataChunk *c = dynamic_cast<DataChunk*>(obj.chunks[j]);
+  //     if (c->alignment != 0 && nextOffset % c->alignment)
+  //       nextOffset += c->alignment - (nextOffset % c->alignment);
+  //     c->bind(nextOffset);
+  //     chunks.push_back(c);
+  //     if (obj.chunks[j]->name != "") {
+  //       if (c->isGlobal()) gChunkMap[c->name] = nextOffset;
+  //       else               lChunkMap[c->name] = nextOffset;
+  //     }
+  //     nextOffset += (c->size);
+  //   }
 
-    /* Resolve local references. */
-    for (Size i = 0; i < obj.chunks.size(); i++) {
-      DataChunk *dc = dynamic_cast<DataChunk*>(obj.chunks[i]);
-      for (Size j = 0; j < dc->refs.size(); j++) {
-        Ref &ref = *(dc->refs[j]);
-        if (lChunkMap.find(dc->refs[j]->name) != lChunkMap.end()) {
-          dc->refs[j]->bind(lChunkMap[dc->refs[j]->name],
-                            dc->address + dc->refs[j]->ibase);
-        }
-      }
-    }
-  }
+  //   /* Resolve local references. */
+  //   for (Size i = 0; i < obj.chunks.size(); i++) {
+  //     DataChunk *dc = dynamic_cast<DataChunk*>(obj.chunks[i]);
+  //     for (Size j = 0; j < dc->refs.size(); j++) {
+  //       Ref &ref = *(dc->refs[j]);
+  //       if (lChunkMap.find(dc->refs[j]->name) != lChunkMap.end()) {
+  //         dc->refs[j]->bind(lChunkMap[dc->refs[j]->name],
+  //                           dc->address + dc->refs[j]->ibase);
+  //       }
+  //     }
+  //   }
+  // }
 
-  /* Resolve references. */
-  for (Size i = 0; i < chunks.size(); i++) {
-    DataChunk *dc = chunks[i];
-    for (Size j = 0; j < dc->refs.size(); j++) {
-      Ref &ref = *(dc->refs[j]);
-      if (!ref.bound && (gChunkMap.find(ref.name) != gChunkMap.end())) {
-        ref.bind(gChunkMap[ref.name], dc->address + ref.ibase);
-      } else if (!ref.bound && mustResolveRefs) {
-        cout << "Undefined symbol: \"" << ref.name << "\"\n";
-        exit(1);
-      }
-    }
-  }  
+  // /* Resolve references. */
+  // for (Size i = 0; i < chunks.size(); i++) {
+  //   DataChunk *dc = chunks[i];
+  //   for (Size j = 0; j < dc->refs.size(); j++) {
+  //     Ref &ref = *(dc->refs[j]);
+  //     if (!ref.bound && (gChunkMap.find(ref.name) != gChunkMap.end())) {
+  //       ref.bind(gChunkMap[ref.name], dc->address + ref.ibase);
+  //     } else if (!ref.bound && mustResolveRefs) {
+  //       cout << "Undefined symbol: \"" << ref.name << "\"\n";
+  //       exit(1);
+  //     }
+  //   }
+  // }  
 
-  /* Write out the chunks. */
-  ofstream outFile(outFileName.c_str());
-  for (Size i = 0; i < chunks.size(); i++) {
-    if (outFile.tellp() > chunks[i]->address - binOffset) {
-      cout << "Linker internal error. Wrote past next chunk address.\n";
-      exit(1);
-    }
-    while (outFile.tellp() < chunks[i]->address - binOffset) outFile.put('\0');
-    outFile.seekp(chunks[i]->address - binOffset);
-    outFile.write((char*)&chunks[i]->contents[0], chunks[i]->contents.size());
-  }
+  // /* Write out the chunks. */
+  // ofstream outFile(outFileName.c_str());
+  // for (Size i = 0; i < chunks.size(); i++) {
+  //   if (outFile.tellp() > chunks[i]->address - binOffset) {
+  //     cout << "Linker internal error. Wrote past next chunk address.\n";
+  //     exit(1);
+  //   }
+  //   while (outFile.tellp() < chunks[i]->address - binOffset) outFile.put('\0');
+  //   outFile.seekp(chunks[i]->address - binOffset);
+  //   outFile.write((char*)&chunks[i]->contents[0], chunks[i]->contents.size());
+  // }
 
-  /* Clean up. */
-  for (Size i = 0; i < nObjects; i++) delete objects[i];
+  // /* Clean up. */
+  // for (Size i = 0; i < nObjects; i++) delete objects[i];
 
   return 0;
 }

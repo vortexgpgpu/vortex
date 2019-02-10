@@ -4,6 +4,7 @@
 #ifndef __INSTRUCTION_H
 #define __INSTRUCTION_H
 
+#include <map>
 #include <iostream>
 
 #include "types.h"
@@ -24,34 +25,52 @@ namespace Harp {
 
   class Instruction {
   public:
-    enum Opcode {   NOP,    DI,     EI, TLBADD, TLBFLUSH,  NEG,   NOT,   AND,
-		     OR,   XOR,    ADD,    SUB,      MUL,  DIV,   MOD,   SHL,
-		    SHR,  ANDI,    ORI,   XORI,     ADDI, SUBI,  MULI,  DIVI,
-		   MODI,  SHLI,   SHRI,   JALI,     JALR, JMPI,  JMPR, CLONE,
-		  JALIS, JALRS,  JMPRT,     LD,       ST,  LDI,  RTOP,  ANDP,
-		    ORP,  XORP,   NOTP,  ISNEG,   ISZERO, HALT,  TRAP, JMPRU,
-		   SKEP,  RETI,  TLBRM,   ITOF,     FTOI, FADD,  FSUB,  FMUL,
-		   FDIV,  FNEG, WSPAWN,  SPLIT,     JOIN,  BAR };
-    enum ArgClass {
-      AC_NONE, AC_2REG, AC_2IMM, AC_3REG, AC_3PREG, AC_3IMM, AC_3REGSRC, 
-      AC_1IMM, AC_1REG, AC_3IMMSRC, AC_PREG_REG, AC_2PREG, AC_2REGSRC
-    };
-    enum InstType {
-      ITYPE_NULL, ITYPE_INTBASIC, ITYPE_INTMUL, ITYPE_INTDIV, ITYPE_STACK, ITYPE_BR, 
-      ITYPE_CALL, ITYPE_RET, ITYPE_TRAP, ITYPE_FPBASIC, ITYPE_FPMUL, ITYPE_FPDIV
-    };
+    enum Opcode
+    {   
+        NOP = 0,    
+        R_INST = 51,
+        L_INST = 3,
+        I_INST = 19,
+        S_INST = 35,
+        B_INST = 99,
+        LUI_INST = 55,
+        AUIPC_INST = 23,
+        JAL_INST = 111,
+        JALR_INST = 103,
+        SYS_INST = 115
+     };
+
+    enum InstType { N_TYPE, R_TYPE, I_TYPE, S_TYPE, B_TYPE, U_TYPE, J_TYPE };
 
     // We build a table of instruction information out of this.
-    static struct InstTableEntry {
+    struct InstTableEntry_t {
       const char *opString;
       bool controlFlow, relAddress, allSrcArgs, privileged;
-      ArgClass argClass;
       InstType iType;
-    } instTable[];
+
+    };
 
     Instruction() : 
       predicated(false), nRsrc(0), nPsrc(0), immsrcPresent(false), 
-      rdestPresent(false), pdestPresent(false), refLiteral(NULL) {}
+      rdestPresent(false), pdestPresent(false), refLiteral(NULL)
+      {
+      
+        instTable = std::map<int, struct InstTableEntry_t> 
+        {
+          {Opcode::NOP,        {"nop"   , false, false, false, false, InstType::N_TYPE }},
+          {Opcode::R_INST,     {"r_type", false, false, false, false, InstType::R_TYPE }},
+          {Opcode::L_INST,     {"load"  , false, false, false, false, InstType::I_TYPE }},
+          {Opcode::I_INST,     {"i_type", false, false, false, false, InstType::I_TYPE }},
+          {Opcode::S_INST,     {"store" , false, false, false, false, InstType::I_TYPE }},
+          {Opcode::B_INST,     {"branch", true , false, false, false, InstType::B_TYPE }},
+          {Opcode::LUI_INST,   {"lui"   , false, false, false, false, InstType::U_TYPE }},
+          {Opcode::AUIPC_INST, {"auipc" , false, false, false, false, InstType::U_TYPE }},
+          {Opcode::JAL_INST,   {"jal"   , true , false, false, false, InstType::J_TYPE }},
+          {Opcode::JALR_INST,  {"jalr"  , true , false, false, false, InstType::I_TYPE }},
+          {Opcode::SYS_INST,   {"SYS"   , true , false, false, false, InstType::I_TYPE }}
+        };
+
+      }
 
     void executeOn(Warp &warp);
     friend std::ostream &operator<<(std::ostream &, Instruction &);
@@ -61,6 +80,8 @@ namespace Harp {
     void  setPred    (RegNum pReg) { predicated = true; pred = pReg; }
     void  setDestReg (RegNum destReg) { rdestPresent = true; rdest = destReg; }
     void  setSrcReg  (RegNum srcReg) { rsrc[nRsrc++] = srcReg; }
+    void  setFunc3  (Word func3) { this->func3 = func3; }
+    void  setFunc7  (Word func7) { this->func7 = func7; }
     void  setDestPReg(RegNum dPReg) { pdestPresent = true; pdest = dPReg; }
     void  setSrcPReg (RegNum srcPReg) { psrc[nPsrc++] = srcPReg; }
     Word *setSrcImm  () { immsrcPresent = true; immsrc = 0xa5; return &immsrc;}
@@ -85,7 +106,7 @@ namespace Harp {
     Ref *getRefLiteral() const { return refLiteral; }
 
     /* Getters used as table lookup. */
-    bool hasRelImm() const { return instTable[op].relAddress; }
+    bool hasRelImm() const { return (*(instTable.find(op))).second.relAddress; }
 
   private:
     bool predicated;
@@ -95,10 +116,22 @@ namespace Harp {
     RegNum rsrc[MAX_REG_SOURCES], psrc[MAX_PRED_SOURCES];
     bool immsrcPresent;
     Word immsrc;
+    Word func3;
+    Word func7;
     bool rdestPresent, pdestPresent;
     RegNum rdest, pdest;
     Ref *refLiteral;
+
+  public:
+    static std::map<int, struct InstTableEntry_t> instTable;
+
   };
 };
 
 #endif
+
+    // static struct InstTableEntry {
+    //   const char *opString;
+    //   bool controlFlow, relAddress, allSrcArgs, privileged;
+    //   InstType iType;
+    // };
