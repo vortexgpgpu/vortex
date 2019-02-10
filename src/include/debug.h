@@ -4,7 +4,7 @@
 #ifndef __DEBUG_H
 #define __DEBUG_H
 
-// #define USE_DEBUG 9
+#define USE_DEBUG 9
 
 #ifdef USE_DEBUG
 #include <iostream>
