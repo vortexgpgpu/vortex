@@ -13,6 +13,50 @@ namespace Harp {
   class Warp;
   class Ref;
 
+  enum Opcode
+  {   
+      NOP = 0,    
+      R_INST = 51,
+      L_INST = 3,
+      I_INST = 19,
+      S_INST = 35,
+      B_INST = 99,
+      LUI_INST = 55,
+      AUIPC_INST = 23,
+      JAL_INST = 111,
+      JALR_INST = 103,
+      SYS_INST = 115,
+      TRAP     = 0x7f,
+      FENCE    = 0x0f
+   };
+
+  enum InstType { N_TYPE, R_TYPE, I_TYPE, S_TYPE, B_TYPE, U_TYPE, J_TYPE};
+
+  // We build a table of instruction information out of this.
+  struct InstTableEntry_t {
+    const char *opString;
+    bool controlFlow, relAddress, allSrcArgs, privileged;
+    InstType iType;
+
+  };
+
+  static std::map<int, struct InstTableEntry_t> instTable = 
+  {
+  {Opcode::NOP,        {"nop"   , false, false, false, false, InstType::N_TYPE }},
+  {Opcode::R_INST,     {"r_type", false, false, false, false, InstType::R_TYPE }},
+  {Opcode::L_INST,     {"load"  , false, false, false, false, InstType::I_TYPE }},
+  {Opcode::I_INST,     {"i_type", false, false, false, false, InstType::I_TYPE }},
+  {Opcode::S_INST,     {"store" , false, false, false, false, InstType::I_TYPE }},
+  {Opcode::B_INST,     {"branch", true , false, false, false, InstType::B_TYPE }},
+  {Opcode::LUI_INST,   {"lui"   , false, false, false, false, InstType::U_TYPE }},
+  {Opcode::AUIPC_INST, {"auipc" , false, false, false, false, InstType::U_TYPE }},
+  {Opcode::JAL_INST,   {"jal"   , true , false, false, false, InstType::J_TYPE }},
+  {Opcode::JALR_INST,  {"jalr"  , true , false, false, false, InstType::I_TYPE }},
+  {Opcode::SYS_INST,   {"SYS"   , true , false, false, false, InstType::I_TYPE }},
+  {Opcode::TRAP,       {"TRAP"  , true , false, false, false, InstType::I_TYPE }},
+  {Opcode::FENCE,      {"fence" , true , false, false, false, InstType::I_TYPE }}
+  };
+
   static const Size MAX_REG_SOURCES(3);
   static const Size MAX_PRED_SOURCES(2);
 
@@ -25,51 +69,10 @@ namespace Harp {
 
   class Instruction {
   public:
-    enum Opcode
-    {   
-        NOP = 0,    
-        R_INST = 51,
-        L_INST = 3,
-        I_INST = 19,
-        S_INST = 35,
-        B_INST = 99,
-        LUI_INST = 55,
-        AUIPC_INST = 23,
-        JAL_INST = 111,
-        JALR_INST = 103,
-        SYS_INST = 115
-     };
-
-    enum InstType { N_TYPE, R_TYPE, I_TYPE, S_TYPE, B_TYPE, U_TYPE, J_TYPE };
-
-    // We build a table of instruction information out of this.
-    struct InstTableEntry_t {
-      const char *opString;
-      bool controlFlow, relAddress, allSrcArgs, privileged;
-      InstType iType;
-
-    };
-
     Instruction() : 
       predicated(false), nRsrc(0), nPsrc(0), immsrcPresent(false), 
       rdestPresent(false), pdestPresent(false), refLiteral(NULL)
       {
-      
-        instTable = std::map<int, struct InstTableEntry_t> 
-        {
-          {Opcode::NOP,        {"nop"   , false, false, false, false, InstType::N_TYPE }},
-          {Opcode::R_INST,     {"r_type", false, false, false, false, InstType::R_TYPE }},
-          {Opcode::L_INST,     {"load"  , false, false, false, false, InstType::I_TYPE }},
-          {Opcode::I_INST,     {"i_type", false, false, false, false, InstType::I_TYPE }},
-          {Opcode::S_INST,     {"store" , false, false, false, false, InstType::I_TYPE }},
-          {Opcode::B_INST,     {"branch", true , false, false, false, InstType::B_TYPE }},
-          {Opcode::LUI_INST,   {"lui"   , false, false, false, false, InstType::U_TYPE }},
-          {Opcode::AUIPC_INST, {"auipc" , false, false, false, false, InstType::U_TYPE }},
-          {Opcode::JAL_INST,   {"jal"   , true , false, false, false, InstType::J_TYPE }},
-          {Opcode::JALR_INST,  {"jalr"  , true , false, false, false, InstType::I_TYPE }},
-          {Opcode::SYS_INST,   {"SYS"   , true , false, false, false, InstType::I_TYPE }}
-        };
-
       }
 
     void executeOn(Warp &warp);
@@ -123,7 +126,7 @@ namespace Harp {
     Ref *refLiteral;
 
   public:
-    static std::map<int, struct InstTableEntry_t> instTable;
+    
 
   };
 };

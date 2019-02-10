@@ -41,7 +41,7 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
   //   else os << "#0x" << hex << inst.immsrc;
   // }
 
-  os << inst.instTable[inst.op].opString;
+  os << instTable[inst.op].opString;
 
   os << ';';
   return os;
@@ -80,6 +80,7 @@ void Instruction::executeOn(Warp &c) {
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
+    std::cout << "INTERRUPT SUPERVISOR\n";
     c.interrupt(3);
     return;
   }
@@ -127,9 +128,12 @@ void Instruction::executeOn(Warp &c) {
     //       op != SPLIT && op != JOIN) continue;
 
     ++c.insts;
-    
+
     Word memAddr;
     Word shift_by;
+    Word shamt;
+    Word temp;
+    int op1, op2;
     switch (op) {
 
       case NOP: break;
@@ -153,7 +157,7 @@ void Instruction::executeOn(Warp &c) {
                 reg[rdest].trunc(wordSz);
             break;
           case 2:
-            if ( Word_s(reg[rsrc[0]]) <  Word_s(reg[rsrc[1]]))
+            if ( int(reg[rsrc[0]]) <  int(reg[rsrc[1]]))
             {
               reg[rdest] = 1;
             }
@@ -178,7 +182,7 @@ void Instruction::executeOn(Warp &c) {
           case 5:
             if (func7)
             {
-                reg[rdest] = Word_s(reg[rsrc[0]]) >> Word_s(reg[rsrc[1]]);
+                reg[rdest] = int(reg[rsrc[0]]) >> int(reg[rsrc[1]]);
                 reg[rdest].trunc(wordSz);
             }
             else
@@ -218,14 +222,15 @@ void Instruction::executeOn(Warp &c) {
             reg[rdest] = signExt((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFFFF, 16, 0xFF);
             break;
           case 2:
-            reg[rdest] = Word_s(c.core->mem.read(memAddr, c.supervisorMode) & 0xFFFFFFFF);
+            reg[rdest] = int(c.core->mem.read(memAddr, c.supervisorMode) & 0xFFFFFFFF);
             break;
           case 4:
             // LBU
             reg[rdest] = Word_u((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFF);
             break;
           case 5:
-            reg[rdest] = Word_s((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFFFF);
+            reg[rdest] = int((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFFFF);
+            break;
           default:
             cout << "ERROR: UNSUPPORTED L INST\n";
             exit(1);
@@ -233,231 +238,268 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       case I_INST:
+        switch (func3)
+        {
+
+          case 0:
+            // ADDI
+            reg[rdest] = reg[rsrc[0]] + immsrc;
+            reg[rdest].trunc(wordSz);
+            break;
+          case 2:
+            // SLTI
+            if ( int(reg[rsrc[0]]) <  int(immsrc))
+            {
+              reg[rdest] = 1;
+            }
+            else
+            {
+              reg[rdest] = 0;
+            }
+            break;
+          case 3:
+            // SLTIU
+            op1 = (unsigned) reg[rsrc[0]];
+            if ( unsigned(reg[rsrc[0]]) <  unsigned(immsrc))
+            {
+              reg[rdest] = 1;
+            }
+            else
+            {
+              reg[rdest] = 0;
+            }
+            break;
+          case 4:
+            // XORI
+            reg[rdest] = reg[rsrc[0]] ^ immsrc;
+            break;
+          case 6:
+            // ORI;
+            reg[rdest] = reg[rsrc[0]] | immsrc;
+            break;
+          case 7:
+            // ANDI
+            reg[rdest] = reg[rsrc[0]] & immsrc;
+            break;
+          case 1:
+            // SLLI
+            reg[rdest] = reg[rsrc[0]] << immsrc;
+            reg[rdest].trunc(wordSz);
+            break;
+          case 5:
+            if (!func7)
+            {
+              // SRAI
+                op1 = reg[rsrc[0]];
+                op2 = immsrc;
+                reg[rdest] = op1 >> op2;
+                reg[rdest].trunc(wordSz);
+            }
+            else
+            {
+              // SRLI
+                reg[rdest] = Word_u(reg[rsrc[0]]) >> Word_u(immsrc);
+                reg[rdest].trunc(wordSz);
+            }
+            break;
+          default:
+            cout << "ERROR: UNSUPPORTED L INST\n";
+            exit(1);
+        }
         break;
       case S_INST:
+        ++c.stores;
+        memAddr = reg[rsrc[1]] + immsrc;
+        switch (func3)
+        {
+          case 0:
+            c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode, 1);
+            break;
+          case 1:
+            c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode, 2);
+            break;
+          case 2:
+            c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode, 4);
+            break;
+          default:
+            cout << "ERROR: UNSUPPORTED S INST\n";
+            exit(1);
+        }
+        c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
+#ifdef EMU_INSTRUMENTATION
+       Harp::OSDomain::osDomain->
+       do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
+#endif
         break;
       case B_INST:
+        switch (func3)
+        {
+          case 0:
+            // BEQ
+            if (int(reg[rsrc[0]]) == int(reg[rsrc[1]]))
+            {
+              if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+              pcSet = true;
+            }
+            break;
+          case 1:
+            // BNE
+            // cout << "COMPARING: " << std::hex << int(reg[rsrc[0]]) << " and " << int(reg[rsrc[1]]) << "\n";
+            // cout << "COMPARING: " << std::hex << rsrc[0] << " and " << rsrc[1] << "\n";
+            if (int(reg[rsrc[0]]) != int(reg[rsrc[1]]))
+            {
+              if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+              pcSet = true;
+            }
+            break;
+          case 4:
+            // BLT
+            if (int(reg[rsrc[0]]) < int(reg[rsrc[1]]))
+            {
+              if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+              pcSet = true;
+            }
+            break;
+          case 5:
+            // BGE
+            if (int(reg[rsrc[0]]) >= int(reg[rsrc[1]]))
+            {
+              if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+              pcSet = true;
+            }
+            break;
+          case 6:
+            // BLTU
+            if (Word_u(reg[rsrc[0]]) < Word_u(reg[rsrc[1]]))
+            {
+              if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+              pcSet = true;
+            }
+            break;
+          case 7:
+            // BGEU
+            if (Word_u(reg[rsrc[0]]) >= Word_u(reg[rsrc[1]]))
+            {
+              if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+              pcSet = true;
+            }
+            break;
+        }
         break;
       case LUI_INST:
+        reg[rdest] = (immsrc << 12) & 0xfffff000;
         break;
       case AUIPC_INST:
+        reg[rdest] = ((immsrc << 12) & 0xfffff000) + (c.pc - 4);
         break;
       case JAL_INST:
+        if (!pcSet) nextPc = (c.pc - 4) + immsrc;
+        if (rdest != 0)
+        {
+          reg[rdest] = c.pc;
+        }
+        pcSet = true;
         break;
       case JALR_INST:
+        if (!pcSet) nextPc = reg[rsrc[0]] + immsrc;
+
+        if (rdest != 0)
+        {
+          reg[rdest] = c.pc;
+        }
+        // for (int z = 0; z < 32; z++) std::cout << "&&&&&&&& reg[" << z << "] = " << reg[z] << "\n";
+        // std::cout << "jumping to nextPc reg: " << rsrc[0] << " : " << reg[rsrc[0]] << " + " << immsrc << "\n";
+        pcSet = true;
         break;
       case SYS_INST:
+        temp = reg[rsrc[0]];
+        switch (func3)
+        {
+          case 1:
+            if (rdest != 0)
+            {
+              // std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
+            }
+              // std::cout << "\t and writing to csr: " << reg[rsrc[0]] << "\n";
+              c.csr[immsrc & 0x00000FFF] = temp;
+            
+            break;
+          case 2:
+            if (rdest != 0)
+            {
+              // std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
+              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            }
+              // std::cout << "\t and writing to csr: " << (reg[rsrc[0]] |  c.csr[immsrc & 0x00000FFF]) << "\n";
+              c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
+            
+            break;
+          case 3:
+            if (rdest != 0)
+            {
+              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
+              
+              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            }
+              //std::cout << "\t and writing to csr: " << (temp &  (~c.csr[immsrc & 0x00000FFF])) << "\n";
+              c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
+            
+            break;
+          case 5:
+            if (rdest != 0)
+            {
+              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
+            }
+              //std::cout << "\t and writing to csr: " << (rsrc[0]) << "\n";
+              c.csr[immsrc & 0x00000FFF] = rsrc[0];
+            
+            break;
+          case 6:
+            if (rdest != 0)
+            {
+              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
+              
+              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            }
+              //std::cout << "\t and writing to csr: " << (rsrc[0] |  c.csr[immsrc & 0x00000FFF]) << "\n";
+              c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
+            
+            break;
+          case 7:
+            if (rdest != 0)
+            {
+              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
+              
+              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            }
+              //std::cout << "\t and writing to csr: " << (rsrc[0] &  (~c.csr[immsrc & 0x00000FFF])) << "\n";
+              c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
+            
+            break;
+          case 0:
+          if (immsrc < 2)
+          {
+            std::cout << "INTERRUPT ECALL\n";
+            nextActiveThreads = 0;
+            c.interrupt(0);
+          }
+            break;
+          default:
+            break;
+        }
+        break;
+      case TRAP:
+        std::cout << "INTERRUPT TRAP\n";
+        nextActiveThreads = 0;
+        c.interrupt(0);
+        break;
+      case FENCE:
         break;
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
-
-
-//       case SHL: 
-//                 break;
-//       case SHR: 
-//                 break;
-
-
-
-
-//       case ADDI: reg[rdest] = reg[rsrc[0]] + immsrc;
-//                  reg[rdest].trunc(wordSz);
-//                  break;
-//       case SUBI: reg[rdest] = reg[rsrc[0]] - immsrc;
-//                  reg[rdest].trunc(wordSz);
-//                  break;
-
-//       case SHRI: reg[rdest] = Word_s(reg[rsrc[0]]) >> immsrc;
-//                  break;
-//       case SHLI: reg[rdest] = reg[rsrc[0]] << immsrc;
-//                  reg[rdest].trunc(wordSz);
-//                  break;
-//       case ANDI: reg[rdest] = reg[rsrc[0]] & immsrc;
-//                  break;
-//       case ORI:  reg[rdest] = reg[rsrc[0]] | immsrc;
-//                  break;
-//       case XORI: reg[rdest] = reg[rsrc[0]] ^ immsrc;
-//                  break;
-//       case JMPI: if (!pcSet) nextPc = c.pc + immsrc;
-//                  pcSet = true;
-//                  break;
-//       case JALI: reg[rdest] = c.pc;
-//                  if (!pcSet) nextPc = c.pc + immsrc;
-//                  pcSet = true;
-//                  break;
-//       case JALR: reg[rdest] = c.pc;
-//                  if (!pcSet) nextPc = reg[rsrc[0]];
-//                  pcSet = true;
-//                  break;
-//       case JMPR: if (!pcSet) nextPc = reg[rsrc[0]];
-//                  pcSet = true;
-//                  break;
-
-//       case JALIS: nextActiveThreads = reg[rsrc[0]];
-//                   reg[rdest] = c.pc;
-//                   if (!pcSet) nextPc = c.pc + immsrc;
-//                   pcSet = true;
-//                   break;
-//       case JALRS: nextActiveThreads = reg[rsrc[0]];
-//                   reg[rdest] = c.pc;
-//                   if (!pcSet) nextPc = reg[rsrc[1]];
-//                   pcSet = true;
-//                   break;
-//       case JMPRT: nextActiveThreads = 1;
-//                   if (!pcSet) nextPc = reg[rsrc[0]];
-//                   pcSet = true;
-//                   break;
-//       case LD: ++c.loads;
-// 	       memAddr = reg[rsrc[0]] + immsrc;
-// #ifdef EMU_INSTRUMENTATION
-//                Harp::OSDomain::osDomain->
-//                  do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
-// #endif
-//                reg[rdest] = c.core->mem.read(memAddr, c.supervisorMode);
-//                c.memAccesses.push_back(Warp::MemAccess(false, memAddr));
-//                break;
-//       case ST: ++c.stores;
-// 	       memAddr = reg[rsrc[1]] + immsrc;
-//                c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode);
-//                c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
-// #ifdef EMU_INSTRUMENTATION
-//                Harp::OSDomain::osDomain->
-//                  do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
-// #endif
-//                break;
-//       case LDI: reg[rdest] = immsrc;
-//                 reg[rdest].trunc(wordSz);
-//                 break;
-//       case RTOP: pReg[pdest] = reg[rsrc[0]];
-//                  break;
-//       case ISZERO: pReg[pdest] = !reg[rsrc[0]];
-//                    break;
-//       case NOTP: pReg[pdest] = !(pReg[psrc[0]]);
-//                  break;
-//       case ANDP: pReg[pdest] = pReg[psrc[0]] & pReg[psrc[1]];
-//                  break;
-//       case ORP: pReg[pdest] = pReg[psrc[0]] | pReg[psrc[1]];
-//                 break;
-//       case XORP: pReg[pdest] = pReg[psrc[0]] != pReg[psrc[1]];
-//                  break;
-//       case ISNEG: pReg[pdest] = (1ll<<(wordSz*8 - 1))&reg[rsrc[0]];
-//                   break;
-//       case HALT: c.activeThreads = 0;
-//                  nextActiveThreads = 0;
-//                  break;
-//       case TRAP: c.interrupt(0);
-//                  break;
-//       case JMPRU: c.supervisorMode = false;
-//                   if (!pcSet) nextPc = reg[rsrc[0]];
-//                   pcSet = true;
-//                   break;
-//       case SKEP: c.core->interruptEntry = reg[rsrc[0]];
-//                  break;
-//       case RETI: if (t == 0) {
-//                    c.tmask = c.shadowTmask;
-//                    nextActiveThreads = c.shadowActiveThreads;
-//                    c.interruptEnable = c.shadowInterruptEnable;
-//                    c.supervisorMode = c.shadowSupervisorMode;
-//                    for (unsigned i = 0; i < reg.size(); ++i)
-//                      reg[i] = c.shadowReg[i];
-//                    for (unsigned i = 0; i < pReg.size(); ++i)
-//                      pReg[i] = c.shadowPReg[i];
-//                    if (!pcSet) { nextPc = c.shadowPc; pcSet = true; }
-//                  }
-//                  break;
-//       case ITOF: reg[rdest] = Float(double(Word_s(reg[rsrc[0]])), wordSz);
-//                  break; 
-//       case FTOI: reg[rdest] = Word_s(double(Float(reg[rsrc[0]], wordSz)));
-//                  reg[rdest].trunc(wordSz);
-//                  break;
-//       case FNEG: reg[rdest] = Float(-double(Float(reg[rsrc[0]],wordSz)),wordSz);
-//                  break;
-//       case FADD: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) +
-//                                     double(Float(reg[rsrc[1]], wordSz)),wordSz);
-//                  break;
-//       case FSUB: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) -
-//                                     double(Float(reg[rsrc[1]], wordSz)),wordSz);
-//                  break;
-//       case FMUL: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) *
-//                                     double(Float(reg[rsrc[1]], wordSz)),wordSz);
-//                  break;
-//       case FDIV: reg[rdest] = Float(double(Float(reg[rsrc[0]], wordSz)) /
-//                                     double(Float(reg[rsrc[1]], wordSz)),wordSz);
-//                  break;
-//       case SPLIT: if (sjOnce) {
-// 		   sjOnce = false;
-//                     if (checkUnanimous(pred, c.pred, c.tmask)) {
-//                       DomStackEntry e(c.tmask);
-//                       e.uni = true;
-//                       c.domStack.push(e);
-//                       break;
-//                     }
-//                    DomStackEntry e(pred, c.pred, c.tmask, c.pc);
-//                    c.domStack.push(c.tmask);
-//                    c.domStack.push(e);
-//                    for (unsigned i = 0; i < e.tmask.size(); ++i)
-//                      c.tmask[i] = !e.tmask[i] && c.tmask[i];
-//                  }
-//                  break;
-//       case JOIN: if (sjOnce) {
-// 		   sjOnce = false;
-//                    if (!c.domStack.empty() && c.domStack.top().uni) {
-//                      D(2, "Uni branch at join");
-//   		               c.tmask = c.domStack.top().tmask;
-//                      c.domStack.pop();
-//                      break;
-//                    }
-//                    if (!c.domStack.top().fallThrough) {
-//                      if (!pcSet) nextPc = c.domStack.top().pc;
-//                      pcSet = true;
-//                    }
-// 		   c.tmask = c.domStack.top().tmask;
-//                    c.domStack.pop();
-//                  }
-// 	         break;
-//       case WSPAWN: if (sjOnce) {
-//                      sjOnce = false;
-//                      D(0, "Spawning a new warp.");
-//                      for (unsigned i = 0; i < c.core->w.size(); ++i) {
-//                        Warp &newWarp(c.core->w[i]);
-//                        if (newWarp.spawned == false) {
-//                          newWarp.pc = reg[rsrc[0]];
-//                          newWarp.reg[0][rdest] = reg[rsrc[1]];
-//                          newWarp.activeThreads = 1;
-// 		         newWarp.supervisorMode = false;
-//                          newWarp.spawned = true;
-//                          break;
-//                        }
-//                      }
-//                    }
-//                    break;
-//       case BAR: if (sjOnce) {
-//                   sjOnce = false;
-//                   Word id(reg[rsrc[0]]), n(reg[rsrc[1]]);
-//                   set<Warp*> &b(c.core->b[id]);
-
-//                   // Add current warp to the barrier and halt.
-//                   b.insert(&c);
-//                   c.shadowActiveThreads = c.activeThreads;
-//                   nextActiveThreads = 0;
-
-//                   D(2, "Barrier " << id << ' ' << b.size() << " of " << n);
-
-//                   // If the barrier's full, reactivate warps waiting at it
-//                   if (b.size() == n) {
-//                     set<Warp*>::iterator it;
-//                     for (it = b.begin(); it != b.end(); ++it)
-//                       (*it)->activeThreads = (*it)->shadowActiveThreads;
-//                     c.core->b.erase(id);
-//                     nextActiveThreads = c.shadowActiveThreads;
-//                   }
-// 		}
-//                 break;
-
-//       default:
-//         cout << "ERROR: Unsupported instruction: " << *this << "\n";
-//         exit(1);
     }
   }
 

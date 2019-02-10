@@ -116,6 +116,12 @@ Warp::Warp(Core *c, Word id) :
     shadowTmask.push_back(true);
   }
 
+  Word csrNum(0);
+  for (Word i = 0; i < (1<<12); i++)
+  {
+    csr.push_back(Reg<uint16_t>(id, regNum++));
+  }
+
   /* Set initial register contents. */
   reg[0][0] = (core->a.getNThds()<<(core->a.getWordSize()*8 / 2)) | id;
 }
@@ -129,6 +135,8 @@ void Warp::step() {
   ++steps;
   
   D(3, "in step pc=0x" << hex << pc);
+
+  // std::cout << "pc: " << hex << pc << "\n";
 
   /* Fetch and decode. */
   if (wordSize < sizeof(pc)) pc &= ((1ll<<(wordSize*8))-1);
@@ -243,8 +251,13 @@ bool Warp::interrupt(Word r0) {
 }
 
 void Warp::printStats() const {
-  cout << "Steps: " << steps << endl
-       << "Insts: " << insts << endl
-       << "Loads: " << loads << endl
+  cout << "Steps : " << steps << endl
+       << "Insts : " << insts << endl
+       << "Loads : " << loads << endl
        << "Stores: " << stores << endl;
+
+  unsigned const grade = reg[0][28];
+
+  if (grade == 1) cout << "GRADE: PASSED\n";
+  else              cout << "GRADE: FAILED "  << (grade >> 1) << "\n";
 }

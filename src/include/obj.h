@@ -16,38 +16,38 @@
 #include "enc.h"
 #include "asm-tokens.h"
 
-// namespace Harp {
-//   class Decoder;
-//   class Encoder;
+namespace Harp {
+  class Decoder;
+  class Encoder;
 
-//   class Ref {
-//   public:
-//     std::string name;
-//     Ref(const std::string &n, bool r, Size ib = 0): 
-//       name(n), bound(false), relative(r), ibase(ib) { }
-//     virtual ~Ref() { }
-//     virtual void bind(Addr addr, Addr base = 0) = 0;
-//     virtual Addr getAddr() const = 0;
+  class Ref {
+  public:
+    std::string name;
+    Ref(const std::string &n, bool r, Size ib = 0): 
+      name(n), bound(false), relative(r), ibase(ib) { }
+    virtual ~Ref() { }
+    virtual void bind(Addr addr, Addr base = 0) = 0;
+    virtual Addr getAddr() const = 0;
 
-//     bool bound, relative;
-//     Size ibase;
-//   };
+    bool bound, relative;
+    Size ibase;
+  };
 
-//   /* Used in not-yet-encoded code objects, plain old data. */
-//   class SimpleRef : public Ref {
-//   public:
-//     SimpleRef(const std::string &name, Addr &addr, bool rel = false) : 
-//       Ref(name, rel), addr(addr) { }
-//     virtual void bind(Addr addr, Addr base = 0) {
-//       std::cout << "Attempted to bind a SimpleRef.\n";
-//       exit(1);
-//     } 
-//     virtual Addr getAddr() const { return this->addr; }
-//     Byte *getAddrPtr() { return (Byte*)&addr; }
+  /* Used in not-yet-encoded code objects, plain old data. */
+  class SimpleRef : public Ref {
+  public:
+    SimpleRef(const std::string &name, Addr &addr, bool rel = false) : 
+      Ref(name, rel), addr(addr) { }
+    virtual void bind(Addr addr, Addr base = 0) {
+      std::cout << "Attempted to bind a SimpleRef.\n";
+      exit(1);
+    } 
+    virtual Addr getAddr() const { return this->addr; }
+    Byte *getAddrPtr() { return (Byte*)&addr; }
 
-//   private:
-//     Addr &addr;
-//   };
+  private:
+    Addr &addr;
+  };
 
 //   /* Used in already-encoded code objects. */
 //   class OffsetRef : public Ref {
@@ -205,6 +205,6 @@
 //   private:
 //     const ArchDef &arch;
 //   };
-// };
+};
 
 #endif

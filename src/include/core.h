@@ -27,7 +27,7 @@ namespace Harp {
     Reg(): cpuId(0), regNum(0), val(0) {}
     Reg(Word c, Word n): cpuId(c), regNum(n), val(0) {}
 
-    Reg &operator=(T r) { val = r; doWrite(); return *this; }
+    Reg &operator=(T r) { if (regNum) {val = r; doWrite();} return *this; }
 
     operator T() const { doRead(); return val; }
 
@@ -120,6 +120,7 @@ namespace Harp {
     Size activeThreads, shadowActiveThreads;
     std::vector<std::vector<Reg<Word> > > reg;
     std::vector<std::vector<Reg<bool> > > pred;
+    std::vector<Reg<uint16_t> > csr;
 
     std::vector<bool> tmask, shadowTmask;
     std::stack<DomStackEntry> domStack;

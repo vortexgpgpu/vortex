@@ -26,21 +26,21 @@ namespace Harp {
       nThds = 1;
       nWarps = 1;
 
-      extent = EXT_REGS;
-
-      if (!iss) { extent = EXT_NULL; return; }
-      iss >> encChar;
-      if (!iss) { extent = EXT_WORDSIZE; return; }
-      iss >> nRegs;
-      if (!iss) { extent = EXT_ENC; return; }
-      char sep;
-      iss >> sep >> nPRegs;
-      if (!iss || sep != '/') { extent = EXT_REGS; return; }
-      iss >> sep >> nThds;
-      if (!iss || sep != '/') { extent = EXT_PREGS; return; }
-      iss >> sep >> nWarps;
-      if (!iss || sep != '/') { extent = EXT_THDS; return; }
       extent = EXT_WARPS;
+
+      // if (!iss) { extent = EXT_NULL; return; }
+      // iss >> encChar;
+      // if (!iss) { extent = EXT_WORDSIZE; return; }
+      // iss >> nRegs;
+      // if (!iss) { extent = EXT_ENC; return; }
+      // char sep;
+      // iss >> sep >> nPRegs;
+      // if (!iss || sep != '/') { extent = EXT_REGS; return; }
+      // iss >> sep >> nThds;
+      // if (!iss || sep != '/') { extent = EXT_PREGS; return; }
+      // iss >> sep >> nWarps;
+      // if (!iss || sep != '/') { extent = EXT_THDS; return; }
+      // extent = EXT_WARPS;
     }
 
     operator std::string () const {

@@ -5,6 +5,7 @@
 
 #include "include/types.h"
 #include "include/util.h"
+#include <iostream>
 
 using namespace Harp;
 using namespace std;
@@ -54,10 +55,14 @@ Word_u Harp::readWord(const vector<Byte> &b, Size &n, Size wordSize) {
   if (b.size() - n < wordSize) throw OutOfBytes();
   Word_u w(0);
   n += wordSize;
+  // std::cout << "wordSize: " << wordSize << "\n";
   for (Size i = 0; i < wordSize; i++) {
     w <<= 8;
+    // cout << "index: " << n - i - 1 << "\n";
     w |= b[n - i - 1];
   }
+  // cout << "b[0]" << std::hex << w << "\n";
+  // throw OutOfBytes();
   return w;
 }
 

@@ -21,6 +21,7 @@
 #include "include/args.h"
 #include "include/help.h"
 
+
 using namespace Harp;
 using namespace HarpTools;
 using namespace std; 
@@ -207,7 +208,7 @@ int disasm_main(int argc, char **argv) {
 }
 
 int emu_main(int argc, char **argv) {
-  string archString("8w32/32/8/8"), imgFileName("a.out.bin");
+  string archString("rv32i"), imgFileName("a.dsfsdout.bin");
   bool showHelp, showStats, basicMachine, batch;
 
   /* Read the command line arguments. */
@@ -238,18 +239,28 @@ int emu_main(int argc, char **argv) {
       return 1;
   }
 
-  MemoryUnit mu(4096, arch.getWordSize(), basicMachine);
-  Core core(arch, *dec, mu/*, ID in multicore implementations*/);
+    // std::cout << "TESTING:  " << tests[t] << "\n"; 
 
-  RamMemDevice mem(imgFileName.c_str(), arch.getWordSize());
-  ConsoleMemDevice console(arch.getWordSize(), cout, core, batch);
-  mu.attach(mem,     0);
-  mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
+    MemoryUnit mu(4096, arch.getWordSize(), basicMachine);
+    Core core(arch, *dec, mu/*, ID in multicore implementations*/);
 
-  while (core.running()) { console.poll(); core.step(); }
+    // RamMemDevice mem(imgFileName.c_str(), arch.getWordSize());
+    RAM old_ram;
+    old_ram.loadHexImpl(imgFileName.c_str());
+    // old_ram.loadHexImpl(tests[t]);
 
-  if (showStats) core.printStats();
 
+    // MemDevice * memory = &old_ram;
+
+    ConsoleMemDevice console(arch.getWordSize(), cout, core, batch);
+    mu.attach(old_ram,     0);
+    mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
+
+    while (core.running()) { console.poll(); core.step(); }
+
+    if (showStats) core.printStats();
+
+    std::cout << "\n";
   return 0;
 }
 

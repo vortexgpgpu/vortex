@@ -102,86 +102,86 @@ void Decoder::decodeChunk(TextChunk &dest, const DataChunk &src) {
 Instruction *ByteDecoder::decode(const vector<Byte> &v, Size &n) {
   Instruction &inst = *(new Instruction());
 
-  uint8_t pred = readByte(v, n);
-  if (pred != 0xff) inst.setPred(pred);
+  // uint8_t pred = readByte(v, n);
+  // if (pred != 0xff) inst.setPred(pred);
 
-  unsigned op = readByte(v, n);
-  inst.setOpcode(Instruction::Opcode(op));
+  // unsigned op = readByte(v, n);
+  // inst.setOpcode(Instruction::Opcode(op));
 
-  bool usedImm = false;
+  // bool usedImm = false;
 
-  switch (Instruction::instTable[op].argClass) {
-    case Instruction::AC_NONE:
-      break;
-    case Instruction::AC_2REG:
-      inst.setDestReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      break;
-    case Instruction::AC_2IMM:
-      inst.setDestReg(readByte(v, n));
-      inst.setSrcImm(readWord(v, n, wordSize));
-      usedImm = true;
-      break;
-    case Instruction::AC_3REG:
-      inst.setDestReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      break;
-    case Instruction::AC_3PREG:
-      inst.setDestPReg(readByte(v, n));
-      inst.setSrcPReg(readByte(v, n));
-      inst.setSrcPReg(readByte(v, n));
-      break;
-    case Instruction::AC_3IMM:
-      inst.setDestReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcImm(readWord(v, n, wordSize));
-      usedImm = true;
-      break;
-    case Instruction::AC_3REGSRC:
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      break;
-    case Instruction::AC_1IMM:
-      inst.setSrcImm(readWord(v, n, wordSize));
-      usedImm = true;
-      break;
-    case Instruction::AC_1REG:
-      inst.setSrcReg(readByte(v, n));
-      break;
-    case Instruction::AC_3IMMSRC:
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcImm(readWord(v, n, wordSize));
-      usedImm = true;
-      break;
-    case Instruction::AC_PREG_REG:
-      inst.setDestPReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      break;
-    case Instruction::AC_2PREG:
-      inst.setDestPReg(readByte(v, n));
-      inst.setSrcPReg(readByte(v, n));
-      break;
-    case Instruction::AC_2REGSRC:
-      inst.setSrcReg(readByte(v, n));
-      inst.setSrcReg(readByte(v, n));
-      break;
-   default:
-      decodeError("Unknown argument class.");
-  }
+  // switch ((Instruction::instTable[op]).argClass) {
+  //   case Instruction::AC_NONE:
+  //     break;
+  //   case Instruction::AC_2REG:
+  //     inst.setDestReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_2IMM:
+  //     inst.setDestReg(readByte(v, n));
+  //     inst.setSrcImm(readWord(v, n, wordSize));
+  //     usedImm = true;
+  //     break;
+  //   case Instruction::AC_3REG:
+  //     inst.setDestReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_3PREG:
+  //     inst.setDestPReg(readByte(v, n));
+  //     inst.setSrcPReg(readByte(v, n));
+  //     inst.setSrcPReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_3IMM:
+  //     inst.setDestReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcImm(readWord(v, n, wordSize));
+  //     usedImm = true;
+  //     break;
+  //   case Instruction::AC_3REGSRC:
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_1IMM:
+  //     inst.setSrcImm(readWord(v, n, wordSize));
+  //     usedImm = true;
+  //     break;
+  //   case Instruction::AC_1REG:
+  //     inst.setSrcReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_3IMMSRC:
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcImm(readWord(v, n, wordSize));
+  //     usedImm = true;
+  //     break;
+  //   case Instruction::AC_PREG_REG:
+  //     inst.setDestPReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_2PREG:
+  //     inst.setDestPReg(readByte(v, n));
+  //     inst.setSrcPReg(readByte(v, n));
+  //     break;
+  //   case Instruction::AC_2REGSRC:
+  //     inst.setSrcReg(readByte(v, n));
+  //     inst.setSrcReg(readByte(v, n));
+  //     break;
+  //  default:
+  //     decodeError("Unknown argument class.");
+  // }
 
-  if (haveRefs && usedImm && 
-      refMap.find(n - wordSize) != refMap.end()) {
-    OffsetRef *oref = dynamic_cast<OffsetRef*>(refMap[n - wordSize]);
-    if (!oref) {
-      decodeError("Expected OffsetRef when decoding instruction stream.");
-    }
-    Ref *r = new SimpleRef(oref->name, *(Addr*)(inst.setSrcImm()), 
-                           inst.hasRelImm());
-    inst.setImmRef(*r);
-  } 
+  // if (haveRefs && usedImm && 
+  //     refMap.find(n - wordSize) != refMap.end()) {
+  //   OffsetRef *oref = dynamic_cast<OffsetRef*>(refMap[n - wordSize]);
+  //   if (!oref) {
+  //     decodeError("Expected OffsetRef when decoding instruction stream.");
+  //   }
+  //   Ref *r = new SimpleRef(oref->name, *(Addr*)(inst.setSrcImm()), 
+  //                          inst.hasRelImm());
+  //   inst.setImmRef(*r);
+  // } 
 
   return &inst;
 }
@@ -191,38 +191,39 @@ ByteEncoder::ByteEncoder(const ArchDef &ad) {
 }
 
 Size ByteEncoder::encode(Ref *&ref, vector<Byte> &v, Size n0, Instruction &i) {
-  Size n(n0);
+  // Size n(n0);
 
-  if (i.hasPred()) writeByte(v, n, i.getPred());
-  else writeByte(v, n, 0xff);
+  // if (i.hasPred()) writeByte(v, n, i.getPred());
+  // else writeByte(v, n, 0xff);
 
-  writeByte(v, n, Byte(i.getOpcode()));
+  // writeByte(v, n, Byte(i.getOpcode()));
 
-  if (i.hasRDest()) {
-    writeByte(v, n, Byte(i.getRDest()));
-  } else if (i.hasPDest()) {
-    writeByte(v, n, Byte(i.getPDest()));
-  }
+  // if (i.hasRDest()) {
+  //   writeByte(v, n, Byte(i.getRDest()));
+  // } else if (i.hasPDest()) {
+  //   writeByte(v, n, Byte(i.getPDest()));
+  // }
 
-  for (RegNum j = 0; j < i.getNRSrc(); j++) {
-    writeByte(v, n, Byte(i.getRSrc(j)));
-  }
+  // for (RegNum j = 0; j < i.getNRSrc(); j++) {
+  //   writeByte(v, n, Byte(i.getRSrc(j)));
+  // }
 
-  for (RegNum j = 0; j < i.getNPSrc(); j++) {
-    writeByte(v, n, Byte(i.getPSrc(j)));
-  }
+  // for (RegNum j = 0; j < i.getNPSrc(); j++) {
+  //   writeByte(v, n, Byte(i.getPSrc(j)));
+  // }
 
-  ref = NULL;
-  if (i.hasImm()) {
-    if (i.hasRefLiteral()) {
-      Ref *r = i.getRefLiteral();
-      ref = new OffsetRef(r->name, v, n, wordSize*8, wordSize, i.hasRelImm());
-    }
+  // ref = NULL;
+  // if (i.hasImm()) {
+  //   if (i.hasRefLiteral()) {
+  //     Ref *r = i.getRefLiteral();
+  //     ref = new OffsetRef(r->name, v, n, wordSize*8, wordSize, i.hasRelImm());
+  //   }
 
-    writeWord(v, n, wordSize, i.getImm());
-  }
+  //   writeWord(v, n, wordSize, i.getImm());
+  // }
 
-  return n - n0;
+  // return n - n0;
+  return 0;
 }
 
 static unsigned ceilLog2(RegNum x) {
@@ -272,91 +273,97 @@ WordDecoder::WordDecoder(const ArchDef &arch) {
 
 }
 
-Word signExt(Word w, Size bit, Word mask) {
+static Word signExt(Word w, Size bit, Word mask) {
   if (w>>(bit-1)) w |= ~mask;
   return w;
 }
 
 Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
-  Word code(readWord(v, idx, n/8));
+  Word code(readWord(v, idx, inst_s/8));
+
+  // std::cout << "code: " << (int) code << "  v: " << v << " indx: " << idx << "\n";
+  
+
   Instruction &inst = * new Instruction();  
 
   // bool predicated = (code>>(n-1));
   bool predicated = false;
-  if (predicated) { inst.setPred((code>>(n-p-1))&pMask); }
+  if (predicated) { inst.setPred((code>>(inst_s-p-1))&pMask); }
 
-  Instruction::Opcode op = (Instruction::Opcode)((code>>shift_opcode)&opcode_mask);
+  Opcode op = (Opcode)((code>>shift_opcode)&opcode_mask);
+  // std::cout << "opcode: " << op << "\n";
   inst.setOpcode(op);
 
   bool usedImm(false);
-
-  switch(Instruction::instTable[op].iType)
+  Word imeed, dest_bits, imm_bits, bit_11, bits_4_1, bit_10_5,
+          bit_12, bits_19_12, bits_10_1, bit_20, unordered;
+  switch(instTable[op].iType)
   {
-    case Instruction::InstType::N_TYPE:
+    case InstType::N_TYPE:
       break;
-    case Instruction::InstType::R_TYPE:
+    case InstType::R_TYPE:
       inst.setDestReg((code>>shift_rd)   & reg_mask);
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
       inst.setSrcReg((code>>shift_rs2)   & reg_mask);
       inst.setFunc3 ((code>>shift_func3) & func3_mask);
       inst.setFunc7 ((code>>shift_func7) & func7_mask);
       break;
-    case Instruction::InstType::I_TYPE
+    case InstType::I_TYPE:
       inst.setDestReg((code>>shift_rd)   & reg_mask);
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
       inst.setFunc3 ((code>>shift_func3) & func3_mask);
       inst.setSrcImm(signExt(code>>shift_i_immed, 12, i_immed_mask));
       usedImm = true;
       break;
-    case Instruction::InstType::S_TYPE:
+    case InstType::S_TYPE:
       
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
       inst.setSrcReg((code>>shift_rs2)   & reg_mask);
       inst.setFunc3 ((code>>shift_func3) & func3_mask);
 
-      word dest_bits = (code>>shift_rd)  & reg_mask;
-      Word imm_bits  = (code>>shift_s_b_immed & func7_mask);
-      Word imeed     = (imm_bits << reg_s) | dest_bits;
+      dest_bits = (code>>shift_rd)  & reg_mask;
+      imm_bits  = (code>>shift_s_b_immed & func7_mask);
+      imeed     = (imm_bits << reg_s) | dest_bits;
       inst.setSrcImm(signExt(imeed, 12, s_immed_mask));
       usedImm = true;
       break;
-    case Instruction::InstType::B_TYPE:
+    case InstType::B_TYPE:
 
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
       inst.setSrcReg((code>>shift_rs2)   & reg_mask);
       inst.setFunc3 ((code>>shift_func3) & func3_mask);
 
-      word dest_bits = (code>>shift_rd)  & reg_mask;
-      Word imm_bits  = (code>>shift_s_b_immed & func7_mask);
+      dest_bits = (code>>shift_rd)  & reg_mask;
+      imm_bits  = (code>>shift_s_b_immed & func7_mask);
 
-      Word bit_11   = dest_bits & 0x1;
-      Word bit_4_1  = dest_bits >> 1;
-      Word bit_10_5 = imm_bits & 0x3f;
-      Word bit_12   = imm_bits >> 6;
+      bit_11   = dest_bits & 0x1;
+      bits_4_1 = dest_bits >> 1;
+      bit_10_5 = imm_bits & 0x3f;
+      bit_12   = imm_bits >> 6;
 
-      Word imeed    = 0 | (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+      imeed    = 0 | (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
 
       inst.setSrcImm(signExt(imeed, 13, b_immed_mask));
       usedImm = true;
       break;
-    case Instruction::InstType::U_TYPE:
+    case InstType::U_TYPE:
       inst.setDestReg((code>>shift_rd)   & reg_mask);
       inst.setSrcImm(signExt(code>>shift_j_u_immed, 20, u_immed_mask));
       usedImm = true;
       break;
-    case Instruction::InstType::J_TYPE:
+    case InstType::J_TYPE:
       inst.setDestReg((code>>shift_rd)   & reg_mask);
 
       // [20 | 10:1 | 11 | 19:12]
 
-      Word unordered = code>>shift_j_u_immed;
+      unordered = code>>shift_j_u_immed;
 
-      Word bits_19_12 = unordered & 0xff;
-      Word bit_11     = (unordered>>8) & 0x1;
-      Word bits_10_1  = (unordered >> 9) & 0x3ff;
-      Word bit_20     = (unordered>>19) & 0x1;
+      bits_19_12 = unordered & 0xff;
+      bit_11     = (unordered>>8) & 0x1;
+      bits_10_1  = (unordered >> 9) & 0x3ff;
+      bit_20     = (unordered>>19) & 0x1;
 
-      Word imeed  = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit20 << 20);
+      imeed  = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
 
       inst.setSrcImm(signExt(imeed, 20, j_immed_mask));
       usedImm = true;

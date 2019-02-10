@@ -152,7 +152,7 @@ Word MemoryUnit::fetch(Addr vAddr, bool sup) {
   return ad.read(pAddr, sup, 8*addrBytes);
 }
 
-void MemoryUnit::write(Addr vAddr, Word w, bool sup) {
+void MemoryUnit::write(Addr vAddr, Word w, bool sup, Size bytes) {
   Addr pAddr;
 
   if (disableVm) {
@@ -162,7 +162,7 @@ void MemoryUnit::write(Addr vAddr, Word w, bool sup) {
     TLBEntry t = tlbLookup(vAddr, flagMask);
     pAddr = t.pfn*pageSize + vAddr%pageSize;
   }
-  ad.write(pAddr, w, sup, 8*addrBytes);
+  ad.write(pAddr, w, sup, 8*bytes);
 }
 
 void MemoryUnit::tlbAdd(Addr virt, Addr phys, Word flags) {
@@ -247,3 +247,7 @@ void DiskControllerMemDevice::write(Addr a, Word w) {
             break;
   }
 }
+
+
+
+
