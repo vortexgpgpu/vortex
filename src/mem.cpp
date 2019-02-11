@@ -87,14 +87,33 @@ Word MemoryUnit::ADecoder::read(Addr a, bool sup, Size wordSize) {
   Size bit = wordSize - 1;
   MemDevice &m(doLookup(a, bit));
   a &= (2<<bit)-1;
+  // std::cout << std::hex << "ADecoder::read(Addr " << a << ", sup " << sup << ", wordSize " << wordSize << " -> ";
+  // std::cout << "Data: " << m.read(a) << "\n";
   return m.read(a);
 }
 
 void MemoryUnit::ADecoder::write(Addr a, Word w, bool sup, Size wordSize) {
   Size bit = wordSize - 1;
   MemDevice &m(doLookup(a, bit));
-  a &= (2<<bit)-1;
-  m.write(a, w);
+
+  RAM & r = (RAM &) m;
+  // a &= (2<<bit)-1;
+  // std::cout << std::hex << "ADecoder::write(Addr " << a << ", w " << w << ", sup " << sup << ", wordSize " << wordSize << "\n";
+  Word before = m.read(a);
+  Word new_word = w;
+  if (wordSize == 8)
+  {
+    r.writeByte(a, &w);
+  }
+  else if (wordSize == 16)
+  {
+    r.writeHalf(a, &w);
+  }
+  else
+  {
+    r.writeWord(a, &w);
+  }
+  // m.write(a, new_word);
 }
 
 Byte *MemoryUnit::getPtr(Addr a, Size s) {
@@ -136,6 +155,7 @@ Word MemoryUnit::read(Addr vAddr, bool sup) {
     TLBEntry t = tlbLookup(vAddr, flagMask);
     pAddr = t.pfn*pageSize + vAddr%pageSize;
   }
+  // std::cout << "MU::write: About to read: " << std::hex << pAddr << " = " << (ad.read(pAddr, sup, 8*addrBytes)) << " with " << std::dec << (8*addrBytes) << "\n";
   return ad.read(pAddr, sup, 8*addrBytes);
 }
 
@@ -149,7 +169,20 @@ Word MemoryUnit::fetch(Addr vAddr, bool sup) {
     TLBEntry t = tlbLookup(vAddr, flagMask);
     pAddr = t.pfn*pageSize + vAddr%pageSize;
   }
-  return ad.read(pAddr, sup, 8*addrBytes);
+
+  Word instruction = ad.read(pAddr, sup, 8*addrBytes);
+
+  // Flip endianess (instead of changing decoding logic)
+  // Word first  = (instruction)       & 0xFF;
+  // Word second = (instruction >> 8)  & 0xFF;
+  // Word third  = (instruction >> 16) & 0xFF;
+  // Word fourth = (instruction >> 24) & 0xFF;
+  // instruction = (instruction & 0xFFFFFF00) | fourth;
+  // instruction = (instruction & 0xFFFF00FF) | (third << 8);
+  // instruction = (instruction & 0xFF00FFFF) | (second << 16);
+  // instruction = (instruction & 0x00FFFFFF) | (first << 24);
+
+  return instruction;
 }
 
 void MemoryUnit::write(Addr vAddr, Word w, bool sup, Size bytes) {
@@ -162,7 +195,9 @@ void MemoryUnit::write(Addr vAddr, Word w, bool sup, Size bytes) {
     TLBEntry t = tlbLookup(vAddr, flagMask);
     pAddr = t.pfn*pageSize + vAddr%pageSize;
   }
+  // std::cout << "MU::write: About to write: " << std::hex << pAddr << " = " << w << " with " << std::dec << 8*bytes << "\n";
   ad.write(pAddr, w, sup, 8*bytes);
+  // std::cout << std::hex << "reading same address: " << (this->read(vAddr, sup)) << "\n";
 }
 
 void MemoryUnit::tlbAdd(Addr virt, Addr phys, Word flags) {

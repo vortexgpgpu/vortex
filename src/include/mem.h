@@ -236,19 +236,23 @@ namespace Harp {
           uint8_t third  = *get(address + 2);
           uint8_t fourth = *get(address + 3);
 
-          // uint8_t hi = (uint8_t) *get(address + 0);
-          // std::cout << "RAM: READING ADDRESS " << address + 0 << " DATA: " << hi << "\n";
-          // hi = (uint8_t) *get(address + 1);
-          // std::cout << "RAM: READING ADDRESS " << address + 1 << " DATA: " << hi << "\n";
-          // hi = (uint8_t) *get(address + 2);
-          // std::cout << "RAM: READING ADDRESS " << address + 2 << " DATA: " << hi << "\n";
-          // hi = (uint8_t) *get(address + 3);
-          // std::cout << "RAM: READING ADDRESS " << address + 3 << " DATA: " << hi << "\n";
+
+          // std::cout << std::hex;
+          // std::cout << "RAM: READING ADDRESS " << address + 0 << " DATA: " << (uint32_t) first << "\n";
+          // std::cout << "RAM: READING ADDRESS " << address + 1 << " DATA: " << (uint32_t) second << "\n";
+          // std::cout << "RAM: READING ADDRESS " << address + 2 << " DATA: " << (uint32_t) third << "\n";
+          // std::cout << "RAM: READING ADDRESS " << address + 3 << " DATA: " << (uint32_t) fourth << "\n";
 
           data[0] = (data[0] << 0) | fourth;
           data[0] = (data[0] << 8) | third;
           data[0] = (data[0] << 8) | second;
           data[0] = (data[0] << 8) | first;
+          // data[0] = (data[0] << 0) | first;
+          // data[0] = (data[0] << 8) | second;
+          // data[0] = (data[0] << 8) | third;
+          // data[0] = (data[0] << 8) | fourth;
+
+          // std::cout << "FINAL DATA: " << data[0] << "\n";
 
       }
 
@@ -309,6 +313,7 @@ namespace Harp {
       {
           uint32_t w;
           getWord(addr, &w);
+          // std::cout << "RAM: read -> " << w << " at addr: " << addr << "\n";
           return (Word) w;
       }
 
@@ -385,7 +390,7 @@ namespace Harp {
                       unsigned add = nextAddr + i;
 
                       *(this->get(add)) = hToI_old(line + 9 + i * 2, 2);
-                      // std::cout << "Address: " << std::hex <<(add) << "\tValue: " << std::hex << hToI_old(line + 9 + i * 2, 2) << std::endl;
+                      // std::cout << "lhi: Address: " << std::hex <<(add) << "\tValue: " << std::hex << hToI_old(line + 9 + i * 2, 2) << std::endl;
                   }
                   break;
               case 2:
@@ -411,6 +416,7 @@ namespace Harp {
           line++;
           size--;
       }
+      
 
       if (content) delete[] content;
   }

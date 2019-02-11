@@ -296,7 +296,9 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
 
   bool usedImm(false);
   Word imeed, dest_bits, imm_bits, bit_11, bits_4_1, bit_10_5,
-          bit_12, bits_19_12, bits_10_1, bit_20, unordered;
+          bit_12, bits_19_12, bits_10_1, bit_20, unordered, func3;
+
+  // std::cout << "op: " << std::hex << op << " what " << instTable[op].iType << "\n";
   switch(instTable[op].iType)
   {
     case InstType::N_TYPE:
@@ -311,12 +313,23 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
     case InstType::I_TYPE:
       inst.setDestReg((code>>shift_rd)   & reg_mask);
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
-      inst.setFunc3 ((code>>shift_func3) & func3_mask);
-      inst.setSrcImm(signExt(code>>shift_i_immed, 12, i_immed_mask));
+
+      func3 = (code>>shift_func3) & func3_mask;
+      inst.setFunc3 (func3);
+
+      if ((func3 == 5) && (op != L_INST))
+      {
+        inst.setSrcImm(signExt(((code>>shift_rs2)&reg_mask), 5, reg_mask));
+      }
+      else
+      {
+        inst.setSrcImm(signExt(code>>shift_i_immed, 12, i_immed_mask));
+      }
+
       usedImm = true;
       break;
     case InstType::S_TYPE:
-      
+      // std::cout << "************STORE\n";
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
       inst.setSrcReg((code>>shift_rs2)   & reg_mask);
       inst.setFunc3 ((code>>shift_func3) & func3_mask);
@@ -324,6 +337,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
       dest_bits = (code>>shift_rd)  & reg_mask;
       imm_bits  = (code>>shift_s_b_immed & func7_mask);
       imeed     = (imm_bits << reg_s) | dest_bits;
+      // std::cout << "ENC: store imeed: " << imeed << "\n";
       inst.setSrcImm(signExt(imeed, 12, s_immed_mask));
       usedImm = true;
       break;

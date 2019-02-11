@@ -1,12 +1,419 @@
 start
-./riscv_tests/rv32ui-p-lw.hex
-INTERRUPT ECALL
-Total steps: 45
-Total insts: 45
+./riscv_tests/rv32ui-p-add.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 453
+Total insts: 453
 === Warp 0 ===
-Steps : 45
-Insts : 45
+Steps : 453
+Insts : 453
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-addi.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 230
+Total insts: 230
+=== Warp 0 ===
+Steps : 230
+Insts : 230
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-and.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 473
+Total insts: 473
+=== Warp 0 ===
+Steps : 473
+Insts : 473
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-andi.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 186
+Total insts: 186
+=== Warp 0 ===
+Steps : 186
+Insts : 186
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-auipc.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 47
+Total insts: 47
+=== Warp 0 ===
+Steps : 47
+Insts : 47
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-beq.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 279
+Total insts: 279
+=== Warp 0 ===
+Steps : 279
+Insts : 279
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-bge.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 297
+Total insts: 297
+=== Warp 0 ===
+Steps : 297
+Insts : 297
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-bgeu.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 322
+Total insts: 322
+=== Warp 0 ===
+Steps : 322
+Insts : 322
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-blt.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 279
+Total insts: 279
+=== Warp 0 ===
+Steps : 279
+Insts : 279
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-bltu.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 304
+Total insts: 304
+=== Warp 0 ===
+Steps : 304
+Insts : 304
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-bne.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 279
+Total insts: 279
+=== Warp 0 ===
+Steps : 279
+Insts : 279
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-jal.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 43
+Total insts: 43
+=== Warp 0 ===
+Steps : 43
+Insts : 43
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-jalr.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 96
+Total insts: 96
+=== Warp 0 ===
+Steps : 96
+Insts : 96
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-lb.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 233
+Total insts: 233
+=== Warp 0 ===
+Steps : 233
+Insts : 233
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-lbu.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 233
+Total insts: 233
+=== Warp 0 ===
+Steps : 233
+Insts : 233
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-lh.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 245
+Total insts: 245
+=== Warp 0 ===
+Steps : 245
+Insts : 245
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-lhu.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 252
+Total insts: 252
+=== Warp 0 ===
+Steps : 252
+Insts : 252
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-lui.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 53
+Total insts: 53
+=== Warp 0 ===
+Steps : 53
+Insts : 53
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-lw.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 255
+Total insts: 255
+=== Warp 0 ===
+Steps : 255
+Insts : 255
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-or.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 476
+Total insts: 476
+=== Warp 0 ===
+Steps : 476
+Insts : 476
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-ori.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 193
+Total insts: 193
+=== Warp 0 ===
+Steps : 193
+Insts : 193
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sb.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 418
+Total insts: 418
+=== Warp 0 ===
+Steps : 418
+Insts : 418
+Loads : 0
+Stores: 35
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sh.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 471
+Total insts: 471
+=== Warp 0 ===
+Steps : 471
+Insts : 471
+Loads : 0
+Stores: 35
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-simple.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 29
+Total insts: 29
+=== Warp 0 ===
+Steps : 29
+Insts : 29
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sll.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 481
+Total insts: 481
+=== Warp 0 ===
+Steps : 481
+Insts : 481
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-slli.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 229
+Total insts: 229
+=== Warp 0 ===
+Steps : 229
+Insts : 229
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-slt.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 447
+Total insts: 447
+=== Warp 0 ===
+Steps : 447
+Insts : 447
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-slti.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 225
+Total insts: 225
+=== Warp 0 ===
+Steps : 225
+Insts : 225
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sltiu.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 225
+Total insts: 225
+=== Warp 0 ===
+Steps : 225
+Insts : 225
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sltu.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 447
+Total insts: 447
+=== Warp 0 ===
+Steps : 447
+Insts : 447
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sra.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 500
+Total insts: 500
+=== Warp 0 ===
+Steps : 500
+Insts : 500
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-srai.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 41
+Total insts: 41
+=== Warp 0 ===
+Steps : 41
+Insts : 41
 Loads : 0
 Stores: 0
 GRADE: FAILED 3
+
+./riscv_tests/rv32ui-p-srl.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 494
+Total insts: 494
+=== Warp 0 ===
+Steps : 494
+Insts : 494
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-srli.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 238
+Total insts: 238
+=== Warp 0 ===
+Steps : 238
+Insts : 238
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sub.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 445
+Total insts: 445
+=== Warp 0 ===
+Steps : 445
+Insts : 445
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-sw.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 478
+Total insts: 478
+=== Warp 0 ===
+Steps : 478
+Insts : 478
+Loads : 0
+Stores: 34
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-xor.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 475
+Total insts: 475
+=== Warp 0 ===
+Steps : 475
+Insts : 475
+Loads : 0
+Stores: 0
+GRADE: PASSED
+
+./riscv_tests/rv32ui-p-xori.hex
+INTERRUPT ECALL/EBREAK
+Total steps: 195
+Total insts: 195
+=== Warp 0 ===
+Steps : 195
+Insts : 195
+Loads : 0
+Stores: 0
+GRADE: PASSED
 

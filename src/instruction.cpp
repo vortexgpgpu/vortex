@@ -133,6 +133,7 @@ void Instruction::executeOn(Warp &c) {
     Word shift_by;
     Word shamt;
     Word temp;
+    Word data_read;
     int op1, op2;
     switch (op) {
 
@@ -204,8 +205,11 @@ void Instruction::executeOn(Warp &c) {
         break;
 
       case L_INST:
-           memAddr  = (reg[rsrc[0]] + immsrc) & 0xFFFFFF00;
-           shift_by = (reg[rsrc[0]] + immsrc) & 0x000000FF;
+           
+           memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);
+           shift_by  = ((reg[rsrc[0]] + immsrc) & 0x00000003) * 8;
+           data_read = c.core->mem.read(memAddr, c.supervisorMode);
+           // std::cout <<std::hex<< "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
 #ifdef EMU_INSTRUMENTATION
            Harp::OSDomain::osDomain->
              do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
@@ -215,21 +219,22 @@ void Instruction::executeOn(Warp &c) {
 
           case 0:
             // LB
-            reg[rdest] = signExt((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFF, 8, 0xFF);
+            reg[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
             break;
           case 1:
             // LH
-            reg[rdest] = signExt((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFFFF, 16, 0xFF);
+            // std::cout << "shifting by: " << shift_by << "  final data: " << ((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF) << "\n";
+            reg[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
             break;
           case 2:
-            reg[rdest] = int(c.core->mem.read(memAddr, c.supervisorMode) & 0xFFFFFFFF);
+            reg[rdest] = int(data_read & 0xFFFFFFFF);
             break;
           case 4:
             // LBU
-            reg[rdest] = Word_u((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFF);
+            reg[rdest] = unsigned((data_read >> shift_by) & 0xFF);
             break;
           case 5:
-            reg[rdest] = int((c.core->mem.read(memAddr, c.supervisorMode) >> shift_by) & 0xFFFF);
+            reg[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
             break;
           default:
             cout << "ERROR: UNSUPPORTED L INST\n";
@@ -309,17 +314,19 @@ void Instruction::executeOn(Warp &c) {
         break;
       case S_INST:
         ++c.stores;
-        memAddr = reg[rsrc[1]] + immsrc;
+        memAddr = reg[rsrc[0]] + immsrc;
+        // std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
         switch (func3)
         {
           case 0:
-            c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode, 1);
+            c.core->mem.write(memAddr, reg[rsrc[1]] & 0x000000FF, c.supervisorMode, 1);
             break;
           case 1:
-            c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode, 2);
+            // std::cout << std::hex << "INST: about to write: " << reg[rsrc[1]] << " to " << memAddr << "\n"; 
+            c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 2);
             break;
           case 2:
-            c.core->mem.write(memAddr, reg[rsrc[0]], c.supervisorMode, 4);
+            c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 4);
             break;
           default:
             cout << "ERROR: UNSUPPORTED S INST\n";
@@ -344,8 +351,6 @@ void Instruction::executeOn(Warp &c) {
             break;
           case 1:
             // BNE
-            // cout << "COMPARING: " << std::hex << int(reg[rsrc[0]]) << " and " << int(reg[rsrc[1]]) << "\n";
-            // cout << "COMPARING: " << std::hex << rsrc[0] << " and " << rsrc[1] << "\n";
             if (int(reg[rsrc[0]]) != int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -407,8 +412,6 @@ void Instruction::executeOn(Warp &c) {
         {
           reg[rdest] = c.pc;
         }
-        // for (int z = 0; z < 32; z++) std::cout << "&&&&&&&& reg[" << z << "] = " << reg[z] << "\n";
-        // std::cout << "jumping to nextPc reg: " << rsrc[0] << " : " << reg[rsrc[0]] << " + " << immsrc << "\n";
         pcSet = true;
         break;
       case SYS_INST:
@@ -418,70 +421,55 @@ void Instruction::executeOn(Warp &c) {
           case 1:
             if (rdest != 0)
             {
-              // std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
               reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-              // std::cout << "\t and writing to csr: " << reg[rsrc[0]] << "\n";
               c.csr[immsrc & 0x00000FFF] = temp;
             
             break;
           case 2:
             if (rdest != 0)
             {
-              // std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
-              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-              // std::cout << "\t and writing to csr: " << (reg[rsrc[0]] |  c.csr[immsrc & 0x00000FFF]) << "\n";
               c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
             
             break;
           case 3:
             if (rdest != 0)
-            {
-              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
-              
+            {              
               reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
             }
-              //std::cout << "\t and writing to csr: " << (temp &  (~c.csr[immsrc & 0x00000FFF])) << "\n";
               c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
             
             break;
           case 5:
             if (rdest != 0)
             {
-              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
               reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-              //std::cout << "\t and writing to csr: " << (rsrc[0]) << "\n";
               c.csr[immsrc & 0x00000FFF] = rsrc[0];
             
             break;
           case 6:
             if (rdest != 0)
-            {
-              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
-              
+            {              
               reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
             }
-              //std::cout << "\t and writing to csr: " << (rsrc[0] |  c.csr[immsrc & 0x00000FFF]) << "\n";
               c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
             
             break;
           case 7:
             if (rdest != 0)
-            {
-              //std::cout << "CSR: Writing to reg: " << rdest << " value: " << c.csr[immsrc & 0x00000FFF];
-              
-              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            {              
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-              //std::cout << "\t and writing to csr: " << (rsrc[0] &  (~c.csr[immsrc & 0x00000FFF])) << "\n";
               c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
             
             break;
           case 0:
           if (immsrc < 2)
           {
-            std::cout << "INTERRUPT ECALL\n";
+            std::cout << "INTERRUPT ECALL/EBREAK\n";
             nextActiveThreads = 0;
             c.interrupt(0);
           }

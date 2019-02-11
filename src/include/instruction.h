@@ -46,7 +46,7 @@ namespace Harp {
   {Opcode::R_INST,     {"r_type", false, false, false, false, InstType::R_TYPE }},
   {Opcode::L_INST,     {"load"  , false, false, false, false, InstType::I_TYPE }},
   {Opcode::I_INST,     {"i_type", false, false, false, false, InstType::I_TYPE }},
-  {Opcode::S_INST,     {"store" , false, false, false, false, InstType::I_TYPE }},
+  {Opcode::S_INST,     {"store" , false, false, false, false, InstType::S_TYPE }},
   {Opcode::B_INST,     {"branch", true , false, false, false, InstType::B_TYPE }},
   {Opcode::LUI_INST,   {"lui"   , false, false, false, false, InstType::U_TYPE }},
   {Opcode::AUIPC_INST, {"auipc" , false, false, false, false, InstType::U_TYPE }},

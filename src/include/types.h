@@ -8,9 +8,9 @@
 
 namespace Harp {
   typedef uint8_t  Byte;
-  typedef uint64_t Word;
-  typedef uint64_t Word_u;
-  typedef int64_t  Word_s;
+  typedef uint32_t Word;
+  typedef uint32_t Word_u;
+  typedef int32_t  Word_s;
 
   typedef Word_u   Addr;
   typedef Word_u   Size;
