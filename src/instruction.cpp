@@ -292,18 +292,33 @@ void Instruction::executeOn(Warp &c) {
             reg[rdest].trunc(wordSz);
             break;
           case 5:
-            if (!func7)
+            if ((func7 == 0))
             {
-              // SRAI
-                op1 = reg[rsrc[0]];
-                op2 = immsrc;
-                reg[rdest] = op1 >> op2;
+              // SRLI
+                // std::cout << "WTF\n";
+                bool isNeg  = ((0x80000000 & reg[rsrc[0]])) > 0;
+                Word result = Word_u(reg[rsrc[0]]) >> Word_u(immsrc);
+                // if (isNeg)
+                // {
+                //   Word mask = 0x80000000;
+                //   for (int i = 32; i < Word_u(immsrc); i++)
+                //   {
+                //     result |= mask;
+                //     mask = mask >> 1;
+                //   }
+                // }
+
+                reg[rdest] = result;
+      
                 reg[rdest].trunc(wordSz);
             }
             else
             {
-              // SRLI
-                reg[rdest] = Word_u(reg[rsrc[0]]) >> Word_u(immsrc);
+                // SRAI
+                // std::cout << "WOHOOOOO\n";
+                op1 = reg[rsrc[0]];
+                op2 = immsrc;
+                reg[rdest] = op1 >> op2;
                 reg[rdest].trunc(wordSz);
             }
             break;

@@ -342,14 +342,14 @@ GRADE: PASSED
 
 ./riscv_tests/rv32ui-p-srai.hex
 INTERRUPT ECALL/EBREAK
-Total steps: 41
-Total insts: 41
+Total steps: 244
+Total insts: 244
 === Warp 0 ===
-Steps : 41
-Insts : 41
+Steps : 244
+Insts : 244
 Loads : 0
 Stores: 0
-GRADE: FAILED 3
+GRADE: PASSED
 
 ./riscv_tests/rv32ui-p-srl.hex
 INTERRUPT ECALL/EBREAK

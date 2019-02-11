@@ -313,12 +313,13 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
     case InstType::I_TYPE:
       inst.setDestReg((code>>shift_rd)   & reg_mask);
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
-
+      inst.setFunc7 ((code>>shift_func7) & func7_mask);
       func3 = (code>>shift_func3) & func3_mask;
       inst.setFunc3 (func3);
 
       if ((func3 == 5) && (op != L_INST))
       {
+        // std::cout << "func7: " << func7 << "\n";
         inst.setSrcImm(signExt(((code>>shift_rs2)&reg_mask), 5, reg_mask));
       }
       else
