@@ -265,7 +265,7 @@ int emu_main(int argc, char **argv) {
     for (Addr i = 0; i < 16; i++)
     {
       Addr new_addr = base_addr + (i *4);
-      std::cout << std::hex << new_addr << " = " << std::dec << old_ram.read(new_addr) << "\n";
+      std::cout << std::hex << new_addr << " = " << std::hex << old_ram.read(new_addr) << "\n";
     }
 
     std::cout << "\n";
