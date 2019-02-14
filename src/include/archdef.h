@@ -23,8 +23,8 @@ namespace Harp {
       encChar = 'w';
       nRegs = 32;
       nPRegs = 0;
-      nThds = 1;
-      nWarps = 1;
+      nThds = 8;
+      nWarps = 3;
 
       extent = EXT_WARPS;
 

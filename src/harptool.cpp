@@ -256,9 +256,17 @@ int emu_main(int argc, char **argv) {
     mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
     // mu.attach(console, 0xf0000000);
 
+    std::cout << "ABOUT TO START\n";
     while (core.running()) { console.poll(); core.step(); }
 
     if (showStats) core.printStats();
+
+    Addr base_addr = 0x81000000;
+    for (Addr i = 0; i < 16; i++)
+    {
+      Addr new_addr = base_addr + (i *4);
+      std::cout << std::hex << new_addr << " = " << std::dec << old_ram.read(new_addr) << "\n";
+    }
 
     std::cout << "\n";
   return 0;

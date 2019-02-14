@@ -431,6 +431,7 @@ void Instruction::executeOn(Warp &c) {
         break;
       case SYS_INST:
         temp = reg[rsrc[0]];
+        std::cout << "STORING IN CSR: " << std::hex << reg[rsrc[0]] << " csr#: " << (immsrc & 0x00000FFF) << "\n";
         switch (func3)
         {
           case 1:
@@ -438,7 +439,9 @@ void Instruction::executeOn(Warp &c) {
             {
               reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-              c.csr[immsrc & 0x00000FFF] = temp;
+
+            std::cout << "FOR SURE WRITING TO CSR#: " << (immsrc & 0x00000FFF) << " value: " << temp << "\n";
+            c.csr[immsrc & 0x00000FFF] = temp;
             
             break;
           case 2:
@@ -492,6 +495,7 @@ void Instruction::executeOn(Warp &c) {
           default:
             break;
         }
+        std::cout << "READING FROM CSR: " << reg[rdest] << " csr#: " << (immsrc & 0x00000FFF) << "\n";
         break;
       case TRAP:
         std::cout << "INTERRUPT TRAP\n";
@@ -499,6 +503,49 @@ void Instruction::executeOn(Warp &c) {
         c.interrupt(0);
         break;
       case FENCE:
+        break;
+      case GPGPU:
+        switch(func3)
+        {
+          case 0:
+            // WSPAWN
+            D(0, "Spawning a new warp.");
+            std::cout << "SIZE: " << c.core->w.size() << "\n";
+            for (unsigned i = 0; i < c.core->w.size(); ++i)
+            {
+              std::cout << "WHATTT\n";
+              Warp &newWarp(c.core->w[i]);
+              std::cout << "STARTING\n";
+              if (newWarp.spawned == false) {
+                std::cout << "ABOUT TO START\n";
+                newWarp.pc  = reg[rsrc[0]];
+                newWarp.reg[0][rdest] = reg[rsrc[1]];
+                newWarp.csr = c.csr;
+                newWarp.activeThreads = 1;
+                newWarp.supervisorMode = false;
+                newWarp.spawned = true;
+                break;
+              }
+            }
+            break;
+          case 5:
+            // CLONE
+            std::cout << "CLONE\n";
+            std::cout << "CLONING THREAD: " << reg[rsrc[0]] << "\n";
+            c.reg[reg[rsrc[0]]] = reg;
+            break;
+          case 6:
+            // JALRS
+            nextActiveThreads = reg[rsrc[1]];
+            reg[rdest] = c.pc;
+            if (!pcSet) nextPc = reg[rsrc[0]];
+            pcSet = true;
+            std::cout << "ACTIVE_THREDS: " << rsrc[1] << " val: " << reg[rsrc[1]] << "\n";
+            std::cout << "nextPC: " << rsrc[0] << " val: " << reg[rsrc[0]] << "\n";
+            break;
+          default:
+            cout << "ERROR: UNSUPPORTED GPGPU INSTRUCTION " << *this << "\n";
+        }
         break;
       default:
         cout << "ERROR: Unsupported instruction: " << *this << "\n";

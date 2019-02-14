@@ -27,7 +27,8 @@ namespace Harp {
       JALR_INST = 103,
       SYS_INST = 115,
       TRAP     = 0x7f,
-      FENCE    = 0x0f
+      FENCE    = 0x0f,
+      GPGPU    = 0x6b
    };
 
   enum InstType { N_TYPE, R_TYPE, I_TYPE, S_TYPE, B_TYPE, U_TYPE, J_TYPE};
@@ -42,19 +43,20 @@ namespace Harp {
 
   static std::map<int, struct InstTableEntry_t> instTable = 
   {
-  {Opcode::NOP,        {"nop"   , false, false, false, false, InstType::N_TYPE }},
-  {Opcode::R_INST,     {"r_type", false, false, false, false, InstType::R_TYPE }},
-  {Opcode::L_INST,     {"load"  , false, false, false, false, InstType::I_TYPE }},
-  {Opcode::I_INST,     {"i_type", false, false, false, false, InstType::I_TYPE }},
-  {Opcode::S_INST,     {"store" , false, false, false, false, InstType::S_TYPE }},
-  {Opcode::B_INST,     {"branch", true , false, false, false, InstType::B_TYPE }},
-  {Opcode::LUI_INST,   {"lui"   , false, false, false, false, InstType::U_TYPE }},
-  {Opcode::AUIPC_INST, {"auipc" , false, false, false, false, InstType::U_TYPE }},
-  {Opcode::JAL_INST,   {"jal"   , true , false, false, false, InstType::J_TYPE }},
-  {Opcode::JALR_INST,  {"jalr"  , true , false, false, false, InstType::I_TYPE }},
-  {Opcode::SYS_INST,   {"SYS"   , true , false, false, false, InstType::I_TYPE }},
-  {Opcode::TRAP,       {"TRAP"  , true , false, false, false, InstType::I_TYPE }},
-  {Opcode::FENCE,      {"fence" , true , false, false, false, InstType::I_TYPE }}
+    {Opcode::NOP,        {"nop"   , false, false, false, false, InstType::N_TYPE }},
+    {Opcode::R_INST,     {"r_type", false, false, false, false, InstType::R_TYPE }},
+    {Opcode::L_INST,     {"load"  , false, false, false, false, InstType::I_TYPE }},
+    {Opcode::I_INST,     {"i_type", false, false, false, false, InstType::I_TYPE }},
+    {Opcode::S_INST,     {"store" , false, false, false, false, InstType::S_TYPE }},
+    {Opcode::B_INST,     {"branch", true , false, false, false, InstType::B_TYPE }},
+    {Opcode::LUI_INST,   {"lui"   , false, false, false, false, InstType::U_TYPE }},
+    {Opcode::AUIPC_INST, {"auipc" , false, false, false, false, InstType::U_TYPE }},
+    {Opcode::JAL_INST,   {"jal"   , true , false, false, false, InstType::J_TYPE }},
+    {Opcode::JALR_INST,  {"jalr"  , true , false, false, false, InstType::I_TYPE }},
+    {Opcode::SYS_INST,   {"SYS"   , true , false, false, false, InstType::I_TYPE }},
+    {Opcode::TRAP,       {"TRAP"  , true , false, false, false, InstType::I_TYPE }},
+    {Opcode::FENCE,      {"fence" , true , false, false, false, InstType::I_TYPE }},
+    {Opcode::GPGPU,      {"gpgpu" , false, false, false, false, InstType::R_TYPE }}
   };
 
   static const Size MAX_REG_SOURCES(3);
