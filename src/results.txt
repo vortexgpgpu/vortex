@@ -3,21 +3,53 @@ start
 ABOUT TO START
 INTERRUPT ECALL/EBREAK
 INTERRUPT ECALL/EBREAK
-Total steps: 274
-Total insts: 1561
+INTERRUPT ECALL/EBREAK
+INTERRUPT ECALL/EBREAK
+Total steps: 300
+Total insts: 1503
 === Warp 0 ===
-Steps : 274
-Insts : 827
+Steps : 300
+Insts : 504
 Loads : 0
-Stores: 177
+Stores: 112
 GRADE: FAILED 0
 === Warp 1 ===
-Steps : 181
-Insts : 734
+Steps : 129
+Insts : 333
 Loads : 0
-Stores: 157
+Stores: 76
 GRADE: FAILED 0
 === Warp 2 ===
+Steps : 129
+Insts : 333
+Loads : 0
+Stores: 76
+GRADE: FAILED 0
+=== Warp 3 ===
+Steps : 129
+Insts : 333
+Loads : 0
+Stores: 76
+GRADE: FAILED 0
+=== Warp 4 ===
+Steps : 0
+Insts : 0
+Loads : 0
+Stores: 0
+GRADE: FAILED 0
+=== Warp 5 ===
+Steps : 0
+Insts : 0
+Loads : 0
+Stores: 0
+GRADE: FAILED 0
+=== Warp 6 ===
+Steps : 0
+Insts : 0
+Loads : 0
+Stores: 0
+GRADE: FAILED 0
+=== Warp 7 ===
 Steps : 0
 Insts : 0
 Loads : 0

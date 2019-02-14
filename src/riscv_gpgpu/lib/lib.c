@@ -10,7 +10,7 @@ void createThreads(unsigned num_threads, unsigned wid, unsigned func_addr, unsig
 	register unsigned *xx  asm("s2")  = x_ptr;
 	register unsigned *yy  asm("s3")  = y_ptr;
 	register unsigned *zz  asm("s4")  = z_ptr;
-	register unsigned wid_ asm("s1")  = wid;
+	register unsigned wid_ asm("a1")  = wid;
 
 	asm __volatile__("addi t5, sp, 0");
 	for (unsigned i = 1; i < num_threads; i++)
@@ -77,14 +77,6 @@ void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, unsigned * x_pt
 	ECALL;
 
 }
-
-
-
-
-
-
-
-
 
 
 unsigned get_wid()

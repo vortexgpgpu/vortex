@@ -256,6 +256,7 @@ int emu_main(int argc, char **argv) {
     mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
     // mu.attach(console, 0xf0000000);
 
+    // core.w[0].pc = 0x8000007c; // If I want to start at a specific location
     std::cout << "ABOUT TO START\n";
     while (core.running()) { console.poll(); core.step(); }
 

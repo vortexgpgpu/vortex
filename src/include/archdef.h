@@ -24,7 +24,7 @@ namespace Harp {
       nRegs = 32;
       nPRegs = 0;
       nThds = 8;
-      nWarps = 3;
+      nWarps = 8;
 
       extent = EXT_WARPS;
 

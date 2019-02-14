@@ -10,7 +10,7 @@
 #define ECALL           asm __volatile__(".word 0x00000073")
 
 
-#define FUNC void (func)(unsigned)
+#define FUNC void (func)(unsigned, unsigned)
 void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, unsigned *, unsigned *, unsigned *);
 
 unsigned   get_wid();
