@@ -4,7 +4,6 @@
 // {
 
 
-
 void createThreads(unsigned num_threads, unsigned wid, unsigned func_addr, unsigned * x_ptr, unsigned * y_ptr, unsigned * z_ptr)
 {
 	register unsigned *xx  asm("s2")  = x_ptr;
