@@ -101,6 +101,12 @@ void MemoryUnit::ADecoder::write(Addr a, Word w, bool sup, Size wordSize) {
   // std::cout << std::hex << "ADecoder::write(Addr " << a << ", w " << w << ", sup " << sup << ", wordSize " << wordSize << "\n";
   Word before = m.read(a);
   Word new_word = w;
+
+  if (a == 0x8000012c)
+  {
+    printf("WRITING TO 0x8000012c -> %d\n", w);
+  }
+
   if (wordSize == 8)
   {
     r.writeByte(a, &w);

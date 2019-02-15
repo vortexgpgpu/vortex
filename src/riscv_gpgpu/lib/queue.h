@@ -10,6 +10,9 @@
 
 typedef struct Job_t
 {
+	unsigned wid;
+	unsigned n_threads;
+	unsigned base_sp;
     unsigned func_ptr;
     unsigned * x;
     unsigned * y;
@@ -24,19 +27,22 @@ typedef struct Queue_t
     unsigned start_i;
     unsigned end_i;
     unsigned num_j;
+    unsigned total_warps;
+    unsigned active_warps;
 
 } Queue;
 
 Queue q;
 
-void initialize_queue(void);
+void queue_initialize(void);
 
-void enqueue(Job);
+void queue_enqueue(Job *);
 
-Job dequeue(void);
+void queue_dequeue(Job *);
 
-int isFull(void);
-int isEmpty(void);
+int queue_isFull(void);
+int queue_isEmpty(void);
+int queue_availableWarps();
 
 
 void func();

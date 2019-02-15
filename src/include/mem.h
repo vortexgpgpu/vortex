@@ -195,10 +195,10 @@ namespace Harp {
           if(mem[address >> 20] == NULL) {
               uint8_t* ptr = new uint8_t[1024*1024];
               for(uint32_t i = 0;i < 1024*1024;i+=4) {
-                  ptr[i + 0] = 0xFF;
-                  ptr[i + 1] = 0xFF;
-                  ptr[i + 2] = 0xFF;
-                  ptr[i + 3] = 0xFF;
+                  ptr[i + 0] = 0xaa;
+                  ptr[i + 1] = 0xbb;
+                  ptr[i + 2] = 0xcc;
+                  ptr[i + 3] = 0xdd;
               }
               mem[address >> 20] = ptr;
           }

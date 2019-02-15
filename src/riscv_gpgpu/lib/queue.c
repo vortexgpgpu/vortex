@@ -1,90 +1,28 @@
 
 #include "queue.h"
-
-unsigned x[] = {1, 1,  6, 0, 3, 1, 1, 2, 0, 3, 6, 7, 5, 7, 7, 9};
-unsigned y[] = {0, 2,  2, 0, 5, 0, 1, 1, 4, 2, 0, 0, 3, 2, 3, 2};
-unsigned z[] = {0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-int main() 
-{ 
-
-    Job j;
-    j.func_ptr = (unsigned) func;
-    j.x        = x;
-    j.y        = y;
-    j.z        = z;
-
-    enqueue(j);
-    enqueue(j);
-    enqueue(j);
-    enqueue(j);
-    enqueue(j);
-    enqueue(j);
-    j = dequeue();
-    j = dequeue();
-    enqueue(j);
-    enqueue(j);
-
-    if (!isFull())
-    {
-        enqueue(j);
-    }
-
-    if (!isFull())
-    {
-        enqueue(j);
-    }
-
-    if (!isFull())
-    {
-        enqueue(j);
-    }
-
-
-    if (!isFull())
-    {
-        enqueue(j);
-    }
-
-    if (!isFull())
-    {
-        enqueue(j);
-    }
-
-    if (!isFull())
-    {
-        enqueue(j);
-    }
-
-
-
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-    dequeue();
-
-
-
-    return 0; 
-} 
   
-void initialize_queue(void)
+void queue_initialize(void)
 {
-    q.start_i = 0;
-    q.end_i   = 0;
-    q.num_j   = 0;
+    q.start_i      = 0;
+    q.end_i        = 0;
+    q.num_j        = 0;
+    q.total_warps  = 7;
+    q.active_warps = 0;
 }
 
-void enqueue(Job j)
+void queue_enqueue(Job * j)
 {
     q.num_j++;
-    q.jobs[q.end_i] = j;
+
+    // q.jobs[q.end_i] = j;
+    
+     q.jobs[q.end_i].wid       = j->wid;
+     q.jobs[q.end_i].n_threads = j->n_threads;
+     q.jobs[q.end_i].base_sp   = j->base_sp;
+     q.jobs[q.end_i].func_ptr  = j->func_ptr;
+     q.jobs[q.end_i].x         = j->x;
+     q.jobs[q.end_i].y         = j->y;
+     q.jobs[q.end_i].z         = j->z;
     if ((q.end_i + 1) < SIZE)
     {
         q.end_i++;
@@ -96,10 +34,10 @@ void enqueue(Job j)
 
 }
 
-Job dequeue(void)
+void queue_dequeue(Job * r)
 {
     q.num_j--;
-    Job j = q.jobs[q.start_i];
+    Job * j = &(q.jobs[q.start_i]);
     if ((q.start_i + 1) < SIZE)
     {
         q.start_i++;
@@ -108,19 +46,28 @@ Job dequeue(void)
     {
         q.start_i = 0;
     }
+
+     r->wid       = j->wid;
+     r->n_threads = j->n_threads;
+     r->base_sp   = j->base_sp;
+     r->func_ptr  = j->func_ptr;
+     r->x         = j->x;
+     r->y         = j->y;
+     r->z         = j->z;
+
 }
 
-int isFull(void)
+int queue_isFull(void)
 {
     return (q.num_j == SIZE);
 }
 
-int isEmpty(void)
+int queue_isEmpty(void)
 {
     return (q.num_j == 0);
 }
 
-void func()
+int queue_availableWarps()
 {
-
+    return (q.active_warps < q.total_warps);
 }

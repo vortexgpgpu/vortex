@@ -525,6 +525,12 @@ void Instruction::executeOn(Warp &c) {
               }
             }
             break;
+          case 4:
+            // JMPRT
+            nextActiveThreads = 1;
+            if (!pcSet) nextPc = reg[rsrc[0]];
+            pcSet = true;
+            break;
           case 5:
             // CLONE
             // std::cout << "CLONE\n";
@@ -545,7 +551,7 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       default:
-        cout << "ERROR: Unsupported instruction: " << *this << "\n";
+        cout << "aERROR: Unsupported instruction: " << *this << "\n";
         exit(1);
     }
   }
