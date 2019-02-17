@@ -4,16 +4,18 @@ void createThreads(unsigned num_threads, unsigned wid, unsigned func_addr, unsig
 {
 
 	asm __volatile__("mv t6, a0");
+	asm __volatile__("mv ra, a2");
 	asm __volatile__("mv a1, a1");
 
 	asm __volatile__("mv s7, a3");
 	asm __volatile__("mv s8, a4");
-	asm __volatile__("mv s9, a5");
+	asm __volatile__("mv s9, t2");
 
 
 	asm __volatile__("addi t5, sp, 0");
 
 	register unsigned num_threads_ asm("t6");
+	asm __volatile__("mv tp, t6");
 	for (unsigned i = 1; i < num_threads_; i++)
 	{
 
@@ -29,8 +31,10 @@ void createThreads(unsigned num_threads, unsigned wid, unsigned func_addr, unsig
 
 
 	// jalis TO FUNC
-	register unsigned num_lanes asm("t6")  = func_addr;
-	register unsigned link      asm("s11") = num_threads;
+	// register unsigned num_lanes asm("t6")  = func_addr;
+	// register unsigned link      asm("s11") = num_threads;
+	asm __volatile__("mv t6, ra");
+	asm __volatile__("mv s11, tp");
 
 
 	JALRS;
@@ -114,7 +118,7 @@ void reschedule_warps()
 	Job j;
 	queue_dequeue(&j);
 	asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
-	wspawn(j.n_threads, j.wid, j.func_ptr, j.x, j.y, j.z);
+	createThreads(j.n_threads, j.wid, j.func_ptr, j.x, j.y, j.z);
 
 }
 
@@ -134,7 +138,7 @@ void schedule_warps()
 
 void sleep()
 {
-	for(int z = 0; z < 10000; z++) {}
+	for(int z = 0; z < 100; z++) {}
 }
 
 
