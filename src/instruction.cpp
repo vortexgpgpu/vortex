@@ -85,17 +85,17 @@ void Instruction::executeOn(Warp &c) {
     return;
   }
 
-  /* Also throw exceptions on non-masked divergent branches. */
-  if (instTable[op].controlFlow) {
-    Size t, count, active;
-    for (t = 0, count = 0, active = 0; t < c.activeThreads; ++t) {
-      if ((!predicated || c.pred[t][pred]) && c.tmask[t]) ++count;
-      if (c.tmask[t]) ++active;
-    }
+  // /* Also throw exceptions on non-masked divergent branches. */
+  // if (instTable[op].controlFlow) {
+  //   Size t, count, active;
+  //   for (t = 0, count = 0, active = 0; t < c.activeThreads; ++t) {
+  //     if ((!predicated || c.pred[t][pred]) && c.tmask[t]) ++count;
+  //     if (c.tmask[t]) ++active;
+  //   }
 
-    if (count != 0 && count != active)
-      throw DivergentBranchException();
-  }
+  //   if (count != 0 && count != active)
+  //     throw DivergentBranchException();
+  // }
 
   Size nextActiveThreads = c.activeThreads;
   Size wordSz = c.core->a.getWordSize();
@@ -106,14 +106,14 @@ void Instruction::executeOn(Warp &c) {
   // If we have a load, overwriting a register's contents, we have to make sure
   // ahead of time it will not fault. Otherwise we may perform an indirect load
   // by mistake.
-  if (op == L_INST && rdest == rsrc[0]) {
-    for (Size t = 0; t < c.activeThreads; t++) {
-      if ((!predicated || c.pred[t][pred]) && c.tmask[t]) {
-        Word memAddr = c.reg[t][rsrc[0]] + immsrc;
-        c.core->mem.read(memAddr, c.supervisorMode);
-      }
-    }
-  }
+  // if (op == L_INST && rdest == rsrc[0]) {
+  //   for (Size t = 0; t < c.activeThreads; t++) {
+  //     if ((!predicated || c.pred[t][pred]) && c.tmask[t]) {
+  //       Word memAddr = c.reg[t][rsrc[0]] + immsrc;
+  //       c.core->mem.read(memAddr, c.supervisorMode);
+  //     }
+  //   }
+  // }
 
   bool sjOnce(true), // Has not yet split or joined once.
        pcSet(false); // PC has already been set
@@ -134,6 +134,8 @@ void Instruction::executeOn(Warp &c) {
     Word shamt;
     Word temp;
     Word data_read;
+    // Word pred;
+    DomStackEntry e(pred, c.reg, c.tmask, c.pc);
     int op1, op2;
     switch (op) {
 
@@ -331,16 +333,19 @@ void Instruction::executeOn(Warp &c) {
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
         // std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
+        // std::cout << "FUNC3: " << func3 << "\n";
         switch (func3)
         {
           case 0:
+            // std::cout << "SB\n";
             c.core->mem.write(memAddr, reg[rsrc[1]] & 0x000000FF, c.supervisorMode, 1);
             break;
           case 1:
-            // std::cout << std::hex << "INST: about to write: " << reg[rsrc[1]] << " to " << memAddr << "\n"; 
+            // std::cout << "SH\n";
             c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 2);
             break;
           case 2:
+            // std::cout << std::hex << "SW: about to write: " << reg[rsrc[1]] << " to " << memAddr << "\n"; 
             c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 4);
             break;
           default:
@@ -525,6 +530,26 @@ void Instruction::executeOn(Warp &c) {
               }
             }
             break;
+          case 2:
+            // SPLIT
+            c.domStack.push(c.tmask);
+            c.domStack.push(e);
+
+            for (unsigned i = 0; i < e.tmask.size(); ++i)
+            {
+              c.tmask[i] = !e.tmask[i] && c.tmask[i];
+            }
+
+            break;
+          case 3:
+            // JOIN
+            if (!c.domStack.top().fallThrough) {
+              if (!pcSet) nextPc = c.domStack.top().pc;
+              pcSet = true;
+            }
+            c.tmask = c.domStack.top().tmask;
+            c.domStack.pop();
+            break;
           case 4:
             // JMPRT
             nextActiveThreads = 1;
@@ -534,7 +559,7 @@ void Instruction::executeOn(Warp &c) {
           case 5:
             // CLONE
             // std::cout << "CLONE\n";
-            // std::cout << "CLONING THREAD: " << reg[rsrc[0]] << "\n";
+            // std::cout << "CLONING REG: " << rsrc[0] << " lane: " << reg[rsrc[0]] << "\n";
             c.reg[reg[rsrc[0]]] = reg;
             break;
           case 6:
@@ -544,7 +569,15 @@ void Instruction::executeOn(Warp &c) {
             if (!pcSet) nextPc = reg[rsrc[0]];
             pcSet = true;
             // std::cout << "ACTIVE_THREDS: " << rsrc[1] << " val: " << reg[rsrc[1]] << "\n";
-            // std::cout << "nextPC: " << rsrc[0] << " val: " << reg[rsrc[0]] << "\n";
+            // std::cout << "nextPC: " << rsrc[0] << " val: " << std::hex << reg[rsrc[0]] << "\n";
+            break;
+          case 7:
+            // pred jump reg
+            if (reg[rsrc[0]])
+            {
+              nextPc = reg[rsrc[1]];
+              pcSet = true;
+            }
             break;
           default:
             cout << "ERROR: UNSUPPORTED GPGPU INSTRUCTION " << *this << "\n";

@@ -304,6 +304,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
     case InstType::N_TYPE:
       break;
     case InstType::R_TYPE:
+      inst.setPred((code>>shift_rs1)   & reg_mask);
       inst.setDestReg((code>>shift_rd)   & reg_mask);
       inst.setSrcReg((code>>shift_rs1)   & reg_mask);
       inst.setSrcReg((code>>shift_rs2)   & reg_mask);

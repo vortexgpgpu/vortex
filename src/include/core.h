@@ -53,7 +53,7 @@ namespace Harp {
   // Entry in the IPDOM Stack
   struct DomStackEntry {
     DomStackEntry(
-      unsigned p, const std::vector<std::vector<Reg<bool> > >& m,
+      unsigned p, const std::vector<std::vector<Reg<Word> > >& m,
       std::vector<bool> &tm, Word pc
     ): pc(pc), fallThrough(false), uni(false)
     {

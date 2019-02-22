@@ -5,7 +5,8 @@
 
 
 
-#define SIZE 10
+#define SIZE 50
+#define WARPS 7
 
 
 typedef struct Job_t
@@ -22,13 +23,12 @@ typedef struct Job_t
 
 typedef struct Queue_t
 {
-
-    struct Job_t jobs[SIZE];
     unsigned start_i;
     unsigned end_i;
     unsigned num_j;
     unsigned total_warps;
     unsigned active_warps;
+    struct Job_t jobs[SIZE];
 
 } Queue;
 
