@@ -10,24 +10,23 @@
 #define ECALL           asm __volatile__(".word 0x00000073");
 #define JMPRT           asm __volatile__(".word 0x5406b");
 #define SPLIT           asm __volatile__(".word 0xf206b");
-#define P_JUMP          asm __volatile__(".word 0x1ff706b");
+#define P_JUMP          asm __volatile__(".word 0x1ff707b");
 #define JOIN            asm __volatile__(".word 0x306b");
 
 
-// #define __if(val) { \
+#define __if(val)  bool temp = !val; \
+		register unsigned   p asm("t5") = temp; \
+		register void * e asm("t6") = &&ELSE; \
+		SPLIT; \
+		P_JUMP; \
 
-// 		register unsigned   p asm("t5") = val; \
-// 		register unsigned * e asm("t6") = &&ELSE; \
-// 		SPLIT; \
-// 		P_JUMP; \
 
-	
-// }
+#define __else register void * w asm("t3") =  &&AFTER; \
+			   asm __volatile__("jr t3"); \
+			   ELSE: asm __volatile__("nop");
 
-// #define __else asm __volatile__("j AFTER"); \
-// 			   ELSE: asm __volatile__("nop");
-
-// #define __end_if AFTER: JOIN;
+#define __end_if AFTER:\
+			   JOIN;
 
 
 #define FUNC void (func)(unsigned, unsigned)

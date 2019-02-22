@@ -7,14 +7,14 @@
 .type queue_initialize, @function
 .global queue_initialize
 queue_initialize:
-	la t0, q      # loading base address of q
-	li t1, 0      # to initialize variables
-	li t2, 7      # Num of available warps
-	sw t1, 0 (t0) # start_i
-	sw t1, 4 (t0) # end_i
-	sw t1, 8 (t0) # num_j
-	sw t2, 12(t0) # total_warps
-	sw t1, 16(t0) # active_warps
+	la t0, q       # loading base address of q
+	li t1, 0       # to initialize variables
+	li t2, A_WARPS # Num of available warps
+	sw t1, 0 (t0)  # start_i
+	sw t1, 4 (t0)  # end_i
+	sw t1, 8 (t0)  # num_j
+	sw t2, 12(t0)  # total_warps
+	sw t1, 16(t0)  # active_warps
 	ret
 
 
@@ -125,4 +125,3 @@ queue_availableWarps:
 	lw   t2, 16(t0)  # t2 = active_warps
 	sltu a0, t2, t1
 	ret
-	

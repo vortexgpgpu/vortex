@@ -28,6 +28,7 @@ namespace Harp {
       SYS_INST = 115,
       TRAP     = 0x7f,
       FENCE    = 0x0f,
+      PJ_INST  = 0x7b,
       GPGPU    = 0x6b
    };
 
@@ -56,6 +57,7 @@ namespace Harp {
     {Opcode::SYS_INST,   {"SYS"   , true , false, false, false, InstType::I_TYPE }},
     {Opcode::TRAP,       {"TRAP"  , true , false, false, false, InstType::I_TYPE }},
     {Opcode::FENCE,      {"fence" , true , false, false, false, InstType::I_TYPE }},
+    {Opcode::PJ_INST,    {"pred j", true , false, false, false, InstType::R_TYPE }},
     {Opcode::GPGPU,      {"gpgpu" , false, false, false, false, InstType::R_TYPE }}
   };
 

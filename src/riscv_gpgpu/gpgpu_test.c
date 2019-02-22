@@ -1,5 +1,5 @@
 // #include <stdint.h>
-// #include <stdbool.h>
+#include <stdbool.h>
 // #include <cstdint>
 
 
@@ -21,8 +21,8 @@ unsigned z[] = {0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 // unsigned y[] = {1, 1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 // unsigned z[] = {0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-#define NUM_WARPS 16
-#define NUM_THREADS 1
+#define NUM_WARPS 3
+#define NUM_THREADS 7
 
 int main()
 {
@@ -44,20 +44,13 @@ void matAddition(unsigned tid, unsigned wid)
 
 	unsigned i = (wid * NUM_THREADS) + tid;
 
-	// int cond = i < 16;
-	// __if(cond)
+	__if((i < 10))
+		z_ptr[i] = x_ptr[i] + y_ptr[i];
+	__else
+	__end_if
 
-	// // DO SOMETHING
 
-	// __else
-
-	// // DO SOMETHING ELSE
-
-	// __end_if
-
-	z_ptr[i] = x_ptr[i] + y_ptr[i];
-
-	sleep((100 * wid)+100);
+	sleep((50 * (wid + wid))+100);
 
 	return;
 	

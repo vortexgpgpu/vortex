@@ -71,19 +71,6 @@ void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, unsigned * x_pt
 	schedule_warps();
 
 	sleep(100);
-
-	// asm __volatile__("addi t5, sp, 0");
-
-	// for (unsigned i = 1; i < num_Warps; i++)
-	// {
-	// 	asm __volatile__("addi sp, sp, -2048");
-	// 	wspawn(num_threads, i, func, x_ptr, y_ptr, z_ptr);
-	// }
-
-	// asm __volatile__("addi sp, t5, 0");
-
-	// createThreads(num_threads, 0, (unsigned) func, x_ptr, y_ptr, z_ptr);
-
 }
 
 

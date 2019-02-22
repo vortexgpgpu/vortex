@@ -203,19 +203,21 @@ void Warp::step() {
         D_RAW(' ' << hex << reg[j][i] << ' ');
       D_RAW('(' << shadowReg[i] << ')' << endl);
     }
-    D(3, "Predicate state:");
-    D_RAW("  ");
-    for (unsigned j = 0; j < pred.size(); ++j) {
-      for (unsigned i = 0; i < pred[j].size(); ++i) D_RAW(pred[j][i]);
-      D_RAW(endl);
-    }
-    D_RAW(" (");
-    for (unsigned i = 0; i < shadowPReg.size(); ++i) D_RAW(shadowPReg[i]);
-    D_RAW(')' << endl);
+    // D(3, "Predicate state:");
+    // D_RAW("  ");
+    // for (unsigned j = 0; j < pred.size(); ++j) {
+    //   for (unsigned i = 0; i < pred[j].size(); ++i) D_RAW(pred[j][i]);
+    //   D_RAW(endl);
+    // }
+    // D_RAW(" (");
+    // for (unsigned i = 0; i < shadowPReg.size(); ++i) D_RAW(shadowPReg[i]);
+    // D_RAW(')' << endl);
 
     D(3, "Thread mask:");
     D_RAW("  ");
     for (unsigned i = 0; i < tmask.size(); ++i) D_RAW(tmask[i] << ' ');
+    D_RAW(endl);
+    D_RAW(endl);
     D_RAW(endl);
   }
   #endif

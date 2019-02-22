@@ -57,8 +57,13 @@ namespace Harp {
       std::vector<bool> &tm, Word pc
     ): pc(pc), fallThrough(false), uni(false)
     {
+      std::cout << "DomStackEntry TMASK: ";
       for (unsigned i = 0; i < m.size(); ++i)
+      {
+        std::cout << " " << (!bool(m[i][p]) && tm[i]);
         tmask.push_back(!bool(m[i][p]) && tm[i]);
+      }
+      std::cout << "\n";
     }
 
     DomStackEntry(const std::vector<bool> &tmask):
