@@ -59,17 +59,17 @@ bool checkUnanimous(unsigned p, const std::vector<std::vector<Reg<Word> > >& m,
   }
   if (i == m.size()) throw DivergentBranchException();
 
-  std::cout << "same: " << same << "  with -> ";
+  //std::cout << "same: " << same << "  with -> ";
   for (; i < m.size(); ++i) {
     if (tm[i]) {
-      std::cout << " " << (bool(m[i][p]));
+      //std::cout << " " << (bool(m[i][p]));
       if (same != (bool(m[i][p]))) {
-        std::cout << " FALSE\n";
+        //std::cout << " FALSE\n";
         return false;
       }
     } 
   }
-  std::cout << " TRUE\n";
+  //std::cout << " TRUE\n";
   return true;
 }
 
@@ -84,7 +84,7 @@ void Instruction::executeOn(Warp &c) {
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
-    std::cout << "INTERRUPT SUPERVISOR\n";
+    //std::cout << "INTERRUPT SUPERVISOR\n";
     c.interrupt(3);
     return;
   }
@@ -126,8 +126,8 @@ void Instruction::executeOn(Warp &c) {
     vector<Reg<bool> > &pReg(c.pred[t]);
     stack<DomStackEntry> &domStack(c.domStack);
 
-    std::cout << std::hex << "opcode: " << op << "  func3: " << func3 << "\n";
-    if (op == GPGPU) std::cout << "OPCODE MATCHED GPGPU\n";
+    //std::cout << std::hex << "opcode: " << op << "  func3: " << func3 << "\n";
+    if (op == GPGPU) //std::cout << "OPCODE MATCHED GPGPU\n";
 
     // If this thread is masked out, don't execute the instruction, unless it's
     // a split or join.
@@ -151,10 +151,10 @@ void Instruction::executeOn(Warp &c) {
     switch (op) {
 
       case NOP:
-        std::cout << "NOP_INST\n";
+        //std::cout << "NOP_INST\n";
         break;
       case R_INST:
-        std::cout << "R_INST\n";
+        //std::cout << "R_INST\n";
         switch (func3)
         {
           case 0:
@@ -221,11 +221,11 @@ void Instruction::executeOn(Warp &c) {
         break;
 
       case L_INST:
-           std::cout << "L_INST\n";
+           //std::cout << "L_INST\n";
            memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);
            shift_by  = ((reg[rsrc[0]] + immsrc) & 0x00000003) * 8;
            data_read = c.core->mem.read(memAddr, c.supervisorMode);
-           // std::cout <<std::hex<< "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
+           // //std::cout <<std::hex<< "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
 #ifdef EMU_INSTRUMENTATION
            Harp::OSDomain::osDomain->
              do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
@@ -239,7 +239,7 @@ void Instruction::executeOn(Warp &c) {
             break;
           case 1:
             // LH
-            // std::cout << "shifting by: " << shift_by << "  final data: " << ((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF) << "\n";
+            // //std::cout << "shifting by: " << shift_by << "  final data: " << ((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF) << "\n";
             reg[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
             break;
           case 2:
@@ -259,7 +259,7 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       case I_INST:
-        std::cout << "I_INST\n";
+        //std::cout << "I_INST\n";
         switch (func3)
         {
 
@@ -312,7 +312,7 @@ void Instruction::executeOn(Warp &c) {
             if ((func7 == 0))
             {
               // SRLI
-                // std::cout << "WTF\n";
+                // //std::cout << "WTF\n";
                 bool isNeg  = ((0x80000000 & reg[rsrc[0]])) > 0;
                 Word result = Word_u(reg[rsrc[0]]) >> Word_u(immsrc);
                 // if (isNeg)
@@ -332,7 +332,7 @@ void Instruction::executeOn(Warp &c) {
             else
             {
                 // SRAI
-                // std::cout << "WOHOOOOO\n";
+                // //std::cout << "WOHOOOOO\n";
                 op1 = reg[rsrc[0]];
                 op2 = immsrc;
                 reg[rdest] = op1 >> op2;
@@ -345,23 +345,28 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       case S_INST:
-        std::cout << "S_INST\n";
+        //std::cout << "S_INST\n";
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
-        // std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
-        // std::cout << "FUNC3: " << func3 << "\n";
+        // //std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
+        // //std::cout << "FUNC3: " << func3 << "\n";
+        if (memAddr == 0x00010000)
+        {
+          std::cout << (char) reg[rsrc[1]];
+          break;
+        }
         switch (func3)
         {
           case 0:
-            // std::cout << "SB\n";
+            // //std::cout << "SB\n";
             c.core->mem.write(memAddr, reg[rsrc[1]] & 0x000000FF, c.supervisorMode, 1);
             break;
           case 1:
-            // std::cout << "SH\n";
+            // //std::cout << "SH\n";
             c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 2);
             break;
           case 2:
-            // std::cout << std::hex << "SW: about to write: " << reg[rsrc[1]] << " to " << memAddr << "\n"; 
+            // //std::cout << std::hex << "SW: about to write: " << reg[rsrc[1]] << " to " << memAddr << "\n"; 
             c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 4);
             break;
           default:
@@ -375,7 +380,7 @@ void Instruction::executeOn(Warp &c) {
 #endif
         break;
       case B_INST:
-        std::cout << "B_INST\n";
+        //std::cout << "B_INST\n";
         switch (func3)
         {
           case 0:
@@ -429,17 +434,17 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       case LUI_INST:
-        std::cout << "LUI_INST\n";
+        //std::cout << "LUI_INST\n";
         reg[rdest] = (immsrc << 12) & 0xfffff000;
         break;
       case AUIPC_INST:
-        std::cout << "AUIPC_INST\n";
+        //std::cout << "AUIPC_INST\n";
         reg[rdest] = ((immsrc << 12) & 0xfffff000) + (c.pc - 4);
         break;
       case JAL_INST:
-        std::cout << "JAL_INST\n";
+        //std::cout << "JAL_INST\n";
         if (!pcSet) nextPc = (c.pc - 4) + immsrc;
-        if (!pcSet) std::cout << "JAL... SETTING PC: " << nextPc << "\n"; 
+        if (!pcSet) //std::cout << "JAL... SETTING PC: " << nextPc << "\n"; 
         if (rdest != 0)
         {
           reg[rdest] = c.pc;
@@ -447,9 +452,9 @@ void Instruction::executeOn(Warp &c) {
         pcSet = true;
         break;
       case JALR_INST:
-        std::cout << "JALR_INST\n";
+        //std::cout << "JALR_INST\n";
         if (!pcSet) nextPc = reg[rsrc[0]] + immsrc;
-        if (!pcSet) std::cout << "JALR... SETTING PC: " << nextPc << "\n"; 
+        if (!pcSet) //std::cout << "JALR... SETTING PC: " << nextPc << "\n"; 
         if (rdest != 0)
         {
           reg[rdest] = c.pc;
@@ -457,7 +462,7 @@ void Instruction::executeOn(Warp &c) {
         pcSet = true;
         break;
       case SYS_INST:
-        std::cout << "SYS_INST\n";
+        //std::cout << "SYS_INST\n";
         temp = reg[rsrc[0]];
         switch (func3)
         {
@@ -513,7 +518,7 @@ void Instruction::executeOn(Warp &c) {
           case 0:
           if (immsrc < 2)
           {
-            std::cout << "INTERRUPT ECALL/EBREAK\n";
+            //std::cout << "INTERRUPT ECALL/EBREAK\n";
             nextActiveThreads = 0;
             c.interrupt(0);
           }
@@ -523,16 +528,16 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       case TRAP:
-        std::cout << "INTERRUPT TRAP\n";
+        //std::cout << "INTERRUPT TRAP\n";
         nextActiveThreads = 0;
         c.interrupt(0);
         break;
       case FENCE:
-        std::cout << "FENCE_INST\n";
+        //std::cout << "FENCE_INST\n";
         break;
       case PJ_INST:
         // pred jump reg
-        std::cout << "pred jump... src: " << rsrc[0] << std::hex << " val: " << reg[rsrc[0]] << " dest: " <<  reg[rsrc[1]] << "\n";
+        //std::cout << "pred jump... src: " << rsrc[0] << std::hex << " val: " << reg[rsrc[0]] << " dest: " <<  reg[rsrc[1]] << "\n";
         if (reg[rsrc[0]])
         {
           if (!pcSet) nextPc = reg[rsrc[1]];
@@ -540,24 +545,24 @@ void Instruction::executeOn(Warp &c) {
         }
         break;
       case GPGPU:
-        std::cout << "GPGPU\n";
+        //std::cout << "GPGPU\n";
         switch(func3)
         {
           case 0:
             // WSPAWN
-            std::cout << "WSPAWN\n";
+            //std::cout << "WSPAWN\n";
             if (sjOnce)
             {
               sjOnce = false;
               D(0, "Spawning a new warp.");
-              // std::cout << "SIZE: " << c.core->w.size() << "\n";
+              // //std::cout << "SIZE: " << c.core->w.size() << "\n";
               for (unsigned i = 0; i < c.core->w.size(); ++i)
               {
-                // std::cout << "WHATTT\n";
+                // //std::cout << "WHATTT\n";
                 Warp &newWarp(c.core->w[i]);
-                // std::cout << "STARTING\n";
+                // //std::cout << "STARTING\n";
                 if (newWarp.spawned == false) {
-                  // std::cout << "ABOUT TO START\n";
+                  // //std::cout << "ABOUT TO START\n";
                   newWarp.pc     = reg[rsrc[0]];
                   newWarp.reg[0] = reg;
                   newWarp.csr = c.csr;
@@ -572,12 +577,12 @@ void Instruction::executeOn(Warp &c) {
           case 2:
           {
             // SPLIT
-            std::cout << "SPLIT\n";
+            //std::cout << "SPLIT\n";
             if (sjOnce)
             {
               sjOnce = false;
               if (checkUnanimous(pred, c.reg, c.tmask)) {
-                std::cout << "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n";
+                //std::cout << "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n";
                 DomStackEntry e(c.tmask);
                 e.uni = true;
                 c.domStack.push(e);
@@ -595,7 +600,7 @@ void Instruction::executeOn(Warp &c) {
             break;
           case 3:
             // JOIN
-            std::cout << "JOIN\n";
+            //std::cout << "JOIN\n";
             if (sjOnce)
             {
               sjOnce = false;
@@ -615,33 +620,34 @@ void Instruction::executeOn(Warp &c) {
             break;
           case 4:
             // JMPRT
-            std::cout << "JMPRT\n";
+            //std::cout << "JMPRT\n";
             nextActiveThreads = 1;
             if (!pcSet) nextPc = reg[rsrc[0]];
             pcSet = true;
             break;
           case 5:
             // CLONE
-            std::cout << "CLONE\n";
-            // std::cout << "CLONING REG: " << rsrc[0] << " lane: " << reg[rsrc[0]] << "\n";
+            //std::cout << "CLONE\n";
+            // //std::cout << "CLONING REG: " << rsrc[0] << " lane: " << reg[rsrc[0]] << "\n";
             c.reg[reg[rsrc[0]]] = reg;
             break;
           case 6:
             // JALRS
-            std::cout << "JALRS\n";
+            //std::cout << "JALRS\n";
             nextActiveThreads = reg[rsrc[1]];
             reg[rdest] = c.pc;
             if (!pcSet) nextPc = reg[rsrc[0]];
             pcSet = true;
-            // std::cout << "ACTIVE_THREDS: " << rsrc[1] << " val: " << reg[rsrc[1]] << "\n";
-            // std::cout << "nextPC: " << rsrc[0] << " val: " << std::hex << reg[rsrc[0]] << "\n";
+            // //std::cout << "ACTIVE_THREDS: " << rsrc[1] << " val: " << reg[rsrc[1]] << "\n";
+            // //std::cout << "nextPC: " << rsrc[0] << " val: " << std::hex << reg[rsrc[0]] << "\n";
             break;
           default:
             cout << "ERROR: UNSUPPORTED GPGPU INSTRUCTION " << *this << "\n";
         }
         break;
       default:
-        cout << "aERROR: Unsupported instruction: " << *this << "\n";
+        cout << "pc: " << hex << (c.pc) << "\n";
+        cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;
         exit(1);
     }
   }
@@ -660,9 +666,9 @@ void Instruction::executeOn(Warp &c) {
 
 
 
-  // std::cout << "new thread mask: ";
-  // for (int i = 0; i < c.tmask.size(); ++i) std::cout << " " << c.tmask[i];
-  // std::cout << "\n";
+  // //std::cout << "new thread mask: ";
+  // for (int i = 0; i < c.tmask.size(); ++i) //std::cout << " " << c.tmask[i];
+  // //std::cout << "\n";
 
   // This way, if pc was set by a side effect (such as interrupt), it will
   // retain its new value.

@@ -7,7 +7,7 @@
 .type queue_initialize, @function
 .global queue_initialize
 queue_initialize:
-	la t0, q       # loading base address of q
+	mv t0, a0       # loading base address of q
 	li t1, 0       # to initialize variables
 	li t2, A_WARPS # Num of available warps
 	sw t1, 0 (t0)  # start_i
@@ -23,7 +23,7 @@ queue_initialize:
 .type queue_enqueue, @function
 .global queue_enqueue
 queue_enqueue:
-	la   t0, q       # loading base address of q
+	mv   t0, a0       # loding base address of q
 	lw   t1, 8 (t0)  # t1 = num_j
 	addi t1, t1, 1   # ++t1
 	sw   t1, 8 (t0)  # num_j = t1
@@ -31,20 +31,22 @@ queue_enqueue:
 	lw   t4, 4 (t0)  # t4 = end_i
 	slli t2, t4, 5   # index * 32 [log(sizeof(job))]
 	add  t1, t1, t2  # jobs + index
-	lw   t3, 0 (a0)  # wid
+	lw   t3, 0 (a1)  # wid
 	sw   t3, 0 (t1)  # 
-	lw   t3, 4 (a0)  # n_threads
+	lw   t3, 4 (a1)  # n_threads
 	sw   t3, 4 (t1)  # 
-	lw   t3, 8 (a0)  # base_sp
+	lw   t3, 8 (a1)  # base_sp
 	sw   t3, 8 (t1)  # 
-	lw   t3, 12(a0)  # func_ptr
+	lw   t3, 12(a1)  # func_ptr
 	sw   t3, 12(t1)  # 
-	lw   t3, 16(a0)  # x
+	lw   t3, 16(a1)  # x
 	sw   t3, 16(t1)  # 
-	lw   t3, 20(a0)  # y
+	lw   t3, 20(a1)  # y
 	sw   t3, 20(t1)  # 
-	lw   t3, 24(a0)  # z
+	lw   t3, 24(a1)  # z
 	sw   t3, 24(t1)  #
+	lw   t3, 28(a1)  # assigned_warp
+	sw   t3, 28(t1)  #
 	addi t4, t4, 1   # end_i++
 	li   t5, SIZE    # size
 	bne  t4, t5, ec  # if ((q.end_i + 1) == SIZE)
@@ -58,7 +60,7 @@ ec:
 .global queue_dequeue
 
 queue_dequeue:
-	la   t0, q       # loading base address of q
+	mv   t0, a0       # loading base address of q
 	lw   t1, 8 (t0)  # t1 = num_j
 	addi t1, t1, -1  # --t1
 	sw   t1, 8 (t0)  # num_j = t1
@@ -74,26 +76,28 @@ dc:
 	slli t2, t4, 5   # index * 32 [log(sizeof(job))]
 	add  t1, t1, t2  # jobs + index
 	lw   t3, 0 (t1)  # wid
-	sw   t3, 0 (a0)  # 
+	sw   t3, 0 (a1)  # 
 	lw   t3, 4 (t1)  # n_threads
-	sw   t3, 4 (a0)  # 
+	sw   t3, 4 (a1)  # 
 	lw   t3, 8 (t1)  # base_sp
-	sw   t3, 8 (a0)  # 
+	sw   t3, 8 (a1)  # 
 	lw   t3, 12(t1)  # func_ptr
-	sw   t3, 12(a0)  # 
+	sw   t3, 12(a1)  # 
 	lw   t3, 16(t1)  # x
-	sw   t3, 16(a0)  # 
+	sw   t3, 16(a1)  # 
 	lw   t3, 20(t1)  # y
-	sw   t3, 20(a0)  # 
+	sw   t3, 20(a1)  # 
 	lw   t3, 24(t1)  # z
-	sw   t3, 24(a0)  #
+	sw   t3, 24(a1)  #
+	lw   t3, 28(t1)  # assigned_warp
+	sw   t3, 28(a1)  #
 	ret
 
 
 .type queue_isFull, @function
 .global queue_isFull
 queue_isFull:
-	la   t0, q       # loading base address of q
+	mv   t0, a0       # loading base address of q
 	lw   t1, 8 (t0)  # t1 = num_j
 	mv   a0, zero    # ret_val = 0
 	li   t3, SIZE    # t3 = SIZE
@@ -107,7 +111,7 @@ qf:
 .type queue_isEmpty, @function
 .global queue_isEmpty
 queue_isEmpty:
-	la   t0, q       # loading base address of q
+	mv   t0, a0       # loading base address of q
 	lw   t1, 8 (t0)  # t1 = num_j
 	mv   a0, zero    # ret_val = 0
 	mv   t3, zero    # t3 = 0
@@ -120,7 +124,7 @@ qe:
 .type queue_availableWarps, @function
 .global queue_availableWarps
 queue_availableWarps:
-	la   t0, q       # loading base address of q
+	mv   t0, a0       # loading base address of q
 	lw   t1, 12(t0)  # t1 = total_warps
 	lw   t2, 16(t0)  # t2 = active_warps
 	sltu a0, t2, t1

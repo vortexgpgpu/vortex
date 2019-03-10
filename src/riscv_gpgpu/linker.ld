@@ -35,6 +35,10 @@ SECTIONS
   PROVIDE (__etext = .);
   PROVIDE (_etext = .);
   PROVIDE (etext = .);
+  PROVIDE (_edata = .);
+  PROVIDE (_end = .);
+  PROVIDE (__global_pointer$ = .);
+
   . = 0x81000000;
   .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) }
   .rodata1        : { *(.rodata1) }

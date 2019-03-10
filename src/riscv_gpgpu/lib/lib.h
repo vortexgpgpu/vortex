@@ -1,7 +1,7 @@
 
 #ifndef __RISCV_GP_
 #define __RISCV_GP_
-
+#include <stdbool.h>
 #include "queue.h"
 
 #define WSPAWN          asm __volatile__(".word 0x3006b"::);
@@ -29,9 +29,16 @@
 			   JOIN;
 
 
+static char * hextoa[] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"};
+static bool done[] = {false, false, false, false, false, false, false};
+
+static int main_sp[1];
+
 #define FUNC void (func)(unsigned, unsigned)
 void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, unsigned *, unsigned *, unsigned *);
 void reschedule_warps(void);
+void int_print(unsigned);
+void wait_for_done(unsigned);
 
 unsigned * get_1st_arg(void);
 unsigned * get_2nd_arg(void);

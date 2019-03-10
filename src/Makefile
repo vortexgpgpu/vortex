@@ -5,7 +5,7 @@ CXXFLAGS ?= -std=c++11 -fPIC -O3 # -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
 LDLIBS ?= -pthread
 PREFIX ?= /usr/local
 
-LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o lex.yy.o
+LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o
 
 all: harptool libharplib.so libharplib.a #libqsim-harp.so
 
@@ -45,8 +45,6 @@ core.o : core.cpp include/types.h include/util.h include/mem.h \
 #                 include/mem.h
 #	$(CXX) $(CXXFLAGS) $(QSIM_CXXFLAGS) -shared -o $@ $^
 
-lex.yy.cc: scanner.lex
-	flex scanner.lex
 
 install:
 	cp libharplib.so $(PREFIX)/lib

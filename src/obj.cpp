@@ -1,21 +1,21 @@
 /*******************************************************************************
  HARPtools by Chad D. Kersey, Summer 2011
 *******************************************************************************/
-#include "include/types.h"
-#include "include/obj.h"
-#include "include/util.h"
-#include "include/asm-tokens.h"
-#include "include/debug.h"
+// #include "include/types.h"
+// #include "include/obj.h"
+// #include "include/util.h"
+// #include "include/asm-tokens.h"
+// #include "include/debug.h"
 
-#include <iostream>
-#include <stdlib.h>
-#include <FlexLexer.h>
+// #include <iostream>
+// #include <stdlib.h>
+// #include <FlexLexer.h>
 
-#include <cctype>
-#include <cstdio>
-#include <cmath>
+// #include <cctype>
+// #include <cstdio>
+// #include <cmath>
 
-#include <map>
+// #include <map>
 
 // using namespace std;
 // using namespace Harp;

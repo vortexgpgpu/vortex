@@ -18,6 +18,7 @@ typedef struct Job_t
     unsigned * x;
     unsigned * y;
     unsigned * z;
+    unsigned assigned_warp;
 
 } Job;
 
@@ -32,17 +33,17 @@ typedef struct Queue_t
 
 } Queue;
 
-Queue q;
+Queue q[8];
 
-void queue_initialize(void);
+void queue_initialize(Queue *);
 
-void queue_enqueue(Job *);
+void queue_enqueue(Queue *, Job *);
 
-void queue_dequeue(Job *);
+void queue_dequeue(Queue *, Job *);
 
-int queue_isFull(void);
-int queue_isEmpty(void);
-int queue_availableWarps();
+int queue_isFull(Queue *);
+int queue_isEmpty(Queue *);
+int queue_availableWarps(Queue *);
 
 
 void func();
