@@ -5,7 +5,7 @@ CXXFLAGS ?= -std=c++11 -fPIC -O3 # -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
 LDLIBS ?= -pthread
 PREFIX ?= /usr/local
 
-LIB_OBJS=args.o obj.o mem.o core.o instruction.o enc.o util.o
+LIB_OBJS=args.o mem.o core.o instruction.o enc.o util.o
 
 all: harptool libharplib.so libharplib.a #libqsim-harp.so
 
@@ -28,8 +28,6 @@ harptool.o : harptool.cpp include/types.h include/core.h include/enc.h \
              include/archdef.h include/args.h include/help.h include/debug.h
 instruction.o : instruction.cpp include/instruction.h include/obj.h \
                 include/core.h include/debug.h include/asm-tokens.h
-obj.o : obj.cpp include/types.h include/obj.h include/util.h \
-        include/asm-tokens.h include/debug.h include/instruction.h
 util.o : util.cpp include/types.h include/util.h
 mem.o : mem.cpp include/types.h include/util.h include/mem.h include/debug.h \
         include/core.h

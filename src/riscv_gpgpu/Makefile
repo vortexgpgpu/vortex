@@ -1,6 +1,6 @@
 
 COMP   = /opt/riscv/bin/riscv32-unknown-elf-gcc
-CC_FLAGS = -march=rv32ic -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
+CC_FLAGS = -march=rv32i -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 
 DMP  = /opt/riscv/bin/riscv32-unknown-elf-objdump
 CPY  = /opt/riscv/bin/riscv32-unknown-elf-objcopy

@@ -178,16 +178,6 @@ Word MemoryUnit::fetch(Addr vAddr, bool sup) {
 
   Word instruction = ad.read(pAddr, sup, 8*addrBytes);
 
-  // Flip endianess (instead of changing decoding logic)
-  // Word first  = (instruction)       & 0xFF;
-  // Word second = (instruction >> 8)  & 0xFF;
-  // Word third  = (instruction >> 16) & 0xFF;
-  // Word fourth = (instruction >> 24) & 0xFF;
-  // instruction = (instruction & 0xFFFFFF00) | fourth;
-  // instruction = (instruction & 0xFFFF00FF) | (third << 8);
-  // instruction = (instruction & 0xFF00FFFF) | (second << 16);
-  // instruction = (instruction & 0x00FFFFFF) | (first << 24);
-
   return instruction;
 }
 
