@@ -84,7 +84,7 @@ void Instruction::executeOn(Warp &c) {
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
-    //std::cout << "INTERRUPT SUPERVISOR\n";
+    std::cout << "INTERRUPT SUPERVISOR\n";
     c.interrupt(3);
     return;
   }
@@ -127,18 +127,30 @@ void Instruction::executeOn(Warp &c) {
     stack<DomStackEntry> &domStack(c.domStack);
 
     //std::cout << std::hex << "opcode: " << op << "  func3: " << func3 << "\n";
-    if (op == GPGPU) //std::cout << "OPCODE MATCHED GPGPU\n";
+    //if (op == GPGPU) //std::cout << "OPCODE MATCHED GPGPU\n";
 
     // If this thread is masked out, don't execute the instruction, unless it's
     // a split or join.
     // if (((predicated && !pReg[pred]) || !c.tmask[t]) &&
     //       op != SPLIT && op != JOIN) continue;
 
-    predicated = (op == GPGPU) && ((func3 == 7) || (func3 == 2));
     bool split = (op == GPGPU) && (func3 == 2);
     bool join  = (op == GPGPU) && (func3 == 3);
 
-    if (((predicated && !reg[pred]) || !c.tmask[t]) && !split && !join) continue;
+
+    predicated = (op == GPGPU) && ((func3 == 7) || (func3 == 2));
+
+
+    // printf("Predicated: %d, split: %d, join: %d\n",predicated, split, join );
+    // printf("%d && ((%d) || (%d))\n",(op == GPGPU), (func3 == 7), (func3 == 2) );
+
+    // cout << "before " << op << " = " << GPGPU << "\n";
+    if (((predicated && !reg[pred]) || !c.tmask[t]) && !split && !join)
+    {
+      // cout << "about to continue\n";
+      continue;
+    }
+    // cout << "after\n";
 
     ++c.insts;
 
@@ -148,78 +160,180 @@ void Instruction::executeOn(Warp &c) {
     Word temp;
     Word data_read;
     int op1, op2;
+    bool m_exten;
+    // std::cout << "op = " << op << "\n";
+    // std::cout << "R_INST: " << R_INST << "\n";
     switch (op) {
 
       case NOP:
         //std::cout << "NOP_INST\n";
         break;
       case R_INST:
-        //std::cout << "R_INST\n";
-        switch (func3)
+        // std::cout << "R_INST\n";
+        m_exten = func7 & 0x1;
+
+        if (m_exten)
         {
-          case 0:
-            if (func7)
-            {
-                reg[rdest] = reg[rsrc[0]] - reg[rsrc[1]];
-                reg[rdest].trunc(wordSz);
-            }
-            else
-            {
-                reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
-                reg[rdest].trunc(wordSz);
-            }
-            break;
-          case 1:
-                reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
-                reg[rdest].trunc(wordSz);
-            break;
-          case 2:
-            if ( int(reg[rsrc[0]]) <  int(reg[rsrc[1]]))
-            {
-              reg[rdest] = 1;
-            }
-            else
-            {
-              reg[rdest] = 0;
-            }
-            break;
-          case 3:
-            if ( Word_u(reg[rsrc[0]]) <  Word_u(reg[rsrc[1]]))
-            {
-              reg[rdest] = 1;
-            }
-            else
-            {
-              reg[rdest] = 0;
-            }
-            break;
-          case 4:
-            reg[rdest] = reg[rsrc[0]] ^ reg[rsrc[1]];
-            break;
-          case 5:
-            if (func7)
-            {
-                reg[rdest] = int(reg[rsrc[0]]) >> int(reg[rsrc[1]]);
-                reg[rdest].trunc(wordSz);
-            }
-            else
-            {
-                reg[rdest] = Word_u(reg[rsrc[0]]) >> Word_u(reg[rsrc[1]]);
-                reg[rdest].trunc(wordSz);
-            }
-            break;
-          case 6:
-            reg[rdest] = reg[rsrc[0]] | reg[rsrc[1]];
-            break;
-          case 7:
-            reg[rdest] = reg[rsrc[0]] & reg[rsrc[1]];
-            break;
-          default:
-            cout << "ERROR: UNSUPPORTED R INST\n";
-            exit(1);
+          // std::cout << "FOUND A MUL/DIV\n";
+
+          switch (func3)
+          {
+            case 0:
+              // MUL
+              // cout << "MUL\n";
+              reg[rdest] = ((int) reg[rsrc[0]]) * ((int) reg[rsrc[1]]);
+              break;
+            case 1:
+              // MULH
+              {
+                int64_t first  = (int64_t) reg[rsrc[0]];
+                if (reg[rsrc[0]] & 0x80000000)
+                {
+                  first = first | 0xFFFFFFFF00000000;
+                }
+                int64_t second = (int64_t) reg[rsrc[1]];
+                if (reg[rsrc[1]] & 0x80000000)
+                {
+                  second = second | 0xFFFFFFFF00000000;
+                }
+                // cout << "mulh: " << std::dec << first << " * " << second;
+                uint64_t result = first * second;
+                reg[rdest] = ( result >> 32) & 0xFFFFFFFF;
+                // cout << " = " << result << "   or  " <<  reg[rdest] << "\n";
+              }
+              break;
+            case 2:
+              // MULHSU
+              {
+                int64_t first  = (int64_t) reg[rsrc[0]];
+                if (reg[rsrc[0]] & 0x80000000)
+                {
+                  first = first | 0xFFFFFFFF00000000;
+                }
+                int64_t second = (int64_t) reg[rsrc[1]];
+                reg[rdest] = (( first * second ) >> 32) & 0xFFFFFFFF;
+              }
+              break;
+            case 3:
+              // MULHU
+              {
+                uint64_t first  = (uint64_t) reg[rsrc[0]];
+                uint64_t second = (uint64_t) reg[rsrc[1]];
+                // cout << "MULHU\n";
+                reg[rdest] = (( first * second) >> 32) & 0xFFFFFFFF;
+              }
+                break;
+            case 4:
+              // DIV
+              if (reg[rsrc[1]] == 0) 
+              {
+                reg[rdest] = -1;
+                break;
+              }
+              // cout << "dividing: " << dec << ((int) reg[rsrc[0]]) << " / " << ((int) reg[rsrc[1]]);
+              reg[rdest] = ( (int) reg[rsrc[0]]) / ( (int) reg[rsrc[1]]);
+              // cout << " = " << ((int) reg[rdest]) << "\n";
+              break;
+            case 5:
+              // DIVU
+              if (reg[rsrc[1]] == 0) 
+              {
+                reg[rdest] = -1;
+                break;
+              }
+              reg[rdest] = ((uint32_t) reg[rsrc[0]]) / ((uint32_t) reg[rsrc[1]]);
+              break;
+            case 6:
+              // REM
+              if (reg[rsrc[1]] == 0) 
+              {
+                reg[rdest] = reg[rsrc[0]];
+                break;
+              }
+              reg[rdest] = ((int) reg[rsrc[0]]) % ((int) reg[rsrc[1]]);
+              break;
+            case 7:
+              // REMU
+              if (reg[rsrc[1]] == 0) 
+              {
+                reg[rdest] = reg[rsrc[0]];
+                break;
+              }
+              reg[rdest] = ((uint32_t) reg[rsrc[0]]) % ((uint32_t) reg[rsrc[1]]);
+              break;
+            default:
+              cout << "unsupported MUL/DIV instr\n";
+              exit(1);
+          }
+        }
+        else
+        {
+          // std::cout << "NORMAL R-TYPE\n";
+          switch (func3)
+          {
+            case 0:
+              if (func7)
+              {
+                  reg[rdest] = reg[rsrc[0]] - reg[rsrc[1]];
+                  reg[rdest].trunc(wordSz);
+              }
+              else
+              {
+                  reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
+                  reg[rdest].trunc(wordSz);
+              }
+              break;
+            case 1:
+                  reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
+                  reg[rdest].trunc(wordSz);
+              break;
+            case 2:
+              if ( int(reg[rsrc[0]]) <  int(reg[rsrc[1]]))
+              {
+                reg[rdest] = 1;
+              }
+              else
+              {
+                reg[rdest] = 0;
+              }
+              break;
+            case 3:
+              if ( Word_u(reg[rsrc[0]]) <  Word_u(reg[rsrc[1]]))
+              {
+                reg[rdest] = 1;
+              }
+              else
+              {
+                reg[rdest] = 0;
+              }
+              break;
+            case 4:
+              reg[rdest] = reg[rsrc[0]] ^ reg[rsrc[1]];
+              break;
+            case 5:
+              if (func7)
+              {
+                  reg[rdest] = int(reg[rsrc[0]]) >> int(reg[rsrc[1]]);
+                  reg[rdest].trunc(wordSz);
+              }
+              else
+              {
+                  reg[rdest] = Word_u(reg[rsrc[0]]) >> Word_u(reg[rsrc[1]]);
+                  reg[rdest].trunc(wordSz);
+              }
+              break;
+            case 6:
+              reg[rdest] = reg[rsrc[0]] | reg[rsrc[1]];
+              break;
+            case 7:
+              reg[rdest] = reg[rsrc[0]] & reg[rsrc[1]];
+              break;
+            default:
+              cout << "ERROR: UNSUPPORTED R INST\n";
+              exit(1);
+          }
         }
         break;
-
       case L_INST:
            //std::cout << "L_INST\n";
            memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);

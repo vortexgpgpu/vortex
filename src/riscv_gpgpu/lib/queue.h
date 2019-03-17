@@ -15,9 +15,9 @@ typedef struct Job_t
 	unsigned n_threads;
 	unsigned base_sp;
     unsigned func_ptr;
-    unsigned * x;
-    unsigned * y;
-    unsigned * z;
+    void     * x;
+    void     * y;
+    void     * z;
     unsigned assigned_warp;
 
 } Job;

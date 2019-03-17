@@ -113,3 +113,31 @@ echo ./riscv_tests/rv32ui-p-xor.hex >> results.txt
 
 echo ./riscv_tests/rv32ui-p-xori.hex >> results.txt
 ./harptool -E -a rv32i --core ./riscv_tests/rv32ui-p-xori.hex  -s -b >> results.txt
+
+
+
+
+echo ./riscv_tests/rv32um-p-div.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-div.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-divu.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-divu.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-mul.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-mul.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-mulh.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-mulh.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-mulhsu.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-mulhsu.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-mulhu.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-mulhu.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-rem.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-rem.hex  -s -b >> results.txt
+
+echo ./riscv_tests/rv32um-p-remu.hex >> results.txt
+./harptool -E -a rv32i --core ./riscv_tests/rv32um-p-remu.hex  -s -b >> results.txt
+

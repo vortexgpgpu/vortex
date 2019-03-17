@@ -1,7 +1,7 @@
 
-* Support for compressed
 * Implement Matrix Multiplication
 * 1 warp independance
 * automatic warp detection
 * finish python compiler
 * print buffers
+* Support for compressed

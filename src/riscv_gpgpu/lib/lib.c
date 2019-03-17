@@ -1,8 +1,8 @@
 #include "lib.h"
 
 
-extern void createThreads(unsigned, unsigned, unsigned, unsigned *, unsigned *, unsigned *, unsigned);
-extern void        wspawn(unsigned, unsigned, unsigned, unsigned *, unsigned *, unsigned *, unsigned);
+extern void createThreads(unsigned, unsigned, unsigned, void *, void *, void *, unsigned);
+extern void        wspawn(unsigned, unsigned, unsigned, void *, void *, void *, unsigned);
 extern void  print_consol(char *);
 extern void        printc(char);
 
@@ -33,9 +33,9 @@ void reschedule_warps()
 
 	if (queue_isEmpty(q+curr_warp))
 	{
-		print_consol("done: ");
-		int_print(curr_warp);
-		print_consol("\n");
+		// print_consol("done: ");
+		// int_print(curr_warp);
+		// print_consol("\n");
 		done[curr_warp] = true;
 		ECALL;
 	}
@@ -75,7 +75,7 @@ void sleep(int t)
 
 
 
-void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, unsigned * x_ptr, unsigned * y_ptr, unsigned * z_ptr)
+void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * x_ptr, void * y_ptr, void * z_ptr)
 {
 	asm __volatile__("addi s2, sp, 0");
 	int warp = 0;
@@ -108,7 +108,6 @@ void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, unsigned * x_pt
 
 void wait_for_done(unsigned num_wait)
 {
-	print_consol("about to wait for done\n");
 	bool temp = false;
 	while (!temp)
 	{
@@ -121,19 +120,19 @@ void wait_for_done(unsigned num_wait)
 }
 
 
-unsigned * get_1st_arg(void)
+void * get_1st_arg(void)
 {
-	register unsigned *ret asm("s7");
+	register void *ret asm("s7");
 	return ret;
 }
-unsigned * get_2nd_arg(void)
+void * get_2nd_arg(void)
 {
-	register unsigned *ret asm("s8");
+	register void *ret asm("s8");
 	return ret;
 }
-unsigned * get_3rd_arg(void)
+void * get_3rd_arg(void)
 {
-	register unsigned *ret asm("s9");
+	register void *ret asm("s9");
 	return ret;
 }
 
