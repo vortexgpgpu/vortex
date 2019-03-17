@@ -1,7 +1,6 @@
 
-* Implement Matrix Multiplication
-* 1 warp independance
-* automatic warp detection
-* finish python compiler
-* print buffers
-* Support for compressed
+
+
+* Multiply bigger matrixes
+* Create a proper OS W/ automatic warp detection
+* Hardware side shit

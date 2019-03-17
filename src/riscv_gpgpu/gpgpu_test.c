@@ -16,22 +16,13 @@ void matAddition (unsigned, unsigned);
 
 
 
-unsigned x[] = {1,0,0,0,
-				0,2,0,0,
-				0,0,3,0,
-				0,0,0,4};
+unsigned x[64] = {0};
 
-unsigned y[] = {10,0,0,0,
-				0,10,0,0,
-				0,0,10,0,
-				0,0,0,10};
+unsigned y[64] = {0};
 
-unsigned z[] = {0,0,0,0,
-				0,0,0,0,
-				0,0,0,0,
-				0,0,0,0};
+unsigned z[64] = {0};
 
-#define MAT_DIM 4
+#define MAT_DIM 8
 
 #define NUM_WARPS MAT_DIM
 #define NUM_THREADS MAT_DIM
@@ -42,6 +33,12 @@ int main()
 	for (int i = 0; i < 8; i++)
 	{
 		queue_initialize(q + i);
+	}
+
+	for (int i = 0; i < (MAT_DIM * MAT_DIM); i++)
+	{
+		x[i] = 3;
+		y[i] = 2;
 	}
 
 	createWarps(NUM_WARPS, NUM_THREADS, matAddition, (void *) x, (void *) y, (void *) z);
