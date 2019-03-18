@@ -1,8 +1,8 @@
 #include "lib.h"
 
 
-extern void createThreads(unsigned, unsigned, unsigned, void *, void *, void *, unsigned);
-extern void        wspawn(unsigned, unsigned, unsigned, void *, void *, void *, unsigned);
+extern void createThreads(unsigned, unsigned, unsigned, void *, unsigned);
+extern void        wspawn(unsigned, unsigned, unsigned, void *, unsigned);
 extern void  print_consol(char *);
 extern void        printc(char);
 
@@ -33,9 +33,6 @@ void reschedule_warps()
 
 	if (queue_isEmpty(q+curr_warp))
 	{
-		// print_consol("done: ");
-		// int_print(curr_warp);
-		// print_consol("\n");
 		done[curr_warp] = true;
 		ECALL;
 	}
@@ -43,7 +40,7 @@ void reschedule_warps()
 	Job j;
 	queue_dequeue(q+curr_warp,&j);
 	asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
-	createThreads(j.n_threads, j.wid, j.func_ptr, j.x, j.y, j.z, j.assigned_warp);
+	createThreads(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 
 	ECALL;
 
@@ -60,7 +57,7 @@ void schedule_warps()
 			Job j;
 			queue_dequeue(q+curr_warp,&j);
 			asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
-			wspawn(j.n_threads, j.wid, j.func_ptr, j.x, j.y, j.z, j.assigned_warp);
+			wspawn(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 		}
 	}
 
@@ -75,7 +72,7 @@ void sleep(int t)
 
 
 
-void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * x_ptr, void * y_ptr, void * z_ptr)
+void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 {
 	asm __volatile__("addi s2, sp, 0");
 	int warp = 0;
@@ -90,9 +87,7 @@ void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * x_ptr, v
 		j.n_threads = num_threads;
 		j.base_sp   = stack_ptr;
 	    j.func_ptr  = (unsigned) func;
-	    j.x         = x_ptr;
-	    j.y         = y_ptr;
-	    j.z         = z_ptr;
+	    j.args      = args;
 	    j.assigned_warp = warp;
 
 	    queue_enqueue(q + warp,&j);

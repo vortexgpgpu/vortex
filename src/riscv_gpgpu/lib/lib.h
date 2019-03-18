@@ -35,7 +35,7 @@ static bool done[] = {false, false, false, false, false, false, false};
 static int main_sp[1];
 
 #define FUNC void (func)(unsigned, unsigned)
-void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void *, void *, void *);
+void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void *);
 void reschedule_warps(void);
 void int_print(unsigned);
 void wait_for_done(unsigned);
@@ -44,6 +44,11 @@ void * get_1st_arg(void);
 void * get_2nd_arg(void);
 void * get_3rd_arg(void);
 void       sleep(int);
+
+
+
+
+
 
 
 #endif

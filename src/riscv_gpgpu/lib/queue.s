@@ -39,14 +39,10 @@ queue_enqueue:
 	sw   t3, 8 (t1)  # 
 	lw   t3, 12(a1)  # func_ptr
 	sw   t3, 12(t1)  # 
-	lw   t3, 16(a1)  # x
+	lw   t3, 16(a1)  # args
 	sw   t3, 16(t1)  # 
-	lw   t3, 20(a1)  # y
+	lw   t3, 20(a1)  # assigned_warp
 	sw   t3, 20(t1)  # 
-	lw   t3, 24(a1)  # z
-	sw   t3, 24(t1)  #
-	lw   t3, 28(a1)  # assigned_warp
-	sw   t3, 28(t1)  #
 	addi t4, t4, 1   # end_i++
 	li   t5, SIZE    # size
 	bne  t4, t5, ec  # if ((q.end_i + 1) == SIZE)
@@ -83,14 +79,10 @@ dc:
 	sw   t3, 8 (a1)  # 
 	lw   t3, 12(t1)  # func_ptr
 	sw   t3, 12(a1)  # 
-	lw   t3, 16(t1)  # x
+	lw   t3, 16(t1)  # args
 	sw   t3, 16(a1)  # 
-	lw   t3, 20(t1)  # y
+	lw   t3, 20(t1)  # assigned_warp
 	sw   t3, 20(a1)  # 
-	lw   t3, 24(t1)  # z
-	sw   t3, 24(a1)  #
-	lw   t3, 28(t1)  # assigned_warp
-	sw   t3, 28(a1)  #
 	ret
 
 

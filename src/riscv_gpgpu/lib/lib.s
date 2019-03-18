@@ -13,10 +13,8 @@ _start:
 .type createThreads, @function
 .global createThreads
 createThreads:
-    mv    s7 ,a3    # Moving x_ptr to s7
-    mv    s8 ,a4    # Moving y_ptr to s8
-    mv    s9 ,a5    # Moving z_ptr to s9
-    mv    s10,a6    # Moving assigned_warp to s10
+    mv    s7 ,a3    # Moving args to s7
+    mv    s10,a4    # Moving assigned_warp to s10
     mv    t5 ,sp    # Saving the current stack pointer to t5
     mv    t2 , a0   # t2 = num_threads
 loop_init:

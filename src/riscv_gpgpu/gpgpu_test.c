@@ -5,7 +5,7 @@ extern void        printc(char);
 
 
 int main(void);
-void matAddition (unsigned, unsigned);
+void matMult (unsigned, unsigned);
 
 #include "./lib/lib.h"
 
@@ -16,16 +16,29 @@ void matAddition (unsigned, unsigned);
 
 
 
-unsigned x[64] = {0};
+unsigned x[256] = {0};
 
-unsigned y[64] = {0};
+unsigned y[256] = {0};
 
-unsigned z[64] = {0};
+unsigned z[256] = {0};
 
-#define MAT_DIM 8
+#define MAT_DIM 16
+#define MAX_THREADS 8
 
 #define NUM_WARPS MAT_DIM
-#define NUM_THREADS MAT_DIM
+#define NUM_THREADS MAX_THREADS
+
+typedef struct
+{
+	unsigned * x;
+	unsigned * y;
+	unsigned * z;
+	unsigned mat_dim;
+	unsigned offset;
+	
+} matMult_arg_t;
+
+matMult_arg_t args;
 
 int main()
 {
@@ -41,9 +54,16 @@ int main()
 		y[i] = 2;
 	}
 
-	createWarps(NUM_WARPS, NUM_THREADS, matAddition, (void *) x, (void *) y, (void *) z);
+	
+	args.x = x;
+	args.y = y;
+	args.z = z;
+	args.mat_dim = MAT_DIM;
+	args.offset = (MAT_DIM/MAX_THREADS);
 
-	wait_for_done(NUM_WARPS);
+	createWarps(NUM_WARPS, NUM_THREADS, matMult, (void *) (&args));
+
+	wait_for_done(8);
 
 	print_consol("-------------------------\n");
 	print_consol("FINAL Z\n");
@@ -60,25 +80,35 @@ int main()
 }
 
 
-void matAddition(unsigned tid, unsigned wid)
+void matMult(unsigned tid, unsigned wid)
 {
+	matMult_arg_t * args = (matMult_arg_t *) get_1st_arg();
 
-	unsigned * x_ptr = (unsigned *) get_1st_arg();
-	unsigned * y_ptr = (unsigned *) get_2nd_arg();
-	unsigned * z_ptr = (unsigned *) get_3rd_arg();
+	unsigned * x_ptr = args->x;
+	unsigned * y_ptr = args->y;
+	unsigned * z_ptr = args->z;
 
+	unsigned off = args->offset;
 
-	unsigned total = 0;
-	for (unsigned place = 0; place < MAT_DIM; place++)
+	unsigned i_index = off * tid;
+	unsigned mat_dim = args->mat_dim;
+
+	for (int iter = 0; iter < off; ++iter)
 	{
-		unsigned x_i = (wid * MAT_DIM)   + place;
-		unsigned y_i = (MAT_DIM * place) + tid;
+		unsigned total = 0;
+		for (unsigned place = 0; place < mat_dim; ++place)
+		{
+			unsigned x_i = (wid * mat_dim)   + place;
+			unsigned y_i = (mat_dim * place) + i_index;
 
-		total += (x_ptr[x_i] * y_ptr[y_i]);
+			total += (x_ptr[x_i] * y_ptr[y_i]);
+		}
+
+		int final_i = (wid * mat_dim) + i_index;
+		z_ptr[final_i] = total;
+		i_index++;
 	}
 
-	int final_i = (wid * MAT_DIM) + tid;
-	z_ptr[final_i] = total;
 
 	return;
 	
