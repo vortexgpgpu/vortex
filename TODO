@@ -1,6 +1,5 @@
 
 
 
-* Multiply bigger matrixes
-* Create a proper OS W/ automatic warp detection
-* Hardware side shit
+* Automatic warp detection? 
+* Start on the Verilog Pipeline (Research loading into mem)
