@@ -40,6 +40,10 @@ void  vx_load_context(void);
 
 #define FUNC void (func)(unsigned, unsigned)
 
+unsigned vx_available_warps(void);
+unsigned vx_available_threads(void);
+
+
 void vx_createThreads(unsigned, unsigned, unsigned, void *, unsigned);
 void        vx_wspawn(unsigned, unsigned, unsigned, void *, unsigned);
 void   vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void *);

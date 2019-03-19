@@ -581,23 +581,27 @@ void Instruction::executeOn(Warp &c) {
         switch (func3)
         {
           case 1:
+            // printf("Case 1\n");
             if (rdest != 0)
             {
               reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-
             c.csr[immsrc & 0x00000FFF] = temp;
             
             break;
           case 2:
+            // printf("Case 2\n");
             if (rdest != 0)
             {
+              // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
               reg[rdest] = c.csr[immsrc & 0x00000FFF];
             }
-              c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
+            // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
+            c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
             
             break;
           case 3:
+            // printf("Case 3\n");
             if (rdest != 0)
             {              
               reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
@@ -606,6 +610,7 @@ void Instruction::executeOn(Warp &c) {
             
             break;
           case 5:
+            // printf("Case 5\n");
             if (rdest != 0)
             {
               reg[rdest] = c.csr[immsrc & 0x00000FFF];
@@ -614,6 +619,7 @@ void Instruction::executeOn(Warp &c) {
             
             break;
           case 6:
+            // printf("Case 6\n");
             if (rdest != 0)
             {              
               reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
@@ -622,6 +628,7 @@ void Instruction::executeOn(Warp &c) {
             
             break;
           case 7:
+            // printf("Case 7\n");
             if (rdest != 0)
             {              
               reg[rdest] = c.csr[immsrc & 0x00000FFF];

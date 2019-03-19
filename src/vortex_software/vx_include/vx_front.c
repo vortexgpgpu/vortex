@@ -1,5 +1,6 @@
 
 #include "vx_front.h"
+#include "../vx_os/vx_back/vx_back.h"
 
 // -------------------------- Matrix Multiplication --------------------------
 
@@ -13,28 +14,34 @@ void vx_sq_mat_mult(void * x, void * y, void * z, unsigned mat_dim)
 	mat_mult_args.z = z;
 	mat_mult_args.mat_dim = mat_dim;
 
-	unsigned off = (mat_dim/MAX_THREADS);
+	unsigned num_avail_threads = vx_available_threads();
 
-	if ((mat_dim%MAX_THREADS) != 0)
+	unsigned off = (mat_dim/num_avail_threads);
+
+	if ((mat_dim%num_avail_threads) != 0)
 	{
 		off += 1;
 	}
 
+	vx_printf("Offset: ", off);
+
 
 	mat_mult_args.offset = off;
 
-	if (mat_dim >= MAX_THREADS)
+	if (mat_dim >= num_avail_threads)
 	{
-		vx_spawnWarps(mat_dim, MAX_THREADS, _vx_mat_mult, (void *) (&mat_mult_args));
+		vx_spawnWarps(mat_dim, num_avail_threads, _vx_mat_mult, (void *) (&mat_mult_args));
 	}
 	else
 	{
 		vx_spawnWarps(mat_dim, mat_dim, _vx_mat_mult, (void *) (&mat_mult_args));
 	}
 
-	if (mat_dim > MAX_WARPS)
+	unsigned num_avail_warps = vx_available_warps();
+
+	if (mat_dim > num_avail_warps)
 	{
-		vx_wait_for_warps(MAX_WARPS);
+		vx_wait_for_warps(num_avail_warps);
 	}
 	else
 	{
@@ -102,9 +109,12 @@ void vx_mat_add(void * x, void * y, void * z, unsigned num_rows, unsigned num_co
 	mat_r_args.num_cols = num_cols;
 	mat_r_args.num_rows = num_rows;
 
-	unsigned off = (num_cols/MAX_THREADS);
 
-	if ((num_cols%MAX_THREADS) != 0)
+	unsigned num_avail_threads = vx_available_threads();
+
+	unsigned off = (num_cols/num_avail_threads);
+
+	if ((num_cols%num_avail_threads) != 0)
 	{
 		off += 1;
 	}
@@ -112,18 +122,20 @@ void vx_mat_add(void * x, void * y, void * z, unsigned num_rows, unsigned num_co
 
 	mat_r_args.offset = off;
 
-	if (num_cols >= MAX_THREADS)
+	if (num_cols >= num_avail_threads)
 	{
-		vx_spawnWarps(num_rows, MAX_THREADS, _vx_mat_add, (void *) (&mat_r_args));
+		vx_spawnWarps(num_rows, num_avail_threads, _vx_mat_add, (void *) (&mat_r_args));
 	}
 	else
 	{
 		vx_spawnWarps(num_rows, num_cols, _vx_mat_add, (void *) (&mat_r_args));
 	}
 
-	if (num_rows > (MAX_WARPS))
+	unsigned num_avail_warps = vx_available_warps();
+
+	if (num_rows > num_avail_warps)
 	{
-		vx_wait_for_warps(MAX_WARPS);
+		vx_wait_for_warps(num_avail_warps);
 	}
 	else
 	{
@@ -182,9 +194,11 @@ void vx_mat_sub(void * x, void * y, void * z, unsigned num_rows, unsigned num_co
 	mat_r_args.num_cols = num_cols;
 	mat_r_args.num_rows = num_rows;
 
-	unsigned off = (num_cols/MAX_THREADS);
+	unsigned num_avail_threads = vx_available_threads();
 
-	if ((num_cols%MAX_THREADS) != 0)
+	unsigned off = (num_cols/num_avail_threads);
+
+	if ((num_cols%num_avail_threads) != 0)
 	{
 		off += 1;
 	}
@@ -192,18 +206,20 @@ void vx_mat_sub(void * x, void * y, void * z, unsigned num_rows, unsigned num_co
 
 	mat_r_args.offset = off;
 
-	if (num_cols >= MAX_THREADS)
+	if (num_cols >= num_avail_threads)
 	{
-		vx_spawnWarps(num_rows, MAX_THREADS, _vx_mat_sub, (void *) (&mat_r_args));
+		vx_spawnWarps(num_rows, num_avail_threads, _vx_mat_sub, (void *) (&mat_r_args));
 	}
 	else
 	{
 		vx_spawnWarps(num_rows, num_cols, _vx_mat_sub, (void *) (&mat_r_args));
 	}
 
-	if (num_rows > (MAX_WARPS))
+	unsigned num_avail_warps = vx_available_warps();
+
+	if (num_rows > num_avail_warps)
 	{
-		vx_wait_for_warps(MAX_WARPS);
+		vx_wait_for_warps(num_avail_warps);
 	}
 	else
 	{

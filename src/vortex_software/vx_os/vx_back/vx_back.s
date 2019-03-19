@@ -6,6 +6,12 @@
 .type _start, @function
 .global _start
 _start:
+    li a0, 4          # Num Warps
+    csrw 0x20, a0     # Setting the number of available warps 
+    li a0, 8          # Num Threads
+    csrw 0x21, a0     # Setting the number of available threads
+    csrw mhartid,zero
+    csrw misa,zero
     lui  sp, 0x7ffff
     jal  vx_before_main
     jal  main
@@ -126,4 +132,20 @@ lw x30, 120(tp)
 lw x31, 124(tp)
 li tp, 0
 ret
+
+.type vx_available_warps, @function
+.global vx_available_warps
+vx_available_warps:
+csrr a0, 0x20
+ret
+
+.type vx_available_threads, @function
+.global vx_available_threads
+vx_available_threads:
+csrr a0, 0x21
+ret
+
+
+
+
 
