@@ -2,8 +2,6 @@
 #include "vx_back.h"
 #include "../vx_io/vx_io.h"
 
-extern void vx_createThreads(unsigned, unsigned, unsigned, void *, unsigned);
-extern void        vx_wspawn(unsigned, unsigned, unsigned, void *, unsigned);
 
 void vx_before_main()
 {
@@ -22,8 +20,13 @@ void vx_reschedule_warps()
 
 	if (queue_isEmpty(q+curr_warp))
 	{
-		// vx_printf("Done: ", curr_warp);
+		vx_printf("Done: ", curr_warp);
 		done[curr_warp] = 1;
+		if (curr_warp == 0)
+		{
+			vx_load_context();
+			return;
+		}
 		ECALL;
 	}
 
@@ -40,9 +43,12 @@ void vx_reschedule_warps()
 
 void vx_schedule_warps()
 {
+
+
+
 	asm __volatile__("mv s3, sp");
 
-	for (int curr_warp = 0; curr_warp < 7; ++curr_warp)
+	for (int curr_warp = 1; curr_warp < 8; ++curr_warp)
 	{
 		if (!queue_isEmpty(q+curr_warp)) 
 		{
@@ -51,12 +57,28 @@ void vx_schedule_warps()
 			asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
 			vx_wspawn(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 		}
-		else
-		{
-		}
 	}
 
 	asm __volatile__("mv sp, s3");
+
+
+	vx_save_context();
+
+	vx_print_str("saved context\n");
+
+	register unsigned val asm("tp");
+	if (val)
+	{
+		if (!queue_isEmpty(q))
+		{
+			vx_print_str("found something for w0\n");
+			Job j;
+			queue_dequeue(q,&j);
+			vx_printf("num_threads: ", j.n_threads);
+			asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
+			vx_createThreads(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
+		}
+	}
 
 }
 
@@ -83,7 +105,7 @@ void vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 
 	    queue_enqueue(q + warp,&j);
 	    ++warp;
-	    if (warp >= 7) warp = 0;
+	    if (warp >= 8) warp = 0;
 	}
 	asm __volatile__("addi sp, s2, 0");
 

@@ -33,7 +33,15 @@ static int done[] = {0, 0, 0, 0, 0, 0, 0};
 
 static int main_sp[1];
 
+unsigned context[32];
+void  vx_save_context(void);
+void  vx_load_context(void);
+
+
 #define FUNC void (func)(unsigned, unsigned)
+
+void vx_createThreads(unsigned, unsigned, unsigned, void *, unsigned);
+void        vx_wspawn(unsigned, unsigned, unsigned, void *, unsigned);
 void   vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void *);
 void   vx_schedule_warps(void);
 void   vx_reschedule_warps(void);

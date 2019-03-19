@@ -5,10 +5,10 @@ unsigned x[1024] = {0};
 unsigned y[1024] = {0};
 unsigned z[1024] = {0};
 
-#define MAT_DIM 32
+#define MAT_DIM 8
 
-#define NUM_COLS 32
-#define NUM_ROWS 32
+#define NUM_COLS 8
+#define NUM_ROWS 1
 
 void initialize_mats()
 {
@@ -24,19 +24,18 @@ int main()
 
 	initialize_mats();
 
-	// matrix multiplication
-	vx_sq_mat_mult(x, y, z, MAT_DIM);
-	vx_print_str("-------------------------\n");
-	vx_print_str("FINAL MAT\n");
+	// // matrix multiplication
+	// vx_sq_mat_mult(x, y, z, MAT_DIM);
+	// vx_print_str("-------------------------\n");
+	// vx_print_str("FINAL MAT\n");
 
-	for (int j = 0; j < (MAT_DIM * MAT_DIM); j++)
-	{
-		if ((j % MAT_DIM) == 0) vx_print_str("\n");
-		vx_print_hex(z[j]);
-		vx_print_str(" ");
-	}
-	vx_print_str("\n-------------------------------\n");
-
+	// for (int j = 0; j < (MAT_DIM * MAT_DIM); j++)
+	// {
+	// 	if ((j % MAT_DIM) == 0) vx_print_str("\n");
+	// 	vx_print_hex(z[j]);
+	// 	vx_print_str(" ");
+	// }
+	// vx_print_str("\n-------------------------------\n");
 
 
 	// matrix addition
