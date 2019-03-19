@@ -634,7 +634,8 @@ void Instruction::executeOn(Warp &c) {
           {
             //std::cout << "INTERRUPT ECALL/EBREAK\n";
             nextActiveThreads = 0;
-            c.interrupt(0);
+            c.spawned = false;
+            // c.interrupt(0);
           }
             break;
           default:
@@ -672,7 +673,7 @@ void Instruction::executeOn(Warp &c) {
               // //std::cout << "SIZE: " << c.core->w.size() << "\n";
               for (unsigned i = 0; i < c.core->w.size(); ++i)
               {
-                // //std::cout << "WHATTT\n";
+                // std::cout << "SPAWNING WARP\n";
                 Warp &newWarp(c.core->w[i]);
                 // //std::cout << "STARTING\n";
                 if (newWarp.spawned == false) {

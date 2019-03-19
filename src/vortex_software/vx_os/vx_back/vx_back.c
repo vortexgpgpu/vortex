@@ -15,16 +15,21 @@ void vx_before_main()
 void vx_reschedule_warps()
 {
 
+
 	register unsigned curr_warp asm("s10");
+	// vx_printf("Reschedule: ", curr_warp);
 
 	if (queue_isEmpty(q+curr_warp))
 	{
-		done[curr_warp] = true;
+		// vx_printf("Done: ", curr_warp);
+		done[curr_warp] = 1;
 		ECALL;
 	}
 
 	Job j;
 	queue_dequeue(q+curr_warp,&j);
+
+	// vx_printf("Reschedule -> ", j.wid);
 	asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
 	vx_createThreads(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 
@@ -45,6 +50,9 @@ void vx_schedule_warps()
 			asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
 			vx_wspawn(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 		}
+		else
+		{
+		}
 	}
 
 	asm __volatile__("mv sp, s3");
@@ -55,6 +63,7 @@ void vx_schedule_warps()
 
 void vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 {
+	vx_before_main();
 	asm __volatile__("addi s2, sp, 0");
 	int warp = 0;
 	for (unsigned i = 0; i < num_Warps; i++)
@@ -84,15 +93,22 @@ void vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 
 void vx_wait_for_warps(unsigned num_wait)
 {
-	bool temp = false;
-	while (!temp)
+	// vx_printf("wait for: ", num_wait);
+	unsigned num = 0;
+	while (num != num_wait)
 	{
-		temp = true;
-		for (int i = 0; i < num_wait; i++)
+		num = 0;
+		for (int i = 0; i < 8; i++)
 		{
-			temp &= done[i];
+			if (done[i] == 1)
+			{
+				num += 1;
+			}
 		}
 	}
+
+	// vx_printf("num found: ", num);
+	for (int i = 0; i < num_wait; i++) done[i] = 0;
 }
 
 

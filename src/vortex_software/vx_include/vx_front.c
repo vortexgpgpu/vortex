@@ -3,15 +3,15 @@
 
 // -------------------------- Matrix Multiplication --------------------------
 
-static mat_mult_arg_t args;
-void _vx_matMult(unsigned, unsigned);
+static mat_mult_arg_t mat_mult_args;
 
+void _vx_mat_mult(unsigned, unsigned);
 void vx_sq_mat_mult(void * x, void * y, void * z, unsigned mat_dim)
 {
-	args.x = x;
-	args.y = y;
-	args.z = z;
-	args.mat_dim = mat_dim;
+	mat_mult_args.x = x;
+	mat_mult_args.y = y;
+	mat_mult_args.z = z;
+	mat_mult_args.mat_dim = mat_dim;
 
 	unsigned off = (mat_dim/MAX_THREADS);
 
@@ -21,24 +21,20 @@ void vx_sq_mat_mult(void * x, void * y, void * z, unsigned mat_dim)
 	}
 
 
-	args.offset = off;
+	mat_mult_args.offset = off;
 
-	vx_print_str("offset: ");
-	vx_print_hex(off);
-	vx_print_str("\n");
-
-	if (mat_dim >= 8)
+	if (mat_dim >= MAX_THREADS)
 	{
-		vx_spawnWarps(mat_dim, MAX_THREADS, _vx_matMult, (void *) (&args));
+		vx_spawnWarps(mat_dim, MAX_THREADS, _vx_mat_mult, (void *) (&mat_mult_args));
 	}
 	else
 	{
-		vx_spawnWarps(mat_dim, mat_dim, _vx_matMult, (void *) (&args));
+		vx_spawnWarps(mat_dim, mat_dim, _vx_mat_mult, (void *) (&mat_mult_args));
 	}
 
-	if (mat_dim > 7)
+	if (mat_dim > MAX_WARPS)
 	{
-		vx_wait_for_warps(MAX_WARPS);
+		vx_wait_for_warps(MAX_WARPS - 1);
 	}
 	else
 	{
@@ -46,7 +42,7 @@ void vx_sq_mat_mult(void * x, void * y, void * z, unsigned mat_dim)
 	}
 }
 
-void _vx_matMult(unsigned tid, unsigned wid)
+void _vx_mat_mult(unsigned tid, unsigned wid)
 {
 	mat_mult_arg_t * args = (mat_mult_arg_t *) vx_get_arg_struct();
 
@@ -87,8 +83,172 @@ void _vx_matMult(unsigned tid, unsigned wid)
 			__else
 			__end_if
 	}
+	return;
+}
 
 
+
+
+static mat_r_arg_t mat_r_args;
+// -------------------------- Matrix Addition --------------------------
+void _vx_mat_add(unsigned, unsigned);
+void vx_mat_add(void * x, void * y, void * z, unsigned num_rows, unsigned num_cols)
+{
+	mat_r_args.x        = x;
+	mat_r_args.y        = y;
+	mat_r_args.z        = z;
+	mat_r_args.num_cols = num_cols;
+	mat_r_args.num_rows = num_rows;
+
+	unsigned off = (num_cols/MAX_THREADS);
+
+	if ((num_cols%MAX_THREADS) != 0)
+	{
+		off += 1;
+	}
+
+
+	mat_r_args.offset = off;
+
+	if (num_cols >= MAX_THREADS)
+	{
+		vx_spawnWarps(num_rows, MAX_THREADS, _vx_mat_add, (void *) (&mat_r_args));
+	}
+	else
+	{
+		vx_spawnWarps(num_rows, num_cols, _vx_mat_add, (void *) (&mat_r_args));
+	}
+
+	if (num_rows > (MAX_WARPS))
+	{
+		vx_wait_for_warps(MAX_WARPS);
+	}
+	else
+	{
+		vx_wait_for_warps(num_rows);
+	}
+}
+
+void _vx_mat_add(unsigned tid, unsigned wid)
+{
+	// vx_print_str("*");
+	// for (int z = 0; z < ((wid * 1000) + 1000); z++);
+
+	mat_r_arg_t * args = (mat_r_arg_t *) vx_get_arg_struct();
+
+	unsigned * x_ptr = args->x;
+	unsigned * y_ptr = args->y;
+	unsigned * z_ptr = args->z;
+
+	unsigned off = args->offset;
+
+	unsigned i_index = off * tid;
+
+	if (off == 0)
+	{
+		off = 1;
+		i_index = tid;
+	}
+
+	unsigned num_cols = args->num_cols;
+
+	for (int iter = 0; iter < off; ++iter)
+	{
+		int final_i = (wid * num_cols) + i_index;
+		unsigned cond = i_index < num_cols;
+		__if(cond)
+		{
+			z_ptr[final_i] = x_ptr[final_i] + y_ptr[final_i];
+			i_index++;
+		}
+		__else
+		__end_if
+	}
 	return;
 	
 }
+
+
+
+// -------------------------- Matrix Subtraction --------------------------
+void _vx_mat_sub(unsigned, unsigned);
+void vx_mat_sub(void * x, void * y, void * z, unsigned num_rows, unsigned num_cols)
+{
+	mat_r_args.x        = x;
+	mat_r_args.y        = y;
+	mat_r_args.z        = z;
+	mat_r_args.num_cols = num_cols;
+	mat_r_args.num_rows = num_rows;
+
+	unsigned off = (num_cols/MAX_THREADS);
+
+	if ((num_cols%MAX_THREADS) != 0)
+	{
+		off += 1;
+	}
+
+
+	mat_r_args.offset = off;
+
+	if (num_cols >= MAX_THREADS)
+	{
+		vx_spawnWarps(num_rows, MAX_THREADS, _vx_mat_sub, (void *) (&mat_r_args));
+	}
+	else
+	{
+		vx_spawnWarps(num_rows, num_cols, _vx_mat_sub, (void *) (&mat_r_args));
+	}
+
+	if (num_rows > (MAX_WARPS))
+	{
+		vx_wait_for_warps(MAX_WARPS);
+	}
+	else
+	{
+		vx_wait_for_warps(num_rows);
+	}
+}
+
+void _vx_mat_sub(unsigned tid, unsigned wid)
+{
+	// vx_print_str("*");
+	// for (int z = 0; z < ((wid * 1000) + 1000); z++);
+
+	mat_r_arg_t * args = (mat_r_arg_t *) vx_get_arg_struct();
+
+	unsigned * x_ptr = args->x;
+	unsigned * y_ptr = args->y;
+	unsigned * z_ptr = args->z;
+
+	unsigned off = args->offset;
+
+	unsigned i_index = off * tid;
+
+	if (off == 0)
+	{
+		off = 1;
+		i_index = tid;
+	}
+
+	unsigned num_cols = args->num_cols;
+
+	for (int iter = 0; iter < off; ++iter)
+	{
+		int final_i = (wid * num_cols) + i_index;
+		unsigned cond = i_index < num_cols;
+		__if(cond)
+		{
+			z_ptr[final_i] = x_ptr[final_i] - y_ptr[final_i];
+			i_index++;
+		}
+		__else
+		__end_if
+	}
+	return;
+	
+}
+
+
+
+
+

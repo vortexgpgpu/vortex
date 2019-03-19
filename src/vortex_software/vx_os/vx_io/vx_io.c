@@ -19,3 +19,11 @@ void vx_print_hex(unsigned f)
 		sf -= 4;
 	} while(sf > 0);
 }
+
+
+void vx_printf(char * c, unsigned f)
+{
+	vx_print_str(c);
+	vx_print_hex(f);
+	vx_print_str("\n");
+}

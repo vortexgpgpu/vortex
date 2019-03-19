@@ -29,7 +29,7 @@
 #define __end_if AFTER:\
 			   JOIN;
 
-static bool done[] = {false, false, false, false, false, false, false};
+static int done[] = {0, 0, 0, 0, 0, 0, 0};
 
 static int main_sp[1];
 
