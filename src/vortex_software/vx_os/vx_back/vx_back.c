@@ -89,7 +89,7 @@ void vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 	vx_before_main();
 
 	unsigned num_available_warps = vx_available_warps();
-	vx_printf("Num available warps: ", num_available_warps);
+	// vx_printf("Num available warps: ", num_available_warps);
 
 	asm __volatile__("addi s2, sp, 0");
 	int warp = 0;

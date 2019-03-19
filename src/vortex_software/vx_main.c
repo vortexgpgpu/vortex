@@ -19,6 +19,18 @@ void initialize_mats()
 	}
 }
 
+void print_matrix(unsigned * z)
+{
+	vx_print_str("-------------------------------\n");
+	for (int j = 0; j < (MAT_DIM * MAT_DIM); j++)
+	{
+		if (j!=0) if ((j % MAT_DIM) == 0) vx_print_str("\n");
+		vx_print_hex(z[j]);
+		vx_print_str(" ");
+	}
+	vx_print_str("\n-------------------------------\n");
+}
+
 int main()
 {
 
@@ -26,44 +38,32 @@ int main()
 
 	// matrix multiplication
 	vx_sq_mat_mult(x, y, z, MAT_DIM);
-	vx_print_str("-------------------------\n");
-	vx_print_str("FINAL MAT\n");
-
-	for (int j = 0; j < (MAT_DIM * MAT_DIM); j++)
-	{
-		if ((j % MAT_DIM) == 0) vx_print_str("\n");
-		vx_print_hex(z[j]);
-		vx_print_str(" ");
-	}
-	vx_print_str("\n-------------------------------\n");
+	vx_print_str("\n\nMatrix multiplication\n");
+	print_matrix(z);
 
 
 	// matrix addition
 	vx_mat_add(x, y, z, NUM_ROWS, NUM_COLS);
-	vx_print_str("-------------------------\n");
-	vx_print_str("FINAL ADD\n");
-
-	for (int j = 0; j < (NUM_COLS * NUM_ROWS); j++)
-	{
-		if ((j % NUM_COLS) == 0) vx_print_str("\n");
-		vx_print_hex(z[j]);
-		vx_print_str(" ");
-	}
-	vx_print_str("\n-------------------------------\n");
+	vx_print_str("\n\nMatrix Addition\n");
+	print_matrix(z);
 
 
 	// matrix sub
 	vx_mat_sub(x, y, z, NUM_ROWS, NUM_COLS);
-	vx_print_str("-------------------------\n");
-	vx_print_str("FINAL Sub\n");
+	vx_print_str("\n\nMatrix Subtraction\n");
+	print_matrix(z);
 
-	for (int j = 0; j < (NUM_COLS * NUM_ROWS); j++)
-	{
-		if ((j % NUM_COLS) == 0) vx_print_str("\n");
-		vx_print_hex(z[j]);
-		vx_print_str(" ");
-	}
-	vx_print_str("\n-------------------------------\n");
+	unsigned scal = 3;
+
+	// matrix element add
+	vx_e_mat_add(z, &scal, z, NUM_ROWS, NUM_COLS);
+	vx_print_str("\n\nMatrix Element Addition\n");
+	print_matrix(z);
+
+	// matrix element add
+	vx_e_mat_mult(z, &scal, z, NUM_ROWS, NUM_COLS);
+	vx_print_str("\n\nMatrix Element Addition\n");
+	print_matrix(z);
 
 
 	return 0;
