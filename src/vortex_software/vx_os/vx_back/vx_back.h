@@ -1,8 +1,9 @@
 
-#ifndef __RISCV_GP_
-#define __RISCV_GP_
+
+#pragma once
+
 #include <stdbool.h>
-#include "queue.h"
+#include "../vx_util/queue.h"
 
 #define WSPAWN          asm __volatile__(".word 0x3006b"::);
 #define CLONE           asm __volatile__(".word 0x3506b":::);
@@ -28,28 +29,15 @@
 #define __end_if AFTER:\
 			   JOIN;
 
-
-static char * hextoa[] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"};
 static bool done[] = {false, false, false, false, false, false, false};
 
 static int main_sp[1];
 
 #define FUNC void (func)(unsigned, unsigned)
-void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void *);
-void reschedule_warps(void);
-void int_print(unsigned);
-void wait_for_done(unsigned);
+void   vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void *);
+void   vx_schedule_warps(void);
+void   vx_reschedule_warps(void);
+void   vx_wait_for_warps(unsigned);
+void * vx_get_arg_struct(void);
 
-void * get_1st_arg(void);
-void * get_2nd_arg(void);
-void * get_3rd_arg(void);
-void       sleep(int);
-
-
-
-
-
-
-
-#endif
 

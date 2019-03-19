@@ -7,12 +7,13 @@
 .global _start
 _start:
     lui  sp, 0x7ffff
+    jal  vx_before_main
     jal  main
     ecall
 
-.type createThreads, @function
-.global createThreads
-createThreads:
+.type vx_createThreads, @function
+.global vx_createThreads
+vx_createThreads:
     mv    s7 ,a3    # Moving args to s7
     mv    s10,a4    # Moving assigned_warp to s10
     mv    t5 ,sp    # Saving the current stack pointer to t5
@@ -34,51 +35,14 @@ loop_done:
     mv    t6,a2  # setting func_addr 
     mv    s11,t2 # setting num_threads to spawn
     .word 0x1bfe0eb
-    la     a0, reschedule_warps
+    la     a0, vx_reschedule_warps
     .word 0x5406b
 
-.type printc, @function
-.global printc
-printc:
-    la a7, 0x00010000
-    sw a1, 0(a7)
-    ret
 
-
-.type wspawn, @function
-.global wspawn
-wspawn:
-    la t1, createThreads
+.type vx_wspawn, @function
+.global vx_wspawn
+vx_wspawn:
+    la t1, vx_createThreads
     .word 0x3006b  # WSPAWN instruction
     ret
 
-.type print_consol, @function
-.global print_consol
-print_consol:
-    addi sp, sp, -12
-    sw   ra, 0(sp)
-    sw   a1, 4(sp)
-bl:
-    lbu  a1,0(a0)
-    beqz a1,be
-    jal  printc
-    addi a0, a0, 1
-    j bl
-be:
-    lw   ra, 0(sp)
-    lw   a1, 4(sp)
-    addi sp, sp, 12
-    ret
-
-.type print_int, @function
-.global print_int
-print_int:
-    addi sp, sp, -12
-    sw   ra, 0(sp)
-    sw   a1, 4(sp)
-    addi a1, a0, 48
-    jal  printc
-    lw   ra, 0(sp)
-    lw   a1, 4(sp)
-    addi sp, sp, 12
-    ret

@@ -1,32 +1,18 @@
-#include "lib.h"
 
+#include "vx_back.h"
 
-extern void createThreads(unsigned, unsigned, unsigned, void *, unsigned);
-extern void        wspawn(unsigned, unsigned, unsigned, void *, unsigned);
-extern void  print_consol(char *);
-extern void        printc(char);
+extern void vx_createThreads(unsigned, unsigned, unsigned, void *, unsigned);
+extern void        vx_wspawn(unsigned, unsigned, unsigned, void *, unsigned);
 
-
-void int_print(unsigned f)
+void vx_before_main()
 {
-	if (f < 16)
+	for (int i = 0; i < 8; i++)
 	{
-		print_consol(hextoa[f]);
-		return;
+		queue_initialize(q + i);
 	}
-	int temp;
-	int sf = 32;
-	bool start = false;
-	do
-	{
-		temp = (f >> (sf - 4)) & 0xf;
-		if (temp != 0) start = true;
-		if (start) print_consol(hextoa[temp]);
-		sf -= 4;
-	} while(sf > 0);
 }
 
-void reschedule_warps()
+void vx_reschedule_warps()
 {
 
 	register unsigned curr_warp asm("s10");
@@ -40,13 +26,13 @@ void reschedule_warps()
 	Job j;
 	queue_dequeue(q+curr_warp,&j);
 	asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
-	createThreads(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
+	vx_createThreads(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 
 	ECALL;
 
 }
 
-void schedule_warps()
+void vx_schedule_warps()
 {
 	asm __volatile__("mv s3, sp");
 
@@ -57,7 +43,7 @@ void schedule_warps()
 			Job j;
 			queue_dequeue(q+curr_warp,&j);
 			asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
-			wspawn(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
+			vx_wspawn(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 		}
 	}
 
@@ -65,14 +51,9 @@ void schedule_warps()
 
 }
 
-void sleep(int t)
-{
-	for(int z = 0; z < t; z++) {}
-}
 
 
-
-void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
+void vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 {
 	asm __volatile__("addi s2, sp, 0");
 	int warp = 0;
@@ -97,11 +78,11 @@ void createWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 	asm __volatile__("addi sp, s2, 0");
 
 
-	schedule_warps();
+	vx_schedule_warps();
 
 }
 
-void wait_for_done(unsigned num_wait)
+void vx_wait_for_warps(unsigned num_wait)
 {
 	bool temp = false;
 	while (!temp)
@@ -115,19 +96,11 @@ void wait_for_done(unsigned num_wait)
 }
 
 
-void * get_1st_arg(void)
+void * vx_get_arg_struct(void)
 {
 	register void *ret asm("s7");
 	return ret;
 }
-void * get_2nd_arg(void)
-{
-	register void *ret asm("s8");
-	return ret;
-}
-void * get_3rd_arg(void)
-{
-	register void *ret asm("s9");
-	return ret;
-}
+
+
 
