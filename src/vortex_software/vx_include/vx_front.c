@@ -34,7 +34,7 @@ void vx_sq_mat_mult(void * x, void * y, void * z, unsigned mat_dim)
 
 	if (mat_dim > MAX_WARPS)
 	{
-		vx_wait_for_warps(MAX_WARPS - 1);
+		vx_wait_for_warps(MAX_WARPS);
 	}
 	else
 	{
@@ -83,6 +83,8 @@ void _vx_mat_mult(unsigned tid, unsigned wid)
 			__else
 			__end_if
 	}
+
+	// for (int z = 0; z < ((1000 * wid) + 1000); z++);
 	return;
 }
 

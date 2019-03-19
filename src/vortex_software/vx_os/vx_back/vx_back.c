@@ -1,5 +1,6 @@
 
 #include "vx_back.h"
+#include "../vx_io/vx_io.h"
 
 extern void vx_createThreads(unsigned, unsigned, unsigned, void *, unsigned);
 extern void        vx_wspawn(unsigned, unsigned, unsigned, void *, unsigned);
