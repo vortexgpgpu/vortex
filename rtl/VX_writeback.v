@@ -17,6 +17,12 @@ module VX_writeback (
 		wire is_jal;
 		wire uses_alu;
 
+		// always @(*) begin
+		// 	if (in_PC_next == 32'h800001f4 || in_PC_next == 32'h800001f0)  begin
+
+		// 		$display("(%h) WB Data: %h, to register: %d",in_PC_next - 4, in_mem_result, in_rd);
+		// 	end
+		// end
 
 		assign is_jal   = in_wb == `WB_JAL;
 		assign uses_alu = in_wb == `WB_ALU;

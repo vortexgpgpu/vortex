@@ -96,6 +96,11 @@ module VX_decode(
 		wire[1:0]  csr_type;
 		reg[3:0]   csr_alu;
 
+
+		// always @(posedge clk) begin
+		// 	$display("Decode: curr_pc: %h", in_curr_PC);
+		// end
+
 		VX_register_file vx_register_file(
 			.clk(clk),
 			.in_write_register(write_register),
@@ -142,8 +147,13 @@ module VX_decode(
 		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
 
-		assign out_rd1 = (is_jal == 1'b1) ? in_curr_PC :
-					                ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register);
+		assign out_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
+
+		// always @(negedge clk) begin
+		// 	if (in_curr_PC == 32'h800001f0) begin
+		// 		$display("IN DECODE: Going to write to: %d with val: %h [%h, %h, %h]", out_rd, out_rd1, in_curr_PC, in_src1_fwd_data, rd1_register);
+		// 	end
+		// end
 
 		assign out_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;
 

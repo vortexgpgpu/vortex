@@ -125,9 +125,14 @@ module VX_forwarding (
 		assign out_csr_fwd      = csr_exe_fwd || csr_mem_fwd; // COMMENT
 
 
+		wire exe_mem_read_stall = ((src1_exe_fwd || src2_exe_fwd) && exe_mem_read) ? `STALL : `NO_STALL;
+		wire mem_mem_read_stall = ((src1_mem_fwd || src2_mem_fwd) && mem_mem_read) ? `STALL : `NO_STALL;
 
-		assign out_fwd_stall = ((src1_exe_fwd || src2_exe_fwd) && exe_mem_read) ? `STALL : `NO_STALL; 
+		assign out_fwd_stall = exe_mem_read_stall || mem_mem_read_stall; 
 
+		// always @(*) begin
+		// 	if (out_fwd_stall) $display("FWD STALL");
+		// end
 
 		assign out_src1_fwd_data = src1_exe_fwd ? ((exe_jal) ? in_execute_PC_next : in_execute_alu_result) :
 			                          (src1_mem_fwd) ? ((mem_jal) ? in_memory_PC_next : (mem_mem_read ? in_memory_mem_data : in_memory_alu_result)) :

@@ -35,6 +35,12 @@ module VX_memory (
 		output wire[31:0] out_cache_driver_in_data 
 	);	
 
+		always @(in_mem_read, in_cache_driver_out_data) begin
+			if (in_mem_read == `LW_MEM_READ) begin
+				// $display("PC: %h ----> Received: %h", in_curr_PC, in_cache_driver_out_data);
+			end
+		end
+
 		assign out_delay = 1'b0;
 
 		assign out_cache_driver_in_address   = in_alu_result;
@@ -60,7 +66,11 @@ module VX_memory (
 		always @(*) begin
 			case(in_branch_type)
 				`BEQ:  out_branch_dir = (in_alu_result == 0)     ? `TAKEN     : `NOT_TAKEN;
-				`BNE:  out_branch_dir = (in_alu_result == 0)     ? `NOT_TAKEN : `TAKEN;
+				`BNE:  
+					begin
+						out_branch_dir = (in_alu_result == 0)     ? `NOT_TAKEN : `TAKEN;
+						// $display("Branch @%h is: %h", in_curr_PC, out_branch_dir);
+					end
 				`BLT:  out_branch_dir = (in_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;
 				`BGT:  out_branch_dir = (in_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
 				`BLTU: out_branch_dir = (in_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;

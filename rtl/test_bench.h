@@ -80,6 +80,53 @@ void Vortex::ProcessFile(void)
     loadHexImpl(this->instruction_file_name, &this->ram);
 }
 
+void Vortex::print_stats(bool cycle_test)
+{
+
+    if (cycle_test)
+    {
+        this->results << std::left;
+        // this->results << "# Static Instructions:\t" << std::dec << this->stats_static_inst << std::endl;
+        this->results << std::setw(24) << "# Dynamic Instructions:" << std::dec << this->stats_dynamic_inst << std::endl;
+        this->results << std::setw(24) << "# of total cycles:" << std::dec << this->stats_total_cycles << std::endl;
+        this->results << std::setw(24) << "# of forwarding stalls:" << std::dec << this->stats_fwd_stalls << std::endl;
+        this->results << std::setw(24) << "# of branch stalls:" << std::dec << this->stats_branch_stalls << std::endl;
+        this->results << std::setw(24) << "# CPI:" << std::dec << (double) this->stats_total_cycles / (double) this->stats_dynamic_inst << std::endl;
+        this->results << std::setw(24) << "# time to simulate: " << std::dec << this->stats_sim_time << " milliseconds" << std::endl;
+    }
+    else
+    {
+        this->results << std::left;
+        this->results << std::setw(24) << "# of total cycles:" << std::dec << this->stats_total_cycles << std::endl;
+        this->results << std::setw(24) << "# time to simulate: " << std::dec << this->stats_sim_time << " milliseconds" << std::endl;
+    }
+
+
+    uint32_t status;
+    ram.getWord(0, &status);
+
+    if (this->unit_test)
+    {
+        if (status == 1)
+        {
+            this->results << std::setw(24) << "# GRADE:" << "PASSING\n";
+        } else
+        {
+            this->results << std::setw(24) << "# GRADE:" << "Failed on test: " << status << "\n";
+        }
+    }
+    else
+    {
+        this->results << std::setw(24) << "# GRADE:" << "N/A [NOT A UNIT TEST]\n";
+    }
+
+    this->stats_static_inst   =  0;
+    this->stats_dynamic_inst  = -1;
+    this->stats_total_cycles  =  0;
+    this->stats_fwd_stalls    =  0;
+    this->stats_branch_stalls =  0;
+
+}
 
 bool Vortex::ibus_driver()
 {
@@ -166,7 +213,9 @@ bool Vortex::dbus_driver()
 
     	} else if (vortex->out_cache_driver_in_mem_read == LW_MEM_READ)
     	{
-
+    		// printf("Reading mem - Addr: %h = %h\n", addr, data_read);
+    		// std::cout << "Reading mem - Addr: " << std::hex << addr << " = " << data_read << "\n";
+    		std::cout << std::dec;
             vortex->in_cache_driver_out_data = data_read;
 
     	} else if (vortex->out_cache_driver_in_mem_read == LBU_MEM_READ)
@@ -222,18 +271,25 @@ bool Vortex::simulate(std::string file_to_simulate)
 
 	unsigned curr_inst;
 	unsigned new_PC;
+
+	int cycle = 0;
 	while (this->stop && (!(stop && (counter > 5))))
 	{
 
+		// std::cout << "************* Cycle: " << cycle << "\n";
         bool istop =  ibus_driver();
         bool dstop = !dbus_driver();
-        stop       =  istop && dstop;
 
 		vortex->clk = 1;
 		vortex->eval();
 
+
+
 		vortex->clk = 0;
 		vortex->eval();
+
+
+        stop = istop && dstop;
 
         if (stop)
         {
@@ -243,6 +299,7 @@ bool Vortex::simulate(std::string file_to_simulate)
             counter = 0;
         }
 
+        cycle++;
 	}
 
     uint32_t status;
@@ -255,54 +312,6 @@ bool Vortex::simulate(std::string file_to_simulate)
     return (status == 1);
 }
 
-
-void Vortex::print_stats(bool cycle_test)
-{
-
-    if (cycle_test)
-    {
-        this->results << std::left;
-        // this->results << "# Static Instructions:\t" << std::dec << this->stats_static_inst << std::endl;
-        this->results << std::setw(24) << "# Dynamic Instructions:" << std::dec << this->stats_dynamic_inst << std::endl;
-        this->results << std::setw(24) << "# of total cycles:" << std::dec << this->stats_total_cycles << std::endl;
-        this->results << std::setw(24) << "# of forwarding stalls:" << std::dec << this->stats_fwd_stalls << std::endl;
-        this->results << std::setw(24) << "# of branch stalls:" << std::dec << this->stats_branch_stalls << std::endl;
-        this->results << std::setw(24) << "# CPI:" << std::dec << (double) this->stats_total_cycles / (double) this->stats_dynamic_inst << std::endl;
-        this->results << std::setw(24) << "# time to simulate: " << std::dec << this->stats_sim_time << " milliseconds" << std::endl;
-    }
-    else
-    {
-        this->results << std::left;
-        this->results << std::setw(24) << "# of total cycles:" << std::dec << this->stats_total_cycles << std::endl;
-        this->results << std::setw(24) << "# time to simulate: " << std::dec << this->stats_sim_time << " milliseconds" << std::endl;
-    }
-
-
-    uint32_t status;
-    ram.getWord(0, &status);
-
-    if (this->unit_test)
-    {
-        if (status == 1)
-        {
-            this->results << std::setw(24) << "# GRADE:" << "PASSING\n";
-        } else
-        {
-            this->results << std::setw(24) << "# GRADE:" << "Failed on test: " << status << "\n";
-        }
-    }
-    else
-    {
-        this->results << std::setw(24) << "# GRADE:" << "N/A [NOT A UNIT TEST]\n";
-    }
-
-    this->stats_static_inst   =  0;
-    this->stats_dynamic_inst  = -1;
-    this->stats_total_cycles  =  0;
-    this->stats_fwd_stalls    =  0;
-    this->stats_branch_stalls =  0;
-
-}
 
 
 

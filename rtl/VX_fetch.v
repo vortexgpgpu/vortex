@@ -70,6 +70,7 @@ module VX_fetch (
 
 		always @(*) begin
 			if ((delay_reg == 1'b1) && (in_freeze == 1'b0)) begin
+				// $display("Using old cuz delay: PC: %h",old);
 				PC_to_use = old;
 			end else if (in_debug == 1'b1) begin
 				if (prev_debug == 1'b1) begin
@@ -78,12 +79,12 @@ module VX_fetch (
 					PC_to_use = real_PC;
 				end
 			end else if (stall_reg == 1'b1) begin
+				// $display("Using old cuz stall: PC: %h\treal_pc: %h",old, real_PC);
 				PC_to_use = old;
 			end else begin
 				PC_to_use = PC_to_use_temp;
 			end
 		end
-
 		
 		assign stall = in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_interrupt || delay || in_freeze;
 
@@ -160,7 +161,9 @@ module VX_fetch (
 		end
 
 
-
+		// always @(*) begin
+		// 	$display("Fetch out pc: %h", out_PC);
+		// end
 
 
 

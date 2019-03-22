@@ -2,7 +2,7 @@
 
 #include "test_bench.h"
 
-#define NUM_TESTS 39
+#define NUM_TESTS 38
 
 int main(int argc, char **argv)
 {
@@ -32,7 +32,6 @@ int main(int argc, char **argv)
 		"../../src/riscv_tests/rv32ui-p-lh.hex",
 		"../../src/riscv_tests/rv32ui-p-lhu.hex",
 		"../../src/riscv_tests/rv32ui-p-lui.hex",
-		"../../src/riscv_tests/rv32ui-p-lui.hex.hex",
 		"../../src/riscv_tests/rv32ui-p-lw.hex",
 		"../../src/riscv_tests/rv32ui-p-or.hex",
 		"../../src/riscv_tests/rv32ui-p-ori.hex",
@@ -60,18 +59,22 @@ int main(int argc, char **argv)
 		{
 			bool curr = v.simulate(tests[ii]);
 
-			if ( curr) std::cout << GREEN << "Test Passed: " << tests[ii] << std::endl;
-			if (!curr) std::cout << RED   << "Test Failed: " << tests[ii] << std::endl;
+			if ( curr) std::cerr << GREEN << "Test Passed: " << tests[ii] << std::endl;
+			if (!curr) std::cerr << RED   << "Test Failed: " << tests[ii] << std::endl;
 			passed = passed && curr;
 
-			std::cout << DEFAULT;
+			std::cerr << DEFAULT;
 		}
 
-		if( passed) std::cout << DEFAULT << "PASSED ALL TESTS\n";
-		if(!passed) std::cout << DEFAULT << "Failed one or more tests\n";
+		if( passed) std::cerr << DEFAULT << "PASSED ALL TESTS\n";
+		if(!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
 
-		
-	// v.simulate("../../src/riscv_tests/rv32ui-p-add.hex");
+
+	// char testing[] = "../../src/riscv_tests/rv32ui-p-lw.hex";
+
+	// bool curr = v.simulate(testing);
+	// if ( curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
+	// if (!curr) std::cerr << RED   << "Test Failed: " << testing << std::endl;
 
 	return 0;
 

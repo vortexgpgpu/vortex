@@ -45,8 +45,6 @@ module VX_execute (
 		output wire       out_valid
 	);
 
-
-
 		wire which_in2;
 
 		wire[31:0] ALU_in1;
@@ -66,6 +64,10 @@ module VX_execute (
 		assign out_jal      = in_jal;
 
 
+		// always @(*) begin
+		// 	$display("EXECUTE CURR_PC: %h",in_curr_PC);
+		// end
+
 		always @(*) begin
 			case(in_alu_op)
 				`ADD:
@@ -76,11 +78,12 @@ module VX_execute (
 				`SUB:
 					begin
 						out_alu_result = $signed(ALU_in1) - $signed(ALU_in2);
+						// $display("PC: %h ----> %h and %h",in_curr_PC, $signed(ALU_in1), $signed(ALU_in2));
 						out_csr_result = 32'hdeadbeef;
 					end
 				`SLLA:
 					begin
-						out_alu_result = ALU_in1 << ALU_in2;
+						out_alu_result = ALU_in1 << ALU_in2[4:0];
 						out_csr_result = 32'hdeadbeef;
 					end
 				`SLT:
@@ -101,12 +104,13 @@ module VX_execute (
 					end
 				`SRL:
 					begin
-						out_alu_result = ALU_in1 >> ALU_in2;
+						out_alu_result = ALU_in1 >> ALU_in2[4:0];
 						out_csr_result = 32'hdeadbeef;
 					end
 				`SRA:
 					begin
-						out_alu_result    = $signed(ALU_in1)  >> ALU_in2;
+						out_alu_result    = $signed(ALU_in1)  >>> ALU_in2[4:0];
+						// $display("Shifting right arithmatic - PC: %h\t%h >>> %h = %h",in_curr_PC, $signed(ALU_in1), ALU_in2, out_alu_result);
 						out_csr_result    = 32'hdeadbeef;
 					end
 				`OR:

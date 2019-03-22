@@ -9,4 +9,9 @@ VERILATOR:
 
 RUNFILE: VERILATOR
 	(cd obj_dir && make -j -f Vvortex.mk)
+
+
+
+clean:
+	rm ./obj_dir/*
 	

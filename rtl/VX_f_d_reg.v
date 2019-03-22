@@ -24,10 +24,12 @@ module VX_f_d_reg (
 
 
 	always @(posedge clk or posedge reset) begin
-		if(reset || (in_fwd_stall == 1'b1) || (in_freeze == 1'b1)) begin
+		if(reset) begin
 			instruction <= 32'h0;
 			curr_PC     <= 32'h0;
 			valid       <=  1'b0;
+		end else if (in_fwd_stall == 1'b1 || in_freeze == 1'b1) begin
+			// $display("Because of FWD stall keeping pc: %h", curr_PC);
 		end else begin
 			instruction <= in_instruction;
 			valid       <= in_valid;
@@ -35,6 +37,9 @@ module VX_f_d_reg (
 		end
 	end
 
+	always @(*) begin
+		// $display("PC in VX_f_d_reg: %h", curr_PC);
+	end
 
 	assign out_instruction = instruction;
 	assign out_curr_PC     = curr_PC;
