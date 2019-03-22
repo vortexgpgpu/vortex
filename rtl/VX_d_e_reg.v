@@ -9,7 +9,7 @@ module VX_d_e_reg (
 		input wire[31:0] in_rd1,
 		input wire[4:0]  in_rs2,
 		input wire[31:0] in_rd2,
-		input wire[3:0]  in_alu_op,
+		input wire[4:0]  in_alu_op,
 		input wire[1:0]  in_wb,
 		input wire       in_rs2_src, // NEW
 		input wire[31:0] in_itype_immed, // new
@@ -37,7 +37,7 @@ module VX_d_e_reg (
 		output wire[31:0] out_rd1,
 		output wire[4:0]  out_rs2,
 		output wire[31:0] out_rd2,
-		output wire[3:0]  out_alu_op,
+		output wire[4:0]  out_alu_op,
 		output wire[1:0]  out_wb,
 		output wire       out_rs2_src, // NEW
 		output wire[31:0] out_itype_immed, // new
@@ -58,7 +58,7 @@ module VX_d_e_reg (
 		reg[31:0] rd1;
 		reg[4:0]  rs2;
 		reg[31:0] rd2;
-		reg[3:0]  alu_op;
+		reg[4:0]  alu_op;
 		reg[1:0]  wb;
 		reg[31:0] PC_next_out;
 		reg       rs2_src;

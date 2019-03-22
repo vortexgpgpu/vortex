@@ -46,23 +46,31 @@
 `define BGTU 3'h6
 
 
-`define NO_ALU 4'd15
-`define ADD 4'd0
-`define SUB 4'd1
-`define SLLA 4'd2
-`define SLT 4'd3
-`define SLTU 4'd4
-`define XOR 4'd5
-`define SRL 4'd6
-`define SRA 4'd7
-`define OR 4'd8
-`define AND 4'd9
-`define SUBU 4'd10
-`define LUI_ALU 4'd11
-`define AUIPC_ALU 4'd12
-`define CSR_ALU_RW 4'd13
-`define CSR_ALU_RS 4'd14
-`define CSR_ALU_RC 4'd15
+`define NO_ALU 5'd15
+`define ADD 5'd0
+`define SUB 5'd1
+`define SLLA 5'd2
+`define SLT 5'd3
+`define SLTU 5'd4
+`define XOR 5'd5
+`define SRL 5'd6
+`define SRA 5'd7
+`define OR 5'd8
+`define AND 5'd9
+`define SUBU 5'd10
+`define LUI_ALU 5'd11
+`define AUIPC_ALU 5'd12
+`define CSR_ALU_RW 5'd13
+`define CSR_ALU_RS 5'd14
+`define CSR_ALU_RC 5'd15
+`define MUL 5'd16
+`define MULH 5'd17
+`define MULHSU 5'd18
+`define MULHU 5'd19
+`define DIV 5'd20
+`define DIVU 5'd21
+`define REM 5'd22
+`define REMU 5'd23
 
 
 

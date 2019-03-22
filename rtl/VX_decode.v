@@ -29,7 +29,7 @@ module VX_decode(
 	output wire[4:0]  out_rs2,
 	output wire[31:0] out_rd2,
 	output wire[1:0]  out_wb,
-	output wire[3:0]  out_alu_op,
+	output wire[4:0]  out_alu_op,
 	output wire       out_rs2_src, // NEW
 	output reg[31:0]  out_itype_immed, // new
 	output wire[2:0]  out_mem_read, // NEW
@@ -45,7 +45,6 @@ module VX_decode(
 
 		wire[6:0]  curr_opcode;
 
-		reg[3:0]   alu_op;
 
 		wire[31:0] rd1_register;
 		wire[31:0] rd2_register;
@@ -94,8 +93,10 @@ module VX_decode(
 		wire[11:0] alu_shift_i_immed;
 
 		wire[1:0]  csr_type;
-		reg[3:0]   csr_alu;
 
+		reg[4:0]   csr_alu;
+		reg[4:0]   alu_op;
+		reg[4:0]   mul_alu;
 
 		// always @(posedge clk) begin
 		// 	$display("Decode: curr_pc: %h", in_curr_PC);
@@ -306,6 +307,20 @@ module VX_decode(
 			endcase
 		end
 
+		always @(*) begin
+			// ALU OP
+			case(func3)
+				3'h0:    mul_alu = `MUL;
+				3'h1:    mul_alu = `MULH;
+				3'h2:    mul_alu = `MULHSU;
+				3'h3:    mul_alu = `MULHU;
+				3'h4:    mul_alu = `DIV;
+				3'h5:    mul_alu = `DIVU;
+				3'h6:    mul_alu = `REM;
+				3'h7:    mul_alu = `REMU;
+				default: mul_alu = `NO_ALU; 
+			endcase
+		end
 
 		assign csr_type = func3[1:0];
 
@@ -318,14 +333,16 @@ module VX_decode(
 			endcase
 		end
 
+		wire[4:0] temp_final_alu;
 
-		assign out_alu_op = is_btype ? ((out_branch_type < `BLTU) ? `SUB : `SUBU) :
+		assign temp_final_alu = is_btype ? ((out_branch_type < `BLTU) ? `SUB : `SUBU) :
 										is_lui ? `LUI_ALU :
 											is_auipc ? `AUIPC_ALU :
 												is_csr ? csr_alu :
 													(is_stype || is_linst) ? `ADD :
 														alu_op;
 
+		assign out_alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
 
 endmodule
 

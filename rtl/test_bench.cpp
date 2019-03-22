@@ -2,7 +2,7 @@
 
 #include "test_bench.h"
 
-#define NUM_TESTS 38
+#define NUM_TESTS 46
 
 int main(int argc, char **argv)
 {
@@ -52,6 +52,14 @@ int main(int argc, char **argv)
 		"../../src/riscv_tests/rv32ui-p-sw.hex",
 		"../../src/riscv_tests/rv32ui-p-xor.hex",
 		"../../src/riscv_tests/rv32ui-p-xori.hex",
+		"../../src/riscv_tests/rv32um-p-div.hex",
+		"../../src/riscv_tests/rv32um-p-divu.hex",
+		"../../src/riscv_tests/rv32um-p-mul.hex",
+		"../../src/riscv_tests/rv32um-p-mulh.hex",
+		"../../src/riscv_tests/rv32um-p-mulhsu.hex",
+		"../../src/riscv_tests/rv32um-p-mulhu.hex",
+		"../../src/riscv_tests/rv32um-p-rem.hex",
+		"../../src/riscv_tests/rv32um-p-remu.hex"
 	};
 
 		for (int ii = 0; ii < NUM_TESTS; ii++)

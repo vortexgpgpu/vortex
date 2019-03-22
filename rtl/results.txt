@@ -340,3 +340,75 @@
 # CPI:                  1.04314
 # time to simulate:     6.95313e-310 milliseconds
 # GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-div.hex	****************
+# Dynamic Instructions: 112
+# of total cycles:      123
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09821
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-divu.hex	****************
+# Dynamic Instructions: 113
+# of total cycles:      124
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09735
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-mul.hex	****************
+# Dynamic Instructions: 589
+# of total cycles:      600
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01868
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-mulh.hex	****************
+# Dynamic Instructions: 585
+# of total cycles:      596
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.0188
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-mulhsu.hex	****************
+# Dynamic Instructions: 585
+# of total cycles:      596
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.0188
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-mulhu.hex	****************
+# Dynamic Instructions: 585
+# of total cycles:      596
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.0188
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-rem.hex	****************
+# Dynamic Instructions: 112
+# of total cycles:      123
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09821
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../src/riscv_tests/rv32um-p-remu.hex	****************
+# Dynamic Instructions: 112
+# of total cycles:      123
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09821
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING

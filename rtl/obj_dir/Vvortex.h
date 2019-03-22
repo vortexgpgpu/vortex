@@ -48,8 +48,10 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__vx_f_d_reg__DOT__valid,0,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_itype,0,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_csr,0,0);
+	VL_SIG8(Vortex__DOT__vx_decode__DOT__mul_alu,4,0);
+	VL_SIG8(Vortex__DOT__vx_decode__DOT__temp_final_alu,4,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__rd,4,0);
-	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__alu_op,3,0);
+	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__alu_op,4,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__wb,1,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__rs2_src,0,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__mem_read,2,0);
@@ -98,10 +100,10 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_decode__DOT__rd2_register,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__rd1,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__rd2,31,0);
-	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__PC_next_out,31,0);
-	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__itype_immed,31,0);
     };
     struct {
+	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__PC_next_out,31,0);
+	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__itype_immed,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__upper_immed,19,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__csr_mask,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__curr_PC,31,0);
@@ -117,6 +119,7 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_m_w_reg__DOT__alu_result,31,0);
 	VL_SIG(Vortex__DOT__vx_m_w_reg__DOT__mem_result,31,0);
 	VL_SIG(Vortex__DOT__vx_m_w_reg__DOT__PC_next,31,0);
+	VL_SIG64(Vortex__DOT__vx_execute__DOT__mult_signed_result,63,0);
 	VL_SIG64(Vortex__DOT__vx_csr_handler__DOT__cycle,63,0);
 	VL_SIG64(Vortex__DOT__vx_csr_handler__DOT__instret,63,0);
 	VL_SIG(Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers[32],31,0);
@@ -126,8 +129,10 @@ VL_MODULE(VVortex) {
     // LOCAL VARIABLES
     // Internals; generally not touched by application code
     // Begin mtask footprint  all: 
+    VL_SIG8(__Vtableidx1,2,0);
     VL_SIG8(__Vclklast__TOP__clk,0,0);
     VL_SIG8(__Vclklast__TOP__reset,0,0);
+    static VL_ST_SIG8(__Vtable1_Vortex__DOT__vx_decode__DOT__mul_alu[8],4,0);
     
     // INTERNAL VARIABLES
     // Internals; generally not touched by application code

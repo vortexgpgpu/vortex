@@ -7,7 +7,7 @@ module VX_execute (
 		input wire[31:0]  in_rd1,
 		input wire[4:0]   in_rs2,
 		input wire[31:0]  in_rd2,
-		input wire[3:0]   in_alu_op,
+		input wire[4:0]   in_alu_op,
 		input wire[1:0]   in_wb,
 		input wire        in_rs2_src, // NEW
 		input wire[31:0]  in_itype_immed, // new
@@ -68,101 +68,53 @@ module VX_execute (
 		// 	$display("EXECUTE CURR_PC: %h",in_curr_PC);
 		// end
 
+		/* verilator lint_off UNUSED */
+		wire[63:0] mult_unsigned_result  = ALU_in1 * ALU_in2;
+		wire[63:0] mult_signed_result    = $signed(ALU_in1) * $signed(ALU_in2);
+
+		wire[63:0] alu_in1_signed = {{32{ALU_in1[31]}}, ALU_in1};
+
+		wire[63:0] mult_signed_un_result = alu_in1_signed * ALU_in2;
+		/* verilator lint_on UNUSED */
+
+		always @(*) begin
+
+			case(in_alu_op)
+				`CSR_ALU_RW: out_csr_result = in_csr_mask;
+				`CSR_ALU_RS: out_csr_result = in_csr_data | in_csr_mask;
+				`CSR_ALU_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
+				default: out_csr_result = 32'hdeadbeef;
+			endcase
+		
+		end
+
 		always @(*) begin
 			case(in_alu_op)
-				`ADD:
-					begin
-						out_alu_result = $signed(ALU_in1) + $signed(ALU_in2);
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SUB:
-					begin
-						out_alu_result = $signed(ALU_in1) - $signed(ALU_in2);
-						// $display("PC: %h ----> %h and %h",in_curr_PC, $signed(ALU_in1), $signed(ALU_in2));
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SLLA:
-					begin
-						out_alu_result = ALU_in1 << ALU_in2[4:0];
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SLT:
-					begin
-						out_alu_result = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SLTU:
-					begin
-
-						out_alu_result = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
-						out_csr_result = 32'hdeadbeef;
-					end
-				`XOR:
-					begin
-						out_alu_result = ALU_in1 ^ ALU_in2;
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SRL:
-					begin
-						out_alu_result = ALU_in1 >> ALU_in2[4:0];
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SRA:
-					begin
-						out_alu_result    = $signed(ALU_in1)  >>> ALU_in2[4:0];
-						// $display("Shifting right arithmatic - PC: %h\t%h >>> %h = %h",in_curr_PC, $signed(ALU_in1), ALU_in2, out_alu_result);
-						out_csr_result    = 32'hdeadbeef;
-					end
-				`OR:
-					begin
-						out_alu_result = ALU_in1 | ALU_in2;
-						out_csr_result = 32'hdeadbeef;
-					end
-				`AND:
-					begin
-						out_alu_result = ALU_in2 & ALU_in1;
-						out_csr_result = 32'hdeadbeef;
-					end
-				`SUBU:
-					begin
-						if (ALU_in1 >= ALU_in2) begin
-							out_alu_result = 32'h0;
-						end else begin
-							out_alu_result = 32'hffffffff;
-
-						end
-						out_csr_result = 32'hdeadbeef;
-					end
-				`LUI_ALU:
-					begin
-						out_alu_result = upper_immed;
-						out_csr_result = 32'hdeadbeef;
-					end
-				`AUIPC_ALU:
-					begin
-						out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
-						out_csr_result = 32'hdeadbeef;
-					end
-				`CSR_ALU_RW:
-					begin
-						out_alu_result = in_csr_data;
-						out_csr_result = in_csr_mask;
-					end
-				`CSR_ALU_RS:
-					begin
-						out_alu_result = in_csr_data;
-						out_csr_result = in_csr_data | in_csr_mask;
-					end
-				`CSR_ALU_RC:
-					begin
-						out_alu_result = in_csr_data;
-						out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
-					end
-				default:
-					begin
-						out_alu_result = 32'h0;
-						out_csr_result = 32'hdeadbeef;
-					end
+				`ADD:        out_alu_result = $signed(ALU_in1) + $signed(ALU_in2);
+				`SUB:        out_alu_result = $signed(ALU_in1) - $signed(ALU_in2);
+				`SLLA:       out_alu_result = ALU_in1 << ALU_in2[4:0];
+				`SLT:        out_alu_result = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
+				`SLTU:       out_alu_result = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
+				`XOR:        out_alu_result = ALU_in1 ^ ALU_in2;
+				`SRL:        out_alu_result = ALU_in1 >> ALU_in2[4:0];						
+				`SRA:        out_alu_result = $signed(ALU_in1)  >>> ALU_in2[4:0];
+				`OR:         out_alu_result = ALU_in1 | ALU_in2;	
+				`AND:        out_alu_result = ALU_in2 & ALU_in1;	
+				`SUBU:       out_alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
+				`LUI_ALU:    out_alu_result = upper_immed;
+				`AUIPC_ALU:  out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
+				`CSR_ALU_RW: out_alu_result = in_csr_data;
+				`CSR_ALU_RS: out_alu_result = in_csr_data;
+				`CSR_ALU_RC: out_alu_result = in_csr_data;
+				`MUL:        out_alu_result = mult_signed_result[31:0];
+				`MULH:       out_alu_result = mult_signed_result[63:32];
+				`MULHSU:     out_alu_result = mult_signed_un_result[63:32];
+				`MULHU:      out_alu_result = mult_unsigned_result[63:32];
+				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : $signed($signed(ALU_in1) / $signed(ALU_in2));
+				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : ALU_in1 / ALU_in2;
+				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : $signed($signed(ALU_in1) % $signed(ALU_in2));
+				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : ALU_in1 % ALU_in2;
+				default: out_alu_result = 32'h0;
 			endcase // in_alu_op
 		end
 
