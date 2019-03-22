@@ -2,4 +2,5 @@
 
 
 * csri bug?
-* Start on the Verilog Pipeline (Research loading into mem)
+* Add hardware threads to rtl
+* Add hardware warps to rtl
