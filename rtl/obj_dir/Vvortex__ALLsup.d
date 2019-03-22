@@ -1,5 +1,4 @@
-Vvortex__ALLsup.o: Vvortex__ALLsup.cpp Vvortex__Syms.cpp Vvortex__Syms.h \
-  /usr/local/Cellar/verilator/4.010/share/verilator/include/verilated_heavy.h \
+VVortex__ALLsup.o: VVortex__ALLsup.cpp VVortex__Syms.cpp VVortex__Syms.h \
   /usr/local/Cellar/verilator/4.010/share/verilator/include/verilated.h \
   /usr/local/Cellar/verilator/4.010/share/verilator/include/verilatedos.h \
-  Vvortex.h
+  VVortex.h

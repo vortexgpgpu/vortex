@@ -3,16 +3,16 @@
 //
 // Internal details; most calling programs do not need this header
 
-#ifndef _Vvortex__Syms_H_
-#define _Vvortex__Syms_H_
+#ifndef _VVortex__Syms_H_
+#define _VVortex__Syms_H_
 
-#include "verilated_heavy.h"
+#include "verilated.h"
 
 // INCLUDE MODULE CLASSES
-#include "Vvortex.h"
+#include "VVortex.h"
 
 // SYMS CLASS
-class Vvortex__Syms : public VerilatedSyms {
+class VVortex__Syms : public VerilatedSyms {
   public:
     
     // LOCAL STATE
@@ -20,11 +20,11 @@ class Vvortex__Syms : public VerilatedSyms {
     bool __Vm_didInit;
     
     // SUBCELL STATE
-    Vvortex*                       TOPp;
+    VVortex*                       TOPp;
     
     // CREATORS
-    Vvortex__Syms(Vvortex* topp, const char* namep);
-    ~Vvortex__Syms() {}
+    VVortex__Syms(VVortex* topp, const char* namep);
+    ~VVortex__Syms() {}
     
     // METHODS
     inline const char* name() { return __Vm_namep; }

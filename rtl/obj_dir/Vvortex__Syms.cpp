@@ -1,11 +1,11 @@
 // Verilated -*- C++ -*-
 // DESCRIPTION: Verilator output: Symbol table implementation internals
 
-#include "Vvortex__Syms.h"
-#include "Vvortex.h"
+#include "VVortex__Syms.h"
+#include "VVortex.h"
 
 // FUNCTIONS
-Vvortex__Syms::Vvortex__Syms(Vvortex* topp, const char* namep)
+VVortex__Syms::VVortex__Syms(VVortex* topp, const char* namep)
 	// Setup locals
 	: __Vm_namep(namep)
 	, __Vm_didInit(false)

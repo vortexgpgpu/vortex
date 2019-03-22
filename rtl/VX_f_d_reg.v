@@ -14,9 +14,9 @@ module VX_f_d_reg (
 	  output wire       out_valid
 );
 
-	always @(posedge clk) begin
-		$display("Fetch Inst: %d\tDecode Inst: %d", in_instruction, out_instruction);
-	end
+	// always @(posedge clk) begin
+		// $display("Fetch Inst: %d\tDecode Inst: %d", in_instruction, out_instruction);
+	// end
 
 	reg[31:0] instruction;
 	reg[31:0] curr_PC;
