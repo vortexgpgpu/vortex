@@ -83,7 +83,6 @@ VL_MODULE(VVortex) {
 	VL_SIG16(Vortex__DOT__vx_d_e_reg__DOT__csr_address,11,0);
 	VL_SIG16(Vortex__DOT__vx_e_m_reg__DOT__csr_address,11,0);
 	VL_SIG16(Vortex__DOT__vx_csr_handler__DOT__decode_csr_address,11,0);
-	VL_SIG(Vortex__DOT__decode_rd1,31,0);
 	VL_SIG(Vortex__DOT__decode_itype_immed,31,0);
 	VL_SIG(Vortex__DOT__execute_alu_result,31,0);
 	VL_SIG(Vortex__DOT__memory_branch_dest,31,0);
@@ -98,19 +97,17 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_f_d_reg__DOT__curr_PC,31,0);
 	VL_SIG(Vortex__DOT__vx_decode__DOT__rd1_register,31,0);
 	VL_SIG(Vortex__DOT__vx_decode__DOT__rd2_register,31,0);
-	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__rd1,31,0);
-	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__rd2,31,0);
-    };
-    struct {
+	VL_SIG(Vortex__DOT__vx_decode__DOT__internal_rd1,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__PC_next_out,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__itype_immed,31,0);
+    };
+    struct {
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__upper_immed,19,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__csr_mask,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__curr_PC,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__jal_offset,31,0);
-	VL_SIG(Vortex__DOT__vx_execute__DOT__ALU_in2,31,0);
+	VL_SIG(Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__alu_result,31,0);
-	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__rd2,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__PC_next,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__csr_result,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__curr_PC,31,0);
@@ -119,10 +116,17 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_m_w_reg__DOT__alu_result,31,0);
 	VL_SIG(Vortex__DOT__vx_m_w_reg__DOT__mem_result,31,0);
 	VL_SIG(Vortex__DOT__vx_m_w_reg__DOT__PC_next,31,0);
-	VL_SIG64(Vortex__DOT__vx_execute__DOT__mult_signed_result,63,0);
+	VL_SIG64(Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result,63,0);
 	VL_SIG64(Vortex__DOT__vx_csr_handler__DOT__cycle,63,0);
 	VL_SIG64(Vortex__DOT__vx_csr_handler__DOT__instret,63,0);
+	VL_SIG(Vortex__DOT__decode_reg_data[2],31,0);
+	VL_SIG(Vortex__DOT__d_e_reg_data[2],31,0);
+	VL_SIG(Vortex__DOT__execute_reg_data[2],31,0);
+	VL_SIG(Vortex__DOT__e_m_reg_data[2],31,0);
 	VL_SIG(Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers[32],31,0);
+	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__reg_data[2],31,0);
+	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__reg_data_z[2],31,0);
+	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__reg_data[2],31,0);
 	VL_SIG16(Vortex__DOT__vx_csr_handler__DOT__csr[4096],11,0);
     };
     
@@ -132,6 +136,14 @@ VL_MODULE(VVortex) {
     VL_SIG8(__Vtableidx1,2,0);
     VL_SIG8(__Vclklast__TOP__clk,0,0);
     VL_SIG8(__Vclklast__TOP__reset,0,0);
+    VL_SIG(Vortex__DOT____Vcellout__vx_decode__out_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT____Vcellout__vx_execute__out_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT____Vcellinp__vx_execute__in_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data[2],31,0);
+    VL_SIG(Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data[2],31,0);
     static VL_ST_SIG8(__Vtable1_Vortex__DOT__vx_decode__DOT__mul_alu[8],4,0);
     
     // INTERNAL VARIABLES
@@ -166,7 +178,7 @@ VL_MODULE(VVortex) {
   private:
     static QData _change_request(VVortex__Syms* __restrict vlSymsp);
   public:
-    static void _combo__TOP__7(VVortex__Syms* __restrict vlSymsp);
+    static void _combo__TOP__8(VVortex__Syms* __restrict vlSymsp);
   private:
     void _ctor_var_reset();
   public:
@@ -178,12 +190,13 @@ VL_MODULE(VVortex) {
   public:
     static void _eval_initial(VVortex__Syms* __restrict vlSymsp);
     static void _eval_settle(VVortex__Syms* __restrict vlSymsp);
-    static void _initial__TOP__4(VVortex__Syms* __restrict vlSymsp);
+    static void _initial__TOP__5(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__1(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__2(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__3(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__6(VVortex__Syms* __restrict vlSymsp);
-    static void _settle__TOP__5(VVortex__Syms* __restrict vlSymsp);
+    static void _settle__TOP__4(VVortex__Syms* __restrict vlSymsp);
+    static void _settle__TOP__7(VVortex__Syms* __restrict vlSymsp);
 } VL_ATTR_ALIGNED(128);
 
 #endif // guard

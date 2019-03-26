@@ -6,9 +6,8 @@ module VX_d_e_reg (
 		input wire       clk,
 		input wire[4:0]  in_rd,
 		input wire[4:0]  in_rs1,
-		input wire[31:0] in_rd1,
 		input wire[4:0]  in_rs2,
-		input wire[31:0] in_rd2,
+		input wire[31:0] in_reg_data[1:0],
 		input wire[4:0]  in_alu_op,
 		input wire[1:0]  in_wb,
 		input wire       in_rs2_src, // NEW
@@ -34,9 +33,8 @@ module VX_d_e_reg (
 		output wire[31:0] out_csr_mask, // done
 		output wire[4:0]  out_rd,
 		output wire[4:0]  out_rs1,
-		output wire[31:0] out_rd1,
 		output wire[4:0]  out_rs2,
-		output wire[31:0] out_rd2,
+		output wire[31:0] out_reg_data[1:0],
 		output wire[4:0]  out_alu_op,
 		output wire[1:0]  out_wb,
 		output wire       out_rs2_src, // NEW
@@ -55,9 +53,8 @@ module VX_d_e_reg (
 
 		reg[4:0]  rd;
 		reg[4:0]  rs1;
-		reg[31:0] rd1;
 		reg[4:0]  rs2;
-		reg[31:0] rd2;
+		reg[31:0] reg_data[1:0];
 		reg[4:0]  alu_op;
 		reg[1:0]  wb;
 		reg[31:0] PC_next_out;
@@ -79,9 +76,9 @@ module VX_d_e_reg (
 		initial begin
 			rd          = 0;
 			rs1         = 0;
-			rd1         = 0;
+			reg_data[0] = 0;
+			reg_data[1] = 0;
 			rs2         = 0;
-			rd2         = 0;
 			alu_op      = 0;
 			wb          = `NO_WB;
 			PC_next_out = 0;
@@ -106,9 +103,8 @@ module VX_d_e_reg (
 
 		assign out_rd          = rd;
 		assign out_rs1         = rs1;
-		assign out_rd1         = rd1;
 		assign out_rs2         = rs2;
-		assign out_rd2         = rd2;
+		assign out_reg_data    = reg_data;
 		assign out_alu_op      = alu_op;
 		assign out_wb          = wb;
 		assign out_PC_next     = PC_next_out;
@@ -127,13 +123,18 @@ module VX_d_e_reg (
 		assign out_valid       = valid;
 
 
+
+		wire[31:0] reg_data_z[1:0];
+
+		assign reg_data_z[0] = 32'0;
+		assign reg_data_z[1] = 32'0;
+
 		always @(posedge clk) begin
 			if (in_freeze == 1'h0) begin
 				rd          <= stalling ? 5'h0         : in_rd;
 				rs1         <= stalling ? 5'h0         : in_rs1;
-				rd1         <= stalling ? 32'h0        : in_rd1;
 				rs2         <= stalling ? 5'h0         : in_rs2;
-				rd2         <= stalling ? 32'h0        : in_rd2;
+				reg_data    <= stalling ? reg_data_z   : in_reg_data;
 				alu_op      <= stalling ? `NO_ALU      : in_alu_op;
 				wb          <= stalling ? `NO_WB       : in_wb;
 				PC_next_out <= stalling ? 32'h0        : in_PC_next;

@@ -9,9 +9,8 @@ module VX_e_m_reg (
 		input wire[4:0]   in_rd,
 		input wire[1:0]   in_wb,
 		input wire[4:0]   in_rs1,
-		input wire[31:0]  in_rd1,
 		input wire[4:0]   in_rs2,
-		input wire[31:0]  in_rd2,
+		input wire[31:0]  in_reg_data[1:0],
 		input wire[2:0]   in_mem_read, // NEW
 		input wire[2:0]   in_mem_write, // NEW
 		input wire[31:0]  in_PC_next,
@@ -33,9 +32,8 @@ module VX_e_m_reg (
 		output wire[4:0]  out_rd,
 		output wire[1:0]  out_wb,
 		output wire[4:0]  out_rs1,
-		output wire[31:0] out_rd1,
-		output wire[31:0] out_rd2,
 		output wire[4:0]  out_rs2,
+		output wire[31:0] out_reg_data[1:0],
 		output wire[2:0]  out_mem_read,
 		output wire[2:0]  out_mem_write,
 		output wire[31:0] out_curr_PC,
@@ -51,9 +49,8 @@ module VX_e_m_reg (
 		reg[31:0] alu_result;
 		reg[4:0]  rd;
 		reg[4:0]  rs1;
-		reg[31:0] rd1;
 		reg[4:0]  rs2;
-		reg[31:0] rd2;
+		reg[31:0] reg_data[1:0];
 		reg[1:0]  wb;
 		reg[31:0] PC_next;
 		reg[2:0]  mem_read;
@@ -73,9 +70,9 @@ module VX_e_m_reg (
 			alu_result    = 0;
 			rd            = 0;
 			rs1           = 0;
-			rd1           = 0;
 			rs2           = 0;
-			rd2           = 0;
+			reg_data[0]   = 0;
+			reg_data[1]   = 0;
 			wb            = 0;
 			PC_next       = 0;
 			mem_read      = `NO_MEM_READ;
@@ -101,8 +98,7 @@ module VX_e_m_reg (
 		assign out_PC_next       = PC_next;
 		assign out_mem_read      = mem_read;
 		assign out_mem_write     = mem_write;
-		assign out_rd1           = rd1;
-		assign out_rd2           = rd2;
+		assign out_reg_data      = reg_data;
 		assign out_csr_address   = csr_address;
 		assign out_is_csr        = is_csr;
 		assign out_csr_result    = csr_result;
@@ -124,8 +120,7 @@ module VX_e_m_reg (
 				PC_next       <= in_PC_next;
 				mem_read      <= in_mem_read;
 				mem_write     <= in_mem_write;
-				rd1           <= in_rd1;
-				rd2           <= in_rd2;
+				reg_data      <= in_reg_data;
 				csr_address   <= in_csr_address;
 				is_csr        <= in_is_csr;
 				csr_result    <= in_csr_result;

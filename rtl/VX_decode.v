@@ -18,22 +18,21 @@ module VX_decode(
 	input wire        in_src2_fwd,
 	input wire[31:0]  in_src2_fwd_data,
 
-	output wire[11:0] out_csr_address, // done
-	output wire       out_is_csr, // done
-	output wire[31:0] out_csr_mask, // done
+	output wire[11:0] out_csr_address,
+	output wire       out_is_csr,
+	output wire[31:0] out_csr_mask,
 
 	// Outputs
 	output wire[4:0]  out_rd,
 	output wire[4:0]  out_rs1,
-	output wire[31:0] out_rd1,
 	output wire[4:0]  out_rs2,
-	output wire[31:0] out_rd2,
+	output wire[31:0] out_reg_data[1:0],
 	output wire[1:0]  out_wb,
 	output wire[4:0]  out_alu_op,
-	output wire       out_rs2_src, // NEW
-	output reg[31:0]  out_itype_immed, // new
-	output wire[2:0]  out_mem_read, // NEW
-	output wire[2:0]  out_mem_write, // NEW
+	output wire       out_rs2_src,
+	output reg[31:0]  out_itype_immed,
+	output wire[2:0]  out_mem_read,
+	output wire[2:0]  out_mem_write,
 	output reg[2:0]   out_branch_type,
 	output reg        out_branch_stall,
 	output reg        out_jal,
@@ -98,6 +97,9 @@ module VX_decode(
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
 
+		wire[31:0] internal_rd1;
+		wire[31:0] internal_rd2;
+
 		// always @(posedge clk) begin
 		// 	$display("Decode: curr_pc: %h", in_curr_PC);
 		// end
@@ -148,20 +150,22 @@ module VX_decode(
 		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
 
-		assign out_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
+		assign internal_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
+		assign internal_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;
+
+
+		assign out_reg_data[0] = internal_rd1;
+		assign out_reg_data[1] = internal_rd2;
+
 
 		// always @(negedge clk) begin
 		// 	if (in_curr_PC == 32'h800001f0) begin
-		// 		$display("IN DECODE: Going to write to: %d with val: %h [%h, %h, %h]", out_rd, out_rd1, in_curr_PC, in_src1_fwd_data, rd1_register);
+		// 		$display("IN DECODE: Going to write to: %d with val: %h [%h, %h, %h]", out_rd, internal_rd1, in_curr_PC, in_src1_fwd_data, rd1_register);
 		// 	end
 		// end
 
-		assign out_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;
-
-
-
 		assign out_is_csr   = is_csr;
-    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : out_rd1;
+    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : internal_rd1;
 
 
 		assign out_wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :

@@ -171,21 +171,27 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
     VL_SIG16(__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0,11,0);
     VL_SIG16(__Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0,11,0);
     VL_SIG(__Vdlyvval__Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers__v0,31,0);
+    VL_SIG(__Vdlyvval__Vortex__DOT__vx_d_e_reg__DOT__reg_data__v0,31,0);
+    VL_SIG(__Vdlyvval__Vortex__DOT__vx_d_e_reg__DOT__reg_data__v1,31,0);
+    VL_SIG(__Vdlyvval__Vortex__DOT__vx_e_m_reg__DOT__reg_data__v0,31,0);
+    VL_SIG(__Vdlyvval__Vortex__DOT__vx_e_m_reg__DOT__reg_data__v1,31,0);
     // Body
-    __Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0 = 0U;
     __Vdlyvset__Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers__v0 = 0U;
+    __Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0 = 0U;
+    // ALWAYS at VX_e_m_reg.v:113
+    __Vdlyvval__Vortex__DOT__vx_e_m_reg__DOT__reg_data__v0 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data
+	[1U];
+    __Vdlyvval__Vortex__DOT__vx_e_m_reg__DOT__reg_data__v1 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data
+	[0U];
     // ALWAYS at VX_csr_handler.v:34
     vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address 
 	= vlTOPp->Vortex__DOT__decode_csr_address;
     // ALWAYS at VX_csr_handler.v:34
     vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle 
 	= (VL_ULL(1) + vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle);
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type 
-	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type;
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC;
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
 	= (0xfffffU & ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 		        ? 0U : ((0x37U == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
@@ -198,40 +204,37 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 						(vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 						 >> 0xcU)
 						 : 0U))));
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset 
-	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed;
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src = 
 	(1U & ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	        ? 0U : (1U & (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_itype) 
 			       | (0x23U == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)))
 			       ? 1U : 0U))));
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type 
+	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type;
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC;
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset 
+	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed;
     // ALWAYS at VX_csr_handler.v:34
     if (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__valid) {
 	vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret 
 	    = (VL_ULL(1) + vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret);
     }
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_write 
 	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_write;
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_read 
 	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_read;
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal;
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal_dest 
-	= (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-	   + vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal_offset);
-    // ALWAYS at VX_csr_handler.v:43
-    if (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__is_csr) {
-	__Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0 
-	    = (0xfffU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_result);
-	__Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0 = 1U;
-	__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0 
-	    = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_address;
-    }
+	= (vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	   [0U] + vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal_offset);
     // ALWAYS at VX_register_file.v:35
     if (((0U != (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb)) 
 	 & (0U != (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd)))) {
@@ -245,50 +248,83 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 	__Vdlyvdim0__Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers__v0 
 	    = vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd;
     }
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd2 = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd2;
-    // ALWAYSPOST at VX_csr_handler.v:45
-    if (__Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0) {
-	vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0] 
-	    = __Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0;
+    // ALWAYS at VX_csr_handler.v:43
+    if (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__is_csr) {
+	__Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0 
+	    = (0xfffU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_result);
+	__Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0 = 1U;
+	__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0 
+	    = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_address;
     }
+    // ALWAYS at VX_d_e_reg.v:132
+    __Vdlyvval__Vortex__DOT__vx_d_e_reg__DOT__reg_data__v0 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
+	    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data_z
+	   [1U] : vlTOPp->Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data
+	   [1U]);
+    __Vdlyvval__Vortex__DOT__vx_d_e_reg__DOT__reg_data__v1 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
+	    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data_z
+	   [0U] : vlTOPp->Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data
+	   [0U]);
+    // ALWAYSPOST at VX_e_m_reg.v:123
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data[1U] 
+	= __Vdlyvval__Vortex__DOT__vx_e_m_reg__DOT__reg_data__v0;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data[0U] 
+	= __Vdlyvval__Vortex__DOT__vx_e_m_reg__DOT__reg_data__v1;
     // ALWAYSPOST at VX_register_file.v:38
     if (__Vdlyvset__Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers__v0) {
 	vlTOPp->Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers[__Vdlyvdim0__Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers__v0] 
 	    = __Vdlyvval__Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers__v0;
     }
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYSPOST at VX_csr_handler.v:45
+    if (__Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0) {
+	vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0] 
+	    = __Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0;
+    }
+    // ALWAYSPOST at VX_d_e_reg.v:137
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data[1U] 
+	= __Vdlyvval__Vortex__DOT__vx_d_e_reg__DOT__reg_data__v0;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data[0U] 
+	= __Vdlyvval__Vortex__DOT__vx_d_e_reg__DOT__reg_data__v1;
+    vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data
+	[1U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data
+	[0U];
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	    ? 0U : (IData)(vlTOPp->Vortex__DOT__decode_branch_type));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC = 
 	((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	  ? 0U : vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__curr_PC);
     vlTOPp->Vortex__DOT__memory_branch_dest = (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC 
 					       + (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset 
 						  << 1U));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	    ? 0xdeadbeefU : vlTOPp->Vortex__DOT__decode_itype_immed);
     // ALWAYS at VX_m_w_reg.v:60
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__valid = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__valid;
     vlTOPp->out_cache_driver_in_mem_write = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_write;
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_write 
 	= (7U & ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 		  ? 7U : ((0x23U == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
 			   ? (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 			      >> 0xcU) : 7U)));
     vlTOPp->out_cache_driver_in_mem_read = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_read;
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_read 
 	= (7U & ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 		  ? 7U : ((3U == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
 			   ? (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 			      >> 0xcU) : 7U)));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal = ((~ (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)) 
 						 & ((0x6fU 
 						     == 
@@ -312,11 +348,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 								(0xfffU 
 								 & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 								    >> 0x14U))))))));
-    // ALWAYS at VX_d_e_reg.v:130
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 = ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
-						  ? 0U
-						  : vlTOPp->Vortex__DOT__decode_rd1);
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal_offset 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	    ? 0U : ((0x6fU == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
@@ -348,12 +380,24 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 					   >> 0x14U))))
 				 ? 0xb0000000U : 0xdeadbeefU)
 			     : 0xdeadbeefU))));
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_m_w_reg.v:60
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result 
+	= vlTOPp->in_cache_driver_out_data;
+    // ALWAYS at VX_m_w_reg.v:60
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result 
+	= vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result;
+    // ALWAYS at VX_m_w_reg.v:60
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next;
+    // ALWAYS at VX_m_w_reg.v:60
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd;
+    // ALWAYS at VX_m_w_reg.v:60
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb;
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_address 
 	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_address;
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__is_csr = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__is_csr;
-    // ALWAYS at VX_e_m_reg.v:117
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_result 
 	= ((0xdU == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
 	    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_mask
@@ -364,47 +408,16 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 		    ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
 		       & ((IData)(0xffffffffU) - vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_mask))
 		    : 0xdeadbeefU)));
-    // ALWAYS at VX_m_w_reg.v:60
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd;
-    vlTOPp->out_cache_driver_in_data = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd2;
-    // ALWAYS at VX_d_e_reg.v:130
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd2 = ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
-						  ? 0U
-						  : 
-						 ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
-						    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
-						   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd))
-						   ? 
-						  ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
-						    ? 
-						   ((3U 
-						     == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
-						     ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
-						     : vlTOPp->Vortex__DOT__execute_alu_result)
-						    : 
-						   ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
-						     ? 
-						    ((3U 
-						      == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
-						      ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
-						      : 
-						     ((2U 
-						       == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
-						       ? vlTOPp->in_cache_driver_out_data
-						       : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
-						     : 
-						    ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
-						      ? 
-						     ((3U 
-						       == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
-						       ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
-						       : 
-						      ((2U 
-							== (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
-						        ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
-						        : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
-						      : 0xdeadbeefU)))
-						   : vlTOPp->Vortex__DOT__vx_decode__DOT__rd2_register));
+    vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data
+	[1U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__e_m_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__e_m_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data
+	[0U];
     vlTOPp->Vortex__DOT__csr_decode_csr_data = ((0xc00U 
 						 == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
 						 ? (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle)
@@ -427,28 +440,43 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 						    : 
 						   vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr
 						   [vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address]))));
-    // ALWAYS at VX_e_m_reg.v:117
+    vlTOPp->Vortex__DOT__d_e_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__d_e_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data
+	[0U];
+    vlTOPp->out_cache_driver_in_data = vlTOPp->Vortex__DOT__e_m_reg_data
+	[1U];
+    // ALWAYS at VX_e_m_reg.v:113
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__valid = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__valid;
     vlTOPp->Vortex__DOT__execute_branch_stall = ((0U 
 						  != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type)) 
 						 | (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
+	= vlTOPp->Vortex__DOT__execute_alu_result;
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out;
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd;
+    // ALWAYS at VX_e_m_reg.v:113
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb;
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_address 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	    ? 0U : (IData)(vlTOPp->Vortex__DOT__decode_csr_address));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__is_csr = 
 	((~ (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)) 
 	 & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_csr));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_mask 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	    ? 0U : (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_csr) 
 		     & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 			>> 0xeU)) ? (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 					      >> 0xfU))
-		     : vlTOPp->Vortex__DOT__decode_rd1));
-    // ALWAYS at VX_d_e_reg.v:130
+		     : vlTOPp->Vortex__DOT__vx_decode__DOT__internal_rd1));
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op = 
 	((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	  ? 0xfU : (((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
@@ -456,208 +484,26 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 					     & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)))
 		     ? (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__mul_alu)
 		     : (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__temp_final_alu)));
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd;
-    // ALWAYS at VX_m_w_reg.v:60
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result 
-	= vlTOPp->in_cache_driver_out_data;
-    vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2 = 
-	((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src)
-	  ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed
-	  : vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd2);
-    // ALWAYS at VX_m_w_reg.v:60
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result 
-	= vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result;
-    // ALWAYS at VX_m_w_reg.v:60
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next;
-    // ALWAYS at VX_m_w_reg.v:60
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb;
-    vlTOPp->Vortex__DOT__vx_execute__DOT__mult_signed_result 
-	= VL_MULS_QQQ(64,64,64, VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1), 
-		      VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2));
-    // ALWAYS at VX_d_e_reg.v:130
+    vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__d_e_reg_data[1U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__d_e_reg_data[0U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data[1U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[0U];
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__valid = (
 						   (~ (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)) 
 						   & (IData)(vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__valid));
-    // ALWAYS at VX_d_e_reg.v:130
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd = (0x1fU 
-						& ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
-						    ? 0U
-						    : 
-						   (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-						    >> 7U)));
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
-	= vlTOPp->Vortex__DOT__execute_alu_result;
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out;
-    // ALWAYS at VX_e_m_reg.v:117
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb = vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb;
-    // ALWAYS at VX_execute.v:91
-    vlTOPp->Vortex__DOT__execute_alu_result = ((0x10U 
-						& (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-					        ? (
-						   (8U 
-						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						    ? 0U
-						    : 
-						   ((4U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						     ? 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1
-						        : 
-						       VL_MODDIV_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))
-						       : 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1
-						        : 
-						       VL_MODDIVS_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 0xffffffffU
-						        : 
-						       VL_DIV_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))
-						       : 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 0xffffffffU
-						        : 
-						       VL_DIVS_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))))
-						     : 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? (IData)(
-								 (((QData)((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1)) 
-								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))) 
-								  >> 0x20U))
-						       : (IData)(
-								 (((((QData)((IData)(
-										VL_NEGATE_I((IData)(
-										(1U 
-										& (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-										>> 0x1fU)))))) 
-								     << 0x20U) 
-								    | (QData)((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1))) 
-								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))) 
-								  >> 0x20U)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? (IData)(
-								 (vlTOPp->Vortex__DOT__vx_execute__DOT__mult_signed_result 
-								  >> 0x20U))
-						       : (IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__mult_signed_result)))))
-					        : (
-						   (8U 
-						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						    ? 
-						   ((4U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						     ? 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? vlTOPp->Vortex__DOT__csr_decode_csr_data
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? vlTOPp->Vortex__DOT__csr_decode_csr_data
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC 
-						       + 
-						       (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
-							<< 0xcU))))
-						     : 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
-						       << 0xcU)
-						       : 
-						      ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-							>= vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 0U
-						        : 0xffffffffU))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2 
-						       & vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1)
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       | vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))))
-						    : 
-						   ((4U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						     ? 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      VL_SHIFTRS_III(32,32,5, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, 
-								     (0x1fU 
-								      & vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       >> 
-						       (0x1fU 
-							& vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       ^ vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						       : 
-						      ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-							< vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 1U
-						        : 0U)))
-						     : 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (VL_LTS_III(1,32,32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 1U
-						        : 0U)
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       << 
-						       (0x1fU 
-							& vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       - vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       + vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))))));
     vlTOPp->out_cache_driver_in_address = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result;
     // ALWAYS at VX_memory.v:66
     vlTOPp->Vortex__DOT__memory_branch_dir = (1U & 
@@ -697,11 +543,18 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 						   ((IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type) 
 						    & (0U 
 						       == vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result)))));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 	    ? 0U : ((IData)(4U) + vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__curr_PC));
-    // ALWAYS at VX_d_e_reg.v:130
+    // ALWAYS at VX_d_e_reg.v:132
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd = (0x1fU 
+						& ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
+						    ? 0U
+						    : 
+						   (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+						    >> 7U)));
+    // ALWAYS at VX_d_e_reg.v:132
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb = ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling)
 						 ? 0U
 						 : 
@@ -746,6 +599,219 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__2(VVortex__Syms* __restrict vlSymsp) 
 						    | (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_csr))
 						    ? 1U
 						    : 0U))));
+    vlTOPp->Vortex__DOT__execute_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__execute_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src)
+	    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed
+	    : vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+	   [1U]);
+    vlTOPp->Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__execute_reg_data[1U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__execute_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result 
+	= VL_MULS_QQQ(64,64,64, VL_EXTENDS_QI(64,32, 
+					      vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+					      [0U]), 
+		      VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2));
+    // ALWAYS at VX_alu.v:47
+    vlTOPp->Vortex__DOT__execute_alu_result = ((0x10U 
+						& (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+					        ? (
+						   (8U 
+						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						    ? 0U
+						    : 
+						   ((4U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						     ? 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 
+						       vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U]
+						        : 
+						       VL_MODDIV_III(32, 
+								     vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								     [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))
+						       : 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 
+						       vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U]
+						        : 
+						       VL_MODDIVS_III(32, 
+								      vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								      [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 0xffffffffU
+						        : 
+						       VL_DIV_III(32, 
+								  vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								  [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))
+						       : 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 0xffffffffU
+						        : 
+						       VL_DIVS_III(32, 
+								   vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								   [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))))
+						     : 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? (IData)(
+								 (((QData)((IData)(
+										vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+										[0U])) 
+								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))) 
+								  >> 0x20U))
+						       : (IData)(
+								 (((((QData)((IData)(
+										VL_NEGATE_I((IData)(
+										(1U 
+										& (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+										[0U] 
+										>> 0x1fU)))))) 
+								     << 0x20U) 
+								    | (QData)((IData)(
+										vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+										[0U]))) 
+								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))) 
+								  >> 0x20U)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? (IData)(
+								 (vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result 
+								  >> 0x20U))
+						       : (IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result)))))
+					        : (
+						   (8U 
+						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						    ? 
+						   ((4U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						     ? 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? vlTOPp->Vortex__DOT__csr_decode_csr_data
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? vlTOPp->Vortex__DOT__csr_decode_csr_data
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC 
+						       + 
+						       (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
+							<< 0xcU))))
+						     : 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
+						       << 0xcU)
+						       : 
+						      ((vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+							[0U] 
+							>= vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 0U
+						        : 0xffffffffU))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2 
+						       & vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U])
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       | vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))))
+						    : 
+						   ((4U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						     ? 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      VL_SHIFTRS_III(32,32,5, 
+								     vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								     [0U], 
+								     (0x1fU 
+								      & vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       >> 
+						       (0x1fU 
+							& vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       ^ vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						       : 
+						      ((vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+							[0U] 
+							< vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 1U
+						        : 0U)))
+						     : 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (VL_LTS_III(1,32,32, 
+								  vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								  [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 1U
+						        : 0U)
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       << 
+						       (0x1fU 
+							& vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       - vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       + vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))))));
 }
 
 VL_INLINE_OPT void VVortex::_sequent__TOP__3(VVortex__Syms* __restrict vlSymsp) {
@@ -764,73 +830,12 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__3(VVortex__Syms* __restrict vlSymsp) 
 		   >> 0xfU))];
 }
 
-void VVortex::_initial__TOP__4(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_initial__TOP__4\n"); );
+void VVortex::_settle__TOP__4(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_settle__TOP__4\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
-    // INITIAL at VX_csr_handler.v:27
-    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle = VL_ULL(0);
-    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret = VL_ULL(0);
-    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address = 0U;
-    // INITIAL at VX_fetch.v:44
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__stall_reg = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__old = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__state = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__real_PC = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__JAL_reg = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__BR_reg = 0U;
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__prev_debug = 0U;
-    // INITIAL at VX_m_w_reg.v:39
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result = 0U;
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result = 0U;
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd = 0U;
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb = 0U;
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next = 0U;
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__valid = 0U;
-    // INITIAL at VX_e_m_reg.v:72
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd2 = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_read = 7U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_write = 7U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_address = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__is_csr = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_result = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal_dest = 0U;
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__valid = 0U;
-    // INITIAL at VX_d_e_reg.v:79
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd2 = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_read = 7U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_write = 7U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_address = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__is_csr = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_mask = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal_offset = 0U;
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__valid = 0U;
-}
-
-void VVortex::_settle__TOP__5(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_settle__TOP__5\n"); );
-    VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
-    // Body
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data_z[0U] = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data_z[1U] = 0U;
     vlTOPp->Vortex__DOT__vx_decode__DOT__is_itype = 
 	((0x13U == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)) 
 	 | (3U == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)));
@@ -849,7 +854,7 @@ void VVortex::_settle__TOP__5(VVortex__Syms* __restrict vlSymsp) {
 						  (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 						   >> 0x14U)
 						   : 0x55U));
-    // ALWAYS at VX_decode.v:310
+    // ALWAYS at VX_decode.v:314
     vlTOPp->__Vtableidx1 = (7U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 				  >> 0xcU));
     vlTOPp->Vortex__DOT__vx_decode__DOT__mul_alu = 
@@ -875,7 +880,7 @@ void VVortex::_settle__TOP__5(VVortex__Syms* __restrict vlSymsp) {
 						      (7U 
 						       & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 							  >> 0xcU))));
-    // ALWAYS at VX_decode.v:260
+    // ALWAYS at VX_decode.v:264
     vlTOPp->Vortex__DOT__decode_branch_type = ((0x63U 
 						== 
 						(0x7fU 
@@ -906,112 +911,7 @@ void VVortex::_settle__TOP__5(VVortex__Syms* __restrict vlSymsp) {
 						      ? 2U
 						      : 1U)))
 					        : 0U);
-    vlTOPp->Vortex__DOT__csr_decode_csr_data = ((0xc00U 
-						 == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
-						 ? (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle)
-						 : 
-						((0xc80U 
-						  == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
-						  ? (IData)(
-							    (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle 
-							     >> 0x20U))
-						  : 
-						 ((0xc02U 
-						   == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
-						   ? (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret)
-						   : 
-						  ((0xc82U 
-						    == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
-						    ? (IData)(
-							      (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret 
-							       >> 0x20U))
-						    : 
-						   vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr
-						   [vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address]))));
-    // ALWAYS at VX_fetch.v:71
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__PC_to_use = 
-	((IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg)
-	  ? vlTOPp->Vortex__DOT__vx_fetch__DOT__old
-	  : ((IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__stall_reg)
-	      ? vlTOPp->Vortex__DOT__vx_fetch__DOT__old
-	      : ((0x10U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-		  ? 0U : ((8U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-			   ? 0U : ((4U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-				    ? ((2U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-				        ? 0U : ((1U 
-						 & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-						 ? 0U
-						 : vlTOPp->Vortex__DOT__vx_fetch__DOT__old))
-				    : ((2U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-				        ? ((1U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-					    ? vlTOPp->Vortex__DOT__vx_fetch__DOT__real_PC
-					    : vlTOPp->Vortex__DOT__vx_fetch__DOT__BR_reg)
-				        : ((1U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
-					    ? vlTOPp->Vortex__DOT__vx_fetch__DOT__JAL_reg
-					    : vlTOPp->Vortex__DOT__vx_fetch__DOT__real_PC)))))));
-    vlTOPp->out_cache_driver_in_data = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd2;
-    vlTOPp->out_cache_driver_in_mem_read = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_read;
-    vlTOPp->out_cache_driver_in_mem_write = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_write;
-    vlTOPp->Vortex__DOT__memory_branch_dest = (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC 
-					       + (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset 
-						  << 1U));
-    vlTOPp->out_cache_driver_in_address = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result;
-    // ALWAYS at VX_memory.v:66
-    vlTOPp->Vortex__DOT__memory_branch_dir = (1U & 
-					      ((4U 
-						& (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
-					        ? (
-						   (2U 
-						    & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
-						    ? 
-						   ((~ (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type)) 
-						    & (~ 
-						       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
-							>> 0x1fU)))
-						    : 
-						   ((1U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
-						     ? 
-						    (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
-						     >> 0x1fU)
-						     : 
-						    (~ 
-						     (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
-						      >> 0x1fU))))
-					        : (
-						   (2U 
-						    & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
-						    ? 
-						   ((1U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
-						     ? 
-						    (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
-						     >> 0x1fU)
-						     : 
-						    (0U 
-						     != vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
-						    : 
-						   ((IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type) 
-						    & (0U 
-						       == vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result)))));
-    vlTOPp->Vortex__DOT__execute_branch_stall = ((0U 
-						  != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type)) 
-						 | (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal));
-    vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2 = 
-	((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src)
-	  ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed
-	  : vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd2);
-    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd 
-	= ((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-		       >> 0x14U)) == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd)) 
-	    & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-			       >> 0x14U)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb)));
-    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd 
-	= ((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-		       >> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd)) 
-	    & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-			       >> 0xfU)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb)));
-    // ALWAYS at VX_decode.v:249
+    // ALWAYS at VX_decode.v:253
     vlTOPp->Vortex__DOT__decode_itype_immed = ((0x40U 
 						& vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)
 					        ? (
@@ -1227,275 +1127,70 @@ void VVortex::_settle__TOP__5(VVortex__Syms* __restrict vlSymsp) {
 							  >> 0x19U)))
 						      ? 0U
 						      : 1U))))))))));
-    // ALWAYS at VX_fetch.v:95
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__temp_PC = (
-						   ((IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal) 
-						    & (~ (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg)))
-						    ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal_dest
-						    : 
-						   (((IData)(vlTOPp->Vortex__DOT__memory_branch_dir) 
-						     & (~ (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg)))
-						     ? vlTOPp->Vortex__DOT__memory_branch_dest
-						     : vlTOPp->Vortex__DOT__vx_fetch__DOT__PC_to_use));
-    vlTOPp->Vortex__DOT__vx_execute__DOT__mult_signed_result 
-	= VL_MULS_QQQ(64,64,64, VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1), 
-		      VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2));
-    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd 
-	= (((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-			>> 0x14U)) == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd)) 
-	     & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-				>> 0x14U)))) & (0U 
-						!= (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))) 
-	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)));
-    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd 
-	= (((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-			>> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd)) 
-	     & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-				>> 0xfU)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))) 
-	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)));
-    vlTOPp->curr_PC = vlTOPp->Vortex__DOT__vx_fetch__DOT__temp_PC;
-    // ALWAYS at VX_execute.v:91
-    vlTOPp->Vortex__DOT__execute_alu_result = ((0x10U 
-						& (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-					        ? (
-						   (8U 
-						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						    ? 0U
-						    : 
-						   ((4U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						     ? 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1
-						        : 
-						       VL_MODDIV_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))
-						       : 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1
-						        : 
-						       VL_MODDIVS_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 0xffffffffU
-						        : 
-						       VL_DIV_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))
-						       : 
-						      ((0U 
-							== vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 0xffffffffU
-						        : 
-						       VL_DIVS_III(32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))))
-						     : 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? (IData)(
-								 (((QData)((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1)) 
-								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))) 
-								  >> 0x20U))
-						       : (IData)(
-								 (((((QData)((IData)(
-										VL_NEGATE_I((IData)(
-										(1U 
-										& (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-										>> 0x1fU)))))) 
-								     << 0x20U) 
-								    | (QData)((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1))) 
-								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))) 
-								  >> 0x20U)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? (IData)(
-								 (vlTOPp->Vortex__DOT__vx_execute__DOT__mult_signed_result 
-								  >> 0x20U))
-						       : (IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__mult_signed_result)))))
-					        : (
-						   (8U 
-						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						    ? 
-						   ((4U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						     ? 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? vlTOPp->Vortex__DOT__csr_decode_csr_data
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? vlTOPp->Vortex__DOT__csr_decode_csr_data
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC 
-						       + 
-						       (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
-							<< 0xcU))))
-						     : 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
-						       << 0xcU)
-						       : 
-						      ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-							>= vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 0U
-						        : 0xffffffffU))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2 
-						       & vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1)
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       | vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))))
-						    : 
-						   ((4U 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						     ? 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      VL_SHIFTRS_III(32,32,5, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, 
-								     (0x1fU 
-								      & vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       >> 
-						       (0x1fU 
-							& vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       ^ vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						       : 
-						      ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-							< vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 1U
-						        : 0U)))
-						     : 
-						    ((2U 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						      ? 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (VL_LTS_III(1,32,32, vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1, vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						        ? 1U
-						        : 0U)
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       << 
-						       (0x1fU 
-							& vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)))
-						      : 
-						     ((1U 
-						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
-						       ? 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       - vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2)
-						       : 
-						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd1 
-						       + vlTOPp->Vortex__DOT__vx_execute__DOT__ALU_in2))))));
-    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd 
-	= ((((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-			 >> 0x14U)) == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd)) 
-	      & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-				 >> 0x14U)))) & (0U 
-						 != (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))) 
-	    & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd))) 
-	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)));
-    vlTOPp->Vortex__DOT__forwarding_fwd_stall = ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
-						   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)) 
-						  & (2U 
-						     == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))) 
-						 | (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd) 
-						     | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
-						    & (2U 
-						       == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))));
-    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd 
-	= ((((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-			 >> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd)) 
-	      & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
-				 >> 0xfU)))) & (0U 
-						!= (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))) 
-	    & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd))) 
-	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)));
-    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_fwd_stall) 
-	   | (IData)(vlTOPp->Vortex__DOT__execute_branch_stall));
-    vlTOPp->Vortex__DOT__vx_fetch__DOT__stall = (((
-						   (0x63U 
-						    == 
-						    (0x7fU 
-						     & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)) 
-						   | ((0x6fU 
-						       == 
-						       (0x7fU 
-							& vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)) 
-						      | (0x67U 
-							 == 
-							 (0x7fU 
-							  & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)))) 
-						  | (IData)(vlTOPp->Vortex__DOT__forwarding_fwd_stall)) 
-						 | (IData)(vlTOPp->Vortex__DOT__execute_branch_stall));
-    vlTOPp->Vortex__DOT__decode_rd1 = ((0x6fU == (0x7fU 
-						  & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
-				        ? vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__curr_PC
-				        : ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
-					     | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
-					    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd))
-					    ? ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
-					        ? (
-						   (3U 
-						    == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
-						    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
-						    : vlTOPp->Vortex__DOT__execute_alu_result)
-					        : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
-						    ? 
-						   ((3U 
-						     == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
-						     ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
-						     : 
-						    ((2U 
-						      == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
-						      ? vlTOPp->in_cache_driver_out_data
-						      : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
-						    : 
-						   ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
-						     ? 
-						    ((3U 
-						      == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
-						      ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
-						      : 
-						     ((2U 
-						       == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
-						       ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
-						       : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
-						     : 0xdeadbeefU)))
-					    : vlTOPp->Vortex__DOT__vx_decode__DOT__rd1_register));
+}
+
+void VVortex::_initial__TOP__5(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_initial__TOP__5\n"); );
+    VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
+    // Body
+    // INITIAL at VX_fetch.v:44
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__stall_reg = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__old = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__state = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__real_PC = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__JAL_reg = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__BR_reg = 0U;
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__prev_debug = 0U;
+    // INITIAL at VX_m_w_reg.v:39
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result = 0U;
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result = 0U;
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd = 0U;
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb = 0U;
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next = 0U;
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__valid = 0U;
+    // INITIAL at VX_csr_handler.v:27
+    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle = VL_ULL(0);
+    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret = VL_ULL(0);
+    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address = 0U;
+    // INITIAL at VX_e_m_reg.v:69
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data[0U] = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data[1U] = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_read = 7U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_write = 7U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_address = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__is_csr = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__csr_result = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal_dest = 0U;
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__valid = 0U;
+    // INITIAL at VX_d_e_reg.v:76
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data[0U] = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data[1U] = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_read = 7U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__mem_write = 7U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_address = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__is_csr = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__csr_mask = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal_offset = 0U;
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__valid = 0U;
 }
 
 VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) {
@@ -1559,7 +1254,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) 
 						  (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 						   >> 0x14U)
 						   : 0x55U));
-    // ALWAYS at VX_decode.v:310
+    // ALWAYS at VX_decode.v:314
     vlTOPp->__Vtableidx1 = (7U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 				  >> 0xcU));
     vlTOPp->Vortex__DOT__vx_decode__DOT__mul_alu = 
@@ -1585,7 +1280,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) 
 						      (7U 
 						       & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 							  >> 0xcU))));
-    // ALWAYS at VX_decode.v:260
+    // ALWAYS at VX_decode.v:264
     vlTOPp->Vortex__DOT__decode_branch_type = ((0x63U 
 						== 
 						(0x7fU 
@@ -1626,7 +1321,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) 
 		       >> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd)) 
 	    & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
 			       >> 0xfU)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb)));
-    // ALWAYS at VX_decode.v:249
+    // ALWAYS at VX_decode.v:253
     vlTOPp->Vortex__DOT__decode_itype_immed = ((0x40U 
 						& vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)
 					        ? (
@@ -1899,45 +1594,541 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) 
 						 | (IData)(vlTOPp->Vortex__DOT__execute_branch_stall));
 }
 
-VL_INLINE_OPT void VVortex::_combo__TOP__7(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__7\n"); );
+void VVortex::_settle__TOP__7(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_settle__TOP__7\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
-    vlTOPp->Vortex__DOT__decode_rd1 = ((0x6fU == (0x7fU 
-						  & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
-				        ? vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__curr_PC
-				        : ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
-					     | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
-					    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd))
-					    ? ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
+    // ALWAYS at VX_fetch.v:71
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__PC_to_use = 
+	((IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg)
+	  ? vlTOPp->Vortex__DOT__vx_fetch__DOT__old
+	  : ((IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__stall_reg)
+	      ? vlTOPp->Vortex__DOT__vx_fetch__DOT__old
+	      : ((0x10U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+		  ? 0U : ((8U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+			   ? 0U : ((4U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+				    ? ((2U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+				        ? 0U : ((1U 
+						 & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+						 ? 0U
+						 : vlTOPp->Vortex__DOT__vx_fetch__DOT__old))
+				    : ((2U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+				        ? ((1U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+					    ? vlTOPp->Vortex__DOT__vx_fetch__DOT__real_PC
+					    : vlTOPp->Vortex__DOT__vx_fetch__DOT__BR_reg)
+				        : ((1U & (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__state))
+					    ? vlTOPp->Vortex__DOT__vx_fetch__DOT__JAL_reg
+					    : vlTOPp->Vortex__DOT__vx_fetch__DOT__real_PC)))))));
+    vlTOPp->Vortex__DOT__csr_decode_csr_data = ((0xc00U 
+						 == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
+						 ? (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle)
+						 : 
+						((0xc80U 
+						  == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
+						  ? (IData)(
+							    (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle 
+							     >> 0x20U))
+						  : 
+						 ((0xc02U 
+						   == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
+						   ? (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret)
+						   : 
+						  ((0xc82U 
+						    == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
+						    ? (IData)(
+							      (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret 
+							       >> 0x20U))
+						    : 
+						   vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr
+						   [vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address]))));
+    vlTOPp->out_cache_driver_in_mem_read = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_read;
+    vlTOPp->out_cache_driver_in_mem_write = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__mem_write;
+    vlTOPp->Vortex__DOT__memory_branch_dest = (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__curr_PC 
+					       + (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_offset 
+						  << 1U));
+    vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data
+	[1U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__reg_data
+	[0U];
+    vlTOPp->out_cache_driver_in_address = vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result;
+    // ALWAYS at VX_memory.v:66
+    vlTOPp->Vortex__DOT__memory_branch_dir = (1U & 
+					      ((4U 
+						& (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
 					        ? (
-						   (3U 
-						    == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
-						    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
-						    : vlTOPp->Vortex__DOT__execute_alu_result)
-					        : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+						   (2U 
+						    & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
 						    ? 
-						   ((3U 
-						     == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
-						     ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
+						   ((~ (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type)) 
+						    & (~ 
+						       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
+							>> 0x1fU)))
+						    : 
+						   ((1U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
+						     ? 
+						    (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
+						     >> 0x1fU)
+						     : 
+						    (~ 
+						     (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
+						      >> 0x1fU))))
+					        : (
+						   (2U 
+						    & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
+						    ? 
+						   ((1U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type))
+						     ? 
+						    (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result 
+						     >> 0x1fU)
+						     : 
+						    (0U 
+						     != vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
+						    : 
+						   ((IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__branch_type) 
+						    & (0U 
+						       == vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result)))));
+    vlTOPp->Vortex__DOT__execute_branch_stall = ((0U 
+						  != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__branch_type)) 
+						 | (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__jal));
+    vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data
+	[1U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd 
+	= ((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+		       >> 0x14U)) == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd)) 
+	    & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+			       >> 0x14U)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb)));
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd 
+	= ((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+		       >> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rd)) 
+	    & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+			       >> 0xfU)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb)));
+    vlTOPp->Vortex__DOT__e_m_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__e_m_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data
+	[0U];
+    // ALWAYS at VX_fetch.v:95
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__temp_PC = (
+						   ((IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal) 
+						    & (~ (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg)))
+						    ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__jal_dest
+						    : 
+						   (((IData)(vlTOPp->Vortex__DOT__memory_branch_dir) 
+						     & (~ (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__delay_reg)))
+						     ? vlTOPp->Vortex__DOT__memory_branch_dest
+						     : vlTOPp->Vortex__DOT__vx_fetch__DOT__PC_to_use));
+    vlTOPp->Vortex__DOT__d_e_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__d_e_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd 
+	= (((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+			>> 0x14U)) == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd)) 
+	     & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+				>> 0x14U)))) & (0U 
+						!= (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))) 
+	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)));
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd 
+	= (((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+			>> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__rd)) 
+	     & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+				>> 0xfU)))) & (0U != (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))) 
+	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)));
+    vlTOPp->out_cache_driver_in_data = vlTOPp->Vortex__DOT__e_m_reg_data
+	[1U];
+    vlTOPp->curr_PC = vlTOPp->Vortex__DOT__vx_fetch__DOT__temp_PC;
+    vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__d_e_reg_data[1U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__d_e_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd 
+	= ((((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+			 >> 0x14U)) == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd)) 
+	      & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+				 >> 0x14U)))) & (0U 
+						 != (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))) 
+	    & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd))) 
+	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)));
+    vlTOPp->Vortex__DOT__forwarding_fwd_stall = ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
+						   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)) 
+						  & (2U 
+						     == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))) 
+						 | (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd) 
+						     | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
+						    & (2U 
+						       == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))));
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd 
+	= ((((((0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+			 >> 0xfU)) == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__rd)) 
+	      & (0U != (0x1fU & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction 
+				 >> 0xfU)))) & (0U 
+						!= (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))) 
+	    & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd))) 
+	   & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)));
+    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data[1U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT____Vcellinp__vx_execute__in_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__stalling 
+	= ((IData)(vlTOPp->Vortex__DOT__forwarding_fwd_stall) 
+	   | (IData)(vlTOPp->Vortex__DOT__execute_branch_stall));
+    vlTOPp->Vortex__DOT__vx_fetch__DOT__stall = (((
+						   (0x63U 
+						    == 
+						    (0x7fU 
+						     & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)) 
+						   | ((0x6fU 
+						       == 
+						       (0x7fU 
+							& vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)) 
+						      | (0x67U 
+							 == 
+							 (0x7fU 
+							  & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction)))) 
+						  | (IData)(vlTOPp->Vortex__DOT__forwarding_fwd_stall)) 
+						 | (IData)(vlTOPp->Vortex__DOT__execute_branch_stall));
+    vlTOPp->Vortex__DOT__execute_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__execute_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__rs2_src)
+	    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__itype_immed
+	    : vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+	   [1U]);
+    vlTOPp->Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__execute_reg_data[1U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__execute_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result 
+	= VL_MULS_QQQ(64,64,64, VL_EXTENDS_QI(64,32, 
+					      vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+					      [0U]), 
+		      VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2));
+    // ALWAYS at VX_alu.v:47
+    vlTOPp->Vortex__DOT__execute_alu_result = ((0x10U 
+						& (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+					        ? (
+						   (8U 
+						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						    ? 0U
+						    : 
+						   ((4U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						     ? 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 
+						       vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U]
+						        : 
+						       VL_MODDIV_III(32, 
+								     vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								     [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))
+						       : 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 
+						       vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U]
+						        : 
+						       VL_MODDIVS_III(32, 
+								      vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								      [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 0xffffffffU
+						        : 
+						       VL_DIV_III(32, 
+								  vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								  [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))
+						       : 
+						      ((0U 
+							== vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 0xffffffffU
+						        : 
+						       VL_DIVS_III(32, 
+								   vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								   [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))))
 						     : 
 						    ((2U 
-						      == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
-						      ? vlTOPp->in_cache_driver_out_data
-						      : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
-						    : 
-						   ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
-						     ? 
-						    ((3U 
-						      == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
-						      ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? (IData)(
+								 (((QData)((IData)(
+										vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+										[0U])) 
+								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))) 
+								  >> 0x20U))
+						       : (IData)(
+								 (((((QData)((IData)(
+										VL_NEGATE_I((IData)(
+										(1U 
+										& (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+										[0U] 
+										>> 0x1fU)))))) 
+								     << 0x20U) 
+								    | (QData)((IData)(
+										vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+										[0U]))) 
+								   * (QData)((IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))) 
+								  >> 0x20U)))
 						      : 
-						     ((2U 
-						       == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
-						       ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
-						       : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
-						     : 0xdeadbeefU)))
-					    : vlTOPp->Vortex__DOT__vx_decode__DOT__rd1_register));
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? (IData)(
+								 (vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result 
+								  >> 0x20U))
+						       : (IData)(vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result)))))
+					        : (
+						   (8U 
+						    & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						    ? 
+						   ((4U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						     ? 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? vlTOPp->Vortex__DOT__csr_decode_csr_data
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? vlTOPp->Vortex__DOT__csr_decode_csr_data
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__curr_PC 
+						       + 
+						       (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
+							<< 0xcU))))
+						     : 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__upper_immed 
+						       << 0xcU)
+						       : 
+						      ((vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+							[0U] 
+							>= vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 0U
+						        : 0xffffffffU))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2 
+						       & vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U])
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       | vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))))
+						    : 
+						   ((4U 
+						     & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						     ? 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      VL_SHIFTRS_III(32,32,5, 
+								     vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								     [0U], 
+								     (0x1fU 
+								      & vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       >> 
+						       (0x1fU 
+							& vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       ^ vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						       : 
+						      ((vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+							[0U] 
+							< vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 1U
+						        : 0U)))
+						     : 
+						    ((2U 
+						      & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						      ? 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (VL_LTS_III(1,32,32, 
+								  vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+								  [0U], vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						        ? 1U
+						        : 0U)
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       << 
+						       (0x1fU 
+							& vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)))
+						      : 
+						     ((1U 
+						       & (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__alu_op))
+						       ? 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       - vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2)
+						       : 
+						      (vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data
+						       [0U] 
+						       + vlTOPp->Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2))))));
+    vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data[1U] 
+	= ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
+	     | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
+	    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd))
+	    ? ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
+	        ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
+		    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
+		    : vlTOPp->Vortex__DOT__execute_alu_result)
+	        : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+		    ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+		        ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
+		        : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+			    ? vlTOPp->in_cache_driver_out_data
+			    : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
+		    : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
+		        ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+			    ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
+			    : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+			        ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
+			        : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
+		        : 0xdeadbeefU))) : vlTOPp->Vortex__DOT__vx_decode__DOT__rd2_register);
+    vlTOPp->Vortex__DOT__vx_decode__DOT__internal_rd1 
+	= ((0x6fU == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
+	    ? vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__curr_PC
+	    : ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
+		 | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
+		| (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd))
+	        ? ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
+		    ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
+		        ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
+		        : vlTOPp->Vortex__DOT__execute_alu_result)
+		    : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+		        ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+			    ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
+			    : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+			        ? vlTOPp->in_cache_driver_out_data
+			        : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
+		        : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
+			    ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+			        ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
+			        : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+				    ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
+				    : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
+			    : 0xdeadbeefU))) : vlTOPp->Vortex__DOT__vx_decode__DOT__rd1_register));
+    vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__internal_rd1;
+    vlTOPp->Vortex__DOT__decode_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__decode_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__decode_reg_data[1U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__decode_reg_data[0U];
+}
+
+VL_INLINE_OPT void VVortex::_combo__TOP__8(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__8\n"); );
+    VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
+    // Body
+    vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data[1U] 
+	= ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
+	     | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
+	    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd))
+	    ? ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
+	        ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
+		    ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
+		    : vlTOPp->Vortex__DOT__execute_alu_result)
+	        : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+		    ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+		        ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
+		        : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+			    ? vlTOPp->in_cache_driver_out_data
+			    : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
+		    : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
+		        ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+			    ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
+			    : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+			        ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
+			        : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
+		        : 0xdeadbeefU))) : vlTOPp->Vortex__DOT__vx_decode__DOT__rd2_register);
+    vlTOPp->Vortex__DOT__vx_decode__DOT__internal_rd1 
+	= ((0x6fU == (0x7fU & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__instruction))
+	    ? vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__curr_PC
+	    : ((((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
+		 | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
+		| (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd))
+	        ? ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
+		    ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__wb))
+		        ? vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__PC_next_out
+		        : vlTOPp->Vortex__DOT__execute_alu_result)
+		    : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+		        ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+			    ? vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__PC_next
+			    : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__wb))
+			        ? vlTOPp->in_cache_driver_out_data
+			        : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__alu_result))
+		        : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
+			    ? ((3U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+			        ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__PC_next
+			        : ((2U == (IData)(vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__wb))
+				    ? vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__mem_result
+				    : vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__alu_result))
+			    : 0xdeadbeefU))) : vlTOPp->Vortex__DOT__vx_decode__DOT__rd1_register));
+    vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__internal_rd1;
+    vlTOPp->Vortex__DOT__decode_reg_data[1U] = vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data
+	[1U];
+    vlTOPp->Vortex__DOT__decode_reg_data[0U] = vlTOPp->Vortex__DOT____Vcellout__vx_decode__out_reg_data
+	[0U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__decode_reg_data[1U];
+    vlTOPp->Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__decode_reg_data[0U];
 }
 
 void VVortex::_eval(VVortex__Syms* __restrict vlSymsp) {
@@ -1958,7 +2149,7 @@ void VVortex::_eval(VVortex__Syms* __restrict vlSymsp) {
 	 | ((IData)(vlTOPp->reset) & (~ (IData)(vlTOPp->__Vclklast__TOP__reset))))) {
 	vlTOPp->_sequent__TOP__6(vlSymsp);
     }
-    vlTOPp->_combo__TOP__7(vlSymsp);
+    vlTOPp->_combo__TOP__8(vlSymsp);
     // Final
     vlTOPp->__Vclklast__TOP__clk = vlTOPp->clk;
     vlTOPp->__Vclklast__TOP__reset = vlTOPp->reset;
@@ -1970,7 +2161,7 @@ void VVortex::_eval_initial(VVortex__Syms* __restrict vlSymsp) {
     // Body
     vlTOPp->__Vclklast__TOP__clk = vlTOPp->clk;
     vlTOPp->__Vclklast__TOP__reset = vlTOPp->reset;
-    vlTOPp->_initial__TOP__4(vlSymsp);
+    vlTOPp->_initial__TOP__5(vlSymsp);
 }
 
 void VVortex::final() {
@@ -1984,7 +2175,8 @@ void VVortex::_eval_settle(VVortex__Syms* __restrict vlSymsp) {
     VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_eval_settle\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
-    vlTOPp->_settle__TOP__5(vlSymsp);
+    vlTOPp->_settle__TOP__4(vlSymsp);
+    vlTOPp->_settle__TOP__7(vlSymsp);
 }
 
 VL_INLINE_OPT QData VVortex::_change_request(VVortex__Syms* __restrict vlSymsp) {
@@ -2020,15 +2212,47 @@ void VVortex::_ctor_var_reset() {
     out_cache_driver_in_mem_write = VL_RAND_RESET_I(3);
     out_cache_driver_in_data = VL_RAND_RESET_I(32);
     Vortex__DOT__decode_csr_address = VL_RAND_RESET_I(12);
-    Vortex__DOT__decode_rd1 = VL_RAND_RESET_I(32);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__decode_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
     Vortex__DOT__decode_itype_immed = VL_RAND_RESET_I(32);
     Vortex__DOT__decode_branch_type = VL_RAND_RESET_I(3);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__d_e_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
     Vortex__DOT__execute_branch_stall = VL_RAND_RESET_I(1);
     Vortex__DOT__execute_alu_result = VL_RAND_RESET_I(32);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__execute_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__e_m_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
     Vortex__DOT__memory_branch_dir = VL_RAND_RESET_I(1);
     Vortex__DOT__memory_branch_dest = VL_RAND_RESET_I(32);
     Vortex__DOT__csr_decode_csr_data = VL_RAND_RESET_I(32);
     Vortex__DOT__forwarding_fwd_stall = VL_RAND_RESET_I(1);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellout__vx_decode__out_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellout__vx_d_e_reg__out_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellinp__vx_d_e_reg__in_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellout__vx_execute__out_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellinp__vx_execute__in_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellout__vx_e_m_reg__out_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT____Vcellinp__vx_e_m_reg__in_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
     Vortex__DOT__vx_fetch__DOT__stall_reg = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_fetch__DOT__delay_reg = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_fetch__DOT__old = VL_RAND_RESET_I(32);
@@ -2049,13 +2273,15 @@ void VVortex::_ctor_var_reset() {
     Vortex__DOT__vx_decode__DOT__is_csr = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__alu_tempp = VL_RAND_RESET_I(12);
     Vortex__DOT__vx_decode__DOT__mul_alu = VL_RAND_RESET_I(5);
+    Vortex__DOT__vx_decode__DOT__internal_rd1 = VL_RAND_RESET_I(32);
     Vortex__DOT__vx_decode__DOT__temp_final_alu = VL_RAND_RESET_I(5);
     { int __Vi0=0; for (; __Vi0<32; ++__Vi0) {
 	    Vortex__DOT__vx_decode__DOT__vx_register_file__DOT__registers[__Vi0] = VL_RAND_RESET_I(32);
     }}
     Vortex__DOT__vx_d_e_reg__DOT__rd = VL_RAND_RESET_I(5);
-    Vortex__DOT__vx_d_e_reg__DOT__rd1 = VL_RAND_RESET_I(32);
-    Vortex__DOT__vx_d_e_reg__DOT__rd2 = VL_RAND_RESET_I(32);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__vx_d_e_reg__DOT__reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
     Vortex__DOT__vx_d_e_reg__DOT__alu_op = VL_RAND_RESET_I(5);
     Vortex__DOT__vx_d_e_reg__DOT__wb = VL_RAND_RESET_I(2);
     Vortex__DOT__vx_d_e_reg__DOT__PC_next_out = VL_RAND_RESET_I(32);
@@ -2073,11 +2299,19 @@ void VVortex::_ctor_var_reset() {
     Vortex__DOT__vx_d_e_reg__DOT__jal_offset = VL_RAND_RESET_I(32);
     Vortex__DOT__vx_d_e_reg__DOT__valid = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_d_e_reg__DOT__stalling = VL_RAND_RESET_I(1);
-    Vortex__DOT__vx_execute__DOT__ALU_in2 = VL_RAND_RESET_I(32);
-    Vortex__DOT__vx_execute__DOT__mult_signed_result = VL_RAND_RESET_Q(64);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__vx_d_e_reg__DOT__reg_data_z[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__vx_execute__DOT____Vcellinp__vx_alu__in_reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
+    Vortex__DOT__vx_execute__DOT__vx_alu__DOT__ALU_in2 = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_execute__DOT__vx_alu__DOT__mult_signed_result = VL_RAND_RESET_Q(64);
     Vortex__DOT__vx_e_m_reg__DOT__alu_result = VL_RAND_RESET_I(32);
     Vortex__DOT__vx_e_m_reg__DOT__rd = VL_RAND_RESET_I(5);
-    Vortex__DOT__vx_e_m_reg__DOT__rd2 = VL_RAND_RESET_I(32);
+    { int __Vi0=0; for (; __Vi0<2; ++__Vi0) {
+	    Vortex__DOT__vx_e_m_reg__DOT__reg_data[__Vi0] = VL_RAND_RESET_I(32);
+    }}
     Vortex__DOT__vx_e_m_reg__DOT__wb = VL_RAND_RESET_I(2);
     Vortex__DOT__vx_e_m_reg__DOT__PC_next = VL_RAND_RESET_I(32);
     Vortex__DOT__vx_e_m_reg__DOT__mem_read = VL_RAND_RESET_I(3);

@@ -1,6 +1,4 @@
 
-
-
 module Vortex(
 	input  wire       clk,
 	input  wire       reset,
@@ -34,9 +32,8 @@ wire       decode_is_csr;
 wire[31:0] decode_csr_mask; 
 wire[4:0]  decode_rd;
 wire[4:0]  decode_rs1;
-wire[31:0] decode_rd1;
 wire[4:0]  decode_rs2;
-wire[31:0] decode_rd2;
+wire[31:0] decode_reg_data[1:0];
 wire[1:0]  decode_wb;
 wire[4:0]  decode_alu_op;
 wire       decode_rs2_src; 
@@ -56,9 +53,8 @@ wire       d_e_is_csr;
 wire[31:0] d_e_csr_mask; 
 wire[4:0]  d_e_rd;
 wire[4:0]  d_e_rs1;
-wire[31:0] d_e_rd1;
 wire[4:0]  d_e_rs2;
-wire[31:0] d_e_rd2;
+wire[31:0] d_e_reg_data[1:0];
 wire[4:0]  d_e_alu_op;
 wire[1:0]  d_e_wb;
 wire       d_e_rs2_src;
@@ -83,9 +79,8 @@ reg[31:0]  execute_alu_result;
 wire[4:0]  execute_rd;
 wire[1:0]  execute_wb;
 wire[4:0]  execute_rs1;
-wire[31:0] execute_rd1;
 wire[4:0]  execute_rs2;
-wire[31:0] execute_rd2;
+wire[31:0] execute_reg_data[1:0];
 wire[2:0]  execute_mem_read;
 wire[2:0]  execute_mem_write;
 wire       execute_jal;
@@ -106,9 +101,8 @@ wire[4:0]  e_m_rd;
 wire[1:0]  e_m_wb;
 wire[4:0]  e_m_rs1;
 /* verilator lint_off UNUSED */
-wire[31:0] e_m_rd1;
+wire[31:0] e_m_reg_data[1:0];
 /* verilator lint_on UNUSED */
-wire[31:0] e_m_rd2;
 wire[4:0]  e_m_rs2;
 wire[2:0]  e_m_mem_read;
 wire[2:0]  e_m_mem_write;
@@ -174,7 +168,6 @@ assign debug        = 1'b0;
 assign interrupt    = 1'b0;
 assign total_freeze = fetch_delay || memory_delay;
 
- 
 
 VX_fetch vx_fetch(
 		.clk(clk),
@@ -232,9 +225,8 @@ VX_decode vx_decode(
 
 		.out_rd(decode_rd),
 		.out_rs1(decode_rs1),
-		.out_rd1(decode_rd1),
 		.out_rs2(decode_rs2),
-		.out_rd2(decode_rd2),
+		.out_reg_data(decode_reg_data),
 		.out_wb(decode_wb),
 		.out_alu_op(decode_alu_op),
 		.out_rs2_src(decode_rs2_src),
@@ -255,9 +247,8 @@ VX_d_e_reg vx_d_e_reg(
 		.clk(clk),
 		.in_rd(decode_rd),
 		.in_rs1(decode_rs1),
-		.in_rd1(decode_rd1),
 		.in_rs2(decode_rs2),
-		.in_rd2(decode_rd2),
+		.in_reg_data(decode_reg_data),
 		.in_alu_op(decode_alu_op),
 		.in_wb(decode_wb),
 		.in_rs2_src(decode_rs2_src), 
@@ -283,9 +274,8 @@ VX_d_e_reg vx_d_e_reg(
 		.out_csr_mask(d_e_csr_mask),
 		.out_rd(d_e_rd),
 		.out_rs1(d_e_rs1),
-		.out_rd1(d_e_rd1),
 		.out_rs2(d_e_rs2),
-		.out_rd2(d_e_rd2),
+		.out_reg_data(d_e_reg_data),
 		.out_alu_op(d_e_alu_op),
 		.out_wb(d_e_wb),
 		.out_rs2_src(d_e_rs2_src), 
@@ -304,9 +294,8 @@ VX_d_e_reg vx_d_e_reg(
 VX_execute vx_execute(
 		.in_rd(d_e_rd),
 		.in_rs1(d_e_rs1),
-		.in_rd1(d_e_rd1),
 		.in_rs2(d_e_rs2),
-		.in_rd2(d_e_rd2),
+		.in_reg_data(d_e_reg_data),
 		.in_alu_op(d_e_alu_op),
 		.in_wb(d_e_wb),
 		.in_rs2_src(d_e_rs2_src),
@@ -332,9 +321,8 @@ VX_execute vx_execute(
 		.out_rd(execute_rd),
 		.out_wb(execute_wb),
 		.out_rs1(execute_rs1),
-		.out_rd1(execute_rd1),
 		.out_rs2(execute_rs2),
-		.out_rd2(execute_rd2),
+		.out_reg_data(execute_reg_data),
 		.out_mem_read(execute_mem_read),
 		.out_mem_write(execute_mem_write),
 		.out_jal(execute_jal),
@@ -352,9 +340,8 @@ VX_e_m_reg vx_e_m_reg(
 		.in_rd(execute_rd),
 		.in_wb(execute_wb),
 		.in_rs1(execute_rs1),
-		.in_rd1(execute_rd1),
 		.in_rs2(execute_rs2),
-		.in_rd2(execute_rd2),
+		.in_reg_data(execute_reg_data),
 		.in_mem_read(execute_mem_read),
 		.in_mem_write(execute_mem_write),
 		.in_PC_next(execute_PC_next),
@@ -376,9 +363,8 @@ VX_e_m_reg vx_e_m_reg(
 		.out_rd(e_m_rd),
 		.out_wb(e_m_wb),
 		.out_rs1(e_m_rs1),
-		.out_rd1(e_m_rd1),
-		.out_rd2(e_m_rd2),
 		.out_rs2(e_m_rs2),
+		.out_reg_data(e_m_reg_data),
 		.out_mem_read(e_m_mem_read),
 		.out_mem_write(e_m_mem_write),
 		.out_curr_PC(e_m_curr_PC),
@@ -398,7 +384,7 @@ VX_memory vx_memory(
 		.in_wb(e_m_wb),
 		.in_rs1(e_m_rs1),
 		.in_rs2(e_m_rs2),
-		.in_rd2(e_m_rd2),
+		.in_rd2(e_m_reg_data[1]),
 		.in_PC_next(e_m_PC_next),
 		.in_curr_PC(e_m_curr_PC),
 		.in_branch_offset(e_m_branch_offset),
