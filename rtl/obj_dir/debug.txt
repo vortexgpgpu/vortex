@@ -1,0 +1,2598 @@
+
+
+(0) Inst: ffffffff
+Decode: curr_pc: 00000000
+
+
+(4) Inst: f1401073
+Decode: curr_pc: 00000000
+
+
+(8) Inst: 30101073
+Decode: curr_pc: 00000004
+
+
+(c) Inst: 800000b7
+Decode: curr_pc: 00000008
+
+
+(10) Inst: 80e7
+Decode: curr_pc: 0000000c
+(00000004) WB Data: babebabe, to register:  0
+
+
+(14) Inst: ffffffff
+Decode: curr_pc: 00000010
+(00000008) WB Data: babebabe, to register:  0
+
+
+(14) Inst: ffffffff
+Decode: curr_pc: 00000014
+(0000000c) WB Data: babebabe, to register:  1
+
+
+(80000000) Inst: 4c0006f
+Decode: curr_pc: 00000014
+Writing 80000000 to  1
+(00000010) WB Data: babebabe, to register:  1
+
+
+(80000004) Inst: 34202f73
+Decode: curr_pc: 80000000
+Writing 00000014 to  1
+
+
+(80000004) Inst: 34202f73
+Decode: curr_pc: 80000004
+
+
+(8000004c) Inst: f1402573
+Decode: curr_pc: 80000004
+(80000000) WB Data: babebabe, to register:  0
+
+
+(80000050) Inst: 51063
+Decode: curr_pc: 8000004c
+
+
+(80000054) Inst: 30102573
+Decode: curr_pc: 80000050
+
+
+(80000054) Inst: 30102573
+Decode: curr_pc: 80000054
+(8000004c) WB Data: babebabe, to register: 10
+
+
+(80000054) Inst: 30102573
+Decode: curr_pc: 80000054
+Writing 00000000 to 10
+
+
+(80000058) Inst: 55863
+Decode: curr_pc: 80000054
+
+
+(8000005c) Inst: ff0000f
+Decode: curr_pc: 80000058
+
+
+(8000005c) Inst: ff0000f
+Decode: curr_pc: 8000005c
+(80000054) WB Data: babebabe, to register: 10
+
+
+(80000068) Inst: e13
+Decode: curr_pc: 8000005c
+Writing 00000000 to 10
+
+
+(8000006c) Inst: 297
+Decode: curr_pc: 80000068
+
+
+(80000070) Inst: f9828293
+Decode: curr_pc: 8000006c
+
+
+(80000074) Inst: 30529073
+Decode: curr_pc: 80000070
+(80000068) WB Data: babebabe, to register: 28
+
+
+(80000078) Inst: 30205073
+Decode: curr_pc: 80000074
+Writing 00000000 to 28
+(8000006c) WB Data: babebabe, to register:  5
+
+
+(8000007c) Inst: 30305073
+Decode: curr_pc: 80000078
+Writing 8000006c to  5
+(80000070) WB Data: babebabe, to register:  5
+
+
+(80000080) Inst: 30405073
+Decode: curr_pc: 8000007c
+Writing 80000004 to  5
+(80000074) WB Data: babebabe, to register:  0
+
+
+(80000084) Inst: 80000297
+Decode: curr_pc: 80000080
+(80000078) WB Data: babebabe, to register:  0
+
+
+(80000088) Inst: f7c28293
+Decode: curr_pc: 80000084
+(8000007c) WB Data: babebabe, to register:  0
+
+
+(8000008c) Inst: 28c63
+Decode: curr_pc: 80000088
+(80000080) WB Data: babebabe, to register:  0
+
+
+(80000090) Inst: 10529073
+Decode: curr_pc: 8000008c
+(80000084) WB Data: babebabe, to register:  5
+
+
+(80000090) Inst: 10529073
+Decode: curr_pc: 80000090
+Writing 00000084 to  5
+(80000088) WB Data: babebabe, to register:  5
+
+
+(800000a4) Inst: 30005073
+Decode: curr_pc: 80000090
+Writing 00000000 to  5
+
+
+(800000a8) Inst: 297
+Decode: curr_pc: 800000a4
+
+
+(800000ac) Inst: 1428293
+Decode: curr_pc: 800000a8
+
+
+(800000b0) Inst: 34129073
+Decode: curr_pc: 800000ac
+(800000a4) WB Data: babebabe, to register:  0
+
+
+(800000b4) Inst: f1402573
+Decode: curr_pc: 800000b0
+(800000a8) WB Data: babebabe, to register:  5
+
+
+(800000b8) Inst: 30200073
+Decode: curr_pc: 800000b4
+Writing 800000a8 to  5
+(800000ac) WB Data: babebabe, to register:  5
+
+
+(800000bc) Inst: 93
+Decode: curr_pc: 800000b8
+Writing 800000bc to  5
+(800000b0) WB Data: babebabe, to register:  0
+
+
+(800000c0) Inst: 113
+Decode: curr_pc: 800000bc
+(800000b4) WB Data: babebabe, to register: 10
+
+
+(800000c4) Inst: 402081b3
+Decode: curr_pc: 800000c0
+Writing 00000000 to 10
+(800000b8) WB Data: babebabe, to register:  0
+
+
+(800000c8) Inst: e93
+Decode: curr_pc: 800000c4
+(800000bc) WB Data: babebabe, to register:  1
+
+
+(800000cc) Inst: 200e13
+Decode: curr_pc: 800000c8
+Writing 00000000 to  1
+(800000c0) WB Data: babebabe, to register:  2
+
+
+(800000d0) Inst: 4bd19663
+Decode: curr_pc: 800000cc
+Writing 00000000 to  2
+(800000c4) WB Data: babebabe, to register:  3
+
+
+(800000d4) Inst: 100093
+Decode: curr_pc: 800000d0
+Writing 00000000 to  3
+(800000c8) WB Data: babebabe, to register: 29
+
+
+(800000d4) Inst: 100093
+Decode: curr_pc: 800000d4
+Writing 00000000 to 29
+(800000cc) WB Data: babebabe, to register: 28
+
+
+(800000d4) Inst: 100093
+Decode: curr_pc: 800000d4
+Writing 00000002 to 28
+
+
+(800000d8) Inst: 100113
+Decode: curr_pc: 800000d4
+
+
+(800000dc) Inst: 402081b3
+Decode: curr_pc: 800000d8
+
+
+(800000e0) Inst: e93
+Decode: curr_pc: 800000dc
+(800000d4) WB Data: babebabe, to register:  1
+
+
+(800000e4) Inst: 300e13
+Decode: curr_pc: 800000e0
+Writing 00000001 to  1
+(800000d8) WB Data: babebabe, to register:  2
+
+
+(800000e8) Inst: 49d19a63
+Decode: curr_pc: 800000e4
+Writing 00000001 to  2
+(800000dc) WB Data: babebabe, to register:  3
+
+
+(800000ec) Inst: 300093
+Decode: curr_pc: 800000e8
+Writing 00000000 to  3
+(800000e0) WB Data: babebabe, to register: 29
+
+
+(800000ec) Inst: 300093
+Decode: curr_pc: 800000ec
+Writing 00000000 to 29
+(800000e4) WB Data: babebabe, to register: 28
+
+
+(800000ec) Inst: 300093
+Decode: curr_pc: 800000ec
+Writing 00000003 to 28
+
+
+(800000f0) Inst: 700113
+Decode: curr_pc: 800000ec
+
+
+(800000f4) Inst: 402081b3
+Decode: curr_pc: 800000f0
+
+
+(800000f8) Inst: ffc00e93
+Decode: curr_pc: 800000f4
+(800000ec) WB Data: babebabe, to register:  1
+
+
+(800000fc) Inst: 400e13
+Decode: curr_pc: 800000f8
+Writing 00000003 to  1
+(800000f0) WB Data: babebabe, to register:  2
+
+
+(80000100) Inst: 47d19e63
+Decode: curr_pc: 800000fc
+Writing 00000007 to  2
+(800000f4) WB Data: babebabe, to register:  3
+
+
+(80000104) Inst: 93
+Decode: curr_pc: 80000100
+Writing fffffffc to  3
+(800000f8) WB Data: babebabe, to register: 29
+
+
+(80000104) Inst: 93
+Decode: curr_pc: 80000104
+Writing fffffffc to 29
+(800000fc) WB Data: babebabe, to register: 28
+
+
+(80000104) Inst: 93
+Decode: curr_pc: 80000104
+Writing 00000004 to 28
+
+
+(80000108) Inst: ffff8137
+Decode: curr_pc: 80000104
+
+
+(8000010c) Inst: 402081b3
+Decode: curr_pc: 80000108
+
+
+(80000110) Inst: 8eb7
+Decode: curr_pc: 8000010c
+(80000104) WB Data: babebabe, to register:  1
+
+
+(80000114) Inst: 500e13
+Decode: curr_pc: 80000110
+Writing 00000000 to  1
+(80000108) WB Data: babebabe, to register:  2
+
+
+(80000118) Inst: 47d19263
+Decode: curr_pc: 80000114
+Writing ffff8000 to  2
+(8000010c) WB Data: babebabe, to register:  3
+
+
+(8000011c) Inst: 800000b7
+Decode: curr_pc: 80000118
+Writing 00008000 to  3
+(80000110) WB Data: babebabe, to register: 29
+
+
+(8000011c) Inst: 800000b7
+Decode: curr_pc: 8000011c
+Writing 00008000 to 29
+(80000114) WB Data: babebabe, to register: 28
+
+
+(8000011c) Inst: 800000b7
+Decode: curr_pc: 8000011c
+Writing 00000005 to 28
+
+
+(80000120) Inst: 113
+Decode: curr_pc: 8000011c
+
+
+(80000124) Inst: 402081b3
+Decode: curr_pc: 80000120
+
+
+(80000128) Inst: 80000eb7
+Decode: curr_pc: 80000124
+(8000011c) WB Data: babebabe, to register:  1
+
+
+(8000012c) Inst: 600e13
+Decode: curr_pc: 80000128
+Writing 80000000 to  1
+(80000120) WB Data: babebabe, to register:  2
+
+
+(80000130) Inst: 45d19663
+Decode: curr_pc: 8000012c
+Writing 00000000 to  2
+(80000124) WB Data: babebabe, to register:  3
+
+
+(80000134) Inst: 800000b7
+Decode: curr_pc: 80000130
+Writing 80000000 to  3
+(80000128) WB Data: babebabe, to register: 29
+
+
+(80000134) Inst: 800000b7
+Decode: curr_pc: 80000134
+Writing 80000000 to 29
+(8000012c) WB Data: babebabe, to register: 28
+
+
+(80000134) Inst: 800000b7
+Decode: curr_pc: 80000134
+Writing 00000006 to 28
+
+
+(80000138) Inst: ffff8137
+Decode: curr_pc: 80000134
+
+
+(8000013c) Inst: 402081b3
+Decode: curr_pc: 80000138
+
+
+(80000140) Inst: 80008eb7
+Decode: curr_pc: 8000013c
+(80000134) WB Data: babebabe, to register:  1
+
+
+(80000144) Inst: 700e13
+Decode: curr_pc: 80000140
+Writing 80000000 to  1
+(80000138) WB Data: babebabe, to register:  2
+
+
+(80000148) Inst: 43d19a63
+Decode: curr_pc: 80000144
+Writing ffff8000 to  2
+(8000013c) WB Data: babebabe, to register:  3
+
+
+(8000014c) Inst: 93
+Decode: curr_pc: 80000148
+Writing 80008000 to  3
+(80000140) WB Data: babebabe, to register: 29
+
+
+(8000014c) Inst: 93
+Decode: curr_pc: 8000014c
+Writing 80008000 to 29
+(80000144) WB Data: babebabe, to register: 28
+
+
+(8000014c) Inst: 93
+Decode: curr_pc: 8000014c
+Writing 00000007 to 28
+
+
+(80000150) Inst: 8137
+Decode: curr_pc: 8000014c
+
+
+(80000154) Inst: fff10113
+Decode: curr_pc: 80000150
+
+
+(80000158) Inst: 402081b3
+Decode: curr_pc: 80000154
+(8000014c) WB Data: babebabe, to register:  1
+
+
+(8000015c) Inst: ffff8eb7
+Decode: curr_pc: 80000158
+Writing 00000000 to  1
+(80000150) WB Data: babebabe, to register:  2
+
+
+(80000160) Inst: 1e8e93
+Decode: curr_pc: 8000015c
+Writing 00008000 to  2
+(80000154) WB Data: babebabe, to register:  2
+
+
+(80000164) Inst: 800e13
+Decode: curr_pc: 80000160
+Writing 00007fff to  2
+(80000158) WB Data: babebabe, to register:  3
+
+
+(80000168) Inst: 41d19a63
+Decode: curr_pc: 80000164
+Writing ffff8001 to  3
+(8000015c) WB Data: babebabe, to register: 29
+
+
+(8000016c) Inst: 800000b7
+Decode: curr_pc: 80000168
+Writing ffff8000 to 29
+(80000160) WB Data: babebabe, to register: 29
+
+
+(8000016c) Inst: 800000b7
+Decode: curr_pc: 8000016c
+Writing ffff8001 to 29
+(80000164) WB Data: babebabe, to register: 28
+
+
+(8000016c) Inst: 800000b7
+Decode: curr_pc: 8000016c
+Writing 00000008 to 28
+
+
+(80000170) Inst: fff08093
+Decode: curr_pc: 8000016c
+
+
+(80000174) Inst: 113
+Decode: curr_pc: 80000170
+
+
+(80000178) Inst: 402081b3
+Decode: curr_pc: 80000174
+(8000016c) WB Data: babebabe, to register:  1
+
+
+(8000017c) Inst: 80000eb7
+Decode: curr_pc: 80000178
+Writing 80000000 to  1
+(80000170) WB Data: babebabe, to register:  1
+
+
+(80000180) Inst: fffe8e93
+Decode: curr_pc: 8000017c
+Writing 7fffffff to  1
+(80000174) WB Data: babebabe, to register:  2
+
+
+(80000184) Inst: 900e13
+Decode: curr_pc: 80000180
+Writing 00000000 to  2
+(80000178) WB Data: babebabe, to register:  3
+
+
+(80000188) Inst: 3fd19a63
+Decode: curr_pc: 80000184
+Writing 7fffffff to  3
+(8000017c) WB Data: babebabe, to register: 29
+
+
+(8000018c) Inst: 800000b7
+Decode: curr_pc: 80000188
+Writing 80000000 to 29
+(80000180) WB Data: babebabe, to register: 29
+
+
+(8000018c) Inst: 800000b7
+Decode: curr_pc: 8000018c
+Writing 7fffffff to 29
+(80000184) WB Data: babebabe, to register: 28
+
+
+(8000018c) Inst: 800000b7
+Decode: curr_pc: 8000018c
+Writing 00000009 to 28
+
+
+(80000190) Inst: fff08093
+Decode: curr_pc: 8000018c
+
+
+(80000194) Inst: 8137
+Decode: curr_pc: 80000190
+
+
+(80000198) Inst: fff10113
+Decode: curr_pc: 80000194
+(8000018c) WB Data: babebabe, to register:  1
+
+
+(8000019c) Inst: 402081b3
+Decode: curr_pc: 80000198
+Writing 80000000 to  1
+(80000190) WB Data: babebabe, to register:  1
+
+
+(800001a0) Inst: 7fff8eb7
+Decode: curr_pc: 8000019c
+Writing 7fffffff to  1
+(80000194) WB Data: babebabe, to register:  2
+
+
+(800001a4) Inst: a00e13
+Decode: curr_pc: 800001a0
+Writing 00008000 to  2
+(80000198) WB Data: babebabe, to register:  2
+
+
+(800001a8) Inst: 3dd19a63
+Decode: curr_pc: 800001a4
+Writing 00007fff to  2
+(8000019c) WB Data: babebabe, to register:  3
+
+
+(800001ac) Inst: 800000b7
+Decode: curr_pc: 800001a8
+Writing 7fff8000 to  3
+(800001a0) WB Data: babebabe, to register: 29
+
+
+(800001ac) Inst: 800000b7
+Decode: curr_pc: 800001ac
+Writing 7fff8000 to 29
+(800001a4) WB Data: babebabe, to register: 28
+
+
+(800001ac) Inst: 800000b7
+Decode: curr_pc: 800001ac
+Writing 0000000a to 28
+
+
+(800001b0) Inst: 8137
+Decode: curr_pc: 800001ac
+
+
+(800001b4) Inst: fff10113
+Decode: curr_pc: 800001b0
+
+
+(800001b8) Inst: 402081b3
+Decode: curr_pc: 800001b4
+(800001ac) WB Data: babebabe, to register:  1
+
+
+(800001bc) Inst: 7fff8eb7
+Decode: curr_pc: 800001b8
+Writing 80000000 to  1
+(800001b0) WB Data: babebabe, to register:  2
+
+
+(800001c0) Inst: 1e8e93
+Decode: curr_pc: 800001bc
+Writing 00008000 to  2
+(800001b4) WB Data: babebabe, to register:  2
+
+
+(800001c4) Inst: b00e13
+Decode: curr_pc: 800001c0
+Writing 00007fff to  2
+(800001b8) WB Data: babebabe, to register:  3
+
+
+(800001c8) Inst: 3bd19a63
+Decode: curr_pc: 800001c4
+Writing 7fff8001 to  3
+(800001bc) WB Data: babebabe, to register: 29
+
+
+(800001cc) Inst: 800000b7
+Decode: curr_pc: 800001c8
+Writing 7fff8000 to 29
+(800001c0) WB Data: babebabe, to register: 29
+
+
+(800001cc) Inst: 800000b7
+Decode: curr_pc: 800001cc
+Writing 7fff8001 to 29
+(800001c4) WB Data: babebabe, to register: 28
+
+
+(800001cc) Inst: 800000b7
+Decode: curr_pc: 800001cc
+Writing 0000000b to 28
+
+
+(800001d0) Inst: fff08093
+Decode: curr_pc: 800001cc
+
+
+(800001d4) Inst: ffff8137
+Decode: curr_pc: 800001d0
+
+
+(800001d8) Inst: 402081b3
+Decode: curr_pc: 800001d4
+(800001cc) WB Data: babebabe, to register:  1
+
+
+(800001dc) Inst: 80008eb7
+Decode: curr_pc: 800001d8
+Writing 80000000 to  1
+(800001d0) WB Data: babebabe, to register:  1
+
+
+(800001e0) Inst: fffe8e93
+Decode: curr_pc: 800001dc
+Writing 7fffffff to  1
+(800001d4) WB Data: babebabe, to register:  2
+
+
+(800001e4) Inst: c00e13
+Decode: curr_pc: 800001e0
+Writing ffff8000 to  2
+(800001d8) WB Data: babebabe, to register:  3
+
+
+(800001e8) Inst: 39d19a63
+Decode: curr_pc: 800001e4
+Writing 80007fff to  3
+(800001dc) WB Data: babebabe, to register: 29
+
+
+(800001ec) Inst: 93
+Decode: curr_pc: 800001e8
+Writing 80008000 to 29
+(800001e0) WB Data: babebabe, to register: 29
+
+
+(800001ec) Inst: 93
+Decode: curr_pc: 800001ec
+Writing 80007fff to 29
+(800001e4) WB Data: babebabe, to register: 28
+
+
+(800001ec) Inst: 93
+Decode: curr_pc: 800001ec
+Writing 0000000c to 28
+
+
+(800001f0) Inst: fff00113
+Decode: curr_pc: 800001ec
+
+
+(800001f4) Inst: 402081b3
+Decode: curr_pc: 800001f0
+
+
+(800001f8) Inst: 100e93
+Decode: curr_pc: 800001f4
+(800001ec) WB Data: babebabe, to register:  1
+
+
+(800001fc) Inst: d00e13
+Decode: curr_pc: 800001f8
+Writing 00000000 to  1
+(800001f0) WB Data: babebabe, to register:  2
+
+
+(80000200) Inst: 37d19e63
+Decode: curr_pc: 800001fc
+Writing ffffffff to  2
+(800001f4) WB Data: babebabe, to register:  3
+
+
+(80000204) Inst: fff00093
+Decode: curr_pc: 80000200
+Writing 00000001 to  3
+(800001f8) WB Data: babebabe, to register: 29
+
+
+(80000204) Inst: fff00093
+Decode: curr_pc: 80000204
+Writing 00000001 to 29
+(800001fc) WB Data: babebabe, to register: 28
+
+
+(80000204) Inst: fff00093
+Decode: curr_pc: 80000204
+Writing 0000000d to 28
+
+
+(80000208) Inst: 100113
+Decode: curr_pc: 80000204
+
+
+(8000020c) Inst: 402081b3
+Decode: curr_pc: 80000208
+
+
+(80000210) Inst: ffe00e93
+Decode: curr_pc: 8000020c
+(80000204) WB Data: babebabe, to register:  1
+
+
+(80000214) Inst: e00e13
+Decode: curr_pc: 80000210
+Writing ffffffff to  1
+(80000208) WB Data: babebabe, to register:  2
+
+
+(80000218) Inst: 37d19263
+Decode: curr_pc: 80000214
+Writing 00000001 to  2
+(8000020c) WB Data: babebabe, to register:  3
+
+
+(8000021c) Inst: fff00093
+Decode: curr_pc: 80000218
+Writing fffffffe to  3
+(80000210) WB Data: babebabe, to register: 29
+
+
+(8000021c) Inst: fff00093
+Decode: curr_pc: 8000021c
+Writing fffffffe to 29
+(80000214) WB Data: babebabe, to register: 28
+
+
+(8000021c) Inst: fff00093
+Decode: curr_pc: 8000021c
+Writing 0000000e to 28
+
+
+(80000220) Inst: fff00113
+Decode: curr_pc: 8000021c
+
+
+(80000224) Inst: 402081b3
+Decode: curr_pc: 80000220
+
+
+(80000228) Inst: e93
+Decode: curr_pc: 80000224
+(8000021c) WB Data: babebabe, to register:  1
+
+
+(8000022c) Inst: f00e13
+Decode: curr_pc: 80000228
+Writing ffffffff to  1
+(80000220) WB Data: babebabe, to register:  2
+
+
+(80000230) Inst: 35d19663
+Decode: curr_pc: 8000022c
+Writing ffffffff to  2
+(80000224) WB Data: babebabe, to register:  3
+
+
+(80000234) Inst: d00093
+Decode: curr_pc: 80000230
+Writing 00000000 to  3
+(80000228) WB Data: babebabe, to register: 29
+
+
+(80000234) Inst: d00093
+Decode: curr_pc: 80000234
+Writing 00000000 to 29
+(8000022c) WB Data: babebabe, to register: 28
+
+
+(80000234) Inst: d00093
+Decode: curr_pc: 80000234
+Writing 0000000f to 28
+
+
+(80000238) Inst: b00113
+Decode: curr_pc: 80000234
+
+
+(8000023c) Inst: 402080b3
+Decode: curr_pc: 80000238
+
+
+(80000240) Inst: 200e93
+Decode: curr_pc: 8000023c
+(80000234) WB Data: babebabe, to register:  1
+
+
+(80000244) Inst: 1000e13
+Decode: curr_pc: 80000240
+Writing 0000000d to  1
+(80000238) WB Data: babebabe, to register:  2
+
+
+(80000248) Inst: 33d09a63
+Decode: curr_pc: 80000244
+Writing 0000000b to  2
+(8000023c) WB Data: babebabe, to register:  1
+
+
+(8000024c) Inst: e00093
+Decode: curr_pc: 80000248
+Writing 00000002 to  1
+(80000240) WB Data: babebabe, to register: 29
+
+
+(8000024c) Inst: e00093
+Decode: curr_pc: 8000024c
+Writing 00000002 to 29
+(80000244) WB Data: babebabe, to register: 28
+
+
+(8000024c) Inst: e00093
+Decode: curr_pc: 8000024c
+Writing 00000010 to 28
+
+
+(80000250) Inst: b00113
+Decode: curr_pc: 8000024c
+
+
+(80000254) Inst: 40208133
+Decode: curr_pc: 80000250
+
+
+(80000258) Inst: 300e93
+Decode: curr_pc: 80000254
+(8000024c) WB Data: babebabe, to register:  1
+
+
+(8000025c) Inst: 1100e13
+Decode: curr_pc: 80000258
+Writing 0000000e to  1
+(80000250) WB Data: babebabe, to register:  2
+
+
+(80000260) Inst: 31d11e63
+Decode: curr_pc: 8000025c
+Writing 0000000b to  2
+(80000254) WB Data: babebabe, to register:  2
+
+
+(80000264) Inst: d00093
+Decode: curr_pc: 80000260
+Writing 00000003 to  2
+(80000258) WB Data: babebabe, to register: 29
+
+
+(80000264) Inst: d00093
+Decode: curr_pc: 80000264
+Writing 00000003 to 29
+(8000025c) WB Data: babebabe, to register: 28
+
+
+(80000264) Inst: d00093
+Decode: curr_pc: 80000264
+Writing 00000011 to 28
+
+
+(80000268) Inst: 401080b3
+Decode: curr_pc: 80000264
+
+
+(8000026c) Inst: e93
+Decode: curr_pc: 80000268
+
+
+(80000270) Inst: 1200e13
+Decode: curr_pc: 8000026c
+(80000264) WB Data: babebabe, to register:  1
+
+
+(80000274) Inst: 31d09463
+Decode: curr_pc: 80000270
+Writing 0000000d to  1
+(80000268) WB Data: babebabe, to register:  1
+
+
+(80000278) Inst: 213
+Decode: curr_pc: 80000274
+Writing 00000000 to  1
+(8000026c) WB Data: babebabe, to register: 29
+
+
+(80000278) Inst: 213
+Decode: curr_pc: 80000278
+Writing 00000000 to 29
+(80000270) WB Data: babebabe, to register: 28
+
+
+(80000278) Inst: 213
+Decode: curr_pc: 80000278
+Writing 00000012 to 28
+
+
+(8000027c) Inst: d00093
+Decode: curr_pc: 80000278
+
+
+(80000280) Inst: b00113
+Decode: curr_pc: 8000027c
+
+
+(80000284) Inst: 402081b3
+Decode: curr_pc: 80000280
+(80000278) WB Data: babebabe, to register:  4
+
+
+(80000288) Inst: 18313
+Decode: curr_pc: 80000284
+Writing 00000000 to  4
+(8000027c) WB Data: babebabe, to register:  1
+
+
+(8000028c) Inst: 120213
+Decode: curr_pc: 80000288
+Writing 0000000d to  1
+(80000280) WB Data: babebabe, to register:  2
+
+
+(80000290) Inst: 200293
+Decode: curr_pc: 8000028c
+Writing 0000000b to  2
+(80000284) WB Data: babebabe, to register:  3
+
+
+(80000294) Inst: fe5214e3
+Decode: curr_pc: 80000290
+Writing 00000002 to  3
+(80000288) WB Data: babebabe, to register:  6
+
+
+(80000298) Inst: 200e93
+Decode: curr_pc: 80000294
+Writing 00000002 to  6
+(8000028c) WB Data: babebabe, to register:  4
+
+
+(80000298) Inst: 200e93
+Decode: curr_pc: 80000298
+Writing 00000001 to  4
+(80000290) WB Data: babebabe, to register:  5
+
+
+(8000027c) Inst: d00093
+Decode: curr_pc: 80000298
+Writing 00000002 to  5
+
+
+(80000280) Inst: b00113
+Decode: curr_pc: 8000027c
+
+
+(80000284) Inst: 402081b3
+Decode: curr_pc: 80000280
+
+
+(80000288) Inst: 18313
+Decode: curr_pc: 80000284
+(8000027c) WB Data: babebabe, to register:  1
+
+
+(8000028c) Inst: 120213
+Decode: curr_pc: 80000288
+Writing 0000000d to  1
+(80000280) WB Data: babebabe, to register:  2
+
+
+(80000290) Inst: 200293
+Decode: curr_pc: 8000028c
+Writing 0000000b to  2
+(80000284) WB Data: babebabe, to register:  3
+
+
+(80000294) Inst: fe5214e3
+Decode: curr_pc: 80000290
+Writing 00000002 to  3
+(80000288) WB Data: babebabe, to register:  6
+
+
+(80000298) Inst: 200e93
+Decode: curr_pc: 80000294
+Writing 00000002 to  6
+(8000028c) WB Data: babebabe, to register:  4
+
+
+(80000298) Inst: 200e93
+Decode: curr_pc: 80000298
+Writing 00000002 to  4
+(80000290) WB Data: babebabe, to register:  5
+
+
+(80000298) Inst: 200e93
+Decode: curr_pc: 80000298
+Writing 00000002 to  5
+
+
+(8000029c) Inst: 1300e13
+Decode: curr_pc: 80000298
+
+
+(800002a0) Inst: 2dd31e63
+Decode: curr_pc: 8000029c
+
+
+(800002a4) Inst: 213
+Decode: curr_pc: 800002a0
+(80000298) WB Data: babebabe, to register: 29
+
+
+(800002a4) Inst: 213
+Decode: curr_pc: 800002a4
+Writing 00000002 to 29
+(8000029c) WB Data: babebabe, to register: 28
+
+
+(800002a4) Inst: 213
+Decode: curr_pc: 800002a4
+Writing 00000013 to 28
+
+
+(800002a8) Inst: e00093
+Decode: curr_pc: 800002a4
+
+
+(800002ac) Inst: b00113
+Decode: curr_pc: 800002a8
+
+
+(800002b0) Inst: 402081b3
+Decode: curr_pc: 800002ac
+(800002a4) WB Data: babebabe, to register:  4
+
+
+(800002b4) Inst: 13
+Decode: curr_pc: 800002b0
+Writing 00000000 to  4
+(800002a8) WB Data: babebabe, to register:  1
+
+
+(800002b8) Inst: 18313
+Decode: curr_pc: 800002b4
+Writing 0000000e to  1
+(800002ac) WB Data: babebabe, to register:  2
+
+
+(800002bc) Inst: 120213
+Decode: curr_pc: 800002b8
+Writing 0000000b to  2
+(800002b0) WB Data: babebabe, to register:  3
+
+
+(800002c0) Inst: 200293
+Decode: curr_pc: 800002bc
+Writing 00000003 to  3
+(800002b4) WB Data: babebabe, to register:  0
+
+
+(800002c4) Inst: fe5212e3
+Decode: curr_pc: 800002c0
+(800002b8) WB Data: babebabe, to register:  6
+
+
+(800002c8) Inst: 300e93
+Decode: curr_pc: 800002c4
+Writing 00000003 to  6
+(800002bc) WB Data: babebabe, to register:  4
+
+
+(800002c8) Inst: 300e93
+Decode: curr_pc: 800002c8
+Writing 00000001 to  4
+(800002c0) WB Data: babebabe, to register:  5
+
+
+(800002a8) Inst: e00093
+Decode: curr_pc: 800002c8
+Writing 00000002 to  5
+
+
+(800002ac) Inst: b00113
+Decode: curr_pc: 800002a8
+
+
+(800002b0) Inst: 402081b3
+Decode: curr_pc: 800002ac
+
+
+(800002b4) Inst: 13
+Decode: curr_pc: 800002b0
+(800002a8) WB Data: babebabe, to register:  1
+
+
+(800002b8) Inst: 18313
+Decode: curr_pc: 800002b4
+Writing 0000000e to  1
+(800002ac) WB Data: babebabe, to register:  2
+
+
+(800002bc) Inst: 120213
+Decode: curr_pc: 800002b8
+Writing 0000000b to  2
+(800002b0) WB Data: babebabe, to register:  3
+
+
+(800002c0) Inst: 200293
+Decode: curr_pc: 800002bc
+Writing 00000003 to  3
+(800002b4) WB Data: babebabe, to register:  0
+
+
+(800002c4) Inst: fe5212e3
+Decode: curr_pc: 800002c0
+(800002b8) WB Data: babebabe, to register:  6
+
+
+(800002c8) Inst: 300e93
+Decode: curr_pc: 800002c4
+Writing 00000003 to  6
+(800002bc) WB Data: babebabe, to register:  4
+
+
+(800002c8) Inst: 300e93
+Decode: curr_pc: 800002c8
+Writing 00000002 to  4
+(800002c0) WB Data: babebabe, to register:  5
+
+
+(800002c8) Inst: 300e93
+Decode: curr_pc: 800002c8
+Writing 00000002 to  5
+
+
+(800002cc) Inst: 1400e13
+Decode: curr_pc: 800002c8
+
+
+(800002d0) Inst: 2bd31663
+Decode: curr_pc: 800002cc
+
+
+(800002d4) Inst: 213
+Decode: curr_pc: 800002d0
+(800002c8) WB Data: babebabe, to register: 29
+
+
+(800002d4) Inst: 213
+Decode: curr_pc: 800002d4
+Writing 00000003 to 29
+(800002cc) WB Data: babebabe, to register: 28
+
+
+(800002d4) Inst: 213
+Decode: curr_pc: 800002d4
+Writing 00000014 to 28
+
+
+(800002d8) Inst: f00093
+Decode: curr_pc: 800002d4
+
+
+(800002dc) Inst: b00113
+Decode: curr_pc: 800002d8
+
+
+(800002e0) Inst: 402081b3
+Decode: curr_pc: 800002dc
+(800002d4) WB Data: babebabe, to register:  4
+
+
+(800002e4) Inst: 13
+Decode: curr_pc: 800002e0
+Writing 00000000 to  4
+(800002d8) WB Data: babebabe, to register:  1
+
+
+(800002e8) Inst: 13
+Decode: curr_pc: 800002e4
+Writing 0000000f to  1
+(800002dc) WB Data: babebabe, to register:  2
+
+
+(800002ec) Inst: 18313
+Decode: curr_pc: 800002e8
+Writing 0000000b to  2
+(800002e0) WB Data: babebabe, to register:  3
+
+
+(800002f0) Inst: 120213
+Decode: curr_pc: 800002ec
+Writing 00000004 to  3
+(800002e4) WB Data: babebabe, to register:  0
+
+
+(800002f4) Inst: 200293
+Decode: curr_pc: 800002f0
+(800002e8) WB Data: babebabe, to register:  0
+
+
+(800002f8) Inst: fe5210e3
+Decode: curr_pc: 800002f4
+(800002ec) WB Data: babebabe, to register:  6
+
+
+(800002fc) Inst: 400e93
+Decode: curr_pc: 800002f8
+Writing 00000004 to  6
+(800002f0) WB Data: babebabe, to register:  4
+
+
+(800002fc) Inst: 400e93
+Decode: curr_pc: 800002fc
+Writing 00000001 to  4
+(800002f4) WB Data: babebabe, to register:  5
+
+
+(800002d8) Inst: f00093
+Decode: curr_pc: 800002fc
+Writing 00000002 to  5
+
+
+(800002dc) Inst: b00113
+Decode: curr_pc: 800002d8
+
+
+(800002e0) Inst: 402081b3
+Decode: curr_pc: 800002dc
+
+
+(800002e4) Inst: 13
+Decode: curr_pc: 800002e0
+(800002d8) WB Data: babebabe, to register:  1
+
+
+(800002e8) Inst: 13
+Decode: curr_pc: 800002e4
+Writing 0000000f to  1
+(800002dc) WB Data: babebabe, to register:  2
+
+
+(800002ec) Inst: 18313
+Decode: curr_pc: 800002e8
+Writing 0000000b to  2
+(800002e0) WB Data: babebabe, to register:  3
+
+
+(800002f0) Inst: 120213
+Decode: curr_pc: 800002ec
+Writing 00000004 to  3
+(800002e4) WB Data: babebabe, to register:  0
+
+
+(800002f4) Inst: 200293
+Decode: curr_pc: 800002f0
+(800002e8) WB Data: babebabe, to register:  0
+
+
+(800002f8) Inst: fe5210e3
+Decode: curr_pc: 800002f4
+(800002ec) WB Data: babebabe, to register:  6
+
+
+(800002fc) Inst: 400e93
+Decode: curr_pc: 800002f8
+Writing 00000004 to  6
+(800002f0) WB Data: babebabe, to register:  4
+
+
+(800002fc) Inst: 400e93
+Decode: curr_pc: 800002fc
+Writing 00000002 to  4
+(800002f4) WB Data: babebabe, to register:  5
+
+
+(800002fc) Inst: 400e93
+Decode: curr_pc: 800002fc
+Writing 00000002 to  5
+
+
+(80000300) Inst: 1500e13
+Decode: curr_pc: 800002fc
+
+
+(80000304) Inst: 27d31c63
+Decode: curr_pc: 80000300
+
+
+(80000308) Inst: 213
+Decode: curr_pc: 80000304
+(800002fc) WB Data: babebabe, to register: 29
+
+
+(80000308) Inst: 213
+Decode: curr_pc: 80000308
+Writing 00000004 to 29
+(80000300) WB Data: babebabe, to register: 28
+
+
+(80000308) Inst: 213
+Decode: curr_pc: 80000308
+Writing 00000015 to 28
+
+
+(8000030c) Inst: d00093
+Decode: curr_pc: 80000308
+
+
+(80000310) Inst: b00113
+Decode: curr_pc: 8000030c
+
+
+(80000314) Inst: 402081b3
+Decode: curr_pc: 80000310
+(80000308) WB Data: babebabe, to register:  4
+
+
+(80000318) Inst: 120213
+Decode: curr_pc: 80000314
+Writing 00000000 to  4
+(8000030c) WB Data: babebabe, to register:  1
+
+
+(8000031c) Inst: 200293
+Decode: curr_pc: 80000318
+Writing 0000000d to  1
+(80000310) WB Data: babebabe, to register:  2
+
+
+(80000320) Inst: fe5216e3
+Decode: curr_pc: 8000031c
+Writing 0000000b to  2
+(80000314) WB Data: babebabe, to register:  3
+
+
+(80000324) Inst: 200e93
+Decode: curr_pc: 80000320
+Writing 00000002 to  3
+(80000318) WB Data: babebabe, to register:  4
+
+
+(80000324) Inst: 200e93
+Decode: curr_pc: 80000324
+Writing 00000001 to  4
+(8000031c) WB Data: babebabe, to register:  5
+
+
+(8000030c) Inst: d00093
+Decode: curr_pc: 80000324
+Writing 00000002 to  5
+
+
+(80000310) Inst: b00113
+Decode: curr_pc: 8000030c
+
+
+(80000314) Inst: 402081b3
+Decode: curr_pc: 80000310
+
+
+(80000318) Inst: 120213
+Decode: curr_pc: 80000314
+(8000030c) WB Data: babebabe, to register:  1
+
+
+(8000031c) Inst: 200293
+Decode: curr_pc: 80000318
+Writing 0000000d to  1
+(80000310) WB Data: babebabe, to register:  2
+
+
+(80000320) Inst: fe5216e3
+Decode: curr_pc: 8000031c
+Writing 0000000b to  2
+(80000314) WB Data: babebabe, to register:  3
+
+
+(80000324) Inst: 200e93
+Decode: curr_pc: 80000320
+Writing 00000002 to  3
+(80000318) WB Data: babebabe, to register:  4
+
+
+(80000324) Inst: 200e93
+Decode: curr_pc: 80000324
+Writing 00000002 to  4
+(8000031c) WB Data: babebabe, to register:  5
+
+
+(80000324) Inst: 200e93
+Decode: curr_pc: 80000324
+Writing 00000002 to  5
+
+
+(80000328) Inst: 1600e13
+Decode: curr_pc: 80000324
+
+
+(8000032c) Inst: 25d19863
+Decode: curr_pc: 80000328
+
+
+(80000330) Inst: 213
+Decode: curr_pc: 8000032c
+(80000324) WB Data: babebabe, to register: 29
+
+
+(80000330) Inst: 213
+Decode: curr_pc: 80000330
+Writing 00000002 to 29
+(80000328) WB Data: babebabe, to register: 28
+
+
+(80000330) Inst: 213
+Decode: curr_pc: 80000330
+Writing 00000016 to 28
+
+
+(80000334) Inst: e00093
+Decode: curr_pc: 80000330
+
+
+(80000338) Inst: b00113
+Decode: curr_pc: 80000334
+
+
+(8000033c) Inst: 13
+Decode: curr_pc: 80000338
+(80000330) WB Data: babebabe, to register:  4
+
+
+(80000340) Inst: 402081b3
+Decode: curr_pc: 8000033c
+Writing 00000000 to  4
+(80000334) WB Data: babebabe, to register:  1
+
+
+(80000344) Inst: 120213
+Decode: curr_pc: 80000340
+Writing 0000000e to  1
+(80000338) WB Data: babebabe, to register:  2
+
+
+(80000348) Inst: 200293
+Decode: curr_pc: 80000344
+Writing 0000000b to  2
+(8000033c) WB Data: babebabe, to register:  0
+
+
+(8000034c) Inst: fe5214e3
+Decode: curr_pc: 80000348
+(80000340) WB Data: babebabe, to register:  3
+
+
+(80000350) Inst: 300e93
+Decode: curr_pc: 8000034c
+Writing 00000003 to  3
+(80000344) WB Data: babebabe, to register:  4
+
+
+(80000350) Inst: 300e93
+Decode: curr_pc: 80000350
+Writing 00000001 to  4
+(80000348) WB Data: babebabe, to register:  5
+
+
+(80000334) Inst: e00093
+Decode: curr_pc: 80000350
+Writing 00000002 to  5
+
+
+(80000338) Inst: b00113
+Decode: curr_pc: 80000334
+
+
+(8000033c) Inst: 13
+Decode: curr_pc: 80000338
+
+
+(80000340) Inst: 402081b3
+Decode: curr_pc: 8000033c
+(80000334) WB Data: babebabe, to register:  1
+
+
+(80000344) Inst: 120213
+Decode: curr_pc: 80000340
+Writing 0000000e to  1
+(80000338) WB Data: babebabe, to register:  2
+
+
+(80000348) Inst: 200293
+Decode: curr_pc: 80000344
+Writing 0000000b to  2
+(8000033c) WB Data: babebabe, to register:  0
+
+
+(8000034c) Inst: fe5214e3
+Decode: curr_pc: 80000348
+(80000340) WB Data: babebabe, to register:  3
+
+
+(80000350) Inst: 300e93
+Decode: curr_pc: 8000034c
+Writing 00000003 to  3
+(80000344) WB Data: babebabe, to register:  4
+
+
+(80000350) Inst: 300e93
+Decode: curr_pc: 80000350
+Writing 00000002 to  4
+(80000348) WB Data: babebabe, to register:  5
+
+
+(80000350) Inst: 300e93
+Decode: curr_pc: 80000350
+Writing 00000002 to  5
+
+
+(80000354) Inst: 1700e13
+Decode: curr_pc: 80000350
+
+
+(80000358) Inst: 23d19263
+Decode: curr_pc: 80000354
+
+
+(8000035c) Inst: 213
+Decode: curr_pc: 80000358
+(80000350) WB Data: babebabe, to register: 29
+
+
+(8000035c) Inst: 213
+Decode: curr_pc: 8000035c
+Writing 00000003 to 29
+(80000354) WB Data: babebabe, to register: 28
+
+
+(8000035c) Inst: 213
+Decode: curr_pc: 8000035c
+Writing 00000017 to 28
+
+
+(80000360) Inst: f00093
+Decode: curr_pc: 8000035c
+
+
+(80000364) Inst: b00113
+Decode: curr_pc: 80000360
+
+
+(80000368) Inst: 13
+Decode: curr_pc: 80000364
+(8000035c) WB Data: babebabe, to register:  4
+
+
+(8000036c) Inst: 13
+Decode: curr_pc: 80000368
+Writing 00000000 to  4
+(80000360) WB Data: babebabe, to register:  1
+
+
+(80000370) Inst: 402081b3
+Decode: curr_pc: 8000036c
+Writing 0000000f to  1
+(80000364) WB Data: babebabe, to register:  2
+
+
+(80000374) Inst: 120213
+Decode: curr_pc: 80000370
+Writing 0000000b to  2
+(80000368) WB Data: babebabe, to register:  0
+
+
+(80000378) Inst: 200293
+Decode: curr_pc: 80000374
+(8000036c) WB Data: babebabe, to register:  0
+
+
+(8000037c) Inst: fe5212e3
+Decode: curr_pc: 80000378
+(80000370) WB Data: babebabe, to register:  3
+
+
+(80000380) Inst: 400e93
+Decode: curr_pc: 8000037c
+Writing 00000004 to  3
+(80000374) WB Data: babebabe, to register:  4
+
+
+(80000380) Inst: 400e93
+Decode: curr_pc: 80000380
+Writing 00000001 to  4
+(80000378) WB Data: babebabe, to register:  5
+
+
+(80000360) Inst: f00093
+Decode: curr_pc: 80000380
+Writing 00000002 to  5
+
+
+(80000364) Inst: b00113
+Decode: curr_pc: 80000360
+
+
+(80000368) Inst: 13
+Decode: curr_pc: 80000364
+
+
+(8000036c) Inst: 13
+Decode: curr_pc: 80000368
+(80000360) WB Data: babebabe, to register:  1
+
+
+(80000370) Inst: 402081b3
+Decode: curr_pc: 8000036c
+Writing 0000000f to  1
+(80000364) WB Data: babebabe, to register:  2
+
+
+(80000374) Inst: 120213
+Decode: curr_pc: 80000370
+Writing 0000000b to  2
+(80000368) WB Data: babebabe, to register:  0
+
+
+(80000378) Inst: 200293
+Decode: curr_pc: 80000374
+(8000036c) WB Data: babebabe, to register:  0
+
+
+(8000037c) Inst: fe5212e3
+Decode: curr_pc: 80000378
+(80000370) WB Data: babebabe, to register:  3
+
+
+(80000380) Inst: 400e93
+Decode: curr_pc: 8000037c
+Writing 00000004 to  3
+(80000374) WB Data: babebabe, to register:  4
+
+
+(80000380) Inst: 400e93
+Decode: curr_pc: 80000380
+Writing 00000002 to  4
+(80000378) WB Data: babebabe, to register:  5
+
+
+(80000380) Inst: 400e93
+Decode: curr_pc: 80000380
+Writing 00000002 to  5
+
+
+(80000384) Inst: 1800e13
+Decode: curr_pc: 80000380
+
+
+(80000388) Inst: 1fd19a63
+Decode: curr_pc: 80000384
+
+
+(8000038c) Inst: 213
+Decode: curr_pc: 80000388
+(80000380) WB Data: babebabe, to register: 29
+
+
+(8000038c) Inst: 213
+Decode: curr_pc: 8000038c
+Writing 00000004 to 29
+(80000384) WB Data: babebabe, to register: 28
+
+
+(8000038c) Inst: 213
+Decode: curr_pc: 8000038c
+Writing 00000018 to 28
+
+
+(80000390) Inst: d00093
+Decode: curr_pc: 8000038c
+
+
+(80000394) Inst: 13
+Decode: curr_pc: 80000390
+
+
+(80000398) Inst: b00113
+Decode: curr_pc: 80000394
+(8000038c) WB Data: babebabe, to register:  4
+
+
+(8000039c) Inst: 402081b3
+Decode: curr_pc: 80000398
+Writing 00000000 to  4
+(80000390) WB Data: babebabe, to register:  1
+
+
+(800003a0) Inst: 120213
+Decode: curr_pc: 8000039c
+Writing 0000000d to  1
+(80000394) WB Data: babebabe, to register:  0
+
+
+(800003a4) Inst: 200293
+Decode: curr_pc: 800003a0
+(80000398) WB Data: babebabe, to register:  2
+
+
+(800003a8) Inst: fe5214e3
+Decode: curr_pc: 800003a4
+Writing 0000000b to  2
+(8000039c) WB Data: babebabe, to register:  3
+
+
+(800003ac) Inst: 200e93
+Decode: curr_pc: 800003a8
+Writing 00000002 to  3
+(800003a0) WB Data: babebabe, to register:  4
+
+
+(800003ac) Inst: 200e93
+Decode: curr_pc: 800003ac
+Writing 00000001 to  4
+(800003a4) WB Data: babebabe, to register:  5
+
+
+(80000390) Inst: d00093
+Decode: curr_pc: 800003ac
+Writing 00000002 to  5
+
+
+(80000394) Inst: 13
+Decode: curr_pc: 80000390
+
+
+(80000398) Inst: b00113
+Decode: curr_pc: 80000394
+
+
+(8000039c) Inst: 402081b3
+Decode: curr_pc: 80000398
+(80000390) WB Data: babebabe, to register:  1
+
+
+(800003a0) Inst: 120213
+Decode: curr_pc: 8000039c
+Writing 0000000d to  1
+(80000394) WB Data: babebabe, to register:  0
+
+
+(800003a4) Inst: 200293
+Decode: curr_pc: 800003a0
+(80000398) WB Data: babebabe, to register:  2
+
+
+(800003a8) Inst: fe5214e3
+Decode: curr_pc: 800003a4
+Writing 0000000b to  2
+(8000039c) WB Data: babebabe, to register:  3
+
+
+(800003ac) Inst: 200e93
+Decode: curr_pc: 800003a8
+Writing 00000002 to  3
+(800003a0) WB Data: babebabe, to register:  4
+
+
+(800003ac) Inst: 200e93
+Decode: curr_pc: 800003ac
+Writing 00000002 to  4
+(800003a4) WB Data: babebabe, to register:  5
+
+
+(800003ac) Inst: 200e93
+Decode: curr_pc: 800003ac
+Writing 00000002 to  5
+
+
+(800003b0) Inst: 1900e13
+Decode: curr_pc: 800003ac
+
+
+(800003b4) Inst: 1dd19463
+Decode: curr_pc: 800003b0
+
+
+(800003b8) Inst: 213
+Decode: curr_pc: 800003b4
+(800003ac) WB Data: babebabe, to register: 29
+
+
+(800003b8) Inst: 213
+Decode: curr_pc: 800003b8
+Writing 00000002 to 29
+(800003b0) WB Data: babebabe, to register: 28
+
+
+(800003b8) Inst: 213
+Decode: curr_pc: 800003b8
+Writing 00000019 to 28
+
+
+(800003bc) Inst: e00093
+Decode: curr_pc: 800003b8
+
+
+(800003c0) Inst: 13
+Decode: curr_pc: 800003bc
+
+
+(800003c4) Inst: b00113
+Decode: curr_pc: 800003c0
+(800003b8) WB Data: babebabe, to register:  4
+
+
+(800003c8) Inst: 13
+Decode: curr_pc: 800003c4
+Writing 00000000 to  4
+(800003bc) WB Data: babebabe, to register:  1
+
+
+(800003cc) Inst: 402081b3
+Decode: curr_pc: 800003c8
+Writing 0000000e to  1
+(800003c0) WB Data: babebabe, to register:  0
+
+
+(800003d0) Inst: 120213
+Decode: curr_pc: 800003cc
+(800003c4) WB Data: babebabe, to register:  2
+
+
+(800003d4) Inst: 200293
+Decode: curr_pc: 800003d0
+Writing 0000000b to  2
+(800003c8) WB Data: babebabe, to register:  0
+
+
+(800003d8) Inst: fe5212e3
+Decode: curr_pc: 800003d4
+(800003cc) WB Data: babebabe, to register:  3
+
+
+(800003dc) Inst: 300e93
+Decode: curr_pc: 800003d8
+Writing 00000003 to  3
+(800003d0) WB Data: babebabe, to register:  4
+
+
+(800003dc) Inst: 300e93
+Decode: curr_pc: 800003dc
+Writing 00000001 to  4
+(800003d4) WB Data: babebabe, to register:  5
+
+
+(800003bc) Inst: e00093
+Decode: curr_pc: 800003dc
+Writing 00000002 to  5
+
+
+(800003c0) Inst: 13
+Decode: curr_pc: 800003bc
+
+
+(800003c4) Inst: b00113
+Decode: curr_pc: 800003c0
+
+
+(800003c8) Inst: 13
+Decode: curr_pc: 800003c4
+(800003bc) WB Data: babebabe, to register:  1
+
+
+(800003cc) Inst: 402081b3
+Decode: curr_pc: 800003c8
+Writing 0000000e to  1
+(800003c0) WB Data: babebabe, to register:  0
+
+
+(800003d0) Inst: 120213
+Decode: curr_pc: 800003cc
+(800003c4) WB Data: babebabe, to register:  2
+
+
+(800003d4) Inst: 200293
+Decode: curr_pc: 800003d0
+Writing 0000000b to  2
+(800003c8) WB Data: babebabe, to register:  0
+
+
+(800003d8) Inst: fe5212e3
+Decode: curr_pc: 800003d4
+(800003cc) WB Data: babebabe, to register:  3
+
+
+(800003dc) Inst: 300e93
+Decode: curr_pc: 800003d8
+Writing 00000003 to  3
+(800003d0) WB Data: babebabe, to register:  4
+
+
+(800003dc) Inst: 300e93
+Decode: curr_pc: 800003dc
+Writing 00000002 to  4
+(800003d4) WB Data: babebabe, to register:  5
+
+
+(800003dc) Inst: 300e93
+Decode: curr_pc: 800003dc
+Writing 00000002 to  5
+
+
+(800003e0) Inst: 1a00e13
+Decode: curr_pc: 800003dc
+
+
+(800003e4) Inst: 19d19c63
+Decode: curr_pc: 800003e0
+
+
+(800003e8) Inst: 213
+Decode: curr_pc: 800003e4
+(800003dc) WB Data: babebabe, to register: 29
+
+
+(800003e8) Inst: 213
+Decode: curr_pc: 800003e8
+Writing 00000003 to 29
+(800003e0) WB Data: babebabe, to register: 28
+
+
+(800003e8) Inst: 213
+Decode: curr_pc: 800003e8
+Writing 0000001a to 28
+
+
+(800003ec) Inst: f00093
+Decode: curr_pc: 800003e8
+
+
+(800003f0) Inst: 13
+Decode: curr_pc: 800003ec
+
+
+(800003f4) Inst: 13
+Decode: curr_pc: 800003f0
+(800003e8) WB Data: babebabe, to register:  4
+
+
+(800003f8) Inst: b00113
+Decode: curr_pc: 800003f4
+Writing 00000000 to  4
+(800003ec) WB Data: babebabe, to register:  1
+
+
+(800003fc) Inst: 402081b3
+Decode: curr_pc: 800003f8
+Writing 0000000f to  1
+(800003f0) WB Data: babebabe, to register:  0
+
+
+(80000400) Inst: 120213
+Decode: curr_pc: 800003fc
+(800003f4) WB Data: babebabe, to register:  0
+
+
+(80000404) Inst: 200293
+Decode: curr_pc: 80000400
+(800003f8) WB Data: babebabe, to register:  2
+
+
+(80000408) Inst: fe5212e3
+Decode: curr_pc: 80000404
+Writing 0000000b to  2
+(800003fc) WB Data: babebabe, to register:  3
+
+
+(8000040c) Inst: 400e93
+Decode: curr_pc: 80000408
+Writing 00000004 to  3
+(80000400) WB Data: babebabe, to register:  4
+
+
+(8000040c) Inst: 400e93
+Decode: curr_pc: 8000040c
+Writing 00000001 to  4
+(80000404) WB Data: babebabe, to register:  5
+
+
+(800003ec) Inst: f00093
+Decode: curr_pc: 8000040c
+Writing 00000002 to  5
+
+
+(800003f0) Inst: 13
+Decode: curr_pc: 800003ec
+
+
+(800003f4) Inst: 13
+Decode: curr_pc: 800003f0
+
+
+(800003f8) Inst: b00113
+Decode: curr_pc: 800003f4
+(800003ec) WB Data: babebabe, to register:  1
+
+
+(800003fc) Inst: 402081b3
+Decode: curr_pc: 800003f8
+Writing 0000000f to  1
+(800003f0) WB Data: babebabe, to register:  0
+
+
+(80000400) Inst: 120213
+Decode: curr_pc: 800003fc
+(800003f4) WB Data: babebabe, to register:  0
+
+
+(80000404) Inst: 200293
+Decode: curr_pc: 80000400
+(800003f8) WB Data: babebabe, to register:  2
+
+
+(80000408) Inst: fe5212e3
+Decode: curr_pc: 80000404
+Writing 0000000b to  2
+(800003fc) WB Data: babebabe, to register:  3
+
+
+(8000040c) Inst: 400e93
+Decode: curr_pc: 80000408
+Writing 00000004 to  3
+(80000400) WB Data: babebabe, to register:  4
+
+
+(8000040c) Inst: 400e93
+Decode: curr_pc: 8000040c
+Writing 00000002 to  4
+(80000404) WB Data: babebabe, to register:  5
+
+
+(8000040c) Inst: 400e93
+Decode: curr_pc: 8000040c
+Writing 00000002 to  5
+
+
+(80000410) Inst: 1b00e13
+Decode: curr_pc: 8000040c
+
+
+(80000414) Inst: 17d19463
+Decode: curr_pc: 80000410
+
+
+(80000418) Inst: 213
+Decode: curr_pc: 80000414
+(8000040c) WB Data: babebabe, to register: 29
+
+
+(80000418) Inst: 213
+Decode: curr_pc: 80000418
+Writing 00000004 to 29
+(80000410) WB Data: babebabe, to register: 28
+
+
+(80000418) Inst: 213
+Decode: curr_pc: 80000418
+Writing 0000001b to 28
+
+
+(8000041c) Inst: b00113
+Decode: curr_pc: 80000418
+
+
+(80000420) Inst: d00093
+Decode: curr_pc: 8000041c
+
+
+(80000424) Inst: 402081b3
+Decode: curr_pc: 80000420
+(80000418) WB Data: babebabe, to register:  4
+
+
+(80000428) Inst: 120213
+Decode: curr_pc: 80000424
+Writing 00000000 to  4
+(8000041c) WB Data: babebabe, to register:  2
+
+
+(8000042c) Inst: 200293
+Decode: curr_pc: 80000428
+Writing 0000000b to  2
+(80000420) WB Data: babebabe, to register:  1
+
+
+(80000430) Inst: fe5216e3
+Decode: curr_pc: 8000042c
+Writing 0000000d to  1
+(80000424) WB Data: babebabe, to register:  3
+
+
+(80000434) Inst: 200e93
+Decode: curr_pc: 80000430
+Writing 00000002 to  3
+(80000428) WB Data: babebabe, to register:  4
+
+
+(80000434) Inst: 200e93
+Decode: curr_pc: 80000434
+Writing 00000001 to  4
+(8000042c) WB Data: babebabe, to register:  5
+
+
+(8000041c) Inst: b00113
+Decode: curr_pc: 80000434
+Writing 00000002 to  5
+
+
+(80000420) Inst: d00093
+Decode: curr_pc: 8000041c
+
+
+(80000424) Inst: 402081b3
+Decode: curr_pc: 80000420
+
+
+(80000428) Inst: 120213
+Decode: curr_pc: 80000424
+(8000041c) WB Data: babebabe, to register:  2
+
+
+(8000042c) Inst: 200293
+Decode: curr_pc: 80000428
+Writing 0000000b to  2
+(80000420) WB Data: babebabe, to register:  1
+
+
+(80000430) Inst: fe5216e3
+Decode: curr_pc: 8000042c
+Writing 0000000d to  1
+(80000424) WB Data: babebabe, to register:  3
+
+
+(80000434) Inst: 200e93
+Decode: curr_pc: 80000430
+Writing 00000002 to  3
+(80000428) WB Data: babebabe, to register:  4
+
+
+(80000434) Inst: 200e93
+Decode: curr_pc: 80000434
+Writing 00000002 to  4
+(8000042c) WB Data: babebabe, to register:  5
+
+
+(80000434) Inst: 200e93
+Decode: curr_pc: 80000434
+Writing 00000002 to  5
+
+
+(80000438) Inst: 1c00e13
+Decode: curr_pc: 80000434
+
+
+(8000043c) Inst: 15d19063
+Decode: curr_pc: 80000438
+
+
+(80000440) Inst: 213
+Decode: curr_pc: 8000043c
+(80000434) WB Data: babebabe, to register: 29
+
+
+(80000440) Inst: 213
+Decode: curr_pc: 80000440
+Writing 00000002 to 29
+(80000438) WB Data: babebabe, to register: 28
+
+
+(80000440) Inst: 213
+Decode: curr_pc: 80000440
+Writing 0000001c to 28
+
+
+(80000444) Inst: b00113
+Decode: curr_pc: 80000440
+
+
+(80000448) Inst: e00093
+Decode: curr_pc: 80000444
+
+
+(8000044c) Inst: 13
+Decode: curr_pc: 80000448
+(80000440) WB Data: babebabe, to register:  4
+
+
+(80000450) Inst: 402081b3
+Decode: curr_pc: 8000044c
+Writing 00000000 to  4
+(80000444) WB Data: babebabe, to register:  2
+
+
+(80000454) Inst: 120213
+Decode: curr_pc: 80000450
+Writing 0000000b to  2
+(80000448) WB Data: babebabe, to register:  1
+
+
+(80000458) Inst: 200293
+Decode: curr_pc: 80000454
+Writing 0000000e to  1
+(8000044c) WB Data: babebabe, to register:  0
+
+
+(8000045c) Inst: fe5214e3
+Decode: curr_pc: 80000458
+(80000450) WB Data: babebabe, to register:  3
+
+
+(80000460) Inst: 300e93
+Decode: curr_pc: 8000045c
+Writing 00000003 to  3
+(80000454) WB Data: babebabe, to register:  4
+
+
+(80000460) Inst: 300e93
+Decode: curr_pc: 80000460
+Writing 00000001 to  4
+(80000458) WB Data: babebabe, to register:  5
+
+
+(80000444) Inst: b00113
+Decode: curr_pc: 80000460
+Writing 00000002 to  5
+
+
+(80000448) Inst: e00093
+Decode: curr_pc: 80000444
+
+
+(8000044c) Inst: 13
+Decode: curr_pc: 80000448
+
+
+(80000450) Inst: 402081b3
+Decode: curr_pc: 8000044c
+(80000444) WB Data: babebabe, to register:  2
+
+
+(80000454) Inst: 120213
+Decode: curr_pc: 80000450
+Writing 0000000b to  2
+(80000448) WB Data: babebabe, to register:  1
+
+
+(80000458) Inst: 200293
+Decode: curr_pc: 80000454
+Writing 0000000e to  1
+(8000044c) WB Data: babebabe, to register:  0
+
+
+(8000045c) Inst: fe5214e3
+Decode: curr_pc: 80000458
+(80000450) WB Data: babebabe, to register:  3
+
+
+(80000460) Inst: 300e93
+Decode: curr_pc: 8000045c
+Writing 00000003 to  3
+(80000454) WB Data: babebabe, to register:  4
+
+
+(80000460) Inst: 300e93
+Decode: curr_pc: 80000460
+Writing 00000002 to  4
+(80000458) WB Data: babebabe, to register:  5
+
+
+(80000460) Inst: 300e93
+Decode: curr_pc: 80000460
+Writing 00000002 to  5
+
+
+(80000464) Inst: 1d00e13
+Decode: curr_pc: 80000460
+
+
+(80000468) Inst: 11d19a63
+Decode: curr_pc: 80000464
+
+
+(8000046c) Inst: 213
+Decode: curr_pc: 80000468
+(80000460) WB Data: babebabe, to register: 29
+
+
+(8000046c) Inst: 213
+Decode: curr_pc: 8000046c
+Writing 00000003 to 29
+(80000464) WB Data: babebabe, to register: 28
+
+
+(8000046c) Inst: 213
+Decode: curr_pc: 8000046c
+Writing 0000001d to 28
+
+
+(80000470) Inst: b00113
+Decode: curr_pc: 8000046c
+
+
+(80000474) Inst: f00093
+Decode: curr_pc: 80000470
+
+
+(80000478) Inst: 13
+Decode: curr_pc: 80000474
+(8000046c) WB Data: babebabe, to register:  4
+
+
+(8000047c) Inst: 13
+Decode: curr_pc: 80000478
+Writing 00000000 to  4
+(80000470) WB Data: babebabe, to register:  2
+
+
+(80000480) Inst: 402081b3
+Decode: curr_pc: 8000047c
+Writing 0000000b to  2
+(80000474) WB Data: babebabe, to register:  1
+
+
+(80000484) Inst: 120213
+Decode: curr_pc: 80000480
+Writing 0000000f to  1
+(80000478) WB Data: babebabe, to register:  0
+
+
+(80000488) Inst: 200293
+Decode: curr_pc: 80000484
+(8000047c) WB Data: babebabe, to register:  0
+
+
+(8000048c) Inst: fe5212e3
+Decode: curr_pc: 80000488
+(80000480) WB Data: babebabe, to register:  3
+
+
+(80000490) Inst: 400e93
+Decode: curr_pc: 8000048c
+Writing 00000004 to  3
+(80000484) WB Data: babebabe, to register:  4
+
+
+(80000490) Inst: 400e93
+Decode: curr_pc: 80000490
+Writing 00000001 to  4
+(80000488) WB Data: babebabe, to register:  5
+
+
+(80000470) Inst: b00113
+Decode: curr_pc: 80000490
+Writing 00000002 to  5
+
+
+(80000474) Inst: f00093
+Decode: curr_pc: 80000470
+
+
+(80000478) Inst: 13
+Decode: curr_pc: 80000474
+
+
+(8000047c) Inst: 13
+Decode: curr_pc: 80000478
+(80000470) WB Data: babebabe, to register:  2
+
+
+(80000480) Inst: 402081b3
+Decode: curr_pc: 8000047c
+Writing 0000000b to  2
+(80000474) WB Data: babebabe, to register:  1
+
+
+(80000484) Inst: 120213
+Decode: curr_pc: 80000480
+Writing 0000000f to  1
+(80000478) WB Data: babebabe, to register:  0
+
+
+(80000488) Inst: 200293
+Decode: curr_pc: 80000484
+(8000047c) WB Data: babebabe, to register:  0
+
+
+(8000048c) Inst: fe5212e3
+Decode: curr_pc: 80000488
+(80000480) WB Data: babebabe, to register:  3
+
+
+(80000490) Inst: 400e93
+Decode: curr_pc: 8000048c
+Writing 00000004 to  3
+(80000484) WB Data: babebabe, to register:  4
+
+
+(80000490) Inst: 400e93
+Decode: curr_pc: 80000490
+Writing 00000002 to  4
+(80000488) WB Data: babebabe, to register:  5
+
+
+(80000490) Inst: 400e93
+Decode: curr_pc: 80000490
+Writing 00000002 to  5
+
+
+(80000494) Inst: 1e00e13
+Decode: curr_pc: 80000490
+
+
+(80000498) Inst: fd19263
+Decode: curr_pc: 80000494
+
+
+(8000049c) Inst: 213
+Decode: curr_pc: 80000498
+(80000490) WB Data: babebabe, to register: 29
+
+
+(8000049c) Inst: 213
+Decode: curr_pc: 8000049c
+Writing 00000004 to 29
+(80000494) WB Data: babebabe, to register: 28
+
+
+(8000049c) Inst: 213
+Decode: curr_pc: 8000049c
+Writing 0000001e to 28
+
+
+(800004a0) Inst: b00113
+Decode: curr_pc: 8000049c
+
+
+(800004a4) Inst: 13
+Decode: curr_pc: 800004a0
+
+
+(800004a8) Inst: d00093
+Decode: curr_pc: 800004a4
+(8000049c) WB Data: babebabe, to register:  4
+
+
+(800004ac) Inst: 402081b3
+Decode: curr_pc: 800004a8
+Writing 00000000 to  4
+(800004a0) WB Data: babebabe, to register:  2
+
+
+(800004b0) Inst: 120213
+Decode: curr_pc: 800004ac
+Writing 0000000b to  2
+(800004a4) WB Data: babebabe, to register:  0
+
+
+(800004b4) Inst: 200293
+Decode: curr_pc: 800004b0
+(800004a8) WB Data: babebabe, to register:  1
+
+
+(800004b8) Inst: fe5214e3
+Decode: curr_pc: 800004b4
+Writing 0000000d to  1
+(800004ac) WB Data: babebabe, to register:  3
+
+
+(800004bc) Inst: 200e93
+Decode: curr_pc: 800004b8
+Writing 00000002 to  3
+(800004b0) WB Data: babebabe, to register:  4
+
+
+(800004bc) Inst: 200e93
+Decode: curr_pc: 800004bc
+Writing 00000001 to  4
+(800004b4) WB Data: babebabe, to register:  5
+
+
+(800004a0) Inst: b00113
+Decode: curr_pc: 800004bc
+Writing 00000002 to  5
+
+
+(800004a4) Inst: 13
+Decode: curr_pc: 800004a0
+
+
+(800004a8) Inst: d00093
+Decode: curr_pc: 800004a4
+
+
+(800004ac) Inst: 402081b3
+Decode: curr_pc: 800004a8
+(800004a0) WB Data: babebabe, to register:  2
+
+
+(800004b0) Inst: 120213
+Decode: curr_pc: 800004ac
+Writing 0000000b to  2
+(800004a4) WB Data: babebabe, to register:  0
+
+
+(800004b4) Inst: 200293
+Decode: curr_pc: 800004b0
+(800004a8) WB Data: babebabe, to register:  1
+
+
+(800004b8) Inst: fe5214e3
+Decode: curr_pc: 800004b4
+Writing 0000000d to  1
+(800004ac) WB Data: babebabe, to register:  3
+
+
+(800004bc) Inst: 200e93
+Decode: curr_pc: 800004b8
+Writing 00000002 to  3
+(800004b0) WB Data: babebabe, to register:  4
+
+
+(800004bc) Inst: 200e93
+Decode: curr_pc: 800004bc
+Writing 00000002 to  4
+(800004b4) WB Data: babebabe, to register:  5
+
+
+(800004bc) Inst: 200e93
+Decode: curr_pc: 800004bc
+Writing 00000002 to  5
+
+
+(800004c0) Inst: 1f00e13
+Decode: curr_pc: 800004bc

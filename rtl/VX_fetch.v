@@ -52,7 +52,7 @@ module VX_fetch (
 			// for (ini_cur_th = 0; ini_cur_th < `NT; ini_cur_th=ini_cur_th+1)
 			// 	valid[ini_cur_th]   = 1; // Thread 1 active
 			valid[0]   = 1;
-			valid[1]   = 0;
+			// valid[1]   = 0;
 			stall_reg  = 0;
 			delay_reg  = 0;
 			old        = 0;

@@ -142,6 +142,8 @@ bool Vortex::ibus_driver()
     ram.getWord(new_PC, &curr_inst);
     vortex->fe_instruction      = curr_inst;
 
+    printf("\n\n(%x) Inst: %x\n", new_PC, curr_inst);
+
     ////////////////////// IBUS //////////////////////
 
 
@@ -284,20 +286,49 @@ bool Vortex::simulate(std::string file_to_simulate)
 	unsigned new_PC;
 
 	int cycle = 0;
-	while (this->stop && (!(stop && (counter > 5))))
-	{
+	// while (this->stop && (!(stop && (counter > 5))))
+	// {
 
-		// std::cout << "************* Cycle: " << cycle << "\n";
+	// 	// std::cout << "************* Cycle: " << cycle << "\n";
+ //        bool istop =  ibus_driver();
+ //        bool dstop = !dbus_driver();
+
+	// 	vortex->clk = 1;
+	// 	vortex->eval();
+
+
+
+	// 	vortex->clk = 0;
+	// 	vortex->eval();
+
+
+ //        stop = istop && dstop;
+
+ //        if (stop)
+ //        {
+ //            counter++;
+ //        } else
+ //        {
+ //            counter = 0;
+ //        }
+
+ //        cycle++;
+	// }
+
+    for (int i = 0; i < 500; i++)
+    {
+
+        // std::cout << "************* Cycle: " << cycle << "\n";
         bool istop =  ibus_driver();
         bool dstop = !dbus_driver();
 
-		vortex->clk = 1;
-		vortex->eval();
+        vortex->clk = 1;
+        vortex->eval();
 
 
 
-		vortex->clk = 0;
-		vortex->eval();
+        vortex->clk = 0;
+        vortex->eval();
 
 
         stop = istop && dstop;
@@ -311,7 +342,8 @@ bool Vortex::simulate(std::string file_to_simulate)
         }
 
         cycle++;
-	}
+    }
+
 
     uint32_t status;
     ram.getWord(0, &status);

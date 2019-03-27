@@ -35,7 +35,7 @@ module VX_register_file (
 
 	always @(posedge clk) begin
 		if(write_enable) begin
-			// $display("Writing %h to %d",write_data, write_register);
+			$display("Writing %h to %d",write_data, write_register);
 			registers[write_register] <= write_data;
 		end
 	end

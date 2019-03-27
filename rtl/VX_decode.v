@@ -101,29 +101,6 @@ module VX_decode(
 		// wire[31:0] internal_rd1;
 		// wire[31:0] internal_rd2;
 
-		// always @(posedge clk) begin
-		// 	$display("Decode: curr_pc: %h", in_curr_PC);
-		// end
-
-		genvar index;
-
-		generate  
-		for (index=0; index < `NT; index=index+1)  
-		  begin: gen_code_label  
-			VX_register_file vx_register_file(
-				.clk(clk),
-				.in_valid(in_wb_valid[index]),
-				.in_write_register(write_register),
-				.in_rd(in_rd),
-				.in_data(in_write_data[index]),
-				.in_src1(out_rs1),
-				.in_src2(out_rs2),
-				.out_src1_data(rd1_register[index]),
-				.out_src2_data(rd2_register[index])
-			);
-		  end  
-		endgenerate  
-
 		// VX_register_file vx_register_file_0(
 		// 	.clk(clk),
 		// 	.in_valid(in_wb_valid[0]),
@@ -152,6 +129,36 @@ module VX_decode(
 		assign out_valid = in_valid;
 
 		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
+
+
+
+		always @(posedge clk) begin
+			$display("Decode: curr_pc: %h", in_curr_PC);
+		end
+
+		genvar index;
+
+		generate  
+		for (index=0; index < `NT; index=index+1)  
+		  begin: gen_code_label  
+			VX_register_file vx_register_file(
+				.clk(clk),
+				.in_valid(in_wb_valid[index]),
+				.in_write_register(write_register),
+				.in_rd(in_rd),
+				.in_data(in_write_data[index]),
+				.in_src1(out_rs1),
+				.in_src2(out_rs2),
+				.out_src1_data(rd1_register[index]),
+				.out_src2_data(rd2_register[index])
+			);
+		  end  
+		endgenerate  
+
+
+
+
+
 		assign curr_opcode    = in_instruction[6:0];
 
 

@@ -1,0 +1,9 @@
+
+****************	../../emulator/riscv_tests/rv32ui-p-sub.hex	****************
+# Dynamic Instructions: 496
+# of total cycles:      500
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.00806
+# time to simulate:     2.13149e-317 milliseconds
+# GRADE:                Failed on test: 4294967295

@@ -6,7 +6,7 @@
 #ifndef _VVortex__Syms_H_
 #define _VVortex__Syms_H_
 
-#include "verilated.h"
+#include "verilated_heavy.h"
 
 // INCLUDE MODULE CLASSES
 #include "VVortex.h"

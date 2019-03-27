@@ -3,6 +3,7 @@
 
 
 module VX_writeback (
+		input wire       clk,
 		input wire[31:0] in_alu_result[`NT_M1:0],
 		input wire[31:0] in_mem_result[`NT_M1:0],
 		input wire[4:0]  in_rd,
@@ -17,12 +18,12 @@ module VX_writeback (
 		wire is_jal;
 		wire uses_alu;
 
-		// always @(*) begin
-		// 	if (in_PC_next == 32'h800001f4 || in_PC_next == 32'h800001f0)  begin
+		always @(negedge clk) begin
+			if (in_wb != 0)  begin
 
-		// 		$display("(%h) WB Data: %h, to register: %d",in_PC_next - 4, in_mem_result, in_rd);
-		// 	end
-		// end
+				$display("(%h) WB Data: %h, to register: %d",in_PC_next - 4, in_mem_result[0], in_rd);
+			end
+		end
 
 		wire[31:0] out_pc_data[`NT_M1:0];
 

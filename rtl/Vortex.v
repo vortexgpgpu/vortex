@@ -381,7 +381,7 @@ VX_e_m_reg vx_e_m_reg(
 wire[31:0]  use_rd2[`NT_M1:0];
 
 assign use_rd2[0] = e_m_reg_data[1];
-assign use_rd2[1] = e_m_reg_data[3];
+// assign use_rd2[1] = e_m_reg_data[3];
 
 VX_memory vx_memory(
 		.in_alu_result                (e_m_alu_result),
@@ -441,6 +441,7 @@ VX_m_w_reg vx_m_w_reg(
 
 
 VX_writeback vx_writeback(
+		.clk           (clk),
 		.in_alu_result (m_w_alu_result),
 		.in_mem_result (m_w_mem_result),
 		.in_rd         (m_w_rd),
