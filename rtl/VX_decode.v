@@ -11,6 +11,7 @@ module VX_decode(
 	input wire[31:0]  in_write_data,
 	input wire[4:0]   in_rd,
 	input wire[1:0]   in_wb,
+	input wire        in_wb_valid,
 
 	// FORWARDING INPUTS
 	input wire        in_src1_fwd,
@@ -106,6 +107,7 @@ module VX_decode(
 
 		VX_register_file vx_register_file(
 			.clk(clk),
+			.in_valid(in_wb_valid),
 			.in_write_register(write_register),
 			.in_rd(in_rd),
 			.in_data(in_write_data),

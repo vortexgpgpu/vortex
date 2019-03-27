@@ -25,6 +25,7 @@ VL_MODULE(VVortex) {
     VL_IN8(reset,0,0);
     VL_OUT8(out_cache_driver_in_mem_read,2,0);
     VL_OUT8(out_cache_driver_in_mem_write,2,0);
+    VL_OUT8(out_cache_driver_in_valid,0,0);
     VL_IN(fe_instruction,31,0);
     VL_IN(in_cache_driver_out_data,31,0);
     VL_OUT(curr_PC,31,0);

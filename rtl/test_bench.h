@@ -173,7 +173,7 @@ bool Vortex::dbus_driver()
     ////////////////////// DBUS //////////////////////
 
 
-    if (vortex->out_cache_driver_in_mem_write != NO_MEM_WRITE)
+    if ((vortex->out_cache_driver_in_mem_write != NO_MEM_WRITE) && vortex->out_cache_driver_in_valid)
     {
         data_write = (uint32_t) vortex->out_cache_driver_in_data;
         addr       = (uint32_t) vortex->out_cache_driver_in_address;
@@ -195,7 +195,7 @@ bool Vortex::dbus_driver()
 
     }
 
-    if (vortex->out_cache_driver_in_mem_read != NO_MEM_READ)
+    if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid)
     {
 
         addr = (uint32_t) vortex->out_cache_driver_in_address;

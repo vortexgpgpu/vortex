@@ -32,6 +32,7 @@ module VX_memory (
 		output wire[31:0] out_cache_driver_in_address,
 		output wire[2:0]  out_cache_driver_in_mem_read,
 		output wire[2:0]  out_cache_driver_in_mem_write,
+		output wire       out_cache_driver_in_valid,
 		output wire[31:0] out_cache_driver_in_data 
 	);	
 
@@ -47,22 +48,20 @@ module VX_memory (
 		assign out_cache_driver_in_mem_read  = in_mem_read;
 		assign out_cache_driver_in_mem_write = in_mem_write;
 		assign out_cache_driver_in_data      = in_rd2;
-
+		assign out_cache_driver_in_valid     = in_valid;
 
 		assign out_mem_result = in_cache_driver_out_data;
 		assign out_alu_result = in_alu_result;
-		assign out_rd = in_rd;
-		assign out_wb = in_wb;
-		assign out_rs1 = in_rs1;
-		assign out_rs2 = in_rs2;
-		assign out_PC_next = in_PC_next;
-
-		assign out_valid = in_valid;
+		assign out_rd         = in_rd;
+		assign out_wb         = in_wb;
+		assign out_rs1        = in_rs1;
+		assign out_rs2        = in_rs2;
+		assign out_PC_next    = in_PC_next;
+		assign out_valid      = in_valid;
 
 
 		assign out_branch_dest = $signed(in_curr_PC) + ($signed(in_branch_offset) << 1);
-
-
+		
 		always @(*) begin
 			case(in_branch_type)
 				`BEQ:  out_branch_dir = (in_alu_result == 0)     ? `TAKEN     : `NOT_TAKEN;

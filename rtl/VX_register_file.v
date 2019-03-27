@@ -2,6 +2,7 @@
 
 module VX_register_file (
   input wire        clk,
+  input wire        in_valid,
   input wire        in_write_register,
   input wire[4:0]   in_rd,
   input wire[31:0]  in_data,
@@ -30,7 +31,7 @@ module VX_register_file (
 	assign write_data     = in_data;
 	assign write_register = in_rd;
 
-	assign write_enable   = in_write_register && (in_rd != 5'h0);
+	assign write_enable   = in_write_register && (in_rd != 5'h0) && in_valid;
 
 	always @(posedge clk) begin
 		if(write_enable) begin

@@ -8,7 +8,8 @@ module Vortex(
 	output wire[31:0] out_cache_driver_in_address,
 	output wire[2:0]  out_cache_driver_in_mem_read,
 	output wire[2:0]  out_cache_driver_in_mem_write,
-	output wire[31:0] out_cache_driver_in_data 
+	output wire       out_cache_driver_in_valid,
+	output wire[31:0] out_cache_driver_in_data
 	);
 
 
@@ -213,7 +214,7 @@ VX_decode vx_decode(
 		.in_write_data(writeback_write_data),
 		.in_rd(writeback_rd),
 		.in_wb(writeback_wb),
-
+		.in_wb_valid(m_w_valid),
 		.in_src1_fwd(forwarding_src1_fwd),
 		.in_src1_fwd_data(forwarding_src1_fwd_data),
 		.in_src2_fwd(forwarding_src2_fwd),
@@ -406,7 +407,8 @@ VX_memory vx_memory(
 		.out_cache_driver_in_address(out_cache_driver_in_address),
 		.out_cache_driver_in_mem_read(out_cache_driver_in_mem_read),
 		.out_cache_driver_in_mem_write(out_cache_driver_in_mem_write),
-		.out_cache_driver_in_data(out_cache_driver_in_data)
+		.out_cache_driver_in_data(out_cache_driver_in_data),
+		.out_cache_driver_in_valid(out_cache_driver_in_valid)
 	);
 
 VX_m_w_reg vx_m_w_reg(
