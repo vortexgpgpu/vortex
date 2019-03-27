@@ -26,7 +26,7 @@ module VX_d_e_reg (
 		input wire       in_jal,
 		input wire[31:0] in_jal_offset,
 		input wire       in_freeze,
-		input wire[`NT_M1:0]   in_valid,
+		input wire       in_valid[`NT_M1:0],
 
 		output wire[11:0] out_csr_address, // done
 		output wire       out_is_csr, // done
@@ -47,7 +47,7 @@ module VX_d_e_reg (
 		output wire       out_jal,
 		output wire[31:0] out_jal_offset,
 		output wire[31:0] out_PC_next,
-		output wire[`NT_M1:0]  out_valid
+		output wire       out_valid[`NT_M1:0]
 	);
 
 
@@ -70,10 +70,10 @@ module VX_d_e_reg (
 		reg[31:0] curr_PC;
 		reg       jal;
 		reg[31:0] jal_offset;
-		reg[`NT_M1:0] valid;
+		reg       valid[`NT_M1:0];
 
 		reg[31:0] reg_data_z[`NT_T2_M1:0];
-		reg[`NT_M1:0] valid_z;
+		reg       valid_z[`NT_M1:0];
 
 		integer ini_reg;
 		initial begin

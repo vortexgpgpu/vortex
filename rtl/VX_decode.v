@@ -6,12 +6,12 @@ module VX_decode(
 	input wire        clk,
 	input wire[31:0]  in_instruction,
 	input wire[31:0]  in_curr_PC,
-	input wire[`NT_M1:0]   in_valid,
+	input wire        in_valid[`NT_M1:0],
 	// WriteBack inputs
 	input wire[31:0]  in_write_data[`NT_M1:0],
 	input wire[4:0]   in_rd,
 	input wire[1:0]   in_wb,
-	input wire[`NT_M1:0]   in_wb_valid,
+	input wire        in_wb_valid[`NT_M1:0],
 
 	// FORWARDING INPUTS
 	input wire        in_src1_fwd,
@@ -40,7 +40,7 @@ module VX_decode(
 	output reg[31:0]  out_jal_offset,
 	output reg[19:0]  out_upper_immed,
 	output wire[31:0] out_PC_next,
-	output wire[`NT_M1:0]  out_valid
+	output wire       out_valid[`NT_M1:0]
 );
 
 		wire[6:0]  curr_opcode;

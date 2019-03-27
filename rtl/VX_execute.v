@@ -22,7 +22,7 @@ module VX_execute (
 		input wire           in_jal,
 		input wire[31:0]     in_jal_offset,
 		input wire[31:0]     in_curr_PC,
-		input wire[`NT_M1:0] in_valid,
+		input wire           in_valid[`NT_M1:0],
 
 		output wire[11:0]     out_csr_address,
 		output wire           out_is_csr,
@@ -40,7 +40,7 @@ module VX_execute (
 		output wire[31:0]     out_branch_offset,
 		output wire           out_branch_stall,
 		output wire[31:0]     out_PC_next,
-		output wire[`NT_M1:0] out_valid
+		output wire           out_valid[`NT_M1:0]
 	);
 
 

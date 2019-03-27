@@ -15,7 +15,7 @@ module VX_memory (
 		input wire[31:0]  in_curr_PC,
 		input wire[31:0]  in_branch_offset,
 		input wire[2:0]   in_branch_type, 
-		input wire[`NT_M1:0] in_valid,
+		input wire        in_valid[`NT_M1:0],
 		input wire[31:0]  in_cache_driver_out_data[`NT_M1:0],
 
 		output wire[31:0] out_alu_result[`NT_M1:0],
@@ -28,11 +28,11 @@ module VX_memory (
 		output wire[31:0] out_branch_dest,
 		output wire       out_delay,
 		output wire[31:0] out_PC_next,
-		output wire[`NT_M1:0] out_valid,
+		output wire       out_valid[`NT_M1:0],
 		output wire[31:0] out_cache_driver_in_address[`NT_M1:0],
 		output wire[2:0]  out_cache_driver_in_mem_read,
 		output wire[2:0]  out_cache_driver_in_mem_write,
-		output wire[`NT_M1:0] out_cache_driver_in_valid,
+		output wire       out_cache_driver_in_valid[`NT_M1:0],
 		output wire[31:0] out_cache_driver_in_data[`NT_M1:0]
 	);	
 

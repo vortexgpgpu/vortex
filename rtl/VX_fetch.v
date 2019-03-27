@@ -19,7 +19,7 @@ module VX_fetch (
 	output wire[31:0]      out_instruction,
 	output wire            out_delay,
 	output wire[31:0]      out_curr_PC,
-	output wire[`NT_M1:0]  out_valid
+	output wire            out_valid[`NT_M1:0]
 );
 
 

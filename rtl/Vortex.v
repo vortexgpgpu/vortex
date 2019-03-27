@@ -10,7 +10,7 @@ module Vortex(
 	output wire[31:0]     out_cache_driver_in_address[`NT_M1:0],
 	output wire[2:0]      out_cache_driver_in_mem_read,
 	output wire[2:0]      out_cache_driver_in_mem_write,
-	output wire[`NT_M1:0] out_cache_driver_in_valid,
+	output wire           out_cache_driver_in_valid[`NT_M1:0],
 	output wire[31:0]     out_cache_driver_in_data[`NT_M1:0]
 	);
 
@@ -21,12 +21,12 @@ assign curr_PC = fetch_curr_PC;
 wire[31:0] fetch_instruction;
 wire       fetch_delay;
 wire[31:0] fetch_curr_PC;
-wire[`NT_M1:0]  fetch_valid;
+wire       fetch_valid[`NT_M1:0];
 
 // From f_d_register
 wire[31:0] f_d_instruction;
 wire[31:0] f_d_curr_PC;
-wire[`NT_M1:0]  f_d_valid;
+wire       f_d_valid[`NT_M1:0];
 
 // From decode
 wire            decode_branch_stall;
@@ -48,7 +48,7 @@ reg             decode_jal;
 reg[31:0]       decode_jal_offset;
 reg[19:0]       decode_upper_immed;
 wire[31:0]      decode_PC_next;
-wire[`NT_M1:0]  decode_valid;
+wire       decode_valid[`NT_M1:0];
 
 // From d_e_register
 wire[11:0]      d_e_csr_address;
@@ -70,7 +70,7 @@ wire[31:0]      d_e_curr_PC;
 wire            d_e_jal;
 wire[31:0]      d_e_jal_offset;
 wire[31:0]      d_e_PC_next;
-wire[`NT_M1:0]  d_e_valid;
+wire       d_e_valid[`NT_M1:0];
 
 
 // From execute
@@ -90,7 +90,7 @@ wire            execute_jal;
 wire[31:0]      execute_jal_dest;
 wire[31:0]      execute_branch_offset;
 wire[31:0]      execute_PC_next;
-wire[`NT_M1:0]  execute_valid;
+wire       execute_valid[`NT_M1:0];
 
 
 // From e_m_register
@@ -113,7 +113,7 @@ wire[31:0]      e_m_curr_PC;
 wire[31:0]      e_m_branch_offset;
 wire[2:0]       e_m_branch_type;
 wire[31:0]      e_m_PC_next;
-wire[`NT_M1:0]  e_m_valid;
+wire       e_m_valid[`NT_M1:0];
 
 
 // From memory
@@ -127,7 +127,7 @@ wire[1:0]       memory_wb;
 wire[4:0]       memory_rs1;
 wire[4:0]       memory_rs2;
 wire[31:0]      memory_PC_next;
-wire[`NT_M1:0]  memory_valid;
+wire       memory_valid[`NT_M1:0];
 
 // From m_w_register
 wire[31:0]      m_w_alu_result[`NT_M1:0];
@@ -139,7 +139,7 @@ wire[4:0]       m_w_rs1;
 wire[4:0]       m_w_rs2;
 /* verilator lint_on UNUSED */
 wire[31:0]      m_w_PC_next;
-wire[`NT_M1:0]  m_w_valid;
+wire       m_w_valid[`NT_M1:0];
 
 // From writeback
 wire[31:0] writeback_write_data[`NT_M1:0];

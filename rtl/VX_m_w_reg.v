@@ -12,7 +12,7 @@ module VX_m_w_reg (
 		input wire[4:0]   in_rs2,
 		input wire[31:0]  in_PC_next,
 		input wire        in_freeze,
-		input wire[`NT_M1:0] in_valid,
+		input wire        in_valid[`NT_M1:0],
 
 		output wire[31:0] out_alu_result[`NT_M1:0],
 		output wire[31:0] out_mem_result[`NT_M1:0], // NEW
@@ -21,7 +21,7 @@ module VX_m_w_reg (
 		output wire[4:0]  out_rs1,
 		output wire[4:0]  out_rs2,
 		output wire[31:0] out_PC_next,
-		output wire[`NT_M1:0] out_valid
+		output wire       out_valid[`NT_M1:0]
 	);
 
 
@@ -33,7 +33,7 @@ module VX_m_w_reg (
 		reg[4:0]  rs2;
 		reg[1:0]  wb;
 		reg[31:0] PC_next;
-		reg[`NT_M1:0] valid;
+		reg       valid[`NT_M1:0];
 
 
 		initial begin
