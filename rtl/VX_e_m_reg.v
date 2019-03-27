@@ -5,12 +5,12 @@
 
 module VX_e_m_reg (
 		input wire        clk,
-		input wire[31:0]  in_alu_result,
+		input wire[31:0]  in_alu_result[`NT_M1:0],
 		input wire[4:0]   in_rd,
 		input wire[1:0]   in_wb,
 		input wire[4:0]   in_rs1,
 		input wire[4:0]   in_rs2,
-		input wire[31:0]  in_reg_data[1:0],
+		input wire[31:0]  in_reg_data[`NT_T2_M1:0],
 		input wire[2:0]   in_mem_read, // NEW
 		input wire[2:0]   in_mem_write, // NEW
 		input wire[31:0]  in_PC_next,
@@ -23,17 +23,17 @@ module VX_e_m_reg (
 		input wire        in_jal,
 		input wire[31:0]  in_jal_dest,
 		input wire        in_freeze,
-		input wire        in_valid,
+		input wire[`NT_M1:0] in_valid,
 
 		output wire[11:0] out_csr_address,
 		output wire       out_is_csr,
 		output wire[31:0] out_csr_result,
-		output wire[31:0] out_alu_result,
+		output wire[31:0] out_alu_result[`NT_M1:0],
 		output wire[4:0]  out_rd,
 		output wire[1:0]  out_wb,
 		output wire[4:0]  out_rs1,
 		output wire[4:0]  out_rs2,
-		output wire[31:0] out_reg_data[1:0],
+		output wire[31:0] out_reg_data[`NT_T2_M1:0],
 		output wire[2:0]  out_mem_read,
 		output wire[2:0]  out_mem_write,
 		output wire[31:0] out_curr_PC,
@@ -42,15 +42,15 @@ module VX_e_m_reg (
 		output wire       out_jal,
 		output wire[31:0] out_jal_dest,
 		output wire[31:0] out_PC_next,
-		output wire       out_valid
+		output wire[`NT_M1:0] out_valid
 	);
 
 
-		reg[31:0] alu_result;
+		reg[31:0] alu_result[`NT_M1:0];
 		reg[4:0]  rd;
 		reg[4:0]  rs1;
 		reg[4:0]  rs2;
-		reg[31:0] reg_data[1:0];
+		reg[31:0] reg_data[`NT_T2_M1:0];
 		reg[1:0]  wb;
 		reg[31:0] PC_next;
 		reg[2:0]  mem_read;
@@ -63,16 +63,18 @@ module VX_e_m_reg (
 		reg[2:0]  branch_type;
 		reg       jal;
 		reg[31:0] jal_dest;
-		reg       valid;
+		reg[`NT_M1:0] valid;
 
+		// reg[31:0] reg_data_z[`NT_T2_M1:0];
+		// reg[`NT_M1:0] valid_z;
+		// reg[31:0]  alu_result_z[`NT_M1:0];
+
+		integer ini_reg;
 
 		initial begin
-			alu_result    = 0;
 			rd            = 0;
 			rs1           = 0;
 			rs2           = 0;
-			reg_data[0]   = 0;
-			reg_data[1]   = 0;
 			wb            = 0;
 			PC_next       = 0;
 			mem_read      = `NO_MEM_READ;
@@ -85,7 +87,15 @@ module VX_e_m_reg (
 			branch_type   = 0;
 			jal           = `NO_JUMP;
 			jal_dest      = 0;
-			valid         = 0;
+			for (ini_reg = 0; ini_reg < `NT; ini_reg = ini_reg + 1)
+			begin
+				reg_data[ini_reg]     = 0;
+				// reg_data_z[ini_reg]   = 0;
+				valid[ini_reg]        = 0;
+				// valid_z[ini_reg]      = 0;
+				// alu_result_z[ini_reg] = 0;
+				alu_result[ini_reg]   = 0;
+			end
 		end
 
 

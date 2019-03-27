@@ -3,23 +3,23 @@
 
 
 module VX_memory (
-		input wire[31:0]  in_alu_result,
+		input wire[31:0]  in_alu_result[`NT_M1:0],
 		input wire[2:0]   in_mem_read, 
 		input wire[2:0]   in_mem_write,
 		input wire[4:0]   in_rd,
 		input wire[1:0]   in_wb,
 		input wire[4:0]   in_rs1,
 		input wire[4:0]   in_rs2,
-		input wire[31:0]  in_rd2,
+		input wire[31:0]  in_rd2[`NT_M1:0],
 		input wire[31:0]  in_PC_next,
 		input wire[31:0]  in_curr_PC,
 		input wire[31:0]  in_branch_offset,
 		input wire[2:0]   in_branch_type, 
-		input wire        in_valid,
-		input wire[31:0]  in_cache_driver_out_data,
+		input wire[`NT_M1:0] in_valid,
+		input wire[31:0]  in_cache_driver_out_data[`NT_M1:0],
 
-		output wire[31:0] out_alu_result,
-		output wire[31:0] out_mem_result,
+		output wire[31:0] out_alu_result[`NT_M1:0],
+		output wire[31:0] out_mem_result[`NT_M1:0],
 		output wire[4:0]  out_rd,
 		output wire[1:0]  out_wb,
 		output wire[4:0]  out_rs1,
@@ -28,12 +28,12 @@ module VX_memory (
 		output wire[31:0] out_branch_dest,
 		output wire       out_delay,
 		output wire[31:0] out_PC_next,
-		output wire       out_valid,
-		output wire[31:0] out_cache_driver_in_address,
+		output wire[`NT_M1:0] out_valid,
+		output wire[31:0] out_cache_driver_in_address[`NT_M1:0],
 		output wire[2:0]  out_cache_driver_in_mem_read,
 		output wire[2:0]  out_cache_driver_in_mem_write,
-		output wire       out_cache_driver_in_valid,
-		output wire[31:0] out_cache_driver_in_data 
+		output wire[`NT_M1:0] out_cache_driver_in_valid,
+		output wire[31:0] out_cache_driver_in_data[`NT_M1:0]
 	);	
 
 		always @(in_mem_read, in_cache_driver_out_data) begin
@@ -64,16 +64,15 @@ module VX_memory (
 		
 		always @(*) begin
 			case(in_branch_type)
-				`BEQ:  out_branch_dir = (in_alu_result == 0)     ? `TAKEN     : `NOT_TAKEN;
+				`BEQ:  out_branch_dir = (in_alu_result[0] == 0)     ? `TAKEN     : `NOT_TAKEN;
 				`BNE:  
 					begin
-						out_branch_dir = (in_alu_result == 0)     ? `NOT_TAKEN : `TAKEN;
-						// $display("Branch @%h is: %h", in_curr_PC, out_branch_dir);
+						out_branch_dir = (in_alu_result[0] == 0)     ? `NOT_TAKEN : `TAKEN;
 					end
-				`BLT:  out_branch_dir = (in_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;
-				`BGT:  out_branch_dir = (in_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
-				`BLTU: out_branch_dir = (in_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;
-				`BGTU: out_branch_dir = (in_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
+				`BLT:  out_branch_dir = (in_alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN;
+				`BGT:  out_branch_dir = (in_alu_result[0][31] == 0) ? `TAKEN     : `NOT_TAKEN;
+				`BLTU: out_branch_dir = (in_alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN;
+				`BGTU: out_branch_dir = (in_alu_result[0][31] == 0) ? `TAKEN     : `NOT_TAKEN;
 				`NO_BRANCH: out_branch_dir = `NOT_TAKEN;
 				default:    out_branch_dir = `NOT_TAKEN;
 			endcase // in_branch_type

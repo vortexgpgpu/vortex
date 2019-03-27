@@ -7,7 +7,7 @@ module VX_d_e_reg (
 		input wire[4:0]  in_rd,
 		input wire[4:0]  in_rs1,
 		input wire[4:0]  in_rs2,
-		input wire[31:0] in_reg_data[1:0],
+		input wire[31:0] in_reg_data[`NT_T2_M1:0],
 		input wire[4:0]  in_alu_op,
 		input wire[1:0]  in_wb,
 		input wire       in_rs2_src, // NEW
@@ -26,7 +26,7 @@ module VX_d_e_reg (
 		input wire       in_jal,
 		input wire[31:0] in_jal_offset,
 		input wire       in_freeze,
-		input wire       in_valid,
+		input wire[`NT_M1:0]   in_valid,
 
 		output wire[11:0] out_csr_address, // done
 		output wire       out_is_csr, // done
@@ -34,7 +34,7 @@ module VX_d_e_reg (
 		output wire[4:0]  out_rd,
 		output wire[4:0]  out_rs1,
 		output wire[4:0]  out_rs2,
-		output wire[31:0] out_reg_data[1:0],
+		output wire[31:0] out_reg_data[`NT_T2_M1:0],
 		output wire[4:0]  out_alu_op,
 		output wire[1:0]  out_wb,
 		output wire       out_rs2_src, // NEW
@@ -47,14 +47,14 @@ module VX_d_e_reg (
 		output wire       out_jal,
 		output wire[31:0] out_jal_offset,
 		output wire[31:0] out_PC_next,
-		output wire       out_valid
+		output wire[`NT_M1:0]  out_valid
 	);
 
 
 		reg[4:0]  rd;
 		reg[4:0]  rs1;
 		reg[4:0]  rs2;
-		reg[31:0] reg_data[1:0];
+		reg[31:0] reg_data[`NT_T2_M1:0];
 		reg[4:0]  alu_op;
 		reg[1:0]  wb;
 		reg[31:0] PC_next_out;
@@ -70,14 +70,22 @@ module VX_d_e_reg (
 		reg[31:0] curr_PC;
 		reg       jal;
 		reg[31:0] jal_offset;
-		reg       valid;
+		reg[`NT_M1:0] valid;
 
+		reg[31:0] reg_data_z[`NT_T2_M1:0];
+		reg[`NT_M1:0] valid_z;
 
+		integer ini_reg;
 		initial begin
 			rd          = 0;
 			rs1         = 0;
-			reg_data[0] = 0;
-			reg_data[1] = 0;
+			for (ini_reg = 0; ini_reg < `NT; ini_reg = ini_reg + 1)
+			begin
+				reg_data[ini_reg]   = 0;
+				reg_data_z[ini_reg] = 0;
+				valid[ini_reg]      = 0;
+				valid_z[ini_reg]    = 0;
+			end
 			rs2         = 0;
 			alu_op      = 0;
 			wb          = `NO_WB;
@@ -94,7 +102,6 @@ module VX_d_e_reg (
 			curr_PC     = 0;
 			jal         = `NO_JUMP;
 			jal_offset  = 0;
-			valid       = 0;
 		end
 
 		wire stalling;
@@ -123,12 +130,6 @@ module VX_d_e_reg (
 		assign out_valid       = valid;
 
 
-
-		wire[31:0] reg_data_z[1:0];
-
-		assign reg_data_z[0] = 32'0;
-		assign reg_data_z[1] = 32'0;
-
 		always @(posedge clk) begin
 			if (in_freeze == 1'h0) begin
 				rd          <= stalling ? 5'h0         : in_rd;
@@ -150,7 +151,7 @@ module VX_d_e_reg (
 				jal         <= stalling ? `NO_JUMP     : in_jal;
 				jal_offset  <= stalling ? 32'h0        : in_jal_offset;
 				curr_PC     <= stalling ? 32'h0        : in_curr_PC;
-				valid       <= stalling ? 1'b0         : in_valid;
+				valid       <= stalling ? valid_z      : in_valid;
 			end
 		end
 

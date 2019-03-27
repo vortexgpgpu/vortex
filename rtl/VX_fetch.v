@@ -1,4 +1,5 @@
 
+`include "VX_define.v"
 
 module VX_fetch (
 	input  wire       clk,
@@ -15,10 +16,10 @@ module VX_fetch (
 	input  wire       in_debug,
 	input  wire[31:0] in_instruction,
 
-	output wire[31:0] out_instruction,
-	output wire       out_delay,
-	output wire[31:0] out_curr_PC,
-	output wire       out_valid
+	output wire[31:0]      out_instruction,
+	output wire            out_delay,
+	output wire[31:0]      out_curr_PC,
+	output wire[`NT_M1:0]  out_valid
 );
 
 
@@ -41,7 +42,17 @@ module VX_fetch (
 		reg[4:0]  temp_state;
 		reg[4:0]  tempp_state;
 
+		reg[`NT_M1:0] valid;
+
+
+		// integer ini_cur_th = 0;
+		genvar out_cur_th;
+
 		initial begin
+			// for (ini_cur_th = 0; ini_cur_th < `NT; ini_cur_th=ini_cur_th+1)
+			// 	valid[ini_cur_th]   = 1; // Thread 1 active
+			valid[0]   = 1;
+			valid[1]   = 0;
 			stall_reg  = 0;
 			delay_reg  = 0;
 			old        = 0;
@@ -89,7 +100,11 @@ module VX_fetch (
 		assign stall = in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_interrupt || delay || in_freeze;
 
 		assign out_instruction = stall ? 32'b0 : in_instruction;
-		assign out_valid       = stall ? 1'b0  : 1'b1;
+
+		generate
+			for (out_cur_th = 0; out_cur_th < `NT; out_cur_th = out_cur_th+1)
+				assign out_valid[out_cur_th] = stall ? 1'b0  : valid[out_cur_th];
+		endgenerate
 
 
 		always @(*) begin

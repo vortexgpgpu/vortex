@@ -6,18 +6,18 @@ module VX_decode(
 	input wire        clk,
 	input wire[31:0]  in_instruction,
 	input wire[31:0]  in_curr_PC,
-	input wire        in_valid,
+	input wire[`NT_M1:0]   in_valid,
 	// WriteBack inputs
-	input wire[31:0]  in_write_data,
+	input wire[31:0]  in_write_data[`NT_M1:0],
 	input wire[4:0]   in_rd,
 	input wire[1:0]   in_wb,
-	input wire        in_wb_valid,
+	input wire[`NT_M1:0]   in_wb_valid,
 
 	// FORWARDING INPUTS
 	input wire        in_src1_fwd,
-	input wire[31:0]  in_src1_fwd_data,
+	input wire[31:0]  in_src1_fwd_data[`NT_M1:0],
 	input wire        in_src2_fwd,
-	input wire[31:0]  in_src2_fwd_data,
+	input wire[31:0]  in_src2_fwd_data[`NT_M1:0],
 
 	output wire[11:0] out_csr_address,
 	output wire       out_is_csr,
@@ -27,7 +27,7 @@ module VX_decode(
 	output wire[4:0]  out_rd,
 	output wire[4:0]  out_rs1,
 	output wire[4:0]  out_rs2,
-	output wire[31:0] out_reg_data[1:0],
+	output wire[31:0] out_reg_data[`NT_T2_M1:0],
 	output wire[1:0]  out_wb,
 	output wire[4:0]  out_alu_op,
 	output wire       out_rs2_src,
@@ -40,14 +40,14 @@ module VX_decode(
 	output reg[31:0]  out_jal_offset,
 	output reg[19:0]  out_upper_immed,
 	output wire[31:0] out_PC_next,
-	output wire       out_valid
+	output wire[`NT_M1:0]  out_valid
 );
 
 		wire[6:0]  curr_opcode;
 
 
-		wire[31:0] rd1_register;
-		wire[31:0] rd2_register;
+		wire[31:0] rd1_register[`NT_M1:0];
+		wire[31:0] rd2_register[`NT_M1:0];
 
 		wire       is_itype;
 		wire       is_rtype;
@@ -98,24 +98,56 @@ module VX_decode(
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
 
-		wire[31:0] internal_rd1;
-		wire[31:0] internal_rd2;
+		// wire[31:0] internal_rd1;
+		// wire[31:0] internal_rd2;
 
 		// always @(posedge clk) begin
 		// 	$display("Decode: curr_pc: %h", in_curr_PC);
 		// end
 
-		VX_register_file vx_register_file(
-			.clk(clk),
-			.in_valid(in_wb_valid),
-			.in_write_register(write_register),
-			.in_rd(in_rd),
-			.in_data(in_write_data),
-			.in_src1(out_rs1),
-			.in_src2(out_rs2),
-			.out_src1_data(rd1_register),
-			.out_src2_data(rd2_register)
-		);
+		genvar index;
+
+		generate  
+		for (index=0; index < `NT; index=index+1)  
+		  begin: gen_code_label  
+			VX_register_file vx_register_file(
+				.clk(clk),
+				.in_valid(in_wb_valid[index]),
+				.in_write_register(write_register),
+				.in_rd(in_rd),
+				.in_data(in_write_data[index]),
+				.in_src1(out_rs1),
+				.in_src2(out_rs2),
+				.out_src1_data(rd1_register[index]),
+				.out_src2_data(rd2_register[index])
+			);
+		  end  
+		endgenerate  
+
+		// VX_register_file vx_register_file_0(
+		// 	.clk(clk),
+		// 	.in_valid(in_wb_valid[0]),
+		// 	.in_write_register(write_register),
+		// 	.in_rd(in_rd),
+		// 	.in_data(in_write_data[1:0]),
+		// 	.in_src1(out_rs1),
+		// 	.in_src2(out_rs2),
+		// 	.out_src1_data(rd1_register),
+		// 	.out_src2_data(rd2_register)
+		// );
+
+
+		// VX_register_file vx_register_file_1(
+		// 	.clk(clk),
+		// 	.in_valid(in_wb_valid),
+		// 	.in_write_register(write_register),
+		// 	.in_rd(in_rd),
+		// 	.in_data(in_write_data),
+		// 	.in_src1(out_rs1),
+		// 	.in_src2(out_rs2),
+		// 	.out_src1_data(rd1_register),
+		// 	.out_src2_data(rd2_register)
+		// );
 
 		assign out_valid = in_valid;
 
@@ -151,13 +183,22 @@ module VX_decode(
 
 		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
+		genvar index_out_reg;
+		generate
+			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
+				begin
+					assign out_reg_data[index_out_reg]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg] : rd1_register[index_out_reg]));
+					assign out_reg_data[index_out_reg+1] = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[index_out_reg] : rd2_register[index_out_reg];
+				end
+		endgenerate
 
-		assign internal_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
-		assign internal_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;
+
+		// assign internal_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
+		// assign internal_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;
 
 
-		assign out_reg_data[0] = internal_rd1;
-		assign out_reg_data[1] = internal_rd2;
+		// assign out_reg_data[0] = internal_rd1;
+		// assign out_reg_data[1] = internal_rd2;
 
 
 		// always @(negedge clk) begin
@@ -167,7 +208,7 @@ module VX_decode(
 		// end
 
 		assign out_is_csr   = is_csr;
-    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : internal_rd1;
+    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : out_reg_data[0];
 
 
 		assign out_wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :

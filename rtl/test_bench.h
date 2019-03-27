@@ -175,22 +175,25 @@ bool Vortex::dbus_driver()
 
     if ((vortex->out_cache_driver_in_mem_write != NO_MEM_WRITE) && vortex->out_cache_driver_in_valid)
     {
-        data_write = (uint32_t) vortex->out_cache_driver_in_data;
-        addr       = (uint32_t) vortex->out_cache_driver_in_address;
+        for (unsigned curr_th = 0; curr_th < NT; curr_th++)
+        {
+            data_write = (uint32_t) vortex->out_cache_driver_in_data[curr_th];
+            addr       = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
 
-        if (vortex->out_cache_driver_in_mem_write == SB_MEM_WRITE)
-        {
-        	data_write = ( data_write) & 0xFF;
-            ram.writeByte( addr, &data_write);
+            if (vortex->out_cache_driver_in_mem_write == SB_MEM_WRITE)
+            {
+                data_write = ( data_write) & 0xFF;
+                ram.writeByte( addr, &data_write);
 
-        } else if (vortex->out_cache_driver_in_mem_write == SH_MEM_WRITE)
-        {
-            data_write = ( data_write) & 0xFFFF;
-            ram.writeHalf( addr, &data_write);
-        } else if (vortex->out_cache_driver_in_mem_write == SW_MEM_WRITE)
-        {
-            data_write = data_write;
-            ram.writeWord( addr, &data_write);
+            } else if (vortex->out_cache_driver_in_mem_write == SH_MEM_WRITE)
+            {
+                data_write = ( data_write) & 0xFFFF;
+                ram.writeHalf( addr, &data_write);
+            } else if (vortex->out_cache_driver_in_mem_write == SW_MEM_WRITE)
+            {
+                data_write = data_write;
+                ram.writeWord( addr, &data_write);
+            }
         }
 
     }
@@ -198,45 +201,49 @@ bool Vortex::dbus_driver()
     if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid)
     {
 
-        addr = (uint32_t) vortex->out_cache_driver_in_address;
-        ram.getWord(addr, &data_read);
+        for (unsigned curr_th = 0; curr_th < NT; curr_th++)
+        {
+            addr = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
+            ram.getWord(addr, &data_read);
 
-    	if (vortex->out_cache_driver_in_mem_read == LB_MEM_READ)
-    	{
+            if (vortex->out_cache_driver_in_mem_read == LB_MEM_READ)
+            {
 
-            vortex->in_cache_driver_out_data = (data_read & 0x80) ? (data_read | 0xFFFFFF00) : (data_read & 0xFF);
+                vortex->in_cache_driver_out_data[curr_th] = (data_read & 0x80) ? (data_read | 0xFFFFFF00) : (data_read & 0xFF);
 
-    	} else if (vortex->out_cache_driver_in_mem_read == LH_MEM_READ)
-    	{
+            } else if (vortex->out_cache_driver_in_mem_read == LH_MEM_READ)
+            {
 
-            vortex->in_cache_driver_out_data = (data_read & 0x8000) ? (data_read | 0xFFFF0000) : (data_read & 0xFFFF);
+                vortex->in_cache_driver_out_data[curr_th] = (data_read & 0x8000) ? (data_read | 0xFFFF0000) : (data_read & 0xFFFF);
 
-    	} else if (vortex->out_cache_driver_in_mem_read == LW_MEM_READ)
-    	{
-    		// printf("Reading mem - Addr: %h = %h\n", addr, data_read);
-    		// std::cout << "Reading mem - Addr: " << std::hex << addr << " = " << data_read << "\n";
-    		std::cout << std::dec;
-            vortex->in_cache_driver_out_data = data_read;
+            } else if (vortex->out_cache_driver_in_mem_read == LW_MEM_READ)
+            {
+                // printf("Reading mem - Addr: %h = %h\n", addr, data_read);
+                // std::cout << "Reading mem - Addr: " << std::hex << addr << " = " << data_read << "\n";
+                std::cout << std::dec;
+                vortex->in_cache_driver_out_data[curr_th] = data_read;
 
-    	} else if (vortex->out_cache_driver_in_mem_read == LBU_MEM_READ)
-    	{
+            } else if (vortex->out_cache_driver_in_mem_read == LBU_MEM_READ)
+            {
 
-            vortex->in_cache_driver_out_data = (data_read & 0xFF);
+                vortex->in_cache_driver_out_data[curr_th] = (data_read & 0xFF);
 
-    	} else if (vortex->out_cache_driver_in_mem_read == LHU_MEM_READ)
-    	{
+            } else if (vortex->out_cache_driver_in_mem_read == LHU_MEM_READ)
+            {
 
-            vortex->in_cache_driver_out_data = (data_read & 0xFFFF);
+                vortex->in_cache_driver_out_data[curr_th] = (data_read & 0xFFFF);
 
-    	}
-    	else
-    	{
-            vortex->in_cache_driver_out_data = 0xbabebabe;
-    	}
+            }
+            else
+            {
+                vortex->in_cache_driver_out_data[curr_th] = 0xbabebabe;
+            }
+        }
     }
     else
     {
-        vortex->in_cache_driver_out_data = 0xbabebabe;
+        for (unsigned curr_th = 0; curr_th < NT; curr_th++)
+            vortex->in_cache_driver_out_data[curr_th] = 0xbabebabe;
     }
 
     return false;
