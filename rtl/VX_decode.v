@@ -132,32 +132,53 @@ module VX_decode(
 
 
 
-		always @(posedge clk) begin
-			$display("Decode: curr_pc: %h", in_curr_PC);
-		end
+		// always @(posedge clk) begin
+		// 	$display("Decode: curr_pc: %h", in_curr_PC);
+		// end
 
-		genvar index;
+		// genvar index;
 
-		generate  
-		for (index=0; index < `NT; index=index+1)  
-		  begin: gen_code_label  
-			VX_register_file vx_register_file(
+		// generate  
+		// for (index=0; index < `NT; index=index+1)  
+		//   begin: gen_code_label  
+		// 	VX_register_file vx_register_file(
+		// 		.clk(clk),
+		// 		.in_valid(in_wb_valid[index]),
+		// 		.in_write_register(write_register),
+		// 		.in_rd(in_rd),
+		// 		.in_data(in_write_data[index]),
+		// 		.in_src1(out_rs1),
+		// 		.in_src2(out_rs2),
+		// 		.out_src1_data(rd1_register[index]),
+		// 		.out_src2_data(rd2_register[index])
+		// 	);
+		//   end  
+		// endgenerate  
+
+			VX_register_file vx_register_file_0(
 				.clk(clk),
-				.in_valid(in_wb_valid[index]),
+				.in_valid(in_wb_valid[0]),
 				.in_write_register(write_register),
 				.in_rd(in_rd),
-				.in_data(in_write_data[index]),
+				.in_data(in_write_data[0]),
 				.in_src1(out_rs1),
 				.in_src2(out_rs2),
-				.out_src1_data(rd1_register[index]),
-				.out_src2_data(rd2_register[index])
+				.out_src1_data(rd1_register[0]),
+				.out_src2_data(rd2_register[0])
 			);
-		  end  
-		endgenerate  
 
 
-
-
+			VX_register_file vx_register_file_1(
+				.clk(clk),
+				.in_valid(in_wb_valid[1]),
+				.in_write_register(write_register),
+				.in_rd(in_rd),
+				.in_data(in_write_data[1]),
+				.in_src1(out_rs1),
+				.in_src2(out_rs2),
+				.out_src1_data(rd1_register[1]),
+				.out_src2_data(rd2_register[1])
+			);
 
 		assign curr_opcode    = in_instruction[6:0];
 
@@ -191,14 +212,22 @@ module VX_decode(
 		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
 		genvar index_out_reg;
+		genvar index_out_reg_2;
 		generate
-			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
+			for (index_out_reg = 0; index_out_reg <= `NT; index_out_reg = index_out_reg + 2)
 				begin
-					assign out_reg_data[index_out_reg]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg] : rd1_register[index_out_reg]));
-					assign out_reg_data[index_out_reg+1] = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[index_out_reg] : rd2_register[index_out_reg];
+					assign index_out_reg_2 = index_out_reg / 2;
+					assign out_reg_data[index_out_reg]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg_2] : rd1_register[index_out_reg_2]));
+					assign out_reg_data[index_out_reg+1] = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[index_out_reg_2] : rd2_register[index_out_reg_2];
 				end
 		endgenerate
 
+		// assign out_reg_data[0]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[0] : rd1_register[0]));
+		// assign out_reg_data[1]   = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[0] : rd2_register[0];
+
+
+		// assign out_reg_data[2]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[1] : rd1_register[1]));
+		// assign out_reg_data[3]   = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[1] : rd2_register[1];
 
 		// assign internal_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
 		// assign internal_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;

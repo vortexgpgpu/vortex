@@ -56,25 +56,48 @@ module VX_execute (
 	// 		.out_alu_result(out_alu_result)
 	// 	);
 
-		genvar index;
-		genvar index_2;
-		generate  
-		for (index=0; index <= `NT; index=index+2)  
-		  begin: gen_code_label  
-		  	assign index_2 = index / 2;
-			VX_alu vx_alu(
-				.in_reg_data   (in_reg_data[index+1:index]),
-				.in_rs2_src    (in_rs2_src),
-				.in_itype_immed(in_itype_immed),
-				.in_upper_immed(in_upper_immed),
-				.in_alu_op     (in_alu_op),
-				.in_csr_data   (in_csr_data),
-				.in_curr_PC    (in_curr_PC),
-				.out_alu_result(out_alu_result[index_2])
-			);
-		  end  
-		endgenerate  
+		// genvar index;
+		// genvar index_2;
+		// generate  
+		// assign index_2 = 0;
+		// for (index=0; index <= `NT; index=index+2)  
+		//   begin: gen_code_label  
+		// 	VX_alu vx_alu(
+		// 		.in_reg_data   (in_reg_data[index+1:index]),
+		// 		.in_rs2_src    (in_rs2_src),
+		// 		.in_itype_immed(in_itype_immed),
+		// 		.in_upper_immed(in_upper_immed),
+		// 		.in_alu_op     (in_alu_op),
+		// 		.in_csr_data   (in_csr_data),
+		// 		.in_curr_PC    (in_curr_PC),
+		// 		.out_alu_result(out_alu_result[index_2])
+		// 	);
+		// 	index_2 = index_2 + 1;
+		//   end  
+		// endgenerate  
 
+
+		VX_alu vx_alu_0(
+			.in_reg_data   (in_reg_data[1:0]),
+			.in_rs2_src    (in_rs2_src),
+			.in_itype_immed(in_itype_immed),
+			.in_upper_immed(in_upper_immed),
+			.in_alu_op     (in_alu_op),
+			.in_csr_data   (in_csr_data),
+			.in_curr_PC    (in_curr_PC),
+			.out_alu_result(out_alu_result[0])
+		);
+
+		VX_alu vx_alu_1(
+			.in_reg_data   (in_reg_data[3:2]),
+			.in_rs2_src    (in_rs2_src),
+			.in_itype_immed(in_itype_immed),
+			.in_upper_immed(in_upper_immed),
+			.in_alu_op     (in_alu_op),
+			.in_csr_data   (in_csr_data),
+			.in_curr_PC    (in_curr_PC),
+			.out_alu_result(out_alu_result[1])
+		);
 
 		assign out_jal_dest = $signed(in_reg_data[0]) + $signed(in_jal_offset);
 		assign out_jal      = in_jal;

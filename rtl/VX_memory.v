@@ -59,6 +59,15 @@ module VX_memory (
 		assign out_PC_next    = in_PC_next;
 		assign out_valid      = in_valid;
 
+		always @(*) begin 
+
+			if (in_cache_driver_out_data[0] != 32'hbabebabe)
+			begin
+				$display("MEM: data read from cache_driver: %h", in_cache_driver_out_data[0]);
+			end
+		
+		end
+
 
 		assign out_branch_dest = $signed(in_curr_PC) + ($signed(in_branch_offset) << 1);
 		

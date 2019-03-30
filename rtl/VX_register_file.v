@@ -31,11 +31,11 @@ module VX_register_file (
 	assign write_data     = in_data;
 	assign write_register = in_rd;
 
-	assign write_enable   = in_write_register && (in_rd != 5'h0) && in_valid;
+	assign write_enable   = (in_write_register && (in_rd != 5'h0)) && in_valid;
 
 	always @(posedge clk) begin
 		if(write_enable) begin
-			$display("Writing %h to %d",write_data, write_register);
+			$display("RF: Writing %h to %d",write_data, write_register);
 			registers[write_register] <= write_data;
 		end
 	end

@@ -9,6 +9,7 @@ module VX_writeback (
 		input wire[4:0]  in_rd,
 		input wire[1:0]  in_wb,
 		input wire[31:0] in_PC_next,
+		input wire       in_valid[`NT_M1:0],
 
 		output wire[31:0] out_write_data[`NT_M1:0],
 		output wire[4:0] out_rd,
@@ -18,23 +19,18 @@ module VX_writeback (
 		wire is_jal;
 		wire uses_alu;
 
-		always @(negedge clk) begin
-			if (in_wb != 0)  begin
-
-				$display("(%h) WB Data: %h, to register: %d",in_PC_next - 4, in_mem_result[0], in_rd);
-			end
-		end
-
 		wire[31:0] out_pc_data[`NT_M1:0];
 
 
-		genvar index;
-		for (index=0; index < `NT; index=index+1)  
-		  assign out_pc_data[index] = in_PC_next;
-		generate 
+		// genvar index;
+		// for (index=0; index < `NT; index=index+1)  
+		//   assign out_pc_data[index] = in_PC_next;
+		// generate 
+		// endgenerate
 
 
-		endgenerate
+		assign out_pc_data[0] = in_PC_next;
+		assign out_pc_data[1] = in_PC_next;
 
 		assign is_jal   = in_wb == `WB_JAL;
 		assign uses_alu = in_wb == `WB_ALU;
@@ -43,6 +39,12 @@ module VX_writeback (
 										uses_alu ? in_alu_result :
 													in_mem_result;
 
+
+		always @(negedge clk) begin
+			if (in_wb != 0)  begin
+				$display("[%h] WB Data: %h {%h}, to register: %d [%d %d]",in_PC_next - 4, out_write_data[0], in_mem_result[0], in_rd, in_valid[0], in_valid[1]);
+			end
+		end
 
 		assign out_rd = in_rd;
 		assign out_wb = in_wb;

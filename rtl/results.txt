@@ -1,9 +1,414 @@
 
-****************	../../emulator/riscv_tests/rv32ui-p-sub.hex	****************
-# Dynamic Instructions: 496
-# of total cycles:      500
+****************	../../emulator/riscv_tests/rv32ui-p-add.hex	****************
+# Dynamic Instructions: 597
+# of total cycles:      608
 # of forwarding stalls: 0
 # of branch stalls:     0
-# CPI:                  1.00806
-# time to simulate:     2.13149e-317 milliseconds
-# GRADE:                Failed on test: 4294967295
+# CPI:                  1.01843
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-addi.hex	****************
+# Dynamic Instructions: 312
+# of total cycles:      323
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03526
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-and.hex	****************
+# Dynamic Instructions: 595
+# of total cycles:      606
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01849
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-andi.hex	****************
+# Dynamic Instructions: 246
+# of total cycles:      257
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.04472
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-auipc.hex	****************
+# Dynamic Instructions: 65
+# of total cycles:      76
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.16923
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-beq.hex	****************
+# Dynamic Instructions: 431
+# of total cycles:      442
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.02552
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-bge.hex	****************
+# Dynamic Instructions: 467
+# of total cycles:      478
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.02355
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-bgeu.hex	****************
+# Dynamic Instructions: 492
+# of total cycles:      503
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.02236
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-blt.hex	****************
+# Dynamic Instructions: 431
+# of total cycles:      442
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.02552
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-bltu.hex	****************
+# Dynamic Instructions: 456
+# of total cycles:      467
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.02412
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-bne.hex	****************
+# Dynamic Instructions: 431
+# of total cycles:      442
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.02552
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-jal.hex	****************
+# Dynamic Instructions: 61
+# of total cycles:      72
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.18033
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-jalr.hex	****************
+# Dynamic Instructions: 138
+# of total cycles:      149
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.07971
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-lb.hex	****************
+# Dynamic Instructions: 331
+# of total cycles:      342
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03323
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-lbu.hex	****************
+# Dynamic Instructions: 331
+# of total cycles:      342
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03323
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-lh.hex	****************
+# Dynamic Instructions: 339
+# of total cycles:      350
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03245
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-lhu.hex	****************
+# Dynamic Instructions: 343
+# of total cycles:      354
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03207
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-lui.hex	****************
+# Dynamic Instructions: 73
+# of total cycles:      84
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.15068
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-lw.hex	****************
+# Dynamic Instructions: 346
+# of total cycles:      357
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03179
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-or.hex	****************
+# Dynamic Instructions: 598
+# of total cycles:      609
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01839
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-ori.hex	****************
+# Dynamic Instructions: 253
+# of total cycles:      264
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.04348
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sb.hex	****************
+# Dynamic Instructions: 571
+# of total cycles:      582
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01926
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sh.hex	****************
+# Dynamic Instructions: 603
+# of total cycles:      614
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01824
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-simple.hex	****************
+# Dynamic Instructions: 37
+# of total cycles:      48
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.2973
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sll.hex	****************
+# Dynamic Instructions: 633
+# of total cycles:      644
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01738
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-slli.hex	****************
+# Dynamic Instructions: 311
+# of total cycles:      322
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03537
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-slt.hex	****************
+# Dynamic Instructions: 591
+# of total cycles:      602
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01861
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-slti.hex	****************
+# Dynamic Instructions: 307
+# of total cycles:      318
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03583
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sltiu.hex	****************
+# Dynamic Instructions: 307
+# of total cycles:      318
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03583
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sltu.hex	****************
+# Dynamic Instructions: 591
+# of total cycles:      602
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01861
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sra.hex	****************
+# Dynamic Instructions: 654
+# of total cycles:      665
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01682
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-srai.hex	****************
+# Dynamic Instructions: 326
+# of total cycles:      337
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03374
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-srl.hex	****************
+# Dynamic Instructions: 648
+# of total cycles:      659
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01698
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-srli.hex	****************
+# Dynamic Instructions: 320
+# of total cycles:      331
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.03438
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sub.hex	****************
+# Dynamic Instructions: 587
+# of total cycles:      598
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01874
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-sw.hex	****************
+# Dynamic Instructions: 612
+# of total cycles:      623
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01797
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-xor.hex	****************
+# Dynamic Instructions: 597
+# of total cycles:      608
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01843
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32ui-p-xori.hex	****************
+# Dynamic Instructions: 255
+# of total cycles:      266
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.04314
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-div.hex	****************
+# Dynamic Instructions: 112
+# of total cycles:      123
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09821
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-divu.hex	****************
+# Dynamic Instructions: 113
+# of total cycles:      124
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09735
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-mul.hex	****************
+# Dynamic Instructions: 589
+# of total cycles:      600
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.01868
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-mulh.hex	****************
+# Dynamic Instructions: 585
+# of total cycles:      596
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.0188
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-mulhsu.hex	****************
+# Dynamic Instructions: 585
+# of total cycles:      596
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.0188
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-mulhu.hex	****************
+# Dynamic Instructions: 585
+# of total cycles:      596
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.0188
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-rem.hex	****************
+# Dynamic Instructions: 112
+# of total cycles:      123
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09821
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING
+
+****************	../../emulator/riscv_tests/rv32um-p-remu.hex	****************
+# Dynamic Instructions: 112
+# of total cycles:      123
+# of forwarding stalls: 0
+# of branch stalls:     0
+# CPI:                  1.09821
+# time to simulate:     6.95313e-310 milliseconds
+# GRADE:                PASSING

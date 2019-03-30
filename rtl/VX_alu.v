@@ -62,7 +62,7 @@ module VX_alu(
 				`CSR_ALU_RW: out_alu_result = in_csr_data;
 				`CSR_ALU_RS: out_alu_result = in_csr_data;
 				`CSR_ALU_RC: out_alu_result = in_csr_data;
-				`MUL:        out_alu_result = mult_signed_result[31:0];
+				`MUL:        begin out_alu_result = mult_signed_result[31:0]; $display("(%x) %x * %x = %x", in_curr_PC, ALU_in1, ALU_in2, out_alu_result); end
 				`MULH:       out_alu_result = mult_signed_result[63:32];
 				`MULHSU:     out_alu_result = mult_signed_un_result[63:32];
 				`MULHU:      out_alu_result = mult_unsigned_result[63:32];

@@ -5,7 +5,8 @@ module Vortex(
 	input  wire           clk,
 	input  wire           reset,
 	input  wire[31:0]     fe_instruction,
-	input  wire[31:0]     in_cache_driver_out_data[`NT_M1:0],
+	input  wire[31:0]     in_cache_driver_out_data_0,
+	input  wire[31:0]     in_cache_driver_out_data_1,
 	output wire[31:0]     curr_PC,
 	output wire[31:0]     out_cache_driver_in_address[`NT_M1:0],
 	output wire[2:0]      out_cache_driver_in_mem_read,
@@ -13,6 +14,11 @@ module Vortex(
 	output wire           out_cache_driver_in_valid[`NT_M1:0],
 	output wire[31:0]     out_cache_driver_in_data[`NT_M1:0]
 	);
+
+wire[31:0] in_cache_driver_out_data[`NT_M1:0];
+
+assign in_cache_driver_out_data[0] = in_cache_driver_out_data_0;
+assign in_cache_driver_out_data[1] = in_cache_driver_out_data_1;
 
 
 assign curr_PC = fetch_curr_PC;
@@ -381,7 +387,7 @@ VX_e_m_reg vx_e_m_reg(
 wire[31:0]  use_rd2[`NT_M1:0];
 
 assign use_rd2[0] = e_m_reg_data[1];
-// assign use_rd2[1] = e_m_reg_data[3];
+assign use_rd2[1] = e_m_reg_data[3];
 
 VX_memory vx_memory(
 		.in_alu_result                (e_m_alu_result),
@@ -447,6 +453,7 @@ VX_writeback vx_writeback(
 		.in_rd         (m_w_rd),
 		.in_wb         (m_w_wb),
 		.in_PC_next    (m_w_PC_next),
+		.in_valid      (m_w_valid),
 
 		.out_write_data(writeback_write_data),
 		.out_rd        (writeback_rd),

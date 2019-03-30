@@ -52,7 +52,7 @@ module VX_fetch (
 			// for (ini_cur_th = 0; ini_cur_th < `NT; ini_cur_th=ini_cur_th+1)
 			// 	valid[ini_cur_th]   = 1; // Thread 1 active
 			valid[0]   = 1;
-			// valid[1]   = 0;
+			valid[1]   = 0;
 			stall_reg  = 0;
 			delay_reg  = 0;
 			old        = 0;
@@ -106,6 +106,9 @@ module VX_fetch (
 				assign out_valid[out_cur_th] = stall ? 1'b0  : valid[out_cur_th];
 		endgenerate
 
+
+		// assign out_valid[0] = stall ? 1'b0  : valid[0];
+		// assign out_valid[1] = stall ? 1'b0  : valid[1];
 
 		always @(*) begin
 
