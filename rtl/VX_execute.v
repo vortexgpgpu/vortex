@@ -47,78 +47,25 @@ module VX_execute (
 
 
 
-	// VX_alu vx_alu(
-	// 		.in_reg_data   (in_reg_data),
-	// 		.in_rs2_src    (in_rs2_src),
-	// 		.in_itype_immed(in_itype_immed),
-	// 		.in_upper_immed(in_upper_immed),
-	// 		.in_alu_op     (in_alu_op),
-	// 		.in_csr_data   (in_csr_data),
-	// 		.in_curr_PC    (in_curr_PC),
-	// 		.out_alu_result(out_alu_result)
-	// 	);
+		genvar index_out_reg;
+		generate
+			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
+				begin
+					VX_alu vx_alu(
+						// .in_reg_data   (in_reg_data[1:0]),
+						.in_1          (in_a_reg_data[index_out_reg]),
+						.in_2          (in_b_reg_data[index_out_reg]),
+						.in_rs2_src    (in_rs2_src),
+						.in_itype_immed(in_itype_immed),
+						.in_upper_immed(in_upper_immed),
+						.in_alu_op     (in_alu_op),
+						.in_csr_data   (in_csr_data),
+						.in_curr_PC    (in_curr_PC),
+						.out_alu_result(out_alu_result[index_out_reg])
+					);
+				end
+		endgenerate
 
-		// genvar index;
-		// reg[5:0] index_2;
-		// generate  
-		// for (index=0; index < `NT; index=index+1)  
-		//   begin: gen_code_label  
-		//   	assign index_2 = index * 2;
-		// 	VX_alu vx_alu(
-		// 		.in_reg_data   (in_reg_data[(index_2+1):(index_2)]),
-		// 		.in_rs2_src    (in_rs2_src),
-		// 		.in_itype_immed(in_itype_immed),
-		// 		.in_upper_immed(in_upper_immed),
-		// 		.in_alu_op     (in_alu_op),
-		// 		.in_csr_data   (in_csr_data),
-		// 		.in_curr_PC    (in_curr_PC),
-		// 		.out_alu_result(out_alu_result[index])
-		// 	);
-		//   end  
-		// endgenerate  
-
-		// genvar index_out_reg;
-		// generate
-		// 	for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
-		// 		begin
-		// 			VX_alu vx_alu_0(
-		// 				// .in_reg_data   (in_reg_data[1:0]),
-		// 				.in_1          (in_a_reg_data[index_out_reg]),
-		// 				.in_2          (in_b_reg_data[index_out_reg]),
-		// 				.in_rs2_src    (in_rs2_src),
-		// 				.in_itype_immed(in_itype_immed),
-		// 				.in_upper_immed(in_upper_immed),
-		// 				.in_alu_op     (in_alu_op),
-		// 				.in_csr_data   (in_csr_data),
-		// 				.in_curr_PC    (in_curr_PC),
-		// 				.out_alu_result(out_alu_result[index_out_reg])
-		// 			);
-		// 		end
-		// endgenerate
-
-		VX_alu vx_alu_0(
-			.in_1          (in_a_reg_data[0]),
-			.in_2          (in_b_reg_data[0]),
-			.in_rs2_src    (in_rs2_src),
-			.in_itype_immed(in_itype_immed),
-			.in_upper_immed(in_upper_immed),
-			.in_alu_op     (in_alu_op),
-			.in_csr_data   (in_csr_data),
-			.in_curr_PC    (in_curr_PC),
-			.out_alu_result(out_alu_result[0])
-		);
-
-		VX_alu vx_alu_1(
-			.in_1          (in_a_reg_data[1]),
-			.in_2          (in_b_reg_data[1]),
-			.in_rs2_src    (in_rs2_src),
-			.in_itype_immed(in_itype_immed),
-			.in_upper_immed(in_upper_immed),
-			.in_alu_op     (in_alu_op),
-			.in_csr_data   (in_csr_data),
-			.in_curr_PC    (in_curr_PC),
-			.out_alu_result(out_alu_result[1])
-		);
 
 		assign out_jal_dest = $signed(in_a_reg_data[0]) + $signed(in_jal_offset);
 		assign out_jal      = in_jal;

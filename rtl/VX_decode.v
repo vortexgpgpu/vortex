@@ -137,49 +137,24 @@ module VX_decode(
 		// 	$display("Decode: curr_pc: %h", in_curr_PC);
 		// end
 
-		// genvar index;
+		genvar index;
 
-		// generate  
-		// for (index=0; index < `NT; index=index+1)  
-		//   begin: gen_code_label  
-		// 	VX_register_file vx_register_file(
-		// 		.clk(clk),
-		// 		.in_valid(in_wb_valid[index]),
-		// 		.in_write_register(write_register),
-		// 		.in_rd(in_rd),
-		// 		.in_data(in_write_data[index]),
-		// 		.in_src1(out_rs1),
-		// 		.in_src2(out_rs2),
-		// 		.out_src1_data(rd1_register[index]),
-		// 		.out_src2_data(rd2_register[index])
-		// 	);
-		//   end  
-		// endgenerate  
-
-			VX_register_file vx_register_file_0(
+		generate  
+		for (index=0; index < `NT; index=index+1)  
+		  begin: gen_code_label  
+			VX_register_file vx_register_file(
 				.clk(clk),
-				.in_valid(in_wb_valid[0]),
+				.in_valid(in_wb_valid[index]),
 				.in_write_register(write_register),
 				.in_rd(in_rd),
-				.in_data(in_write_data[0]),
+				.in_data(in_write_data[index]),
 				.in_src1(out_rs1),
 				.in_src2(out_rs2),
-				.out_src1_data(rd1_register[0]),
-				.out_src2_data(rd2_register[0])
+				.out_src1_data(rd1_register[index]),
+				.out_src2_data(rd2_register[index])
 			);
-
-
-			VX_register_file vx_register_file_1(
-				.clk(clk),
-				.in_valid(in_wb_valid[1]),
-				.in_write_register(write_register),
-				.in_rd(in_rd),
-				.in_data(in_write_data[1]),
-				.in_src1(out_rs1),
-				.in_src2(out_rs2),
-				.out_src1_data(rd1_register[1]),
-				.out_src2_data(rd2_register[1])
-			);
+		  end  
+		endgenerate  
 
 		assign curr_opcode    = in_instruction[6:0];
 
