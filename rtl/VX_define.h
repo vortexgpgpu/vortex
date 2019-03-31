@@ -1,8 +1,7 @@
 
 
-#define NT 2
-#define NT_M1 1
-#define NT_T2_M1 3
+#define NT 5
+#define NT_M1 4
 
 #define R_INST 51
 #define L_INST 3
