@@ -29418,8 +29418,8 @@ RF: Writing 00000000 to 10
 RF: Writing 800020bc to  1
 ----
 ******
-[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffffff
+[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29470,8 +29470,8 @@ RF: Writing 00000002 to 28
 RF: Writing 800020d4 to  1
 ----
 ******
-[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29527,8 +29527,8 @@ RF: Writing 00000003 to 28
 RF: Writing 800020ec to  1
 ----
 ******
-[800000f0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffffff0
+[800000f0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29579,8 +29579,8 @@ RF: Writing 00000004 to 28
 RF: Writing 80002104 to  1
 ----
 ******
-[80000108] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[80000108] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29631,8 +29631,8 @@ RF: Writing 00000005 to 28
 RF: Writing 8000211c to  1
 ----
 ******
-[80000120] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffffff
+[80000120] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29683,8 +29683,8 @@ RF: Writing 00000006 to 28
 RF: Writing 80002134 to  1
 ----
 ******
-[80000138] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[80000138] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29735,8 +29735,8 @@ RF: Writing 00000007 to 28
 RF: Writing 8000214c to  1
 ----
 ******
-[80000150] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffffff0
+[80000150] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29787,8 +29787,8 @@ RF: Writing 00000008 to 28
 RF: Writing 80002164 to  1
 ----
 ******
-[80000168] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[80000168] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29846,8 +29846,8 @@ RF: Writing 8000217c to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[80000184] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffffff
+[80000184] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29905,8 +29905,8 @@ RF: Writing 80002198 to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[800001a0] WB Data: 80001ffa {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[800001a0] WB Data: 80001ffa {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -29971,8 +29971,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021bc to  1
 ----
 ******
-[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffffff0
+[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30062,8 +30062,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021bc to  1
 ----
 ******
-[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffffff0
+[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30167,8 +30167,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021e8 to  1
 ----
 ******
-[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30259,8 +30259,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021e8 to  1
 ----
 ******
-[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30365,8 +30365,8 @@ RF: Writing 00000000 to  4
 RF: Writing 80002218 to  1
 ----
 ******
-[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30458,8 +30458,8 @@ RF: Writing 00000002 to  5
 RF: Writing 80002218 to  1
 ----
 ******
-[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30565,8 +30565,8 @@ RF: Writing 00000000 to  4
 RF: Writing 8000224c to  1
 ----
 ******
-[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffffff0
+[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30644,8 +30644,8 @@ RF: Writing 00000002 to  5
 RF: Writing 8000224c to  1
 ----
 ******
-[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffffff0
+[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -30744,8 +30744,8 @@ RF: Writing 80002274 to  1
 RF: Writing 80002002 to  1
 ----
 ******
-[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000000f
+[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -30829,8 +30829,8 @@ RF: Writing 80002274 to  1
 RF: Writing 80002002 to  1
 ----
 ******
-[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000000f
+[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -30934,8 +30934,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 00000000
+[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -31025,8 +31025,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 00000000
+[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -31103,8 +31103,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800022c8 to  3
 ----
 ******
-[800002cc] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: ffffffff
+[800002cc] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -31172,8 +31172,8 @@ RF: Writing 00000012 to 28
 RF: Writing 800022e4 to  3
 ----
 ******
-[800002e8] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: ffffffff
+[800002e8] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -31546,8 +31546,8 @@ RF: Writing 00000000 to 10
 RF: Writing 800020bc to  1
 ----
 ******
-[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31598,8 +31598,8 @@ RF: Writing 00000002 to 28
 RF: Writing 800020d4 to  1
 ----
 ******
-[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31655,8 +31655,8 @@ RF: Writing 00000003 to 28
 RF: Writing 800020ec to  1
 ----
 ******
-[800000f0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000f0
+[800000f0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31707,8 +31707,8 @@ RF: Writing 00000004 to 28
 RF: Writing 80002104 to  1
 ----
 ******
-[80000108] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[80000108] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31759,8 +31759,8 @@ RF: Writing 00000005 to 28
 RF: Writing 8000211c to  1
 ----
 ******
-[80000120] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[80000120] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31811,8 +31811,8 @@ RF: Writing 00000006 to 28
 RF: Writing 80002134 to  1
 ----
 ******
-[80000138] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[80000138] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31863,8 +31863,8 @@ RF: Writing 00000007 to 28
 RF: Writing 8000214c to  1
 ----
 ******
-[80000150] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000f0
+[80000150] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31915,8 +31915,8 @@ RF: Writing 00000008 to 28
 RF: Writing 80002164 to  1
 ----
 ******
-[80000168] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[80000168] WB Data: 80002003 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -31974,8 +31974,8 @@ RF: Writing 8000217c to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[80000184] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[80000184] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32033,8 +32033,8 @@ RF: Writing 80002198 to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[800001a0] WB Data: 80001ffa {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[800001a0] WB Data: 80001ffa {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32099,8 +32099,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021bc to  1
 ----
 ******
-[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000f0
+[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32190,8 +32190,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021bc to  1
 ----
 ******
-[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000f0
+[800001c0] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32295,8 +32295,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021e8 to  1
 ----
 ******
-[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32387,8 +32387,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021e8 to  1
 ----
 ******
-[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000000f
+[800001ec] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32493,8 +32493,8 @@ RF: Writing 00000000 to  4
 RF: Writing 80002218 to  1
 ----
 ******
-[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32586,8 +32586,8 @@ RF: Writing 00000002 to  5
 RF: Writing 80002218 to  1
 ----
 ******
-[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000000
+[8000021c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32693,8 +32693,8 @@ RF: Writing 00000000 to  4
 RF: Writing 8000224c to  1
 ----
 ******
-[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000f0
+[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32772,8 +32772,8 @@ RF: Writing 00000002 to  5
 RF: Writing 8000224c to  1
 ----
 ******
-[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000f0
+[80000250] WB Data: 80002001 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -32872,8 +32872,8 @@ RF: Writing 80002274 to  1
 RF: Writing 80002002 to  1
 ----
 ******
-[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000000f
+[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -32957,8 +32957,8 @@ RF: Writing 80002274 to  1
 RF: Writing 80002002 to  1
 ----
 ******
-[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000000f
+[8000027c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -33062,8 +33062,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 00000000
+[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -33153,8 +33153,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 00000000
+[800002ac] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -33231,8 +33231,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800022c8 to  3
 ----
 ******
-[800002cc] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 000000ff
+[800002cc] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -33300,8 +33300,8 @@ RF: Writing 00000012 to 28
 RF: Writing 800022e4 to  3
 ----
 ******
-[800002e8] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 000000ff
+[800002e8] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -33674,8 +33674,8 @@ RF: Writing 00000000 to 10
 RF: Writing 800020bc to  1
 ----
 ******
-[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -33726,8 +33726,8 @@ RF: Writing 00000002 to 28
 RF: Writing 800020d4 to  1
 ----
 ******
-[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffff00
+[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -33783,8 +33783,8 @@ RF: Writing 00000003 to 28
 RF: Writing 800020ec to  1
 ----
 ******
-[800000f0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[800000f0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -33842,8 +33842,8 @@ RF: Writing 00000004 to 28
 RF: Writing 80002108 to  1
 ----
 ******
-[8000010c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffff00f
+[8000010c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -33901,8 +33901,8 @@ RF: Writing 00000005 to 28
 RF: Writing 80002124 to  1
 ----
 ******
-[80000128] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[80000128] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -33953,8 +33953,8 @@ RF: Writing 00000006 to 28
 RF: Writing 8000213c to  1
 ----
 ******
-[80000140] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffff00
+[80000140] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34005,8 +34005,8 @@ RF: Writing 00000007 to 28
 RF: Writing 80002154 to  1
 ----
 ******
-[80000158] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[80000158] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34064,8 +34064,8 @@ RF: Writing 00000008 to 28
 RF: Writing 80002170 to  1
 ----
 ******
-[80000174] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffff00f
+[80000174] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34130,8 +34130,8 @@ RF: Writing 8000218c to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[80000194] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[80000194] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34189,8 +34189,8 @@ RF: Writing 800021a8 to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[800001b0] WB Data: 80001ffb {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffff00
+[800001b0] WB Data: 80001ffb {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34255,8 +34255,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021cc to  1
 ----
 ******
-[800001d0] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[800001d0] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34353,8 +34353,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021cc to  1
 ----
 ******
-[800001d0] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[800001d0] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34465,8 +34465,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021fc to  1
 ----
 ******
-[80000200] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffff00f
+[80000200] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34564,8 +34564,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021fc to  1
 ----
 ******
-[80000200] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: fffff00f
+[80000200] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34677,8 +34677,8 @@ RF: Writing 00000000 to  4
 RF: Writing 80002230 to  1
 ----
 ******
-[80000234] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffff00
+[80000234] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34770,8 +34770,8 @@ RF: Writing 00000002 to  5
 RF: Writing 80002230 to  1
 ----
 ******
-[80000234] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ffffff00
+[80000234] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34877,8 +34877,8 @@ RF: Writing 00000000 to  4
 RF: Writing 80002264 to  1
 ----
 ******
-[80000268] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[80000268] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -34958,8 +34958,8 @@ RF: Writing 00000002 to  5
 RF: Writing 80002264 to  1
 ----
 ******
-[80000268] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[80000268] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -35060,8 +35060,8 @@ RF: Writing 80002290 to  1
 RF: Writing 80002004 to  1
 ----
 ******
-[80000298] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: fffff00f
+[80000298] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -35147,8 +35147,8 @@ RF: Writing 80002290 to  1
 RF: Writing 80002004 to  1
 ----
 ******
-[80000298] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: fffff00f
+[80000298] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -35254,8 +35254,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002cc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: ffffff00
+[800002cc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -35345,8 +35345,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002cc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: ffffff00
+[800002cc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -35423,8 +35423,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800022e8 to  3
 ----
 ******
-[800002ec] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 000000ff
+[800002ec] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -35492,8 +35492,8 @@ RF: Writing 00000012 to 28
 RF: Writing 80002304 to  3
 ----
 ******
-[80000308] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 000000ff
+[80000308] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -35866,8 +35866,8 @@ RF: Writing 00000000 to 10
 RF: Writing 800020bc to  1
 ----
 ******
-[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -35918,8 +35918,8 @@ RF: Writing 00000002 to 28
 RF: Writing 800020d4 to  1
 ----
 ******
-[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[800000d8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -35977,8 +35977,8 @@ RF: Writing 00000003 to 28
 RF: Writing 800020f0 to  1
 ----
 ******
-[800000f4] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[800000f4] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36036,8 +36036,8 @@ RF: Writing 00000004 to 28
 RF: Writing 8000210c to  1
 ----
 ******
-[80000110] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000f00f
+[80000110] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36095,8 +36095,8 @@ RF: Writing 00000005 to 28
 RF: Writing 80002128 to  1
 ----
 ******
-[8000012c] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[8000012c] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36147,8 +36147,8 @@ RF: Writing 00000006 to 28
 RF: Writing 80002140 to  1
 ----
 ******
-[80000144] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[80000144] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36206,8 +36206,8 @@ RF: Writing 00000007 to 28
 RF: Writing 8000215c to  1
 ----
 ******
-[80000160] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[80000160] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36265,8 +36265,8 @@ RF: Writing 00000008 to 28
 RF: Writing 80002178 to  1
 ----
 ******
-[8000017c] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000f00f
+[8000017c] WB Data: 80002006 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36331,8 +36331,8 @@ RF: Writing 80002194 to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[8000019c] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 000000ff
+[8000019c] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36390,8 +36390,8 @@ RF: Writing 800021b0 to  1
 RF: Writing 80002000 to  1
 ----
 ******
-[800001b8] WB Data: 80001ffb {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[800001b8] WB Data: 80001ffb {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36463,8 +36463,8 @@ RF: Writing 00000000 to  4
 RF: Writing 800021d8 to  1
 ----
 ******
-[800001dc] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[800001dc] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36561,8 +36561,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800021d8 to  1
 ----
 ******
-[800001dc] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[800001dc] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36673,8 +36673,8 @@ RF: Writing 00000000 to  4
 RF: Writing 80002208 to  1
 ----
 ******
-[8000020c] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000f00f
+[8000020c] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36772,8 +36772,8 @@ RF: Writing 00000002 to  5
 RF: Writing 80002208 to  1
 ----
 ******
-[8000020c] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000f00f
+[8000020c] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36885,8 +36885,8 @@ RF: Writing 00000000 to  4
 RF: Writing 8000223c to  1
 ----
 ******
-[80000240] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[80000240] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -36985,8 +36985,8 @@ RF: Writing 00000002 to  5
 RF: Writing 8000223c to  1
 ----
 ******
-[80000240] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[80000240] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -37099,8 +37099,8 @@ RF: Writing 00000000 to  4
 RF: Writing 80002274 to  1
 ----
 ******
-[80000278] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[80000278] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -37180,8 +37180,8 @@ RF: Writing 00000002 to  5
 RF: Writing 80002274 to  1
 ----
 ******
-[80000278] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00000ff0
+[80000278] WB Data: 80002002 {babebabe}, to register:  1 [1 0]
 
 ----
 ******
@@ -37282,8 +37282,8 @@ RF: Writing 800022a0 to  1
 RF: Writing 80002004 to  1
 ----
 ******
-[800002a8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000f00f
+[800002a8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -37369,8 +37369,8 @@ RF: Writing 800022a0 to  1
 RF: Writing 80002004 to  1
 ----
 ******
-[800002a8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000f00f
+[800002a8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -37476,8 +37476,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002dc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[800002dc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -37569,8 +37569,8 @@ RF: Writing 80002000 to  1
 ******
 ----
 ******
-[800002dc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: 0000ff00
+[800002dc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
 ******
@@ -37649,8 +37649,8 @@ RF: Writing 00000002 to  5
 RF: Writing 800022fc to  3
 ----
 ******
-[80000300] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 000000ff
+[80000300] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -37718,8 +37718,8 @@ RF: Writing 00000012 to 28
 RF: Writing 80002318 to  3
 ----
 ******
-[8000031c] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 000000ff
+[8000031c] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
 ******
@@ -38594,12 +38594,16 @@ RF: Writing 00000000 to 10
 ----
 ******
 RF: Writing 800020bc to  1
+PC: 800000c4 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = ff00ff
 ******
-[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00ff00ff
+PC: 800000c4 ----> Received: 00ff00ff for addr: 80002000
+[800000c0] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002000 = ff00ff
 ******
 RF: Writing 80002000 to  1
 MEM: data read from cache_driver: 00ff00ff
@@ -38653,12 +38657,16 @@ RF: Writing 00000002 to 28
 ----
 ******
 RF: Writing 800020d8 to  1
+PC: 800000e0 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[800000dc] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 800000e0 ----> Received: ff00ff00 for addr: 80002004
+[800000dc] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 RF: Writing 80002000 to  1
 MEM: data read from cache_driver: ff00ff00
@@ -38712,12 +38720,16 @@ RF: Writing 00000003 to 28
 ----
 ******
 RF: Writing 800020f4 to  1
+PC: 800000fc ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
-[800000f8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0ff00ff0
+PC: 800000fc ----> Received: 0ff00ff0 for addr: 80002008
+[800000f8] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
 RF: Writing 80002000 to  1
 MEM: data read from cache_driver: 0ff00ff0
@@ -38771,12 +38783,16 @@ RF: Writing 00000004 to 28
 ----
 ******
 RF: Writing 80002110 to  1
+PC: 80000118 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
-[80000114] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: f00ff00f
+PC: 80000118 ----> Received: f00ff00f for addr: 8000200c
+[80000114] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
 RF: Writing 80002000 to  1
 MEM: data read from cache_driver: f00ff00f
@@ -38830,12 +38846,16 @@ RF: Writing 00000005 to 28
 ----
 ******
 RF: Writing 8000212c to  1
+PC: 80000134 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = ff00ff
 ******
-[80000130] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00ff00ff
+PC: 80000134 ----> Received: 00ff00ff for addr: 80002000
+[80000130] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002000 = ff00ff
 ******
 RF: Writing 8000200c to  1
 MEM: data read from cache_driver: 00ff00ff
@@ -38889,12 +38909,16 @@ RF: Writing 00000006 to 28
 ----
 ******
 RF: Writing 80002148 to  1
+PC: 80000150 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[8000014c] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 80000150 ----> Received: ff00ff00 for addr: 80002004
+[8000014c] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 RF: Writing 8000200c to  1
 MEM: data read from cache_driver: ff00ff00
@@ -38948,12 +38972,16 @@ RF: Writing 00000007 to 28
 ----
 ******
 RF: Writing 80002164 to  1
+PC: 8000016c ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
-[80000168] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0ff00ff0
+PC: 8000016c ----> Received: 0ff00ff0 for addr: 80002008
+[80000168] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
 RF: Writing 8000200c to  1
 MEM: data read from cache_driver: 0ff00ff0
@@ -39007,12 +39035,16 @@ RF: Writing 00000008 to 28
 ----
 ******
 RF: Writing 80002180 to  1
+PC: 80000188 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
-[80000184] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: f00ff00f
+PC: 80000188 ----> Received: f00ff00f for addr: 8000200c
+[80000184] WB Data: 8000200c {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
 RF: Writing 8000200c to  1
 MEM: data read from cache_driver: f00ff00f
@@ -39073,12 +39105,16 @@ RF: Writing 8000219c to  1
 ----
 ******
 RF: Writing 80002000 to  1
+PC: 800001a8 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = ff00ff
 ******
-[800001a4] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 00ff00ff
+PC: 800001a8 ----> Received: 00ff00ff for addr: 80002000
+[800001a4] WB Data: 80001fe0 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002000 = ff00ff
 ******
 RF: Writing 80001fe0 to  1
 MEM: data read from cache_driver: 00ff00ff
@@ -39139,12 +39175,16 @@ RF: Writing 800021bc to  1
 ----
 ******
 RF: Writing 80002000 to  1
+PC: 800001c8 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[800001c4] WB Data: 80001ffd {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 800001c8 ----> Received: ff00ff00 for addr: 80002004
+[800001c4] WB Data: 80001ffd {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 RF: Writing 80001ffd to  1
 MEM: data read from cache_driver: ff00ff00
@@ -39212,12 +39252,16 @@ RF: Writing 00000000 to  4
 ----
 ******
 RF: Writing 800021e4 to  1
+PC: 800001ec ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
-[800001e8] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0ff00ff0
+PC: 800001ec ----> Received: 0ff00ff0 for addr: 80002008
+[800001e8] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
 RF: Writing 80002004 to  1
 MEM: data read from cache_driver: 0ff00ff0
@@ -39310,12 +39354,16 @@ RF: Writing 00000002 to  5
 ----
 ******
 RF: Writing 800021e4 to  1
+PC: 800001ec ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
-[800001e8] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0ff00ff0
+PC: 800001ec ----> Received: 0ff00ff0 for addr: 80002008
+[800001e8] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
 RF: Writing 80002004 to  1
 MEM: data read from cache_driver: 0ff00ff0
@@ -39422,12 +39470,16 @@ RF: Writing 00000000 to  4
 ----
 ******
 RF: Writing 80002214 to  1
+PC: 8000021c ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
-[80000218] WB Data: 80002008 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: f00ff00f
+PC: 8000021c ----> Received: f00ff00f for addr: 8000200c
+[80000218] WB Data: 80002008 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
 RF: Writing 80002008 to  1
 MEM: data read from cache_driver: f00ff00f
@@ -39521,12 +39573,16 @@ RF: Writing 00000002 to  5
 ----
 ******
 RF: Writing 80002214 to  1
+PC: 8000021c ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
-[80000218] WB Data: 80002008 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: f00ff00f
+PC: 8000021c ----> Received: f00ff00f for addr: 8000200c
+[80000218] WB Data: 80002008 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
 RF: Writing 80002008 to  1
 MEM: data read from cache_driver: f00ff00f
@@ -39634,12 +39690,16 @@ RF: Writing 00000000 to  4
 ----
 ******
 RF: Writing 80002248 to  1
+PC: 80000250 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[8000024c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 80000250 ----> Received: ff00ff00 for addr: 80002004
+[8000024c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 RF: Writing 80002000 to  1
 MEM: data read from cache_driver: ff00ff00
@@ -39734,12 +39794,16 @@ RF: Writing 00000002 to  5
 ----
 ******
 RF: Writing 80002248 to  1
+PC: 80000250 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[8000024c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 80000250 ----> Received: ff00ff00 for addr: 80002004
+[8000024c] WB Data: 80002000 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 RF: Writing 80002000 to  1
 MEM: data read from cache_driver: ff00ff00
@@ -39848,12 +39912,16 @@ RF: Writing 00000000 to  4
 ----
 ******
 RF: Writing 80002280 to  1
+PC: 80000288 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
-[80000284] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0ff00ff0
+PC: 80000288 ----> Received: 0ff00ff0 for addr: 80002008
+[80000284] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
 RF: Writing 80002004 to  1
 MEM: data read from cache_driver: 0ff00ff0
@@ -39929,12 +39997,16 @@ RF: Writing 00000002 to  5
 ----
 ******
 RF: Writing 80002280 to  1
+PC: 80000288 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
-[80000284] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 MEM: data read from cache_driver: 0ff00ff0
+PC: 80000288 ----> Received: 0ff00ff0 for addr: 80002008
+[80000284] WB Data: 80002004 {babebabe}, to register:  1 [1 0]
 
 ----
+READING - Addr: 80002008 = ff00ff0
 ******
 RF: Writing 80002004 to  1
 MEM: data read from cache_driver: 0ff00ff0
@@ -40031,12 +40103,16 @@ RF: Writing 800022ac to  1
 ----
 ******
 RF: Writing 80002008 to  1
+PC: 800002b8 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
-[800002b4] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: f00ff00f
+PC: 800002b8 ----> Received: f00ff00f for addr: 8000200c
+[800002b4] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
 MEM: data read from cache_driver: f00ff00f
 ----
@@ -40118,12 +40194,16 @@ RF: Writing 800022ac to  1
 ----
 ******
 RF: Writing 80002008 to  1
+PC: 800002b8 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
-[800002b4] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: f00ff00f
+PC: 800002b8 ----> Received: f00ff00f for addr: 8000200c
+[800002b4] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
+READING - Addr: 8000200c = f00ff00f
 ******
 MEM: data read from cache_driver: f00ff00f
 ----
@@ -40225,12 +40305,16 @@ RF: Writing 80002000 to  1
 
 ----
 ******
+PC: 800002ec ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[800002e8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 800002ec ----> Received: ff00ff00 for addr: 80002004
+[800002e8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 MEM: data read from cache_driver: ff00ff00
 ----
@@ -40318,12 +40402,16 @@ RF: Writing 80002000 to  1
 
 ----
 ******
+PC: 800002ec ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
-[800002e8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 MEM: data read from cache_driver: ff00ff00
+PC: 800002ec ----> Received: ff00ff00 for addr: 80002004
+[800002e8] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
 
 ----
+READING - Addr: 80002004 = ff00ff00
 ******
 MEM: data read from cache_driver: ff00ff00
 ----
@@ -40398,12 +40486,16 @@ RF: Writing 00000002 to  5
 ----
 ******
 RF: Writing 80002308 to  3
+PC: 80000310 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = ff00ff
 ******
-[8000030c] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 00ff00ff
+PC: 80000310 ----> Received: 00ff00ff for addr: 80002000
+[8000030c] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
+READING - Addr: 80002000 = ff00ff
 ******
 RF: Writing 80002000 to  3
 MEM: data read from cache_driver: 00ff00ff
@@ -40467,12 +40559,16 @@ RF: Writing 00000012 to 28
 ----
 ******
 RF: Writing 80002324 to  3
+PC: 8000032c ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = ff00ff
 ******
-[80000328] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 MEM: data read from cache_driver: 00ff00ff
+PC: 8000032c ----> Received: 00ff00ff for addr: 80002000
+[80000328] WB Data: 80002000 {babebabe}, to register:  3 [1 0]
 
 ----
+READING - Addr: 80002000 = ff00ff
 ******
 RF: Writing 80002000 to  3
 MEM: data read from cache_driver: 00ff00ff
@@ -46959,8 +47055,8 @@ RF: Writing 80002002 to  1
 RF: Writing 80002204 to  4
 ----
 ******
-[80000208] WB Data: 80002009 {babebabe}, to register:  4 [1 0]
 MEM: data read from cache_driver: ffffff98
+[80000208] WB Data: 80002009 {babebabe}, to register:  4 [1 0]
 
 ----
 ******
@@ -50056,11 +50152,15 @@ RF: Writing beef1000 to  2
 ----
 ******
 RF: Writing beef0aa0 to  2
+PC: 80000118 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = beef0aa0
 ******
 MEM: data read from cache_driver: beef0aa0
+PC: 80000118 ----> Received: beef0aa0 for addr: 80002004
 
 ----
+READING - Addr: 80002004 = beef0aa0
 ******
 MEM: data read from cache_driver: beef0aa0
 ----
@@ -50616,8 +50716,8 @@ RF: Writing 8000200b to  1
 RF: Writing 80002230 to  4
 ----
 ******
-[80000234] WB Data: 80002012 {babebabe}, to register:  4 [1 0]
 MEM: data read from cache_driver: 00003098
+[80000234] WB Data: 80002012 {babebabe}, to register:  4 [1 0]
 
 ----
 ******
@@ -87376,11 +87476,15 @@ STORING aa00aa in 80002000
 ----
 ******
 RF: Writing 00aa00aa to  2
+PC: 800000d0 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = aa00aa
 ******
 MEM: data read from cache_driver: 00aa00aa
+PC: 800000d0 ----> Received: 00aa00aa for addr: 80002000
 
 ----
+READING - Addr: 80002000 = aa00aa
 ******
 MEM: data read from cache_driver: 00aa00aa
 ----
@@ -87456,11 +87560,15 @@ STORING aa00aa00 in 80002004
 ----
 ******
 RF: Writing aa00aa00 to  2
+PC: 800000f8 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = aa00aa00
 ******
 MEM: data read from cache_driver: aa00aa00
+PC: 800000f8 ----> Received: aa00aa00 for addr: 80002004
 
 ----
+READING - Addr: 80002004 = aa00aa00
 ******
 MEM: data read from cache_driver: aa00aa00
 ----
@@ -87536,11 +87644,15 @@ STORING aa00aa0 in 80002008
 ----
 ******
 RF: Writing 0aa00aa0 to  2
+PC: 80000120 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = aa00aa0
 ******
 MEM: data read from cache_driver: 0aa00aa0
+PC: 80000120 ----> Received: 0aa00aa0 for addr: 80002008
 
 ----
+READING - Addr: 80002008 = aa00aa0
 ******
 MEM: data read from cache_driver: 0aa00aa0
 ----
@@ -87616,11 +87728,15 @@ STORING a00aa00a in 8000200c
 ----
 ******
 RF: Writing a00aa00a to  2
+PC: 80000148 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = a00aa00a
 ******
 MEM: data read from cache_driver: a00aa00a
+PC: 80000148 ----> Received: a00aa00a for addr: 8000200c
 
 ----
+READING - Addr: 8000200c = a00aa00a
 ******
 MEM: data read from cache_driver: a00aa00a
 ----
@@ -87696,11 +87812,15 @@ STORING aa00aa in 80002010
 ----
 ******
 RF: Writing 00aa00aa to  2
+PC: 80000170 ----> Received: babebabe for addr: 80002010
 ----
+READING - Addr: 80002010 = aa00aa
 ******
 MEM: data read from cache_driver: 00aa00aa
+PC: 80000170 ----> Received: 00aa00aa for addr: 80002010
 
 ----
+READING - Addr: 80002010 = aa00aa
 ******
 MEM: data read from cache_driver: 00aa00aa
 ----
@@ -87776,11 +87896,15 @@ STORING aa00aa00 in 80002014
 ----
 ******
 RF: Writing aa00aa00 to  2
+PC: 80000198 ----> Received: babebabe for addr: 80002014
 ----
+READING - Addr: 80002014 = aa00aa00
 ******
 MEM: data read from cache_driver: aa00aa00
+PC: 80000198 ----> Received: aa00aa00 for addr: 80002014
 
 ----
+READING - Addr: 80002014 = aa00aa00
 ******
 MEM: data read from cache_driver: aa00aa00
 ----
@@ -87856,11 +87980,15 @@ STORING aa00aa0 in 80002018
 ----
 ******
 RF: Writing 0aa00aa0 to  2
+PC: 800001c0 ----> Received: babebabe for addr: 80002018
 ----
+READING - Addr: 80002018 = aa00aa0
 ******
 MEM: data read from cache_driver: 0aa00aa0
+PC: 800001c0 ----> Received: 0aa00aa0 for addr: 80002018
 
 ----
+READING - Addr: 80002018 = aa00aa0
 ******
 MEM: data read from cache_driver: 0aa00aa0
 ----
@@ -87936,11 +88064,15 @@ STORING a00aa00a in 8000201c
 ----
 ******
 RF: Writing a00aa00a to  2
+PC: 800001e8 ----> Received: babebabe for addr: 8000201c
 ----
+READING - Addr: 8000201c = a00aa00a
 ******
 MEM: data read from cache_driver: a00aa00a
+PC: 800001e8 ----> Received: a00aa00a for addr: 8000201c
 
 ----
+READING - Addr: 8000201c = a00aa00a
 ******
 MEM: data read from cache_driver: a00aa00a
 ----
@@ -88023,11 +88155,15 @@ STORING 12345678 in 80002020
 ----
 ******
 RF: Writing 80002000 to  4
+PC: 80000214 ----> Received: babebabe for addr: 80002020
 ----
+READING - Addr: 80002020 = 12345678
 ******
 MEM: data read from cache_driver: 12345678
+PC: 80000214 ----> Received: 12345678 for addr: 80002020
 
 ----
+READING - Addr: 80002020 = 12345678
 ******
 MEM: data read from cache_driver: 12345678
 ----
@@ -88132,12 +88268,16 @@ RF: Writing 8000201d to  1
 ----
 ******
 RF: Writing 80002240 to  4
+PC: 80000248 ----> Received: babebabe for addr: 80002024
 ----
+READING - Addr: 80002024 = 58213098
 ******
-[80000244] WB Data: 80002024 {babebabe}, to register:  4 [1 0]
 MEM: data read from cache_driver: 58213098
+PC: 80000248 ----> Received: 58213098 for addr: 80002024
+[80000244] WB Data: 80002024 {babebabe}, to register:  4 [1 0]
 
 ----
+READING - Addr: 80002024 = 58213098
 ******
 RF: Writing 80002024 to  4
 MEM: data read from cache_driver: 58213098
@@ -88228,11 +88368,15 @@ STORING aabbccdd in 80002000
 ----
 ******
 RF: Writing 80002000 to  2
+PC: 80000278 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = aabbccdd
 ******
 MEM: data read from cache_driver: aabbccdd
+PC: 80000278 ----> Received: aabbccdd for addr: 80002000
 
 ----
+READING - Addr: 80002000 = aabbccdd
 ******
 MEM: data read from cache_driver: aabbccdd
 ----
@@ -88330,11 +88474,15 @@ STORING aabbccdd in 80002000
 ----
 ******
 RF: Writing 80002000 to  2
+PC: 80000278 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = aabbccdd
 ******
 MEM: data read from cache_driver: aabbccdd
+PC: 80000278 ----> Received: aabbccdd for addr: 80002000
 
 ----
+READING - Addr: 80002000 = aabbccdd
 ******
 MEM: data read from cache_driver: aabbccdd
 ----
@@ -88452,11 +88600,15 @@ STORING daabbccd in 80002004
 STORING daabbccd in 80002004 
 ----
 ******
+PC: 800002b4 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = daabbccd
 ******
 MEM: data read from cache_driver: daabbccd
+PC: 800002b4 ----> Received: daabbccd for addr: 80002004
 
 ----
+READING - Addr: 80002004 = daabbccd
 ******
 MEM: data read from cache_driver: daabbccd
 ----
@@ -88560,11 +88712,15 @@ STORING daabbccd in 80002004
 STORING daabbccd in 80002004 
 ----
 ******
+PC: 800002b4 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = daabbccd
 ******
 MEM: data read from cache_driver: daabbccd
+PC: 800002b4 ----> Received: daabbccd for addr: 80002004
 
 ----
+READING - Addr: 80002004 = daabbccd
 ******
 MEM: data read from cache_driver: daabbccd
 ----
@@ -88688,11 +88844,15 @@ STORING ddaabbcc in 80002008
 STORING ddaabbcc in 80002008 
 ----
 ******
+PC: 800002f4 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ddaabbcc
 ******
 MEM: data read from cache_driver: ddaabbcc
+PC: 800002f4 ----> Received: ddaabbcc for addr: 80002008
 
 ----
+READING - Addr: 80002008 = ddaabbcc
 ******
 MEM: data read from cache_driver: ddaabbcc
 ----
@@ -88802,11 +88962,15 @@ STORING ddaabbcc in 80002008
 STORING ddaabbcc in 80002008 
 ----
 ******
+PC: 800002f4 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = ddaabbcc
 ******
 MEM: data read from cache_driver: ddaabbcc
+PC: 800002f4 ----> Received: ddaabbcc for addr: 80002008
 
 ----
+READING - Addr: 80002008 = ddaabbcc
 ******
 MEM: data read from cache_driver: ddaabbcc
 ----
@@ -88924,11 +89088,15 @@ STORING cddaabbc in 8000200c
 ----
 ******
 RF: Writing 80002000 to  2
+PC: 80000330 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = cddaabbc
 ******
 MEM: data read from cache_driver: cddaabbc
+PC: 80000330 ----> Received: cddaabbc for addr: 8000200c
 
 ----
+READING - Addr: 8000200c = cddaabbc
 ******
 MEM: data read from cache_driver: cddaabbc
 ----
@@ -89032,11 +89200,15 @@ STORING cddaabbc in 8000200c
 ----
 ******
 RF: Writing 80002000 to  2
+PC: 80000330 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = cddaabbc
 ******
 MEM: data read from cache_driver: cddaabbc
+PC: 80000330 ----> Received: cddaabbc for addr: 8000200c
 
 ----
+READING - Addr: 8000200c = cddaabbc
 ******
 MEM: data read from cache_driver: cddaabbc
 ----
@@ -89160,11 +89332,15 @@ STORING ccddaabb in 80002010
 STORING ccddaabb in 80002010 
 ----
 ******
+PC: 80000370 ----> Received: babebabe for addr: 80002010
 ----
+READING - Addr: 80002010 = ccddaabb
 ******
 MEM: data read from cache_driver: ccddaabb
+PC: 80000370 ----> Received: ccddaabb for addr: 80002010
 
 ----
+READING - Addr: 80002010 = ccddaabb
 ******
 MEM: data read from cache_driver: ccddaabb
 ----
@@ -89274,11 +89450,15 @@ STORING ccddaabb in 80002010
 STORING ccddaabb in 80002010 
 ----
 ******
+PC: 80000370 ----> Received: babebabe for addr: 80002010
 ----
+READING - Addr: 80002010 = ccddaabb
 ******
 MEM: data read from cache_driver: ccddaabb
+PC: 80000370 ----> Received: ccddaabb for addr: 80002010
 
 ----
+READING - Addr: 80002010 = ccddaabb
 ******
 MEM: data read from cache_driver: ccddaabb
 ----
@@ -89402,11 +89582,15 @@ STORING bccddaab in 80002014
 ----
 ******
 RF: Writing 80002000 to  2
+PC: 800003b0 ----> Received: babebabe for addr: 80002014
 ----
+READING - Addr: 80002014 = bccddaab
 ******
 MEM: data read from cache_driver: bccddaab
+PC: 800003b0 ----> Received: bccddaab for addr: 80002014
 
 ----
+READING - Addr: 80002014 = bccddaab
 ******
 MEM: data read from cache_driver: bccddaab
 ----
@@ -89516,11 +89700,15 @@ STORING bccddaab in 80002014
 ----
 ******
 RF: Writing 80002000 to  2
+PC: 800003b0 ----> Received: babebabe for addr: 80002014
 ----
+READING - Addr: 80002014 = bccddaab
 ******
 MEM: data read from cache_driver: bccddaab
+PC: 800003b0 ----> Received: bccddaab for addr: 80002014
 
 ----
+READING - Addr: 80002014 = bccddaab
 ******
 MEM: data read from cache_driver: bccddaab
 ----
@@ -89632,11 +89820,15 @@ STORING 112233 in 80002000
 ----
 ******
 RF: Writing 00112233 to  1
+PC: 800003e8 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = 112233
 ******
 MEM: data read from cache_driver: 00112233
+PC: 800003e8 ----> Received: 00112233 for addr: 80002000
 
 ----
+READING - Addr: 80002000 = 112233
 ******
 MEM: data read from cache_driver: 00112233
 ----
@@ -89734,11 +89926,15 @@ STORING 112233 in 80002000
 ----
 ******
 RF: Writing 00112233 to  1
+PC: 800003e8 ----> Received: babebabe for addr: 80002000
 ----
+READING - Addr: 80002000 = 112233
 ******
 MEM: data read from cache_driver: 00112233
+PC: 800003e8 ----> Received: 00112233 for addr: 80002000
 
 ----
+READING - Addr: 80002000 = 112233
 ******
 MEM: data read from cache_driver: 00112233
 ----
@@ -89856,11 +90052,15 @@ STORING 30011223 in 80002004
 STORING 30011223 in 80002004 
 ----
 ******
+PC: 80000424 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = 30011223
 ******
 MEM: data read from cache_driver: 30011223
+PC: 80000424 ----> Received: 30011223 for addr: 80002004
 
 ----
+READING - Addr: 80002004 = 30011223
 ******
 MEM: data read from cache_driver: 30011223
 ----
@@ -89969,11 +90169,15 @@ STORING 30011223 in 80002004
 STORING 30011223 in 80002004 
 ----
 ******
+PC: 80000424 ----> Received: babebabe for addr: 80002004
 ----
+READING - Addr: 80002004 = 30011223
 ******
 MEM: data read from cache_driver: 30011223
+PC: 80000424 ----> Received: 30011223 for addr: 80002004
 
 ----
+READING - Addr: 80002004 = 30011223
 ******
 MEM: data read from cache_driver: 30011223
 ----
@@ -90102,11 +90306,15 @@ STORING 33001122 in 80002008
 STORING 33001122 in 80002008 
 ----
 ******
+PC: 80000464 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = 33001122
 ******
 MEM: data read from cache_driver: 33001122
+PC: 80000464 ----> Received: 33001122 for addr: 80002008
 
 ----
+READING - Addr: 80002008 = 33001122
 ******
 MEM: data read from cache_driver: 33001122
 ----
@@ -90216,11 +90424,15 @@ STORING 33001122 in 80002008
 STORING 33001122 in 80002008 
 ----
 ******
+PC: 80000464 ----> Received: babebabe for addr: 80002008
 ----
+READING - Addr: 80002008 = 33001122
 ******
 MEM: data read from cache_driver: 33001122
+PC: 80000464 ----> Received: 33001122 for addr: 80002008
 
 ----
+READING - Addr: 80002008 = 33001122
 ******
 MEM: data read from cache_driver: 33001122
 ----
@@ -90338,11 +90550,15 @@ STORING 23300112 in 8000200c
 ----
 ******
 RF: Writing 23300112 to  1
+PC: 800004a0 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = 23300112
 ******
 MEM: data read from cache_driver: 23300112
+PC: 800004a0 ----> Received: 23300112 for addr: 8000200c
 
 ----
+READING - Addr: 8000200c = 23300112
 ******
 MEM: data read from cache_driver: 23300112
 ----
@@ -90446,11 +90662,15 @@ STORING 23300112 in 8000200c
 ----
 ******
 RF: Writing 23300112 to  1
+PC: 800004a0 ----> Received: babebabe for addr: 8000200c
 ----
+READING - Addr: 8000200c = 23300112
 ******
 MEM: data read from cache_driver: 23300112
+PC: 800004a0 ----> Received: 23300112 for addr: 8000200c
 
 ----
+READING - Addr: 8000200c = 23300112
 ******
 MEM: data read from cache_driver: 23300112
 ----
@@ -90574,11 +90794,15 @@ STORING 22330011 in 80002010
 STORING 22330011 in 80002010 
 ----
 ******
+PC: 800004e0 ----> Received: babebabe for addr: 80002010
 ----
+READING - Addr: 80002010 = 22330011
 ******
 MEM: data read from cache_driver: 22330011
+PC: 800004e0 ----> Received: 22330011 for addr: 80002010
 
 ----
+READING - Addr: 80002010 = 22330011
 ******
 MEM: data read from cache_driver: 22330011
 ----
@@ -90698,11 +90922,15 @@ STORING 22330011 in 80002010
 STORING 22330011 in 80002010 
 ----
 ******
+PC: 800004e0 ----> Received: babebabe for addr: 80002010
 ----
+READING - Addr: 80002010 = 22330011
 ******
 MEM: data read from cache_driver: 22330011
+PC: 800004e0 ----> Received: 22330011 for addr: 80002010
 
 ----
+READING - Addr: 80002010 = 22330011
 ******
 MEM: data read from cache_driver: 22330011
 ----
@@ -90836,11 +91064,15 @@ STORING 12233001 in 80002014
 ----
 ******
 RF: Writing 12233001 to  1
+PC: 80000520 ----> Received: babebabe for addr: 80002014
 ----
+READING - Addr: 80002014 = 12233001
 ******
 MEM: data read from cache_driver: 12233001
+PC: 80000520 ----> Received: 12233001 for addr: 80002014
 
 ----
+READING - Addr: 80002014 = 12233001
 ******
 MEM: data read from cache_driver: 12233001
 ----
@@ -90950,11 +91182,15 @@ STORING 12233001 in 80002014
 ----
 ******
 RF: Writing 12233001 to  1
+PC: 80000520 ----> Received: babebabe for addr: 80002014
 ----
+READING - Addr: 80002014 = 12233001
 ******
 MEM: data read from cache_driver: 12233001
+PC: 80000520 ----> Received: 12233001 for addr: 80002014
 
 ----
+READING - Addr: 80002014 = 12233001
 ******
 MEM: data read from cache_driver: 12233001
 ----
@@ -100088,7 +100324,7 @@ RF: Writing 0000000f to  1
 ******
 RF: Writing 0000000b to  2
 (80000378) 0000000f * 0000000b = 000000a5
-(80000378) 0000000f * 0000000b = 000000a5
+(80000378) 00000000 * 0000000b = 00000000
 ----
 ******
 [80000370] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -100152,7 +100388,7 @@ RF: Writing 0000000f to  1
 ******
 RF: Writing 0000000b to  2
 (80000378) 0000000f * 0000000b = 000000a5
-(80000378) 0000000f * 0000000b = 000000a5
+(80000378) 00000000 * 0000000b = 00000000
 ----
 ******
 [80000370] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -100403,7 +100639,7 @@ RF: Writing 0000000e to  1
 ----
 ******
 (800003d4) 0000000e * 0000000b = 0000009a
-(800003d4) 0000000e * 0000000b = 0000009a
+(800003d4) 00000000 * 0000000b = 00000000
 ----
 ******
 [800003cc] WB Data: 0000000b {babebabe}, to register:  2 [1 0]
@@ -100467,7 +100703,7 @@ RF: Writing 0000000e to  1
 ----
 ******
 (800003d4) 0000000e * 0000000b = 0000009a
-(800003d4) 0000000e * 0000000b = 0000009a
+(800003d4) 00000000 * 0000000b = 00000000
 ----
 ******
 [800003cc] WB Data: 0000000b {babebabe}, to register:  2 [1 0]
@@ -100567,7 +100803,7 @@ RF: Writing 0000000f to  1
 ----
 ******
 (80000404) 0000000f * 0000000b = 000000a5
-(80000404) 0000000f * 0000000b = 000000a5
+(80000404) 00000000 * 0000000b = 00000000
 ----
 ******
 [800003fc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -100631,7 +100867,7 @@ RF: Writing 0000000f to  1
 ----
 ******
 (80000404) 0000000f * 0000000b = 000000a5
-(80000404) 0000000f * 0000000b = 000000a5
+(80000404) 00000000 * 0000000b = 00000000
 ----
 ******
 [800003fc] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -101024,7 +101260,7 @@ RF: Writing 0000000b to  2
 ******
 RF: Writing 0000000f to  1
 (80000488) 0000000f * 0000000b = 000000a5
-(80000488) 0000000f * 0000000b = 000000a5
+(80000488) 0000000f * 00000000 = 00000000
 ----
 ******
 [80000480] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -101088,7 +101324,7 @@ RF: Writing 0000000b to  2
 ******
 RF: Writing 0000000f to  1
 (80000488) 0000000f * 0000000b = 000000a5
-(80000488) 0000000f * 0000000b = 000000a5
+(80000488) 0000000f * 00000000 = 00000000
 ----
 ******
 [80000480] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -101339,7 +101575,7 @@ RF: Writing 0000000b to  2
 ----
 ******
 (800004e4) 0000000e * 0000000b = 0000009a
-(800004e4) 0000000e * 0000000b = 0000009a
+(800004e4) 0000000e * 00000000 = 00000000
 ----
 ******
 [800004dc] WB Data: 0000000e {babebabe}, to register:  1 [1 0]
@@ -101403,7 +101639,7 @@ RF: Writing 0000000b to  2
 ----
 ******
 (800004e4) 0000000e * 0000000b = 0000009a
-(800004e4) 0000000e * 0000000b = 0000009a
+(800004e4) 0000000e * 00000000 = 00000000
 ----
 ******
 [800004dc] WB Data: 0000000e {babebabe}, to register:  1 [1 0]
@@ -101503,7 +101739,7 @@ RF: Writing 0000000b to  2
 ----
 ******
 (80000514) 0000000f * 0000000b = 000000a5
-(80000514) 0000000f * 0000000b = 000000a5
+(80000514) 0000000f * 00000000 = 00000000
 ----
 ******
 [8000050c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]
@@ -101567,7 +101803,7 @@ RF: Writing 0000000b to  2
 ----
 ******
 (80000514) 0000000f * 0000000b = 000000a5
-(80000514) 0000000f * 0000000b = 000000a5
+(80000514) 0000000f * 00000000 = 00000000
 ----
 ******
 [8000050c] WB Data: 00000000 {babebabe}, to register:  0 [1 0]

@@ -2,7 +2,8 @@
 `include "VX_define.v"
 
 module VX_alu(
-	input wire[31:0]  in_reg_data[1:0],
+	input wire[31:0]  in_1,
+	input wire[31:0]  in_2,
 	input wire        in_rs2_src,
 	input wire[31:0]  in_itype_immed,
 	input wire[19:0]  in_upper_immed,
@@ -22,9 +23,9 @@ module VX_alu(
 
 		assign which_in2  = in_rs2_src == `RS2_IMMED;
 
-		assign ALU_in1 = in_reg_data[0];
+		assign ALU_in1 = in_1;
 
-		assign ALU_in2 = which_in2 ? in_itype_immed : in_reg_data[1];
+		assign ALU_in2 = which_in2 ? in_itype_immed : in_2;
 
 
 		assign upper_immed = {in_upper_immed, {12{1'b0}}};

@@ -206,52 +206,50 @@ bool Vortex::dbus_driver()
     printf("----\n");
     for (unsigned curr_th = 0; curr_th < NT; curr_th++)
     {
-
-        unsigned & in_data_use = (curr_th == 0) ? vortex->in_cache_driver_out_data_0 : vortex->in_cache_driver_out_data_1;
-
-        if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid[0])
+        
+        if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid[curr_th])
         {
 
 
-                addr = (uint32_t) vortex->out_cache_driver_in_address[1];
+                addr = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
                 ram.getWord(addr, &data_read);
 
                 if (vortex->out_cache_driver_in_mem_read == LB_MEM_READ)
                 {
 
-                    in_data_use = (data_read & 0x80) ? (data_read | 0xFFFFFF00) : (data_read & 0xFF);
+                    vortex->in_cache_driver_out_data[curr_th] = (data_read & 0x80) ? (data_read | 0xFFFFFF00) : (data_read & 0xFF);
 
                 } else if (vortex->out_cache_driver_in_mem_read == LH_MEM_READ)
                 {
 
-                    in_data_use = (data_read & 0x8000) ? (data_read | 0xFFFF0000) : (data_read & 0xFFFF);
+                    vortex->in_cache_driver_out_data[curr_th] = (data_read & 0x8000) ? (data_read | 0xFFFF0000) : (data_read & 0xFFFF);
 
                 } else if (vortex->out_cache_driver_in_mem_read == LW_MEM_READ)
                 {
                     // printf("Reading mem - Addr: %x = %x\n", addr, data_read);
-                    // std::cout << "Reading mem - Addr: " << std::hex << addr << " = " << data_read << "\n";
+                    std::cout << "READING - Addr: " << std::hex << addr << " = " << data_read << "\n";
                     std::cout << std::dec;
-                    in_data_use = data_read;
+                    vortex->in_cache_driver_out_data[curr_th] = data_read;
 
                 } else if (vortex->out_cache_driver_in_mem_read == LBU_MEM_READ)
                 {
 
-                    in_data_use = (data_read & 0xFF);
+                    vortex->in_cache_driver_out_data[curr_th] = (data_read & 0xFF);
 
                 } else if (vortex->out_cache_driver_in_mem_read == LHU_MEM_READ)
                 {
 
-                    in_data_use = (data_read & 0xFFFF);
+                    vortex->in_cache_driver_out_data[curr_th] = (data_read & 0xFFFF);
 
                 }
                 else
                 {
-                    in_data_use = 0xbabebabe;
+                    vortex->in_cache_driver_out_data[curr_th] = 0xbabebabe;
                 }
         }
         else
         {
-            in_data_use = 0xbabebabe;
+            vortex->in_cache_driver_out_data[curr_th] = 0xbabebabe;
         }
 
     }
@@ -321,13 +319,16 @@ bool Vortex::simulate(std::string file_to_simulate)
  //        cycle++;
 	// }
 
+    bool istop;
+    bool dstop;
+
     // for (int i = 0; i < 500; i++)
     while (this->stop && (!(stop && (counter > 5))))
     {
 
         // std::cout << "************* Cycle: " << cycle << "\n";
-        bool istop =  ibus_driver();
-        bool dstop = !dbus_driver();
+        istop =  ibus_driver();
+        dstop = !dbus_driver();
 
         vortex->clk = 1;
         vortex->eval();

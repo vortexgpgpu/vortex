@@ -78,7 +78,7 @@ int main(int argc, char **argv)
 		if(!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
 
 
-	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-lw.hex";
+	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
 
 	// bool curr = v.simulate(testing);
 	// if ( curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;

@@ -10,7 +10,8 @@ module VX_e_m_reg (
 		input wire[1:0]   in_wb,
 		input wire[4:0]   in_rs1,
 		input wire[4:0]   in_rs2,
-		input wire[31:0]  in_reg_data[`NT_T2_M1:0],
+		input wire[31:0]  in_a_reg_data[`NT_M1:0],
+		input wire[31:0]  in_b_reg_data[`NT_M1:0],
 		input wire[2:0]   in_mem_read, // NEW
 		input wire[2:0]   in_mem_write, // NEW
 		input wire[31:0]  in_PC_next,
@@ -33,7 +34,8 @@ module VX_e_m_reg (
 		output wire[1:0]  out_wb,
 		output wire[4:0]  out_rs1,
 		output wire[4:0]  out_rs2,
-		output wire[31:0] out_reg_data[`NT_T2_M1:0],
+		output wire[31:0] out_a_reg_data[`NT_M1:0],
+		output wire[31:0] out_b_reg_data[`NT_M1:0],
 		output wire[2:0]  out_mem_read,
 		output wire[2:0]  out_mem_write,
 		output wire[31:0] out_curr_PC,
@@ -50,7 +52,8 @@ module VX_e_m_reg (
 		reg[4:0]  rd;
 		reg[4:0]  rs1;
 		reg[4:0]  rs2;
-		reg[31:0] reg_data[`NT_T2_M1:0];
+		reg[31:0] a_reg_data[`NT_M1:0];
+		reg[31:0] b_reg_data[`NT_M1:0];
 		reg[1:0]  wb;
 		reg[31:0] PC_next;
 		reg[2:0]  mem_read;
@@ -87,13 +90,12 @@ module VX_e_m_reg (
 			branch_type   = 0;
 			jal           = `NO_JUMP;
 			jal_dest      = 0;
+			
 			for (ini_reg = 0; ini_reg < `NT; ini_reg = ini_reg + 1)
 			begin
-				reg_data[ini_reg]     = 0;
-				// reg_data_z[ini_reg]   = 0;
+				a_reg_data[ini_reg]   = 0;
+				b_reg_data[ini_reg]   = 0;
 				valid[ini_reg]        = 0;
-				// valid_z[ini_reg]      = 0;
-				// alu_result_z[ini_reg] = 0;
 				alu_result[ini_reg]   = 0;
 			end
 		end
@@ -108,7 +110,8 @@ module VX_e_m_reg (
 		assign out_PC_next       = PC_next;
 		assign out_mem_read      = mem_read;
 		assign out_mem_write     = mem_write;
-		assign out_reg_data      = reg_data;
+		assign out_a_reg_data    = a_reg_data;
+		assign out_b_reg_data    = b_reg_data;
 		assign out_csr_address   = csr_address;
 		assign out_is_csr        = is_csr;
 		assign out_csr_result    = csr_result;
@@ -130,7 +133,8 @@ module VX_e_m_reg (
 				PC_next       <= in_PC_next;
 				mem_read      <= in_mem_read;
 				mem_write     <= in_mem_write;
-				reg_data      <= in_reg_data;
+				a_reg_data    <= in_a_reg_data;
+				b_reg_data    <= in_b_reg_data;
 				csr_address   <= in_csr_address;
 				is_csr        <= in_is_csr;
 				csr_result    <= in_csr_result;

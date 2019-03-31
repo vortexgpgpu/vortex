@@ -27,7 +27,8 @@ module VX_decode(
 	output wire[4:0]  out_rd,
 	output wire[4:0]  out_rs1,
 	output wire[4:0]  out_rs2,
-	output wire[31:0] out_reg_data[`NT_T2_M1:0],
+	output wire[31:0] out_a_reg_data[`NT_M1:0],
+	output wire[31:0] out_b_reg_data[`NT_M1:0],
 	output wire[1:0]  out_wb,
 	output wire[4:0]  out_alu_op,
 	output wire       out_rs2_src,
@@ -212,13 +213,11 @@ module VX_decode(
 		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
 		genvar index_out_reg;
-		genvar index_out_reg_2;
 		generate
-			for (index_out_reg = 0; index_out_reg <= `NT; index_out_reg = index_out_reg + 2)
+			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
 				begin
-					assign index_out_reg_2 = index_out_reg / 2;
-					assign out_reg_data[index_out_reg]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg_2] : rd1_register[index_out_reg_2]));
-					assign out_reg_data[index_out_reg+1] = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[index_out_reg_2] : rd2_register[index_out_reg_2];
+					assign out_a_reg_data[index_out_reg]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg] : rd1_register[index_out_reg]));
+					assign out_b_reg_data[index_out_reg]   = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[index_out_reg] : rd2_register[index_out_reg];
 				end
 		endgenerate
 
@@ -244,7 +243,7 @@ module VX_decode(
 		// end
 
 		assign out_is_csr   = is_csr;
-    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : out_reg_data[0];
+    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : out_a_reg_data[0];
 
 
 		assign out_wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :

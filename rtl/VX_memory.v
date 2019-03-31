@@ -38,7 +38,7 @@ module VX_memory (
 
 		always @(in_mem_read, in_cache_driver_out_data) begin
 			if (in_mem_read == `LW_MEM_READ) begin
-				// $display("PC: %h ----> Received: %h", in_curr_PC, in_cache_driver_out_data);
+				$display("PC: %h ----> Received: %h for addr: ", in_curr_PC, in_cache_driver_out_data[0], in_alu_result[0]);
 			end
 		end
 

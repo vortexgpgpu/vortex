@@ -7,7 +7,8 @@ module VX_d_e_reg (
 		input wire[4:0]  in_rd,
 		input wire[4:0]  in_rs1,
 		input wire[4:0]  in_rs2,
-		input wire[31:0] in_reg_data[`NT_T2_M1:0],
+		input wire[31:0] in_a_reg_data[`NT_M1:0],
+		input wire[31:0] in_b_reg_data[`NT_M1:0],
 		input wire[4:0]  in_alu_op,
 		input wire[1:0]  in_wb,
 		input wire       in_rs2_src, // NEW
@@ -34,7 +35,8 @@ module VX_d_e_reg (
 		output wire[4:0]  out_rd,
 		output wire[4:0]  out_rs1,
 		output wire[4:0]  out_rs2,
-		output wire[31:0] out_reg_data[`NT_T2_M1:0],
+		output wire[31:0] out_a_reg_data[`NT_M1:0],
+		output wire[31:0] out_b_reg_data[`NT_M1:0],
 		output wire[4:0]  out_alu_op,
 		output wire[1:0]  out_wb,
 		output wire       out_rs2_src, // NEW
@@ -54,7 +56,8 @@ module VX_d_e_reg (
 		reg[4:0]  rd;
 		reg[4:0]  rs1;
 		reg[4:0]  rs2;
-		reg[31:0] reg_data[`NT_T2_M1:0];
+		reg[31:0] a_reg_data[`NT_M1:0];
+		reg[31:0] b_reg_data[`NT_M1:0];
 		reg[4:0]  alu_op;
 		reg[1:0]  wb;
 		reg[31:0] PC_next_out;
@@ -72,7 +75,7 @@ module VX_d_e_reg (
 		reg[31:0] jal_offset;
 		reg       valid[`NT_M1:0];
 
-		reg[31:0] reg_data_z[`NT_T2_M1:0];
+		reg[31:0] reg_data_z[`NT_M1:0];
 		reg       valid_z[`NT_M1:0];
 
 		integer ini_reg;
@@ -81,10 +84,11 @@ module VX_d_e_reg (
 			rs1         = 0;
 			for (ini_reg = 0; ini_reg < `NT; ini_reg = ini_reg + 1)
 			begin
-				reg_data[ini_reg]   = 0;
-				reg_data_z[ini_reg] = 0;
-				valid[ini_reg]      = 0;
-				valid_z[ini_reg]    = 0;
+				a_reg_data[ini_reg]   = 0;
+				b_reg_data[ini_reg]   = 0;
+				reg_data_z[ini_reg]   = 0;
+				valid[ini_reg]        = 0;
+				valid_z[ini_reg]      = 0;
 			end
 			rs2         = 0;
 			alu_op      = 0;
@@ -111,7 +115,8 @@ module VX_d_e_reg (
 		assign out_rd          = rd;
 		assign out_rs1         = rs1;
 		assign out_rs2         = rs2;
-		assign out_reg_data    = reg_data;
+		assign out_a_reg_data  = a_reg_data;
+		assign out_b_reg_data  = b_reg_data;
 		assign out_alu_op      = alu_op;
 		assign out_wb          = wb;
 		assign out_PC_next     = PC_next_out;
@@ -135,7 +140,8 @@ module VX_d_e_reg (
 				rd          <= stalling ? 5'h0         : in_rd;
 				rs1         <= stalling ? 5'h0         : in_rs1;
 				rs2         <= stalling ? 5'h0         : in_rs2;
-				reg_data    <= stalling ? reg_data_z   : in_reg_data;
+				a_reg_data  <= stalling ? reg_data_z   : in_a_reg_data;
+				b_reg_data  <= stalling ? reg_data_z   : in_b_reg_data;
 				alu_op      <= stalling ? `NO_ALU      : in_alu_op;
 				wb          <= stalling ? `NO_WB       : in_wb;
 				PC_next_out <= stalling ? 32'h0        : in_PC_next;
