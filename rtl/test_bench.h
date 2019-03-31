@@ -142,8 +142,8 @@ bool Vortex::ibus_driver()
     ram.getWord(new_PC, &curr_inst);
     vortex->fe_instruction      = curr_inst;
 
-    printf("\n\n---------------------------------------------\n(%x) Inst: %x\n", new_PC, curr_inst);
-    printf("\n");
+    // printf("\n\n---------------------------------------------\n(%x) Inst: %x\n", new_PC, curr_inst);
+    // printf("\n");
     ////////////////////// IBUS //////////////////////
 
 
@@ -157,7 +157,7 @@ bool Vortex::ibus_driver()
         stop = false;
     } else
     {
-        printf("Ibus requesting stop: %x\n", curr_inst);
+        // printf("Ibus requesting stop: %x\n", curr_inst);
         stop = true;
     }
 
@@ -208,7 +208,7 @@ bool Vortex::dbus_driver()
     }
 
 
-    printf("----\n");
+    // printf("----\n");
     for (unsigned curr_th = 0; curr_th < NT; curr_th++)
     {
 
@@ -258,7 +258,7 @@ bool Vortex::dbus_driver()
         }
 
     }
-    printf("******\n");
+    // printf("******\n");
 
 
     return false;
@@ -270,7 +270,7 @@ bool Vortex::simulate(std::string file_to_simulate)
 {
 
     this->instruction_file_name = file_to_simulate;
-    this->results << "\n****************\t" << file_to_simulate << "\t****************\n";
+    // this->results << "\n****************\t" << file_to_simulate << "\t****************\n";
 
     this->ProcessFile();
 
@@ -328,6 +328,8 @@ bool Vortex::simulate(std::string file_to_simulate)
     bool dstop;
 
     // for (int i = 0; i < 500; i++)
+
+    // unsigned cycles;
     while (this->stop && (!(stop && (counter > 5))))
     {
 
@@ -358,6 +360,7 @@ bool Vortex::simulate(std::string file_to_simulate)
         cycle++;
     }
 
+    std::cerr << "Total Cycles: " << cycle << "\n";
 
     uint32_t status;
     ram.getWord(0, &status);

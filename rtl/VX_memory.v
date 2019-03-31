@@ -36,11 +36,11 @@ module VX_memory (
 		output wire[31:0] out_cache_driver_in_data[`NT_M1:0]
 	);	
 
-		always @(in_mem_read, in_cache_driver_out_data) begin
-			if (in_mem_read == `LW_MEM_READ) begin
-				$display("PC: %h ----> Received: %h for addr: ", in_curr_PC, in_cache_driver_out_data[0], in_alu_result[0]);
-			end
-		end
+		// always @(in_mem_read, in_cache_driver_out_data) begin
+		// 	if (in_mem_read == `LW_MEM_READ) begin
+		// 		$display("PC: %h ----> Received: %h for addr: ", in_curr_PC, in_cache_driver_out_data[0], in_alu_result[0]);
+		// 	end
+		// end
 
 		assign out_delay = 1'b0;
 
@@ -59,14 +59,14 @@ module VX_memory (
 		assign out_PC_next    = in_PC_next;
 		assign out_valid      = in_valid;
 
-		always @(*) begin 
+		// always @(*) begin 
 
-			if (in_cache_driver_out_data[0] != 32'hbabebabe)
-			begin
-				$display("MEM: data read from cache_driver: %h", in_cache_driver_out_data[0]);
-			end
+		// 	if (in_cache_driver_out_data[0] != 32'hbabebabe)
+		// 	begin
+		// 		$display("MEM: data read from cache_driver: %h", in_cache_driver_out_data[0]);
+		// 	end
 		
-		end
+		// end
 
 
 		assign out_branch_dest = $signed(in_curr_PC) + ($signed(in_branch_offset) << 1);

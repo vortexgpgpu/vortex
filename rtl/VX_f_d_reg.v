@@ -26,9 +26,9 @@ module VX_f_d_reg (
 
 	integer reset_cur_thread = 0;
 
-	always @(in_instruction) begin
-		$display("in_instruction: %h",in_instruction);
-	end
+	// always @(in_instruction) begin
+	// 	$display("in_instruction: %h",in_instruction);
+	// end
 
 	always @(posedge clk or posedge reset) begin
 		if(reset) begin
@@ -38,9 +38,9 @@ module VX_f_d_reg (
 				valid[reset_cur_thread]    <=  1'b0;
 
 		end else if (in_fwd_stall == 1'b1 || in_freeze == 1'b1 || in_clone_stall) begin
-			if (in_clone_stall) begin
-				$display("STALL BECAUSE OF CLONE");
-			end
+			// if (in_clone_stall) begin
+			// 	$display("STALL BECAUSE OF CLONE");
+			// end
 		end else begin
 			instruction <= in_instruction;
 			valid       <= in_valid;

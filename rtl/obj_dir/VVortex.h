@@ -8,7 +8,7 @@
 #ifndef _VVortex_H_
 #define _VVortex_H_
 
-#include "verilated_heavy.h"
+#include "verilated.h"
 
 class VVortex__Syms;
 
@@ -200,9 +200,6 @@ VL_MODULE(VVortex) {
     struct {
 	// Begin mtask footprint  all: 
 	VL_SIG8(__Vtableidx1,2,0);
-	VL_SIG8(__Vdlyvset__Vortex__DOT__vx_f_d_reg__DOT__valid__v0,0,0);
-	VL_SIG8(__Vdlyvset__Vortex__DOT__vx_f_d_reg__DOT__valid__v8,0,0);
-	VL_SIG8(__Vdlyvset__Vortex__DOT__vx_f_d_reg__DOT__valid__v9,0,0);
 	VL_SIG8(__Vclklast__TOP__clk,0,0);
 	VL_SIG8(__Vclklast__TOP__reset,0,0);
 	VL_SIG(Vortex__DOT__vx_decode__DOT____Vcellout__vx_register_file_master__out_src2_data,31,0);
@@ -263,11 +260,11 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_valid[8],0,0);
 	VL_SIG(Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_data[8],31,0);
 	VL_SIG(Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_address[8],31,0);
-    };
-    struct {
 	VL_SIG8(Vortex__DOT____Vcellout__vx_memory__out_valid[8],0,0);
 	VL_SIG(Vortex__DOT____Vcellout__vx_memory__out_mem_result[8],31,0);
 	VL_SIG(Vortex__DOT____Vcellout__vx_memory__out_alu_result[8],31,0);
+    };
+    struct {
 	VL_SIG(Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data[8],31,0);
 	VL_SIG8(Vortex__DOT____Vcellinp__vx_memory__in_valid[8],0,0);
 	VL_SIG(Vortex__DOT____Vcellinp__vx_memory__in_rd2[8],31,0);
