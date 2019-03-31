@@ -198,7 +198,7 @@ bool Vortex::dbus_driver()
                     ram.writeHalf( addr, &data_write);
                 } else if (vortex->out_cache_driver_in_mem_write == SW_MEM_WRITE)
                 {
-                    printf("STORING %x in %x \n", data_write, addr);
+                    // printf("STORING %x in %x \n", data_write, addr);
                     data_write = data_write;
                     ram.writeWord( addr, &data_write);
                 }
@@ -232,7 +232,7 @@ bool Vortex::dbus_driver()
                 } else if (vortex->out_cache_driver_in_mem_read == LW_MEM_READ)
                 {
                     // printf("Reading mem - Addr: %x = %x\n", addr, data_read);
-                    std::cout << "READING - Addr: " << std::hex << addr << " = " << data_read << "\n";
+                    // std::cout << "READING - Addr: " << std::hex << addr << " = " << data_read << "\n";
                     std::cout << std::dec;
                     vortex->in_cache_driver_out_data[curr_th] = data_read;
 

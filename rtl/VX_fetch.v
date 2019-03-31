@@ -68,7 +68,7 @@ module VX_fetch (
 
 		always @(*) begin : proc_
 			if (in_change_mask) begin
-				$display("CHANGING MASK: [%d %d]",in_thread_mask[0], in_thread_mask[1]);
+				// $display("CHANGING MASK: [%d %d]",in_thread_mask[0], in_thread_mask[1]);
 				assign valid = in_thread_mask;
 			end
 		end
@@ -100,7 +100,7 @@ module VX_fetch (
 					PC_to_use = real_PC;
 				end
 			end else if (stall_reg == 1'b1) begin
-				$display("Using old cuz stall: PC: %h\treal_pc: %h",old, real_PC);
+				// $display("Using old cuz stall: PC: %h\treal_pc: %h",old, real_PC);
 				PC_to_use = old;
 			end else begin
 				PC_to_use = PC_to_use_temp;
@@ -125,7 +125,7 @@ module VX_fetch (
 
 			if ((in_jal == 1'b1) && (delay_reg == 1'b0)) begin
 				temp_PC = in_jal_dest;
-				$display("in_jal_dest: %h",in_jal_dest);
+				// $display("in_jal_dest: %h",in_jal_dest);
 			end else if ((in_branch_dir == 1'b1) && (delay_reg == 1'b0)) begin
 				temp_PC = in_branch_dest;
 			end else begin
@@ -136,9 +136,9 @@ module VX_fetch (
 
 		assign out_PC = temp_PC;
 
-		always @(*) begin
-			$display("FETCH PC: %h (%h, %h, %h)",temp_PC, PC_to_use, in_jal_dest, in_branch_dest);
-		end
+		// always @(*) begin
+		// 	$display("FETCH PC: %h (%h, %h, %h)",temp_PC, PC_to_use, in_jal_dest, in_branch_dest);
+		// end
 
 		always @(*) begin
 		

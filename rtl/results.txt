@@ -1,9 +1,9 @@
 
 ****************	../../kernel/vortex_test.hex	****************
-# Dynamic Instructions: 482804
-# of total cycles:      482816
+# Dynamic Instructions: 365972
+# of total cycles:      365984
 # of forwarding stalls: 0
 # of branch stalls:     0
-# CPI:                  1.00002
+# CPI:                  1.00003
 # time to simulate:     6.95312e-310 milliseconds
 # GRADE:                Failed on test: 0

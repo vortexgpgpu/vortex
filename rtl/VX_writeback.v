@@ -3,13 +3,17 @@
 
 
 module VX_writeback (
+		/* verilator lint_off UNUSED */
 		input wire       clk,
+		/* verilator lint_off UNUSED */
 		input wire[31:0] in_alu_result[`NT_M1:0],
 		input wire[31:0] in_mem_result[`NT_M1:0],
 		input wire[4:0]  in_rd,
 		input wire[1:0]  in_wb,
 		input wire[31:0] in_PC_next,
+		/* verilator lint_off UNUSED */
 		input wire       in_valid[`NT_M1:0],
+		/* verilator lint_on UNUSED */
 
 		output wire[31:0] out_write_data[`NT_M1:0],
 		output wire[4:0] out_rd,
@@ -40,11 +44,11 @@ module VX_writeback (
 													in_mem_result;
 
 
-		always @(negedge clk) begin
-			if (in_wb != 0)  begin
-				$display("[%h] WB Data: %h {%h}, to register: %d [%d %d]",in_PC_next - 4, out_write_data[0], in_mem_result[0], in_rd, in_valid[0], in_valid[1]);
-			end
-		end
+		// always @(negedge clk) begin
+		// 	if (in_wb != 0)  begin
+		// 		$display("[%h] WB Data: %h {%h}, to register: %d [%d %d]",in_PC_next - 4, out_write_data[0], in_mem_result[0], in_rd, in_valid[0], in_valid[1]);
+		// 	end
+		// end
 
 		assign out_rd = in_rd;
 		assign out_wb = in_wb;

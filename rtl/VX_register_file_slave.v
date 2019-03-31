@@ -43,10 +43,10 @@ module VX_register_file_slave (
 
 	always @(posedge clk) begin
 		if(write_enable && !in_clone) begin
-			$display("RF: Writing %h to %d",write_data, write_register);
+			// $display("RF: Writing %h to %d",write_data, write_register);
 			registers[write_register] <= write_data;
 		end else if (in_clone && in_to_clone) begin
-			$display("CLONING IN SLAVE");
+			// $display("CLONING IN SLAVE");
 			registers <= in_regs;
 		end
 	end

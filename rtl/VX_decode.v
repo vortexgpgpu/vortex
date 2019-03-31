@@ -139,9 +139,9 @@ module VX_decode(
 
 		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
 
-		always @(*) begin
-			$display("DECODE PC: %h",in_curr_PC);
-		end
+		// always @(*) begin
+		// 	$display("DECODE PC: %h",in_curr_PC);
+		// end
 
 
 		// always @(posedge clk) begin
@@ -164,45 +164,46 @@ module VX_decode(
 		);
 
 
-		wire to_clone_1 = (1 == rd1_register[0]) && (state_stall == 1);
+		// wire to_clone_1 = (1 == rd1_register[0]) && (state_stall == 1);
 
 
-			VX_register_file_slave vx_register_file_slave(
-				.clk               (clk),
-				.in_valid          (in_wb_valid[1]),
-				.in_write_register (write_register),
-				.in_rd             (in_rd),
-				.in_data           (in_write_data[1]),
-				.in_src1           (out_rs1),
-				.in_src2           (out_rs2),
-				.in_clone          (is_clone),
-				.in_to_clone       (to_clone_1),
-				.in_regs           (clone_regsiters),
-				.out_src1_data     (rd1_register[1]),
-				.out_src2_data     (rd2_register[1])
-			);
-
-		// genvar index;
-
-		// generate  
-		// for (index=1; index < `NT; index=index+1)  
-		//   begin: gen_code_label  
 		// 	VX_register_file_slave vx_register_file_slave(
 		// 		.clk               (clk),
-		// 		.in_valid          (in_wb_valid[index]),
+		// 		.in_valid          (in_wb_valid[1]),
 		// 		.in_write_register (write_register),
 		// 		.in_rd             (in_rd),
-		// 		.in_data           (in_write_data[index]),
+		// 		.in_data           (in_write_data[1]),
 		// 		.in_src1           (out_rs1),
 		// 		.in_src2           (out_rs2),
 		// 		.in_clone          (is_clone),
-		// 		.in_to_clone       (index == rd1_register[0]),
+		// 		.in_to_clone       (to_clone_1),
 		// 		.in_regs           (clone_regsiters),
-		// 		.out_src1_data     (rd1_register[index]),
-		// 		.out_src2_data     (rd2_register[index])
+		// 		.out_src1_data     (rd1_register[1]),
+		// 		.out_src2_data     (rd2_register[1])
 		// 	);
-		//   end  
-		// endgenerate  
+
+		genvar index;
+		generate  
+		for (index=1; index < `NT; index=index+1)  
+		  begin: gen_code_label  
+			wire to_clone;
+		  	assign to_clone = (index == rd1_register[0]) && (state_stall == 1);
+			VX_register_file_slave vx_register_file_slave(
+				.clk               (clk),
+				.in_valid          (in_wb_valid[index]),
+				.in_write_register (write_register),
+				.in_rd             (in_rd),
+				.in_data           (in_write_data[index]),
+				.in_src1           (out_rs1),
+				.in_src2           (out_rs2),
+				.in_clone          (is_clone),
+				.in_to_clone       (to_clone),
+				.in_regs           (clone_regsiters),
+				.out_src1_data     (rd1_register[index]),
+				.out_src2_data     (rd2_register[index])
+			);
+		  end  
+		endgenerate  
 
 		assign curr_opcode    = in_instruction[6:0];
 
@@ -237,11 +238,11 @@ module VX_decode(
 		assign is_jalrs     = is_gpgpu && (func3 == 6);
 		assign is_jmprt     = is_gpgpu && (func3 == 4);
 
-		always @(*) begin
-			if (is_jalrs) begin
-				$display("JALRS WOHOOO: rs2 - %h", out_b_reg_data[0]);
-			end
-		end
+		// always @(*) begin
+		// 	if (is_jalrs) begin
+		// 		$display("JALRS WOHOOO: rs2 - %h", out_b_reg_data[0]);
+		// 	end
+		// end
 
 
 		wire     jalrs_thread_mask[`NT_M1:0];
@@ -272,21 +273,21 @@ module VX_decode(
 
 
 		// assign out_clone    = is_clone;
-		always @(in_instruction) begin
-			$display("Decode inst: %h", in_instruction);
-		end
+		// always @(in_instruction) begin
+		// 	$display("Decode inst: %h", in_instruction);
+		// end
 
 		reg[5:0] state_stall = 0;
 		always @(posedge clk) begin
 			if ((is_clone) && state_stall == 0) begin
 				state_stall <= 10;
-				$display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, is_clone);
+				// $display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, is_clone);
 			end else if (state_stall == 1) begin
-				$display("ENDING CLONE, 1 =? %h = %h -- %d", rd1_register[0], to_clone_1, is_clone);
+				// $display("ENDING CLONE, 1 =? %h = %h -- %d", rd1_register[0], to_clone_1, is_clone);
 				state_stall <= 0;
 			end else if (state_stall > 0) begin
 				state_stall <= state_stall - 1;
-				$display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, is_clone);
+				// $display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, is_clone);
 			end
 		end
 

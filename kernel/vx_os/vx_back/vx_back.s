@@ -8,7 +8,7 @@
 _start:
     li a0, 1          # Num Warps
     csrw 0x20, a0     # Setting the number of available warps 
-    li a0, 2          # Num Threads
+    li a0, 8          # Num Threads
     csrw 0x21, a0     # Setting the number of available threads
     csrw mhartid,zero
     csrw misa,zero

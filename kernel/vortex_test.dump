@@ -7,7 +7,7 @@ Disassembly of section .text:
 80000000 <_start>:
 80000000:	00100513          	li	a0,1
 80000004:	02051073          	csrw	0x20,a0
-80000008:	00200513          	li	a0,2
+80000008:	00800513          	li	a0,8
 8000000c:	02151073          	csrw	0x21,a0
 80000010:	f1401073          	csrw	mhartid,zero
 80000014:	30101073          	csrw	misa,zero
