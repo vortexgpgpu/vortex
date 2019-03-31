@@ -56,7 +56,10 @@ reg             decode_jal;
 reg[31:0]       decode_jal_offset;
 reg[19:0]       decode_upper_immed;
 wire[31:0]      decode_PC_next;
-wire       decode_valid[`NT_M1:0];
+wire            decode_valid[`NT_M1:0];
+wire            decode_clone_stall;
+wire            decode_change_mask;
+wire            decode_thread_mask[`NT_M1:0];
 
 // From d_e_register
 wire[11:0]      d_e_csr_address;
@@ -192,11 +195,14 @@ VX_fetch vx_fetch(
 		.in_branch_stall    (decode_branch_stall),
 		.in_fwd_stall       (forwarding_fwd_stall),
 		.in_branch_stall_exe(execute_branch_stall),
+		.in_clone_stall     (decode_clone_stall),
 		.in_jal             (e_m_jal),
 		.in_jal_dest        (e_m_jal_dest),
 		.in_interrupt       (interrupt),
 		.in_debug           (debug),
 		.in_instruction     (fe_instruction),
+		.in_thread_mask     (decode_thread_mask),
+		.in_change_mask     (decode_change_mask),
 
 		.out_instruction    (fetch_instruction),
 		.out_delay          (fetch_delay),
@@ -213,6 +219,7 @@ VX_f_d_reg vx_f_d_reg(
 		.in_curr_PC     (fetch_curr_PC),
 		.in_fwd_stall   (forwarding_fwd_stall),
 		.in_freeze      (total_freeze),
+		.in_clone_stall (decode_clone_stall),
 		.out_instruction(f_d_instruction),
 		.out_curr_PC    (f_d_curr_PC),
 		.out_valid      (f_d_valid)
@@ -254,7 +261,10 @@ VX_decode vx_decode(
 		.out_jal_offset  (decode_jal_offset),
 		.out_upper_immed (decode_upper_immed),
 		.out_PC_next     (decode_PC_next),
-		.out_valid       (decode_valid)
+		.out_valid       (decode_valid),
+		.out_clone_stall (decode_clone_stall),
+		.out_change_mask (decode_change_mask),
+		.out_thread_mask (decode_thread_mask)
 	);
 
 
@@ -284,6 +294,7 @@ VX_d_e_reg vx_d_e_reg(
 		.in_jal_offset  (decode_jal_offset),
 		.in_freeze      (total_freeze),
 		.in_valid       (decode_valid),
+		.in_clone_stall (decode_clone_stall),
 
 		.out_csr_address(d_e_csr_address),
 		.out_is_csr     (d_e_is_csr),

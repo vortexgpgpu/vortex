@@ -142,7 +142,7 @@ bool Vortex::ibus_driver()
     ram.getWord(new_PC, &curr_inst);
     vortex->fe_instruction      = curr_inst;
 
-    // printf("\n\n(%x) Inst: %x\n", new_PC, curr_inst);
+    printf("\n\n---------------------------------------------\n(%x) Inst: %x\n", new_PC, curr_inst);
     printf("\n");
     ////////////////////// IBUS //////////////////////
 
@@ -182,6 +182,11 @@ bool Vortex::dbus_driver()
                 data_write = (uint32_t) vortex->out_cache_driver_in_data[curr_th];
                 addr       = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
 
+                if (addr == 0x00010000)
+                {
+                  std::cerr << (char) data_write;
+                }
+
                 if (vortex->out_cache_driver_in_mem_write == SB_MEM_WRITE)
                 {
                     data_write = ( data_write) & 0xFF;
@@ -206,7 +211,7 @@ bool Vortex::dbus_driver()
     printf("----\n");
     for (unsigned curr_th = 0; curr_th < NT; curr_th++)
     {
-        
+
         if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid[curr_th])
         {
 
@@ -328,7 +333,7 @@ bool Vortex::simulate(std::string file_to_simulate)
 
         // std::cout << "************* Cycle: " << cycle << "\n";
         istop =  ibus_driver();
-        dstop = !dbus_driver();
+        // dstop = !dbus_driver();
 
         vortex->clk = 1;
         vortex->eval();

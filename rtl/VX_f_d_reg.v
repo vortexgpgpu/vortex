@@ -9,6 +9,7 @@ module VX_f_d_reg (
 	  input wire[31:0]       in_curr_PC,
 	  input wire             in_fwd_stall,
 	  input wire             in_freeze,
+	  input wire             in_clone_stall,
 
 	  output wire[31:0]      out_instruction,
 	  output wire[31:0]      out_curr_PC,
@@ -25,6 +26,9 @@ module VX_f_d_reg (
 
 	integer reset_cur_thread = 0;
 
+	always @(in_instruction) begin
+		$display("in_instruction: %h",in_instruction);
+	end
 
 	always @(posedge clk or posedge reset) begin
 		if(reset) begin
@@ -33,8 +37,10 @@ module VX_f_d_reg (
 			for (reset_cur_thread = 0; reset_cur_thread < `NT; reset_cur_thread = reset_cur_thread + 1)
 				valid[reset_cur_thread]    <=  1'b0;
 
-		end else if (in_fwd_stall == 1'b1 || in_freeze == 1'b1) begin
-			// $display("Because of FWD stall keeping pc: %h", curr_PC);
+		end else if (in_fwd_stall == 1'b1 || in_freeze == 1'b1 || in_clone_stall) begin
+			if (in_clone_stall) begin
+				$display("STALL BECAUSE OF CLONE");
+			end
 		end else begin
 			instruction <= in_instruction;
 			valid       <= in_valid;

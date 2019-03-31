@@ -27,6 +27,7 @@ module VX_d_e_reg (
 		input wire       in_jal,
 		input wire[31:0] in_jal_offset,
 		input wire       in_freeze,
+		input wire       in_clone_stall,
 		input wire       in_valid[`NT_M1:0],
 
 		output wire[11:0] out_csr_address, // done
@@ -110,7 +111,7 @@ module VX_d_e_reg (
 
 		wire stalling;
 
-		assign stalling = (in_fwd_stall == `STALL) || (in_branch_stall == `STALL);
+		assign stalling = (in_fwd_stall == `STALL) || (in_branch_stall == `STALL) || (in_clone_stall == `STALL);
 
 		assign out_rd          = rd;
 		assign out_rs1         = rs1;

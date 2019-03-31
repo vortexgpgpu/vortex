@@ -1,0 +1,12 @@
+# DESCRIPTION: Verilator output: Timestamp data for --skip-identical.  Delete at will.
+C "VX_register_file.v -cc"
+S   4608404 12889046060  1553037052           0  1548678579           0 "/usr/local/Cellar/verilator/4.010/bin/verilator_bin"
+S      1075 12889419229  1554007548           0  1554007548           0 "VX_register_file.v"
+T     13053 12889437111  1554007562           0  1554007562           0 "obj_dir/VVX_register_file.cpp"
+T      3056 12889437110  1554007562           0  1554007562           0 "obj_dir/VVX_register_file.h"
+T      1511 12889437113  1554007562           0  1554007562           0 "obj_dir/VVX_register_file.mk"
+T       580 12889437109  1554007562           0  1554007562           0 "obj_dir/VVX_register_file__Syms.cpp"
+T       787 12889437108  1554007562           0  1554007562           0 "obj_dir/VVX_register_file__Syms.h"
+T       356 12889437114  1554007562           0  1554007562           0 "obj_dir/VVX_register_file__ver.d"
+T         0        0  1554007562           0  1554007562           0 "obj_dir/VVX_register_file__verFiles.dat"
+T      1189 12889437112  1554007562           0  1554007562           0 "obj_dir/VVX_register_file_classes.mk"

@@ -13,6 +13,7 @@
 `define JAL_INST 7'd111
 `define JALR_INST 7'd103
 `define SYS_INST 7'd115
+`define GPGPU_INST 7'h6b
 
 
 `define WB_ALU 2'h1

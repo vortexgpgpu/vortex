@@ -10,11 +10,14 @@ module VX_fetch (
 	input  wire       in_branch_stall,
 	input  wire       in_fwd_stall,
 	input  wire       in_branch_stall_exe,
+	input  wire       in_clone_stall,
 	input  wire       in_jal,
 	input  wire[31:0] in_jal_dest,
 	input  wire       in_interrupt,
 	input  wire       in_debug,
 	input  wire[31:0] in_instruction,
+	input  wire       in_thread_mask[`NT_M1:0],
+	input  wire       in_change_mask,
 
 	output wire[31:0]      out_instruction,
 	output wire            out_delay,
@@ -42,7 +45,7 @@ module VX_fetch (
 		reg[4:0]  temp_state;
 		reg[4:0]  tempp_state;
 
-		reg[`NT_M1:0] valid;
+		reg valid[`NT_M1:0];
 
 
 		integer ini_cur_th = 0;
@@ -60,6 +63,14 @@ module VX_fetch (
 			JAL_reg    = 0;
 			BR_reg     = 0;
 			prev_debug = 0;
+		end
+
+
+		always @(*) begin : proc_
+			if (in_change_mask) begin
+				$display("CHANGING MASK: [%d %d]",in_thread_mask[0], in_thread_mask[1]);
+				assign valid = in_thread_mask;
+			end
 		end
 
 		always @(*) begin
@@ -89,20 +100,21 @@ module VX_fetch (
 					PC_to_use = real_PC;
 				end
 			end else if (stall_reg == 1'b1) begin
-				// $display("Using old cuz stall: PC: %h\treal_pc: %h",old, real_PC);
+				$display("Using old cuz stall: PC: %h\treal_pc: %h",old, real_PC);
 				PC_to_use = old;
 			end else begin
 				PC_to_use = PC_to_use_temp;
 			end
 		end
 		
-		assign stall = in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_interrupt || delay || in_freeze;
+		assign stall = in_clone_stall || in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_interrupt || delay || in_freeze;
 
 		assign out_instruction = stall ? 32'b0 : in_instruction;
+		// assign out_instruction = in_instruction;
 
 		generate
 			for (out_cur_th = 0; out_cur_th < `NT; out_cur_th = out_cur_th+1)
-				assign out_valid[out_cur_th] = stall ? 1'b0  : valid[out_cur_th];
+				assign out_valid[out_cur_th] = in_change_mask ? in_thread_mask[out_cur_th] : stall ? 1'b0  : valid[out_cur_th];
 		endgenerate
 
 
@@ -113,6 +125,7 @@ module VX_fetch (
 
 			if ((in_jal == 1'b1) && (delay_reg == 1'b0)) begin
 				temp_PC = in_jal_dest;
+				$display("in_jal_dest: %h",in_jal_dest);
 			end else if ((in_branch_dir == 1'b1) && (delay_reg == 1'b0)) begin
 				temp_PC = in_branch_dest;
 			end else begin
@@ -122,6 +135,10 @@ module VX_fetch (
 		end
 
 		assign out_PC = temp_PC;
+
+		always @(*) begin
+			$display("FETCH PC: %h (%h, %h, %h)",temp_PC, PC_to_use, in_jal_dest, in_branch_dest);
+		end
 
 		always @(*) begin
 		

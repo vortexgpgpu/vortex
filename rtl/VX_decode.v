@@ -41,6 +41,9 @@ module VX_decode(
 	output reg[31:0]  out_jal_offset,
 	output reg[19:0]  out_upper_immed,
 	output wire[31:0] out_PC_next,
+	output reg        out_clone_stall,
+	output wire       out_change_mask,
+	output wire       out_thread_mask[`NT_M1:0],
 	output wire       out_valid[`NT_M1:0]
 );
 
@@ -62,6 +65,11 @@ module VX_decode(
 		wire       is_csr;
 		wire       is_csr_immed;
 		wire       is_e_inst;
+
+		wire       is_gpgpu;
+		wire       is_clone;
+		wire       is_jalrs;
+		wire       is_jmprt;
 
 		wire       write_register;
 
@@ -131,30 +139,70 @@ module VX_decode(
 
 		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
 
+		always @(*) begin
+			$display("DECODE PC: %h",in_curr_PC);
+		end
 
 
 		// always @(posedge clk) begin
 		// 	$display("Decode: curr_pc: %h", in_curr_PC);
 		// end
 
-		genvar index;
+		wire[31:0] clone_regsiters[31:0];
 
-		generate  
-		for (index=0; index < `NT; index=index+1)  
-		  begin: gen_code_label  
-			VX_register_file vx_register_file(
-				.clk(clk),
-				.in_valid(in_wb_valid[index]),
-				.in_write_register(write_register),
-				.in_rd(in_rd),
-				.in_data(in_write_data[index]),
-				.in_src1(out_rs1),
-				.in_src2(out_rs2),
-				.out_src1_data(rd1_register[index]),
-				.out_src2_data(rd2_register[index])
+		VX_register_file vx_register_file_master(
+			.clk               (clk),
+			.in_valid          (in_wb_valid[0]),
+			.in_write_register (write_register),
+			.in_rd             (in_rd),
+			.in_data           (in_write_data[0]),
+			.in_src1           (out_rs1),
+			.in_src2           (out_rs2),
+			.out_regs          (clone_regsiters),
+			.out_src1_data     (rd1_register[0]),
+			.out_src2_data     (rd2_register[0])
+		);
+
+
+		wire to_clone_1 = (1 == rd1_register[0]) && (state_stall == 1);
+
+
+			VX_register_file_slave vx_register_file_slave(
+				.clk               (clk),
+				.in_valid          (in_wb_valid[1]),
+				.in_write_register (write_register),
+				.in_rd             (in_rd),
+				.in_data           (in_write_data[1]),
+				.in_src1           (out_rs1),
+				.in_src2           (out_rs2),
+				.in_clone          (is_clone),
+				.in_to_clone       (to_clone_1),
+				.in_regs           (clone_regsiters),
+				.out_src1_data     (rd1_register[1]),
+				.out_src2_data     (rd2_register[1])
 			);
-		  end  
-		endgenerate  
+
+		// genvar index;
+
+		// generate  
+		// for (index=1; index < `NT; index=index+1)  
+		//   begin: gen_code_label  
+		// 	VX_register_file_slave vx_register_file_slave(
+		// 		.clk               (clk),
+		// 		.in_valid          (in_wb_valid[index]),
+		// 		.in_write_register (write_register),
+		// 		.in_rd             (in_rd),
+		// 		.in_data           (in_write_data[index]),
+		// 		.in_src1           (out_rs1),
+		// 		.in_src2           (out_rs2),
+		// 		.in_clone          (is_clone),
+		// 		.in_to_clone       (index == rd1_register[0]),
+		// 		.in_regs           (clone_regsiters),
+		// 		.out_src1_data     (rd1_register[index]),
+		// 		.out_src2_data     (rd2_register[index])
+		// 	);
+		//   end  
+		// endgenerate  
 
 		assign curr_opcode    = in_instruction[6:0];
 
@@ -184,6 +232,65 @@ module VX_decode(
 		assign is_csr_immed = (is_csr) && (func3[2] == 1);
 		assign is_e_inst    = (curr_opcode == `SYS_INST) && (func3 == 0);
 
+		assign is_gpgpu     = (curr_opcode == `GPGPU_INST);
+		assign is_clone     = is_gpgpu && (func3 == 5);
+		assign is_jalrs     = is_gpgpu && (func3 == 6);
+		assign is_jmprt     = is_gpgpu && (func3 == 4);
+
+		always @(*) begin
+			if (is_jalrs) begin
+				$display("JALRS WOHOOO: rs2 - %h", out_b_reg_data[0]);
+			end
+		end
+
+
+		wire     jalrs_thread_mask[`NT_M1:0];
+		wire     jmprt_thread_mask[`NT_M1:0];
+
+		genvar tm_i;
+		generate
+			for (tm_i = 0; tm_i < `NT; tm_i = tm_i + 1) begin
+					assign jalrs_thread_mask[tm_i] = tm_i <= $signed(out_b_reg_data[0]);
+			end
+		endgenerate
+
+
+		genvar tm_ji;
+		generate
+			assign jmprt_thread_mask[0] = 1;
+			for (tm_ji = 1; tm_ji < `NT; tm_ji = tm_ji + 1) begin
+					assign jmprt_thread_mask[tm_ji] = 0;
+			end
+		endgenerate
+
+		assign out_thread_mask = is_jalrs ? jalrs_thread_mask : jmprt_thread_mask;
+
+
+		assign out_change_mask = is_jalrs || is_jmprt;
+
+
+
+
+		// assign out_clone    = is_clone;
+		always @(in_instruction) begin
+			$display("Decode inst: %h", in_instruction);
+		end
+
+		reg[5:0] state_stall = 0;
+		always @(posedge clk) begin
+			if ((is_clone) && state_stall == 0) begin
+				state_stall <= 10;
+				$display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, is_clone);
+			end else if (state_stall == 1) begin
+				$display("ENDING CLONE, 1 =? %h = %h -- %d", rd1_register[0], to_clone_1, is_clone);
+				state_stall <= 0;
+			end else if (state_stall > 0) begin
+				state_stall <= state_stall - 1;
+				$display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, is_clone);
+			end
+		end
+
+		assign out_clone_stall = ((state_stall == 0) && is_clone) || ((state_stall != 1) && is_clone);
 
 		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
@@ -221,7 +328,7 @@ module VX_decode(
     	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : out_a_reg_data[0];
 
 
-		assign out_wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :
+		assign out_wb       = (is_jal || is_jalr || is_jalrs || is_e_inst) ? `WB_JAL :
 			                   is_linst ? `WB_MEM :
 			                   	     (is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
 			                   	     	    `NO_WB;
@@ -267,22 +374,30 @@ module VX_decode(
 			case(curr_opcode)
 				`JAL_INST:
 					begin
-		       		 	out_jal        = 1'b1;
+		       		 	out_jal        = 1'b1 && in_valid[0];
 						out_jal_offset = jal_1_offset;
 					end
 				`JALR_INST:
 					begin
-		        		out_jal        = 1'b1;
+		        		out_jal        = 1'b1 && in_valid[0];
 						out_jal_offset = jal_2_offset;
+					end
+				`GPGPU_INST:
+					begin
+						if (is_jalrs || is_jmprt)
+						begin
+			        		out_jal        = 1'b1 && in_valid[0];
+							out_jal_offset = 32'h0;
+						end
 					end
 				`SYS_INST:
 					begin
-						out_jal        = jal_sys_jal;
+						out_jal        = jal_sys_jal && in_valid[0];
 						out_jal_offset = jal_sys_off;
 					end
 				default:
 					begin
-						out_jal          = 1'b0;
+						out_jal          = 1'b0 && in_valid[0];
 						out_jal_offset   = 32'hdeadbeef;
 					end
 			endcase
@@ -318,7 +433,7 @@ module VX_decode(
 			case(curr_opcode)
 				`B_INST:
 					begin
-						out_branch_stall = 1'b1;
+						out_branch_stall = 1'b1 && in_valid[0];
 						case(func3)
 							3'h0: out_branch_type = `BEQ;
 							3'h1: out_branch_type = `BNE;
@@ -333,17 +448,25 @@ module VX_decode(
 				`JAL_INST:
 					begin
 						out_branch_type  = `NO_BRANCH;
-						out_branch_stall = 1'b1;
+						out_branch_stall = 1'b1 && in_valid[0];
 					end
 				`JALR_INST:
 					begin
 						out_branch_type  = `NO_BRANCH;
-						out_branch_stall = 1'b1;
+						out_branch_stall = 1'b1 && in_valid[0];
+					end
+				`GPGPU_INST:
+					begin
+						if (is_jalrs || is_jmprt)
+						begin
+							out_branch_type  = `NO_BRANCH;
+							out_branch_stall = 1'b1 && in_valid[0];
+						end
 					end
 				default:
 					begin
 						out_branch_type  = `NO_BRANCH;
-						out_branch_stall = 1'b0;
+						out_branch_stall = 1'b0 && in_valid[0];
 					end
 			endcase
 		end
