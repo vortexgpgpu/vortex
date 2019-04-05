@@ -5,10 +5,10 @@ unsigned x[1024] = {0};
 unsigned y[1024] = {0};
 unsigned z[1024] = {0};
 
-#define MAT_DIM 16
+#define MAT_DIM 8
 
-#define NUM_COLS 16
-#define NUM_ROWS 16
+#define NUM_COLS 8
+#define NUM_ROWS 8
 
 void initialize_mats()
 {

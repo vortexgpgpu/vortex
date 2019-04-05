@@ -7,7 +7,7 @@ Disassembly of section .text:
 80000000 <_start>:
 80000000:	00100513          	li	a0,1
 80000004:	02051073          	csrw	0x20,a0
-80000008:	00800513          	li	a0,8
+80000008:	00100513          	li	a0,1
 8000000c:	02151073          	csrw	0x21,a0
 80000010:	f1401073          	csrw	mhartid,zero
 80000014:	30101073          	csrw	misa,zero
@@ -1516,7 +1516,7 @@ Disassembly of section .text:
 80001630:	00178793          	addi	a5,a5,1
 80001634:	fef42623          	sw	a5,-20(s0)
 80001638:	fec42703          	lw	a4,-20(s0)
-8000163c:	0ff00793          	li	a5,255
+8000163c:	03f00793          	li	a5,63
 80001640:	fae7dae3          	bge	a5,a4,800015f4 <initialize_mats+0x14>
 80001644:	00000013          	nop
 80001648:	01c12403          	lw	s0,28(sp)
@@ -1537,7 +1537,7 @@ Disassembly of section .text:
 8000167c:	fec42783          	lw	a5,-20(s0)
 80001680:	00078e63          	beqz	a5,8000169c <print_matrix+0x48>
 80001684:	fec42783          	lw	a5,-20(s0)
-80001688:	00f7f793          	andi	a5,a5,15
+80001688:	0077f793          	andi	a5,a5,7
 8000168c:	00079863          	bnez	a5,8000169c <print_matrix+0x48>
 80001690:	810007b7          	lui	a5,0x81000
 80001694:	13478513          	addi	a0,a5,308 # 81000134 <main_sp+0xffffa730>
@@ -1556,7 +1556,7 @@ Disassembly of section .text:
 800016c8:	00178793          	addi	a5,a5,1
 800016cc:	fef42623          	sw	a5,-20(s0)
 800016d0:	fec42703          	lw	a4,-20(s0)
-800016d4:	0ff00793          	li	a5,255
+800016d4:	03f00793          	li	a5,63
 800016d8:	fae7d2e3          	bge	a5,a4,8000167c <print_matrix+0x28>
 800016dc:	810007b7          	lui	a5,0x81000
 800016e0:	13c78513          	addi	a0,a5,316 # 8100013c <main_sp+0xffffa738>
@@ -1573,7 +1573,7 @@ Disassembly of section .text:
 80001704:	00812c23          	sw	s0,24(sp)
 80001708:	02010413          	addi	s0,sp,32
 8000170c:	ed5ff0ef          	jal	ra,800015e0 <initialize_mats>
-80001710:	01000693          	li	a3,16
+80001710:	00800693          	li	a3,8
 80001714:	810057b7          	lui	a5,0x81005
 80001718:	9e878613          	addi	a2,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 8000171c:	810047b7          	lui	a5,0x81004
@@ -1587,8 +1587,8 @@ Disassembly of section .text:
 8000173c:	810057b7          	lui	a5,0x81005
 80001740:	9e878513          	addi	a0,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 80001744:	f11ff0ef          	jal	ra,80001654 <print_matrix>
-80001748:	01000713          	li	a4,16
-8000174c:	01000693          	li	a3,16
+80001748:	00800713          	li	a4,8
+8000174c:	00800693          	li	a3,8
 80001750:	810057b7          	lui	a5,0x81005
 80001754:	9e878613          	addi	a2,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 80001758:	810047b7          	lui	a5,0x81004
@@ -1602,8 +1602,8 @@ Disassembly of section .text:
 80001778:	810057b7          	lui	a5,0x81005
 8000177c:	9e878513          	addi	a0,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 80001780:	ed5ff0ef          	jal	ra,80001654 <print_matrix>
-80001784:	01000713          	li	a4,16
-80001788:	01000693          	li	a3,16
+80001784:	00800713          	li	a4,8
+80001788:	00800693          	li	a3,8
 8000178c:	810057b7          	lui	a5,0x81005
 80001790:	9e878613          	addi	a2,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 80001794:	810047b7          	lui	a5,0x81004
@@ -1620,8 +1620,8 @@ Disassembly of section .text:
 800017c0:	00300793          	li	a5,3
 800017c4:	fef42623          	sw	a5,-20(s0)
 800017c8:	fec40593          	addi	a1,s0,-20
-800017cc:	01000713          	li	a4,16
-800017d0:	01000693          	li	a3,16
+800017cc:	00800713          	li	a4,8
+800017d0:	00800693          	li	a3,8
 800017d4:	810057b7          	lui	a5,0x81005
 800017d8:	9e878613          	addi	a2,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 800017dc:	810057b7          	lui	a5,0x81005
@@ -1634,8 +1634,8 @@ Disassembly of section .text:
 800017f8:	9e878513          	addi	a0,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 800017fc:	e59ff0ef          	jal	ra,80001654 <print_matrix>
 80001800:	fec40593          	addi	a1,s0,-20
-80001804:	01000713          	li	a4,16
-80001808:	01000693          	li	a3,16
+80001804:	00800713          	li	a4,8
+80001808:	00800693          	li	a3,8
 8000180c:	810057b7          	lui	a5,0x81005
 80001810:	9e878613          	addi	a2,a5,-1560 # 810049e8 <main_sp+0xffffefe4>
 80001814:	810057b7          	lui	a5,0x81005
