@@ -1,6 +1,6 @@
 
-`define NT 8
-`define NT_M1 7
+`define NT 1
+`define NT_M1 0
 
 
 `define R_INST 7'd51

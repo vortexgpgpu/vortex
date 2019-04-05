@@ -147,9 +147,10 @@ module VX_decode(
 		// always @(posedge clk) begin
 		// 	$display("Decode: curr_pc: %h", in_curr_PC);
 		// end
-
+		/* verilator lint_off UNUSED */
 		wire[31:0] clone_regsiters[31:0];
-
+		/* verilator lint_on UNUSED */
+		
 		VX_register_file vx_register_file_master(
 			.clk               (clk),
 			.in_valid          (in_wb_valid[0]),

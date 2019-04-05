@@ -413,6 +413,7 @@ VX_e_m_reg vx_e_m_reg(
 // assign use_rd2[1] = e_m_reg_data[3];
 
 VX_memory vx_memory(
+		.clk                          (clk),
 		.in_alu_result                (e_m_alu_result),
 		.in_mem_read                  (e_m_mem_read),
 		.in_mem_write                 (e_m_mem_write),

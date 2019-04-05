@@ -32,9 +32,17 @@ module VX_writeback (
 		// generate 
 		// endgenerate
 
+		genvar i;
+		generate
+			for (i = 0; i < `NT; i=i+1)
+			begin
+				assign out_pc_data[i] = in_PC_next;
+			end
+		endgenerate
 
-		assign out_pc_data[0] = in_PC_next;
-		assign out_pc_data[1] = in_PC_next;
+		// assign out_pc_data[0] = in_PC_next;
+
+		// assign out_pc_data[1] = in_PC_next;
 
 		assign is_jal   = in_wb == `WB_JAL;
 		assign uses_alu = in_wb == `WB_ALU;
