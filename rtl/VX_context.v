@@ -3,6 +3,7 @@
 
 module VX_context (
   input wire        clk,
+  input wire        in_warp,
   input wire        in_valid[`NT_M1:0],
   input wire        in_write_register,
   input wire[4:0]   in_rd,
@@ -30,6 +31,7 @@ module VX_context (
 		
 		VX_register_file vx_register_file_master(
 			.clk               (clk),
+			.in_warp           (in_warp),
 			.in_valid          (in_valid[0]),
 			.in_write_register (in_write_register),
 			.in_rd             (in_rd),
@@ -49,6 +51,7 @@ module VX_context (
 		  	assign to_clone = (index == rd1_register[0]) && (state_stall == 1);
 			VX_register_file_slave vx_register_file_slave(
 				.clk               (clk),
+				.in_warp           (in_warp),
 				.in_valid          (in_valid[index]),
 				.in_write_register (in_write_register),
 				.in_rd             (in_rd),

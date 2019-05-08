@@ -3,34 +3,39 @@
 
 module VX_forwarding (
 		// INFO FROM DECODE
-		input wire[4:0]  in_decode_src1,
-		input wire[4:0]  in_decode_src2,
-		input wire[11:0] in_decode_csr_address, 
+		input wire[4:0]      in_decode_src1,
+		input wire[4:0]      in_decode_src2,
+		input wire[11:0]     in_decode_csr_address, 
+		input wire[`NW_M1:0] in_decode_warp_num,
 
 		// INFO FROM EXE
-		input wire[4:0]  in_execute_dest,
-		input wire[1:0]  in_execute_wb,
-		input wire[31:0] in_execute_alu_result[`NT_M1:0],
-		input wire[31:0] in_execute_PC_next,
-		input wire       in_execute_is_csr,
-		input wire[11:0] in_execute_csr_address,
+		input wire[4:0]      in_execute_dest,
+		input wire[1:0]      in_execute_wb,
+		input wire[31:0]     in_execute_alu_result[`NT_M1:0],
+		input wire[31:0]     in_execute_PC_next,
+		input wire           in_execute_is_csr,
+		input wire[11:0]     in_execute_csr_address,
+		input wire[`NW_M1:0] in_execute_warp_num,
 
 		// INFO FROM MEM
-		input wire[4:0]  in_memory_dest,
-		input wire[1:0]  in_memory_wb,
-		input wire[31:0] in_memory_alu_result[`NT_M1:0],
-		input wire[31:0] in_memory_mem_data[`NT_M1:0],
-		input wire[31:0] in_memory_PC_next,
-		input wire       in_memory_is_csr,
-		input wire[11:0] in_memory_csr_address,
-		input wire[31:0] in_memory_csr_result,
+		input wire[4:0]      in_memory_dest,
+		input wire[1:0]      in_memory_wb,
+		input wire[31:0]     in_memory_alu_result[`NT_M1:0],
+		input wire[31:0]     in_memory_mem_data[`NT_M1:0],
+		input wire[31:0]     in_memory_PC_next,
+		input wire           in_memory_is_csr,
+		input wire[11:0]     in_memory_csr_address,
+		input wire[31:0]     in_memory_csr_result,
+		input wire[`NW_M1:0] in_memory_warp_num,
 
 		// INFO FROM WB
-		input wire[4:0]  in_writeback_dest,
-		input wire[1:0]  in_writeback_wb,
-		input wire[31:0] in_writeback_alu_result[`NT_M1:0],
-		input wire[31:0] in_writeback_mem_data[`NT_M1:0],
-		input wire[31:0] in_writeback_PC_next,
+		input wire[4:0]      in_writeback_dest,
+		input wire[1:0]      in_writeback_wb,
+		input wire[31:0]     in_writeback_alu_result[`NT_M1:0],
+		input wire[31:0]     in_writeback_mem_data[`NT_M1:0],
+		input wire[31:0]     in_writeback_PC_next,
+		input wire[`NW_M1:0] in_writeback_warp_num,
+
 
 		// OUT SIGNALS
 		output wire       out_src1_fwd,
@@ -92,16 +97,19 @@ module VX_forwarding (
 		// SRC1
 		assign src1_exe_fwd = ((in_decode_src1 == in_execute_dest) && 
 								(in_decode_src1 != `ZERO_REG) &&
-			                     (in_execute_wb != `NO_WB));
+			                     (in_execute_wb != `NO_WB))   &&
+						    (in_decode_warp_num == in_execute_warp_num);
 
 		assign src1_mem_fwd = ((in_decode_src1 == in_memory_dest) &&
 							    (in_decode_src1 != `ZERO_REG) &&
 			                      (in_memory_wb != `NO_WB) &&
-			                      (!src1_exe_fwd));
+			                      (!src1_exe_fwd))  &&
+		                    (in_decode_warp_num == in_memory_warp_num);
 
 		assign src1_wb_fwd = ((in_decode_src1 == in_writeback_dest) &&
 							   (in_decode_src1 != `ZERO_REG) &&
 			                  (in_writeback_wb != `NO_WB) &&
+			            (in_writeback_warp_num == in_decode_warp_num) &&
 			                      (!src1_exe_fwd) &&
 			                      (!src1_mem_fwd));
 
@@ -115,18 +123,21 @@ module VX_forwarding (
 		// SRC2
 		assign src2_exe_fwd = ((in_decode_src2 == in_execute_dest) && 
 								(in_decode_src2 != `ZERO_REG) &&
-			                     (in_execute_wb != `NO_WB));
+			                     (in_execute_wb != `NO_WB)) &&
+		                    (in_decode_warp_num == in_execute_warp_num);
 
 		assign src2_mem_fwd = ((in_decode_src2 == in_memory_dest) &&
 								(in_decode_src2 != `ZERO_REG) &&
 			                      (in_memory_wb != `NO_WB) &&
-			                      (!src2_exe_fwd));
+			                      (!src2_exe_fwd)) &&
+		                    (in_decode_warp_num == in_memory_warp_num);
 
 		assign src2_wb_fwd = ((in_decode_src2 == in_writeback_dest) &&
 							   (in_decode_src2 != `ZERO_REG) &&
 			                  (in_writeback_wb != `NO_WB) &&
 			                      (!src2_exe_fwd) &&
-			                      (!src2_mem_fwd));
+			                      (!src2_mem_fwd)) &&
+		                (in_writeback_warp_num == in_decode_warp_num);
 
 
 		assign out_src2_fwd  = src2_exe_fwd || src2_mem_fwd || src2_wb_fwd; // COMMENT

@@ -24,6 +24,7 @@ module VX_execute (
 		input wire[31:0]     in_jal_offset,
 		input wire[31:0]     in_curr_PC,
 		input wire           in_valid[`NT_M1:0],
+		input [`NW_M1:0]     in_warp_num,
 
 		output wire[11:0]     out_csr_address,
 		output wire           out_is_csr,
@@ -42,7 +43,8 @@ module VX_execute (
 		output wire[31:0]     out_branch_offset,
 		output wire           out_branch_stall,
 		output wire[31:0]     out_PC_next,
-		output wire           out_valid[`NT_M1:0]
+		output wire           out_valid[`NT_M1:0],
+		output wire[`NW_M1:0]  out_warp_num
 	);
 
 
@@ -101,6 +103,7 @@ module VX_execute (
 		assign out_csr_address   = in_csr_address;
 		assign out_branch_offset = in_itype_immed;
 		assign out_valid         = in_valid;
+		assign out_warp_num      = in_warp_num;
 
 
 endmodule // VX_execute

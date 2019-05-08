@@ -5,6 +5,7 @@
 
 module VX_register_file_slave (
   input wire         clk,
+  input wire         in_warp,
   input wire         in_valid,
   input wire         in_write_register,
   input wire[4:0]    in_rd,
@@ -42,7 +43,7 @@ module VX_register_file_slave (
 	assign write_enable   = (in_write_register && (in_rd != 5'h0)) && in_valid;
 
 	always @(posedge clk) begin
-		if(write_enable && !in_clone) begin
+		if(write_enable && !in_clone && in_warp) begin
 			// $display("RF: Writing %h to %d",write_data, write_register);
 			registers[write_register] <= write_data;
 		end else if (in_clone && in_to_clone) begin

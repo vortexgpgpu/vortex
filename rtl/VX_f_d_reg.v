@@ -10,10 +10,12 @@ module VX_f_d_reg (
 	  input wire             in_fwd_stall,
 	  input wire             in_freeze,
 	  input wire             in_clone_stall,
+	  input wire[`NW_M1:0]   in_warp_num,
 
 	  output wire[31:0]      out_instruction,
 	  output wire[31:0]      out_curr_PC,
-	  output wire            out_valid[`NT_M1:0]
+	  output wire            out_valid[`NT_M1:0],
+	  output wire[`NW_M1:0]  out_warp_num
 );
 
 	// always @(posedge clk) begin
@@ -23,6 +25,7 @@ module VX_f_d_reg (
 	reg[31:0]      instruction;
 	reg[31:0]      curr_PC;
 	reg            valid[`NT_M1:0];
+	reg[`NW_M1:0]  warp_num;
 
 	integer reset_cur_thread = 0;
 
@@ -34,6 +37,7 @@ module VX_f_d_reg (
 		if(reset) begin
 			instruction <= 32'h0;
 			curr_PC     <= 32'h0;
+			warp_num    <= 0;
 			for (reset_cur_thread = 0; reset_cur_thread < `NT; reset_cur_thread = reset_cur_thread + 1)
 				valid[reset_cur_thread]    <=  1'b0;
 
@@ -45,6 +49,7 @@ module VX_f_d_reg (
 			instruction <= in_instruction;
 			valid       <= in_valid;
 			curr_PC     <= in_curr_PC;
+			warp_num    <= in_warp_num;
 		end
 	end
 
@@ -55,6 +60,7 @@ module VX_f_d_reg (
 	assign out_instruction = instruction;
 	assign out_curr_PC     = curr_PC;
 	assign out_valid       = valid;
+	assign out_warp_num    = warp_num;
 
 
 

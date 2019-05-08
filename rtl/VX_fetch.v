@@ -21,7 +21,7 @@ module VX_fetch (
 
 	output wire[31:0]  out_instruction,
 	output wire        out_delay,
-	// output wire[1:0]   out_warp_num,
+	output wire[`NW_M1:0] out_warp_num,
 	output wire[31:0]  out_curr_PC,
 	output wire        out_valid[`NT_M1:0]
 );
@@ -29,13 +29,22 @@ module VX_fetch (
 		reg       stall;
 		reg[31:0] out_PC;
 
-		// reg[1:0] warp_num;
+		reg[`NW_M1:0] warp_num;
+		reg[`NW_M1:0] warp_state;
 
-		// initial begin
-		// 	warp_num = 0;
-		// end
+		initial begin
+			warp_num   = 0;
+			warp_state = 0;
+		end
 
+		always @(posedge clk or posedge reset) begin
+			if (reset || (warp_num == warp_state)) begin
+				warp_num <= 0;
+			end else begin
+				warp_num <= warp_num + 1;
+			end
 
+		end
 
 
 		assign stall = in_clone_stall || in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_interrupt || in_freeze || in_debug;
@@ -68,7 +77,7 @@ module VX_fetch (
 
 		assign out_curr_PC     = out_PC;
 		assign out_valid       = warp_valid;
-		// assign out_warp_num    = warp_num;
+		assign out_warp_num    = warp_num;
 		assign out_delay       = 0;
 		assign out_instruction = stall ? 32'b0 : in_instruction;
 

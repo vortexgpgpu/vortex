@@ -47,6 +47,9 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__forwarding_src1_fwd,0,0);
 	VL_SIG8(Vortex__DOT__forwarding_src2_fwd,0,0);
 	VL_SIG8(Vortex__DOT__vx_fetch__DOT__stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_num,1,0);
+	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_state,1,0);
+	VL_SIG8(Vortex__DOT__vx_f_d_reg__DOT__warp_num,1,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_itype,0,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_csr,0,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_clone,0,0);
@@ -64,6 +67,7 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__branch_type,2,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__is_csr,0,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__jal,0,0);
+	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__warp_num,1,0);
 	VL_SIG8(Vortex__DOT__vx_d_e_reg__DOT__stalling,0,0);
 	VL_SIG8(Vortex__DOT__vx_e_m_reg__DOT__rd,4,0);
 	VL_SIG8(Vortex__DOT__vx_e_m_reg__DOT__wb,1,0);
@@ -72,8 +76,10 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__vx_e_m_reg__DOT__is_csr,0,0);
 	VL_SIG8(Vortex__DOT__vx_e_m_reg__DOT__branch_type,2,0);
 	VL_SIG8(Vortex__DOT__vx_e_m_reg__DOT__jal,0,0);
+	VL_SIG8(Vortex__DOT__vx_e_m_reg__DOT__warp_num,1,0);
 	VL_SIG8(Vortex__DOT__vx_m_w_reg__DOT__rd,4,0);
 	VL_SIG8(Vortex__DOT__vx_m_w_reg__DOT__wb,1,0);
+	VL_SIG8(Vortex__DOT__vx_m_w_reg__DOT__warp_num,1,0);
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd,0,0);
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd,0,0);
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd,0,0);
@@ -95,14 +101,14 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__PC_next_out,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__itype_immed,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__upper_immed,19,0);
+    };
+    struct {
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__csr_mask,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__curr_PC,31,0);
 	VL_SIG(Vortex__DOT__vx_d_e_reg__DOT__jal_offset,31,0);
 	VL_SIG(Vortex__DOT__vx_execute__DOT__genblk1__BRA__0__KET____DOT__vx_alu__DOT__ALU_in2,31,0);
 	VL_SIG(Vortex__DOT__vx_execute__DOT__genblk1__BRA__1__KET____DOT__vx_alu__DOT__ALU_in2,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__PC_next,31,0);
-    };
-    struct {
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__csr_result,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__curr_PC,31,0);
 	VL_SIG(Vortex__DOT__vx_e_m_reg__DOT__branch_offset,31,0);
@@ -161,6 +167,8 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_writeback__DOT__out_pc_data[2],31,0);
 	VL_SIG(Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[2],31,0);
 	VL_SIG(Vortex__DOT__vx_forwarding__DOT__use_memory_PC_next[2],31,0);
+    };
+    struct {
 	VL_SIG(Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[2],31,0);
 	VL_SIG16(Vortex__DOT__vx_csr_handler__DOT__csr[4096],11,0);
     };
@@ -171,6 +179,7 @@ VL_MODULE(VVortex) {
     struct {
 	// Begin mtask footprint  all: 
 	VL_SIG8(__Vtableidx1,2,0);
+	VL_SIG8(__Vdly__Vortex__DOT__vx_fetch__DOT__warp_num,1,0);
 	VL_SIG8(__Vclklast__TOP__clk,0,0);
 	VL_SIG8(__Vclklast__TOP__reset,0,0);
 	VL_SIG(Vortex__DOT__vx_decode__DOT__VX_Context__DOT____Vcellout__vx_register_file_master__out_src2_data,31,0);
@@ -233,9 +242,9 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[2],31,0);
 	VL_SIG(Vortex__DOT____Vcellinp__vx_forwarding__in_writeback_mem_data[2],31,0);
 	VL_SIG(Vortex__DOT____Vcellinp__vx_forwarding__in_writeback_alu_result[2],31,0);
-	VL_SIG(Vortex__DOT____Vcellinp__vx_forwarding__in_memory_mem_data[2],31,0);
     };
     struct {
+	VL_SIG(Vortex__DOT____Vcellinp__vx_forwarding__in_memory_mem_data[2],31,0);
 	VL_SIG(Vortex__DOT____Vcellinp__vx_forwarding__in_memory_alu_result[2],31,0);
 	VL_SIG(Vortex__DOT____Vcellinp__vx_forwarding__in_execute_alu_result[2],31,0);
 	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__VX_Warp__out_valid[2],0,0);

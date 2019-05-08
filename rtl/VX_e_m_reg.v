@@ -25,6 +25,7 @@ module VX_e_m_reg (
 		input wire[31:0]  in_jal_dest,
 		input wire        in_freeze,
 		input wire        in_valid[`NT_M1:0],
+		input wire[`NW_M1:0] in_warp_num,
 
 		output wire[11:0] out_csr_address,
 		output wire       out_is_csr,
@@ -44,7 +45,8 @@ module VX_e_m_reg (
 		output wire       out_jal,
 		output wire[31:0] out_jal_dest,
 		output wire[31:0] out_PC_next,
-		output wire       out_valid[`NT_M1:0]
+		output wire       out_valid[`NT_M1:0],
+	    output wire[`NW_M1:0] out_warp_num
 	);
 
 
@@ -67,7 +69,7 @@ module VX_e_m_reg (
 		reg       jal;
 		reg[31:0] jal_dest;
 		reg       valid[`NT_M1:0];
-
+		reg[`NW_M1:0] warp_num;
 		// reg[31:0] reg_data_z[`NT_T2_M1:0];
 		// reg[`NT_M1:0] valid_z;
 		// reg[31:0]  alu_result_z[`NT_M1:0];
@@ -90,7 +92,7 @@ module VX_e_m_reg (
 			branch_type   = 0;
 			jal           = `NO_JUMP;
 			jal_dest      = 0;
-			
+			warp_num      = 0;
 			for (ini_reg = 0; ini_reg < `NT; ini_reg = ini_reg + 1)
 			begin
 				a_reg_data[ini_reg]   = 0;
@@ -121,7 +123,7 @@ module VX_e_m_reg (
 		assign out_jal           = jal;
 		assign out_jal_dest      = jal_dest;
 		assign out_valid         = valid;
-		
+		assign out_warp_num      = warp_num;
 
 		always @(posedge clk) begin
 			if(in_freeze == 1'b0) begin
@@ -144,6 +146,7 @@ module VX_e_m_reg (
 				jal           <= in_jal;
 				jal_dest      <= in_jal_dest;
 				valid         <= in_valid;
+				warp_num      <= in_warp_num;
 			end
 		end
 

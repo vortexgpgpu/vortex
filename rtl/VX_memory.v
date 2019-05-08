@@ -20,6 +20,7 @@ module VX_memory (
 		input wire[2:0]   in_branch_type, 
 		input wire        in_valid[`NT_M1:0],
 		input wire[31:0]  in_cache_driver_out_data[`NT_M1:0],
+		input wire[`NW_M1:0]  in_warp_num,
 
 		output wire[31:0] out_alu_result[`NT_M1:0],
 		output wire[31:0] out_mem_result[`NT_M1:0],
@@ -36,7 +37,8 @@ module VX_memory (
 		output wire[2:0]  out_cache_driver_in_mem_read,
 		output wire[2:0]  out_cache_driver_in_mem_write,
 		output wire       out_cache_driver_in_valid[`NT_M1:0],
-		output wire[31:0] out_cache_driver_in_data[`NT_M1:0]
+		output wire[31:0] out_cache_driver_in_data[`NT_M1:0],
+		output wire[`NW_M1:0]  out_warp_num
 	);	
 
 		// always @(in_mem_read, in_cache_driver_out_data) begin
@@ -88,6 +90,7 @@ module VX_memory (
 		assign out_rs2        = in_rs2;
 		assign out_PC_next    = in_PC_next;
 		assign out_valid      = in_valid;
+		assign out_warp_num   = in_warp_num;
 
 		// always @(*) begin 
 

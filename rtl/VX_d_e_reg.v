@@ -3,54 +3,56 @@
 `include "VX_define.v"
 
 module VX_d_e_reg (
-		input wire       clk,
-		input wire[4:0]  in_rd,
-		input wire[4:0]  in_rs1,
-		input wire[4:0]  in_rs2,
-		input wire[31:0] in_a_reg_data[`NT_M1:0],
-		input wire[31:0] in_b_reg_data[`NT_M1:0],
-		input wire[4:0]  in_alu_op,
-		input wire[1:0]  in_wb,
-		input wire       in_rs2_src, // NEW
-		input wire[31:0] in_itype_immed, // new
-		input wire[2:0]  in_mem_read, // NEW
-		input wire[2:0]  in_mem_write,
-		input wire[31:0] in_PC_next,
-		input wire[2:0]  in_branch_type,
-		input wire       in_fwd_stall,
-		input wire       in_branch_stall,
-		input wire[19:0] in_upper_immed,
-		input wire[11:0] in_csr_address, // done
-		input wire       in_is_csr, // done
-		input wire[31:0] in_csr_mask, // done
-		input wire[31:0] in_curr_PC,
-		input wire       in_jal,
-		input wire[31:0] in_jal_offset,
-		input wire       in_freeze,
-		input wire       in_clone_stall,
-		input wire       in_valid[`NT_M1:0],
+		input wire           clk,
+		input wire[4:0]      in_rd,
+		input wire[4:0]      in_rs1,
+		input wire[4:0]      in_rs2,
+		input wire[31:0]     in_a_reg_data[`NT_M1:0],
+		input wire[31:0]     in_b_reg_data[`NT_M1:0],
+		input wire[4:0]      in_alu_op,
+		input wire[1:0]      in_wb,
+		input wire           in_rs2_src, // NEW
+		input wire[31:0]     in_itype_immed, // new
+		input wire[2:0]      in_mem_read, // NEW
+		input wire[2:0]      in_mem_write,
+		input wire[31:0]     in_PC_next,
+		input wire[2:0]      in_branch_type,
+		input wire           in_fwd_stall,
+		input wire           in_branch_stall,
+		input wire[19:0]     in_upper_immed,
+		input wire[11:0]     in_csr_address, // done
+		input wire           in_is_csr, // done
+		input wire[31:0]     in_csr_mask, // done
+		input wire[31:0]     in_curr_PC,
+		input wire           in_jal,
+		input wire[31:0]     in_jal_offset,
+		input wire           in_freeze,
+		input wire           in_clone_stall,
+		input wire           in_valid[`NT_M1:0],
+		input wire[`NW_M1:0] in_warp_num,
 
-		output wire[11:0] out_csr_address, // done
-		output wire       out_is_csr, // done
-		output wire[31:0] out_csr_mask, // done
-		output wire[4:0]  out_rd,
-		output wire[4:0]  out_rs1,
-		output wire[4:0]  out_rs2,
-		output wire[31:0] out_a_reg_data[`NT_M1:0],
-		output wire[31:0] out_b_reg_data[`NT_M1:0],
-		output wire[4:0]  out_alu_op,
-		output wire[1:0]  out_wb,
-		output wire       out_rs2_src, // NEW
-		output wire[31:0] out_itype_immed, // new
-		output wire[2:0]  out_mem_read,
-		output wire[2:0]  out_mem_write,
-		output wire[2:0]  out_branch_type,
-		output wire[19:0] out_upper_immed,
-		output wire[31:0] out_curr_PC,
-		output wire       out_jal,
-		output wire[31:0] out_jal_offset,
-		output wire[31:0] out_PC_next,
-		output wire       out_valid[`NT_M1:0]
+		output wire[11:0]     out_csr_address, // done
+		output wire           out_is_csr, // done
+		output wire[31:0]     out_csr_mask, // done
+		output wire[4:0]      out_rd,
+		output wire[4:0]      out_rs1,
+		output wire[4:0]      out_rs2,
+		output wire[31:0]     out_a_reg_data[`NT_M1:0],
+		output wire[31:0]     out_b_reg_data[`NT_M1:0],
+		output wire[4:0]      out_alu_op,
+		output wire[1:0]      out_wb,
+		output wire           out_rs2_src, // NEW
+		output wire[31:0]     out_itype_immed, // new
+		output wire[2:0]      out_mem_read,
+		output wire[2:0]      out_mem_write,
+		output wire[2:0]      out_branch_type,
+		output wire[19:0]     out_upper_immed,
+		output wire[31:0]     out_curr_PC,
+		output wire           out_jal,
+		output wire[31:0]     out_jal_offset,
+		output wire[31:0]     out_PC_next,
+		output wire           out_valid[`NT_M1:0],
+	    output wire[`NW_M1:0] out_warp_num
 	);
 
 
@@ -78,6 +80,8 @@ module VX_d_e_reg (
 
 		reg[31:0] reg_data_z[`NT_M1:0];
 		reg       valid_z[`NT_M1:0];
+
+		reg[`NW_M1:0] warp_num;
 
 		integer ini_reg;
 		initial begin
@@ -107,6 +111,7 @@ module VX_d_e_reg (
 			curr_PC     = 0;
 			jal         = `NO_JUMP;
 			jal_offset  = 0;
+			warp_num    = 0;
 		end
 
 		wire stalling;
@@ -134,6 +139,7 @@ module VX_d_e_reg (
 		assign out_jal_offset  = jal_offset;
 		assign out_curr_PC     = curr_PC;
 		assign out_valid       = valid;
+		assign out_warp_num    = warp_num;
 
 
 		always @(posedge clk) begin
@@ -159,6 +165,7 @@ module VX_d_e_reg (
 				jal_offset  <= stalling ? 32'h0        : in_jal_offset;
 				curr_PC     <= stalling ? 32'h0        : in_curr_PC;
 				valid       <= stalling ? valid_z      : in_valid;
+				warp_num    <= stalling ? 0            : in_warp_num;
 			end
 		end
 

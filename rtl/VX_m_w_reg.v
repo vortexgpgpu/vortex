@@ -13,6 +13,7 @@ module VX_m_w_reg (
 		input wire[31:0]  in_PC_next,
 		input wire        in_freeze,
 		input wire        in_valid[`NT_M1:0],
+		input wire[`NW_M1:0] in_warp_num,
 
 		output wire[31:0] out_alu_result[`NT_M1:0],
 		output wire[31:0] out_mem_result[`NT_M1:0], // NEW
@@ -21,7 +22,8 @@ module VX_m_w_reg (
 		output wire[4:0]  out_rs1,
 		output wire[4:0]  out_rs2,
 		output wire[31:0] out_PC_next,
-		output wire       out_valid[`NT_M1:0]
+		output wire       out_valid[`NT_M1:0],
+	    output wire[`NW_M1:0] out_warp_num
 	);
 
 
@@ -34,7 +36,7 @@ module VX_m_w_reg (
 		reg[1:0]  wb;
 		reg[31:0] PC_next;
 		reg       valid[`NT_M1:0];
-
+		reg[`NW_M1:0] warp_num;
 
 		initial begin
 			// alu_result  = 0;
@@ -44,6 +46,7 @@ module VX_m_w_reg (
 			rs2         = 0;
 			wb          = 0;
 			PC_next     = 0;
+			warp_num    = 0;
 			// valid       = 0;
 		end
 
@@ -55,7 +58,7 @@ module VX_m_w_reg (
 		assign out_wb          = wb;
 		assign out_PC_next     = PC_next;
 		assign out_valid       = valid;
-		
+		assign out_warp_num    = warp_num;
 
 		always @(posedge clk) begin
 			if(in_freeze == 1'b0) begin
@@ -67,6 +70,7 @@ module VX_m_w_reg (
 				wb           <= in_wb;
 				PC_next      <= in_PC_next;
 				valid        <= in_valid;
+				warp_num     <= in_warp_num;
 			end
 		end
 

@@ -25,15 +25,17 @@ module Vortex(
 assign curr_PC = fetch_curr_PC;
 
 // From fetch
-wire[31:0] fetch_instruction;
-wire       fetch_delay;
-wire[31:0] fetch_curr_PC;
-wire       fetch_valid[`NT_M1:0];
+wire[31:0]   fetch_instruction;
+wire         fetch_delay;
+wire[31:0]   fetch_curr_PC;
+wire         fetch_valid[`NT_M1:0];
+wire[`NW_M1:0] fetch_warp_num;
 
 // From f_d_register
-wire[31:0] f_d_instruction;
-wire[31:0] f_d_curr_PC;
-wire       f_d_valid[`NT_M1:0];
+wire[31:0]   f_d_instruction;
+wire[31:0]   f_d_curr_PC;
+wire         f_d_valid[`NT_M1:0];
+wire[`NW_M1:0] f_d_warp_num;
 
 // From decode
 wire            decode_branch_stall;
@@ -60,6 +62,7 @@ wire            decode_valid[`NT_M1:0];
 wire            decode_clone_stall;
 wire            decode_change_mask;
 wire            decode_thread_mask[`NT_M1:0];
+wire[`NW_M1:0]    decode_warp_num;
 
 // From d_e_register
 wire[11:0]      d_e_csr_address;
@@ -82,7 +85,8 @@ wire[31:0]      d_e_curr_PC;
 wire            d_e_jal;
 wire[31:0]      d_e_jal_offset;
 wire[31:0]      d_e_PC_next;
-wire       d_e_valid[`NT_M1:0];
+wire            d_e_valid[`NT_M1:0];
+wire[`NW_M1:0]    d_e_warp_num;
 
 
 // From execute
@@ -104,6 +108,7 @@ wire[31:0]      execute_jal_dest;
 wire[31:0]      execute_branch_offset;
 wire[31:0]      execute_PC_next;
 wire            execute_valid[`NT_M1:0];
+wire[`NW_M1:0]    execute_warp_num;
 
 
 // From e_m_register
@@ -128,6 +133,7 @@ wire[31:0]      e_m_branch_offset;
 wire[2:0]       e_m_branch_type;
 wire[31:0]      e_m_PC_next;
 wire            e_m_valid[`NT_M1:0];
+wire[`NW_M1:0]    e_m_warp_num;
 
 
 // From memory
@@ -142,6 +148,7 @@ wire[4:0]       memory_rs1;
 wire[4:0]       memory_rs2;
 wire[31:0]      memory_PC_next;
 wire            memory_valid[`NT_M1:0];
+wire[`NW_M1:0]    memory_warp_num;
 
 // From m_w_register
 wire[31:0]      m_w_alu_result[`NT_M1:0];
@@ -153,27 +160,29 @@ wire[4:0]       m_w_rs1;
 wire[4:0]       m_w_rs2;
 /* verilator lint_on UNUSED */
 wire[31:0]      m_w_PC_next;
-wire       m_w_valid[`NT_M1:0];
+wire            m_w_valid[`NT_M1:0];
+wire[`NW_M1:0]    m_w_warp_num;
 
 // From writeback
-wire[31:0] writeback_write_data[`NT_M1:0];
-wire[4:0]  writeback_rd;
-wire[1:0]  writeback_wb;
+wire[31:0]   writeback_write_data[`NT_M1:0];
+wire[4:0]    writeback_rd;
+wire[1:0]    writeback_wb;
+wire[`NW_M1:0] writeback_warp_num;
 
 // From csr handler
-wire[31:0]  csr_decode_csr_data;
+wire[31:0]    csr_decode_csr_data;
 
 
 // From forwarding
-wire       forwarding_fwd_stall;
-wire       forwarding_src1_fwd;
-wire       forwarding_src2_fwd;
+wire         forwarding_fwd_stall;
+wire         forwarding_src1_fwd;
+wire         forwarding_src2_fwd;
 /* verilator lint_off UNUSED */
-wire       forwarding_csr_fwd;
-wire[31:0] forwarding_csr_fwd_data;
+wire         forwarding_csr_fwd;
+wire[31:0]   forwarding_csr_fwd_data;
 /* verilator lint_on UNUSED */
-wire[31:0] forwarding_src1_fwd_data[`NT_M1:0];
-wire[31:0] forwarding_src2_fwd_data[`NT_M1:0];
+wire[31:0]   forwarding_src1_fwd_data[`NT_M1:0];
+wire[31:0]   forwarding_src2_fwd_data[`NT_M1:0];
 
 
 // Internal
@@ -207,6 +216,7 @@ VX_fetch vx_fetch(
 		.out_instruction    (fetch_instruction),
 		.out_delay          (fetch_delay),
 		.out_curr_PC        (fetch_curr_PC),
+		.out_warp_num       (fetch_warp_num),
 		.out_valid          (fetch_valid)
 	);
 
@@ -220,9 +230,11 @@ VX_f_d_reg vx_f_d_reg(
 		.in_fwd_stall   (forwarding_fwd_stall),
 		.in_freeze      (total_freeze),
 		.in_clone_stall (decode_clone_stall),
+		.in_warp_num    (fetch_warp_num),
 		.out_instruction(f_d_instruction),
 		.out_curr_PC    (f_d_curr_PC),
-		.out_valid      (f_d_valid)
+		.out_valid      (f_d_valid),
+		.out_warp_num   (f_d_warp_num)
 	);
 
 
@@ -234,16 +246,17 @@ VX_decode vx_decode(
 		.in_write_data   (writeback_write_data),
 		.in_rd           (writeback_rd),
 		.in_wb           (writeback_wb),
+		.in_wb_warp_num  (writeback_warp_num),
 		.in_wb_valid     (m_w_valid),
 		.in_src1_fwd     (forwarding_src1_fwd),
 		.in_src1_fwd_data(forwarding_src1_fwd_data),
 		.in_src2_fwd     (forwarding_src2_fwd),
 		.in_src2_fwd_data(forwarding_src2_fwd_data),
+		.in_warp_num     (f_d_warp_num),
 
 		.out_csr_address (decode_csr_address),
 		.out_is_csr      (decode_is_csr),
 		.out_csr_mask    (decode_csr_mask),
-
 		.out_rd          (decode_rd),
 		.out_rs1         (decode_rs1),
 		.out_rs2         (decode_rs2),
@@ -264,7 +277,8 @@ VX_decode vx_decode(
 		.out_valid       (decode_valid),
 		.out_clone_stall (decode_clone_stall),
 		.out_change_mask (decode_change_mask),
-		.out_thread_mask (decode_thread_mask)
+		.out_thread_mask (decode_thread_mask),
+		.out_warp_num    (decode_warp_num)
 	);
 
 
@@ -295,6 +309,7 @@ VX_d_e_reg vx_d_e_reg(
 		.in_freeze      (total_freeze),
 		.in_valid       (decode_valid),
 		.in_clone_stall (decode_clone_stall),
+		.in_warp_num    (decode_warp_num),
 
 		.out_csr_address(d_e_csr_address),
 		.out_is_csr     (d_e_is_csr),
@@ -316,7 +331,8 @@ VX_d_e_reg vx_d_e_reg(
 		.out_jal        (d_e_jal),
 		.out_jal_offset (d_e_jal_offset),
 		.out_PC_next    (d_e_PC_next),
-		.out_valid      (d_e_valid)
+		.out_valid      (d_e_valid),
+		.out_warp_num   (d_e_warp_num)
 	);
 
 VX_execute vx_execute(
@@ -342,6 +358,7 @@ VX_execute vx_execute(
 		.in_jal_offset    (d_e_jal_offset),
 		.in_curr_PC       (d_e_curr_PC),
 		.in_valid         (d_e_valid),
+		.in_warp_num      (d_e_warp_num),
 
 		.out_csr_address  (execute_csr_address),
 		.out_is_csr       (execute_is_csr),
@@ -360,7 +377,8 @@ VX_execute vx_execute(
 		.out_branch_offset(execute_branch_offset),
 		.out_branch_stall (execute_branch_stall),
 		.out_PC_next      (execute_PC_next),
-		.out_valid        (execute_valid)
+		.out_valid        (execute_valid),
+		.out_warp_num     (execute_warp_num)
 	);
 
 VX_e_m_reg vx_e_m_reg(
@@ -385,6 +403,7 @@ VX_e_m_reg vx_e_m_reg(
 		.in_jal_dest      (execute_jal_dest),
 		.in_freeze        (total_freeze),
 		.in_valid         (execute_valid),
+		.in_warp_num      (execute_warp_num),
 
 		.out_csr_address  (e_m_csr_address),
 		.out_is_csr       (e_m_is_csr),
@@ -404,7 +423,8 @@ VX_e_m_reg vx_e_m_reg(
 		.out_jal          (e_m_jal),
 		.out_jal_dest     (e_m_jal_dest),
 		.out_PC_next      (e_m_PC_next),
-		.out_valid        (e_m_valid)
+		.out_valid        (e_m_valid),
+		.out_warp_num     (e_m_warp_num)
 	);
 
 // wire[31:0]  use_rd2[`NT_M1:0];
@@ -428,6 +448,7 @@ VX_memory vx_memory(
 		.in_branch_type               (e_m_branch_type),
 		.in_valid                     (e_m_valid),
 		.in_cache_driver_out_data     (in_cache_driver_out_data),
+		.in_warp_num                  (e_m_warp_num),
 
 		.out_alu_result               (memory_alu_result),
 		.out_mem_result               (memory_mem_result),
@@ -440,6 +461,7 @@ VX_memory vx_memory(
 		.out_delay                    (memory_delay),
 		.out_PC_next                  (memory_PC_next),
 		.out_valid                    (memory_valid),
+		.out_warp_num                 (memory_warp_num),
 		.out_cache_driver_in_address  (out_cache_driver_in_address),
 		.out_cache_driver_in_mem_read (out_cache_driver_in_mem_read),
 		.out_cache_driver_in_mem_write(out_cache_driver_in_mem_write),
@@ -458,6 +480,7 @@ VX_m_w_reg vx_m_w_reg(
 		.in_PC_next    (memory_PC_next),
 		.in_freeze     (total_freeze),
 		.in_valid      (memory_valid),
+		.in_warp_num   (memory_warp_num),
 
 		.out_alu_result(m_w_alu_result),
 		.out_mem_result(m_w_mem_result),
@@ -466,7 +489,8 @@ VX_m_w_reg vx_m_w_reg(
 		.out_rs1       (m_w_rs1),
 		.out_rs2       (m_w_rs2),
 		.out_PC_next   (m_w_PC_next),
-		.out_valid     (m_w_valid)
+		.out_valid     (m_w_valid),
+		.out_warp_num  (m_w_warp_num)
 	);
 
 
@@ -478,10 +502,12 @@ VX_writeback vx_writeback(
 		.in_wb         (m_w_wb),
 		.in_PC_next    (m_w_PC_next),
 		.in_valid      (m_w_valid),
+		.in_warp_num   (m_w_warp_num),
 
 		.out_write_data(writeback_write_data),
 		.out_rd        (writeback_rd),
-		.out_wb        (writeback_wb)
+		.out_wb        (writeback_wb),
+		.out_warp_num  (writeback_warp_num)
 	);
 
 
@@ -489,6 +515,7 @@ VX_forwarding vx_forwarding(
 		.in_decode_src1         (decode_rs1),
 		.in_decode_src2         (decode_rs2),
 		.in_decode_csr_address  (decode_csr_address),
+		.in_decode_warp_num     (decode_warp_num),
 
 		.in_execute_dest        (execute_rd),
 		.in_execute_wb          (execute_wb),
@@ -496,6 +523,7 @@ VX_forwarding vx_forwarding(
 		.in_execute_PC_next     (execute_PC_next),
 		.in_execute_is_csr      (execute_is_csr),
 		.in_execute_csr_address (execute_csr_address),
+		.in_execute_warp_num    (execute_warp_num),
 
 		.in_memory_dest         (memory_rd),
 		.in_memory_wb           (memory_wb),
@@ -505,12 +533,14 @@ VX_forwarding vx_forwarding(
 		.in_memory_is_csr       (e_m_is_csr),
 		.in_memory_csr_address  (e_m_csr_address),
 		.in_memory_csr_result   (e_m_csr_result),
+		.in_memory_warp_num     (memory_warp_num),
 
 		.in_writeback_dest      (m_w_rd),
 		.in_writeback_wb        (m_w_wb),
 		.in_writeback_alu_result(m_w_alu_result),
 		.in_writeback_mem_data  (m_w_mem_result),
 		.in_writeback_PC_next   (m_w_PC_next),
+		.in_writeback_warp_num  (writeback_warp_num),
 
 		.out_src1_fwd           (forwarding_src1_fwd),
 		.out_src2_fwd           (forwarding_src2_fwd),

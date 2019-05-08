@@ -2,6 +2,8 @@
 `define NT 2
 `define NT_M1 1
 
+`define NW_M1 1
+
 
 `define R_INST 7'd51
 `define L_INST 7'd3

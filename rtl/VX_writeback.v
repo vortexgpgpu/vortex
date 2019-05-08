@@ -14,10 +14,12 @@ module VX_writeback (
 		/* verilator lint_off UNUSED */
 		input wire       in_valid[`NT_M1:0],
 		/* verilator lint_on UNUSED */
+		input wire [`NW_M1:0]  in_warp_num,
 
 		output wire[31:0] out_write_data[`NT_M1:0],
 		output wire[4:0] out_rd,
-		output wire[1:0] out_wb
+		output wire[1:0] out_wb,
+		output wire[`NW_M1:0]  out_warp_num
 	);
 
 		wire is_jal;
@@ -60,6 +62,7 @@ module VX_writeback (
 
 		assign out_rd = in_rd;
 		assign out_wb = in_wb;
+		assign out_warp_num = in_warp_num;
 
 
 endmodule // VX_writeback

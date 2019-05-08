@@ -12,6 +12,7 @@ module VX_decode(
 	input wire[4:0]   in_rd,
 	input wire[1:0]   in_wb,
 	input wire        in_wb_valid[`NT_M1:0],
+	input wire[`NW_M1:0]   in_wb_warp_num,
 
 	// FORWARDING INPUTS
 	input wire        in_src1_fwd,
@@ -19,9 +20,14 @@ module VX_decode(
 	input wire        in_src2_fwd,
 	input wire[31:0]  in_src2_fwd_data[`NT_M1:0],
 
+	input wire[`NW_M1:0]   in_warp_num,
+
+
 	output wire[11:0] out_csr_address,
 	output wire       out_is_csr,
 	output wire[31:0] out_csr_mask,
+
+
 
 	// Outputs
 	output wire[4:0]  out_rd,
@@ -44,7 +50,8 @@ module VX_decode(
 	output reg        out_clone_stall,
 	output wire       out_change_mask,
 	output wire       out_thread_mask[`NT_M1:0],
-	output wire       out_valid[`NT_M1:0]
+	output wire       out_valid[`NT_M1:0],
+	output wire[`NW_M1:0]  out_warp_num
 );
 
 		wire[6:0]  curr_opcode;
@@ -103,8 +110,11 @@ module VX_decode(
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
 
+		wire context_zero_valid = (in_wb_warp_num == 0);
+
 		VX_context VX_Context(
 			.clk              (clk),
+			.in_warp          (context_zero_valid),
 			.in_valid         (in_wb_valid),
 			.in_rd            (in_rd),
 			.in_src1          (out_rs1),
@@ -123,7 +133,7 @@ module VX_decode(
 			.out_clone_stall  (out_clone_stall)
 			);
 
-
+		assign out_warp_num = in_warp_num;
 		assign out_valid = in_valid;
 
 		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
