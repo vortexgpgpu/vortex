@@ -18,6 +18,8 @@ module VX_fetch (
 	input  wire[31:0]  in_instruction,
 	input  wire        in_thread_mask[`NT_M1:0],
 	input  wire        in_change_mask,
+	input  wire[`NW_M1:0] in_decode_warp_num,
+	input  wire[`NW_M1:0] in_memory_warp_num,
 
 	output wire[31:0]  out_instruction,
 	output wire        out_delay,
@@ -53,15 +55,19 @@ module VX_fetch (
 		wire[31:0] warp_pc;
 		wire       warp_valid[`NT_M1:0];
 
+
+		wire warp_zero_change_mask = in_change_mask && (in_decode_warp_num == 0);
+		wire warp_zero_jal         = in_jal         && (in_memory_warp_num == 0);
+		wire warp_zero_branch      = in_branch_dir  && (in_memory_warp_num == 0);
 		VX_warp VX_Warp(
 			.clk           (clk),
 			.reset         (reset),
 			.stall         (stall),
 			.in_thread_mask(in_thread_mask),
-			.in_change_mask(in_change_mask),
-			.in_jal        (in_jal),
+			.in_change_mask(warp_zero_change_mask),
+			.in_jal        (warp_zero_jal),
 			.in_jal_dest   (in_jal_dest),
-			.in_branch_dir (in_branch_dir),
+			.in_branch_dir (warp_zero_branch),
 			.in_branch_dest(in_branch_dest),
 			.out_PC        (warp_pc),
 			.out_valid     (warp_valid)

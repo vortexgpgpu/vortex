@@ -212,6 +212,8 @@ VX_fetch vx_fetch(
 		.in_instruction     (fe_instruction),
 		.in_thread_mask     (decode_thread_mask),
 		.in_change_mask     (decode_change_mask),
+		.in_decode_warp_num (decode_warp_num),
+		.in_memory_warp_num (memory_warp_num),
 
 		.out_instruction    (fetch_instruction),
 		.out_delay          (fetch_delay),

@@ -41,7 +41,6 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__decode_branch_type,2,0);
 	VL_SIG8(Vortex__DOT__decode_jal,0,0);
 	VL_SIG8(Vortex__DOT__decode_clone_stall,0,0);
-	VL_SIG8(Vortex__DOT__decode_change_mask,0,0);
 	VL_SIG8(Vortex__DOT__execute_branch_stall,0,0);
 	VL_SIG8(Vortex__DOT__forwarding_fwd_stall,0,0);
 	VL_SIG8(Vortex__DOT__forwarding_src1_fwd,0,0);
@@ -49,6 +48,7 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__vx_fetch__DOT__stall,0,0);
 	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_num,1,0);
 	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_state,1,0);
+	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_zero_change_mask,0,0);
 	VL_SIG8(Vortex__DOT__vx_f_d_reg__DOT__warp_num,1,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_itype,0,0);
 	VL_SIG8(Vortex__DOT__vx_decode__DOT__is_csr,0,0);
