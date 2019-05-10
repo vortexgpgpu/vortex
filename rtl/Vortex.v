@@ -13,7 +13,8 @@ module Vortex(
 	output wire[2:0]      out_cache_driver_in_mem_read,
 	output wire[2:0]      out_cache_driver_in_mem_write,
 	output wire           out_cache_driver_in_valid[`NT_M1:0],
-	output wire[31:0]     out_cache_driver_in_data[`NT_M1:0]
+	output wire[31:0]     out_cache_driver_in_data[`NT_M1:0],
+	output wire           out_ebreak
 	);
 
 // wire[31:0] in_cache_driver_out_data[`NT_M1:0];
@@ -25,11 +26,12 @@ module Vortex(
 assign curr_PC = fetch_curr_PC;
 
 // From fetch
-wire[31:0]   fetch_instruction;
-wire         fetch_delay;
-wire[31:0]   fetch_curr_PC;
-wire         fetch_valid[`NT_M1:0];
+wire[31:0]     fetch_instruction;
+wire           fetch_delay;
+wire[31:0]     fetch_curr_PC;
+wire           fetch_valid[`NT_M1:0];
 wire[`NW_M1:0] fetch_warp_num;
+wire           fetch_ebreak;
 
 // From f_d_register
 wire[31:0]   f_d_instruction;
@@ -62,7 +64,10 @@ wire            decode_valid[`NT_M1:0];
 wire            decode_clone_stall;
 wire            decode_change_mask;
 wire            decode_thread_mask[`NT_M1:0];
-wire[`NW_M1:0]    decode_warp_num;
+wire[`NW_M1:0]  decode_warp_num;
+wire            decode_wspawn;
+wire[31:0]      decode_wspawn_pc;
+wire            decode_ebreak;
 
 // From d_e_register
 wire[11:0]      d_e_csr_address;
@@ -193,7 +198,7 @@ wire debug;
 assign debug        = 1'b0;
 assign interrupt    = 1'b0;
 assign total_freeze = fetch_delay || memory_delay;
-
+assign out_ebreak   = fetch_ebreak;
 
 VX_fetch vx_fetch(
 		.clk                (clk),
@@ -214,12 +219,16 @@ VX_fetch vx_fetch(
 		.in_change_mask     (decode_change_mask),
 		.in_decode_warp_num (decode_warp_num),
 		.in_memory_warp_num (memory_warp_num),
+		.in_wspawn          (decode_wspawn),
+		.in_wspawn_pc       (decode_wspawn_pc),
+		.in_ebreak          (decode_ebreak),
 
 		.out_instruction    (fetch_instruction),
 		.out_delay          (fetch_delay),
 		.out_curr_PC        (fetch_curr_PC),
 		.out_warp_num       (fetch_warp_num),
-		.out_valid          (fetch_valid)
+		.out_valid          (fetch_valid),
+		.out_ebreak         (fetch_ebreak)
 	);
 
 
@@ -280,7 +289,10 @@ VX_decode vx_decode(
 		.out_clone_stall (decode_clone_stall),
 		.out_change_mask (decode_change_mask),
 		.out_thread_mask (decode_thread_mask),
-		.out_warp_num    (decode_warp_num)
+		.out_warp_num    (decode_warp_num),
+		.out_wspawn      (decode_wspawn),
+		.out_wspawn_pc   (decode_wspawn_pc),
+		.out_ebreak      (decode_ebreak)
 	);
 
 

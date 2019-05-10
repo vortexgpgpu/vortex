@@ -68,6 +68,13 @@ module VX_execute (
 				end
 		endgenerate
 
+		// always @(*) begin
+		// 	if ((in_alu_op == `MUL) && (in_warp_num == 1)) begin
+		// 		$display("@PC: %h ---> %d * %d = %d\t%d * %d = %d", in_curr_PC, in_a_reg_data[0], in_b_reg_data[0], out_alu_result[0], in_a_reg_data[1], in_b_reg_data[1], out_alu_result[1]);
+		// 	end
+		
+		// end
+
 
 		assign out_jal_dest = $signed(in_a_reg_data[0]) + $signed(in_jal_offset);
 		assign out_jal      = in_jal;

@@ -65,6 +65,12 @@ module VX_memory (
 		assign out_cache_driver_in_data      = in_rd2;
 		assign out_cache_driver_in_valid     = in_valid;
 
+		// always @(*) begin
+		// 	if (in_valid[0] && (in_mem_write == `SW_MEM_WRITE) && (in_alu_result[0] >= 32'h810049a0)) begin
+		// 		$display("SW$ PC: %h - Warp: %h -> [%h]%h = %h || [%h]%h = %h",in_curr_PC, in_warp_num, in_valid[0], in_alu_result[0], in_rd2[0], in_valid[1], in_alu_result[1], in_rd2[1]);
+		// 	end
+		// end
+
 
 
 		// wire[31:0] sm_out_data[`NT_M1:0];
@@ -113,7 +119,13 @@ module VX_memory (
 					end
 				`BLT:  out_branch_dir = (in_alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN;
 				`BGT:  out_branch_dir = (in_alu_result[0][31] == 0) ? `TAKEN     : `NOT_TAKEN;
-				`BLTU: out_branch_dir = (in_alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN;
+				`BLTU: 
+					begin 
+						out_branch_dir = (in_alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN; 
+						if (in_warp_num == 1) begin
+							// $display("BLTU PC:%h : %d < %d = %d", in_curr_PC, in_rs1, in_rs2, (in_alu_result[0][31] == 0)); 
+						end
+					end
 				`BGTU: out_branch_dir = (in_alu_result[0][31] == 0) ? `TAKEN     : `NOT_TAKEN;
 				`NO_BRANCH: out_branch_dir = `NOT_TAKEN;
 				default:    out_branch_dir = `NOT_TAKEN;

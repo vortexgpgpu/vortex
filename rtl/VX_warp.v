@@ -11,7 +11,8 @@ module VX_warp (
 	input  wire[31:0] in_jal_dest,
 	input  wire       in_branch_dir,
 	input  wire[31:0] in_branch_dest,
-
+	input  wire       in_wspawn,
+	input  wire[31:0] in_wspawn_pc,
 
 	output wire[31:0] out_PC,
 	output wire       out_valid[`NT_M1:0]
@@ -62,7 +63,10 @@ module VX_warp (
 		always @(posedge clk or posedge reset) begin
 			if (reset) begin
 				real_PC <= 0;
-			end else if (stall == 1'b0) begin
+			end else if (in_wspawn == 1'b1) begin
+				// $display("Inside warp ***** Spawn @ %H",in_wspawn_pc);
+				real_PC <= in_wspawn_pc;
+			end else if (!stall) begin
 				real_PC <= use_PC + 32'h4;
 			end else begin
 				real_PC <= use_PC;

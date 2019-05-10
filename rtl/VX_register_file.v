@@ -2,7 +2,7 @@
 
 module VX_register_file (
   input wire        clk,
-  input wire        in_warp,
+  input wire        in_wb_warp,
   input wire        in_valid,
   input wire        in_write_register,
   input wire[4:0]   in_rd,
@@ -30,6 +30,11 @@ module VX_register_file (
 	// 	end
 	// end
 
+	// always @(*) begin
+	// 	$display("TID: %d: %h",10,registers[10]);
+	// 	$display("WID: %d: %h",11,registers[11]);
+	// end
+
 	assign out_regs = registers;
 
 	assign write_data     = in_data;
@@ -38,7 +43,7 @@ module VX_register_file (
 	assign write_enable   = (in_write_register && (in_rd != 5'h0)) && in_valid;
 
 	always @(posedge clk) begin
-		if(write_enable && in_warp) begin
+		if(write_enable && in_wb_warp) begin
 			// $display("RF: Writing %h to %d",write_data, write_register);
 			registers[write_register] <= write_data;
 		end

@@ -74,21 +74,21 @@ void _vx_mat_mult(unsigned tid, unsigned wid)
 		unsigned total = 0;
 		for (unsigned place = 0; place < mat_dim; ++place)
 		{
-			unsigned x_i = (wid * mat_dim)   + place;
-			unsigned y_i = (mat_dim * place) + i_index;
+			unsigned x_i = (wid     * mat_dim)   + place;
+			unsigned y_i = (mat_dim * place  )   + i_index;
 
 			total += (x_ptr[x_i] * y_ptr[y_i]);
 		}
 
 			int final_i = (wid * mat_dim) + i_index;
-			unsigned cond = i_index < mat_dim;
-			__if(cond)
-			{
+			// unsigned cond = i_index < mat_dim;
+			// __if(cond)
+			// {
 				z_ptr[final_i] = total;
 				i_index++;
-			}
-			__else
-			__end_if
+			// }
+			// __else
+			// __end_if
 	}
 
 	// for (int z = 0; z < ((1000 * wid) + 1000); z++);

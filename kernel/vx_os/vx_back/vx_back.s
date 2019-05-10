@@ -6,7 +6,7 @@
 .type _start, @function
 .global _start
 _start:
-    li a0, 1          # Num Warps
+    li a0, 2          # Num Warps
     csrw 0x20, a0     # Setting the number of available warps 
     li a0, 2          # Num Threads
     csrw 0x21, a0     # Setting the number of available threads
@@ -31,11 +31,17 @@ loop_cond:
 loop_body:
     addi  sp,sp,-2048 # Allocate 2k stack for new thread
     mv    t1, a0      # #lane = i
-    .word 0x3506b           # clone register state
+    .word 0x3506b     # clone register state
 loop_inc:
     addi a0, a0, 1
     j loop_cond
 loop_done:
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
     mv    sp,t5  # Restoring the stack
     li    a0,0   # setting tid = 0 for main thread
     mv    t6,a2  # setting func_addr 

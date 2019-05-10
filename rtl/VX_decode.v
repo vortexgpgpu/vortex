@@ -3,55 +3,55 @@
 
 module VX_decode(
 	// Fetch Inputs
-	input wire        clk,
-	input wire[31:0]  in_instruction,
-	input wire[31:0]  in_curr_PC,
-	input wire        in_valid[`NT_M1:0],
+	input wire            clk,
+	input wire[31:0]      in_instruction,
+	input wire[31:0]      in_curr_PC,
+	input wire            in_valid[`NT_M1:0],
 	// WriteBack inputs
-	input wire[31:0]  in_write_data[`NT_M1:0],
-	input wire[4:0]   in_rd,
-	input wire[1:0]   in_wb,
-	input wire        in_wb_valid[`NT_M1:0],
-	input wire[`NW_M1:0]   in_wb_warp_num,
+	input wire[31:0]      in_write_data[`NT_M1:0],
+	input wire[4:0]       in_rd,
+	input wire[1:0]       in_wb,
+	input wire            in_wb_valid[`NT_M1:0],
+	input wire[`NW_M1:0]  in_wb_warp_num,
 
 	// FORWARDING INPUTS
-	input wire        in_src1_fwd,
-	input wire[31:0]  in_src1_fwd_data[`NT_M1:0],
-	input wire        in_src2_fwd,
-	input wire[31:0]  in_src2_fwd_data[`NT_M1:0],
+	input wire            in_src1_fwd,
+	input wire[31:0]      in_src1_fwd_data[`NT_M1:0],
+	input wire            in_src2_fwd,
+	input wire[31:0]      in_src2_fwd_data[`NT_M1:0],
 
-	input wire[`NW_M1:0]   in_warp_num,
+	input wire[`NW_M1:0]  in_warp_num,
 
-
-	output wire[11:0] out_csr_address,
-	output wire       out_is_csr,
-	output wire[31:0] out_csr_mask,
-
-
+	output wire[11:0]     out_csr_address,
+	output wire           out_is_csr,
+	output wire[31:0]     out_csr_mask,
 
 	// Outputs
-	output wire[4:0]  out_rd,
-	output wire[4:0]  out_rs1,
-	output wire[4:0]  out_rs2,
-	output wire[31:0] out_a_reg_data[`NT_M1:0],
-	output wire[31:0] out_b_reg_data[`NT_M1:0],
-	output wire[1:0]  out_wb,
-	output wire[4:0]  out_alu_op,
-	output wire       out_rs2_src,
-	output reg[31:0]  out_itype_immed,
-	output wire[2:0]  out_mem_read,
-	output wire[2:0]  out_mem_write,
-	output reg[2:0]   out_branch_type,
-	output reg        out_branch_stall,
-	output reg        out_jal,
-	output reg[31:0]  out_jal_offset,
-	output reg[19:0]  out_upper_immed,
-	output wire[31:0] out_PC_next,
-	output reg        out_clone_stall,
-	output wire       out_change_mask,
-	output wire       out_thread_mask[`NT_M1:0],
-	output wire       out_valid[`NT_M1:0],
-	output wire[`NW_M1:0]  out_warp_num
+	output wire[4:0]      out_rd,
+	output wire[4:0]      out_rs1,
+	output wire[4:0]      out_rs2,
+	output wire[31:0]     out_a_reg_data[`NT_M1:0],
+	output wire[31:0]     out_b_reg_data[`NT_M1:0],
+	output wire[1:0]      out_wb,
+	output wire[4:0]      out_alu_op,
+	output wire           out_rs2_src,
+	output reg[31:0]      out_itype_immed,
+	output wire[2:0]      out_mem_read,
+	output wire[2:0]      out_mem_write,
+	output reg[2:0]       out_branch_type,
+	output reg            out_branch_stall,
+	output reg            out_jal,
+	output reg[31:0]      out_jal_offset,
+	output reg[19:0]      out_upper_immed,
+	output wire[31:0]     out_PC_next,
+	output reg            out_clone_stall,
+	output wire           out_change_mask,
+	output wire           out_thread_mask[`NT_M1:0],
+	output wire           out_valid[`NT_M1:0],
+	output wire[`NW_M1:0] out_warp_num,
+	output wire           out_wspawn,
+	output wire[31:0]     out_wspawn_pc,
+	output wire           out_ebreak
 );
 
 		wire[6:0]  curr_opcode;
@@ -73,6 +73,7 @@ module VX_decode(
 		wire       is_clone;
 		wire       is_jalrs;
 		wire       is_jmprt;
+		wire       is_wspawn;
 
 		wire       write_register;
 
@@ -110,11 +111,28 @@ module VX_decode(
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
 
-		wire context_zero_valid = (in_wb_warp_num == 0);
+		wire[31:0] w0_t0_registers[31:0];
 
-		VX_context VX_Context(
+		wire       context_zero_valid = (in_wb_warp_num == 0);
+		wire[31:0] zero_a_reg_data[`NT_M1:0];
+		wire[31:0] zero_b_reg_data[`NT_M1:0];
+		reg        zero_clone_stall;
+
+		// always @(*) begin
+		// 	$display("DECODE WARP: %h", in_warp_num);
+		// end
+
+		wire curr_warp_zero  = in_warp_num == 0;
+		wire curr_warp_one   = in_warp_num == 1;
+
+		// always @(*) begin
+		// 	$display("DECODE WARP: %h PC: %h",in_warp_num, in_curr_PC);
+		// end
+
+		VX_context VX_Context_zero(
 			.clk              (clk),
-			.in_warp          (context_zero_valid),
+			.in_warp          (curr_warp_zero),
+			.in_wb_warp       (context_zero_valid),
 			.in_valid         (in_wb_valid),
 			.in_rd            (in_rd),
 			.in_src1          (out_rs1),
@@ -128,13 +146,52 @@ module VX_decode(
 			.in_src2_fwd_data (in_src2_fwd_data),
 			.in_write_register(write_register),
 			.in_write_data    (in_write_data),
-			.out_a_reg_data   (out_a_reg_data),
-			.out_b_reg_data   (out_b_reg_data),
-			.out_clone_stall  (out_clone_stall)
-			);
+			.out_a_reg_data   (zero_a_reg_data),
+			.out_b_reg_data   (zero_b_reg_data),
+			.out_clone_stall  (zero_clone_stall),
+			.w0_t0_registers  (w0_t0_registers)
+		);
+
+		wire       context_one_valid = (in_wb_warp_num == 1);
+		wire[31:0] one_a_reg_data[`NT_M1:0];
+		wire[31:0] one_b_reg_data[`NT_M1:0];
+		reg        one_clone_stall;
+		VX_context_slave VX_Context_one(
+			.clk              (clk),
+			.in_warp          (curr_warp_one),
+			.in_wb_warp       (context_one_valid),
+			.in_valid         (in_wb_valid),
+			.in_rd            (in_rd),
+			.in_src1          (out_rs1),
+			.in_src2          (out_rs2),
+			.in_curr_PC       (in_curr_PC),
+			.in_is_clone      (is_clone),
+			.in_is_jal        (is_jal),
+			.in_src1_fwd      (in_src1_fwd),
+			.in_src1_fwd_data (in_src1_fwd_data),
+			.in_src2_fwd      (in_src2_fwd),
+			.in_src2_fwd_data (in_src2_fwd_data),
+			.in_write_register(write_register),
+			.in_write_data    (in_write_data),
+			.in_wspawn_regs   (w0_t0_registers),
+			.in_wspawn        (is_wspawn),
+			.out_a_reg_data   (one_a_reg_data),
+			.out_b_reg_data   (one_b_reg_data),
+			.out_clone_stall  (one_clone_stall)
+		);
+
+		assign out_a_reg_data  = curr_warp_zero ? zero_a_reg_data  : one_a_reg_data;
+		assign out_b_reg_data  = curr_warp_zero ? zero_b_reg_data  : one_b_reg_data;
+		assign out_clone_stall = zero_clone_stall || one_clone_stall;
+
+		// always @(*) begin
+		// 	if (context_one_valid) begin
+		// 		$display("PC: %h -> src1: %h\tsrc2: %h",in_curr_PC, one_a_reg_data[0], one_b_reg_data[0]);
+		// 	end
+		// end
 
 		assign out_warp_num = in_warp_num;
-		assign out_valid = in_valid;
+		assign out_valid    = in_valid;
 
 		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
 
@@ -171,6 +228,10 @@ module VX_decode(
 		assign is_clone     = is_gpgpu && (func3 == 5);
 		assign is_jalrs     = is_gpgpu && (func3 == 6);
 		assign is_jmprt     = is_gpgpu && (func3 == 4);
+		assign is_wspawn    = is_gpgpu && (func3 == 0);
+
+		assign out_wspawn    = is_wspawn;
+		assign out_wspawn_pc = out_a_reg_data[0];
 
 		// always @(*) begin
 		// 	if (is_jalrs) begin
@@ -259,7 +320,7 @@ module VX_decode(
 			case(curr_opcode)
 				`LUI_INST:   out_upper_immed  = {func7, out_rs2, out_rs1, func3};
 				`AUIPC_INST: out_upper_immed  = {func7, out_rs2, out_rs1, func3};
-				default:    out_upper_immed  = 20'h0;
+				default:     out_upper_immed  = 20'h0;
 			endcase // curr_opcode
 		end
 
@@ -306,6 +367,7 @@ module VX_decode(
 					end
 				`SYS_INST:
 					begin
+						// $display("SYS EBREAK %h", (jal_sys_jal && in_valid[0]) );
 						out_jal        = jal_sys_jal && in_valid[0];
 						out_jal_offset = jal_sys_off;
 					end
@@ -317,6 +379,13 @@ module VX_decode(
 			endcase
 		end
 
+		wire is_ebreak;
+
+
+		assign is_ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && in_valid[0]);
+
+
+		assign out_ebreak = is_ebreak;
 
 		// CSR
 

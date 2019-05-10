@@ -326,11 +326,12 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     bool istop;
     bool dstop;
-
+    bool cont = false;
     // for (int i = 0; i < 500; i++)
 
     // unsigned cycles;
-    while (this->stop && (!(stop && (counter > 5))))
+    counter = 0;
+    while (this->stop && ((counter < 5)))
     {
 
         // std::cout << "************* Cycle: " << cycle << "\n";
@@ -347,10 +348,12 @@ bool Vortex::simulate(std::string file_to_simulate)
         vortex->eval();
 
 
-        stop = istop && dstop;
+        // stop = istop && dstop;
+        stop = vortex->out_ebreak;
 
-        if (stop)
+        if (stop || cont)
         {
+            cont = true;
             counter++;
         } else
         {
