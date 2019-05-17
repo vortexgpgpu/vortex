@@ -435,5 +435,48 @@ void _vx_e_mat_mult(unsigned tid, unsigned wid)
 	
 }
 
+void sleep(int num)
+{
+  for (int i = 0; i < num; i++);
+}
+
+
+bool barrier_bool = false;
+bool barriers[32];
+
+void barrier(unsigned wid, int num)
+{
+  barriers[wid] = true;
+
+  if (wid == 0)
+  {
+    bool cont = false;
+    int count = 0;
+    while(cont)
+    {
+      count = 0;
+      for (int i = 0; i < num; i++)
+      {
+        if (barriers[i]) count++;
+      }
+
+      if (count == num)
+      {
+        for (int i = 0; i < num; i++)
+        {
+          barriers[i]  = false;
+          barrier_bool = true;
+          sleep(70);
+          barrier_bool = false;
+        }
+      }
+    }
+  }
+  else
+  {
+    while(!barrier_bool);
+    sleep(100);
+  }
+}
 
 
