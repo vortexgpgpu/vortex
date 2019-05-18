@@ -6,9 +6,9 @@
 .type _start, @function
 .global _start
 _start:
-    li a0, 2          # Num Warps
+    li a0, 8          # Num Warps
     csrw 0x20, a0     # Setting the number of available warps 
-    li a0, 2          # Num Threads
+    li a0, 4          # Num Threads
     csrw 0x21, a0     # Setting the number of available threads
     csrw mhartid,zero
     csrw misa,zero
@@ -46,7 +46,21 @@ loop_done:
     li    a0,0   # setting tid = 0 for main thread
     mv    t6,a2  # setting func_addr 
     mv    s11,t2 # setting num_threads to spawn
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
     .word 0x1bfe0eb
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
     la     a0, vx_reschedule_warps
     .word 0x5406b
 

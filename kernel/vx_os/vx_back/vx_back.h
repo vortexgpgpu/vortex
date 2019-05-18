@@ -29,11 +29,11 @@
 #define __end_if AFTER:\
 			   JOIN;
 
-static int done[] = {0, 0, 0, 0, 0, 0, 0};
+static int done[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 static int main_sp[1];
 
-unsigned context[32];
+unsigned context[64];
 void  vx_save_context(void);
 void  vx_load_context(void);
 

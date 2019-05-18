@@ -3,7 +3,9 @@
 
 module VX_context (
   input wire        clk,
+  /* verilator lint_off UNUSED */
   input wire        in_warp,
+  /* verilator lint_on UNUSED */
   input wire        in_wb_warp,
   input wire        in_valid[`NT_M1:0],
   input wire        in_write_register,

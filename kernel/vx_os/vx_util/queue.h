@@ -5,8 +5,8 @@
 
 
 
-#define SIZE 50
-#define WARPS 7
+#define SIZE 100
+#define WARPS 8
 
 
 typedef struct Job_t
@@ -31,7 +31,7 @@ typedef struct Queue_t
 
 } Queue;
 
-Queue q[8];
+Queue q[64];
 
 void queue_initialize(Queue *);
 

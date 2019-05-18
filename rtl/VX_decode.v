@@ -19,6 +19,9 @@ module VX_decode(
 	input wire[31:0]      in_src1_fwd_data[`NT_M1:0],
 	input wire            in_src2_fwd,
 	input wire[31:0]      in_src2_fwd_data[`NT_M1:0],
+	/* verilator lint_off UNUSED */
+	input wire[`NW_M1:0]  in_which_wspawn,
+	/* verilator lint_on UNUSED */
 
 	input wire[`NW_M1:0]  in_warp_num,
 
@@ -111,78 +114,181 @@ module VX_decode(
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
 
+		/* verilator lint_off UNUSED */
 		wire[31:0] w0_t0_registers[31:0];
+		/* verilator lint_on UNUSED */
 
-		wire       context_zero_valid = (in_wb_warp_num == 0);
-		wire[31:0] zero_a_reg_data[`NT_M1:0];
-		wire[31:0] zero_b_reg_data[`NT_M1:0];
-		reg        zero_clone_stall;
+
 
 		// always @(*) begin
 		// 	$display("DECODE WARP: %h", in_warp_num);
 		// end
 
-		wire curr_warp_zero  = in_warp_num == 0;
-		wire curr_warp_one   = in_warp_num == 1;
 
 		// always @(*) begin
 		// 	$display("DECODE WARP: %h PC: %h",in_warp_num, in_curr_PC);
 		// end
 
-		VX_context VX_Context_zero(
-			.clk              (clk),
-			.in_warp          (curr_warp_zero),
-			.in_wb_warp       (context_zero_valid),
-			.in_valid         (in_wb_valid),
-			.in_rd            (in_rd),
-			.in_src1          (out_rs1),
-			.in_src2          (out_rs2),
-			.in_curr_PC       (in_curr_PC),
-			.in_is_clone      (is_clone),
-			.in_is_jal        (is_jal),
-			.in_src1_fwd      (in_src1_fwd),
-			.in_src1_fwd_data (in_src1_fwd_data),
-			.in_src2_fwd      (in_src2_fwd),
-			.in_src2_fwd_data (in_src2_fwd_data),
-			.in_write_register(write_register),
-			.in_write_data    (in_write_data),
-			.out_a_reg_data   (zero_a_reg_data),
-			.out_b_reg_data   (zero_b_reg_data),
-			.out_clone_stall  (zero_clone_stall),
-			.w0_t0_registers  (w0_t0_registers)
-		);
+		`ifdef ONLY
 
-		wire       context_one_valid = (in_wb_warp_num == 1);
-		wire[31:0] one_a_reg_data[`NT_M1:0];
-		wire[31:0] one_b_reg_data[`NT_M1:0];
-		reg        one_clone_stall;
-		VX_context_slave VX_Context_one(
-			.clk              (clk),
-			.in_warp          (curr_warp_one),
-			.in_wb_warp       (context_one_valid),
-			.in_valid         (in_wb_valid),
-			.in_rd            (in_rd),
-			.in_src1          (out_rs1),
-			.in_src2          (out_rs2),
-			.in_curr_PC       (in_curr_PC),
-			.in_is_clone      (is_clone),
-			.in_is_jal        (is_jal),
-			.in_src1_fwd      (in_src1_fwd),
-			.in_src1_fwd_data (in_src1_fwd_data),
-			.in_src2_fwd      (in_src2_fwd),
-			.in_src2_fwd_data (in_src2_fwd_data),
-			.in_write_register(write_register),
-			.in_write_data    (in_write_data),
-			.in_wspawn_regs   (w0_t0_registers),
-			.in_wspawn        (is_wspawn),
-			.out_a_reg_data   (one_a_reg_data),
-			.out_b_reg_data   (one_b_reg_data),
-			.out_clone_stall  (one_clone_stall)
-		);
+			wire[31:0] glob_a_reg_data[`NT_M1:0];
+			wire[31:0] glob_b_reg_data[`NT_M1:0];
+			reg        glob_clone_stall;
 
-		assign out_a_reg_data  = curr_warp_zero ? zero_a_reg_data  : one_a_reg_data;
-		assign out_b_reg_data  = curr_warp_zero ? zero_b_reg_data  : one_b_reg_data;
-		assign out_clone_stall = zero_clone_stall || one_clone_stall;
+			wire       curr_warp_zero     = in_warp_num == 0;
+			wire       context_zero_valid = (in_wb_warp_num == 0);
+			wire       real_zero_isclone  = is_clone  && (in_warp_num == 0);  
+			VX_context VX_Context_zero(
+				.clk              (clk),
+				.in_warp          (curr_warp_zero),
+				.in_wb_warp       (context_zero_valid),
+				.in_valid         (in_wb_valid),
+				.in_rd            (in_rd),
+				.in_src1          (out_rs1),
+				.in_src2          (out_rs2),
+				.in_curr_PC       (in_curr_PC),
+				.in_is_clone      (real_zero_isclone),
+				.in_is_jal        (is_jal),
+				.in_src1_fwd      (in_src1_fwd),
+				.in_src1_fwd_data (in_src1_fwd_data),
+				.in_src2_fwd      (in_src2_fwd),
+				.in_src2_fwd_data (in_src2_fwd_data),
+				.in_write_register(write_register),
+				.in_write_data    (in_write_data),
+				.out_a_reg_data   (glob_a_reg_data),
+				.out_b_reg_data   (glob_b_reg_data),
+				.out_clone_stall  (glob_clone_stall),
+				.w0_t0_registers  (w0_t0_registers)
+			);
+
+
+			assign out_a_reg_data  = glob_a_reg_data;
+			assign out_b_reg_data  = glob_b_reg_data;
+			assign out_clone_stall = glob_clone_stall;
+
+		`else 
+
+			wire[31:0] glob_a_reg_data[`NW-1:0][`NT_M1:0];
+			wire[31:0] glob_b_reg_data[`NW-1:0][`NT_M1:0];
+			reg        glob_clone_stall[`NW-1:0];
+
+			wire       curr_warp_zero     = in_warp_num == 0;
+			wire       context_zero_valid = (in_wb_warp_num == 0);
+			wire       real_zero_isclone  = is_clone  && (in_warp_num == 0);  
+			VX_context VX_Context_zero(
+				.clk              (clk),
+				.in_warp          (curr_warp_zero),
+				.in_wb_warp       (context_zero_valid),
+				.in_valid         (in_wb_valid),
+				.in_rd            (in_rd),
+				.in_src1          (out_rs1),
+				.in_src2          (out_rs2),
+				.in_curr_PC       (in_curr_PC),
+				.in_is_clone      (real_zero_isclone),
+				.in_is_jal        (is_jal),
+				.in_src1_fwd      (in_src1_fwd),
+				.in_src1_fwd_data (in_src1_fwd_data),
+				.in_src2_fwd      (in_src2_fwd),
+				.in_src2_fwd_data (in_src2_fwd_data),
+				.in_write_register(write_register),
+				.in_write_data    (in_write_data),
+				.out_a_reg_data   (glob_a_reg_data[0]),
+				.out_b_reg_data   (glob_b_reg_data[0]),
+				.out_clone_stall  (glob_clone_stall[0]),
+				.w0_t0_registers  (w0_t0_registers)
+			);
+
+			genvar r;
+			generate
+				for (r = 1; r < `NW; r = r + 1) begin
+					wire context_glob_valid = (in_wb_warp_num == r);
+					wire curr_warp_glob     = in_warp_num == r;
+					wire real_wspawn        = is_wspawn && (in_which_wspawn == r); 
+					wire real_isclone       = is_clone  && (in_warp_num == r);      
+					VX_context_slave VX_Context_one(
+						.clk              (clk),
+						.in_warp          (curr_warp_glob),
+						.in_wb_warp       (context_glob_valid),
+						.in_valid         (in_wb_valid),
+						.in_rd            (in_rd),
+						.in_src1          (out_rs1),
+						.in_src2          (out_rs2),
+						.in_curr_PC       (in_curr_PC),
+						.in_is_clone      (real_isclone),
+						.in_is_jal        (is_jal),
+						.in_src1_fwd      (in_src1_fwd),
+						.in_src1_fwd_data (in_src1_fwd_data),
+						.in_src2_fwd      (in_src2_fwd),
+						.in_src2_fwd_data (in_src2_fwd_data),
+						.in_write_register(write_register),
+						.in_write_data    (in_write_data),
+						.in_wspawn_regs   (w0_t0_registers),
+						.in_wspawn        (real_wspawn),
+						.out_a_reg_data   (glob_a_reg_data[r]),
+						.out_b_reg_data   (glob_b_reg_data[r]),
+						.out_clone_stall  (glob_clone_stall[r])
+					);
+				end
+			endgenerate
+
+			// always @(posedge clk)
+			// 	if(write_register && (in_wb_warp == 3) && (in_wb_valid[0]) && (in_rd == 31)) begin
+
+			// 		$display("Warp 3 writing ",);
+			// 	end
+			// end
+
+			reg[31:0] temp_out_a_reg_data[`NT_M1:0];
+			reg[31:0] temp_out_b_reg_data[`NT_M1:0];
+			/* verilator lint_off UNOPTFLAT */
+			reg       temp_out_clone_stall;
+			/* verilator lint_on UNOPTFLAT */
+
+			always @(*) begin
+
+				if (`NW == 1) begin
+					temp_out_a_reg_data = glob_a_reg_data;
+					temp_out_b_reg_data = glob_b_reg_data;
+				end else begin
+					integer g;
+					// temp_out_clone_stall = 0;
+					for (g = 0; g < `NW; g = g + 1)
+					begin
+						if (in_warp_num == g[`NW_M1:0]) begin
+							temp_out_a_reg_data = glob_a_reg_data[g];
+							temp_out_b_reg_data = glob_b_reg_data[g];
+						end
+
+						// temp_out_clone_stall = temp_out_clone_stall || glob_clone_stall[g];
+					end
+				end
+			end
+
+			assign out_a_reg_data  = temp_out_a_reg_data;
+			assign out_b_reg_data  = temp_out_b_reg_data;
+			// assign out_clone_stall = temp_out_clone_stall;
+
+			// assign out_a_reg_data  = curr_warp_zero ? glob_a_reg_data[0]  : glob_a_reg_data[1];
+			// assign out_b_reg_data  = curr_warp_zero ? glob_b_reg_data[0]  : glob_b_reg_data[1];
+
+			genvar y;
+			generate
+				always @(*) begin
+					temp_out_clone_stall = glob_clone_stall[0];
+					for (y = 1; y < `NW; y = y+1) begin
+						temp_out_clone_stall = temp_out_clone_stall || glob_clone_stall[y];
+					end
+				end
+			endgenerate
+
+			assign out_clone_stall = temp_out_clone_stall;
+
+
+		`endif
+
+
+		// assign out_clone_stall = glob_clone_stall[0] || glob_clone_stall[1] || 
+		//                          glob_clone_stall[2] || glob_clone_stall[3];
 
 		// always @(*) begin
 		// 	if (context_one_valid) begin
@@ -234,7 +340,7 @@ module VX_decode(
 		assign out_wspawn_pc = out_a_reg_data[0];
 
 		// always @(*) begin
-		// 	if (is_jalrs) begin
+		// 	if (is_jalrs && in_warp_num == 2) begin
 		// 		$display("JALRS WOHOOO: rs2 - %h", out_b_reg_data[0]);
 		// 	end
 		// end
@@ -272,9 +378,6 @@ module VX_decode(
 		// 	$display("Decode inst: %h", in_instruction);
 		// end
 
-
-
-		// ch_print("DECODE: PC: {0}, INSTRUCTION: {1}", in_curr_PC, in_instruction);
 
 
 
@@ -361,6 +464,7 @@ module VX_decode(
 					begin
 						if (is_jalrs || is_jmprt)
 						begin
+							// $display("OUT JAL DEST: %h", out_a_reg_data[0]);
 			        		out_jal        = 1'b1 && in_valid[0];
 							out_jal_offset = 32'h0;
 						end

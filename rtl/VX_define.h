@@ -1,7 +1,10 @@
 
 
-#define NT 2
-#define NT_M1 1
+#define NT 4
+#define NT_M1 (NT-1)
+
+#define NW 8
+
 
 #define R_INST 51
 #define L_INST 3

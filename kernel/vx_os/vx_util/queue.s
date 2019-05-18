@@ -58,6 +58,12 @@ ec:
 queue_dequeue:
 	mv   t0, a0       # loading base address of q
 	lw   t1, 8 (t0)  # t1 = num_j
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 	addi t1, t1, -1  # --t1
 	sw   t1, 8 (t0)  # num_j = t1
 	addi t1, t0, 20  # t1 = jobs_addr

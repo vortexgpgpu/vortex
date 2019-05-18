@@ -148,7 +148,6 @@ bool Vortex::ibus_driver()
 
 
     ////////////////////// STATS //////////////////////
-    ++stats_total_cycles;
 
 
     if (((((unsigned int)curr_inst) != 0) && (((unsigned int)curr_inst) != 0xffffffff)))
@@ -175,16 +174,31 @@ bool Vortex::dbus_driver()
     // std::cout << "DBUS DRIVER\n" << std::endl;
     ////////////////////// DBUS //////////////////////
 
+    bool did = false;
+
     for (unsigned curr_th = 0; curr_th < NT; curr_th++)
     {
         if ((vortex->out_cache_driver_in_mem_write != NO_MEM_WRITE) && vortex->out_cache_driver_in_valid[curr_th])
         {
+                did = true;
                 data_write = (uint32_t) vortex->out_cache_driver_in_data[curr_th];
                 addr       = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
 
                 if (addr == 0x00010000)
                 {
                   std::cerr << (char) data_write;
+                }
+
+                if ((addr >= 0x810002cc) && (addr < 0x810002d0))
+                {
+                    int index = (addr - 0x810002cc) / 4;
+                    std::cerr << GREEN << "1done[" << index << "] = " << data_write << DEFAULT << "\n";
+                }
+
+                if ((addr >= 0x810059f4) && (addr < 0x810059f4))
+                {
+                    int index = (addr - 0x810059f4) / 4;
+                    std::cerr << RED << "2done[" << index << "] = " << data_write << DEFAULT << "\n";
                 }
 
                 if (vortex->out_cache_driver_in_mem_write == SB_MEM_WRITE)
@@ -208,14 +222,15 @@ bool Vortex::dbus_driver()
     }
 
 
+
+
     // printf("----\n");
     for (unsigned curr_th = 0; curr_th < NT; curr_th++)
     {
 
         if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid[curr_th])
         {
-
-
+                did = true;
                 addr = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
                 ram.getWord(addr, &data_read);
 
@@ -258,6 +273,15 @@ bool Vortex::dbus_driver()
         }
 
     }
+
+    if (did && (NW > 1))
+    {
+
+        if (NW < NT)
+        {
+            this->stats_total_cycles += NT % (NW -1);
+        }
+    }
     // printf("******\n");
 
 
@@ -294,7 +318,6 @@ bool Vortex::simulate(std::string file_to_simulate)
 	unsigned curr_inst;
 	unsigned new_PC;
 
-	int cycle = 0;
 	// while (this->stop && (!(stop && (counter > 5))))
 	// {
 
@@ -360,10 +383,10 @@ bool Vortex::simulate(std::string file_to_simulate)
             counter = 0;
         }
 
-        cycle++;
+        ++stats_total_cycles;
     }
 
-    std::cerr << "Total Cycles: " << cycle << "\n";
+    std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
 
     uint32_t status;
     ram.getWord(0, &status);

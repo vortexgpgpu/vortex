@@ -32,6 +32,7 @@ wire[31:0]     fetch_curr_PC;
 wire           fetch_valid[`NT_M1:0];
 wire[`NW_M1:0] fetch_warp_num;
 wire           fetch_ebreak;
+wire[`NW_M1:0] fetch_which_warp;
 
 // From f_d_register
 wire[31:0]   f_d_instruction;
@@ -228,7 +229,8 @@ VX_fetch vx_fetch(
 		.out_curr_PC        (fetch_curr_PC),
 		.out_warp_num       (fetch_warp_num),
 		.out_valid          (fetch_valid),
-		.out_ebreak         (fetch_ebreak)
+		.out_ebreak         (fetch_ebreak),
+		.out_which_wspawn   (fetch_which_warp)
 	);
 
 
@@ -264,6 +266,7 @@ VX_decode vx_decode(
 		.in_src2_fwd     (forwarding_src2_fwd),
 		.in_src2_fwd_data(forwarding_src2_fwd_data),
 		.in_warp_num     (f_d_warp_num),
+		.in_which_wspawn (fetch_which_warp),
 
 		.out_csr_address (decode_csr_address),
 		.out_is_csr      (decode_is_csr),

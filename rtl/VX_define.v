@@ -1,8 +1,11 @@
 
-`define NT 2
-`define NT_M1 1
 
-`define NW_M1 1
+`define NT 4
+`define NT_M1 (`NT-1)
+
+`define NW_M1 3
+`define NW 8
+// `define ONLY
 
 
 `define R_INST 7'd51

@@ -6,7 +6,7 @@
 void vx_before_main()
 {
 	// unsigned num_available_warps = vx_available_warps();
-	for (int i = 0; i < 8; i++)
+	for (int i = 0; i < 32; i++)
 	{
 		queue_initialize(q + i);
 	}
@@ -15,9 +15,20 @@ void vx_before_main()
 void vx_reschedule_warps()
 {
 
-
 	register unsigned curr_warp asm("s10");
-	// vx_printf("Reschedule: ", curr_warp);
+	vx_printf("Reschedule: ", curr_warp);
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
+	asm __volatile__("nop");
 
 	if (queue_isEmpty(q+curr_warp))
 	{
@@ -38,7 +49,7 @@ void vx_reschedule_warps()
 	asm __volatile__("mv sp,%0"::"r" (j.base_sp):);
 	vx_createThreads(j.n_threads, j.wid, j.func_ptr, j.args, j.assigned_warp);
 
-	ECALL;
+	ECALL; // should never reach this
 
 }
 
@@ -133,6 +144,7 @@ void vx_wait_for_warps(unsigned num_wait)
 				num += 1;
 			}
 		}
+		// vx_printf("Found: ", num);
 	}
 
 	// vx_printf("num found: ", num);

@@ -5,6 +5,7 @@ module VX_warp (
 	input  wire       clk,
 	input  wire       reset,
 	input  wire       stall,
+	input  wire       remove,
 	input  wire       in_thread_mask[`NT_M1:0],
 	input  wire       in_change_mask,
 	input  wire       in_jal,
@@ -23,18 +24,24 @@ module VX_warp (
 		var[31:0] use_PC;
 		reg valid[`NT_M1:0];
 
+		reg valid_zero[`NT_M1:0];
 
 		integer ini_cur_th = 0;
 		initial begin
 			real_PC = 0;
-			for (ini_cur_th = 1; ini_cur_th < `NT; ini_cur_th=ini_cur_th+1)
+			for (ini_cur_th = 1; ini_cur_th < `NT; ini_cur_th=ini_cur_th+1) begin
 				valid[ini_cur_th]   = 0; // Thread 1 active
-			valid[0]   = 1;
+				valid_zero[ini_cur_th] = 0;
+			end
+			valid[0]      = 1;
+			valid_zero[0] = 0;
 		end
 
 
 		always @(*) begin
-			if (in_change_mask) begin
+			if (remove) begin
+				assign valid = valid_zero;
+			end else if (in_change_mask) begin
 				assign valid = in_thread_mask;
 			end
 		end
@@ -50,6 +57,7 @@ module VX_warp (
 		always @(*) begin
 			if (in_jal == 1'b1) begin
 				temp_PC = in_jal_dest;
+				// $display("LINKING TO %h", temp_PC);
 			end else if (in_branch_dir == 1'b1) begin
 				temp_PC = in_branch_dest;
 			end else begin
