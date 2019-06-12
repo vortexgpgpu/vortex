@@ -125,7 +125,7 @@ void vx_wait_for_warps(unsigned num_wait)
 	unsigned num = 0;
 	while (num != num_wait)
 	{
-		num = 1;
+		num = 0;
 		for (int i = 0; i < 32; i++)
 		{
 			if (done[i] == 1)
