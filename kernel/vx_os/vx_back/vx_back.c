@@ -123,10 +123,11 @@ void vx_wait_for_warps(unsigned num_wait)
 	vx_printf("wait for: ", num_wait);
 	unsigned num_available_warps = vx_available_warps();
 	unsigned num = 0;
-	while (num != num_wait)
+	while (num < num_wait)
 	{
 		// change num=1 if running on RTL
-		num = 0;
+		// Change num=0 if running on emulator
+		num = 1;
 		for (int i = 0; i < 32; i++)
 		{
 			if (done[i] == 1)
