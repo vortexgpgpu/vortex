@@ -125,6 +125,7 @@ void vx_wait_for_warps(unsigned num_wait)
 	unsigned num = 0;
 	while (num != num_wait)
 	{
+		// change num=1 if running on RTL
 		num = 0;
 		for (int i = 0; i < 32; i++)
 		{
