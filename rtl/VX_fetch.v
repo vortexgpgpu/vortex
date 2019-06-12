@@ -40,22 +40,22 @@ module VX_fetch (
 		reg[`NW_M1:0] warp_state;
 		reg[`NW_M1:0] warp_count;
 
-		reg[31:0] num_ecalls;
+		// reg[31:0] num_ecalls;
 
 		initial begin
 			warp_num   = 0;
 			warp_state = 0;
-			num_ecalls = 0;
+			// num_ecalls = 0;
 			warp_count = 1;
 		end
 
 
-		always @(posedge clk) begin
-			if (in_ebreak) begin
-				num_ecalls <= num_ecalls + 1;
-				$display("--------> New num_ecalls = %h", num_ecalls+1);
-			end
-		end
+		// always @(posedge clk) begin
+		// 	if (in_ebreak) begin
+		// 		num_ecalls <= num_ecalls + 1;
+		// 		$display("--------> New num_ecalls = %h", num_ecalls+1);
+		// 	end
+		// end
 
 		wire add_warp    = in_wspawn && !in_ebreak && !in_clone_stall;
 		wire remove_warp = in_ebreak && !in_wspawn && !in_clone_stall;
@@ -65,7 +65,7 @@ module VX_fetch (
 				warp_num   <= 0;
 			`ifndef ONLY
 			end else if (!warp_glob_valid[warp_num+1]) begin
-				$display("Skipping one");
+				// $display("Skipping one");
 				warp_num   <= warp_num + 2;
 			`endif
 			end else begin
@@ -75,12 +75,12 @@ module VX_fetch (
 			if (add_warp) begin
 				warp_state <= warp_state + 1;
 				warp_count <= warp_count + 1;
-				$display("Adding a new warp %h", warp_state+1);
+				// $display("Adding a new warp %h", warp_state+1);
 			end else if (remove_warp) begin // No removing, just invalidating
 				warp_count <= warp_count - 1;
-				$display("Removing a warp %h %h", in_decode_warp_num, warp_count);
+				// $display("Removing a warp %h %h", in_decode_warp_num, warp_count);
 				if (warp_count == 2) begin
-					$display("&&&&&&&&&&&&& STATE 0");
+					// $display("&&&&&&&&&&&&& STATE 0");
 					warp_state <= 0;
 				end
 			end
@@ -103,9 +103,9 @@ module VX_fetch (
 			wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
 			wire       warp_zero_remove      = remove_warp && (in_decode_warp_num == 0);
 
-			always @(*) begin : proc_
-				if (warp_zero_remove) $display("4Removing warp: %h", 0);
-			end
+			// always @(*) begin : proc_
+			// 	if (warp_zero_remove) $display("4Removing warp: %h", 0);
+			// end
 
 			VX_warp VX_Warp(
 				.clk           (clk),
@@ -140,9 +140,9 @@ module VX_fetch (
 					wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
 					wire       warp_zero_remove      = remove_warp && (in_decode_warp_num == cur_warp);
 
-					always @(*) begin : proc_
-						if (warp_zero_remove) $display("4Removing warp: %h", cur_warp);
-					end
+					// always @(*) begin : proc_
+					// 	if (warp_zero_remove) $display("4Removing warp: %h", cur_warp);
+					// end
 
 					VX_warp VX_Warp(
 						.clk           (clk),
@@ -184,11 +184,11 @@ module VX_fetch (
 			assign out_PC    = out_PC_var;
 			assign out_valid = out_valid_var;
 
-			always @(*) begin
-				if (out_valid[0]) begin
-					$display("[%d] %h #%b#",out_warp_num, out_PC, out_valid);
-				end
-			end
+			// always @(*) begin
+			// 	if (out_valid[0]) begin
+			// 		$display("[%d] %h #%b#",out_warp_num, out_PC, out_valid);
+			// 	end
+			// end
 
 		`endif
 

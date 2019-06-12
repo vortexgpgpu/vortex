@@ -4,7 +4,8 @@
 #define __RAM__
 
 #include "string.h"
-
+#include <stdint.h>
+#include <cstdint>
 class RAM{
 public:
     uint8_t* mem[1 << 12];

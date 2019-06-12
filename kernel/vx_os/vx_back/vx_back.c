@@ -16,18 +16,7 @@ void vx_reschedule_warps()
 {
 
 	register unsigned curr_warp asm("s10");
-	vx_printf("Reschedule: ", curr_warp);
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
-	asm __volatile__("nop");
+	// vx_printf("Reschedule: ", curr_warp);
 	asm __volatile__("nop");
 
 	if (queue_isEmpty(q+curr_warp))
@@ -131,20 +120,20 @@ void vx_spawnWarps(unsigned num_Warps, unsigned num_threads, FUNC, void * args)
 
 void vx_wait_for_warps(unsigned num_wait)
 {
-	// vx_printf("wait for: ", num_wait);
+	vx_printf("wait for: ", num_wait);
 	unsigned num_available_warps = vx_available_warps();
 	unsigned num = 0;
 	while (num != num_wait)
 	{
-		num = 0;
-		for (int i = 0; i < num_available_warps; i++)
+		num = 1;
+		for (int i = 0; i < 32; i++)
 		{
 			if (done[i] == 1)
 			{
 				num += 1;
 			}
 		}
-		// vx_printf("Found: ", num);
+		vx_printf("Found: ", num);
 	}
 
 	// vx_printf("num found: ", num);

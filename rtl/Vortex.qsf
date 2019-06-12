@@ -1,0 +1,47 @@
+set_global_assignment -name FAMILY "Arria 10"
+set_global_assignment -name TOP_LEVEL_ENTITY Vortex
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 18.0.0
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "20:33:29  MAY 12, 2019"
+set_global_assignment -name LAST_QUARTUS_VERSION "18.0.0 Pro Edition"
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/Vortex.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_alu.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_context.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_context_slave.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_csr_handler.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_d_e_reg.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_decode.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_define.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_e_m_reg.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_execute.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_f_d_reg.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_fetch.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_forwarding.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_m_w_reg.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_memory.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_register_file.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_register_file_master_slave.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_register_file_slave.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_warp.v
+set_global_assignment -name VERILOG_FILE ../../Users/fsabbaghgt/Documents/GitHub/Vortex/rtl/VX_writeback.v
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name DEVICE 10AX115U3F45I2SG
+set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 4
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP "-40"
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
+set_global_assignment -name POWER_AUTO_COMPUTE_TJ ON
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
+set_global_assignment -name NUMBER_OF_REMOVED_REGISTERS_REPORTED 50000
+set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
+set_global_assignment -name VERILOG_SHOW_LMF_MAPPING_MESSAGES OFF
+set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
+set_global_assignment -name SDC_FILE clk_const.sdc
+set_global_assignment -name ALLOW_REGISTER_RETIMING OFF
+set_global_assignment -name REMOVE_DUPLICATE_REGISTERS OFF
+set_global_assignment -name AUTO_ROM_RECOGNITION OFF
+set_global_assignment -name AUTO_RAM_RECOGNITION OFF
+set_global_assignment -name SYNTH_PROTECT_SDC_CONSTRAINT ON
+set_global_assignment -name IGNORE_MAX_FANOUT_ASSIGNMENTS ON
+set_global_assignment -name FLOW_ENABLE_POWER_ANALYZER OFF
+set_global_assignment -name FLOW_DISABLE_ASSEMBLER ON
+set_instance_assignment -name PARTITION_COLOUR 4288217044 -to Vortex -entity Vortex

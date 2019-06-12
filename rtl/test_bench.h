@@ -189,17 +189,17 @@ bool Vortex::dbus_driver()
                   std::cerr << (char) data_write;
                 }
 
-                if ((addr >= 0x810002cc) && (addr < 0x810002d0))
-                {
-                    int index = (addr - 0x810002cc) / 4;
-                    std::cerr << GREEN << "1done[" << index << "] = " << data_write << DEFAULT << "\n";
-                }
+                // if ((addr >= 0x810002cc) && (addr < 0x810002d0))
+                // {
+                //     int index = (addr - 0x810002cc) / 4;
+                //     // std::cerr << GREEN << "1done[" << index << "] = " << data_write << DEFAULT << "\n";
+                // }
 
-                if ((addr >= 0x810059f4) && (addr < 0x810059f4))
-                {
-                    int index = (addr - 0x810059f4) / 4;
-                    std::cerr << RED << "2done[" << index << "] = " << data_write << DEFAULT << "\n";
-                }
+                // if ((addr >= 0x810059f4) && (addr < 0x810059f4))
+                // {
+                //     int index = (addr - 0x810059f4) / 4;
+                //     // std::cerr << RED << "2done[" << index << "] = " << data_write << DEFAULT << "\n";
+                // }
 
                 if (vortex->out_cache_driver_in_mem_write == SB_MEM_WRITE)
                 {
@@ -248,7 +248,7 @@ bool Vortex::dbus_driver()
                 {
                     // printf("Reading mem - Addr: %x = %x\n", addr, data_read);
                     // std::cout << "READING - Addr: " << std::hex << addr << " = " << data_read << "\n";
-                    std::cout << std::dec;
+                    // std::cout << std::dec;
                     vortex->in_cache_driver_out_data[curr_th] = data_read;
 
                 } else if (vortex->out_cache_driver_in_mem_read == LBU_MEM_READ)

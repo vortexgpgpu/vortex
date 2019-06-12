@@ -1,7 +1,7 @@
 
 `include "VX_define.v"
 
-
+// Old SM file
 
 module VX_shared_memory(
 		input  wire       clk,

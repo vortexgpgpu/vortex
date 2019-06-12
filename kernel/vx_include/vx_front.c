@@ -23,7 +23,7 @@ void vx_sq_mat_mult(void * x, void * y, void * z, unsigned mat_dim)
 		off += 1;
 	}
 
-	vx_printf("Offset: ", off);
+	// vx_printf("Offset: ", off);
 
 
 	mat_mult_args.offset = off;

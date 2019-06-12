@@ -3,7 +3,9 @@
 module VX_csr_handler (
 		input wire        clk,
 		input wire[11:0]  in_decode_csr_address, // done
+		/* verilator lint_off UNUSED */
 		input wire[11:0]  in_mem_csr_address,
+		/* verilator lint_on UNUSED */
 		input wire        in_mem_is_csr,
 		/* verilator lint_off UNUSED */
 		input wire[31:0]  in_mem_csr_result,
@@ -13,7 +15,7 @@ module VX_csr_handler (
 	);
 
 
-		reg[11:0] csr[4095:0];
+		reg[11:0] csr[1024:0];
 		reg[63:0] cycle;
 		reg[63:0] instret;
 		reg[11:0] decode_csr_address;
@@ -42,7 +44,9 @@ module VX_csr_handler (
 
 		always @(posedge clk) begin
 			if(in_mem_is_csr) begin
+				/* verilator lint_off WIDTH */
 				csr[in_mem_csr_address] <= in_mem_csr_result[11:0];
+				/* verilator lint_on WIDTH */
 			end
 		end
 
@@ -53,11 +57,13 @@ module VX_csr_handler (
 		assign read_instreth = decode_csr_address == 12'hC82;
 
 
+		/* verilator lint_off WIDTH */
     	assign out_decode_csr_data = read_cycle ? cycle[31:0] :
     									read_cycleh ? cycle[63:32] : 
     											read_instret ? instret[31:0] :
     													read_instreth ? instret[63:32] : 
     															{{20{1'b0}}, csr[decode_csr_address]};
+    	/* verilator lint_on WIDTH */
 
 
 
