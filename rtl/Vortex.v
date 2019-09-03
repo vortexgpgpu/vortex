@@ -1,14 +1,16 @@
 
 `include "VX_define.v"
+`include "buses.vh"
 
 module Vortex(
 	input  wire           clk,
 	input  wire           reset,
-	input  wire[31:0]     fe_instruction,
-	// input  wire[31:0]     in_cache_driver_out_data_0,
-	// input  wire[31:0]     in_cache_driver_out_data_1,
+	input  wire[31:0] icache_response_instruction,
+	output wire[31:0]  icache_request_pc_address,
+	// input  wire[31:0]     icache_instruction,
+	// output wire           icache_request_valid,
+	// output wire[31:0]     icache_PC,
 	input  wire[31:0]     in_cache_driver_out_data[`NT_M1:0],
-	output wire[31:0]     curr_PC,
 	output wire[31:0]     out_cache_driver_in_address[`NT_M1:0],
 	output wire[2:0]      out_cache_driver_in_mem_read,
 	output wire[2:0]      out_cache_driver_in_mem_write,
@@ -22,8 +24,6 @@ module Vortex(
 // assign in_cache_driver_out_data[0] = in_cache_driver_out_data_0;
 // assign in_cache_driver_out_data[1] = in_cache_driver_out_data_1;
 
-
-assign curr_PC = fetch_curr_PC;
 
 // From fetch
 wire[31:0]     fetch_instruction;
@@ -201,6 +201,14 @@ assign interrupt    = 1'b0;
 assign total_freeze = fetch_delay || memory_delay;
 assign out_ebreak   = fetch_ebreak;
 
+
+icache_response_t icache_response_fe;
+icache_request_t  icache_request_fe;
+fe_inst_meta_de_t fe_inst_meta_fd;
+
+assign icache_response_fe.instruction = icache_response_instruction;
+assign icache_request_pc_address      = icache_request_fe.pc_address;
+
 VX_fetch vx_fetch(
 		.clk                (clk),
 		.reset              (reset),
@@ -215,7 +223,6 @@ VX_fetch vx_fetch(
 		.in_jal_dest        (e_m_jal_dest),
 		.in_interrupt       (interrupt),
 		.in_debug           (debug),
-		.in_instruction     (fe_instruction),
 		.in_thread_mask     (decode_thread_mask),
 		.in_change_mask     (decode_change_mask),
 		.in_decode_warp_num (decode_warp_num),
@@ -223,14 +230,17 @@ VX_fetch vx_fetch(
 		.in_wspawn          (decode_wspawn),
 		.in_wspawn_pc       (decode_wspawn_pc),
 		.in_ebreak          (decode_ebreak),
+		.icache_response    (icache_response_fe),
 
+		.icache_request     (icache_request_fe),
 		.out_instruction    (fetch_instruction),
 		.out_delay          (fetch_delay),
 		.out_curr_PC        (fetch_curr_PC),
 		.out_warp_num       (fetch_warp_num),
 		.out_valid          (fetch_valid),
 		.out_ebreak         (fetch_ebreak),
-		.out_which_wspawn   (fetch_which_warp)
+		.out_which_wspawn   (fetch_which_warp),
+		.fe_inst_meta_fd    (fe_inst_meta_fd)
 	);
 
 
@@ -247,7 +257,8 @@ VX_f_d_reg vx_f_d_reg(
 		.out_instruction(f_d_instruction),
 		.out_curr_PC    (f_d_curr_PC),
 		.out_valid      (f_d_valid),
-		.out_warp_num   (f_d_warp_num)
+		.out_warp_num   (f_d_warp_num),
+		.fe_inst_meta_fd(fe_inst_meta_fd)
 	);
 
 

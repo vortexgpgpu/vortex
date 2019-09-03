@@ -138,9 +138,9 @@ bool Vortex::ibus_driver()
 
     curr_inst = 0xdeadbeef;
 
-    new_PC                             = vortex->curr_PC;
+    new_PC                             = vortex->icache_request_pc_address;
     ram.getWord(new_PC, &curr_inst);
-    vortex->fe_instruction      = curr_inst;
+    vortex->icache_response_instruction   = curr_inst;
 
     // printf("\n\n---------------------------------------------\n(%x) Inst: %x\n", new_PC, curr_inst);
     // printf("\n");

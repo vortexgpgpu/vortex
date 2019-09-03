@@ -16,6 +16,7 @@ VM_TRACE = 0
 # Generated module classes, fast-path, compile with highest optimization
 VM_CLASSES_FAST += \
 	VVortex \
+	VVortex___024unit \
 	VVortex_VX_context_slave \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization

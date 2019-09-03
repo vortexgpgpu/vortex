@@ -3,6 +3,7 @@
 
 #include "VVortex__Syms.h"
 #include "VVortex.h"
+#include "VVortex___024unit.h"
 #include "VVortex_VX_context_slave.h"
 
 // FUNCTIONS

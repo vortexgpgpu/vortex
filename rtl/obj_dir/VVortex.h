@@ -37,8 +37,8 @@ VL_MODULE(VVortex) {
     VL_OUT8(out_cache_driver_in_mem_read,2,0);
     VL_OUT8(out_cache_driver_in_mem_write,2,0);
     VL_OUT8(out_ebreak,0,0);
-    VL_IN(fe_instruction,31,0);
-    VL_OUT(curr_PC,31,0);
+    VL_IN(icache_response_instruction,31,0);
+    VL_OUT(icache_request_pc_address,31,0);
     VL_IN(in_cache_driver_out_data[4],31,0);
     VL_OUT(out_cache_driver_in_address[4],31,0);
     VL_OUT8(out_cache_driver_in_valid[4],0,0);

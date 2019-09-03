@@ -33,6 +33,7 @@ VM_PREFIX = VVortex
 VM_MODPREFIX = VVortex
 # User CFLAGS (from -CFLAGS on Verilator command line)
 VM_USER_CFLAGS = \
+	-std=c++11 \
 
 # User LDLIBS (from -LDFLAGS on Verilator command line)
 VM_USER_LDLIBS = \

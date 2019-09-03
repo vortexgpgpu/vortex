@@ -15,6 +15,7 @@ module VX_fetch (
 	input  wire[31:0]     in_jal_dest,
 	input  wire           in_interrupt,
 	input  wire           in_debug,
+	input  wire[31:0]     in_instruction,
 	input  wire           in_thread_mask[`NT_M1:0],
 	input  wire           in_change_mask,
 	input  wire[`NW_M1:0] in_decode_warp_num,
@@ -22,17 +23,14 @@ module VX_fetch (
 	input  wire           in_wspawn,
 	input  wire[31:0]     in_wspawn_pc,
 	input  wire           in_ebreak,
-	input  icache_response_t icache_response,
 
-	output icache_request_t icache_request,
 	output wire[31:0]     out_instruction,
 	output wire           out_delay,
 	output wire[`NW_M1:0] out_warp_num,
 	output wire[31:0]     out_curr_PC,
 	output wire           out_valid[`NT_M1:0],
 	output wire           out_ebreak,
-	output wire[`NW_M1:0] out_which_wspawn,
-	output fe_inst_meta_de_t fe_inst_meta_fd
+	output wire[`NW_M1:0] out_which_wspawn
 );
 
 		reg       stall;
@@ -97,34 +95,34 @@ module VX_fetch (
 
 		`ifdef ONLY
 
-			// wire       warp_zero_change_mask = in_change_mask && (in_decode_warp_num == 0);
-			// wire       warp_zero_jal         = in_jal         && (in_memory_warp_num == 0);
-			// wire       warp_zero_branch      = in_branch_dir  && (in_memory_warp_num == 0);
-			// wire       warp_zero_stall       = stall          || (warp_num != 0);
-			// wire       warp_zero_wspawn      = (0 == 0) ? 0 : (in_wspawn && ((warp_state+1) == 0));
-			// wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
-			// wire       warp_zero_remove      = remove_warp && (in_decode_warp_num == 0);
+			wire       warp_zero_change_mask = in_change_mask && (in_decode_warp_num == 0);
+			wire       warp_zero_jal         = in_jal         && (in_memory_warp_num == 0);
+			wire       warp_zero_branch      = in_branch_dir  && (in_memory_warp_num == 0);
+			wire       warp_zero_stall       = stall          || (warp_num != 0);
+			wire       warp_zero_wspawn      = (0 == 0) ? 0 : (in_wspawn && ((warp_state+1) == 0));
+			wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
+			wire       warp_zero_remove      = remove_warp && (in_decode_warp_num == 0);
 
-			// // always @(*) begin : proc_
-			// // 	if (warp_zero_remove) $display("4Removing warp: %h", 0);
-			// // end
+			// always @(*) begin : proc_
+			// 	if (warp_zero_remove) $display("4Removing warp: %h", 0);
+			// end
 
-			// VX_warp VX_Warp(
-			// 	.clk           (clk),
-			// 	.reset         (reset),
-			// 	.stall         (warp_zero_stall),
-			// 	.remove        (warp_zero_remove),
-			// 	.in_thread_mask(in_thread_mask),
-			// 	.in_change_mask(warp_zero_change_mask),
-			// 	.in_jal        (warp_zero_jal),
-			// 	.in_jal_dest   (in_jal_dest),
-			// 	.in_branch_dir (warp_zero_branch),
-			// 	.in_branch_dest(in_branch_dest),
-			// 	.in_wspawn     (warp_zero_wspawn),
-			// 	.in_wspawn_pc  (warp_zero_wspawn_pc),
-			// 	.out_PC        (out_PC),
-			// 	.out_valid     (out_valid)
-			// 	);
+			VX_warp VX_Warp(
+				.clk           (clk),
+				.reset         (reset),
+				.stall         (warp_zero_stall),
+				.remove        (warp_zero_remove),
+				.in_thread_mask(in_thread_mask),
+				.in_change_mask(warp_zero_change_mask),
+				.in_jal        (warp_zero_jal),
+				.in_jal_dest   (in_jal_dest),
+				.in_branch_dir (warp_zero_branch),
+				.in_branch_dest(in_branch_dest),
+				.in_wspawn     (warp_zero_wspawn),
+				.in_wspawn_pc  (warp_zero_wspawn_pc),
+				.out_PC        (out_PC),
+				.out_valid     (out_valid)
+				);
 
 		`else 
 
@@ -195,21 +193,13 @@ module VX_fetch (
 		`endif
 
 
-		assign icache_request.pc_address = out_PC;
+
 
 		assign out_curr_PC     = out_PC;
 		assign out_warp_num    = warp_num;
 		assign out_delay       = 0;
 
-		assign out_instruction = (stall) ? 32'b0 : icache_response.instruction;
-
-		assign fe_inst_meta_fd.warp_num = warp_num;
-
-		genvar index;
-		for (index = 0; index <= `NT_M1; index = index + 1) assign fe_inst_meta_fd.valid[index] = out_valid_var[index];
-
-		assign fe_inst_meta_fd.instruction = (stall) ? 32'b0 : icache_response.instruction;;
-		assign fe_inst_meta_fd.inst_pc     = out_PC;
+		assign out_instruction = stall ? 32'b0 : in_instruction;
 
 
 
