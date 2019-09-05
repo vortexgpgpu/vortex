@@ -2,52 +2,44 @@
 `include "VX_define.v"
 
 module VX_execute (
-		input wire[4:0]      in_rd,
-		input wire[4:0]      in_rs1,
-		input wire[4:0]      in_rs2,
-		input wire[31:0]     in_a_reg_data[`NT_M1:0],
-		input wire[31:0]     in_b_reg_data[`NT_M1:0],
-		input wire[4:0]      in_alu_op,
-		input wire[1:0]      in_wb,
-		input wire           in_rs2_src, // NEW
-		input wire[31:0]     in_itype_immed, // new
-		input wire[2:0]      in_mem_read, // NEW
-		input wire[2:0]      in_mem_write, // NEW
-		input wire[31:0]     in_PC_next,
-		input wire[2:0]      in_branch_type,
-		input wire[19:0]     in_upper_immed,
-		input wire[11:0]     in_csr_address, // done
-		input wire           in_is_csr, // done
-		input wire[31:0]     in_csr_data, // done
-		input wire[31:0]     in_csr_mask, // done
-		input wire           in_jal,
-		input wire[31:0]     in_jal_offset,
-		input wire[31:0]     in_curr_PC,
-		input wire           in_valid[`NT_M1:0],
-		input [`NW_M1:0]     in_warp_num,
+		VX_frE_to_bckE_req_inter    VX_bckE_req,
+		input wire[31:0]            in_csr_data,
 
-		output wire[11:0]     out_csr_address,
-		output wire           out_is_csr,
-		output reg[31:0]      out_csr_result,
-		output reg[31:0]      out_alu_result[`NT_M1:0],
-		output wire[4:0]      out_rd,
-		output wire[1:0]      out_wb,
-		output wire[4:0]      out_rs1,
-		output wire[4:0]      out_rs2,
-		output wire[31:0]     out_a_reg_data[`NT_M1:0],
-		output wire[31:0]     out_b_reg_data[`NT_M1:0],
-		output wire[2:0]      out_mem_read,
-		output wire[2:0]      out_mem_write,
-		output wire           out_jal,
-		output wire[31:0]     out_jal_dest,
-		output wire[31:0]     out_branch_offset,
-		output wire           out_branch_stall,
-		output wire[31:0]     out_PC_next,
-		output wire           out_valid[`NT_M1:0],
-		output wire[`NW_M1:0]  out_warp_num
+		VX_mem_req_inter            VX_exe_mem_req,
+		output wire[11:0]           out_csr_address,
+		output wire                 out_is_csr,
+		output reg[31:0]            out_csr_result,
+		output wire[`NT_M1:0][31:0] out_a_reg_data,
+		output wire[`NT_M1:0][31:0] out_b_reg_data,
+		output wire                 out_jal,
+		output wire[31:0]           out_jal_dest,
+		output wire                 out_branch_stall
 	);
 
 
+		wire[`NT_M1:0][31:0] in_a_reg_data;
+		wire[`NT_M1:0][31:0] in_b_reg_data;
+		wire[4:0]            in_alu_op;
+		wire                 in_rs2_src;
+		wire[31:0]           in_itype_immed;
+		wire[2:0]            in_branch_type;
+		wire[19:0]           in_upper_immed;
+		wire[31:0]           in_csr_mask;
+		wire                 in_jal;
+		wire[31:0]           in_jal_offset;
+		wire[31:0]           in_curr_PC;
+
+		assign in_a_reg_data  = VX_bckE_req.a_reg_data;
+		assign in_b_reg_data  = VX_bckE_req.b_reg_data;
+		assign in_alu_op      = VX_bckE_req.alu_op;
+		assign in_rs2_src     = VX_bckE_req.rs2_src;
+		assign in_itype_immed = VX_bckE_req.itype_immed;
+		assign in_branch_type = VX_bckE_req.branch_type;
+		assign in_upper_immed = VX_bckE_req.upper_immed;
+		assign in_csr_mask    = VX_bckE_req.csr_mask;
+		assign in_jal         = VX_bckE_req.jal;
+		assign in_jal_offset  = VX_bckE_req.jal_offset;
+		assign in_curr_PC     = VX_bckE_req.curr_PC;
 
 		genvar index_out_reg;
 		generate
@@ -63,17 +55,10 @@ module VX_execute (
 						.in_alu_op     (in_alu_op),
 						.in_csr_data   (in_csr_data),
 						.in_curr_PC    (in_curr_PC),
-						.out_alu_result(out_alu_result[index_out_reg])
+						.out_alu_result(VX_exe_mem_req.alu_result[index_out_reg])
 					);
 				end
 		endgenerate
-
-		// always @(*) begin
-		// 	if ((in_alu_op == `MUL) && (in_warp_num == 1)) begin
-		// 		$display("@PC: %h ---> %d * %d = %d\t%d * %d = %d", in_curr_PC, in_a_reg_data[0], in_b_reg_data[0], out_alu_result[0], in_a_reg_data[1], in_b_reg_data[1], out_alu_result[1]);
-		// 	end
-		
-		// end
 
 
 		assign out_jal_dest = $signed(in_a_reg_data[0]) + $signed(in_jal_offset);
@@ -97,20 +82,30 @@ module VX_execute (
 
 
 
-		assign out_rd            = in_rd;
-		assign out_wb            = in_wb;
-		assign out_mem_read      = in_mem_read;
-		assign out_mem_write     = in_mem_write;
-		assign out_rs1           = in_rs1;
-		assign out_a_reg_data    = in_a_reg_data;
-		assign out_b_reg_data    = in_b_reg_data;
-		assign out_rs2           = in_rs2;
-		assign out_PC_next       = in_PC_next;
-		assign out_is_csr        = in_is_csr;
-		assign out_csr_address   = in_csr_address;
-		assign out_branch_offset = in_itype_immed;
-		assign out_valid         = in_valid;
-		assign out_warp_num      = in_warp_num;
+		genvar ind;
+		for (ind = 0; ind <= `NT_M1; ind = ind + 1) begin
+			assign out_a_reg_data[ind]    = in_a_reg_data[ind];
+			assign out_b_reg_data[ind]    = in_b_reg_data[ind];
+		end
+
+		assign VX_exe_mem_req.mem_read      = VX_bckE_req.mem_read;
+		assign VX_exe_mem_req.mem_write     = VX_bckE_req.mem_write;
+		assign VX_exe_mem_req.wb            = VX_bckE_req.wb;
+		assign VX_exe_mem_req.rs1           = VX_bckE_req.rs1;
+		assign VX_exe_mem_req.rs2           = VX_bckE_req.rs2;
+		assign VX_exe_mem_req.rd            = VX_bckE_req.rd;
+		assign VX_exe_mem_req.rd2           = VX_bckE_req.b_reg_data;
+		assign VX_exe_mem_req.wb            = VX_bckE_req.wb;
+		assign VX_exe_mem_req.PC_next       = VX_bckE_req.PC_next;
+		assign VX_exe_mem_req.curr_PC       = VX_bckE_req.curr_PC;
+		assign VX_exe_mem_req.branch_offset = VX_bckE_req.itype_immed;
+		assign VX_exe_mem_req.branch_type   = VX_bckE_req.branch_type;
+		assign VX_exe_mem_req.valid         = VX_bckE_req.valid;
+		assign VX_exe_mem_req.warp_num      = VX_bckE_req.warp_num;
+
+
+		assign out_is_csr        = VX_bckE_req.is_csr;
+		assign out_csr_address   = VX_bckE_req.csr_address;
 
 
 endmodule // VX_execute

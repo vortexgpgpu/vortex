@@ -15,25 +15,30 @@ module VX_fetch (
 	input  wire[31:0]     in_jal_dest,
 	input  wire           in_interrupt,
 	input  wire           in_debug,
-	input  wire           in_thread_mask[`NT_M1:0],
-	input  wire           in_change_mask,
-	input  wire[`NW_M1:0] in_decode_warp_num,
 	input  wire[`NW_M1:0] in_memory_warp_num,
-	input  wire           in_wspawn,
-	input  wire[31:0]     in_wspawn_pc,
-	input  wire           in_ebreak,
 	input  icache_response_t icache_response,
 
 	output icache_request_t icache_request,
-	output wire[31:0]     out_instruction,
 	output wire           out_delay,
-	output wire[`NW_M1:0] out_warp_num,
-	output wire[31:0]     out_curr_PC,
-	output wire           out_valid[`NT_M1:0],
 	output wire           out_ebreak,
 	output wire[`NW_M1:0] out_which_wspawn,
-	output fe_inst_meta_de_t fe_inst_meta_fd
+	VX_inst_meta_inter    fe_inst_meta_fd,
+	VX_warp_ctl_inter     VX_warp_ctl
 );
+
+		wire           in_change_mask     = VX_warp_ctl.change_mask;
+		wire           in_wspawn          = VX_warp_ctl.wspawn;
+		wire[31:0]     in_wspawn_pc       = VX_warp_ctl.wspawn_pc;
+		wire           in_ebreak          = VX_warp_ctl.ebreak;
+		wire[`NW_M1:0] in_decode_warp_num = VX_warp_ctl.warp_num;
+
+
+		wire in_thread_mask[`NT_M1:0];
+
+		genvar ind;
+		for (ind = 0; ind <= `NT_M1; ind = ind + 1) assign in_thread_mask[ind] = VX_warp_ctl.thread_mask[ind];
+
+
 
 		reg       stall;
 		reg[31:0] out_PC;
@@ -184,24 +189,15 @@ module VX_fetch (
 			end
 
 			assign out_PC    = out_PC_var;
-			assign out_valid = out_valid_var;
-
-			// always @(*) begin
-			// 	if (out_valid[0]) begin
-			// 		$display("[%d] %h #%b#",out_warp_num, out_PC, out_valid);
-			// 	end
-			// end
 
 		`endif
+
+	
 
 
 		assign icache_request.pc_address = out_PC;
 
-		assign out_curr_PC     = out_PC;
-		assign out_warp_num    = warp_num;
 		assign out_delay       = 0;
-
-		assign out_instruction = (stall) ? 32'b0 : icache_response.instruction;
 
 		assign fe_inst_meta_fd.warp_num = warp_num;
 
@@ -211,6 +207,8 @@ module VX_fetch (
 		assign fe_inst_meta_fd.instruction = (stall) ? 32'b0 : icache_response.instruction;;
 		assign fe_inst_meta_fd.inst_pc     = out_PC;
 
-
+		// always @(*) begin
+		// 	$display("fetch: icache_request: %x", out_PC);
+		// end
 
 endmodule

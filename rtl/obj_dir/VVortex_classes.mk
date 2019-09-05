@@ -11,12 +11,20 @@ VM_COVERAGE = 0
 VM_THREADS = 0
 # Tracing output mode?  0/1 (from --trace)
 VM_TRACE = 0
+# Tracing threadeds output mode?  0/1 (from --trace-fst-thread)
+VM_TRACE_THREADED = 0
 
 ### Object file lists...
 # Generated module classes, fast-path, compile with highest optimization
 VM_CLASSES_FAST += \
 	VVortex \
 	VVortex___024unit \
+	VVortex_VX_inst_meta_inter \
+	VVortex_VX_frE_to_bckE_req_inter \
+	VVortex_VX_mem_req_inter \
+	VVortex_VX_inst_mem_wb_inter \
+	VVortex_VX_warp_ctl_inter \
+	VVortex_VX_wb_inter \
 	VVortex_VX_context_slave \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization

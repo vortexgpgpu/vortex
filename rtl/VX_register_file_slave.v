@@ -15,13 +15,13 @@ module VX_register_file_slave (
   input wire[4:0]    in_src2,
   input wire         in_clone,
   input wire         in_to_clone,
-  input wire[31:0]   in_regs[31:0],
+  input wire[31:0][31:0]   in_regs,
 
   output reg[31:0]   out_src1_data,
   output reg[31:0]   out_src2_data
 );
 
-	reg[31:0] registers[31:0];
+	reg[31:0][31:0] registers;
 
 	wire[31:0] write_data;
 

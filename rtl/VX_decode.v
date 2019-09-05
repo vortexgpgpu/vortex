@@ -2,60 +2,51 @@
 `include "VX_define.v"
 
 module VX_decode(
+	input wire             clk,
 	// Fetch Inputs
-	input wire            clk,
-	input wire[31:0]      in_instruction,
-	input wire[31:0]      in_curr_PC,
-	input wire            in_valid[`NT_M1:0],
+	VX_inst_meta_inter     fd_inst_meta_de,
+
 	// WriteBack inputs
-	input wire[31:0]      in_write_data[`NT_M1:0],
-	input wire[4:0]       in_rd,
-	input wire[1:0]       in_wb,
-	input wire            in_wb_valid[`NT_M1:0],
-	input wire[`NW_M1:0]  in_wb_warp_num,
+	VX_wb_inter            VX_writeback_inter,
 
 	// FORWARDING INPUTS
 	input wire            in_src1_fwd,
-	input wire[31:0]      in_src1_fwd_data[`NT_M1:0],
+	input wire[`NT_M1:0][31:0]      in_src1_fwd_data,
 	input wire            in_src2_fwd,
-	input wire[31:0]      in_src2_fwd_data[`NT_M1:0],
-	/* verilator lint_off UNUSED */
+	input wire[`NT_M1:0][31:0]      in_src2_fwd_data,
 	input wire[`NW_M1:0]  in_which_wspawn,
-	/* verilator lint_on UNUSED */
-
-	input wire[`NW_M1:0]  in_warp_num,
-
-	output wire[11:0]     out_csr_address,
-	output wire           out_is_csr,
-	output wire[31:0]     out_csr_mask,
 
 	// Outputs
-	output wire[4:0]      out_rd,
-	output wire[4:0]      out_rs1,
-	output wire[4:0]      out_rs2,
-	output wire[31:0]     out_a_reg_data[`NT_M1:0],
-	output wire[31:0]     out_b_reg_data[`NT_M1:0],
-	output wire[1:0]      out_wb,
-	output wire[4:0]      out_alu_op,
-	output wire           out_rs2_src,
-	output reg[31:0]      out_itype_immed,
-	output wire[2:0]      out_mem_read,
-	output wire[2:0]      out_mem_write,
-	output reg[2:0]       out_branch_type,
-	output reg            out_branch_stall,
-	output reg            out_jal,
-	output reg[31:0]      out_jal_offset,
-	output reg[19:0]      out_upper_immed,
-	output wire[31:0]     out_PC_next,
-	output reg            out_clone_stall,
-	output wire           out_change_mask,
-	output wire           out_thread_mask[`NT_M1:0],
-	output wire           out_valid[`NT_M1:0],
-	output wire[`NW_M1:0] out_warp_num,
-	output wire           out_wspawn,
-	output wire[31:0]     out_wspawn_pc,
-	output wire           out_ebreak
+	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
+	VX_warp_ctl_inter        VX_warp_ctl,
+	output reg               out_clone_stall,
+	output reg               out_branch_stall
+
 );
+
+
+		wire[`NT_M1:0][31:0]      in_write_data;
+		wire[4:0]       in_rd;
+		wire[1:0]       in_wb;
+		wire[`NT_M1:0]  in_wb_valid;
+		wire[`NW_M1:0]  in_wb_warp_num;
+
+
+		assign in_write_data  = VX_writeback_inter.write_data;
+		assign in_rd          = VX_writeback_inter.rd;
+		assign in_wb          = VX_writeback_inter.wb;
+		assign in_wb_valid    = VX_writeback_inter.wb_valid;
+		assign in_wb_warp_num = VX_writeback_inter.wb_warp_num;
+
+		wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
+		wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
+		wire[`NW_M1:0]  in_warp_num        = fd_inst_meta_de.warp_num;
+
+		assign VX_frE_to_bckE_req.curr_PC  = in_curr_PC;
+
+		wire            in_valid[`NT_M1:0];
+		genvar index;
+		for (index = 0; index <= `NT_M1; index = index + 1) assign in_valid[index] = fd_inst_meta_de.valid[index];
 
 		wire[6:0]  curr_opcode;
 
@@ -115,7 +106,7 @@ module VX_decode(
 		reg[4:0]   mul_alu;
 
 		/* verilator lint_off UNUSED */
-		wire[31:0] w0_t0_registers[31:0];
+		wire[31:0][31:0] w0_t0_registers;
 		/* verilator lint_on UNUSED */
 
 
@@ -144,8 +135,8 @@ module VX_decode(
 				.in_wb_warp       (context_zero_valid),
 				.in_valid         (in_wb_valid),
 				.in_rd            (in_rd),
-				.in_src1          (out_rs1),
-				.in_src2          (out_rs2),
+				.in_src1          (VX_frE_to_bckE_req.rs1),
+				.in_src2          (VX_frE_to_bckE_req.rs2),
 				.in_curr_PC       (in_curr_PC),
 				.in_is_clone      (real_zero_isclone),
 				.in_is_jal        (is_jal),
@@ -162,15 +153,15 @@ module VX_decode(
 			);
 
 
-			assign out_a_reg_data  = glob_a_reg_data;
-			assign out_b_reg_data  = glob_b_reg_data;
+			assign VX_frE_to_bckE_req.a_reg_data  = glob_a_reg_data;
+			assign VX_frE_to_bckE_req.b_reg_data  = glob_b_reg_data;
 			assign out_clone_stall = glob_clone_stall;
 
 		`else 
 
-			wire[31:0] glob_a_reg_data[`NW-1:0][`NT_M1:0];
-			wire[31:0] glob_b_reg_data[`NW-1:0][`NT_M1:0];
-			reg        glob_clone_stall[`NW-1:0];
+			wire[`NW-1:0][`NT_M1:0][31:0] glob_a_reg_data;
+			wire[`NW-1:0][`NT_M1:0][31:0] glob_b_reg_data;
+			reg[`NW-1:0]        glob_clone_stall;
 
 			wire       curr_warp_zero     = in_warp_num == 0;
 			wire       context_zero_valid = (in_wb_warp_num == 0);
@@ -181,8 +172,8 @@ module VX_decode(
 				.in_wb_warp       (context_zero_valid),
 				.in_valid         (in_wb_valid),
 				.in_rd            (in_rd),
-				.in_src1          (out_rs1),
-				.in_src2          (out_rs2),
+				.in_src1          (VX_frE_to_bckE_req.rs1),
+				.in_src2          (VX_frE_to_bckE_req.rs2),
 				.in_curr_PC       (in_curr_PC),
 				.in_is_clone      (real_zero_isclone),
 				.in_is_jal        (is_jal),
@@ -211,8 +202,8 @@ module VX_decode(
 						.in_wb_warp       (context_glob_valid),
 						.in_valid         (in_wb_valid),
 						.in_rd            (in_rd),
-						.in_src1          (out_rs1),
-						.in_src2          (out_rs2),
+						.in_src1          (VX_frE_to_bckE_req.rs1),
+						.in_src2          (VX_frE_to_bckE_req.rs2),
 						.in_curr_PC       (in_curr_PC),
 						.in_is_clone      (real_isclone),
 						.in_is_jal        (is_jal),
@@ -238,8 +229,8 @@ module VX_decode(
 			// 	end
 			// end
 
-			reg[31:0] temp_out_a_reg_data[`NT_M1:0];
-			reg[31:0] temp_out_b_reg_data[`NT_M1:0];
+			reg[`NT_M1:0][31:0] temp_out_a_reg_data;
+			reg[`NT_M1:0][31:0] temp_out_b_reg_data;
 			/* verilator lint_off UNOPTFLAT */
 			reg       temp_out_clone_stall;
 			/* verilator lint_on UNOPTFLAT */
@@ -247,8 +238,8 @@ module VX_decode(
 			always @(*) begin
 
 				if (`NW == 1) begin
-					temp_out_a_reg_data = glob_a_reg_data;
-					temp_out_b_reg_data = glob_b_reg_data;
+					temp_out_a_reg_data = glob_a_reg_data[0];
+					temp_out_b_reg_data = glob_b_reg_data[0];
 				end else begin
 					integer g;
 					// temp_out_clone_stall = 0;
@@ -264,8 +255,12 @@ module VX_decode(
 				end
 			end
 
-			assign out_a_reg_data  = temp_out_a_reg_data;
-			assign out_b_reg_data  = temp_out_b_reg_data;
+			genvar sml_index;
+			for (sml_index = 0; sml_index <= `NT_M1; sml_index = sml_index + 1) begin
+				assign VX_frE_to_bckE_req.a_reg_data[sml_index]  = temp_out_a_reg_data[sml_index];
+				assign VX_frE_to_bckE_req.b_reg_data[sml_index]  = temp_out_b_reg_data[sml_index];
+			end
+
 			// assign out_clone_stall = temp_out_clone_stall;
 
 			// assign out_a_reg_data  = curr_warp_zero ? glob_a_reg_data[0]  : glob_a_reg_data[1];
@@ -296,8 +291,11 @@ module VX_decode(
 		// 	end
 		// end
 
-		assign out_warp_num = in_warp_num;
-		assign out_valid    = in_valid;
+
+		assign VX_frE_to_bckE_req.valid    = fd_inst_meta_de.valid;
+
+		assign VX_frE_to_bckE_req.warp_num = in_warp_num;
+		assign VX_warp_ctl.warp_num        = in_warp_num;
 
 		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
 
@@ -305,15 +303,15 @@ module VX_decode(
 		assign curr_opcode    = in_instruction[6:0];
 
 
-		assign out_rd   = in_instruction[11:7];
-		assign out_rs1  = in_instruction[19:15];
-		assign out_rs2  = in_instruction[24:20];
+		assign VX_frE_to_bckE_req.rd   = in_instruction[11:7];
+		assign VX_frE_to_bckE_req.rs1  = in_instruction[19:15];
+		assign VX_frE_to_bckE_req.rs2  = in_instruction[24:20];
 		assign func3    = in_instruction[14:12];
 		assign func7    = in_instruction[31:25];
 		assign u_12     = in_instruction[31:20];
 
 
-		assign out_PC_next = in_curr_PC + 32'h4;
+		assign VX_frE_to_bckE_req.PC_next = in_curr_PC + 32'h4;
 
 
 		// Write Back sigal
@@ -336,23 +334,21 @@ module VX_decode(
 		assign is_jmprt     = is_gpgpu && (func3 == 4);
 		assign is_wspawn    = is_gpgpu && (func3 == 0);
 
-		assign out_wspawn    = is_wspawn;
-		assign out_wspawn_pc = out_a_reg_data[0];
-
-		// always @(*) begin
-		// 	if (is_jalrs && in_warp_num == 2) begin
-		// 		$display("JALRS WOHOOO: rs2 - %h", out_b_reg_data[0]);
-		// 	end
-		// end
+		assign VX_warp_ctl.wspawn    = is_wspawn;
+		assign VX_warp_ctl.wspawn_pc = VX_frE_to_bckE_req.a_reg_data[0];
 
 
-		wire     jalrs_thread_mask[`NT_M1:0];
-		wire     jmprt_thread_mask[`NT_M1:0];
+
+
+		wire[`NT_M1:0] jalrs_thread_mask;
+		wire[`NT_M1:0] jmprt_thread_mask;
 
 		genvar tm_i;
 		generate
 			for (tm_i = 0; tm_i < `NT; tm_i = tm_i + 1) begin
-					assign jalrs_thread_mask[tm_i] = tm_i <= $signed(out_b_reg_data[0]);
+					/* verilator lint_off UNSIGNED */
+					assign jalrs_thread_mask[tm_i] = tm_i <= $signed(VX_frE_to_bckE_req.b_reg_data[0]);
+					/* verilator lint_on UNSIGNED */
 			end
 		endgenerate
 
@@ -365,10 +361,10 @@ module VX_decode(
 			end
 		endgenerate
 
-		assign out_thread_mask = is_jalrs ? jalrs_thread_mask : jmprt_thread_mask;
+		assign VX_warp_ctl.thread_mask = is_jalrs ? jalrs_thread_mask : jmprt_thread_mask;
 
 
-		assign out_change_mask = is_jalrs || is_jmprt;
+		assign VX_warp_ctl.change_mask = is_jalrs || is_jmprt;
 
 
 
@@ -398,32 +394,32 @@ module VX_decode(
 
 		// always @(negedge clk) begin
 		// 	if (in_curr_PC == 32'h800001f0) begin
-		// 		$display("IN DECODE: Going to write to: %d with val: %h [%h, %h, %h]", out_rd, internal_rd1, in_curr_PC, in_src1_fwd_data, rd1_register);
+		// 		$display("IN DECODE: Going to write to: %d with val: %h [%h, %h, %h]", VX_frE_to_bckE_req.rd, internal_rd1, in_curr_PC, in_src1_fwd_data, rd1_register);
 		// 	end
 		// end
 
-		assign out_is_csr   = is_csr;
-    	assign out_csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, out_rs1} : out_a_reg_data[0];
+		assign VX_frE_to_bckE_req.is_csr   = is_csr;
+    	assign VX_frE_to_bckE_req.csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, VX_frE_to_bckE_req.rs1} : VX_frE_to_bckE_req.a_reg_data[0];
 
 
-		assign out_wb       = (is_jal || is_jalr || is_jalrs || is_e_inst) ? `WB_JAL :
-			                   is_linst ? `WB_MEM :
-			                   	     (is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
-			                   	     	    `NO_WB;
+		assign VX_frE_to_bckE_req.wb       = (is_jal || is_jalr || is_jalrs || is_e_inst) ? `WB_JAL :
+			                   					is_linst ? `WB_MEM :
+			                   	     				(is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
+			                   	     	    			`NO_WB;
 
 
-		assign out_rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
+		assign VX_frE_to_bckE_req.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
 
 		// MEM signals 
-		assign out_mem_read  = (is_linst) ? func3 : `NO_MEM_READ;
-		assign out_mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
+		assign VX_frE_to_bckE_req.mem_read  = (is_linst) ? func3 : `NO_MEM_READ;
+		assign VX_frE_to_bckE_req.mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
 
 		// UPPER IMMEDIATE
 		always @(*) begin
 			case(curr_opcode)
-				`LUI_INST:   out_upper_immed  = {func7, out_rs2, out_rs1, func3};
-				`AUIPC_INST: out_upper_immed  = {func7, out_rs2, out_rs1, func3};
-				default:     out_upper_immed  = 20'h0;
+				`LUI_INST:   VX_frE_to_bckE_req.upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
+				`AUIPC_INST: VX_frE_to_bckE_req.upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
+				default:     VX_frE_to_bckE_req.upper_immed  = 20'h0;
 			endcase // curr_opcode
 		end
 
@@ -437,7 +433,7 @@ module VX_decode(
 		assign jal_1_offset         = {{11{jal_b_20}}, jal_unsigned_offset};
 
 
-		assign jalr_immed   = {func7, out_rs2};
+		assign jalr_immed   = {func7, VX_frE_to_bckE_req.rs2};
 		assign jal_2_offset = {{20{jalr_immed[11]}}, jalr_immed};
 
 
@@ -452,33 +448,32 @@ module VX_decode(
 			case(curr_opcode)
 				`JAL_INST:
 					begin
-		       		 	out_jal        = 1'b1 && in_valid[0];
-						out_jal_offset = jal_1_offset;
+		       		 	VX_frE_to_bckE_req.jal        = 1'b1 && in_valid[0];
+						VX_frE_to_bckE_req.jal_offset = jal_1_offset;
 					end
 				`JALR_INST:
 					begin
-		        		out_jal        = 1'b1 && in_valid[0];
-						out_jal_offset = jal_2_offset;
+		        		VX_frE_to_bckE_req.jal        = 1'b1 && in_valid[0];
+						VX_frE_to_bckE_req.jal_offset = jal_2_offset;
 					end
 				`GPGPU_INST:
 					begin
 						if (is_jalrs || is_jmprt)
 						begin
-							// $display("OUT JAL DEST: %h", out_a_reg_data[0]);
-			        		out_jal        = 1'b1 && in_valid[0];
-							out_jal_offset = 32'h0;
+			        		VX_frE_to_bckE_req.jal        = 1'b1 && in_valid[0];
+							VX_frE_to_bckE_req.jal_offset = 32'h0;
 						end
 					end
 				`SYS_INST:
 					begin
 						// $display("SYS EBREAK %h", (jal_sys_jal && in_valid[0]) );
-						out_jal        = jal_sys_jal && in_valid[0];
-						out_jal_offset = jal_sys_off;
+						VX_frE_to_bckE_req.jal        = jal_sys_jal && in_valid[0];
+						VX_frE_to_bckE_req.jal_offset = jal_sys_off;
 					end
 				default:
 					begin
-						out_jal          = 1'b0 && in_valid[0];
-						out_jal_offset   = 32'hdeadbeef;
+						VX_frE_to_bckE_req.jal          = 1'b0 && in_valid[0];
+						VX_frE_to_bckE_req.jal_offset   = 32'hdeadbeef;
 					end
 			endcase
 		end
@@ -489,29 +484,29 @@ module VX_decode(
 		assign is_ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && in_valid[0]);
 
 
-		assign out_ebreak = is_ebreak;
+		assign VX_warp_ctl.ebreak = is_ebreak;
 
 		// CSR
 
 		assign csr_cond1  = func3 != 3'h0;
 		assign csr_cond2  = u_12  >= 12'h2;
 
-		assign out_csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
+		assign VX_frE_to_bckE_req.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
 
 
 		// ITYPE IMEED
 		assign alu_shift_i       = (func3 == 3'h1) || (func3 == 3'h5);
-		assign alu_shift_i_immed = {{7{1'b0}}, out_rs2};
+		assign alu_shift_i_immed = {{7{1'b0}}, VX_frE_to_bckE_req.rs2};
 		assign alu_tempp = alu_shift_i ? alu_shift_i_immed : u_12;
 
 
 		always @(*) begin
 			case(curr_opcode)
-					`ALU_INST: out_itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
-					`S_INST:   out_itype_immed = {{20{func7[6]}}, func7, out_rd};
-					`L_INST:   out_itype_immed = {{20{u_12[11]}}, u_12};
-					`B_INST:   out_itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
-					default:  out_itype_immed = 32'hdeadbeef;
+					`ALU_INST: VX_frE_to_bckE_req.itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
+					`S_INST:   VX_frE_to_bckE_req.itype_immed = {{20{func7[6]}}, func7, VX_frE_to_bckE_req.rd};
+					`L_INST:   VX_frE_to_bckE_req.itype_immed = {{20{u_12[11]}}, u_12};
+					`B_INST:   VX_frE_to_bckE_req.itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
+					default:   VX_frE_to_bckE_req.itype_immed = 32'hdeadbeef;
 				endcase
 		end
 	
@@ -522,37 +517,37 @@ module VX_decode(
 					begin
 						out_branch_stall = 1'b1 && in_valid[0];
 						case(func3)
-							3'h0: out_branch_type = `BEQ;
-							3'h1: out_branch_type = `BNE;
-							3'h4: out_branch_type = `BLT;
-							3'h5: out_branch_type = `BGT;
-							3'h6: out_branch_type = `BLTU;
-							3'h7: out_branch_type = `BGTU;
-							default: out_branch_type = `NO_BRANCH; 
+							3'h0: VX_frE_to_bckE_req.branch_type = `BEQ;
+							3'h1: VX_frE_to_bckE_req.branch_type = `BNE;
+							3'h4: VX_frE_to_bckE_req.branch_type = `BLT;
+							3'h5: VX_frE_to_bckE_req.branch_type = `BGT;
+							3'h6: VX_frE_to_bckE_req.branch_type = `BLTU;
+							3'h7: VX_frE_to_bckE_req.branch_type = `BGTU;
+							default: VX_frE_to_bckE_req.branch_type = `NO_BRANCH; 
 						endcase
 					end
 
 				`JAL_INST:
 					begin
-						out_branch_type  = `NO_BRANCH;
+						VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
 						out_branch_stall = 1'b1 && in_valid[0];
 					end
 				`JALR_INST:
 					begin
-						out_branch_type  = `NO_BRANCH;
+						VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
 						out_branch_stall = 1'b1 && in_valid[0];
 					end
 				`GPGPU_INST:
 					begin
 						if (is_jalrs || is_jmprt)
 						begin
-							out_branch_type  = `NO_BRANCH;
+							VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
 							out_branch_stall = 1'b1 && in_valid[0];
 						end
 					end
 				default:
 					begin
-						out_branch_type  = `NO_BRANCH;
+						VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
 						out_branch_stall = 1'b0 && in_valid[0];
 					end
 			endcase
@@ -602,14 +597,14 @@ module VX_decode(
 
 		wire[4:0] temp_final_alu;
 
-		assign temp_final_alu = is_btype ? ((out_branch_type < `BLTU) ? `SUB : `SUBU) :
+		assign temp_final_alu = is_btype ? ((VX_frE_to_bckE_req.branch_type < `BLTU) ? `SUB : `SUBU) :
 										is_lui ? `LUI_ALU :
 											is_auipc ? `AUIPC_ALU :
 												is_csr ? csr_alu :
 													(is_stype || is_linst) ? `ADD :
 														alu_op;
 
-		assign out_alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
+		assign VX_frE_to_bckE_req.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
 
 endmodule
 

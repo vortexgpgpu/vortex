@@ -18,14 +18,14 @@ typedef struct packed
 	logic[31:0] instruction;
 } icache_response_t;
 
-typedef struct packed
-{
-	logic[31:0]       instruction;
-	logic[31:0]       inst_pc;
-	logic[`NW_M1:0]   warp_num;
-	logic[`NT_M1:0]   valid;
+// typedef struct packed
+// {
+// 	logic[31:0]       instruction;
+// 	logic[31:0]       inst_pc;
+// 	logic[`NW_M1:0]   warp_num;
+// 	logic[`NT_M1:0]   valid;
 
-} fe_inst_meta_de_t;
+// } fe_inst_meta_de_t;
 
 
 `endif

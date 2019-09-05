@@ -10,12 +10,12 @@ module VX_register_file (
   input wire[4:0]   in_src1,
   input wire[4:0]   in_src2,
 
-  output wire[31:0]  out_regs[31:0],
+  output wire[31:0][31:0]  out_regs,
   output reg[31:0]   out_src1_data,
   output reg[31:0]   out_src2_data
 );
 
-	reg[31:0] registers[31:0];
+	reg[31:0][31:0] registers;
 
 	wire[31:0] write_data;
 

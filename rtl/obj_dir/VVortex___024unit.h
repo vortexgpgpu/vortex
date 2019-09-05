@@ -39,7 +39,7 @@ VL_MODULE(VVortex___024unit) {
     // INTERNAL METHODS
     void __Vconfigure(VVortex__Syms* symsp, bool first);
   private:
-    void _ctor_var_reset();
+    void _ctor_var_reset() VL_ATTR_COLD;
 } VL_ATTR_ALIGNED(128);
 
 #endif // guard

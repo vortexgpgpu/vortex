@@ -7,31 +7,31 @@ module VX_context_slave (
   input wire        in_warp,
   /* verilator lint_on UNUSED */
   input wire        in_wb_warp,
-  input wire        in_valid[`NT_M1:0],
+  input wire[`NT_M1:0]        in_valid,
   input wire        in_write_register,
   input wire[4:0]   in_rd,
-  input wire[31:0]  in_write_data[`NT_M1:0],
+  input wire[`NT_M1:0][31:0]  in_write_data,
   input wire[4:0]   in_src1,
   input wire[4:0]   in_src2,
   input wire[31:0]  in_curr_PC,
   input wire        in_is_clone,
   input wire        in_is_jal,
   input wire        in_src1_fwd,
-  input wire[31:0]  in_src1_fwd_data[`NT_M1:0],
+  input wire[`NT_M1:0][31:0]  in_src1_fwd_data,
   input wire        in_src2_fwd,
-  input wire[31:0]  in_src2_fwd_data[`NT_M1:0],
-  input wire[31:0]  in_wspawn_regs[31:0],
+  input wire[`NT_M1:0][31:0]  in_src2_fwd_data,
+  input wire[31:0][31:0]  in_wspawn_regs,
   input wire        in_wspawn,
 
-  output reg[31:0]   out_a_reg_data[`NT_M1:0],
-  output reg[31:0]   out_b_reg_data[`NT_M1:0],
+  output reg[`NT_M1:0][31:0]   out_a_reg_data,
+  output reg[`NT_M1:0][31:0]   out_b_reg_data,
   output wire        out_clone_stall
 	
 );
-		wire[31:0] rd1_register[`NT_M1:0];
-		wire[31:0] rd2_register[`NT_M1:0];
+		wire[`NT_M1:0][31:0] rd1_register;
+		wire[`NT_M1:0][31:0] rd2_register;
 		/* verilator lint_off UNUSED */
-		wire[31:0] clone_regsiters[31:0];
+		wire[31:0][31:0] clone_regsiters;
 		/* verilator lint_on UNUSED */
 
 

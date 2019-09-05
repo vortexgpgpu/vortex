@@ -10,14 +10,14 @@ module VX_register_file_master_slave (
   input wire[4:0]    in_src2,
   input wire         in_wspawn,
   input wire         in_to_wspawn,
-  input wire[31:0]   in_wspawn_regs[31:0],
+  input wire[31:0][31:0]   in_wspawn_regs,
 
   output reg[31:0]   out_src1_data,
   output reg[31:0]   out_src2_data,
-  output wire[31:0]  out_regs[31:0]
+  output wire[31:0][31:0]  out_regs
 );
 
-	reg[31:0] registers[31:0];
+	reg[31:0][31:0] registers;
 
 	wire[31:0] write_data;
 
