@@ -19,10 +19,10 @@ VM_TRACE_THREADED = 0
 VM_CLASSES_FAST += \
 	VVortex \
 	VVortex___024unit \
-	VVortex_VX_inst_meta_inter \
-	VVortex_VX_frE_to_bckE_req_inter \
 	VVortex_VX_mem_req_inter \
 	VVortex_VX_inst_mem_wb_inter \
+	VVortex_VX_inst_meta_inter \
+	VVortex_VX_frE_to_bckE_req_inter \
 	VVortex_VX_warp_ctl_inter \
 	VVortex_VX_wb_inter \
 

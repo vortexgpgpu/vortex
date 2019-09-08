@@ -30,7 +30,7 @@ VVortex_VX_warp_ctl_inter::~VVortex_VX_warp_ctl_inter() {
 // Internal Methods
 
 void VVortex_VX_warp_ctl_inter::_ctor_var_reset() {
-    VL_DEBUG_IF(VL_DBG_MSGF("+          VVortex_VX_warp_ctl_inter::_ctor_var_reset\n"); );
+    VL_DEBUG_IF(VL_DBG_MSGF("+            VVortex_VX_warp_ctl_inter::_ctor_var_reset\n"); );
     // Body
     change_mask = VL_RAND_RESET_I(1);
     thread_mask = VL_RAND_RESET_I(4);

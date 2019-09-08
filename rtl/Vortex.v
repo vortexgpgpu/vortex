@@ -21,16 +21,14 @@ module Vortex(
 // assign in_cache_driver_out_data[0] = in_cache_driver_out_data_0;
 // assign in_cache_driver_out_data[1] = in_cache_driver_out_data_1;
 
+wire decode_clone_stall;
+wire decode_branch_stall;
+wire[11:0] decode_csr_address;
 
 // From fetch
 wire           fetch_delay;
 wire           fetch_ebreak;
 wire[`NW_M1:0] fetch_which_warp;
-
-
-// From decode
-wire            decode_branch_stall;
-wire            decode_clone_stall;
 
 
 // From execute
@@ -80,7 +78,6 @@ icache_request_t  icache_request_fe;
 VX_inst_meta_inter       fe_inst_meta_fd();
 VX_inst_meta_inter       fd_inst_meta_de();
 
-VX_frE_to_bckE_req_inter VX_frE_to_bckE_req();
 VX_frE_to_bckE_req_inter VX_bckE_req();
 
 VX_mem_req_inter         VX_exe_mem_req();
@@ -130,42 +127,24 @@ VX_fetch vx_fetch(
 	);
 
 
-VX_f_d_reg vx_f_d_reg(
-		.clk            (clk),
-		.reset          (reset),
-		.in_fwd_stall   (forwarding_fwd_stall),
-		.in_freeze      (total_freeze),
-		.in_clone_stall (decode_clone_stall),
-		.fe_inst_meta_fd(fe_inst_meta_fd),
-		.fd_inst_meta_de(fd_inst_meta_de)
+VX_front_end vx_front_end(
+	.clk                 (clk),
+	.reset               (reset),
+	.total_freeze        (total_freeze),
+	.forwarding_fwd_stall(forwarding_fwd_stall),
+	.fetch_which_warp    (fetch_which_warp),
+	.execute_branch_stall(execute_branch_stall),
+	.VX_warp_ctl         (VX_warp_ctl),
+	.fe_inst_meta_fd     (fe_inst_meta_fd),
+	.VX_writeback_inter  (VX_writeback_inter),
+	.VX_fwd_req_de       (VX_fwd_req_de),
+	.VX_fwd_rsp          (VX_fwd_rsp),
+	.VX_bckE_req         (VX_bckE_req),
+	.decode_clone_stall  (decode_clone_stall),
+	.decode_branch_stall (decode_branch_stall),
+	.decode_csr_address  (decode_csr_address)
 	);
 
-
-VX_decode vx_decode(
-		.clk               (clk),
-		.fd_inst_meta_de   (fd_inst_meta_de),
-		.VX_writeback_inter(VX_writeback_inter),
-		.VX_fwd_rsp        (VX_fwd_rsp),
-		.in_which_wspawn (fetch_which_warp),
-
-		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
-		.VX_fwd_req_de     (VX_fwd_req_de),
-		.VX_warp_ctl       (VX_warp_ctl),
-		.out_clone_stall   (decode_clone_stall),
-		.out_branch_stall  (decode_branch_stall)
-	);
-
-
-VX_d_e_reg vx_d_e_reg(
-		.clk            (clk),
-		.reset          (reset),
-		.in_fwd_stall   (forwarding_fwd_stall),
-		.in_branch_stall(execute_branch_stall),
-		.in_freeze      (total_freeze),
-		.in_clone_stall (decode_clone_stall),
-		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
-		.VX_bckE_req       (VX_bckE_req)
-	);
 
 VX_execute vx_execute(
 		.VX_bckE_req      (VX_bckE_req),
@@ -243,7 +222,7 @@ VX_forwarding vx_forwarding(
 
 VX_csr_handler vx_csr_handler(
 		.clk                  (clk),
-		.in_decode_csr_address(VX_frE_to_bckE_req.csr_address),
+		.in_decode_csr_address(decode_csr_address),
 		.in_mem_csr_address   (e_m_csr_address),
 		.in_mem_is_csr        (e_m_is_csr),
 		.in_mem_csr_result    (e_m_csr_result),
