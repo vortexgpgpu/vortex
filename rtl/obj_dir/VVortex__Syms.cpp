@@ -3,7 +3,6 @@
 
 #include "VVortex__Syms.h"
 #include "VVortex.h"
-#include "VVortex___024unit.h"
 #include "VVortex_VX_mem_req_inter.h"
 #include "VVortex_VX_inst_mem_wb_inter.h"
 #include "VVortex_VX_inst_meta_inter.h"

@@ -1,6 +1,5 @@
 
 `include "VX_define.v"
-`include "buses.vh"
 
 module Vortex(
 	input  wire           clk,
@@ -15,11 +14,6 @@ module Vortex(
 	output wire[31:0]     out_cache_driver_in_data[`NT_M1:0],
 	output wire           out_ebreak
 	);
-
-// wire[31:0] in_cache_driver_out_data[`NT_M1:0];
-
-// assign in_cache_driver_out_data[0] = in_cache_driver_out_data_0;
-// assign in_cache_driver_out_data[1] = in_cache_driver_out_data_1;
 
 wire decode_clone_stall;
 wire decode_branch_stall;
@@ -72,8 +66,7 @@ assign total_freeze = fetch_delay || memory_delay;
 assign out_ebreak   = fetch_ebreak;
 
 
-icache_response_t icache_response_fe;
-icache_request_t  icache_request_fe;
+
 
 VX_inst_meta_inter       fe_inst_meta_fd();
 VX_inst_meta_inter       fd_inst_meta_de();
@@ -97,6 +90,9 @@ VX_forward_exe_inter          VX_fwd_exe();
 VX_forward_mem_inter          VX_fwd_mem();
 VX_forward_wb_inter           VX_fwd_wb();
 VX_forward_response_inter     VX_fwd_rsp();
+
+VX_icache_response_inter icache_response_fe;
+VX_icache_request_inter  icache_request_fe;
 
 assign icache_response_fe.instruction = icache_response_instruction;
 assign icache_request_pc_address      = icache_request_fe.pc_address;

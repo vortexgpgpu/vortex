@@ -18,7 +18,6 @@ VM_TRACE_THREADED = 0
 # Generated module classes, fast-path, compile with highest optimization
 VM_CLASSES_FAST += \
 	VVortex \
-	VVortex___024unit \
 	VVortex_VX_mem_req_inter \
 	VVortex_VX_inst_mem_wb_inter \
 	VVortex_VX_inst_meta_inter \

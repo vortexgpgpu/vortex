@@ -16,9 +16,9 @@ module VX_fetch (
 	input  wire           in_interrupt,
 	input  wire           in_debug,
 	input  wire[`NW_M1:0] in_memory_warp_num,
-	input  icache_response_t icache_response,
+	VX_icache_response_inter icache_response,
 
-	output icache_request_t icache_request,
+	VX_icache_request_inter icache_request,
 	output wire           out_delay,
 	output wire           out_ebreak,
 	output wire[`NW_M1:0] out_which_wspawn,

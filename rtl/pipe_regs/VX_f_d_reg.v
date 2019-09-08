@@ -1,5 +1,3 @@
-`include "buses.vh"
-
 `include "VX_define.v"
 
 module VX_f_d_reg (
