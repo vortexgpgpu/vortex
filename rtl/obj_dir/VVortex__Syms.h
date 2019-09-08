@@ -11,13 +11,15 @@
 
 // INCLUDE MODULE CLASSES
 #include "VVortex.h"
-#include "VVortex_VX_mem_req_inter.h"
-#include "VVortex_VX_inst_mem_wb_inter.h"
-#include "VVortex_VX_inst_meta_inter.h"
+#include "VVortex_VX_dcache_response_inter.h"
+#include "VVortex_VX_dcache_request_inter.h"
 #include "VVortex_VX_frE_to_bckE_req_inter.h"
 #include "VVortex_VX_wb_inter.h"
 #include "VVortex_VX_branch_response_inter.h"
 #include "VVortex_VX_warp_ctl_inter.h"
+#include "VVortex_VX_inst_meta_inter.h"
+#include "VVortex_VX_mem_req_inter.h"
+#include "VVortex_VX_inst_mem_wb_inter.h"
 
 // SYMS CLASS
 class VVortex__Syms : public VerilatedSyms {
@@ -30,9 +32,11 @@ class VVortex__Syms : public VerilatedSyms {
     // SUBCELL STATE
     VVortex*                       TOPp;
     VVortex_VX_branch_response_inter TOP__Vortex__DOT__VX_branch_rsp;
-    VVortex_VX_mem_req_inter       TOP__Vortex__DOT__VX_exe_mem_req;
-    VVortex_VX_inst_mem_wb_inter   TOP__Vortex__DOT__VX_mem_wb;
+    VVortex_VX_dcache_request_inter TOP__Vortex__DOT__VX_dcache_req;
+    VVortex_VX_dcache_response_inter TOP__Vortex__DOT__VX_dcache_rsp;
     VVortex_VX_wb_inter            TOP__Vortex__DOT__VX_writeback_inter;
+    VVortex_VX_mem_req_inter       TOP__Vortex__DOT__vx_back_end__DOT__VX_exe_mem_req;
+    VVortex_VX_inst_mem_wb_inter   TOP__Vortex__DOT__vx_back_end__DOT__VX_mem_wb;
     VVortex_VX_frE_to_bckE_req_inter TOP__Vortex__DOT__vx_front_end__DOT__VX_frE_to_bckE_req;
     VVortex_VX_warp_ctl_inter      TOP__Vortex__DOT__vx_front_end__DOT__VX_warp_ctl;
     VVortex_VX_inst_meta_inter     TOP__Vortex__DOT__vx_front_end__DOT__fe_inst_meta_fd;

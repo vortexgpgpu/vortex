@@ -30,7 +30,7 @@ VVortex_VX_inst_mem_wb_inter::~VVortex_VX_inst_mem_wb_inter() {
 // Internal Methods
 
 void VVortex_VX_inst_mem_wb_inter::_ctor_var_reset() {
-    VL_DEBUG_IF(VL_DBG_MSGF("+          VVortex_VX_inst_mem_wb_inter::_ctor_var_reset\n"); );
+    VL_DEBUG_IF(VL_DBG_MSGF("+            VVortex_VX_inst_mem_wb_inter::_ctor_var_reset\n"); );
     // Body
     VL_RAND_RESET_W(128,mem_result);
 }

@@ -14,29 +14,26 @@ module VX_memory (
 		VX_branch_response_inter VX_branch_rsp,
 
 
-		input  wire[31:0]  in_cache_driver_out_data[`NT_M1:0],
-		output wire[31:0] out_cache_driver_in_address[`NT_M1:0],
-		output wire[2:0]  out_cache_driver_in_mem_read,
-		output wire[2:0]  out_cache_driver_in_mem_write,
-		output wire       out_cache_driver_in_valid[`NT_M1:0],
-		output wire[31:0] out_cache_driver_in_data[`NT_M1:0]
+		VX_dcache_response_inter VX_dcache_rsp,
+		VX_dcache_request_inter VX_dcache_req
+
 	);	
 
 
 		 genvar index;
 		 for (index = 0; index <= `NT_M1; index = index + 1) begin
-			assign out_cache_driver_in_address[index]   = VX_mem_req.alu_result[index];
-			assign out_cache_driver_in_data[index]      = VX_mem_req.rd2[index];
-			assign out_cache_driver_in_valid[index]     = VX_mem_req.valid[index];
+			assign VX_dcache_req.out_cache_driver_in_address[index]   = VX_mem_req.alu_result[index];
+			assign VX_dcache_req.out_cache_driver_in_data[index]      = VX_mem_req.rd2[index];
+			assign VX_dcache_req.out_cache_driver_in_valid[index]     = VX_mem_req.valid[index];
 
-			assign VX_mem_wb.mem_result[index]                = in_cache_driver_out_data[index];
+			assign VX_mem_wb.mem_result[index]                = VX_dcache_rsp.in_cache_driver_out_data[index];
 
 		 end
 
 		assign out_delay = 1'b0;
 
-		assign out_cache_driver_in_mem_read  = VX_mem_req.mem_read;
-		assign out_cache_driver_in_mem_write = VX_mem_req.mem_write;
+		assign VX_dcache_req.out_cache_driver_in_mem_read  = VX_mem_req.mem_read;
+		assign VX_dcache_req.out_cache_driver_in_mem_write = VX_mem_req.mem_write;
 
 
 		assign VX_mem_wb.alu_result = VX_mem_req.alu_result;

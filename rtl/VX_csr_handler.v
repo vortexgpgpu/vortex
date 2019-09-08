@@ -3,14 +3,21 @@
 module VX_csr_handler (
 		input wire        clk,
 		input wire[11:0]  in_decode_csr_address, // done
-		input wire[11:0]  in_mem_csr_address,
-		input wire        in_mem_is_csr,
-		/* verilator lint_off UNUSED */
-		input wire[31:0]  in_mem_csr_result,
-		/* verilator lint_on UNUSED */
+		VX_csr_write_request_inter VX_csr_w_req,
 		input wire        in_wb_valid,
 		output wire[31:0] out_decode_csr_data // done
 	);
+
+		wire       in_mem_is_csr;
+		wire[11:0] in_mem_csr_address;
+		/* verilator lint_off UNUSED */
+		wire[31:0] in_mem_csr_result;
+		/* verilator lint_on UNUSED */
+
+
+		assign in_mem_is_csr      = VX_csr_w_req.is_csr;
+		assign in_mem_csr_address = VX_csr_w_req.csr_address;
+		assign in_mem_csr_result  = VX_csr_w_req.csr_result;
 
 
 		reg[1024:0][11:0] csr;
