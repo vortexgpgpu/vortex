@@ -2,8 +2,8 @@
 // DESCRIPTION: Verilator output: Design internal header
 // See VVortex.h for the primary calling header
 
-#ifndef _VVortex___024unit_H_
-#define _VVortex___024unit_H_
+#ifndef _VVortex_VX_branch_response_inter_H_
+#define _VVortex_VX_branch_response_inter_H_
 
 #include "verilated.h"
 
@@ -11,12 +11,14 @@ class VVortex__Syms;
 
 //----------
 
-VL_MODULE(VVortex___024unit) {
+VL_MODULE(VVortex_VX_branch_response_inter) {
   public:
     
     // PORTS
     
     // LOCAL SIGNALS
+    // Begin mtask footprint  all: 
+    VL_SIG(branch_dest,31,0);
     
     // LOCAL VARIABLES
     
@@ -29,10 +31,10 @@ VL_MODULE(VVortex___024unit) {
     
     // CONSTRUCTORS
   private:
-    VL_UNCOPYABLE(VVortex___024unit);  ///< Copying not allowed
+    VL_UNCOPYABLE(VVortex_VX_branch_response_inter);  ///< Copying not allowed
   public:
-    VVortex___024unit(const char* name="TOP");
-    ~VVortex___024unit();
+    VVortex_VX_branch_response_inter(const char* name="TOP");
+    ~VVortex_VX_branch_response_inter();
     
     // API METHODS
     

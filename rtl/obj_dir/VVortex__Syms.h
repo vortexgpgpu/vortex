@@ -13,6 +13,7 @@
 #include "VVortex.h"
 #include "VVortex_VX_mem_req_inter.h"
 #include "VVortex_VX_inst_mem_wb_inter.h"
+#include "VVortex_VX_branch_response_inter.h"
 #include "VVortex_VX_inst_meta_inter.h"
 #include "VVortex_VX_frE_to_bckE_req_inter.h"
 #include "VVortex_VX_warp_ctl_inter.h"
@@ -28,6 +29,7 @@ class VVortex__Syms : public VerilatedSyms {
     
     // SUBCELL STATE
     VVortex*                       TOPp;
+    VVortex_VX_branch_response_inter TOP__Vortex__DOT__VX_branch_rsp;
     VVortex_VX_mem_req_inter       TOP__Vortex__DOT__VX_exe_mem_req;
     VVortex_VX_inst_mem_wb_inter   TOP__Vortex__DOT__VX_mem_wb;
     VVortex_VX_warp_ctl_inter      TOP__Vortex__DOT__VX_warp_ctl;

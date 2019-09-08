@@ -25,6 +25,7 @@ VL_CTOR_IMP(VVortex) {
     VL_CELL(__PVT__Vortex__DOT__VX_mem_wb, VVortex_VX_inst_mem_wb_inter);
     VL_CELL(__PVT__Vortex__DOT__VX_warp_ctl, VVortex_VX_warp_ctl_inter);
     VL_CELL(__PVT__Vortex__DOT__VX_writeback_inter, VVortex_VX_wb_inter);
+    VL_CELL(__PVT__Vortex__DOT__VX_branch_rsp, VVortex_VX_branch_response_inter);
     VL_CELL(__PVT__Vortex__DOT__vx_front_end__DOT__VX_frE_to_bckE_req, VVortex_VX_frE_to_bckE_req_inter);
     VL_CELL(__PVT__Vortex__DOT__vx_front_end__DOT__fd_inst_meta_de, VVortex_VX_inst_meta_inter);
     // Reset internal values
@@ -226,7 +227,7 @@ void VVortex::_initial__TOP__1(VVortex__Syms* __restrict vlSymsp) {
     // INITIAL at VX_context_slave.v:41
     vlTOPp->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
     vlTOPp->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
-    // INITIAL at VX_fetch.v:52
+    // INITIAL at VX_fetch.v:50
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num = 0U;
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_state = 0U;
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_count = 1U;
@@ -627,17 +628,15 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     vlTOPp->Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_valid[3U] 
 	= (1U & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
 		 >> 7U));
-    vlTOPp->Vortex__DOT__memory_branch_dest = (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
-						 << 0x15U) 
-						| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
-						   >> 0xbU)) 
-					       + ((
-						   vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
-						   << 0x16U) 
-						  | (0x3ffffeU 
-						     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
-							>> 0xaU))));
-    // ALWAYS at VX_memory.v:63
+    vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
+	     << 0x15U) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
+			  >> 0xbU)) + ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
+					<< 0x16U) | 
+				       (0x3ffffeU & 
+					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
+					 >> 0xaU))));
+    // ALWAYS at VX_memory.v:62
     vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir 
 	= (1U & ((0x400U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
 		  ? ((0x200U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
@@ -1349,7 +1348,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (0U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1360,7 +1359,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (1U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1371,7 +1370,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (2U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1382,7 +1381,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (3U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1393,7 +1392,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (4U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1404,7 +1403,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (5U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1415,7 +1414,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (6U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -1426,7 +1425,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (7U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_alu.v:48
     vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellout__genblk1__BRA__0__KET____DOT__vx_alu__out_alu_result 
@@ -2410,7 +2409,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	= (1U & ((IData)(vlTOPp->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_out_clone_stall) 
 		 | ((IData)(vlTOPp->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__glob_clone_stall) 
 		    >> 7U)));
-    // ALWAYS at VX_fetch.v:177
+    // ALWAYS at VX_fetch.v:175
     if ((0U == (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num))) {
 	vlTOPp->Vortex__DOT__vx_fetch__DOT__out_PC_var 
 	    = vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_pc
@@ -4892,7 +4891,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_valid[7U][0U] 
 	= vlTOPp->Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Warp__out_valid
 	[0U];
-    // ALWAYS at VX_fetch.v:177
+    // ALWAYS at VX_fetch.v:175
     if ((0U == (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num))) {
 	vlTOPp->Vortex__DOT__vx_fetch__DOT__out_valid_var[0U] 
 	    = vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_valid
@@ -5117,7 +5116,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__3(VVortex__Syms* __restrict vlSymsp) 
 					       ? vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC
 					       : ((IData)(4U) 
 						  + vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC))));
-    // ALWAYS at VX_fetch.v:70
+    // ALWAYS at VX_fetch.v:68
     vlTOPp->__Vdly__Vortex__DOT__vx_fetch__DOT__warp_num 
 	= (0xfU & (((((IData)(vlTOPp->reset) | ((IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num) 
 						>= (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_state))) 
@@ -10821,17 +10820,15 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
     vlTOPp->Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_valid[3U] 
 	= (1U & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
 		 >> 7U));
-    vlTOPp->Vortex__DOT__memory_branch_dest = (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
-						 << 0x15U) 
-						| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
-						   >> 0xbU)) 
-					       + ((
-						   vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
-						   << 0x16U) 
-						  | (0x3ffffeU 
-						     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
-							>> 0xaU))));
-    // ALWAYS at VX_memory.v:63
+    vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
+	     << 0x15U) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
+			  >> 0xbU)) + ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[1U] 
+					<< 0x16U) | 
+				       (0x3ffffeU & 
+					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
+					 >> 0xaU))));
+    // ALWAYS at VX_memory.v:62
     vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir 
 	= (1U & ((0x400U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
 		  ? ((0x200U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
@@ -11155,7 +11152,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (0U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11166,7 +11163,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (1U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11177,7 +11174,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (2U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11188,7 +11185,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (3U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11199,7 +11196,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (4U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11210,7 +11207,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (5U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11221,7 +11218,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (6U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC 
@@ -11232,7 +11229,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (7U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-					 ? vlTOPp->Vortex__DOT__memory_branch_dest
+					 ? vlSymsp->TOP__Vortex__DOT__VX_branch_rsp.branch_dest
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__real_PC));
     vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd 
 	= (((((((0x1fU & ((vlTOPp->Vortex__DOT__vx_front_end__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -11352,7 +11349,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) 
 						   | (IData)(vlTOPp->Vortex__DOT__vx_front_end__DOT__internal_decode_branch_stall)) 
 						  | (IData)(vlTOPp->Vortex__DOT__forwarding_fwd_stall)) 
 						 | (IData)(vlTOPp->Vortex__DOT__execute_branch_stall));
-    // ALWAYS at VX_fetch.v:177
+    // ALWAYS at VX_fetch.v:175
     if ((0U == (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num))) {
 	vlTOPp->Vortex__DOT__vx_fetch__DOT__out_PC_var 
 	    = vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_pc
@@ -13613,7 +13610,7 @@ VL_INLINE_OPT void VVortex::_combo__TOP__8(VVortex__Syms* __restrict vlSymsp) {
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_valid[7U][0U] 
 	= vlTOPp->Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Warp__out_valid
 	[0U];
-    // ALWAYS at VX_fetch.v:177
+    // ALWAYS at VX_fetch.v:175
     if ((0U == (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num))) {
 	vlTOPp->Vortex__DOT__vx_fetch__DOT__out_valid_var[0U] 
 	    = vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_valid
@@ -13835,7 +13832,6 @@ void VVortex::_ctor_var_reset() {
     }}
     out_ebreak = VL_RAND_RESET_I(1);
     Vortex__DOT__execute_branch_stall = VL_RAND_RESET_I(1);
-    Vortex__DOT__memory_branch_dest = VL_RAND_RESET_I(32);
     Vortex__DOT__csr_decode_csr_data = VL_RAND_RESET_I(32);
     Vortex__DOT__forwarding_fwd_stall = VL_RAND_RESET_I(1);
     { int __Vi0=0; for (; __Vi0<4; ++__Vi0) {

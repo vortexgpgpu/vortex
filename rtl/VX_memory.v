@@ -11,8 +11,7 @@ module VX_memory (
 
 		output wire          out_delay,
 
-		output wire          out_branch_dir,
-		output wire[31:0]    out_branch_dest, 
+		VX_branch_response_inter VX_branch_rsp,
 
 
 		input  wire[31:0]  in_cache_driver_out_data[`NT_M1:0],
@@ -58,7 +57,7 @@ module VX_memory (
 		reg temp_branch_dir;
 
 
-		assign out_branch_dest = $signed(VX_mem_req.curr_PC) + ($signed(VX_mem_req.branch_offset) << 1);
+		assign VX_branch_rsp.branch_dest = $signed(VX_mem_req.curr_PC) + ($signed(VX_mem_req.branch_offset) << 1);
 		
 		always @(*) begin
 			case(VX_mem_req.branch_type)
@@ -73,7 +72,8 @@ module VX_memory (
 			endcase // in_branch_type
 		end
 
-		assign out_branch_dir = temp_branch_dir;
+		assign VX_branch_rsp.branch_dir      = temp_branch_dir;
+		assign VX_branch_rsp.branch_warp_num = VX_mem_req.warp_num;
 
 endmodule // Memory
 

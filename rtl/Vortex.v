@@ -44,8 +44,6 @@ wire[31:0]      e_m_csr_result;
 
 // From memory
 wire            memory_delay;
-wire            memory_branch_dir;
-wire[31:0]      memory_branch_dest;
 
 // From csr handler
 wire[31:0]    csr_decode_csr_data;
@@ -57,11 +55,7 @@ wire         forwarding_fwd_stall;
 
 // Internal
 wire total_freeze;
-wire interrupt;
-wire debug;
 
-assign debug        = 1'b0;
-assign interrupt    = 1'b0;
 assign total_freeze = fetch_delay || memory_delay;
 assign out_ebreak   = fetch_ebreak;
 
@@ -91,8 +85,12 @@ VX_forward_mem_inter          VX_fwd_mem();
 VX_forward_wb_inter           VX_fwd_wb();
 VX_forward_response_inter     VX_fwd_rsp();
 
-VX_icache_response_inter icache_response_fe;
-VX_icache_request_inter  icache_request_fe;
+VX_icache_response_inter icache_response_fe();
+VX_icache_request_inter  icache_request_fe();
+
+
+VX_branch_response_inter VX_branch_rsp();
+VX_jal_response_inter    VX_jal_rsp();
 
 assign icache_response_fe.instruction = icache_response_instruction;
 assign icache_request_pc_address      = icache_request_fe.pc_address;
@@ -100,22 +98,17 @@ assign icache_request_pc_address      = icache_request_fe.pc_address;
 VX_fetch vx_fetch(
 		.clk                (clk),
 		.reset              (reset),
-		.in_branch_dir      (memory_branch_dir),
-		.in_freeze          (total_freeze),
-		.in_branch_dest     (memory_branch_dest),
+		.in_memory_delay    (memory_delay),
 		.in_branch_stall    (decode_branch_stall),
 		.in_fwd_stall       (forwarding_fwd_stall),
 		.in_branch_stall_exe(execute_branch_stall),
 		.in_clone_stall     (decode_clone_stall),
-		.in_jal             (e_m_jal),
-		.in_jal_dest        (e_m_jal_dest),
-		.in_interrupt       (interrupt),
-		.in_debug           (debug),
-		.in_memory_warp_num (VX_mem_wb.warp_num),
+		.VX_jal_rsp         (VX_jal_rsp),
 		.icache_response    (icache_response_fe),
 		.VX_warp_ctl        (VX_warp_ctl),
 
 		.icache_request     (icache_request_fe),
+		.VX_branch_rsp      (VX_branch_rsp),
 		.out_delay          (fetch_delay),
 		.out_ebreak         (fetch_ebreak),
 		.out_which_wspawn   (fetch_which_warp),
@@ -156,6 +149,11 @@ VX_execute vx_execute(
 		.out_branch_stall (execute_branch_stall)
 	);
 
+
+assign VX_jal_rsp.jal          = e_m_jal;
+assign VX_jal_rsp.jal_dest     = e_m_jal_dest;
+assign VX_jal_rsp.jal_warp_num = VX_mem_req.warp_num;
+
 VX_e_m_reg vx_e_m_reg(
 		.clk              (clk),
 		.reset            (reset),
@@ -181,8 +179,7 @@ VX_memory vx_memory(
 		.VX_fwd_mem                   (VX_fwd_mem),
 		.out_delay                    (memory_delay),
 
-		.out_branch_dir               (memory_branch_dir),
-		.out_branch_dest              (memory_branch_dest),
+		.VX_branch_rsp                (VX_branch_rsp),
 
 		.in_cache_driver_out_data     (in_cache_driver_out_data),
 		.out_cache_driver_in_address  (out_cache_driver_in_address),

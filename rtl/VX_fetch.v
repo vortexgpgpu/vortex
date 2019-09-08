@@ -4,26 +4,21 @@
 module VX_fetch (
 	input  wire           clk,
 	input  wire           reset,
-	input  wire           in_branch_dir,
-	input  wire           in_freeze,
-	input  wire[31:0]     in_branch_dest,
+	input  wire           in_memory_delay,
 	input  wire           in_branch_stall,
 	input  wire           in_fwd_stall,
 	input  wire           in_branch_stall_exe,
 	input  wire           in_clone_stall,
-	input  wire           in_jal,
-	input  wire[31:0]     in_jal_dest,
-	input  wire           in_interrupt,
-	input  wire           in_debug,
-	input  wire[`NW_M1:0] in_memory_warp_num,
 	VX_icache_response_inter icache_response,
-
 	VX_icache_request_inter icache_request,
+
 	output wire           out_delay,
 	output wire           out_ebreak,
 	output wire[`NW_M1:0] out_which_wspawn,
-	VX_inst_meta_inter    fe_inst_meta_fd,
-	VX_warp_ctl_inter     VX_warp_ctl
+	VX_jal_response_inter    VX_jal_rsp,
+	VX_branch_response_inter VX_branch_rsp,
+	VX_inst_meta_inter       fe_inst_meta_fd,
+	VX_warp_ctl_inter        VX_warp_ctl
 );
 
 		wire           in_change_mask     = VX_warp_ctl.change_mask;
@@ -31,6 +26,9 @@ module VX_fetch (
 		wire[31:0]     in_wspawn_pc       = VX_warp_ctl.wspawn_pc;
 		wire           in_ebreak          = VX_warp_ctl.ebreak;
 		wire[`NW_M1:0] in_decode_warp_num = VX_warp_ctl.warp_num;
+
+
+		wire in_freeze = out_delay || in_memory_delay;
 
 
 		wire in_thread_mask[`NT_M1:0];
@@ -96,7 +94,7 @@ module VX_fetch (
 		assign out_ebreak = (in_decode_warp_num == 0) && in_ebreak;
 
 
-		assign stall = in_clone_stall || in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_interrupt || in_freeze || in_debug;
+		assign stall = in_clone_stall || in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_freeze;
 
 		assign out_which_wspawn = (warp_state+1);
 
@@ -140,8 +138,8 @@ module VX_fetch (
 				for (cur_warp = 0; cur_warp < `NW; cur_warp = cur_warp + 1)
 				begin
 					wire       warp_zero_change_mask = in_change_mask && (in_decode_warp_num == cur_warp);
-					wire       warp_zero_jal         = in_jal         && (in_memory_warp_num == cur_warp);
-					wire       warp_zero_branch      = in_branch_dir  && (in_memory_warp_num == cur_warp);
+					wire       warp_zero_jal         = VX_jal_rsp.jal            && (VX_jal_rsp.jal_warp_num       == cur_warp);
+					wire       warp_zero_branch      = VX_branch_rsp.branch_dir  && (VX_branch_rsp.branch_warp_num == cur_warp);
 					wire       warp_zero_stall       = stall          || (warp_num != cur_warp);
 					wire       warp_zero_wspawn      = (cur_warp == 0) ? 0 : (in_wspawn && ((warp_state+1) == cur_warp));
 					wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
@@ -159,9 +157,9 @@ module VX_fetch (
 						.in_thread_mask(in_thread_mask),
 						.in_change_mask(warp_zero_change_mask),
 						.in_jal        (warp_zero_jal),
-						.in_jal_dest   (in_jal_dest),
+						.in_jal_dest   (VX_jal_rsp.jal_dest),
 						.in_branch_dir (warp_zero_branch),
-						.in_branch_dest(in_branch_dest),
+						.in_branch_dest(VX_branch_rsp.branch_dest),
 						.in_wspawn     (warp_zero_wspawn),
 						.in_wspawn_pc  (warp_zero_wspawn_pc),
 						.out_PC        (warp_glob_pc[cur_warp]),
