@@ -46,6 +46,11 @@ module VX_csr_handler (
 			end
 		end
 
+		reg[11:0] data_read;
+		always @(negedge clk) begin
+			data_read <= csr[decode_csr_address];
+		end
+
 
 		assign read_cycle    = decode_csr_address == 12'hC00;
 		assign read_cycleh   = decode_csr_address == 12'hC80;
@@ -58,7 +63,7 @@ module VX_csr_handler (
     									read_cycleh ? cycle[63:32] : 
     											read_instret ? instret[31:0] :
     													read_instreth ? instret[63:32] : 
-    															{{20{1'b0}}, csr[decode_csr_address]};
+    															{{20{1'b0}}, data_read};
     	/* verilator lint_on WIDTH */
 
 

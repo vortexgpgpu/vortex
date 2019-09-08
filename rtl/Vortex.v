@@ -15,14 +15,11 @@ module Vortex(
 	output wire           out_ebreak
 	);
 
-wire decode_clone_stall;
-wire decode_branch_stall;
 wire[11:0] decode_csr_address;
 
 // From fetch
 wire           fetch_delay;
 wire           fetch_ebreak;
-wire[`NW_M1:0] fetch_which_warp;
 
 
 // From execute
@@ -62,7 +59,6 @@ assign out_ebreak   = fetch_ebreak;
 
 
 
-VX_inst_meta_inter       fe_inst_meta_fd();
 VX_inst_meta_inter       fd_inst_meta_de();
 
 VX_frE_to_bckE_req_inter VX_bckE_req();
@@ -75,7 +71,6 @@ VX_inst_mem_wb_inter     VX_mem_wb();
 
 VX_mw_wb_inter           VX_mw_wb();
 
-VX_warp_ctl_inter        VX_warp_ctl();
 VX_wb_inter              VX_writeback_inter();
 
 
@@ -95,43 +90,24 @@ VX_jal_response_inter    VX_jal_rsp();
 assign icache_response_fe.instruction = icache_response_instruction;
 assign icache_request_pc_address      = icache_request_fe.pc_address;
 
-VX_fetch vx_fetch(
-		.clk                (clk),
-		.reset              (reset),
-		.in_memory_delay    (memory_delay),
-		.in_branch_stall    (decode_branch_stall),
-		.in_fwd_stall       (forwarding_fwd_stall),
-		.in_branch_stall_exe(execute_branch_stall),
-		.in_clone_stall     (decode_clone_stall),
-		.VX_jal_rsp         (VX_jal_rsp),
-		.icache_response    (icache_response_fe),
-		.VX_warp_ctl        (VX_warp_ctl),
-
-		.icache_request     (icache_request_fe),
-		.VX_branch_rsp      (VX_branch_rsp),
-		.out_delay          (fetch_delay),
-		.out_ebreak         (fetch_ebreak),
-		.out_which_wspawn   (fetch_which_warp),
-		.fe_inst_meta_fd    (fe_inst_meta_fd)
-	);
-
 
 VX_front_end vx_front_end(
 	.clk                 (clk),
 	.reset               (reset),
-	.total_freeze        (total_freeze),
 	.forwarding_fwd_stall(forwarding_fwd_stall),
-	.fetch_which_warp    (fetch_which_warp),
 	.execute_branch_stall(execute_branch_stall),
-	.VX_warp_ctl         (VX_warp_ctl),
-	.fe_inst_meta_fd     (fe_inst_meta_fd),
 	.VX_writeback_inter  (VX_writeback_inter),
 	.VX_fwd_req_de       (VX_fwd_req_de),
 	.VX_fwd_rsp          (VX_fwd_rsp),
 	.VX_bckE_req         (VX_bckE_req),
-	.decode_clone_stall  (decode_clone_stall),
-	.decode_branch_stall (decode_branch_stall),
-	.decode_csr_address  (decode_csr_address)
+	.decode_csr_address  (decode_csr_address),
+	.memory_delay        (memory_delay),
+	.fetch_delay         (fetch_delay),
+	.icache_response_fe  (icache_response_fe),
+	.icache_request_fe   (icache_request_fe),
+	.VX_jal_rsp          (VX_jal_rsp),
+	.VX_branch_rsp       (VX_branch_rsp),
+	.fetch_ebreak        (fetch_ebreak)
 	);
 
 

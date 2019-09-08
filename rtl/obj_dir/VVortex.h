@@ -15,9 +15,9 @@ class VVortex_VX_inst_meta_inter;
 class VVortex_VX_frE_to_bckE_req_inter;
 class VVortex_VX_mem_req_inter;
 class VVortex_VX_inst_mem_wb_inter;
-class VVortex_VX_warp_ctl_inter;
 class VVortex_VX_wb_inter;
 class VVortex_VX_branch_response_inter;
+class VVortex_VX_warp_ctl_inter;
 
 //----------
 
@@ -26,15 +26,15 @@ VL_MODULE(VVortex) {
     // CELLS
     // Public to allow access to /*verilator_public*/ items;
     // otherwise the application code can consider these internals.
-    VVortex_VX_inst_meta_inter*	__PVT__Vortex__DOT__fe_inst_meta_fd;
     VVortex_VX_inst_meta_inter*	__PVT__Vortex__DOT__fd_inst_meta_de;
     VVortex_VX_frE_to_bckE_req_inter*	__PVT__Vortex__DOT__VX_bckE_req;
     VVortex_VX_mem_req_inter*	__PVT__Vortex__DOT__VX_exe_mem_req;
     VVortex_VX_mem_req_inter*	__PVT__Vortex__DOT__VX_mem_req;
     VVortex_VX_inst_mem_wb_inter*	__PVT__Vortex__DOT__VX_mem_wb;
-    VVortex_VX_warp_ctl_inter*	__PVT__Vortex__DOT__VX_warp_ctl;
     VVortex_VX_wb_inter*	__PVT__Vortex__DOT__VX_writeback_inter;
     VVortex_VX_branch_response_inter*	__PVT__Vortex__DOT__VX_branch_rsp;
+    VVortex_VX_warp_ctl_inter*	__PVT__Vortex__DOT__vx_front_end__DOT__VX_warp_ctl;
+    VVortex_VX_inst_meta_inter*	__PVT__Vortex__DOT__vx_front_end__DOT__fe_inst_meta_fd;
     VVortex_VX_frE_to_bckE_req_inter*	__PVT__Vortex__DOT__vx_front_end__DOT__VX_frE_to_bckE_req;
     VVortex_VX_inst_meta_inter*	__PVT__Vortex__DOT__vx_front_end__DOT__fd_inst_meta_de;
     
@@ -61,29 +61,29 @@ VL_MODULE(VVortex) {
 	// Begin mtask footprint  all: 
 	VL_SIG8(Vortex__DOT__execute_branch_stall,0,0);
 	VL_SIG8(Vortex__DOT__forwarding_fwd_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_num,3,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_state,3,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_count,3,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__add_warp,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__remove_warp,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__warp_zero_change_mask,0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__warp_zero_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_front_end__DOT__internal_decode_branch_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__decode_branch_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_num,3,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_state,3,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_count,3,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__add_warp,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__remove_warp,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__warp_zero_stall,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__warp_zero_change_mask,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__warp_zero_stall,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__is_itype,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__is_csr,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__is_clone,0,0);
@@ -142,24 +142,25 @@ VL_MODULE(VVortex) {
 	VL_SIG16(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__alu_tempp,11,0);
 	VL_SIGW(Vortex__DOT__vx_csr_handler__DOT__csr,12299,0,385);
 	VL_SIG16(Vortex__DOT__vx_csr_handler__DOT__decode_csr_address,11,0);
+	VL_SIG16(Vortex__DOT__vx_csr_handler__DOT__data_read,11,0);
 	VL_SIG(Vortex__DOT__csr_decode_csr_data,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__out_PC_var,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__real_PC,31,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__out_PC_var,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__real_PC,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value,71,0,3);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__glob_a_reg_data,1023,0,32);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__glob_b_reg_data,1023,0,32);
@@ -188,9 +189,9 @@ VL_MODULE(VVortex) {
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers,1023,0,32);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers,1023,0,32);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers,1023,0,32);
-	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers,1023,0,32);
     };
     struct {
+	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers,1023,0,32);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register,127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register,127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers,1023,0,32);
@@ -234,26 +235,28 @@ VL_MODULE(VVortex) {
 	VL_SIG64(Vortex__DOT__vx_execute__DOT__genblk1__BRA__3__KET____DOT__vx_alu__DOT__mult_signed_result,63,0);
 	VL_SIG64(Vortex__DOT__vx_csr_handler__DOT__cycle,63,0);
 	VL_SIG64(Vortex__DOT__vx_csr_handler__DOT__instret,63,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__in_thread_mask[4],0,0);
-	VL_SIG(Vortex__DOT__vx_fetch__DOT__warp_glob_pc[8],31,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__warp_glob_valid[8][4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__out_valid_var[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__in_thread_mask[4],0,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_glob_pc[8],31,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_glob_valid[8][4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__out_valid_var[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid_zero[4],0,0);
+    };
+    struct {
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__in_valid[4],0,0);
     };
     
@@ -263,7 +266,7 @@ VL_MODULE(VVortex) {
     struct {
 	// Begin mtask footprint  all: 
 	VL_SIG8(__Vtableidx1,2,0);
-	VL_SIG8(__Vdly__Vortex__DOT__vx_fetch__DOT__warp_num,3,0);
+	VL_SIG8(__Vdly__Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_num,3,0);
 	VL_SIG8(__Vclklast__TOP__clk,0,0);
 	VL_SIG8(__Vclklast__TOP__reset,0,0);
 	VL_SIG16(Vortex__DOT__vx_csr_handler__DOT____Vlvbound1,11,0);
@@ -359,22 +362,22 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_data[4],31,0);
 	VL_SIG(Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_address[4],31,0);
 	VL_SIG(Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data[4],31,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__0__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__0__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__1__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__2__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__3__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__4__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__5__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__6__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Warp__out_valid[4],0,0);
-	VL_SIG8(Vortex__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__7__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__0__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__0__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__1__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__2__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__3__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__4__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__5__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__6__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Warp__out_valid[4],0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellinp__genblk2__BRA__7__KET____DOT__VX_Warp__in_thread_mask[4],0,0);
     };
     static VL_ST_SIG8(__Vtable1_Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__mul_alu[8],4,0);
     
@@ -410,8 +413,9 @@ VL_MODULE(VVortex) {
   private:
     static QData _change_request(VVortex__Syms* __restrict vlSymsp);
   public:
+    static void _combo__TOP__11(VVortex__Syms* __restrict vlSymsp);
     static void _combo__TOP__5(VVortex__Syms* __restrict vlSymsp);
-    static void _combo__TOP__8(VVortex__Syms* __restrict vlSymsp);
+    static void _combo__TOP__9(VVortex__Syms* __restrict vlSymsp);
   private:
     void _ctor_var_reset() VL_ATTR_COLD;
   public:
@@ -424,6 +428,8 @@ VL_MODULE(VVortex) {
     static void _eval_initial(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
     static void _eval_settle(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
     static void _initial__TOP__1(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
+    static void _multiclk__TOP__10(VVortex__Syms* __restrict vlSymsp);
+    static void _multiclk__TOP__8(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__3(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__4(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__6(VVortex__Syms* __restrict vlSymsp);

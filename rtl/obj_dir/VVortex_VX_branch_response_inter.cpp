@@ -30,7 +30,7 @@ VVortex_VX_branch_response_inter::~VVortex_VX_branch_response_inter() {
 // Internal Methods
 
 void VVortex_VX_branch_response_inter::_ctor_var_reset() {
-    VL_DEBUG_IF(VL_DBG_MSGF("+          VVortex_VX_branch_response_inter::_ctor_var_reset\n"); );
+    VL_DEBUG_IF(VL_DBG_MSGF("+            VVortex_VX_branch_response_inter::_ctor_var_reset\n"); );
     // Body
     branch_dest = VL_RAND_RESET_I(32);
 }
