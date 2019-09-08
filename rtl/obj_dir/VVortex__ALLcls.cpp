@@ -8,4 +8,3 @@
 #include "VVortex_VX_inst_mem_wb_inter.cpp"
 #include "VVortex_VX_warp_ctl_inter.cpp"
 #include "VVortex_VX_wb_inter.cpp"
-#include "VVortex_VX_context_slave.cpp"

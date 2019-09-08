@@ -4,8 +4,7 @@ VVortex__ALLcls.o: VVortex__ALLcls.cpp VVortex.cpp VVortex.h \
  VVortex___024unit.h VVortex_VX_inst_meta_inter.h \
  VVortex_VX_frE_to_bckE_req_inter.h VVortex_VX_mem_req_inter.h \
  VVortex_VX_inst_mem_wb_inter.h VVortex_VX_warp_ctl_inter.h \
- VVortex_VX_wb_inter.h VVortex_VX_context_slave.h VVortex___024unit.cpp \
+ VVortex_VX_wb_inter.h VVortex___024unit.cpp \
  VVortex_VX_inst_meta_inter.cpp VVortex_VX_frE_to_bckE_req_inter.cpp \
  VVortex_VX_mem_req_inter.cpp VVortex_VX_inst_mem_wb_inter.cpp \
- VVortex_VX_warp_ctl_inter.cpp VVortex_VX_wb_inter.cpp \
- VVortex_VX_context_slave.cpp
+ VVortex_VX_warp_ctl_inter.cpp VVortex_VX_wb_inter.cpp

@@ -25,7 +25,6 @@ VM_CLASSES_FAST += \
 	VVortex_VX_inst_mem_wb_inter \
 	VVortex_VX_warp_ctl_inter \
 	VVortex_VX_wb_inter \
-	VVortex_VX_context_slave \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization
 VM_CLASSES_SLOW += \

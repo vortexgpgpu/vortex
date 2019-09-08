@@ -26,13 +26,6 @@ VL_CTOR_IMP(VVortex) {
     VL_CELL(__PVT__Vortex__DOT__VX_mem_wb, VVortex_VX_inst_mem_wb_inter);
     VL_CELL(__PVT__Vortex__DOT__VX_warp_ctl, VVortex_VX_warp_ctl_inter);
     VL_CELL(__PVT__Vortex__DOT__VX_writeback_inter, VVortex_VX_wb_inter);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
-    VL_CELL(__PVT__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one, VVortex_VX_context_slave);
     // Reset internal values
     
     // Reset structure values
@@ -191,12 +184,47 @@ void VVortex::_initial__TOP__1(VVortex__Syms* __restrict vlSymsp) {
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid_zero[3U] = 0U;
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid[0U] = 1U;
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__valid_zero[0U] = 0U;
-    // INITIAL at VX_csr_handler.v:29
+    // INITIAL at VX_csr_handler.v:27
     vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle = VL_ULL(0);
     vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret = VL_ULL(0);
     vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address = 0U;
     // INITIAL at VX_context.v:31
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall = 0U;
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:38
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:39
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+    // INITIAL at VX_context_slave.v:41
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
     // INITIAL at VX_fetch.v:52
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num = 0U;
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_state = 0U;
@@ -208,13 +236,12 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
     // Begin mtask footprint  all: 
-    VL_SIGW(__Vtemp19,479,0,15);
-    VL_SIGW(__Vtemp28,735,0,23);
-    VL_SIGW(__Vtemp43,127,0,4);
-    VL_SIGW(__Vtemp59,127,0,4);
+    VL_SIGW(__Vtemp17,223,0,7);
+    VL_SIGW(__Vtemp26,479,0,15);
+    VL_SIGW(__Vtemp41,127,0,4);
+    VL_SIGW(__Vtemp57,127,0,4);
+    VL_SIGW(__Vtemp76,319,0,10);
     // Body
-    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
-	= (1U | (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask));
     vlTOPp->Vortex__DOT__vx_decode__DOT__jmprt_thread_mask 
 	= (1U | (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jmprt_thread_mask));
     vlTOPp->Vortex__DOT__vx_decode__DOT__jmprt_thread_mask 
@@ -231,38 +258,6 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->in_cache_driver_out_data[1U];
     vlTOPp->Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data[0U] 
 	= vlTOPp->in_cache_driver_out_data[0U];
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xbU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[7U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xcU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xbU] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[8U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[7U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xcU] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[8U] 
-			 >> 0xeU));
     vlTOPp->Vortex__DOT__execute_branch_stall = (1U 
 						 & ((0U 
 						     != 
@@ -281,6 +276,62 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
     vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[0U] 
 	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
 	    << 0x18U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0U] 
@@ -341,6 +392,62 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__is_itype = 
 	((0x13U == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
@@ -359,7 +466,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 		      ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 			  << 4U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 				    >> 0x1cU)) : 0x55U));
-    // ALWAYS at VX_decode.v:572
+    // ALWAYS at VX_decode.v:532
     vlTOPp->__Vtableidx1 = (7U & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				   << 0xcU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					       >> 0x14U)));
@@ -537,7 +644,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 						  | (0x3ffffeU 
 						     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
 							>> 0xaU))));
-    // ALWAYS at VX_memory.v:56
+    // ALWAYS at VX_memory.v:63
     vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir 
 	= (1U & ((0x400U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
 		  ? ((0x200U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
@@ -596,16 +703,43 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 							      (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret 
 							       >> 0x20U))
 						    : 
-						   ((0x400U 
-						     >= 
-						     (0x7ffU 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)))
-						     ? 
-						    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr
-						    [
-						    (0x7ffU 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))]
-						     : 0U)))));
+						   (0xfffU 
+						    & ((0x300bU 
+							>= 
+							(0x3fffU 
+							 & ((IData)(0xcU) 
+							    * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))))
+						        ? 
+						       (((0U 
+							  == 
+							  (0x1fU 
+							   & ((IData)(0xcU) 
+							      * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))))
+							  ? 0U
+							  : 
+							 (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[
+							  ((IData)(1U) 
+							   + 
+							   (0x1ffU 
+							    & (((IData)(0xcU) 
+								* (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)) 
+							       >> 5U)))] 
+							  << 
+							  ((IData)(0x20U) 
+							   - 
+							   (0x1fU 
+							    & ((IData)(0xcU) 
+							       * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)))))) 
+							| (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[
+							   (0x1ffU 
+							    & (((IData)(0xcU) 
+								* (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)) 
+							       >> 5U))] 
+							   >> 
+							   (0x1fU 
+							    & ((IData)(0xcU) 
+							       * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)))))
+						        : 0U))))));
     vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[0U] 
 	= vlTOPp->Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data
 	[0U];
@@ -678,7 +812,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
 				     >> 4U))) == (0xfU 
 						  & vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0U])));
-    // ALWAYS at VX_decode.v:503
+    // ALWAYS at VX_decode.v:463
     vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.itype_immed 
 	= ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])
 	    ? ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])
@@ -800,7 +934,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	   & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jal_sys_jal) 
 	      & vlTOPp->Vortex__DOT__vx_decode__DOT__in_valid
 	      [0U]));
-    // ALWAYS at VX_decode.v:447
+    // ALWAYS at VX_decode.v:407
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -903,7 +1037,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     } else {
 	vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.jal_offset = 0xdeadbeefU;
     }
-    // ALWAYS at VX_decode.v:447
+    // ALWAYS at VX_decode.v:407
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -960,7 +1094,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     } else {
 	vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.jal = 0U;
     }
-    // ALWAYS at VX_decode.v:514
+    // ALWAYS at VX_decode.v:474
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -1019,7 +1153,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     } else {
 	vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.branch_type = 0U;
     }
-    // ALWAYS at VX_decode.v:514
+    // ALWAYS at VX_decode.v:474
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -1135,60 +1269,60 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					   >> 4U)))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[0U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+						 >> 0xfU))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[1U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+						 >> 0xfU))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[2U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+						 >> 0xfU))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[3U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+						 >> 0xfU))));
     vlTOPp->out_cache_driver_in_address[3U] = vlTOPp->Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_address
 	[3U];
     vlTOPp->out_cache_driver_in_address[2U] = vlTOPp->Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_address
@@ -1215,10 +1349,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	[0U];
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (0U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (0U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1226,10 +1360,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (1U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (1U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1237,10 +1371,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (2U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (2U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1248,10 +1382,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (3U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (3U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1259,10 +1393,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (4U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (4U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1270,10 +1404,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (5U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (5U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1281,10 +1415,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (6U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (6U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -1292,10 +1426,10 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (7U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (7U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -2116,66 +2250,66 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	      & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone)));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xfdU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 1U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xfbU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 2U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xf7U & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 3U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xefU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 4U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xdfU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 5U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xbfU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 6U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0x7fU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 7U));
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_pc[0U] 
 	= vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__temp_PC;
@@ -2206,14 +2340,14 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			   << 9U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 				     >> 0x17U))) == 
 		(0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x14U)))) 
+			   << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 0xaU)))) 
 	       & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				   << 9U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					     >> 0x17U))))) 
 	      & (0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			       << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					   >> 0x12U))))) 
+			       << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					    >> 8U))))) 
 	     & ((0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]) 
 		== (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 			     << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
@@ -2238,14 +2372,14 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 			   << 4U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 				     >> 0x1cU))) == 
 		(0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x14U)))) 
+			   << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 0xaU)))) 
 	       & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				   << 4U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					     >> 0x1cU))))) 
 	      & (0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			       << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					   >> 0x12U))))) 
+			       << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					    >> 8U))))) 
 	     & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd))) 
 	    & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd))) 
 	   & ((0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]) 
@@ -2324,90 +2458,89 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	    = vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_pc
 	    [7U];
     }
-    __Vtemp19[0xdU] = ((0xfff80000U & (((0xdU == (0x1fU 
-						  & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						      << 0x17U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							>> 9U))))
-					 ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-					     << 3U) 
-					    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-					       >> 0x1dU))
-					 : ((0xeU == 
-					     (0x1fU 
-					      & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						  << 0x17U) 
-						 | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-						    >> 9U))))
-					     ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-						| ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						    << 3U) 
-						   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						      >> 0x1dU)))
-					     : ((0xfU 
-						 == 
-						 (0x1fU 
-						  & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						      << 0x17U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							>> 9U))))
-						 ? 
-						(vlTOPp->Vortex__DOT__csr_decode_csr_data 
-						 & ((IData)(0xffffffffU) 
-						    - 
-						    ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						      << 3U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-							>> 0x1dU))))
-						 : 0xdeadbeefU))) 
-				       << 0x13U)) | 
-		       ((0x40000U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
-				     << 0xaU)) | (0x3ffffU 
-						  & ((((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
-							<< 0x12U) 
-						       | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
-							  >> 0xeU)) 
-						      + 
-						      ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
-							<< 0x18U) 
-						       | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
-							  >> 8U))) 
-						     >> 0xeU))));
-    __Vtemp19[0xeU] = (0x7ffffU & (((0xdU == (0x1fU 
-					      & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						  << 0x17U) 
-						 | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-						    >> 9U))))
-				     ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-					 << 3U) | (
-						   vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						   >> 0x1dU))
-				     : ((0xeU == (0x1fU 
-						  & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						      << 0x17U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							>> 9U))))
-					 ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-					    | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						<< 3U) 
-					       | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						  >> 0x1dU)))
-					 : ((0xfU == 
-					     (0x1fU 
-					      & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						  << 0x17U) 
-						 | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-						    >> 9U))))
-					     ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-						& ((IData)(0xffffffffU) 
-						   - 
-						   ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						     << 3U) 
-						    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						       >> 0x1dU))))
-					     : 0xdeadbeefU))) 
-				   >> 0xdU));
-    __Vtemp28[7U] = ((0xffff0000U & ((0x80000000U & 
+    __Vtemp17[5U] = ((0xfff80000U & (((0xdU == (0x1fU 
+						& ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						    << 0x17U) 
+						   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						      >> 9U))))
+				       ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+					   << 3U) | 
+					  (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+					   >> 0x1dU))
+				       : ((0xeU == 
+					   (0x1fU & 
+					    ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+					      << 0x17U) 
+					     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						>> 9U))))
+					   ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+					      | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+						  << 3U) 
+						 | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						    >> 0x1dU)))
+					   : ((0xfU 
+					       == (0x1fU 
+						   & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						       << 0x17U) 
+						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+							 >> 9U))))
+					       ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+						  & ((IData)(0xffffffffU) 
+						     - 
+						     ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+						       << 3U) 
+						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+							 >> 0x1dU))))
+					       : 0xdeadbeefU))) 
+				     << 0x13U)) | (
+						   (0x40000U 
+						    & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
+						       << 0xaU)) 
+						   | (0x3ffffU 
+						      & ((((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
+							    << 0x12U) 
+							   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
+							      >> 0xeU)) 
+							  + 
+							  ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
+							    << 0x18U) 
+							   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
+							      >> 8U))) 
+							 >> 0xeU))));
+    __Vtemp17[6U] = (0x7ffffU & (((0xdU == (0x1fU & 
+					    ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+					      << 0x17U) 
+					     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						>> 9U))))
+				   ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+				       << 3U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						 >> 0x1dU))
+				   : ((0xeU == (0x1fU 
+						& ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						    << 0x17U) 
+						   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						      >> 9U))))
+				       ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+					  | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+					      << 3U) 
+					     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						>> 0x1dU)))
+				       : ((0xfU == 
+					   (0x1fU & 
+					    ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+					      << 0x17U) 
+					     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						>> 9U))))
+					   ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+					      & ((IData)(0xffffffffU) 
+						 - 
+						 ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+						   << 3U) 
+						  | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						     >> 0x1dU))))
+					   : 0xdeadbeefU))) 
+				 >> 0xdU));
+    __Vtemp26[7U] = ((0xffff0000U & ((0x80000000U & 
 				      (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[4U] 
 				       << 0x1cU)) | 
 				     ((0x70000000U 
@@ -2433,7 +2566,7 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 						     >> 3U)))) 
 			| (0x7ffU & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
 				     >> 3U))));
-    __Vtemp28[8U] = ((0xffffU & ((0xfffcU & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U] 
+    __Vtemp26[8U] = ((0xffffU & ((0xfffcU & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U] 
 					     << 2U)) 
 				 | ((3U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[4U] 
 					   >> 4U)) 
@@ -2491,9 +2624,9 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 						   & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[8U] 
 						      >> 3U)))));
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[7U] 
-	= __Vtemp28[7U];
+	= __Vtemp26[7U];
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[8U] 
-	= __Vtemp28[8U];
+	= __Vtemp26[8U];
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[9U] 
 	= ((0xffffU & ((3U & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U] 
 			      >> 0x1eU)) | (0xfffcU 
@@ -2518,62 +2651,6 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xcU] 
 	= ((0xffffU & ((3U & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U] 
 			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xdU] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xeU] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xfU] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x10U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x11U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x12U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x13U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x14U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-			      >> 0x1eU)) | (0xfffcU 
 					    & ((((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
 						  << 0x12U) 
 						 | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
@@ -2584,22 +2661,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 						   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
 						      >> 8U))) 
 					       << 2U)))) 
-	   | (0xffff0000U & (__Vtemp19[0xdU] << 0x10U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x15U] 
-	= ((0xffffU & (__Vtemp19[0xdU] >> 0x10U)) | 
-	   (0xffff0000U & (__Vtemp19[0xeU] << 0x10U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x16U] 
+	   | (0xffff0000U & (__Vtemp17[5U] << 0x10U)));
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xdU] 
+	= ((0xffffU & (__Vtemp17[5U] >> 0x10U)) | (0xffff0000U 
+						   & (__Vtemp17[6U] 
+						      << 0x10U)));
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xeU] 
 	= (0xffffU & ((0xfff0U & ((0xffc0U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xfU] 
 					      << 6U)) 
 				  | (0x30U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
 					      >> 0x1aU)))) 
 		      | ((8U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-				>> 0x1aU)) | (__Vtemp19[0xeU] 
+				>> 0x1aU)) | (__Vtemp17[6U] 
 					      >> 0x10U))));
-    vlTOPp->Vortex__DOT__forwarding_src1_fwd = (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
-						 | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
-						| (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd));
-    __Vtemp43[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd 
+	= (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
+	    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
+	   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd));
+    __Vtemp41[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2615,22 +2694,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[0U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U]));
-    __Vtemp43[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp41[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2646,22 +2727,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[1U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U]));
-    __Vtemp43[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp41[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2677,22 +2760,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[2U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U]));
-    __Vtemp43[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp41[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2708,49 +2793,52 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[3U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U]));
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[0U] 
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[0U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U])
-	    : __Vtemp43[0U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[1U] 
+	    : __Vtemp41[0U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[1U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U])
-	    : __Vtemp43[1U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[2U] 
+	    : __Vtemp41[1U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[2U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U])
-	    : __Vtemp43[2U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[3U] 
+	    : __Vtemp41[2U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[3U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U])
-	    : __Vtemp43[3U]);
-    vlTOPp->Vortex__DOT__forwarding_src2_fwd = (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
-						 | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
-						| (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd));
-    __Vtemp59[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+	    : __Vtemp41[3U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd 
+	= (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
+	    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
+	   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd));
+    __Vtemp57[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2766,22 +2854,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[0U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U]));
-    __Vtemp59[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+    __Vtemp57[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2797,22 +2887,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[1U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U]));
-    __Vtemp59[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+    __Vtemp57[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2828,22 +2920,24 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[2U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U]));
-    __Vtemp59[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+    __Vtemp57[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		      ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					<< 0xbU) | 
 				       (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -2859,45 +2953,47 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					       >> 2U))))
 		      : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			  ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					    << 0xeU) 
+					    << 0x18U) 
 					   | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0x12U))))
+					      >> 8U))))
 			      ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[3U]
 			      : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						<< 0xeU) 
+						<< 0x18U) 
 					       | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						  >> 0x12U))))
+						  >> 8U))))
 				  ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-						>> 0x19U))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+						   >> 0xfU))
 				  : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-				      << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-						>> 0x19U))))
+				      << 0x11U) | (
+						   vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+						   >> 0xfU))))
 			  : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U]));
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[0U] 
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[0U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U])
-	    : __Vtemp59[0U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[1U] 
+	    : __Vtemp57[0U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[1U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U])
-	    : __Vtemp59[1U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[2U] 
+	    : __Vtemp57[1U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[2U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U])
-	    : __Vtemp59[2U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[3U] 
+	    : __Vtemp57[2U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[3U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U])
-	    : __Vtemp59[3U]);
+	    : __Vtemp57[3U]);
     vlTOPp->Vortex__DOT__vx_fetch__DOT__add_warp = 
 	(((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_wspawn) 
 	  & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_ebreak))) 
@@ -2917,8 +3013,8 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[0U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[0U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[1U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -2926,8 +3022,8 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[1U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[1U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[2U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -2935,8 +3031,8 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[2U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[2U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[3U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -2944,25 +3040,389 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[3U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[0U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[0U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[0U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[1U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[1U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[1U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[2U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[2U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[2U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[3U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[3U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__warp_zero_stall 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__stall) 
 	   | (0U != (IData)(vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_num)));
@@ -2995,6 +3455,62 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[4U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[5U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[6U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[7U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[8U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[9U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xaU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xbU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xcU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xdU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xeU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xfU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x10U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x11U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x12U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x13U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x14U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x15U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x16U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x17U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x18U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x19U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1aU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1bU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1cU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1dU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1eU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1fU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[1U] 
@@ -3003,224 +3519,62 @@ void VVortex::_settle__TOP__2(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[3U];
-}
-
-void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_settle__TOP__3\n"); );
-    VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
-    // Variables
-    // Begin mtask footprint  all: 
-    VL_SIGW(__Vtemp78,319,0,10);
-    // Body
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[4U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[5U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[6U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[7U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[4U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[5U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[6U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[7U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[8U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[9U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xaU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xbU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[8U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[9U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xaU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xbU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xcU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xdU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xeU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xfU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xcU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xdU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xeU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xfU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x10U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x11U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x12U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x13U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x10U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x11U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x12U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x13U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x14U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x15U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x16U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x17U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x14U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x15U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x16U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x17U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x18U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x19U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1aU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1bU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x18U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x19U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1aU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1bU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1cU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1dU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1eU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1fU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1cU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1dU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1eU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1fU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[3U];
-    // ALWAYS at VX_decode.v:238
-    if ((0U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[1U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[2U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[3U];
-    }
-    if ((1U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[4U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[5U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[6U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[7U];
-    }
-    if ((2U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[8U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[9U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xaU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xbU];
-    }
-    if ((3U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xcU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xdU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xeU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xfU];
-    }
-    if ((4U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x10U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x11U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x12U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x13U];
-    }
-    if ((5U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x14U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x15U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x16U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x17U];
-    }
-    if ((6U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x18U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x19U];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1aU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1bU];
-    }
-    if ((7U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
-			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-				      >> 4U))))) {
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1cU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1dU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1eU];
-	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
-	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1fU];
-    }
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     // ALWAYS at VX_decode.v:238
     if ((0U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
@@ -3318,14 +3672,103 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
 	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_a_reg_data[3U] 
 	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1fU];
     }
-    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
-	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U];
-    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[1U] 
-	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U];
-    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[2U] 
-	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U];
-    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[3U] 
-	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U];
+    // ALWAYS at VX_decode.v:238
+    if ((0U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[1U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[2U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[3U];
+    }
+    if ((1U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[4U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[5U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[6U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[7U];
+    }
+    if ((2U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[8U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[9U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xaU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xbU];
+    }
+    if ((3U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xcU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xdU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xeU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xfU];
+    }
+    if ((4U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x10U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x11U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x12U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x13U];
+    }
+    if ((5U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x14U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x15U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x16U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x17U];
+    }
+    if ((6U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x18U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x19U];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1aU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1bU];
+    }
+    if ((7U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+				      >> 4U))))) {
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1cU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1dU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1eU];
+	vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U] 
+	    = vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1fU];
+    }
     vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.a_reg_data[0U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_a_reg_data[0U];
     vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.a_reg_data[1U] 
@@ -3334,19 +3777,15 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_a_reg_data[2U];
     vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.a_reg_data[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_a_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
-	= ((0xdU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
-	   | ((1U <= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
-	      << 1U));
-    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
-	= ((0xbU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
-	   | ((2U <= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
-	      << 2U));
-    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
-	= ((7U & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
-	   | ((3U <= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
-	      << 3U));
-    __Vtemp78[0U] = (IData)((((QData)((IData)((((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[0U];
+    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[1U];
+    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U];
+    vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U];
+    __Vtemp76[0U] = (IData)((((QData)((IData)((((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 						 >> 1U) 
 						& (0x33U 
 						   == 
@@ -3471,7 +3910,7 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
 									     : 7U) 
 									   << 3U)) 
 								       | (IData)(vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.branch_type))))))))));
-    __Vtemp78[1U] = ((0xfffe0000U & (vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
+    __Vtemp76[1U] = ((0xfffe0000U & (vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
 				     << 0x11U)) | (IData)(
 							  ((((QData)((IData)(
 									     (((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -3655,7 +4094,7 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
 							 >> 0x20U)) 
 						>> 0x18U))));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[3U] 
-	= ((0xe0000000U & (__Vtemp78[0U] << 0x1dU)) 
+	= ((0xe0000000U & (__Vtemp76[0U] << 0x1dU)) 
 	   | ((0x1ffffe00U & (((0x37U == (0x7fU & (
 						   (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 						    << 0x18U) 
@@ -3680,10 +4119,10 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
 						   | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
 						      >> 0x1fU)))));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[4U] 
-	= ((0x1fffffffU & (__Vtemp78[0U] >> 3U)) | 
-	   (0xe0000000U & (__Vtemp78[1U] << 0x1dU)));
+	= ((0x1fffffffU & (__Vtemp76[0U] >> 3U)) | 
+	   (0xe0000000U & (__Vtemp76[1U] << 0x1dU)));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[5U] 
-	= ((0x1fffffffU & (__Vtemp78[1U] >> 3U)) | 
+	= ((0x1fffffffU & (__Vtemp76[1U] >> 3U)) | 
 	   (0xe0000000U & (vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
 			   << 0xeU)));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[6U] 
@@ -3782,6 +4221,21 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[0xfU] 
 	= (0x3fffffffU & ((IData)(vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.csr_address) 
 			  >> 2U));
+    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
+	= ((0xeU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
+	   | VL_LTES_III(32,32,32, 0U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
+	= ((0xdU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
+	   | (VL_LTES_III(1,32,32, 1U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
+	      << 1U));
+    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
+	= ((0xbU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
+	   | (VL_LTES_III(1,32,32, 2U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
+	      << 2U));
+    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
+	= ((7U & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
+	   | (VL_LTES_III(1,32,32, 3U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
+	      << 3U));
     vlSymsp->TOP__Vortex__DOT__VX_warp_ctl.thread_mask 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_jalrs)
 	    ? (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)
@@ -4576,8 +5030,8 @@ void VVortex::_settle__TOP__3(VVortex__Syms* __restrict vlSymsp) {
 	      [3U] << 3U));
 }
 
-VL_INLINE_OPT void VVortex::_sequent__TOP__4(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__4\n"); );
+VL_INLINE_OPT void VVortex::_sequent__TOP__3(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__3\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
     // Begin mtask footprint  all: 
@@ -4778,38 +5232,6 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__4(VVortex__Syms* __restrict vlSymsp) 
 	    ? 0U : vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[0xfU]);
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_count 
 	= __Vdly__Vortex__DOT__vx_fetch__DOT__warp_count;
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xbU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[7U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xcU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xbU] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[8U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[7U] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xcU] 
-			 >> 0xeU));
-    vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-	= ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
-	    << 0x12U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[8U] 
-			 >> 0xeU));
     vlTOPp->Vortex__DOT__execute_branch_stall = (1U 
 						 & ((0U 
 						     != 
@@ -4902,19 +5324,57 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__4(VVortex__Syms* __restrict vlSymsp) 
 		      VL_EXTENDS_QI(64,32, vlTOPp->Vortex__DOT__vx_execute__DOT__genblk1__BRA__3__KET____DOT__vx_alu__DOT__ALU_in2));
 }
 
-VL_INLINE_OPT void VVortex::_sequent__TOP__5(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__5\n"); );
+VL_INLINE_OPT void VVortex::_sequent__TOP__4(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__4\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
     // Begin mtask footprint  all: 
     VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall,5,0);
-    VL_SIG8(__Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0,0,0);
-    VL_SIG16(__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0,10,0);
-    VL_SIG16(__Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0,11,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall,5,0);
+    VL_SIG8(__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall,5,0);
     // Body
     __Vdly__Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall;
-    __Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0 = 0U;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall;
     // ALWAYS at VX_context.v:83
     if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone) 
 	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall)))) {
@@ -4930,48 +5390,258 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__5(VVortex__Syms* __restrict vlSymsp) 
 	    }
 	}
     }
-    // ALWAYS at VX_csr_handler.v:36
-    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address 
-	= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.csr_address;
-    // ALWAYS at VX_csr_handler.v:45
-    if ((8U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x16U])) {
-	vlTOPp->Vortex__DOT__vx_csr_handler__DOT____Vlvbound1 
-	    = (0xfffU & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x16U] 
-			  << 0x1dU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-				       >> 3U)));
-	if (VL_LIKELY((0x400U >= (0x7ffU & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x16U] 
-					    >> 4U))))) {
-	    __Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0 
-		= vlTOPp->Vortex__DOT__vx_csr_handler__DOT____Vlvbound1;
-	    __Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0 = 1U;
-	    __Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0 
-		= (0x7ffU & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x16U] 
-			     >> 4U));
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
 	}
     }
-    // ALWAYS at VX_csr_handler.v:36
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:119
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_wspawn) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_context_slave.v:104
+    if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone) 
+	 & (0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) {
+	__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0xaU;
+    } else {
+	if ((1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+	    __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall = 0U;
+	} else {
+	    if ((0U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall))) {
+		__Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+		    = (0x3fU & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall) 
+				- (IData)(1U)));
+	    }
+	}
+    }
+    // ALWAYS at VX_csr_handler.v:34
+    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address 
+	= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.csr_address;
+    // ALWAYS at VX_csr_handler.v:43
+    if ((8U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xeU])) {
+	vlTOPp->Vortex__DOT__vx_csr_handler__DOT____Vlvbound1 
+	    = (0xfffU & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xeU] 
+			  << 0x1dU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+				       >> 3U)));
+	if (VL_LIKELY((0x300bU >= (0x3fffU & ((IData)(0xcU) 
+					      * (0xfffU 
+						 & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xeU] 
+						    >> 4U))))))) {
+	    VL_ASSIGNSEL_WIII(12,(0x3fffU & ((IData)(0xcU) 
+					     * (0xfffU 
+						& (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xeU] 
+						   >> 4U)))), vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr, vlTOPp->Vortex__DOT__vx_csr_handler__DOT____Vlvbound1);
+	}
+    }
+    // ALWAYS at VX_csr_handler.v:34
     vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle 
 	= (VL_ULL(1) + vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle);
-    // ALWAYS at VX_csr_handler.v:36
+    // ALWAYS at VX_csr_handler.v:34
     if ((0x10U & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U])) {
 	vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret 
 	    = (VL_ULL(1) + vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret);
     }
     // ALWAYS at VX_register_file_slave.v:53
     if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x12U)))) 
-	    & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				<< 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					    >> 0x14U))))) 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
 	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
 	      >> 7U)) & (0U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
 	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone)))) {
 	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					 << 0x11U) 
-					| (0x1ffe0U 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
 					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0xfU)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
 			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
     } else {
 	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone) 
@@ -5048,19 +5718,19 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__5(VVortex__Syms* __restrict vlSymsp) 
     }
     // ALWAYS at VX_register_file_slave.v:53
     if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x12U)))) 
-	    & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				<< 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					    >> 0x14U))))) 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
 	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
 	      >> 6U)) & (0U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
 	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone)))) {
 	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					 << 0x11U) 
-					| (0x1ffe0U 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
 					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0xfU)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
 			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
     } else {
 	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone) 
@@ -5137,19 +5807,19 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__5(VVortex__Syms* __restrict vlSymsp) 
     }
     // ALWAYS at VX_register_file_slave.v:53
     if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x12U)))) 
-	    & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				<< 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					    >> 0x14U))))) 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
 	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
 	      >> 5U)) & (0U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
 	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone)))) {
 	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					 << 0x11U) 
-					| (0x1ffe0U 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
 					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0xfU)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
 			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
     } else {
 	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone) 
@@ -5224,13 +5894,1891 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__5(VVortex__Syms* __restrict vlSymsp) 
 		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
 	}
     }
-    // ALWAYSPOST at VX_csr_handler.v:48
-    if (__Vdlyvset__Vortex__DOT__vx_csr_handler__DOT__csr__v0) {
-	vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[__Vdlyvdim0__Vortex__DOT__vx_csr_handler__DOT__csr__v0] 
-	    = __Vdlyvval__Vortex__DOT__vx_csr_handler__DOT__csr__v0;
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (7U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (7U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (7U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (7U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (7U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (7U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (6U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (6U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (6U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (6U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (6U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (6U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (5U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (5U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (5U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (5U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (5U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (5U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (4U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (4U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (4U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (4U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (4U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (4U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (3U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (3U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (3U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (3U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (3U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (3U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (2U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (2U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (2U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (2U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (2U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (2U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 7U)) & (1U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone) 
+	      & ((3U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (1U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 6U)) & (1U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone) 
+	      & ((2U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (1U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_slave.v:53
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 5U)) & (1U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U]);
+    } else {
+	if ((((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone) 
+	      & ((1U == vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U]) 
+		 & (1U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall)))) 
+	     & (1U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+				<< 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+					     >> 4U)))))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
     }
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall 
 	= __Vdly__Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall;
     vlTOPp->Vortex__DOT__csr_decode_csr_data = ((0xc00U 
 						 == (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))
 						 ? (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__cycle)
@@ -5251,42 +7799,672 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__5(VVortex__Syms* __restrict vlSymsp) 
 							      (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__instret 
 							       >> 0x20U))
 						    : 
-						   ((0x400U 
-						     >= 
-						     (0x7ffU 
-						      & (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)))
-						     ? 
-						    vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr
-						    [
-						    (0x7ffU 
-						     & (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))]
-						     : 0U)))));
-}
-
-VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__6\n"); );
-    VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
-    // Body
+						   (0xfffU 
+						    & ((0x300bU 
+							>= 
+							(0x3fffU 
+							 & ((IData)(0xcU) 
+							    * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))))
+						        ? 
+						       (((0U 
+							  == 
+							  (0x1fU 
+							   & ((IData)(0xcU) 
+							      * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address))))
+							  ? 0U
+							  : 
+							 (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[
+							  ((IData)(1U) 
+							   + 
+							   (0x1ffU 
+							    & (((IData)(0xcU) 
+								* (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)) 
+							       >> 5U)))] 
+							  << 
+							  ((IData)(0x20U) 
+							   - 
+							   (0x1fU 
+							    & ((IData)(0xcU) 
+							       * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)))))) 
+							| (vlTOPp->Vortex__DOT__vx_csr_handler__DOT__csr[
+							   (0x1ffU 
+							    & (((IData)(0xcU) 
+								* (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)) 
+							       >> 5U))] 
+							   >> 
+							   (0x1fU 
+							    & ((IData)(0xcU) 
+							       * (IData)(vlTOPp->Vortex__DOT__vx_csr_handler__DOT__decode_csr_address)))))
+						        : 0U))))));
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (7U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (6U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (5U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (4U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (3U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (2U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    // ALWAYS at VX_register_file_master_slave.v:50
+    if ((((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			   << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 8U)))) & 
+	    (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			      << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 0xaU))))) 
+	   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
+	      >> 4U)) & (1U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]))) 
+	 & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_wspawn)))) {
+	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
+					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers, 
+			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
+    } else {
+	if (((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_wspawn) 
+	     & (2U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) {
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[1U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[1U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[2U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[2U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[3U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[3U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[4U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[4U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[5U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[5U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[6U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[6U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[7U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[7U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[8U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[8U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[9U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[9U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xaU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xaU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xbU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xbU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xcU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xcU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xdU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xdU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xeU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xeU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0xfU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0xfU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x10U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x10U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x11U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x11U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x12U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x12U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x13U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x13U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x14U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x14U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x15U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x15U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x16U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x16U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x17U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x17U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x18U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x18U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x19U] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x19U];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1aU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1aU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1bU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1bU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1cU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1cU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1dU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1dU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1eU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1eU];
+	    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[0x1fU] 
+		= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[0x1fU];
+	}
+    }
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall 
+	= __Vdly__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall;
     // ALWAYS at VX_register_file.v:45
     if (((((0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) 
-	   & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			       << 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					   >> 0x14U))))) 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) & 
+	   (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+			     << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					  >> 0xaU))))) 
 	  & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
 	     >> 4U)) & (0U == (0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U])))) {
 	VL_ASSIGNSEL_WIII(32,(0x3e0U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					 << 0x11U) 
-					| (0x1ffe0U 
+					 << 0x1bU) 
+					| (0x7ffffe0U 
 					   & (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					      >> 0xfU)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers, 
+					      >> 5U)))), vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers, 
 			  vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U]);
     }
 }
 
-VL_INLINE_OPT void VVortex::_combo__TOP__7(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__7\n"); );
+VL_INLINE_OPT void VVortex::_combo__TOP__5(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__5\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
     vlTOPp->Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data[3U] 
@@ -5299,8 +8477,8 @@ VL_INLINE_OPT void VVortex::_combo__TOP__7(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->in_cache_driver_out_data[0U];
 }
 
-VL_INLINE_OPT void VVortex::_sequent__TOP__8(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__8\n"); );
+VL_INLINE_OPT void VVortex::_sequent__TOP__6(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__6\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
     // ALWAYS at VX_register_file.v:52
@@ -5313,6 +8491,104 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__8(VVortex__Syms* __restrict vlSymsp) 
     // ALWAYS at VX_register_file.v:52
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__vx_register_file_master__out_src2_data 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_master_slave.v:66
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers[
 	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				 << 4U)) | (0xfU & 
 					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
@@ -5359,10 +8635,332 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__8(VVortex__Syms* __restrict vlSymsp) 
 				 << 4U)) | (0xfU & 
 					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffe00U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 9U)) | (0x1ffU 
+					    & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					       >> 0x17U))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
+    // ALWAYS at VX_register_file_slave.v:68
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers[
+	(0x1fU & ((0x7fffff0U & (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				 << 4U)) | (0xfU & 
+					    (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 0x1cU))))];
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[0U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__vx_register_file_master__out_src1_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[0U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[0U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[2U] 
@@ -5375,16 +8973,99 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__8(VVortex__Syms* __restrict vlSymsp) 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
     vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[1U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[3U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[2U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data;
+    vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[1U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data;
 }
 
-VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__9\n"); );
+VL_INLINE_OPT void VVortex::_sequent__TOP__7(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_sequent__TOP__7\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
     // Begin mtask footprint  all: 
-    VL_SIGW(__Vtemp99,319,0,10);
-    VL_SIGW(__Vtemp115,479,0,15);
-    VL_SIGW(__Vtemp124,735,0,23);
+    VL_SIGW(__Vtemp111,223,0,7);
+    VL_SIGW(__Vtemp120,479,0,15);
     // Body
     // ALWAYS at VX_alu.v:48
     vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellout__genblk1__BRA__0__KET____DOT__vx_alu__out_alu_result 
@@ -6019,150 +9700,124 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
     vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U] 
 	= vlTOPp->Vortex__DOT__vx_execute__DOT____Vcellout__genblk1__BRA__3__KET____DOT__vx_alu__out_alu_result;
     // ALWAYS at VX_generic_register.v:20
-    __Vtemp99[0U] = (IData)((((QData)((IData)((0x1fU 
-					       & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-						   << 9U) 
-						  | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-						     >> 0x17U))))) 
-			      << 0x34U) | (((QData)((IData)(
-							    (3U 
-							     & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-								 << 0xbU) 
-								| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-								   >> 0x15U))))) 
-					    << 0x32U) 
-					   | (((QData)((IData)(
-							       (0x1fU 
-								& ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-								    << 0x10U) 
-								   | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-								      >> 0x10U))))) 
-					       << 0x2dU) 
-					      | (((QData)((IData)(
-								  (0x1fU 
-								   & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-								       << 0x15U) 
-								      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-									 >> 0xbU))))) 
-						  << 0x28U) 
-						 | (((QData)((IData)(
-								     ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[3U] 
-								       << 0x15U) 
-								      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
-									 >> 0xbU)))) 
-						     << 8U) 
-						    | (QData)((IData)(
-								      (0xffU 
-								       & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))))))));
-    __Vtemp99[1U] = ((0xfe000000U & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[0U] 
-				     << 0x19U)) | (IData)(
-							  ((((QData)((IData)(
-									     (0x1fU 
-									      & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-										<< 9U) 
-										| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-										>> 0x17U))))) 
-							     << 0x34U) 
-							    | (((QData)((IData)(
-										(3U 
-										& ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-										<< 0xbU) 
-										| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-										>> 0x15U))))) 
-								<< 0x32U) 
-							       | (((QData)((IData)(
-										(0x1fU 
-										& ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-										<< 0x10U) 
-										| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-										>> 0x10U))))) 
-								   << 0x2dU) 
-								  | (((QData)((IData)(
-										(0x1fU 
-										& ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-										<< 0x15U) 
-										| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
-										>> 0xbU))))) 
-								      << 0x28U) 
-								     | (((QData)((IData)(
-										((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[3U] 
-										<< 0x15U) 
-										| (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
-										>> 0xbU)))) 
-									 << 8U) 
-									| (QData)((IData)(
-										(0xffU 
-										& vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))))))) 
-							   >> 0x20U)));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U] 
-	= ((IData)(vlTOPp->reset) ? 0U : __Vtemp99[0U]);
+	= ((IData)(vlTOPp->reset) ? 0U : (IData)((((QData)((IData)(
+								   (0x1fU 
+								    & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
+									<< 9U) 
+								       | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
+									  >> 0x17U))))) 
+						   << 0x2aU) 
+						  | (((QData)((IData)(
+								      (3U 
+								       & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
+									   << 0xbU) 
+									  | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
+									     >> 0x15U))))) 
+						      << 0x28U) 
+						     | (((QData)((IData)(
+									 ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[3U] 
+									   << 0x15U) 
+									  | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
+									     >> 0xbU)))) 
+							 << 8U) 
+							| (QData)((IData)(
+									  (0xffU 
+									   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U]))))))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-	= ((IData)(vlTOPp->reset) ? 0U : __Vtemp99[1U]);
-    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0xffff8000U 
 					   & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[0U] 
-					      >> 7U)) 
-					  | (0xfe000000U 
+					      << 0xfU)) 
+					  | (IData)(
+						    ((((QData)((IData)(
+								       (0x1fU 
+									& ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
+									    << 9U) 
+									   | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
+									      >> 0x17U))))) 
+						       << 0x2aU) 
+						      | (((QData)((IData)(
+									  (3U 
+									   & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
+									       << 0xbU) 
+									      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
+										>> 0x15U))))) 
+							  << 0x28U) 
+							 | (((QData)((IData)(
+									     ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[3U] 
+									       << 0x15U) 
+									      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[2U] 
+										>> 0xbU)))) 
+							     << 8U) 
+							    | (QData)((IData)(
+									      (0xffU 
+									       & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))))) 
+						     >> 0x20U))));
+    vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
+					   & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[0U] 
+					      >> 0x11U)) 
+					  | (0xffff8000U 
 					     & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[1U] 
-						<< 0x19U))));
+						<< 0xfU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
 					   & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[1U] 
-					      >> 7U)) 
-					  | (0xfe000000U 
+					      >> 0x11U)) 
+					  | (0xffff8000U 
 					     & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[2U] 
-						<< 0x19U))));
+						<< 0xfU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
 					   & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[2U] 
-					      >> 7U)) 
-					  | (0xfe000000U 
+					      >> 0x11U)) 
+					  | (0xffff8000U 
 					     & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[3U] 
-						<< 0x19U))));
+						<< 0xfU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
 					   & (vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[3U] 
-					      >> 7U)) 
-					  | (0xfe000000U 
+					      >> 0x11U)) 
+					  | (0xffff8000U 
 					     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-						<< 0x17U))));
+						<< 0xdU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
-					   & ((0x1800000U 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
+					   & ((0x6000U 
 					       & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[9U] 
-						  << 0x17U)) 
+						  << 0xdU)) 
 					      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
-						 >> 9U))) 
-					  | (0xfe000000U 
+						 >> 0x13U))) 
+					  | (0xffff8000U 
 					     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[9U] 
-						<< 0x17U))));
+						<< 0xdU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
-					   & ((0x1800000U 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
+					   & ((0x6000U 
 					       & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xaU] 
-						  << 0x17U)) 
+						  << 0xdU)) 
 					      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[9U] 
-						 >> 9U))) 
-					  | (0xfe000000U 
+						 >> 0x13U))) 
+					  | (0xffff8000U 
 					     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xaU] 
-						<< 0x17U))));
+						<< 0xdU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-	= ((IData)(vlTOPp->reset) ? 0U : ((0x1ffffffU 
-					   & ((0x1800000U 
+	= ((IData)(vlTOPp->reset) ? 0U : ((0x7fffU 
+					   & ((0x6000U 
 					       & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xbU] 
-						  << 0x17U)) 
+						  << 0xdU)) 
 					      | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xaU] 
-						 >> 9U))) 
-					  | (0xfe000000U 
+						 >> 0x13U))) 
+					  | (0xffff8000U 
 					     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xbU] 
-						<< 0x17U))));
+						<< 0xdU))));
     vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-	= ((IData)(vlTOPp->reset) ? 0U : (0x1ffffffU 
-					  & ((0x1800000U 
-					      & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
-						 << 0x17U)) 
-					     | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xbU] 
-						>> 9U))));
+	= ((IData)(vlTOPp->reset) ? 0U : (0x7fffU & 
+					  ((0x6000U 
+					    & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
+					       << 0xdU)) 
+					   | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xbU] 
+					      >> 0x13U))));
     // ALWAYS at VX_generic_register.v:20
     if (vlTOPp->reset) {
 	vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] = 0U;
@@ -6270,22 +9925,6 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xdU]);
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xeU] 
 	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xeU]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xfU] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xfU]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x10U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x10U]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x11U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x11U]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x12U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x12U]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x13U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x13U]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x14U]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x15U]);
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x16U] 
-	= ((IData)(vlTOPp->reset) ? 0U : vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x16U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT__is_itype = 
 	((0x13U == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
@@ -6304,7 +9943,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 		      ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 			  << 4U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 				    >> 0x1cU)) : 0x55U));
-    // ALWAYS at VX_decode.v:572
+    // ALWAYS at VX_decode.v:532
     vlTOPp->__Vtableidx1 = (7U & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				   << 0xcU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					       >> 0x14U)));
@@ -6420,143 +10059,142 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 						  & vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0U])));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[0U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[0U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+						 >> 0xfU))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[1U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[1U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+						 >> 0xfU))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[2U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[2U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-					       >> 0x19U))));
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+						 >> 0xfU))));
     vlSymsp->TOP__Vortex__DOT__VX_writeback_inter.write_data[3U] 
 	= ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			  << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				      >> 0x12U)))) ? 
+			  << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 8U)))) ? 
 	   vlTOPp->Vortex__DOT__vx_writeback__DOT__out_pc_data[3U]
 	    : ((1U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			      << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					  >> 0x12U))))
+			      << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					   >> 8U))))
 	        ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-		    << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-			      >> 0x19U)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-					     << 7U) 
-					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-					       >> 0x19U))));
-    __Vtemp115[0xdU] = ((0xfff80000U & (((0xdU == (0x1fU 
-						   & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						       << 0x17U) 
-						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							 >> 9U))))
-					  ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-					      << 3U) 
-					     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						>> 0x1dU))
-					  : ((0xeU 
-					      == (0x1fU 
-						  & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						      << 0x17U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							>> 9U))))
-					      ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-						 | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						     << 3U) 
-						    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						       >> 0x1dU)))
-					      : ((0xfU 
-						  == 
-						  (0x1fU 
-						   & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						       << 0x17U) 
-						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							 >> 9U))))
-						  ? 
-						 (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-						  & ((IData)(0xffffffffU) 
-						     - 
-						     ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						       << 3U) 
-						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-							 >> 0x1dU))))
-						  : 0xdeadbeefU))) 
-					<< 0x13U)) 
-			| ((0x40000U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
-					<< 0xaU)) | 
-			   (0x3ffffU & ((((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
-					   << 0x12U) 
-					  | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
-					     >> 0xeU)) 
-					 + ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
-					     << 0x18U) 
-					    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
-					       >> 8U))) 
-					>> 0xeU))));
-    __Vtemp115[0xeU] = (0x7ffffU & (((0xdU == (0x1fU 
-					       & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						   << 0x17U) 
-						  | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-						     >> 9U))))
-				      ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-					  << 3U) | 
-					 (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-					  >> 0x1dU))
-				      : ((0xeU == (0x1fU 
-						   & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						       << 0x17U) 
-						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							 >> 9U))))
-					  ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-					     | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						 << 3U) 
-						| (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-						   >> 0x1dU)))
-					  : ((0xfU 
-					      == (0x1fU 
-						  & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
-						      << 0x17U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
-							>> 9U))))
-					      ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
-						 & ((IData)(0xffffffffU) 
-						    - 
-						    ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-						      << 3U) 
-						     | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
-							>> 0x1dU))))
-					      : 0xdeadbeefU))) 
-				    >> 0xdU));
-    __Vtemp124[7U] = ((0xffff0000U & ((0x80000000U 
+		    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+				 >> 0xfU)) : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+					       << 0x11U) 
+					      | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+						 >> 0xfU))));
+    __Vtemp111[5U] = ((0xfff80000U & (((0xdU == (0x1fU 
+						 & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						     << 0x17U) 
+						    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						       >> 9U))))
+				        ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+					    << 3U) 
+					   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+					      >> 0x1dU))
+				        : ((0xeU == 
+					    (0x1fU 
+					     & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						 << 0x17U) 
+						| (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						   >> 9U))))
+					    ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+					       | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+						   << 3U) 
+						  | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						     >> 0x1dU)))
+					    : ((0xfU 
+						== 
+						(0x1fU 
+						 & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						     << 0x17U) 
+						    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						       >> 9U))))
+					        ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+						   & ((IData)(0xffffffffU) 
+						      - 
+						      ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+							<< 3U) 
+						       | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+							  >> 0x1dU))))
+					        : 0xdeadbeefU))) 
+				      << 0x13U)) | 
+		      ((0x40000U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
+				    << 0xaU)) | (0x3ffffU 
+						 & ((((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
+						       << 0x12U) 
+						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
+							 >> 0xeU)) 
+						     + 
+						     ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[2U] 
+						       << 0x18U) 
+						      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
+							 >> 8U))) 
+						    >> 0xeU))));
+    __Vtemp111[6U] = (0x7ffffU & (((0xdU == (0x1fU 
+					     & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						 << 0x17U) 
+						| (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						   >> 9U))))
+				    ? ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+					<< 3U) | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						  >> 0x1dU))
+				    : ((0xeU == (0x1fU 
+						 & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						     << 0x17U) 
+						    | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						       >> 9U))))
+				        ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+					   | ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+					       << 3U) 
+					      | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						 >> 0x1dU)))
+				        : ((0xfU == 
+					    (0x1fU 
+					     & ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[6U] 
+						 << 0x17U) 
+						| (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[5U] 
+						   >> 9U))))
+					    ? (vlTOPp->Vortex__DOT__csr_decode_csr_data 
+					       & ((IData)(0xffffffffU) 
+						  - 
+						  ((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
+						    << 3U) 
+						   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xdU] 
+						      >> 0x1dU))))
+					    : 0xdeadbeefU))) 
+				  >> 0xdU));
+    __Vtemp120[7U] = ((0xffff0000U & ((0x80000000U 
 				       & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[4U] 
 					  << 0x1cU)) 
 				      | ((0x70000000U 
@@ -6582,7 +10220,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 						      >> 3U)))) 
 			 | (0x7ffU & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
 				      >> 3U))));
-    __Vtemp124[8U] = ((0xffffU & ((0xfffcU & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U] 
+    __Vtemp120[8U] = ((0xffffU & ((0xfffcU & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U] 
 					      << 2U)) 
 				  | ((3U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[4U] 
 					    >> 4U)) 
@@ -6640,9 +10278,9 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 						   & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[8U] 
 						      >> 3U)))));
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[7U] 
-	= __Vtemp124[7U];
+	= __Vtemp120[7U];
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[8U] 
-	= __Vtemp124[8U];
+	= __Vtemp120[8U];
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[9U] 
 	= ((0xffffU & ((3U & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U] 
 			      >> 0x1eU)) | (0xfffcU 
@@ -6667,62 +10305,6 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
     vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xcU] 
 	= ((0xffffU & ((3U & (vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U] 
 			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xdU] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[0U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xeU] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[1U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xfU] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[2U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x10U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_b_reg_data[3U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x11U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[0U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x12U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[1U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x13U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[2U] 
-			      >> 0x1eU)) | (0xfffcU 
-					    & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-					       << 2U)))) 
-	   | (0xffff0000U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-			     << 2U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x14U] 
-	= ((0xffffU & ((3U & (vlTOPp->Vortex__DOT____Vcellout__vx_execute__out_a_reg_data[3U] 
-			      >> 0x1eU)) | (0xfffcU 
 					    & ((((vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xaU] 
 						  << 0x12U) 
 						 | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[9U] 
@@ -6733,19 +10315,19 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 						   | (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[1U] 
 						      >> 8U))) 
 					       << 2U)))) 
-	   | (0xffff0000U & (__Vtemp115[0xdU] << 0x10U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x15U] 
-	= ((0xffffU & (__Vtemp115[0xdU] >> 0x10U)) 
-	   | (0xffff0000U & (__Vtemp115[0xeU] << 0x10U)));
-    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0x16U] 
+	   | (0xffff0000U & (__Vtemp111[5U] << 0x10U)));
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xdU] 
+	= ((0xffffU & (__Vtemp111[5U] >> 0x10U)) | 
+	   (0xffff0000U & (__Vtemp111[6U] << 0x10U)));
+    vlTOPp->Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in[0xeU] 
 	= (0xffffU & ((0xfff0U & ((0xffc0U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xfU] 
 					      << 6U)) 
 				  | (0x30U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
 					      >> 0x1aU)))) 
 		      | ((8U & (vlTOPp->Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value[0xeU] 
-				>> 0x1aU)) | (__Vtemp115[0xeU] 
+				>> 0x1aU)) | (__Vtemp111[6U] 
 					      >> 0x10U))));
-    // ALWAYS at VX_decode.v:503
+    // ALWAYS at VX_decode.v:463
     vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.itype_immed 
 	= ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])
 	    ? ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])
@@ -6867,7 +10449,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 	   & ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jal_sys_jal) 
 	      & vlTOPp->Vortex__DOT__vx_decode__DOT__in_valid
 	      [0U]));
-    // ALWAYS at VX_decode.v:447
+    // ALWAYS at VX_decode.v:407
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -6970,7 +10552,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
     } else {
 	vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.jal_offset = 0xdeadbeefU;
     }
-    // ALWAYS at VX_decode.v:447
+    // ALWAYS at VX_decode.v:407
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -7027,7 +10609,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
     } else {
 	vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.jal = 0U;
     }
-    // ALWAYS at VX_decode.v:514
+    // ALWAYS at VX_decode.v:474
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -7086,7 +10668,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
     } else {
 	vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.branch_type = 0U;
     }
-    // ALWAYS at VX_decode.v:514
+    // ALWAYS at VX_decode.v:474
     if ((0x4000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	if ((0x2000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
 	    if ((0x1000U & vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U])) {
@@ -7264,7 +10846,7 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 						  | (0x3ffffeU 
 						     & (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U] 
 							>> 0xaU))));
-    // ALWAYS at VX_memory.v:56
+    // ALWAYS at VX_memory.v:63
     vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir 
 	= (1U & ((0x400U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
 		  ? ((0x200U & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])
@@ -7494,66 +11076,66 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 	      & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__real_zero_isclone)));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xfdU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 1U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xfbU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 2U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xf7U & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 3U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xefU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 4U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xdfU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 5U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0xbfU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 6U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall 
 	= ((0x7fU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__glob_clone_stall)) 
-	   | (((((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__clone_state_stall)) 
-		 | (1U != (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__clone_state_stall))) 
+	   | (((((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall)) 
+		 | (1U != (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall))) 
 		& (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone)) 
-	       | (((0U == (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)) 
+	       | (((0U == (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)) 
 		   & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_wspawn)) 
-		  | (1U < (IData)(vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.__PVT__wspawn_state_stall)))) 
+		  | (1U < (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall)))) 
 	      << 7U));
     vlTOPp->out_cache_driver_in_address[3U] = vlTOPp->Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_address
 	[3U];
@@ -7581,10 +11163,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 	[0U];
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (0U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (0U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7592,10 +11174,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__0__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (1U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (1U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7603,10 +11185,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__1__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (2U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (2U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7614,10 +11196,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__2__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (3U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (3U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7625,10 +11207,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__3__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (4U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (4U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7636,10 +11218,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__4__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (5U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (5U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7647,10 +11229,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__5__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (6U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (6U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7658,10 +11240,10 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 					 : vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__real_PC));
     // ALWAYS at VX_warp.v:57
     vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC 
-	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
+	= (((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
 	     >> 2U) & (7U == (0xfU & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
-	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x15U] 
-		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0x14U] 
+	    ? ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xdU] 
+		<< 0x1eU) | (vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0xcU] 
 			     >> 2U)) : (((IData)(vlTOPp->Vortex__DOT__vx_memory__DOT__temp_branch_dir) 
 					 & (7U == (0xfU 
 						   & vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[0U])))
@@ -7672,14 +11254,14 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 			   << 9U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 				     >> 0x17U))) == 
 		(0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x14U)))) 
+			   << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 0xaU)))) 
 	       & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				   << 9U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					     >> 0x17U))))) 
 	      & (0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			       << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					   >> 0x12U))))) 
+			       << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					    >> 8U))))) 
 	     & ((0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]) 
 		== (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 			     << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
@@ -7704,14 +11286,14 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 			   << 4U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 				     >> 0x1cU))) == 
 		(0x1fU & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			   << 0xcU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-				       >> 0x14U)))) 
+			   << 0x16U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					>> 0xaU)))) 
 	       & (0U != (0x1fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				   << 4U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					     >> 0x1cU))))) 
 	      & (0U != (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-			       << 0xeU) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					   >> 0x12U))))) 
+			       << 0x18U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+					    >> 8U))))) 
 	     & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd))) 
 	    & (~ (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd))) 
 	   & ((0xfU & vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[0U]) 
@@ -7765,12 +11347,14 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
 	= vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__6__KET____DOT__VX_Warp__DOT__temp_PC;
     vlTOPp->Vortex__DOT__vx_fetch__DOT__warp_glob_pc[7U] 
 	= vlTOPp->Vortex__DOT__vx_fetch__DOT__genblk2__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC;
-    vlTOPp->Vortex__DOT__forwarding_src1_fwd = (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
-						 | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
-						| (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd));
-    vlTOPp->Vortex__DOT__forwarding_src2_fwd = (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
-						 | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
-						| (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd));
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd 
+	= (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd) 
+	    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)) 
+	   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd));
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd 
+	= (((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd) 
+	    | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)) 
+	   | (IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd));
     vlTOPp->Vortex__DOT__vx_fetch__DOT__add_warp = 
 	(((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_wspawn) 
 	  & (~ (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_ebreak))) 
@@ -7851,13 +11435,14 @@ VL_INLINE_OPT void VVortex::_sequent__TOP__9(VVortex__Syms* __restrict vlSymsp) 
     vlTOPp->icache_request_pc_address = vlTOPp->Vortex__DOT__vx_fetch__DOT__out_PC_var;
 }
 
-VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__10\n"); );
+VL_INLINE_OPT void VVortex::_combo__TOP__8(VVortex__Syms* __restrict vlSymsp) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__8\n"); );
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
     // Begin mtask footprint  all: 
-    VL_SIGW(__Vtemp146,127,0,4);
-    VL_SIGW(__Vtemp162,127,0,4);
+    VL_SIGW(__Vtemp142,127,0,4);
+    VL_SIGW(__Vtemp158,127,0,4);
+    VL_SIGW(__Vtemp177,319,0,10);
     // Body
     vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[0U] 
 	= vlTOPp->Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data
@@ -7871,7 +11456,7 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
     vlSymsp->TOP__Vortex__DOT__VX_mem_wb.mem_result[3U] 
 	= vlTOPp->Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data
 	[3U];
-    __Vtemp146[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp142[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -7887,22 +11472,23 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[0U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U]));
-    __Vtemp146[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp142[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -7918,22 +11504,23 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[1U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U]));
-    __Vtemp146[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp142[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -7949,22 +11536,23 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[2U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U]));
-    __Vtemp146[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
+    __Vtemp142[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -7980,46 +11568,47 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[3U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U]));
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[0U] 
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[0U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U])
-	    : __Vtemp146[0U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[1U] 
+	    : __Vtemp142[0U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[1U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U])
-	    : __Vtemp146[1U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[2U] 
+	    : __Vtemp142[1U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[2U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U])
-	    : __Vtemp146[2U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[3U] 
+	    : __Vtemp142[2U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[3U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U])
-	    : __Vtemp146[3U]);
-    __Vtemp162[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+	    : __Vtemp142[3U]);
+    __Vtemp158[0U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -8035,22 +11624,23 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[0U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U]));
-    __Vtemp162[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+    __Vtemp158[1U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -8066,22 +11656,23 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[1U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[6U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U]));
-    __Vtemp162[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+    __Vtemp158[2U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -8097,22 +11688,23 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[2U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[3U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[7U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U]));
-    __Vtemp162[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
+    __Vtemp158[3U] = ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_mem_fwd)
 		       ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[8U] 
 					 << 0xbU) | 
 					(vlTOPp->Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value[7U] 
@@ -8128,53 +11720,54 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 						>> 2U))))
 		       : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_wb_fwd)
 			   ? ((3U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-					     << 0xeU) 
+					     << 0x18U) 
 					    | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-					       >> 0x12U))))
+					       >> 8U))))
 			       ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next[3U]
 			       : ((2U == (3U & ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[2U] 
-						 << 0xeU) 
+						 << 0x18U) 
 						| (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[1U] 
-						   >> 0x12U))))
+						   >> 8U))))
 				   ? ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[5U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
-						 >> 0x19U))
-				   : ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
-				       << 7U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
-						 >> 0x19U))))
+				       << 0x11U) | 
+				      (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[4U] 
+				       >> 0xfU)) : 
+				  ((vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[9U] 
+				    << 0x11U) | (vlTOPp->Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value[8U] 
+						 >> 0xfU))))
 			   : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U]));
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[0U] 
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[0U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[0U])
-	    : __Vtemp162[0U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[1U] 
+	    : __Vtemp158[0U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[1U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[1U])
-	    : __Vtemp162[1U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[2U] 
+	    : __Vtemp158[1U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[2U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[2U])
-	    : __Vtemp162[2U]);
-    vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[3U] 
+	    : __Vtemp158[2U]);
+    vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U] 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd)
 	    ? ((3U == (IData)(vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.wb))
 	        ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next[3U]
 	        : vlSymsp->TOP__Vortex__DOT__VX_exe_mem_req.alu_result[3U])
-	    : __Vtemp162[3U]);
+	    : __Vtemp158[3U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[0U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[0U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[0U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[1U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -8182,8 +11775,8 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[1U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[1U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[2U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -8191,8 +11784,8 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[2U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[2U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[3U] 
 	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -8200,25 +11793,389 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 					     >> 8U))))
 	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
-			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__forwarding_src1_fwd)
-					 ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data[3U]
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
 					 : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[0U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[0U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[1U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[1U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[1U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[2U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[2U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[2U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[3U] 
+	= ((0x6fU == (0x7fU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+				<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+					     >> 8U))))
+	    ? ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
+		<< 0x18U) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
+			     >> 8U)) : ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd)
+					 ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data[3U]
+					 : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register[3U]));
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[0U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[0U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[0U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[1U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[1U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[1U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[2U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[2U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[2U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[3U] 
-	= ((IData)(vlTOPp->Vortex__DOT__forwarding_src2_fwd)
-	    ? vlTOPp->Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data[3U]
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
 	    : vlTOPp->Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[0U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[0U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[0U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[1U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[1U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[1U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[2U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[2U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[2U]);
+    vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[3U] 
+	= ((IData)(vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd)
+	    ? vlTOPp->Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data[3U]
+	    : vlTOPp->Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register[3U]);
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[1U] 
@@ -8227,6 +12184,62 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[4U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[5U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[6U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[7U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[8U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[9U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xaU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xbU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xcU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xdU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xeU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xfU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x10U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x11U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x12U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x13U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x14U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x15U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x16U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x17U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x18U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x19U] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1aU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1bU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data[3U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1cU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[0U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1dU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[1U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1eU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[2U];
+    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1fU] 
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[1U] 
@@ -8235,127 +12248,62 @@ VL_INLINE_OPT void VVortex::_combo__TOP__10(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__VX_Context_zero__out_b_reg_data[3U];
-}
-
-VL_INLINE_OPT void VVortex::_combo__TOP__11(VVortex__Syms* __restrict vlSymsp) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    VVortex::_combo__TOP__11\n"); );
-    VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
-    // Variables
-    // Begin mtask footprint  all: 
-    VL_SIGW(__Vtemp181,319,0,10);
-    // Body
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[4U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[5U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[6U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[7U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_a_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[4U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[5U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[6U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[7U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[8U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[9U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xaU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xbU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[8U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[9U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xaU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xbU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xcU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xdU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xeU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0xfU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xcU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xdU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xeU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0xfU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x10U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x11U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x12U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x13U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x10U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x11U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x12U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x13U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x14U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x15U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x16U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x17U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x14U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x15U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x16U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x17U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x18U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x19U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1aU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1bU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x18U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x19U] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1aU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1bU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one.out_b_reg_data[3U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1cU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[0U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1dU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[1U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1eU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[2U];
-    vlTOPp->Vortex__DOT__vx_decode__DOT__glob_a_reg_data[0x1fU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_a_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1cU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[0U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[0U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1dU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[1U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[1U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1eU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[2U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[2U];
     vlTOPp->Vortex__DOT__vx_decode__DOT__glob_b_reg_data[0x1fU] 
-	= vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one.out_b_reg_data[3U];
+	= vlTOPp->Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data[3U];
     // ALWAYS at VX_decode.v:238
     if ((0U == (0xfU & ((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[1U] 
 			 << 0x1cU) | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
@@ -8566,7 +12514,7 @@ VL_INLINE_OPT void VVortex::_combo__TOP__11(VVortex__Syms* __restrict vlSymsp) {
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[2U];
     vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[3U] 
 	= vlTOPp->Vortex__DOT__vx_decode__DOT__temp_out_b_reg_data[3U];
-    __Vtemp181[0U] = (IData)((((QData)((IData)((((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
+    __Vtemp177[0U] = (IData)((((QData)((IData)((((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 						  >> 1U) 
 						 & (0x33U 
 						    == 
@@ -8691,7 +12639,7 @@ VL_INLINE_OPT void VVortex::_combo__TOP__11(VVortex__Syms* __restrict vlSymsp) {
 									      : 7U) 
 									    << 3U)) 
 									| (IData)(vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.branch_type))))))))));
-    __Vtemp181[1U] = ((0xfffe0000U & (vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
+    __Vtemp177[1U] = ((0xfffe0000U & (vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
 				      << 0x11U)) | (IData)(
 							   ((((QData)((IData)(
 									      (((vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
@@ -8875,7 +12823,7 @@ VL_INLINE_OPT void VVortex::_combo__TOP__11(VVortex__Syms* __restrict vlSymsp) {
 							 >> 0x20U)) 
 						>> 0x18U))));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[3U] 
-	= ((0xe0000000U & (__Vtemp181[0U] << 0x1dU)) 
+	= ((0xe0000000U & (__Vtemp177[0U] << 0x1dU)) 
 	   | ((0x1ffffe00U & (((0x37U == (0x7fU & (
 						   (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[2U] 
 						    << 0x18U) 
@@ -8900,10 +12848,10 @@ VL_INLINE_OPT void VVortex::_combo__TOP__11(VVortex__Syms* __restrict vlSymsp) {
 						   | (vlTOPp->Vortex__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value[0U] 
 						      >> 0x1fU)))));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[4U] 
-	= ((0x1fffffffU & (__Vtemp181[0U] >> 3U)) | 
-	   (0xe0000000U & (__Vtemp181[1U] << 0x1dU)));
+	= ((0x1fffffffU & (__Vtemp177[0U] >> 3U)) | 
+	   (0xe0000000U & (__Vtemp177[1U] << 0x1dU)));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[5U] 
-	= ((0x1fffffffU & (__Vtemp181[1U] >> 3U)) | 
+	= ((0x1fffffffU & (__Vtemp177[1U] >> 3U)) | 
 	   (0xe0000000U & (vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U] 
 			   << 0xeU)));
     vlTOPp->Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in[6U] 
@@ -9003,16 +12951,19 @@ VL_INLINE_OPT void VVortex::_combo__TOP__11(VVortex__Syms* __restrict vlSymsp) {
 	= (0x3fffffffU & ((IData)(vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.csr_address) 
 			  >> 2U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
+	= ((0xeU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
+	   | VL_LTES_III(32,32,32, 0U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]));
+    vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
 	= ((0xdU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
-	   | ((1U <= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
+	   | (VL_LTES_III(1,32,32, 1U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
 	      << 1U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
 	= ((0xbU & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
-	   | ((2U <= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
+	   | (VL_LTES_III(1,32,32, 2U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
 	      << 2U));
     vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask 
 	= ((7U & (IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__jalrs_thread_mask)) 
-	   | ((3U <= vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
+	   | (VL_LTES_III(1,32,32, 3U, vlSymsp->TOP__Vortex__DOT__VX_frE_to_bckE_req.b_reg_data[0U]) 
 	      << 3U));
     vlSymsp->TOP__Vortex__DOT__VX_warp_ctl.thread_mask 
 	= ((IData)(vlTOPp->Vortex__DOT__vx_decode__DOT__is_jalrs)
@@ -9814,43 +13765,20 @@ void VVortex::_eval(VVortex__Syms* __restrict vlSymsp) {
     // Body
     if ((((IData)(vlTOPp->clk) & (~ (IData)(vlTOPp->__Vclklast__TOP__clk))) 
 	 | ((IData)(vlTOPp->reset) & (~ (IData)(vlTOPp->__Vclklast__TOP__reset))))) {
-	vlTOPp->_sequent__TOP__4(vlSymsp);
+	vlTOPp->_sequent__TOP__3(vlSymsp);
     }
     if (((IData)(vlTOPp->clk) & (~ (IData)(vlTOPp->__Vclklast__TOP__clk)))) {
-	vlTOPp->_sequent__TOP__5(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__15(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__16(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__17(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__18(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__19(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__20(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__21(vlSymsp);
-	vlTOPp->_sequent__TOP__6(vlSymsp);
+	vlTOPp->_sequent__TOP__4(vlSymsp);
     }
-    vlTOPp->_combo__TOP__7(vlSymsp);
+    vlTOPp->_combo__TOP__5(vlSymsp);
     if (((~ (IData)(vlTOPp->clk)) & (IData)(vlTOPp->__Vclklast__TOP__clk))) {
-	vlTOPp->_sequent__TOP__8(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
-	vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one._sequent__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__22(vlSymsp);
+	vlTOPp->_sequent__TOP__6(vlSymsp);
     }
     if ((((IData)(vlTOPp->clk) & (~ (IData)(vlTOPp->__Vclklast__TOP__clk))) 
 	 | ((IData)(vlTOPp->reset) & (~ (IData)(vlTOPp->__Vclklast__TOP__reset))))) {
-	vlTOPp->_sequent__TOP__9(vlSymsp);
+	vlTOPp->_sequent__TOP__7(vlSymsp);
     }
-    vlTOPp->_combo__TOP__10(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one._combo__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__29(vlSymsp);
-    vlTOPp->_combo__TOP__11(vlSymsp);
+    vlTOPp->_combo__TOP__8(vlSymsp);
     // Final
     vlTOPp->__Vclklast__TOP__clk = vlTOPp->clk;
     vlTOPp->__Vclklast__TOP__reset = vlTOPp->reset;
@@ -9861,13 +13789,6 @@ void VVortex::_eval_initial(VVortex__Syms* __restrict vlSymsp) {
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
     vlTOPp->_initial__TOP__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one._initial__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__1(vlSymsp);
     vlTOPp->__Vclklast__TOP__clk = vlTOPp->clk;
     vlTOPp->__Vclklast__TOP__reset = vlTOPp->reset;
 }
@@ -9884,14 +13805,6 @@ void VVortex::_eval_settle(VVortex__Syms* __restrict vlSymsp) {
     VVortex* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Body
     vlTOPp->_settle__TOP__2(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlSymsp->TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one._settle__TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__8(vlSymsp);
-    vlTOPp->_settle__TOP__3(vlSymsp);
 }
 
 VL_INLINE_OPT QData VVortex::_change_request(VVortex__Syms* __restrict vlSymsp) {
@@ -9941,10 +13854,6 @@ void VVortex::_ctor_var_reset() {
     Vortex__DOT__memory_branch_dest = VL_RAND_RESET_I(32);
     Vortex__DOT__csr_decode_csr_data = VL_RAND_RESET_I(32);
     Vortex__DOT__forwarding_fwd_stall = VL_RAND_RESET_I(1);
-    Vortex__DOT__forwarding_src1_fwd = VL_RAND_RESET_I(1);
-    Vortex__DOT__forwarding_src2_fwd = VL_RAND_RESET_I(1);
-    VL_RAND_RESET_W(128,Vortex__DOT____Vcellout__vx_execute__out_b_reg_data);
-    VL_RAND_RESET_W(128,Vortex__DOT____Vcellout__vx_execute__out_a_reg_data);
     { int __Vi0=0; for (; __Vi0<4; ++__Vi0) {
 	    Vortex__DOT____Vcellout__vx_memory__out_cache_driver_in_valid[__Vi0] = VL_RAND_RESET_I(1);
     }}
@@ -9957,8 +13866,6 @@ void VVortex::_ctor_var_reset() {
     { int __Vi0=0; for (; __Vi0<4; ++__Vi0) {
 	    Vortex__DOT____Vcellinp__vx_memory__in_cache_driver_out_data[__Vi0] = VL_RAND_RESET_I(32);
     }}
-    VL_RAND_RESET_W(128,Vortex__DOT____Vcellout__vx_forwarding__out_src2_fwd_data);
-    VL_RAND_RESET_W(128,Vortex__DOT____Vcellout__vx_forwarding__out_src1_fwd_data);
     { int __Vi0=0; for (; __Vi0<4; ++__Vi0) {
 	    Vortex__DOT__vx_fetch__DOT__in_thread_mask[__Vi0] = VL_RAND_RESET_I(1);
     }}
@@ -10136,18 +14043,32 @@ void VVortex::_ctor_var_reset() {
     Vortex__DOT__vx_decode__DOT__temp_final_alu = VL_RAND_RESET_I(5);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__1__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__2__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__3__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__4__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__5__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__6__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_wspawn = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__real_isclone = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_b_reg_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT____Vcellout__genblk2__BRA__7__KET____DOT__VX_Context_one__out_a_reg_data);
     Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__state_stall = VL_RAND_RESET_I(6);
     VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd1_register);
     VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__rd2_register);
@@ -10163,6 +14084,118 @@ void VVortex::_ctor_var_reset() {
     VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
     VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
     VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__VX_Context_zero__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd1_register);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__rd2_register);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__clone_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__wspawn_state_stall = VL_RAND_RESET_I(6);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__vx_register_file_master__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src2_data = VL_RAND_RESET_I(32);
+    Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT____Vcellout__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__out_src1_data = VL_RAND_RESET_I(32);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__vx_register_file_master__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__1__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__2__KET____DOT__vx_register_file_slave__DOT__registers);
+    VL_RAND_RESET_W(1024,Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one__DOT__gen_code_label__BRA__3__KET____DOT__vx_register_file_slave__DOT__registers);
     VL_RAND_RESET_W(490,Vortex__DOT__vx_d_e_reg__DOT____Vcellinp__d_e_reg__in);
     VL_RAND_RESET_W(490,Vortex__DOT__vx_d_e_reg__DOT__d_e_reg__DOT__value);
     Vortex__DOT__vx_execute__DOT____Vcellout__genblk1__BRA__0__KET____DOT__vx_alu__out_alu_result = VL_RAND_RESET_I(32);
@@ -10177,11 +14210,15 @@ void VVortex::_ctor_var_reset() {
     Vortex__DOT__vx_execute__DOT__genblk1__BRA__2__KET____DOT__vx_alu__DOT__mult_signed_result = VL_RAND_RESET_Q(64);
     Vortex__DOT__vx_execute__DOT__genblk1__BRA__3__KET____DOT__vx_alu__DOT__ALU_in2 = VL_RAND_RESET_I(32);
     Vortex__DOT__vx_execute__DOT__genblk1__BRA__3__KET____DOT__vx_alu__DOT__mult_signed_result = VL_RAND_RESET_Q(64);
-    VL_RAND_RESET_W(720,Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in);
-    VL_RAND_RESET_W(720,Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value);
+    VL_RAND_RESET_W(464,Vortex__DOT__vx_e_m_reg__DOT____Vcellinp__f_d_reg__in);
+    VL_RAND_RESET_W(464,Vortex__DOT__vx_e_m_reg__DOT__f_d_reg__DOT__value);
     Vortex__DOT__vx_memory__DOT__temp_branch_dir = VL_RAND_RESET_I(1);
-    VL_RAND_RESET_W(313,Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value);
+    VL_RAND_RESET_W(303,Vortex__DOT__vx_m_w_reg__DOT__m_w_reg__DOT__value);
     VL_RAND_RESET_W(128,Vortex__DOT__vx_writeback__DOT__out_pc_data);
+    Vortex__DOT__vx_forwarding__DOT__out_src1_fwd = VL_RAND_RESET_I(1);
+    Vortex__DOT__vx_forwarding__DOT__out_src2_fwd = VL_RAND_RESET_I(1);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_forwarding__DOT__out_src1_fwd_data);
+    VL_RAND_RESET_W(128,Vortex__DOT__vx_forwarding__DOT__out_src2_fwd_data);
     Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd = VL_RAND_RESET_I(1);
     Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd = VL_RAND_RESET_I(1);
@@ -10191,9 +14228,7 @@ void VVortex::_ctor_var_reset() {
     VL_RAND_RESET_W(128,Vortex__DOT__vx_forwarding__DOT__use_execute_PC_next);
     VL_RAND_RESET_W(128,Vortex__DOT__vx_forwarding__DOT__use_memory_PC_next);
     VL_RAND_RESET_W(128,Vortex__DOT__vx_forwarding__DOT__use_writeback_PC_next);
-    { int __Vi0=0; for (; __Vi0<1025; ++__Vi0) {
-	    Vortex__DOT__vx_csr_handler__DOT__csr[__Vi0] = VL_RAND_RESET_I(12);
-    }}
+    VL_RAND_RESET_W(12300,Vortex__DOT__vx_csr_handler__DOT__csr);
     Vortex__DOT__vx_csr_handler__DOT__cycle = VL_RAND_RESET_Q(64);
     Vortex__DOT__vx_csr_handler__DOT__instret = VL_RAND_RESET_Q(64);
     Vortex__DOT__vx_csr_handler__DOT__decode_csr_address = VL_RAND_RESET_I(12);

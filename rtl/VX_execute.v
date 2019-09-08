@@ -3,14 +3,13 @@
 
 module VX_execute (
 		VX_frE_to_bckE_req_inter    VX_bckE_req,
+		VX_forward_exe_inter        VX_fwd_exe,
 		input wire[31:0]            in_csr_data,
 
 		VX_mem_req_inter            VX_exe_mem_req,
 		output wire[11:0]           out_csr_address,
 		output wire                 out_is_csr,
 		output reg[31:0]            out_csr_result,
-		output wire[`NT_M1:0][31:0] out_a_reg_data,
-		output wire[`NT_M1:0][31:0] out_b_reg_data,
 		output wire                 out_jal,
 		output wire[31:0]           out_jal_dest,
 		output wire                 out_branch_stall
@@ -81,13 +80,6 @@ module VX_execute (
 		assign out_branch_stall = ((in_branch_type != `NO_BRANCH) || in_jal ) ? `STALL : `NO_STALL;
 
 
-
-		genvar ind;
-		for (ind = 0; ind <= `NT_M1; ind = ind + 1) begin
-			assign out_a_reg_data[ind]    = in_a_reg_data[ind];
-			assign out_b_reg_data[ind]    = in_b_reg_data[ind];
-		end
-
 		assign VX_exe_mem_req.mem_read      = VX_bckE_req.mem_read;
 		assign VX_exe_mem_req.mem_write     = VX_bckE_req.mem_write;
 		assign VX_exe_mem_req.wb            = VX_bckE_req.wb;
@@ -102,6 +94,13 @@ module VX_execute (
 		assign VX_exe_mem_req.branch_type   = VX_bckE_req.branch_type;
 		assign VX_exe_mem_req.valid         = VX_bckE_req.valid;
 		assign VX_exe_mem_req.warp_num      = VX_bckE_req.warp_num;
+
+
+		assign VX_fwd_exe.dest              = VX_exe_mem_req.rd;
+		assign VX_fwd_exe.wb                = VX_exe_mem_req.wb;
+		assign VX_fwd_exe.alu_result        = VX_exe_mem_req.alu_result;
+		assign VX_fwd_exe.PC_next           = VX_exe_mem_req.PC_next;
+		assign VX_fwd_exe.warp_num          = VX_exe_mem_req.warp_num;
 
 
 		assign out_is_csr        = VX_bckE_req.is_csr;

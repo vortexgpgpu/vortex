@@ -9,12 +9,14 @@ module VX_decode(
 	// WriteBack inputs
 	VX_wb_inter            VX_writeback_inter,
 
+
+	// Fwd Request
+	VX_forward_reqeust_inter VX_fwd_req_de,
+
 	// FORWARDING INPUTS
-	input wire            in_src1_fwd,
-	input wire[`NT_M1:0][31:0]      in_src1_fwd_data,
-	input wire            in_src2_fwd,
-	input wire[`NT_M1:0][31:0]      in_src2_fwd_data,
-	input wire[`NW_M1:0]  in_which_wspawn,
+	VX_forward_response_inter   VX_fwd_rsp,
+
+	input wire[`NW_M1:0]          in_which_wspawn,
 
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
@@ -23,6 +25,12 @@ module VX_decode(
 	output reg               out_branch_stall
 
 );
+
+
+		wire                    in_src1_fwd      = VX_fwd_rsp.src1_fwd;
+		wire[`NT_M1:0][31:0]    in_src1_fwd_data = VX_fwd_rsp.src1_fwd_data;
+		wire                    in_src2_fwd      = VX_fwd_rsp.src2_fwd;
+		wire[`NT_M1:0][31:0]    in_src2_fwd_data = VX_fwd_rsp.src2_fwd_data;
 
 
 		wire[`NT_M1:0][31:0]      in_write_data;
@@ -105,20 +113,13 @@ module VX_decode(
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
 
-		/* verilator lint_off UNUSED */
 		wire[31:0][31:0] w0_t0_registers;
-		/* verilator lint_on UNUSED */
 
 
 
-		// always @(*) begin
-		// 	$display("DECODE WARP: %h", in_warp_num);
-		// end
-
-
-		// always @(*) begin
-		// 	$display("DECODE WARP: %h PC: %h",in_warp_num, in_curr_PC);
-		// end
+		assign VX_fwd_req_de.src1        = VX_frE_to_bckE_req.rs1;
+		assign VX_fwd_req_de.src2        = VX_frE_to_bckE_req.rs2;
+		assign VX_fwd_req_de.warp_num    = VX_frE_to_bckE_req.warp_num;
 
 		`ifdef ONLY
 
@@ -231,9 +232,8 @@ module VX_decode(
 
 			reg[`NT_M1:0][31:0] temp_out_a_reg_data;
 			reg[`NT_M1:0][31:0] temp_out_b_reg_data;
-			/* verilator lint_off UNOPTFLAT */
+
 			reg       temp_out_clone_stall;
-			/* verilator lint_on UNOPTFLAT */
 
 			always @(*) begin
 
@@ -281,15 +281,6 @@ module VX_decode(
 
 		`endif
 
-
-		// assign out_clone_stall = glob_clone_stall[0] || glob_clone_stall[1] || 
-		//                          glob_clone_stall[2] || glob_clone_stall[3];
-
-		// always @(*) begin
-		// 	if (context_one_valid) begin
-		// 		$display("PC: %h -> src1: %h\tsrc2: %h",in_curr_PC, one_a_reg_data[0], one_b_reg_data[0]);
-		// 	end
-		// end
 
 
 		assign VX_frE_to_bckE_req.valid    = fd_inst_meta_de.valid;
@@ -346,9 +337,7 @@ module VX_decode(
 		genvar tm_i;
 		generate
 			for (tm_i = 0; tm_i < `NT; tm_i = tm_i + 1) begin
-					/* verilator lint_off UNSIGNED */
-					assign jalrs_thread_mask[tm_i] = tm_i <= $signed(VX_frE_to_bckE_req.b_reg_data[0]);
-					/* verilator lint_on UNSIGNED */
+					assign jalrs_thread_mask[tm_i] = $signed(tm_i) <= $signed(VX_frE_to_bckE_req.b_reg_data[0]);
 			end
 		endgenerate
 
@@ -368,35 +357,6 @@ module VX_decode(
 
 
 
-
-		// assign out_clone    = is_clone;
-		// always @(in_instruction) begin
-		// 	$display("Decode inst: %h", in_instruction);
-		// end
-
-
-
-
-		// assign out_reg_data[0]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[0] : rd1_register[0]));
-		// assign out_reg_data[1]   = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[0] : rd2_register[0];
-
-
-		// assign out_reg_data[2]   = (    (is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[1] : rd1_register[1]));
-		// assign out_reg_data[3]   = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[1] : rd2_register[1];
-
-		// assign internal_rd1 = ((is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data : rd1_register));
-		// assign internal_rd2 = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data : rd2_register;
-
-
-		// assign out_reg_data[0] = internal_rd1;
-		// assign out_reg_data[1] = internal_rd2;
-
-
-		// always @(negedge clk) begin
-		// 	if (in_curr_PC == 32'h800001f0) begin
-		// 		$display("IN DECODE: Going to write to: %d with val: %h [%h, %h, %h]", VX_frE_to_bckE_req.rd, internal_rd1, in_curr_PC, in_src1_fwd_data, rd1_register);
-		// 	end
-		// end
 
 		assign VX_frE_to_bckE_req.is_csr   = is_csr;
     	assign VX_frE_to_bckE_req.csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, VX_frE_to_bckE_req.rs1} : VX_frE_to_bckE_req.a_reg_data[0];

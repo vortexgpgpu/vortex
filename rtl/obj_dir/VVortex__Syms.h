@@ -18,7 +18,6 @@
 #include "VVortex_VX_inst_mem_wb_inter.h"
 #include "VVortex_VX_warp_ctl_inter.h"
 #include "VVortex_VX_wb_inter.h"
-#include "VVortex_VX_context_slave.h"
 
 // SYMS CLASS
 class VVortex__Syms : public VerilatedSyms {
@@ -36,13 +35,6 @@ class VVortex__Syms : public VerilatedSyms {
     VVortex_VX_warp_ctl_inter      TOP__Vortex__DOT__VX_warp_ctl;
     VVortex_VX_wb_inter            TOP__Vortex__DOT__VX_writeback_inter;
     VVortex_VX_inst_meta_inter     TOP__Vortex__DOT__fe_inst_meta_fd;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__1__KET____DOT__VX_Context_one;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__2__KET____DOT__VX_Context_one;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__3__KET____DOT__VX_Context_one;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__4__KET____DOT__VX_Context_one;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__5__KET____DOT__VX_Context_one;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__6__KET____DOT__VX_Context_one;
-    VVortex_VX_context_slave       TOP__Vortex__DOT__vx_decode__DOT__genblk2__BRA__7__KET____DOT__VX_Context_one;
     
     // CREATORS
     VVortex__Syms(VVortex* topp, const char* namep);

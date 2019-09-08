@@ -6,6 +6,8 @@ module VX_memory (
 		VX_mem_req_inter     VX_mem_req,
 		VX_inst_mem_wb_inter VX_mem_wb,
 
+		VX_forward_mem_inter VX_fwd_mem,
+
 
 		output wire          out_delay,
 
@@ -41,11 +43,16 @@ module VX_memory (
 		assign VX_mem_wb.alu_result = VX_mem_req.alu_result;
 		assign VX_mem_wb.rd         = VX_mem_req.rd;
 		assign VX_mem_wb.wb         = VX_mem_req.wb;
-		assign VX_mem_wb.rs1        = VX_mem_req.rs1;
-		assign VX_mem_wb.rs2        = VX_mem_req.rs2;
 		assign VX_mem_wb.PC_next    = VX_mem_req.PC_next;
 		assign VX_mem_wb.valid      = VX_mem_req.valid;
 		assign VX_mem_wb.warp_num   = VX_mem_req.warp_num;
+
+		assign VX_fwd_mem.dest        = VX_mem_wb.rd;
+		assign VX_fwd_mem.wb          = VX_mem_wb.wb;
+		assign VX_fwd_mem.alu_result  = VX_mem_wb.alu_result;
+		assign VX_fwd_mem.mem_data    = VX_mem_wb.mem_result;
+		assign VX_fwd_mem.PC_next     = VX_mem_wb.PC_next;
+		assign VX_fwd_mem.warp_num    = VX_mem_wb.warp_num;
 
 
 		reg temp_branch_dir;

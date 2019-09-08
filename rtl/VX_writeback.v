@@ -3,34 +3,26 @@
 
 
 module VX_writeback (
-		/* verilator lint_off UNUSED */
-		input wire       clk,
-		/* verilator lint_off UNUSED */
-		input wire[`NT_M1:0][31:0] in_alu_result,
-		input wire[`NT_M1:0][31:0] in_mem_result,
-		input wire[4:0]  in_rd,
-		input wire[1:0]  in_wb,
-		input wire[31:0] in_PC_next,
-		/* verilator lint_off UNUSED */
-		input wire[`NT_M1:0]       in_valid,
-		/* verilator lint_on UNUSED */
-		input wire [`NW_M1:0]  in_warp_num,
-
-
-		VX_wb_inter       VX_writeback_inter
+		VX_mw_wb_inter      VX_mw_wb,
+		VX_forward_wb_inter VX_fwd_wb,
+		VX_wb_inter         VX_writeback_inter
 	);
+
+		
+
+		wire[`NT_M1:0][31:0] in_alu_result = VX_mw_wb.alu_result;
+		wire[`NT_M1:0][31:0] in_mem_result = VX_mw_wb.mem_result;
+		wire[4:0]            in_rd         = VX_mw_wb.rd;
+		wire[1:0]            in_wb         = VX_mw_wb.wb;
+		wire[31:0]           in_PC_next    = VX_mw_wb.PC_next;
+		wire[`NT_M1:0]       in_valid      = VX_mw_wb.valid;
+		wire [`NW_M1:0]      in_warp_num   = VX_mw_wb.warp_num;
 
 		wire is_jal;
 		wire uses_alu;
 
 		wire[`NT_M1:0][31:0] out_pc_data;
 
-
-		// genvar index;
-		// for (index=0; index < `NT; index=index+1)  
-		//   assign out_pc_data[index] = in_PC_next;
-		// generate 
-		// endgenerate
 
 		genvar i;
 		generate
@@ -55,6 +47,14 @@ module VX_writeback (
 		assign VX_writeback_inter.rd          = in_rd;
 		assign VX_writeback_inter.wb          = in_wb;
 		assign VX_writeback_inter.wb_warp_num = in_warp_num;
+
+
+		assign VX_fwd_wb.dest        = VX_writeback_inter.rd;
+		assign VX_fwd_wb.wb          = VX_writeback_inter.wb;
+		assign VX_fwd_wb.alu_result  = in_alu_result;
+		assign VX_fwd_wb.mem_data    = in_mem_result;
+		assign VX_fwd_wb.PC_next     = in_PC_next;
+		assign VX_fwd_wb.warp_num    = VX_writeback_inter.wb_warp_num;
 
 
 endmodule // VX_writeback
