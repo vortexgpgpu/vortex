@@ -6,12 +6,12 @@
 #include "VVortex_VX_dcache_response_inter.h"
 #include "VVortex_VX_dcache_request_inter.h"
 #include "VVortex_VX_frE_to_bckE_req_inter.h"
-#include "VVortex_VX_wb_inter.h"
 #include "VVortex_VX_branch_response_inter.h"
 #include "VVortex_VX_warp_ctl_inter.h"
 #include "VVortex_VX_inst_meta_inter.h"
 #include "VVortex_VX_mem_req_inter.h"
 #include "VVortex_VX_inst_mem_wb_inter.h"
+#include "VVortex_VX_wb_inter.h"
 
 // FUNCTIONS
 VVortex__Syms::VVortex__Syms(VVortex* topp, const char* namep)

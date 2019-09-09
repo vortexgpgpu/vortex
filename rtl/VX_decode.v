@@ -27,23 +27,6 @@ module VX_decode(
 );
 
 
-		wire                    in_src1_fwd      = VX_fwd_rsp.src1_fwd;
-		wire[`NT_M1:0][31:0]    in_src1_fwd_data = VX_fwd_rsp.src1_fwd_data;
-		wire                    in_src2_fwd      = VX_fwd_rsp.src2_fwd;
-		wire[`NT_M1:0][31:0]    in_src2_fwd_data = VX_fwd_rsp.src2_fwd_data;
-
-
-		wire[`NT_M1:0][31:0]      in_write_data;
-		wire[1:0]       in_wb;
-		wire[`NT_M1:0]  in_wb_valid;
-		wire[`NW_M1:0]  in_wb_warp_num;
-
-
-		assign in_write_data  = VX_writeback_inter.write_data;
-		assign in_wb          = VX_writeback_inter.wb;
-		assign in_wb_valid    = VX_writeback_inter.wb_valid;
-		assign in_wb_warp_num = VX_writeback_inter.wb_warp_num;
-
 		wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
 		wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
 		wire[`NW_M1:0]  in_warp_num        = fd_inst_meta_de.warp_num;
@@ -74,8 +57,6 @@ module VX_decode(
 		wire       is_jalrs;
 		wire       is_jmprt;
 		wire       is_wspawn;
-
-		wire       write_register;
 
 		wire[2:0]  func3;
 		wire[6:0]  func7;
@@ -156,25 +137,35 @@ module VX_decode(
 
 		`else 
 
+			VX_gpr_read_inter VX_gpr_read();
+			assign VX_gpr_read.rs1      = VX_frE_to_bckE_req.rs1;
+			assign VX_gpr_read.rs2      = VX_frE_to_bckE_req.rs2;
+			assign VX_gpr_read.warp_num = VX_frE_to_bckE_req.warp_num;
+
+			VX_gpr_jal_inter VX_gpr_jal();
+			assign VX_gpr_jal.is_jal  = is_jal;
+			assign VX_gpr_jal.curr_PC = in_curr_PC;
+
+
+			VX_gpr_clone_inter VX_gpr_clone();
+			assign VX_gpr_clone.is_clone = is_clone;
+			assign VX_gpr_clone.warp_num = VX_frE_to_bckE_req.warp_num;
+
+
+			VX_gpr_wspawn_inter VX_gpr_wspawn();
+			assign VX_gpr_wspawn.is_wspawn    = is_wspawn;
+			assign VX_gpr_wspawn.which_wspawn = in_which_wspawn;
+			// assign VX_gpr_wspawn.warp_num     = VX_frE_to_bckE_req.warp_num;
+
 			VX_gpr_wrapper vx_grp_wrapper(
 					.clk            (clk),
-					.in_warp_num     (in_warp_num),
-					.in_wb_warp_num  (in_wb_warp_num),
-					.is_clone        (is_clone),
-					.in_wb_valid     (in_wb_valid),
-					.in_rd           (VX_writeback_inter.rd),
-					.in_rs1          (VX_frE_to_bckE_req.rs1),
-					.in_rs2          (VX_frE_to_bckE_req.rs2),
-					.in_curr_PC      (in_curr_PC),
-					.is_jal          (is_jal),
-					.in_src1_fwd     (in_src1_fwd),
-					.in_src1_fwd_data(in_src1_fwd_data),
-					.in_src2_fwd     (in_src2_fwd),
-					.in_src2_fwd_data(in_src2_fwd_data),
-					.write_register  (write_register),
-					.in_write_data   (in_write_data),
-					.is_wspawn       (is_wspawn),
-					.in_which_wspawn (in_which_wspawn),
+					.VX_writeback_inter(VX_writeback_inter),
+					.VX_fwd_rsp        (VX_fwd_rsp),
+					.VX_gpr_read       (VX_gpr_read),
+					.VX_gpr_jal        (VX_gpr_jal),
+					.VX_gpr_clone      (VX_gpr_clone),
+					.VX_gpr_wspawn     (VX_gpr_wspawn),
+					
 					.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
 					.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
 					.out_clone_stall(out_clone_stall)
@@ -189,8 +180,6 @@ module VX_decode(
 
 		assign VX_frE_to_bckE_req.warp_num = in_warp_num;
 		assign VX_warp_ctl.warp_num        = in_warp_num;
-
-		assign write_register = (in_wb != 2'h0) ? (1'b1) : (1'b0);
 
 
 		assign curr_opcode    = in_instruction[6:0];

@@ -9,9 +9,7 @@ interface VX_csr_write_request_inter ();
 
 		wire        is_csr;
 		wire[11:0]  csr_address;
-		/* verilator lint_off UNUSED */
 		wire[31:0]  csr_result;
-		/* verilator lint_on UNUSED */
 
 	// source-side view
 	modport snk (

@@ -21,12 +21,12 @@ VM_CLASSES_FAST += \
 	VVortex_VX_dcache_response_inter \
 	VVortex_VX_dcache_request_inter \
 	VVortex_VX_frE_to_bckE_req_inter \
-	VVortex_VX_wb_inter \
 	VVortex_VX_branch_response_inter \
 	VVortex_VX_warp_ctl_inter \
 	VVortex_VX_inst_meta_inter \
 	VVortex_VX_mem_req_inter \
 	VVortex_VX_inst_mem_wb_inter \
+	VVortex_VX_wb_inter \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization
 VM_CLASSES_SLOW += \

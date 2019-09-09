@@ -13,9 +13,7 @@ module VX_context_slave (
   input wire[`NT_M1:0][31:0]  in_write_data,
   input wire[4:0]   in_src1,
   input wire[4:0]   in_src2,
-  input wire[31:0]  in_curr_PC,
   input wire        in_is_clone,
-  input wire        in_is_jal,
   input wire        in_src1_fwd,
   input wire[`NT_M1:0][31:0]  in_src1_fwd_data,
   input wire        in_src2_fwd,
@@ -134,8 +132,8 @@ module VX_context_slave (
 		generate
 			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
 				begin
-					assign out_a_reg_data[index_out_reg]   = (    (in_is_jal == 1'b1) ? in_curr_PC : ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg] : rd1_register[index_out_reg]));
-					assign out_b_reg_data[index_out_reg]   = (in_src2_fwd == 1'b1) ?  in_src2_fwd_data[index_out_reg] : rd2_register[index_out_reg];
+					assign out_a_reg_data[index_out_reg]   = ((in_src1_fwd == 1'b1) ? in_src1_fwd_data[index_out_reg] : rd1_register[index_out_reg]);
+					assign out_b_reg_data[index_out_reg]   = (in_src2_fwd == 1'b1)  ? in_src2_fwd_data[index_out_reg] : rd2_register[index_out_reg];
 				end
 		endgenerate
 
