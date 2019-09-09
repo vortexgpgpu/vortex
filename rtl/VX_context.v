@@ -83,13 +83,10 @@ module VX_context (
 		always @(posedge clk) begin
 			if ((in_is_clone) && state_stall == 0) begin
 				state_stall <= 10;
-				// $display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, in_is_clone);
 			end else if (state_stall == 1) begin
-				// $display("ENDING CLONE, 1 =? %h = %h -- %d", rd1_register[0], to_clone_1, in_is_clone);
 				state_stall <= 0;
 			end else if (state_stall > 0) begin
 				state_stall <= state_stall - 1;
-				// $display("CLONEEE BITCH %d, 1 =? %h = %h -- %d", state_stall, rd1_register[0], to_clone_1, in_is_clone);
 			end
 		end
 
