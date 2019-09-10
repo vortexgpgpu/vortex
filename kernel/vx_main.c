@@ -37,9 +37,11 @@ int main()
 	initialize_mats();
 
 	// matrix multiplication
-	vx_sq_mat_mult(x, y, z, MAT_DIM);
-	vx_print_str("\n\nMatrix multiplication\n");
-	print_matrix(z);
+	// vx_sq_mat_mult(x, y, z, MAT_DIM);
+	// vx_print_str("\n\nMatrix multiplication\n");
+	// print_matrix(z);
+
+	print_matrix(x);
 
 
 	// // matrix addition

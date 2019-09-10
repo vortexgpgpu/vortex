@@ -165,7 +165,7 @@ module VX_decode(
 					.VX_gpr_jal        (VX_gpr_jal),
 					.VX_gpr_clone      (VX_gpr_clone),
 					.VX_gpr_wspawn     (VX_gpr_wspawn),
-					
+
 					.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
 					.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
 					.out_clone_stall(out_clone_stall)

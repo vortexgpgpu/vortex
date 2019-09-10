@@ -5,10 +5,8 @@
 
 
 interface VX_gpr_jal_inter ();
-
 	wire       is_jal;
 	wire[31:0] curr_PC;
-
 
 	modport snk (
 		input is_jal,
