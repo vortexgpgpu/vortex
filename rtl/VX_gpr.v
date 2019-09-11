@@ -11,12 +11,40 @@ module VX_gpr (
 	output reg[`NT_M1:0][31:0] out_b_reg_data
 );
 
-
-	logic[`NT_M1:0][31:0] gpr[31:0]; // gpr[register_number][thread_number][data_bits]
-
 	wire write_enable;
 
 	assign write_enable = valid_write_request && ((VX_writeback_inter.wb != 0) && (VX_writeback_inter.rd != 5'h0));
+	 // USING RAM blocks
+	 // First RAM
+	 byte_enabled_simple_dual_port_ram first_ram(
+	 	.we   (write_enable),
+	 	.clk  (clk),
+	 	.waddr(VX_writeback_inter.rd),
+	 	.raddr(VX_gpr_read.rs1),
+	 	.be   (VX_writeback_inter.wb_valid),
+	 	.wdata(VX_writeback_inter.write_data),
+	 	.q    (out_a_reg_data)
+	 	);
+
+	 // Second RAM block
+	 byte_enabled_simple_dual_port_ram second_ram(
+	 	.we   (write_enable),
+	 	.clk  (clk),
+	 	.waddr(VX_writeback_inter.rd),
+	 	.raddr(VX_gpr_read.rs2),
+	 	.be   (VX_writeback_inter.wb_valid),
+	 	.wdata(VX_writeback_inter.write_data),
+	 	.q    (out_b_reg_data)
+	 	);
+
+
+
+
+	// logic[`NT_M1:0][31:0] gpr[31:0]; // gpr[register_number][thread_number][data_bits]
+
+	// wire write_enable;
+
+	// assign write_enable = valid_write_request && ((VX_writeback_inter.wb != 0) && (VX_writeback_inter.rd != 5'h0));
 	// assign read_enable  = valid_request;
 
 		// // Using Registers
@@ -33,46 +61,6 @@ module VX_gpr (
 	 // 		out_a_reg_data <= gpr[VX_gpr_read.rs1];
 		// 	out_b_reg_data <= gpr[VX_gpr_read.rs2];
 		//  end
-
-
-
-
-		 // USING RAM blocks
-
-		 // First RAM
-		 integer thread_index_1;
-		 always_ff@(posedge clk)
-		 begin
-		 	if (write_enable) begin
-		 		for (thread_index_1 = 0; thread_index_1 <= `NT_M1; thread_index_1 = thread_index_1 + 1) begin
-		 			if (VX_writeback_inter.wb_valid[thread_index_1]) begin
-		 				gpr[VX_writeback_inter.rd][thread_index_1] <= VX_writeback_inter.write_data[thread_index_1];
-		 			end
-		 		end
-		 	end
-		 end
-
-		 always @(negedge clk) begin
-	 		out_a_reg_data <= gpr[VX_gpr_read.rs1];
-		 end
-
-
-		 // Second RAM
-		 integer thread_index_2;
-		 always_ff@(posedge clk)
-		 begin
-		 	if (write_enable) begin
-		 		for (thread_index_2 = 0; thread_index_2 <= `NT_M1; thread_index_2 = thread_index_2 + 1) begin
-		 			if (VX_writeback_inter.wb_valid[thread_index_2]) begin
-		 				gpr[VX_writeback_inter.rd][thread_index_2] <= VX_writeback_inter.write_data[thread_index_2];
-		 			end
-		 		end
-		 	end
-		 end
-
-		 always @(negedge clk) begin
-	 		out_b_reg_data <= gpr[VX_gpr_read.rs2];
-		 end
 
 
 endmodule

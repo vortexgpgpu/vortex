@@ -1,5 +1,3 @@
-
-
 // C++ libraries
 #include <utility> 
 #include <iostream>
@@ -398,13 +396,3 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     return (status == 1);
 }
-
-
-
-
-
-
-
-
-
-

@@ -1,1 +1,3 @@
-./rtl/obj_dir/debug.txt
+./rtl/obj_dir/
+./rtl/.*
+.*

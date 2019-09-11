@@ -46,14 +46,13 @@ module VX_csr_handler (
 			end
 		end
 
-
+		reg[11:0] data_read;
 		always @(posedge clk) begin
 			if(in_mem_is_csr) begin
 				csr[in_mem_csr_address] <= in_mem_csr_result[11:0];
 			end
 		end
 
-		reg[11:0] data_read;
 		always @(negedge clk) begin
 			data_read <= csr[decode_csr_address];
 		end

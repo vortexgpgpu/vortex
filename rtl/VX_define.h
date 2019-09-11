@@ -1,5 +1,3 @@
-
-
 #define NT 4
 #define NT_M1 (NT-1)
 
@@ -98,10 +96,3 @@
 #define GREEN "\033[32m"
 #define RED "\033[31m"
 #define DEFAULT "\033[39m"
-
-
-
-
-
-
-

@@ -1,5 +1,3 @@
-
-
 #include "test_bench.h"
 
 #define NUM_TESTS 46
@@ -88,6 +86,3 @@ int main(int argc, char **argv)
 	return 0;
 
 }
-
-
-

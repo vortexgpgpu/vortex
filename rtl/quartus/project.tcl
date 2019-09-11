@@ -21,6 +21,8 @@ set_global_assignment -name SEARCH_PATH  ../
 
 set_global_assignment -name VERILOG_FILE ../VX_define.v
 
+set_global_assignment -name VERILOG_FILE ../byte_enabled_simple_dual_port_ram.v
+
 set_global_assignment -name VERILOG_FILE ../interfaces/VX_branch_response_inter.v
 set_global_assignment -name VERILOG_FILE ../interfaces/VX_csr_write_request_inter.v
 set_global_assignment -name VERILOG_FILE ../interfaces/VX_dcache_request_inter.v

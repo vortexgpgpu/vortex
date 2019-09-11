@@ -1,4 +1,3 @@
-
 all: RUNFILE
 
 
@@ -10,4 +9,3 @@ RUNFILE: VERILATOR
 
 clean:
 	rm ./obj_dir/*
-	
