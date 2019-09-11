@@ -1,20 +1,46 @@
 `include "VX_define.v"
 
-module VX_gpr_wrapper (
+module VX_gpr_syn (
 	input wire                  clk,
-	VX_gpr_read_inter           VX_gpr_read,
-	VX_wb_inter                 VX_writeback_inter,
-	VX_forward_response_inter   VX_fwd_rsp,
+	// VX_gpr_read_inter           VX_gpr_read,
+	// VX_wb_inter                 VX_writeback_inter,
+	// VX_forward_response_inter   VX_fwd_rsp,
 	
-	VX_gpr_jal_inter            VX_gpr_jal,
-	VX_gpr_clone_inter          VX_gpr_clone,
-	VX_gpr_wspawn_inter         VX_gpr_wspawn,
+	// VX_gpr_jal_inter            VX_gpr_jal,
+	// VX_gpr_clone_inter          VX_gpr_clone,
+	// VX_gpr_wspawn_inter         VX_gpr_wspawn,
+
+	////////////////////////////////
+	input wire[4:0]      rs1,
+	input wire[4:0]      rs2,
+	input wire[`NW_M1:0] warp_num,
+	input wire[`NT_M1:0][31:0]  write_data, 
+	input wire[4:0]      		  rd,
+	input wire[1:0]      		  wb,
+	input wire[`NT_M1:0]        wb_valid,
+	input wire[`NW_M1:0]        wb_warp_num,
+	/////////
 
 	output wire[`NT_M1:0][31:0] out_a_reg_data,
 	output wire[`NT_M1:0][31:0] out_b_reg_data,
 	output wire                 out_gpr_stall
 	
 );
+
+
+	VX_gpr_read_inter           VX_gpr_read();
+	assign VX_gpr_read.rs1      = rs1;
+	assign VX_gpr_read.rs2      = rs2;
+	assign VX_gpr_read.warp_num = warp_num;
+
+	VX_wb_inter                 VX_writeback_inter();
+	assign VX_writeback_inter.write_data = write_data;
+	assign VX_writeback_inter.rd = rd;
+	assign VX_writeback_inter.wb = wb;
+	assign VX_writeback_inter.wb_valid = wb_valid;
+	assign VX_writeback_inter.wb_warp_num = wb_warp_num;
+
+
 
 	// wire[`NW-1:0][`NT_M1:0][31:0] temp_a_reg_data;
 	// wire[`NW-1:0][`NT_M1:0][31:0] temp_b_reg_data;
@@ -97,13 +123,9 @@ module VX_gpr_wrapper (
 	wire[`NW-1:0][`NT_M1:0][31:0] temp_a_reg_data;
 	wire[`NW-1:0][`NT_M1:0][31:0] temp_b_reg_data;
 
-	wire[`NT_M1:0][31:0] jal_data;
-	genvar index;
-	for (index = 0; index <= `NT_M1; index = index + 1) assign jal_data[index] = VX_gpr_jal.curr_PC;
 
-
-	assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (VX_fwd_rsp.src1_fwd ? VX_fwd_rsp.src1_fwd_data : temp_a_reg_data[VX_gpr_read.warp_num]));
-	assign out_b_reg_data =                                    (VX_fwd_rsp.src2_fwd ? VX_fwd_rsp.src2_fwd_data : temp_b_reg_data[VX_gpr_read.warp_num]);
+	assign out_a_reg_data = temp_a_reg_data[VX_gpr_read.warp_num];
+	assign out_b_reg_data = temp_b_reg_data[VX_gpr_read.warp_num];
 
 	genvar warp_index;
 	generate

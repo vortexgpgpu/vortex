@@ -6,7 +6,7 @@ module VX_warp (
 	input  wire       reset,
 	input  wire       stall,
 	input  wire       remove,
-	input  wire       in_thread_mask[`NT_M1:0],
+	input  wire[`NT_M1:0] in_thread_mask,
 	input  wire       in_change_mask,
 	input  wire       in_jal,
 	input  wire[31:0] in_jal_dest,
@@ -16,15 +16,15 @@ module VX_warp (
 	input  wire[31:0] in_wspawn_pc,
 
 	output wire[31:0] out_PC,
-	output wire       out_valid[`NT_M1:0]
+	output wire[`NT_M1:0] out_valid
 );
 
 		reg[31:0] real_PC;
 		var[31:0] temp_PC;
 		var[31:0] use_PC;
-		reg valid[`NT_M1:0];
+		reg[`NT_M1:0] valid;
 
-		reg valid_zero[`NT_M1:0];
+		reg[`NT_M1:0] valid_zero;
 
 		integer ini_cur_th = 0;
 		initial begin

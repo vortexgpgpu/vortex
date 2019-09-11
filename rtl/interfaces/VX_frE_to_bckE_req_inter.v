@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "../VX_define.v"
 
 `ifndef VX_FrE_to_BE_INTER
 
@@ -29,59 +29,6 @@ interface VX_frE_to_bckE_req_inter ();
 	wire[31:0]           PC_next;
 	wire[`NT_M1:0]       valid;
 	wire[`NW_M1:0]       warp_num;
-
-	// source-side view
-	modport snk (
-		input csr_address,
-		input is_csr,
-		input csr_mask,
-		input rd,
-		input rs1,
-		input rs2,
-		input a_reg_data,
-		input b_reg_data,
-		input alu_op,
-		input wb,
-		input rs2_src,
-		input itype_immed,
-		input mem_read,
-		input mem_write,
-		input branch_type,
-		input upper_immed,
-		input curr_PC,
-		input jal,
-		input jal_offset,
-		input PC_next,
-		input valid,
-		input warp_num
-	);
-
-
-	// source-side view
-	modport src (
-		output csr_address,
-		output is_csr,
-		output csr_mask,
-		output rd,
-		output rs1,
-		output rs2,
-		output a_reg_data,
-		output b_reg_data,
-		output alu_op,
-		output wb,
-		output rs2_src,
-		output itype_immed,
-		output mem_read,
-		output mem_write,
-		output branch_type,
-		output upper_immed,
-		output curr_PC,
-		output jal,
-		output jal_offset,
-		output PC_next,
-		output valid,
-		output warp_num
-	);
 
 
 endinterface

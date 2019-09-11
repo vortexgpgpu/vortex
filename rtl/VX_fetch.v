@@ -8,7 +8,7 @@ module VX_fetch (
 	input  wire           in_branch_stall,
 	input  wire           in_fwd_stall,
 	input  wire           in_branch_stall_exe,
-	input  wire           in_clone_stall,
+	input  wire           in_gpr_stall,
 	VX_icache_response_inter icache_response,
 	VX_icache_request_inter icache_request,
 
@@ -31,10 +31,10 @@ module VX_fetch (
 		wire in_freeze = out_delay || in_memory_delay;
 
 
-		wire in_thread_mask[`NT_M1:0];
+		// wire in_thread_mask[`NT_M1:0];
 
-		genvar ind;
-		for (ind = 0; ind <= `NT_M1; ind = ind + 1) assign in_thread_mask[ind] = VX_warp_ctl.thread_mask[ind];
+		// genvar ind;
+		// for (ind = 0; ind <= `NT_M1; ind = ind + 1) assign in_thread_mask[ind] = VX_warp_ctl.thread_mask[ind];
 
 
 
@@ -62,17 +62,12 @@ module VX_fetch (
 		// 	end
 		// end
 
-		wire add_warp    = in_wspawn && !in_ebreak && !in_clone_stall;
-		wire remove_warp = in_ebreak && !in_wspawn && !in_clone_stall;
+		wire add_warp    = in_wspawn && !in_ebreak && !in_gpr_stall;
+		wire remove_warp = in_ebreak && !in_wspawn && !in_gpr_stall;
 
 		always @(posedge clk or posedge reset) begin
 			if (reset || (warp_num >= warp_state) || remove_warp || add_warp) begin
 				warp_num   <= 0;
-			`ifndef ONLY
-			end else if (!warp_glob_valid[warp_num+1]) begin
-				// $display("Skipping one");
-				warp_num   <= warp_num + 2;
-			`endif
 			end else begin
 				warp_num   <= warp_num + 1;
 			end
@@ -94,45 +89,16 @@ module VX_fetch (
 		assign out_ebreak = (in_decode_warp_num == 0) && in_ebreak;
 
 
-		assign stall = in_clone_stall || in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_freeze;
+		assign stall = in_gpr_stall || in_branch_stall || in_fwd_stall || in_branch_stall_exe || in_freeze;
 
 		assign out_which_wspawn = (warp_state+1);
 
 		`ifdef ONLY
 
-			// wire       warp_zero_change_mask = in_change_mask && (in_decode_warp_num == 0);
-			// wire       warp_zero_jal         = in_jal         && (in_memory_warp_num == 0);
-			// wire       warp_zero_branch      = in_branch_dir  && (in_memory_warp_num == 0);
-			// wire       warp_zero_stall       = stall          || (warp_num != 0);
-			// wire       warp_zero_wspawn      = (0 == 0) ? 0 : (in_wspawn && ((warp_state+1) == 0));
-			// wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
-			// wire       warp_zero_remove      = remove_warp && (in_decode_warp_num == 0);
-
-			// // always @(*) begin : proc_
-			// // 	if (warp_zero_remove) $display("4Removing warp: %h", 0);
-			// // end
-
-			// VX_warp VX_Warp(
-			// 	.clk           (clk),
-			// 	.reset         (reset),
-			// 	.stall         (warp_zero_stall),
-			// 	.remove        (warp_zero_remove),
-			// 	.in_thread_mask(in_thread_mask),
-			// 	.in_change_mask(warp_zero_change_mask),
-			// 	.in_jal        (warp_zero_jal),
-			// 	.in_jal_dest   (in_jal_dest),
-			// 	.in_branch_dir (warp_zero_branch),
-			// 	.in_branch_dest(in_branch_dest),
-			// 	.in_wspawn     (warp_zero_wspawn),
-			// 	.in_wspawn_pc  (warp_zero_wspawn_pc),
-			// 	.out_PC        (out_PC),
-			// 	.out_valid     (out_valid)
-			// 	);
-
 		`else 
 
-			wire[31:0] warp_glob_pc[`NW-1:0];
-			wire       warp_glob_valid[`NW-1:0][`NT_M1:0];
+			wire[`NW-1:0][31:0] warp_glob_pc;
+			wire[`NW-1:0][`NT_M1:0] warp_glob_valid;
 			genvar cur_warp;
 			generate
 				for (cur_warp = 0; cur_warp < `NW; cur_warp = cur_warp + 1)
@@ -145,16 +111,12 @@ module VX_fetch (
 					wire[31:0] warp_zero_wspawn_pc   = in_wspawn_pc;
 					wire       warp_zero_remove      = remove_warp && (in_decode_warp_num == cur_warp);
 
-					// always @(*) begin : proc_
-					// 	if (warp_zero_remove) $display("4Removing warp: %h", cur_warp);
-					// end
-
 					VX_warp VX_Warp(
 						.clk           (clk),
 						.reset         (reset),
 						.stall         (warp_zero_stall),
 						.remove        (warp_zero_remove),
-						.in_thread_mask(in_thread_mask),
+						.in_thread_mask(VX_warp_ctl.thread_mask),
 						.in_change_mask(warp_zero_change_mask),
 						.in_jal        (warp_zero_jal),
 						.in_jal_dest   (VX_jal_rsp.jal_dest),
@@ -169,8 +131,9 @@ module VX_fetch (
 			endgenerate
 
 
+
 			reg[31:0] out_PC_var;
-			reg      out_valid_var[`NT_M1:0];
+			reg[`NT_M1:0]  out_valid_var;
 
 			always @(*) begin : help
 				integer g;

@@ -5,7 +5,7 @@ module VX_f_d_reg (
 	input wire             reset,
 	input wire             in_fwd_stall,
 	input wire             in_freeze,
-	input wire             in_clone_stall,
+	input wire             in_gpr_stall,
 
 	VX_inst_meta_inter     fe_inst_meta_fd,
 	VX_inst_meta_inter     fd_inst_meta_de
@@ -13,7 +13,7 @@ module VX_f_d_reg (
 );
 
 	wire flush = 1'b0;
-	wire stall = in_fwd_stall == 1'b1 || in_freeze == 1'b1 || in_clone_stall;
+	wire stall = in_fwd_stall == 1'b1 || in_freeze == 1'b1 || in_gpr_stall;
 
 
 

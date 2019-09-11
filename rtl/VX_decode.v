@@ -21,7 +21,7 @@ module VX_decode(
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
 	VX_warp_ctl_inter        VX_warp_ctl,
-	output reg               out_clone_stall,
+	output reg               out_gpr_stall,
 	output reg               out_branch_stall
 
 );
@@ -98,81 +98,42 @@ module VX_decode(
 		assign VX_fwd_req_de.src2        = VX_frE_to_bckE_req.rs2;
 		assign VX_fwd_req_de.warp_num    = VX_frE_to_bckE_req.warp_num;
 
-		`ifdef ONLY
 
-			wire[31:0] glob_a_reg_data[`NT_M1:0];
-			wire[31:0] glob_b_reg_data[`NT_M1:0];
-			reg        glob_clone_stall;
+		VX_gpr_read_inter VX_gpr_read();
+		assign VX_gpr_read.rs1      = VX_frE_to_bckE_req.rs1;
+		assign VX_gpr_read.rs2      = VX_frE_to_bckE_req.rs2;
+		assign VX_gpr_read.warp_num = VX_frE_to_bckE_req.warp_num;
 
-			wire       curr_warp_zero     = in_warp_num == 0;
-			wire       context_zero_valid = (in_wb_warp_num == 0);
-			wire       real_zero_isclone  = is_clone  && (in_warp_num == 0);  
-			VX_context VX_Context_zero(
-				.clk              (clk),
-				.in_warp          (curr_warp_zero),
-				.in_wb_warp       (context_zero_valid),
-				.in_valid         (in_wb_valid),
-				.in_rd            (VX_writeback_inter.rd),
-				.in_src1          (VX_frE_to_bckE_req.rs1),
-				.in_src2          (VX_frE_to_bckE_req.rs2),
-				.in_curr_PC       (in_curr_PC),
-				.in_is_clone      (real_zero_isclone),
-				.in_is_jal        (is_jal),
-				.in_src1_fwd      (in_src1_fwd),
-				.in_src1_fwd_data (in_src1_fwd_data),
-				.in_src2_fwd      (in_src2_fwd),
-				.in_src2_fwd_data (in_src2_fwd_data),
-				.in_write_register(write_register),
-				.in_write_data    (in_write_data),
-				.out_a_reg_data   (glob_a_reg_data),
-				.out_b_reg_data   (glob_b_reg_data),
-				.out_clone_stall  (glob_clone_stall),
-				.w0_t0_registers  (w0_t0_registers)
+		VX_gpr_jal_inter VX_gpr_jal();
+		assign VX_gpr_jal.is_jal  = is_jal;
+		assign VX_gpr_jal.curr_PC = in_curr_PC;
+
+
+		VX_gpr_clone_inter VX_gpr_clone();
+		assign VX_gpr_clone.is_clone = is_clone;
+		assign VX_gpr_clone.warp_num = VX_frE_to_bckE_req.warp_num;
+
+
+		VX_gpr_wspawn_inter VX_gpr_wspawn();
+		assign VX_gpr_wspawn.is_wspawn    = is_wspawn;
+		assign VX_gpr_wspawn.which_wspawn = in_which_wspawn;
+		// assign VX_gpr_wspawn.warp_num     = VX_frE_to_bckE_req.warp_num;
+
+		VX_gpr_wrapper vx_grp_wrapper(
+				.clk            (clk),
+				.VX_writeback_inter(VX_writeback_inter),
+				.VX_fwd_rsp        (VX_fwd_rsp),
+				.VX_gpr_read       (VX_gpr_read),
+				.VX_gpr_jal        (VX_gpr_jal),
+				.VX_gpr_clone      (VX_gpr_clone),
+				.VX_gpr_wspawn     (VX_gpr_wspawn),
+
+				.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
+				.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
+				.out_gpr_stall(out_gpr_stall)
 			);
 
 
-			assign VX_frE_to_bckE_req.a_reg_data  = glob_a_reg_data;
-			assign VX_frE_to_bckE_req.b_reg_data  = glob_b_reg_data;
-			assign out_clone_stall = glob_clone_stall;
-
-		`else 
-
-			VX_gpr_read_inter VX_gpr_read();
-			assign VX_gpr_read.rs1      = VX_frE_to_bckE_req.rs1;
-			assign VX_gpr_read.rs2      = VX_frE_to_bckE_req.rs2;
-			assign VX_gpr_read.warp_num = VX_frE_to_bckE_req.warp_num;
-
-			VX_gpr_jal_inter VX_gpr_jal();
-			assign VX_gpr_jal.is_jal  = is_jal;
-			assign VX_gpr_jal.curr_PC = in_curr_PC;
-
-
-			VX_gpr_clone_inter VX_gpr_clone();
-			assign VX_gpr_clone.is_clone = is_clone;
-			assign VX_gpr_clone.warp_num = VX_frE_to_bckE_req.warp_num;
-
-
-			VX_gpr_wspawn_inter VX_gpr_wspawn();
-			assign VX_gpr_wspawn.is_wspawn    = is_wspawn;
-			assign VX_gpr_wspawn.which_wspawn = in_which_wspawn;
-			// assign VX_gpr_wspawn.warp_num     = VX_frE_to_bckE_req.warp_num;
-
-			VX_gpr_wrapper vx_grp_wrapper(
-					.clk            (clk),
-					.VX_writeback_inter(VX_writeback_inter),
-					.VX_fwd_rsp        (VX_fwd_rsp),
-					.VX_gpr_read       (VX_gpr_read),
-					.VX_gpr_jal        (VX_gpr_jal),
-					.VX_gpr_clone      (VX_gpr_clone),
-					.VX_gpr_wspawn     (VX_gpr_wspawn),
-
-					.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
-					.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
-					.out_clone_stall(out_clone_stall)
-				);
-
-
-		`endif
 
 
 

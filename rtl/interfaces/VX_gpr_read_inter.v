@@ -1,4 +1,4 @@
-
+`include "../VX_define.v"
 `ifndef VX_GPR_READ
 
 `define VX_GPR_READ

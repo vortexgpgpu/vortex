@@ -1,3 +1,9 @@
+`include "../VX_define.v"
+
+`ifndef VX_MEM_REQ_IN
+
+`define VX_MEM_REQ_IN
+
 interface VX_mem_req_inter ();
 
 	wire[`NT_M1:0][31:0] alu_result;
@@ -16,40 +22,7 @@ interface VX_mem_req_inter ();
 	wire[`NW_M1:0]       warp_num;
 
 
-	modport snk (
-		input alu_result,
-		input mem_read, 
-		input mem_write,
-		input rd,
-		input wb,
-		input rs1,
-		input rs2,
-		input rd2,
-		input PC_next,
-		input curr_PC,
-		input branch_offset,
-		input branch_type, 
-		input valid,
-		input warp_num
-	);
-
-
-	modport src (
-		output alu_result,
-		output mem_read, 
-		output mem_write,
-		output rd,
-		output wb,
-		output rs1,
-		output rs2,
-		output rd2,
-		output PC_next,
-		output curr_PC,
-		output branch_offset,
-		output branch_type, 
-		output valid,
-		output warp_num
-	);
-
-
 endinterface
+
+
+`endif

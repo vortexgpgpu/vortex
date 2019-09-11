@@ -38,7 +38,7 @@ VX_inst_meta_inter       fd_inst_meta_de();
 
 // From decode
 wire           decode_branch_stall;
-wire           decode_clone_stall;
+wire           decode_gpr_stall;
 
 
 wire total_freeze = memory_delay || fetch_delay;
@@ -51,7 +51,7 @@ VX_fetch vx_fetch(
 		.in_branch_stall    (decode_branch_stall),
 		.in_fwd_stall       (forwarding_fwd_stall),
 		.in_branch_stall_exe(execute_branch_stall),
-		.in_clone_stall     (decode_clone_stall),
+		.in_gpr_stall     (decode_gpr_stall),
 		.VX_jal_rsp         (VX_jal_rsp),
 		.icache_response    (icache_response_fe),
 		.VX_warp_ctl        (VX_warp_ctl),
@@ -69,7 +69,7 @@ VX_f_d_reg vx_f_d_reg(
 		.reset          (reset),
 		.in_fwd_stall   (forwarding_fwd_stall),
 		.in_freeze      (total_freeze),
-		.in_clone_stall (decode_clone_stall),
+		.in_gpr_stall (decode_gpr_stall),
 		.fe_inst_meta_fd(fe_inst_meta_fd),
 		.fd_inst_meta_de(fd_inst_meta_de)
 	);
@@ -85,7 +85,7 @@ VX_decode vx_decode(
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_fwd_req_de     (VX_fwd_req_de),
 		.VX_warp_ctl       (VX_warp_ctl),
-		.out_clone_stall   (decode_clone_stall),
+		.out_gpr_stall   (decode_gpr_stall),
 		.out_branch_stall  (decode_branch_stall)
 	);
 
@@ -96,7 +96,7 @@ VX_d_e_reg vx_d_e_reg(
 		.in_fwd_stall   (forwarding_fwd_stall),
 		.in_branch_stall(execute_branch_stall),
 		.in_freeze      (total_freeze),
-		.in_clone_stall (decode_clone_stall),
+		.in_gpr_stall (decode_gpr_stall),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_bckE_req       (VX_bckE_req)
 	);
