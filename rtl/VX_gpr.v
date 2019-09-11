@@ -14,29 +14,47 @@ module VX_gpr (
 	wire write_enable;
 
 	assign write_enable = valid_write_request && ((VX_writeback_inter.wb != 0) && (VX_writeback_inter.rd != 5'h0));
-	 // USING RAM blocks
-	 // First RAM
-	 byte_enabled_simple_dual_port_ram first_ram(
-	 	.we   (write_enable),
-	 	.clk  (clk),
-	 	.waddr(VX_writeback_inter.rd),
-	 	.raddr(VX_gpr_read.rs1),
-	 	.be   (VX_writeback_inter.wb_valid),
-	 	.wdata(VX_writeback_inter.write_data),
-	 	.q    (out_a_reg_data)
-	 	);
+	
+	byte_enabled_simple_dual_port_ram first_ram(
+		.we    (write_enable),
+		.clk   (clk),
+		.waddr (VX_writeback_inter.rd),
+		.raddr1(VX_gpr_read.rs1),
+		.raddr2(VX_gpr_read.rs2),
+		.be    (VX_writeback_inter.wb_valid),
+		.wdata (VX_writeback_inter.write_data),
+		.q1    (out_a_reg_data),
+		.q2    (out_b_reg_data)
+	);
 
-	 // Second RAM block
-	 byte_enabled_simple_dual_port_ram second_ram(
-	 	.we   (write_enable),
-	 	.clk  (clk),
-	 	.waddr(VX_writeback_inter.rd),
-	 	.raddr(VX_gpr_read.rs2),
-	 	.be   (VX_writeback_inter.wb_valid),
-	 	.wdata(VX_writeback_inter.write_data),
-	 	.q    (out_b_reg_data)
-	 	);
 
+
+
+
+
+
+	 // // USING RAM blocks
+	 // // First RAM
+	 // byte_enabled_simple_dual_port_ram first_ram(
+	 // 	.we   (write_enable),
+	 // 	.clk  (clk),
+	 // 	.waddr(VX_writeback_inter.rd),
+	 // 	.raddr(VX_gpr_read.rs1),
+	 // 	.be   (VX_writeback_inter.wb_valid),
+	 // 	.wdata(VX_writeback_inter.write_data),
+	 // 	.q    (out_a_reg_data)
+	 // 	);
+
+	 // // Second RAM block
+	 // byte_enabled_simple_dual_port_ram second_ram(
+	 // 	.we   (write_enable),
+	 // 	.clk  (clk),
+	 // 	.waddr(VX_writeback_inter.rd),
+	 // 	.raddr(VX_gpr_read.rs2),
+	 // 	.be   (VX_writeback_inter.wb_valid),
+	 // 	.wdata(VX_writeback_inter.write_data),
+	 // 	.q    (out_b_reg_data)
+	 // 	);
 
 
 

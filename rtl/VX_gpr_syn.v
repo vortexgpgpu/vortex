@@ -21,26 +21,39 @@ module VX_gpr_syn (
 	input wire[`NW_M1:0]        wb_warp_num,
 	/////////
 
-	output wire[`NT_M1:0][31:0] out_a_reg_data,
-	output wire[`NT_M1:0][31:0] out_b_reg_data,
+	output wire[`NT_M1:0][31:0] real_a_reg_data,
+	output wire[`NT_M1:0][31:0] real_b_reg_data,
 	output wire                 out_gpr_stall
 	
 );
 
-
 	VX_gpr_read_inter           VX_gpr_read();
-	assign VX_gpr_read.rs1      = rs1;
-	assign VX_gpr_read.rs2      = rs2;
-	assign VX_gpr_read.warp_num = warp_num;
-
 	VX_wb_inter                 VX_writeback_inter();
-	assign VX_writeback_inter.write_data = write_data;
-	assign VX_writeback_inter.rd = rd;
-	assign VX_writeback_inter.wb = wb;
-	assign VX_writeback_inter.wb_valid = wb_valid;
-	assign VX_writeback_inter.wb_warp_num = wb_warp_num;
+
+	VX_generic_register #(.N(157)) input_reg
+	(
+		.clk  (clk),
+		.reset(0),
+		.stall(0),
+		.flush(0),
+		.in   ({rs1            , rs2            , warp_num            , write_data                   , rd                   , wb                   , wb_valid                   , wb_warp_num                   }),
+		.out  ({VX_gpr_read.rs1, VX_gpr_read.rs2, VX_gpr_read.warp_num, VX_writeback_inter.write_data, VX_writeback_inter.rd, VX_writeback_inter.wb, VX_writeback_inter.wb_valid, VX_writeback_inter.wb_warp_num})
+	);
 
 
+
+	wire[`NT_M1:0][31:0] out_a_reg_data;
+	wire[`NT_M1:0][31:0] out_b_reg_data;
+
+	VX_generic_register #(.N(256)) output_reg 
+	(
+		.clk  (clk),
+		.reset(0),
+		.stall(0),
+		.flush(0),
+		.in   ({out_a_reg_data , out_b_reg_data}),
+		.out  ({real_a_reg_data, real_b_reg_data})
+	);
 
 	// wire[`NW-1:0][`NT_M1:0][31:0] temp_a_reg_data;
 	// wire[`NW-1:0][`NT_M1:0][31:0] temp_b_reg_data;

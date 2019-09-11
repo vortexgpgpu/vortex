@@ -5,10 +5,10 @@
 module byte_enabled_simple_dual_port_ram
 (
 	input we, clk,
-	input wire[4:0] waddr, raddr,
+	input wire[4:0] waddr, raddr1, raddr2,
 	input wire[`NT_M1:0] be,
 	input wire[`NT_M1:0][31:0] wdata,
-	output reg[`NT_M1:0][31:0] q
+	output reg[`NT_M1:0][31:0] q1, q2
 );
 
 	//     Thread   Byte  Bit
@@ -26,8 +26,7 @@ module byte_enabled_simple_dual_port_ram
 	end
 
 
-	always_ff@(negedge clk) begin
-		q <= GPR[raddr];
-	end
+		assign q1 = GPR[raddr1];
+		assign q2 = GPR[raddr2];
 
 endmodule

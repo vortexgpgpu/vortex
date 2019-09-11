@@ -15,8 +15,6 @@ module Vortex(
 	output wire           out_ebreak
 	);
 
-
-
 // Dcache Interface
 
 VX_dcache_response_inter VX_dcache_rsp();
