@@ -33,8 +33,4 @@ void VVortex_VX_frE_to_bckE_req_inter::_ctor_var_reset() {
     VL_DEBUG_IF(VL_DBG_MSGF("+            VVortex_VX_frE_to_bckE_req_inter::_ctor_var_reset\n"); );
     // Body
     csr_address = VL_RAND_RESET_I(12);
-    itype_immed = VL_RAND_RESET_I(32);
-    branch_type = VL_RAND_RESET_I(3);
-    jal = VL_RAND_RESET_I(1);
-    jal_offset = VL_RAND_RESET_I(32);
 }

@@ -65,26 +65,40 @@ module VX_fetch (
 		wire add_warp    = in_wspawn && !in_ebreak && !in_gpr_stall;
 		wire remove_warp = in_ebreak && !in_wspawn && !in_gpr_stall;
 
-		always @(posedge clk or posedge reset) begin
-			if (reset || (warp_num >= warp_state) || remove_warp || add_warp) begin
-				warp_num   <= 0;
-			end else begin
-				warp_num   <= warp_num + 1;
-			end
+		wire[`NW_M1:0] new_warp_state;
+		wire[`NW_M1:0] new_warp_count;
 
-			if (add_warp) begin
-				warp_state <= warp_state + 1;
-				warp_count <= warp_count + 1;
-				// $display("Adding a new warp %h", warp_state+1);
-			end else if (remove_warp) begin // No removing, just invalidating
-				warp_count <= warp_count - 1;
-				// $display("Removing a warp %h %h", in_decode_warp_num, warp_count);
-				if (warp_count == 2) begin
-					// $display("&&&&&&&&&&&&& STATE 0");
-					warp_state <= 0;
-				end
-			end
+		assign new_warp_count = add_warp ? (warp_count + 1) : ((remove_warp                     ) ? (warp_count - 1) : (warp_count  ));
+		assign new_warp_state = add_warp ? (warp_state + 1) : ((remove_warp && (warp_count == 3)) ? (0             ) : ( warp_state ));
+
+		wire[`NW_M1:0] new_warp_num ;
+
+		assign new_warp_num   = (reset || (warp_num >= warp_state) || remove_warp || add_warp) ?  0 : (warp_num + 1);
+
+		always @(posedge clk or posedge reset) begin
+			warp_num   <= new_warp_num;
+			warp_state <= new_warp_state;
+			warp_count <= new_warp_count;
 		end
+
+		// always @(posedge clk or posedge reset) begin
+		// 	if (reset || (warp_num >= warp_state) || remove_warp || add_warp) begin
+		// 		warp_num   <= 0;
+		// 	end else begin
+		// 		warp_num   <= warp_num + 1;
+		// 	end
+
+		// 	if (add_warp) begin
+		// 		warp_state <= warp_state + 1;
+		// 		warp_count <= warp_count + 1;
+		// 		// $display("Adding a new warp %h", warp_state+1);
+		// 	end else if (remove_warp) begin // No removing, just invalidating
+		// 		warp_count <= warp_count - 1;
+		// 		if (warp_count == 2) begin
+		// 			warp_state <= 0;
+		// 		end
+		// 	end
+		// end
 
 		assign out_ebreak = (in_decode_warp_num == 0) && in_ebreak;
 

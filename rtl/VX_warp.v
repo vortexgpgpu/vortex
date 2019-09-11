@@ -38,11 +38,11 @@ module VX_warp (
 		end
 
 
-		always @(*) begin
+		always @(posedge clk) begin
 			if (remove) begin
-				assign valid = valid_zero;
+				valid <= valid_zero;
 			end else if (in_change_mask) begin
-				assign valid = in_thread_mask;
+				valid <= in_thread_mask;
 			end
 		end
 

@@ -64,13 +64,15 @@ VL_MODULE(VVortex) {
 	// Begin mtask footprint  all: 
 	VL_SIG8(Vortex__DOT__execute_branch_stall,0,0);
 	VL_SIG8(Vortex__DOT__forwarding_fwd_stall,0,0);
-	VL_SIG8(Vortex__DOT__vx_front_end__DOT__decode_branch_stall,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__stall,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_num,3,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_state,3,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_count,3,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__add_warp,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__remove_warp,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__new_warp_state,3,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__new_warp_count,3,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__new_warp_num,3,0);
 	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_glob_valid,31,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__out_valid_var,3,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk1__BRA__0__KET____DOT__warp_zero_change_mask,0,0);
@@ -114,20 +116,23 @@ VL_MODULE(VVortex) {
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__mul_alu,4,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__jalrs_thread_mask,3,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__jmprt_thread_mask,3,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_jal,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__is_ebreak,0,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_branch_type,2,0);
+	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_branch_stall,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_final_alu,4,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__0__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__1__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__2__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__3__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__4__KET____DOT__vx_gpr__DOT__write_enable,0,0);
+    };
+    struct {
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__5__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__6__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__7__KET____DOT__vx_gpr__DOT__write_enable,0,0);
 	VL_SIG8(Vortex__DOT__vx_back_end__DOT__vx_memory__DOT__temp_branch_dir,0,0);
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src1_exe_fwd,0,0);
-    };
-    struct {
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src1_mem_fwd,0,0);
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src1_wb_fwd,0,0);
 	VL_SIG8(Vortex__DOT__vx_forwarding__DOT__src2_exe_fwd,0,0);
@@ -157,6 +162,8 @@ VL_MODULE(VVortex) {
 	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk1__BRA__7__KET____DOT__VX_Warp__DOT__real_PC,31,0);
 	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__genblk1__BRA__7__KET____DOT__VX_Warp__DOT__temp_PC,31,0);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_f_d_reg__DOT__f_d_reg__DOT__value,71,0,3);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_jal_offset,31,0);
+	VL_SIG(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__temp_itype_immed,31,0);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__temp_a_reg_data,1023,0,32);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__temp_b_reg_data,1023,0,32);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__jal_data,127,0,4);
@@ -185,6 +192,8 @@ VL_MODULE(VVortex) {
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__2__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__2__KET____DOT__vx_gpr__DOT__second_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__3__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[32],127,0,4);
+    };
+    struct {
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__3__KET____DOT__vx_gpr__DOT__second_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__4__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__4__KET____DOT__vx_gpr__DOT__second_ram__DOT__GPR[32],127,0,4);
@@ -192,8 +201,6 @@ VL_MODULE(VVortex) {
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__5__KET____DOT__vx_gpr__DOT__second_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__6__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__6__KET____DOT__vx_gpr__DOT__second_ram__DOT__GPR[32],127,0,4);
-    };
-    struct {
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__7__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[32],127,0,4);
 	VL_SIGW(Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__7__KET____DOT__vx_gpr__DOT__second_ram__DOT__GPR[32],127,0,4);
     };
@@ -210,7 +217,6 @@ VL_MODULE(VVortex) {
     VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk1__BRA__6__KET____DOT__VX_Warp__out_valid,3,0);
     VL_SIG8(Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT____Vcellout__genblk1__BRA__7__KET____DOT__VX_Warp__out_valid,3,0);
     VL_SIG8(__Vtableidx1,2,0);
-    VL_SIG8(__Vdly__Vortex__DOT__vx_front_end__DOT__vx_fetch__DOT__warp_num,3,0);
     VL_SIG8(__Vclklast__TOP__clk,0,0);
     VL_SIG8(__Vclklast__TOP__reset,0,0);
     VL_SIG16(Vortex__DOT__vx_csr_handler__DOT____Vlvbound1,11,0);
@@ -272,9 +278,9 @@ VL_MODULE(VVortex) {
   private:
     static QData _change_request(VVortex__Syms* __restrict vlSymsp);
   public:
-    static void _combo__TOP__11(VVortex__Syms* __restrict vlSymsp);
-    static void _combo__TOP__4(VVortex__Syms* __restrict vlSymsp);
-    static void _combo__TOP__9(VVortex__Syms* __restrict vlSymsp);
+    static void _combo__TOP__10(VVortex__Syms* __restrict vlSymsp);
+    static void _combo__TOP__12(VVortex__Syms* __restrict vlSymsp);
+    static void _combo__TOP__3(VVortex__Syms* __restrict vlSymsp);
   private:
     void _ctor_var_reset() VL_ATTR_COLD;
   public:
@@ -286,14 +292,15 @@ VL_MODULE(VVortex) {
   public:
     static void _eval_initial(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
     static void _eval_settle(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
-    static void _initial__TOP__1(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
-    static void _multiclk__TOP__10(VVortex__Syms* __restrict vlSymsp);
+    static void _initial__TOP__6(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
+    static void _multiclk__TOP__11(VVortex__Syms* __restrict vlSymsp);
     static void _multiclk__TOP__8(VVortex__Syms* __restrict vlSymsp);
-    static void _sequent__TOP__3(VVortex__Syms* __restrict vlSymsp);
+    static void _sequent__TOP__2(VVortex__Syms* __restrict vlSymsp);
+    static void _sequent__TOP__4(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__5(VVortex__Syms* __restrict vlSymsp);
-    static void _sequent__TOP__6(VVortex__Syms* __restrict vlSymsp);
     static void _sequent__TOP__7(VVortex__Syms* __restrict vlSymsp);
-    static void _settle__TOP__2(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
+    static void _settle__TOP__1(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
+    static void _settle__TOP__9(VVortex__Syms* __restrict vlSymsp) VL_ATTR_COLD;
 } VL_ATTR_ALIGNED(128);
 
 #endif // guard

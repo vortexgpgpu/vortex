@@ -1,6 +1,6 @@
-PROJECT = VX_gpr_syn
-TOP_LEVEL_ENTITY = VX_gpr_syn
-SRC_FILE = VX_gpr_syn.v
+PROJECT = Vortex
+TOP_LEVEL_ENTITY = Vortex
+SRC_FILE = Vortex.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family

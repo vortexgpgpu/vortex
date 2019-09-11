@@ -18,11 +18,7 @@ VL_MODULE(VVortex_VX_frE_to_bckE_req_inter) {
     
     // LOCAL SIGNALS
     // Begin mtask footprint  all: 
-    VL_SIG8(branch_type,2,0);
-    VL_SIG8(jal,0,0);
     VL_SIG16(csr_address,11,0);
-    VL_SIG(itype_immed,31,0);
-    VL_SIG(jal_offset,31,0);
     
     // LOCAL VARIABLES
     

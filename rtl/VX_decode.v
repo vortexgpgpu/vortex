@@ -227,13 +227,16 @@ module VX_decode(
 		assign VX_frE_to_bckE_req.mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
 
 		// UPPER IMMEDIATE
+		reg[19:0] temp_upper_immed;
 		always @(*) begin
 			case(curr_opcode)
-				`LUI_INST:   VX_frE_to_bckE_req.upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
-				`AUIPC_INST: VX_frE_to_bckE_req.upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
-				default:     VX_frE_to_bckE_req.upper_immed  = 20'h0;
+				`LUI_INST:   temp_upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
+				`AUIPC_INST: temp_upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
+				default:     temp_upper_immed  = 20'h0;
 			endcase // curr_opcode
 		end
+
+		assign VX_frE_to_bckE_req.upper_immed = temp_upper_immed;
 
 
 		assign jal_b_19_to_12      = in_instruction[19:12];
@@ -256,39 +259,44 @@ module VX_decode(
 		assign jal_sys_off = (jal_sys_cond1 && jal_sys_cond2) ? 32'hb0000000 : 32'hdeadbeef;
 
 		// JAL 
+		reg       temp_jal;
+		reg[31:0] temp_jal_offset;
 		always @(*) begin
 			case(curr_opcode)
 				`JAL_INST:
 					begin
-		       		 	VX_frE_to_bckE_req.jal        = 1'b1 && in_valid[0];
-						VX_frE_to_bckE_req.jal_offset = jal_1_offset;
+		       		 	temp_jal        = 1'b1 && in_valid[0];
+						temp_jal_offset = jal_1_offset;
 					end
 				`JALR_INST:
 					begin
-		        		VX_frE_to_bckE_req.jal        = 1'b1 && in_valid[0];
-						VX_frE_to_bckE_req.jal_offset = jal_2_offset;
+		        		temp_jal        = 1'b1 && in_valid[0];
+						temp_jal_offset = jal_2_offset;
 					end
 				`GPGPU_INST:
 					begin
 						if (is_jalrs || is_jmprt)
 						begin
-			        		VX_frE_to_bckE_req.jal        = 1'b1 && in_valid[0];
-							VX_frE_to_bckE_req.jal_offset = 32'h0;
+			        		temp_jal        = 1'b1 && in_valid[0];
+							temp_jal_offset = 32'h0;
 						end
 					end
 				`SYS_INST:
 					begin
 						// $display("SYS EBREAK %h", (jal_sys_jal && in_valid[0]) );
-						VX_frE_to_bckE_req.jal        = jal_sys_jal && in_valid[0];
-						VX_frE_to_bckE_req.jal_offset = jal_sys_off;
+						temp_jal        = jal_sys_jal && in_valid[0];
+						temp_jal_offset = jal_sys_off;
 					end
 				default:
 					begin
-						VX_frE_to_bckE_req.jal          = 1'b0 && in_valid[0];
-						VX_frE_to_bckE_req.jal_offset   = 32'hdeadbeef;
+						temp_jal          = 1'b0 && in_valid[0];
+						temp_jal_offset   = 32'hdeadbeef;
 					end
 			endcase
 		end
+
+		assign VX_frE_to_bckE_req.jal        = temp_jal;
+		assign VX_frE_to_bckE_req.jal_offset = temp_jal_offset;
 
 		wire is_ebreak;
 
@@ -312,59 +320,66 @@ module VX_decode(
 		assign alu_tempp = alu_shift_i ? alu_shift_i_immed : u_12;
 
 
+		reg[31:0] temp_itype_immed;
 		always @(*) begin
 			case(curr_opcode)
-					`ALU_INST: VX_frE_to_bckE_req.itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
-					`S_INST:   VX_frE_to_bckE_req.itype_immed = {{20{func7[6]}}, func7, VX_frE_to_bckE_req.rd};
-					`L_INST:   VX_frE_to_bckE_req.itype_immed = {{20{u_12[11]}}, u_12};
-					`B_INST:   VX_frE_to_bckE_req.itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
-					default:   VX_frE_to_bckE_req.itype_immed = 32'hdeadbeef;
+					`ALU_INST: temp_itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
+					`S_INST:   temp_itype_immed = {{20{func7[6]}}, func7, VX_frE_to_bckE_req.rd};
+					`L_INST:   temp_itype_immed = {{20{u_12[11]}}, u_12};
+					`B_INST:   temp_itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
+					default:   temp_itype_immed = 32'hdeadbeef;
 				endcase
 		end
+
+		assign VX_frE_to_bckE_req.itype_immed = temp_itype_immed;
 	
 
+		reg[2:0] temp_branch_type;
+		reg      temp_branch_stall;
 		always @(*) begin
 			case(curr_opcode)
 				`B_INST:
 					begin
-						out_branch_stall = 1'b1 && in_valid[0];
+						temp_branch_stall = 1'b1 && in_valid[0];
 						case(func3)
-							3'h0: VX_frE_to_bckE_req.branch_type = `BEQ;
-							3'h1: VX_frE_to_bckE_req.branch_type = `BNE;
-							3'h4: VX_frE_to_bckE_req.branch_type = `BLT;
-							3'h5: VX_frE_to_bckE_req.branch_type = `BGT;
-							3'h6: VX_frE_to_bckE_req.branch_type = `BLTU;
-							3'h7: VX_frE_to_bckE_req.branch_type = `BGTU;
-							default: VX_frE_to_bckE_req.branch_type = `NO_BRANCH; 
+							3'h0: temp_branch_type = `BEQ;
+							3'h1: temp_branch_type = `BNE;
+							3'h4: temp_branch_type = `BLT;
+							3'h5: temp_branch_type = `BGT;
+							3'h6: temp_branch_type = `BLTU;
+							3'h7: temp_branch_type = `BGTU;
+							default: temp_branch_type = `NO_BRANCH; 
 						endcase
 					end
 
 				`JAL_INST:
 					begin
-						VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
-						out_branch_stall = 1'b1 && in_valid[0];
+						temp_branch_type  = `NO_BRANCH;
+						temp_branch_stall = 1'b1 && in_valid[0];
 					end
 				`JALR_INST:
 					begin
-						VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
-						out_branch_stall = 1'b1 && in_valid[0];
+						temp_branch_type  = `NO_BRANCH;
+						temp_branch_stall = 1'b1 && in_valid[0];
 					end
 				`GPGPU_INST:
 					begin
 						if (is_jalrs || is_jmprt)
 						begin
-							VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
-							out_branch_stall = 1'b1 && in_valid[0];
+							temp_branch_type  = `NO_BRANCH;
+							temp_branch_stall = 1'b1 && in_valid[0];
 						end
 					end
 				default:
 					begin
-						VX_frE_to_bckE_req.branch_type  = `NO_BRANCH;
-						out_branch_stall = 1'b0 && in_valid[0];
+						temp_branch_type  = `NO_BRANCH;
+						temp_branch_stall = 1'b0 && in_valid[0];
 					end
 			endcase
 		end
 
+		assign VX_frE_to_bckE_req.branch_type = temp_branch_type;
+		assign out_branch_stall               = temp_branch_stall;
 
 		always @(*) begin
 			// ALU OP
