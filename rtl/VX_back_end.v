@@ -43,13 +43,13 @@ wire[31:0]      execute_jal_dest;
 
 
 
-VX_mw_wb_inter   VX_mw_wb();
+VX_mw_wb_inter           VX_mw_wb();
+VX_inst_mem_wb_inter     VX_mem_wb();
 
 
 VX_mem_req_inter  VX_exe_mem_req();
 VX_mem_req_inter  VX_mem_req();
 
-VX_inst_mem_wb_inter     VX_mem_wb();
 
 VX_execute vx_execute(
 		.VX_bckE_req      (VX_bckE_req),
@@ -99,13 +99,21 @@ VX_memory vx_memory(
 		.VX_dcache_req (VX_dcache_req)
 	);
 
-VX_m_w_reg vx_m_w_reg(
-		.clk       (clk),
-		.reset     (reset),
-		.in_freeze (total_freeze),
-		.VX_mem_wb (VX_mem_wb),
-		.VX_mw_wb  (VX_mw_wb)
-	);
+// VX_m_w_reg vx_m_w_reg(
+// 		.clk       (clk),
+// 		.reset     (reset),
+// 		.in_freeze (total_freeze),
+// 		.VX_mem_wb (VX_mem_wb),
+// 		.VX_mw_wb  (VX_mw_wb)
+// 	);
+
+assign VX_mw_wb.alu_result = VX_mem_wb.alu_result;
+assign VX_mw_wb.mem_result = VX_mem_wb.mem_result;
+assign VX_mw_wb.rd         = VX_mem_wb.rd;
+assign VX_mw_wb.wb         = VX_mem_wb.wb;
+assign VX_mw_wb.PC_next    = VX_mem_wb.PC_next;
+assign VX_mw_wb.valid      = VX_mem_wb.valid;
+assign VX_mw_wb.warp_num   = VX_mem_wb.warp_num;
 
 
 VX_writeback vx_writeback(

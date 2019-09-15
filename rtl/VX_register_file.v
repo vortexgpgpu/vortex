@@ -23,12 +23,17 @@ module VX_register_file (
 
 	wire write_enable;
 
-	// reg[5:0] i;
-	// always @(posedge clk) begin
-	// 	for (i = 0; i < 32; i++) begin
-	// 		$display("%d: %h",i, registers[i[4:0]]);
-	// 	end
-	// end
+	reg[5:0] i;
+	always @(posedge clk) begin
+		$display("*************");
+		if (write_enable && in_wb_warp)
+			$display("writing: %d = %h",in_rd, in_data);
+
+		for (i = 0; i < 32; i++) begin
+			if (registers[i[4:0]] != 0)
+				$display("%d: %h",i, registers[i[4:0]]);
+		end
+	end
 
 	// always @(*) begin
 	// 	$display("TID: %d: %h",10,registers[10]);
@@ -49,9 +54,14 @@ module VX_register_file (
 		end
 	end
 
-	always @(negedge clk) begin
-		out_src1_data <= registers[in_src1];
-		out_src2_data <= registers[in_src2];
+	// always @(negedge clk) begin
+		assign out_src1_data = registers[in_src1];
+		assign out_src2_data = registers[in_src2];
+	// end
+
+	always @(*) begin 
+		$display("Reading Data 1: %d = %h",in_src1, out_src1_data);
+		$display("Reading Data 2: %d = %h",in_src2, out_src2_data);
 	end
 
 

@@ -46,7 +46,6 @@ wire total_freeze = memory_delay || fetch_delay;
 
 VX_fetch vx_fetch(
 		.clk                (clk),
-		.reset              (reset),
 		.in_memory_delay    (memory_delay),
 		.in_branch_stall    (decode_branch_stall),
 		.in_fwd_stall       (forwarding_fwd_stall),

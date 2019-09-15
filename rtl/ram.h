@@ -166,7 +166,6 @@ void loadHexImpl(std::string path,RAM* mem) {
     //Preload 0x0 <-> 0x80000000 jumps
     ((uint32_t*)mem->get(0))[1] = 0xf1401073;
 
-    // ((uint32_t*)mem->get(0))[1] = 0xf1401073;
     ((uint32_t*)mem->get(0))[2] = 0x30101073;
 
     ((uint32_t*)mem->get(0))[3] = 0x800000b7;
@@ -202,7 +201,6 @@ void loadHexImpl(std::string path,RAM* mem) {
                     unsigned add = nextAddr + i;
 
                     *(mem->get(add)) = hToI(line + 9 + i * 2, 2);
-                    // std::cout << "Address: " << std::hex <<(add) << "\tValue: " << std::hex << hToI(line + 9 + i * 2, 2) << std::endl;
                 }
                 break;
             case 2:

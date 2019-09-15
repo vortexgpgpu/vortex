@@ -11,8 +11,17 @@ module byte_enabled_simple_dual_port_ram
 	output reg[`NT_M1:0][31:0] q1, q2
 );
 
+		// integer regi;
+		// integer threadi;
+
 	//     Thread   Byte  Bit
 	logic [`NT_M1:0][3:0][7:0] GPR[31:0];
+
+	integer ini;
+	initial begin
+		for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] = 0;
+	end
+
 	always_ff@(posedge clk) begin
 		if(we) begin
 			integer thread_ind;
@@ -23,10 +32,20 @@ module byte_enabled_simple_dual_port_ram
 				if(be[thread_ind]) GPR[waddr][thread_ind][3] <= wdata[thread_ind][31:24];
 			end
 		end
+
+		// $display("^^^^^^^^^^^^^^^^^^^^^^^");
+		// for (regi = 0; regi <= 31; regi = regi + 1) begin
+		// 	for (threadi = 0; threadi <= `NT_M1; threadi = threadi + 1) begin
+		// 		if (GPR[regi][threadi] != 0) $display("$%d: %h",regi, GPR[regi][threadi]);
+		// 	end
+		// end
+
 	end
 
+	assign q1 = GPR[raddr1];
+	assign q2 = GPR[raddr2];
 
-		assign q1 = GPR[raddr1];
-		assign q2 = GPR[raddr2];
+	// assign q1 = (raddr1 == waddr && (we)) ? wdata : GPR[raddr1];
+	// assign q2 = (raddr2 == waddr && (we)) ? wdata : GPR[raddr2];
 
 endmodule

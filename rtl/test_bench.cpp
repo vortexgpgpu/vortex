@@ -7,8 +7,8 @@ int main(int argc, char **argv)
 
 	Verilated::commandArgs(argc, argv);
 
+	Verilated::traceEverOn(true);
 
-	Vortex v;
 
  //    bool passed = true;
 	// std::string tests[NUM_TESTS] = {
@@ -61,8 +61,10 @@ int main(int argc, char **argv)
 	// };
 
 	// 	for (int ii = 0; ii < NUM_TESTS; ii++)
-	// 	// for (int ii = 0; ii < NUM_TESTS - 1; ii++)
+	// 	// for (int ii = 5; ii < 6; ii++)
 	// 	{
+	// 		std::cout << "TESTING: " << tests[ii] << '\n';
+	// 		Vortex v;
 	// 		bool curr = v.simulate(tests[ii]);
 
 	// 		if ( curr) std::cerr << GREEN << "Test Passed: " << tests[ii] << std::endl;
@@ -77,6 +79,7 @@ int main(int argc, char **argv)
 
 
 	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
+	Vortex v;
 	char testing[] = "../../kernel/vortex_test.hex";
 
 	bool curr = v.simulate(testing);

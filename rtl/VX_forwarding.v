@@ -111,7 +111,7 @@ module VX_forwarding (
 			                      (!src1_mem_fwd));
 
 
-		assign out_src1_fwd  = src1_exe_fwd || src1_mem_fwd || src1_wb_fwd; // COMMENT
+		assign out_src1_fwd  = src1_exe_fwd || src1_mem_fwd || (src1_wb_fwd && 0);
 
 
 
@@ -137,7 +137,7 @@ module VX_forwarding (
 		                (in_writeback_warp_num == in_decode_warp_num);
 
 
-		assign out_src2_fwd  = src2_exe_fwd || src2_mem_fwd || src2_wb_fwd; // COMMENT
+		assign out_src2_fwd  = src2_exe_fwd || src2_mem_fwd || (src2_wb_fwd && 0);
 
 
 

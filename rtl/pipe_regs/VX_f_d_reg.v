@@ -17,7 +17,7 @@ module VX_f_d_reg (
 
 
 
-	VX_generic_register #(.N(72)) f_d_reg 
+	VX_generic_register #(.N(71)) f_d_reg 
 	(
 		.clk  (clk),
 		.reset(reset),

@@ -4,7 +4,7 @@
 `define NT_M1 (`NT-1)
 
 // NW_M1 is actually log2(NW)
-`define NW_M1 3
+`define NW_M1 (3-1)
 `define NW 8
 // Uncomment the below line if NW=1
 // `define ONLY

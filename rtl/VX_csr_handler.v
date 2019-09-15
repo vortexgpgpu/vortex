@@ -53,9 +53,7 @@ module VX_csr_handler (
 			end
 		end
 
-		always @(negedge clk) begin
-			data_read <= csr[decode_csr_address];
-		end
+		assign data_read = csr[decode_csr_address];
 
 
 		assign read_cycle    = decode_csr_address == 12'hC00;

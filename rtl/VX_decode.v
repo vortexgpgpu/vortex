@@ -301,6 +301,7 @@ module VX_decode(
 		wire is_ebreak;
 
 
+		// assign is_ebreak = is_e_inst;
 		assign is_ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && in_valid[0]);
 
 
@@ -340,6 +341,7 @@ module VX_decode(
 			case(curr_opcode)
 				`B_INST:
 					begin
+						// $display("BRANCH IN DECODE");
 						temp_branch_stall = 1'b1 && in_valid[0];
 						case(func3)
 							3'h0: temp_branch_type = `BEQ;
@@ -379,7 +381,7 @@ module VX_decode(
 		end
 
 		assign VX_frE_to_bckE_req.branch_type = temp_branch_type;
-		assign out_branch_stall               = temp_branch_stall;
+		assign out_branch_stall               = temp_branch_stall && in_valid[0];
 
 		always @(*) begin
 			// ALU OP

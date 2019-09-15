@@ -76,7 +76,6 @@ module VX_execute (
 
 
 
-
 		assign out_branch_stall = ((in_branch_type != `NO_BRANCH) || in_jal ) ? `STALL : `NO_STALL;
 
 

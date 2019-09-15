@@ -69,6 +69,7 @@ module VX_memory (
 			endcase // in_branch_type
 		end
 
+		assign VX_branch_rsp.valid_branch    = (VX_mem_req.branch_type != `NO_BRANCH) && (|VX_mem_req.valid);
 		assign VX_branch_rsp.branch_dir      = temp_branch_dir;
 		assign VX_branch_rsp.branch_warp_num = VX_mem_req.warp_num;
 

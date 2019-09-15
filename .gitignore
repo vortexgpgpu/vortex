@@ -1,3 +1,4 @@
 ./rtl/obj_dir/
+./rtl/obj_dir/*.vcd
 ./rtl/.*
 .*

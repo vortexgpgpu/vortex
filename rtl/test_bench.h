@@ -15,7 +15,11 @@
 #include "VVortex.h"
 #include "verilated.h"
 
+#include "tb_debug.h"
 
+#ifdef VCD_OUTPUT
+#include <verilated_vcd_c.h>
+#endif
 
 class Vortex
 {
@@ -53,6 +57,9 @@ class Vortex
         int debug_end_wait;
         int debug_debugAddr;
         double stats_sim_time;
+        #ifdef VCD_OUTPUT
+        VerilatedVcdC   *m_trace;
+        #endif
 };
 
 
@@ -62,12 +69,20 @@ Vortex::Vortex() : start_pc(0), curr_cycle(0), stop(true), unit_test(true), stat
                                                     debug_state(0), ibus_state(0), dbus_state(0), debug_return(0),
                                                     debug_wait_num(0), debug_inst_num(0), debug_end_wait(0), debug_debugAddr(0)
 {
-	this->vortex = new VVortex;
+	this->vortex  = new VVortex;
+    #ifdef VCD_OUTPUT
+    this->m_trace = new VerilatedVcdC;
+    this->vortex->trace(m_trace, 99);
+    this->m_trace->open("trace.vcd");
+    #endif
     this->results.open("../results.txt");
 }
 
 Vortex::~Vortex()
 {
+    #ifdef VCD_OUTPUT
+    m_trace->close();
+    #endif
 	this->results.close();
 	delete this->vortex;
 }
@@ -139,6 +154,8 @@ bool Vortex::ibus_driver()
     new_PC                             = vortex->icache_request_pc_address;
     ram.getWord(new_PC, &curr_inst);
     vortex->icache_response_instruction   = curr_inst;
+
+    // std::cout << std::hex << "IReq: " << vortex->icache_request_pc_address << "\tResp: " << curr_inst << "\n";
 
     // printf("\n\n---------------------------------------------\n(%x) Inst: %x\n", new_PC, curr_inst);
     // printf("\n");
@@ -307,11 +324,10 @@ bool Vortex::simulate(std::string file_to_simulate)
     // auto start_time = clock();
 
 
-	vortex->clk = 0;
-	vortex->reset = 1;
-	vortex->eval();
+	// vortex->reset = 1;
 
-	vortex->reset = 0;
+
+	// vortex->reset = 0;
 
 	unsigned curr_inst;
 	unsigned new_PC;
@@ -350,30 +366,38 @@ bool Vortex::simulate(std::string file_to_simulate)
     bool cont = false;
     // for (int i = 0; i < 500; i++)
 
+    vortex->clk = 0;
+    vortex->eval();
+
     // unsigned cycles;
     counter = 0;
+    this->stats_total_cycles = 10;
     while (this->stop && ((counter < 5)))
     // while (this->stats_total_cycles < 10)
     {
-
+        // std::cout << "Counter: " << counter << "\n";
         // std::cout << "************* Cycle: " << (this->stats_total_cycles) << "\n";
-        istop =  ibus_driver();
         // dstop = !dbus_driver();
 
         vortex->clk = 1;
         vortex->eval();
-
+        #ifdef VCD_OUTPUT
+        m_trace->dump(2*this->stats_total_cycles);
+        #endif
+        istop =  ibus_driver();
         dstop = !dbus_driver();
 
 
         vortex->clk = 0;
         vortex->eval();
-
-
+        #ifdef VCD_OUTPUT
+        m_trace->dump((2*this->stats_total_cycles)+1);
+        #endif
         // stop = istop && dstop;
         stop = vortex->out_ebreak;
 
         if (stop || cont)
+        // if (istop)
         {
             cont = true;
             counter++;
@@ -387,8 +411,12 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
 
-    uint32_t status;
-    ram.getWord(0, &status);
+    int status = (unsigned int) vortex->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__0__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[28][0] & 0xf;
+
+    // std::cout << "Something: " <<  result << '\n';
+
+    // uint32_t status;
+    // ram.getWord(0, &status);
 
     this->print_stats();
 
