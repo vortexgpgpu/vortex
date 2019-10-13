@@ -20,11 +20,19 @@ module VX_gpr (
 		.clk   (clk),
 		.waddr (VX_writeback_inter.rd),
 		.raddr1(VX_gpr_read.rs1),
-		.raddr2(VX_gpr_read.rs2),
 		.be    (VX_writeback_inter.wb_valid),
 		.wdata (VX_writeback_inter.write_data),
-		.q1    (out_a_reg_data),
-		.q2    (out_b_reg_data)
+		.q1    (out_a_reg_data)
+	);
+
+	byte_enabled_simple_dual_port_ram first_ram(
+		.we    (write_enable),
+		.clk   (clk),
+		.waddr (VX_writeback_inter.rd),
+		.raddr1(VX_gpr_read.rs2),
+		.be    (VX_writeback_inter.wb_valid),
+		.wdata (VX_writeback_inter.write_data),
+		.q1    (out_b_reg_data)
 	);
 
 
