@@ -5,10 +5,10 @@
 module byte_enabled_simple_dual_port_ram
 (
 	input we, clk,
-	input wire[4:0] waddr, raddr1, raddr2,
+	input wire[4:0] waddr, raddr1,
 	input wire[`NT_M1:0] be,
 	input wire[`NT_M1:0][31:0] wdata,
-	output reg[`NT_M1:0][31:0] q1, q2
+	output reg[`NT_M1:0][31:0] q1
 );
 
 		// integer regi;
@@ -42,7 +42,6 @@ module byte_enabled_simple_dual_port_ram
 	end
 	
 	assign q1 = GPR[raddr1];
-	assign q2 = GPR[raddr2];
 
 
 	// assign q1 = (raddr1 == waddr && (we)) ? wdata : GPR[raddr1];
