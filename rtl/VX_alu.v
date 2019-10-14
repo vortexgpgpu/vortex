@@ -45,7 +45,7 @@ module VX_alu(
 		wire[63:0] mult_signed_un_result = alu_in1_signed * ALU_in2;
 		/* verilator lint_on UNUSED */
 
-		always @(*) begin
+		always @(in_alu_op or ALU_in1 or ALU_in2) begin
 			case(in_alu_op)
 				`ADD:        out_alu_result = $signed(ALU_in1) + $signed(ALU_in2);
 				`SUB:        out_alu_result = $signed(ALU_in1) - $signed(ALU_in2);

@@ -13,7 +13,6 @@ module VX_fetch (
 
 	output wire           out_delay,
 	output wire           out_ebreak,
-	output wire[`NW_M1:0] out_which_wspawn,
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
 	VX_inst_meta_inter       fe_inst_meta_fd,
@@ -73,7 +72,6 @@ module VX_fetch (
 	
 
 		assign out_delay        = 0;
-		assign out_which_wspawn = 0;
 
 		assign icache_request.pc_address = warp_pc;
 		assign fe_inst_meta_fd.warp_num  = warp_num;

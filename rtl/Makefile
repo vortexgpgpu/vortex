@@ -7,7 +7,7 @@ VERILATOR:
 
 compdebug:
 	echo "#define VCD_OUTPUT" > tb_debug.h
-	verilator --compiler gcc -Wall --trace -cc Vortex.v -I. -Iinterfaces/ -Ipipe_regs/ --exe test_bench.cpp -CFLAGS -std=c++11 -O3
+	verilator --compiler gcc --prof-cfuncs -DVL_DEBUG=1 --coverage -Wall --trace -cc Vortex.v -I. -Iinterfaces/ -Ipipe_regs/ --exe test_bench.cpp -CFLAGS '-std=c++11 -DVL_DEBUG'
 
 RUNFILE: VERILATOR
 	(cd obj_dir && make -j -f VVortex.mk)

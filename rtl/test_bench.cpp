@@ -9,6 +9,8 @@ int main(int argc, char **argv)
 
 	Verilated::traceEverOn(true);
 
+	// Verilated::debug(1);
+
 
  //    bool passed = true;
 	// std::string tests[NUM_TESTS] = {

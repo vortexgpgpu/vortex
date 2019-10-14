@@ -3,6 +3,7 @@
 
 module VX_execute (
 		VX_frE_to_bckE_req_inter    VX_bckE_req,
+		VX_gpr_data_inter           VX_gpr_data,
 		VX_forward_exe_inter        VX_fwd_exe,
 		input wire[31:0]            in_csr_data,
 
@@ -28,8 +29,8 @@ module VX_execute (
 		wire[31:0]           in_jal_offset;
 		wire[31:0]           in_curr_PC;
 
-		assign in_a_reg_data  = VX_bckE_req.a_reg_data;
-		assign in_b_reg_data  = VX_bckE_req.b_reg_data;
+		assign in_a_reg_data  = VX_gpr_data.a_reg_data;
+		assign in_b_reg_data  = VX_gpr_data.b_reg_data;
 		assign in_alu_op      = VX_bckE_req.alu_op;
 		assign in_rs2_src     = VX_bckE_req.rs2_src;
 		assign in_itype_immed = VX_bckE_req.itype_immed;
@@ -85,7 +86,7 @@ module VX_execute (
 		assign VX_exe_mem_req.rs1           = VX_bckE_req.rs1;
 		assign VX_exe_mem_req.rs2           = VX_bckE_req.rs2;
 		assign VX_exe_mem_req.rd            = VX_bckE_req.rd;
-		assign VX_exe_mem_req.rd2           = VX_bckE_req.b_reg_data;
+		assign VX_exe_mem_req.rd2           = VX_gpr_data.b_reg_data;
 		assign VX_exe_mem_req.wb            = VX_bckE_req.wb;
 		assign VX_exe_mem_req.PC_next       = VX_bckE_req.PC_next;
 		assign VX_exe_mem_req.curr_PC       = VX_bckE_req.curr_PC;

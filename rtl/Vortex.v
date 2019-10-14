@@ -69,16 +69,19 @@ wire[31:0]                 csr_decode_csr_data;
 wire[11:0]                 decode_csr_address;
 
 
+VX_warp_ctl_inter        VX_warp_ctl();
+
+
+wire out_gpr_stall;
 
 
 VX_front_end vx_front_end(
 	.clk                 (clk),
 	.reset               (reset),
+	.VX_warp_ctl         (VX_warp_ctl),
 	.forwarding_fwd_stall(forwarding_fwd_stall),
 	.execute_branch_stall(execute_branch_stall),
 	.VX_writeback_inter  (VX_writeback_inter),
-	.VX_fwd_req_de       (VX_fwd_req_de),
-	.VX_fwd_rsp          (VX_fwd_rsp),
 	.VX_bckE_req         (VX_bckE_req),
 	.decode_csr_address  (decode_csr_address),
 	.memory_delay        (memory_delay),
@@ -87,7 +90,8 @@ VX_front_end vx_front_end(
 	.icache_request_fe   (icache_request_fe),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
-	.fetch_ebreak        (out_ebreak)
+	.fetch_ebreak        (out_ebreak),
+	.in_gpr_stall        (out_gpr_stall)
 	);
 
 
@@ -95,6 +99,10 @@ VX_back_end vx_back_end(
 	.clk                 (clk),
 	.reset               (reset),
 	.fetch_delay         (fetch_delay),
+	.in_fwd_stall        (forwarding_fwd_stall),
+	.VX_fwd_req_de       (VX_fwd_req_de),
+	.VX_fwd_rsp          (VX_fwd_rsp),
+	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
 	.VX_fwd_exe          (VX_fwd_exe),
 	.csr_decode_csr_data (csr_decode_csr_data),
@@ -107,7 +115,8 @@ VX_back_end vx_back_end(
 	.VX_fwd_wb           (VX_fwd_wb),
 	.VX_csr_w_req        (VX_csr_w_req),
 	.VX_writeback_inter  (VX_writeback_inter),
-	.out_mem_delay       (memory_delay)
+	.out_mem_delay       (memory_delay),
+	.out_gpr_stall       (out_gpr_stall)
 	);
 
 VX_forwarding vx_forwarding(

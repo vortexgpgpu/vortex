@@ -5,8 +5,10 @@ module VX_back_end (
 
 	input wire[31:0]        csr_decode_csr_data,
 	output wire              execute_branch_stall,
+	input wire               in_fwd_stall,
 
 	output wire              out_mem_delay,
+	output wire              out_gpr_stall,
 
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
@@ -15,8 +17,13 @@ module VX_back_end (
 	VX_frE_to_bckE_req_inter VX_bckE_req,
 	VX_wb_inter              VX_writeback_inter,
 
+	VX_warp_ctl_inter        VX_warp_ctl,
+
 	VX_dcache_response_inter VX_dcache_rsp,
 	VX_dcache_request_inter VX_dcache_req,
+
+	VX_forward_reqeust_inter  VX_fwd_req_de,
+	VX_forward_response_inter VX_fwd_rsp,
 
 	VX_forward_exe_inter     VX_fwd_exe,
 	VX_forward_mem_inter     VX_fwd_mem,
@@ -51,8 +58,27 @@ VX_mem_req_inter  VX_exe_mem_req();
 VX_mem_req_inter  VX_mem_req();
 
 
+VX_gpr_data_inter           VX_gpr_data();
+
+VX_frE_to_bckE_req_inter VX_bckE_req_out();
+
+VX_gpr_stage VX_gpr_stage(
+	.clk               (clk),
+	.VX_writeback_inter(VX_writeback_inter),
+	.VX_fwd_rsp        (VX_fwd_rsp),
+	.in_fwd_stall      (in_fwd_stall),
+	.VX_bckE_req       (VX_bckE_req),
+	.VX_warp_ctl       (VX_warp_ctl),
+	.VX_bckE_req_out   (VX_bckE_req_out),
+	.VX_gpr_data       (VX_gpr_data),
+	.VX_fwd_req_de     (VX_fwd_req_de),
+	.out_gpr_stall     (out_gpr_stall)
+	);
+
+
 VX_execute vx_execute(
-		.VX_bckE_req      (VX_bckE_req),
+		.VX_bckE_req      (VX_bckE_req_out),
+		.VX_gpr_data      (VX_gpr_data),
 		.VX_fwd_exe       (VX_fwd_exe),
 		.in_csr_data      (csr_decode_csr_data),
 

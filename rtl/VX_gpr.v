@@ -15,6 +15,12 @@ module VX_gpr (
 
 	assign write_enable = valid_write_request && ((VX_writeback_inter.wb != 0) && (VX_writeback_inter.rd != 5'h0));
 	
+
+
+			// always @(*) begin
+			// 	if(write_enable) $display("Writing to %d: %d = %h",VX_writeback_inter.wb_warp_num, VX_writeback_inter.rd, VX_writeback_inter.write_data[0][31:0]);
+			// end
+
 	byte_enabled_simple_dual_port_ram first_ram(
 		.we    (write_enable),
 		.clk   (clk),

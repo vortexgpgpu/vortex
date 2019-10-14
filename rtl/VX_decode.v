@@ -2,30 +2,30 @@
 `include "VX_define.v"
 
 module VX_decode(
-	input wire             clk,
 	// Fetch Inputs
 	VX_inst_meta_inter     fd_inst_meta_de,
 
 	// WriteBack inputs
-	VX_wb_inter            VX_writeback_inter,
+	// VX_wb_inter            VX_writeback_inter,
 
 
 	// Fwd Request
-	VX_forward_reqeust_inter VX_fwd_req_de,
+	// VX_forward_reqeust_inter VX_fwd_req_de,
 
 	// FORWARDING INPUTS
-	VX_forward_response_inter   VX_fwd_rsp,
+	// VX_forward_response_inter   VX_fwd_rsp,
 
-	input wire[`NW_M1:0]          in_which_wspawn,
+	// input wire[`NW_M1:0]          in_which_wspawn,
 
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
-	VX_warp_ctl_inter        VX_warp_ctl,
 	output reg               out_gpr_stall,
-	output reg               out_branch_stall
+	output reg               out_branch_stall,
+	output wire              out_ebreak
 
 );
 
+		assign out_gpr_stall = 0;
 
 		wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
 		wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
@@ -53,7 +53,7 @@ module VX_decode(
 		wire       is_e_inst;
 
 		wire       is_gpgpu;
-		wire       is_clone;
+		// wire       is_clone;
 		wire       is_jalrs;
 		wire       is_jmprt;
 		wire       is_wspawn;
@@ -94,44 +94,44 @@ module VX_decode(
 
 
 
-		assign VX_fwd_req_de.src1        = VX_frE_to_bckE_req.rs1;
-		assign VX_fwd_req_de.src2        = VX_frE_to_bckE_req.rs2;
-		assign VX_fwd_req_de.warp_num    = VX_frE_to_bckE_req.warp_num;
+		// assign VX_fwd_req_de.src1        = VX_frE_to_bckE_req.rs1;
+		// assign VX_fwd_req_de.src2        = VX_frE_to_bckE_req.rs2;
+		// assign VX_fwd_req_de.warp_num    = VX_frE_to_bckE_req.warp_num;
 
 
-		VX_gpr_read_inter VX_gpr_read();
-		assign VX_gpr_read.rs1      = VX_frE_to_bckE_req.rs1;
-		assign VX_gpr_read.rs2      = VX_frE_to_bckE_req.rs2;
-		assign VX_gpr_read.warp_num = VX_frE_to_bckE_req.warp_num;
+		// VX_gpr_read_inter VX_gpr_read();
+		// assign VX_gpr_read.rs1      = VX_frE_to_bckE_req.rs1;
+		// assign VX_gpr_read.rs2      = VX_frE_to_bckE_req.rs2;
+		// assign VX_gpr_read.warp_num = VX_frE_to_bckE_req.warp_num;
 
-		VX_gpr_jal_inter VX_gpr_jal();
-		assign VX_gpr_jal.is_jal  = is_jal;
-		assign VX_gpr_jal.curr_PC = in_curr_PC;
-
-
-		VX_gpr_clone_inter VX_gpr_clone();
-		assign VX_gpr_clone.is_clone = is_clone;
-		assign VX_gpr_clone.warp_num = VX_frE_to_bckE_req.warp_num;
+		// VX_gpr_jal_inter VX_gpr_jal();
+		// assign VX_gpr_jal.is_jal  = is_jal;
+		// assign VX_gpr_jal.curr_PC = in_curr_PC;
 
 
-		VX_gpr_wspawn_inter VX_gpr_wspawn();
-		assign VX_gpr_wspawn.is_wspawn    = is_wspawn;
-		assign VX_gpr_wspawn.which_wspawn = in_which_wspawn;
-		// assign VX_gpr_wspawn.warp_num     = VX_frE_to_bckE_req.warp_num;
+		// VX_gpr_clone_inter VX_gpr_clone();
+		// assign VX_gpr_clone.is_clone = is_clone;
+		// assign VX_gpr_clone.warp_num = VX_frE_to_bckE_req.warp_num;
 
-		VX_gpr_wrapper vx_grp_wrapper(
-				.clk            (clk),
-				.VX_writeback_inter(VX_writeback_inter),
-				.VX_fwd_rsp        (VX_fwd_rsp),
-				.VX_gpr_read       (VX_gpr_read),
-				.VX_gpr_jal        (VX_gpr_jal),
-				.VX_gpr_clone      (VX_gpr_clone),
-				.VX_gpr_wspawn     (VX_gpr_wspawn),
 
-				.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
-				.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
-				.out_gpr_stall(out_gpr_stall)
-			);
+		// VX_gpr_wspawn_inter VX_gpr_wspawn();
+		// assign VX_gpr_wspawn.is_wspawn    = is_wspawn;
+		// assign VX_gpr_wspawn.which_wspawn = in_which_wspawn;
+		// // assign VX_gpr_wspawn.warp_num     = VX_frE_to_bckE_req.warp_num;
+
+		// VX_gpr_wrapper vx_grp_wrapper(
+		// 		.clk            (clk),
+		// 		.VX_writeback_inter(VX_writeback_inter),
+		// 		.VX_fwd_rsp        (VX_fwd_rsp),
+		// 		.VX_gpr_read       (VX_gpr_read),
+		// 		.VX_gpr_jal        (VX_gpr_jal),
+		// 		.VX_gpr_clone      (VX_gpr_clone),
+		// 		.VX_gpr_wspawn     (VX_gpr_wspawn),
+
+		// 		.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
+		// 		.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
+		// 		.out_gpr_stall(out_gpr_stall)
+		// 	);
 
 
 
@@ -140,7 +140,6 @@ module VX_decode(
 		assign VX_frE_to_bckE_req.valid    = fd_inst_meta_de.valid;
 
 		assign VX_frE_to_bckE_req.warp_num = in_warp_num;
-		assign VX_warp_ctl.warp_num        = in_warp_num;
 
 
 		assign curr_opcode    = in_instruction[6:0];
@@ -172,46 +171,35 @@ module VX_decode(
 		assign is_e_inst    = (curr_opcode == `SYS_INST) && (func3 == 0);
 
 		assign is_gpgpu     = (curr_opcode == `GPGPU_INST);
-		assign is_clone     = is_gpgpu && (func3 == 5);
+		// assign is_clone     = is_gpgpu && (func3 == 5);
 		assign is_jalrs     = is_gpgpu && (func3 == 6);
 		assign is_jmprt     = is_gpgpu && (func3 == 4);
 		assign is_wspawn    = is_gpgpu && (func3 == 0);
 
-		assign VX_warp_ctl.wspawn    = is_wspawn;
-		assign VX_warp_ctl.wspawn_pc = VX_frE_to_bckE_req.a_reg_data[0];
+
+		assign VX_frE_to_bckE_req.csr_immed = is_csr_immed;
+		assign VX_frE_to_bckE_req.wspawn    = is_wspawn;
 
 
 
+		// wire[`NT_M1:0] jalrs_thread_mask = 0;
+		// wire[`NT_M1:0] jmprt_thread_mask;
 
-		wire[`NT_M1:0] jalrs_thread_mask;
-		wire[`NT_M1:0] jmprt_thread_mask;
-
-		genvar tm_i;
-		generate
-			for (tm_i = 0; tm_i < `NT; tm_i = tm_i + 1) begin
-					assign jalrs_thread_mask[tm_i] = $signed(tm_i) <= $signed(VX_frE_to_bckE_req.b_reg_data[0]);
-			end
-		endgenerate
-
-
-		genvar tm_ji;
-		generate
-			assign jmprt_thread_mask[0] = 1;
-			for (tm_ji = 1; tm_ji < `NT; tm_ji = tm_ji + 1) begin
-					assign jmprt_thread_mask[tm_ji] = 0;
-			end
-		endgenerate
-
-		assign VX_warp_ctl.thread_mask = is_jalrs ? jalrs_thread_mask : jmprt_thread_mask;
+		// genvar tm_i;
+		// generate
+		// 	for (tm_i = 0; tm_i < `NT; tm_i = tm_i + 1) begin
+		// 			assign jalrs_thread_mask[tm_i] = $signed(tm_i) <= $signed(VX_frE_to_bckE_req.b_reg_data[0]);
+		// 	end
+		// endgenerate
 
 
-		assign VX_warp_ctl.change_mask = is_jalrs || is_jmprt;
-
-
-
-
-		assign VX_frE_to_bckE_req.is_csr   = is_csr;
-    	assign VX_frE_to_bckE_req.csr_mask = (is_csr_immed == 1'b1) ?  {27'h0, VX_frE_to_bckE_req.rs1} : VX_frE_to_bckE_req.a_reg_data[0];
+		// genvar tm_ji;
+		// generate
+		// 	assign jmprt_thread_mask[0] = 1;
+		// 	for (tm_ji = 1; tm_ji < `NT; tm_ji = tm_ji + 1) begin
+		// 			assign jmprt_thread_mask[tm_ji] = 0;
+		// 	end
+		// endgenerate
 
 
 		assign VX_frE_to_bckE_req.wb       = (is_jal || is_jalr || is_jalrs || is_e_inst) ? `WB_JAL :
@@ -295,17 +283,19 @@ module VX_decode(
 			endcase
 		end
 
+		assign VX_frE_to_bckE_req.jalQual    = is_jal;
 		assign VX_frE_to_bckE_req.jal        = temp_jal;
 		assign VX_frE_to_bckE_req.jal_offset = temp_jal_offset;
 
-		wire is_ebreak;
+		// wire is_ebreak;
 
 
 		// assign is_ebreak = is_e_inst;
-		assign is_ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && in_valid[0]);
+		wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && in_valid[0]);
+		assign VX_frE_to_bckE_req.ebreak = ebreak;
+		assign out_ebreak = ebreak;
 
 
-		assign VX_warp_ctl.ebreak = is_ebreak;
 
 		// CSR
 
