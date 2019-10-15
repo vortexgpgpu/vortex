@@ -6,19 +6,25 @@
 .type _start, @function
 .global _start
 _start:
-    # li a1, 5
-    # jal Hi
-    # ecall
-    li a0, 8          # Num Warps
-    csrw 0x20, a0     # Setting the number of available warps 
-    li a0, 4          # Num Threads
-    csrw 0x21, a0     # Setting the number of available threads
-    csrw mhartid,zero
-    csrw misa,zero
-    lui  sp, 0x7ffff
-    # jal  vx_before_main
-    jal  main
+    li a1, 2
+    nop
+    nop
+    nop
+    addi a2, a1, 0
+    nop
+    nop
+    nop
     ecall
+    # li a0, 8          # Num Warps
+    # csrw 0x20, a0     # Setting the number of available warps 
+    # li a0, 4          # Num Threads
+    # csrw 0x21, a0     # Setting the number of available threads
+    # csrw mhartid,zero
+    # csrw misa,zero
+    # lui  sp, 0x7ffff
+    # # jal  vx_before_main
+    # jal  main
+    # ecall
 
 # Hi:
 #     li a2, 7

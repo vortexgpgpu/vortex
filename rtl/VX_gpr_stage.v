@@ -26,8 +26,10 @@ module VX_gpr_stage (
 );
 
 
-	// wire[31:0] curr_PC = VX_bckE_req.curr_PC;
-	// wire[2:0] branchType = VX_bckE_req.branch_type;
+	wire[31:0] curr_PC = VX_bckE_req.curr_PC;
+	wire[2:0] branchType = VX_bckE_req.branch_type;
+
+	wire jalQual = VX_bckE_req.jalQual;
 
 
 	assign VX_fwd_req_de.src1        = VX_bckE_req.rs1;

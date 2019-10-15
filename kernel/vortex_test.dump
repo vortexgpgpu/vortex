@@ -5,14 +5,14 @@ vortex_test.elf:     file format elf32-littleriscv
 Disassembly of section .text:
 
 80000000 <_start>:
-80000000:	00800513          	li	a0,8
-80000004:	02051073          	csrw	0x20,a0
-80000008:	00400513          	li	a0,4
-8000000c:	02151073          	csrw	0x21,a0
-80000010:	f1401073          	csrw	mhartid,zero
-80000014:	30101073          	csrw	misa,zero
-80000018:	7ffff137          	lui	sp,0x7ffff
-8000001c:	091010ef          	jal	ra,800018ac <main>
+80000000:	00200593          	li	a1,2
+80000004:	00000013          	nop
+80000008:	00000013          	nop
+8000000c:	00000013          	nop
+80000010:	00058613          	mv	a2,a1
+80000014:	00000013          	nop
+80000018:	00000013          	nop
+8000001c:	00000013          	nop
 80000020:	00000073          	ecall
 
 80000024 <vx_createThreads>:
@@ -28,7 +28,7 @@ Disassembly of section .text:
 80000038:	00755c63          	bge	a0,t2,80000050 <loop_done>
 
 8000003c <loop_body>:
-8000003c:	80010113          	addi	sp,sp,-2048 # 7fffe800 <SIZE+0x7fffe7ce>
+8000003c:	80010113          	addi	sp,sp,-2048
 80000040:	00050313          	mv	t1,a0
 80000044:	0003506b          	0x3506b
 
@@ -1604,96 +1604,102 @@ Disassembly of section .text:
 80001788:	03010113          	addi	sp,sp,48
 8000178c:	00008067          	ret
 
-80001790 <initialize_mats>:
-80001790:	fe010113          	addi	sp,sp,-32
-80001794:	00812e23          	sw	s0,28(sp)
-80001798:	02010413          	addi	s0,sp,32
-8000179c:	fe042623          	sw	zero,-20(s0)
-800017a0:	0480006f          	j	800017e8 <initialize_mats+0x58>
-800017a4:	810267b7          	lui	a5,0x81026
-800017a8:	fec42703          	lw	a4,-20(s0)
-800017ac:	00271713          	slli	a4,a4,0x2
-800017b0:	21c78793          	addi	a5,a5,540 # 8102621c <barrier_bool+0xffffcf58>
-800017b4:	00f707b3          	add	a5,a4,a5
-800017b8:	00300713          	li	a4,3
-800017bc:	00e7a023          	sw	a4,0(a5)
-800017c0:	810277b7          	lui	a5,0x81027
-800017c4:	fec42703          	lw	a4,-20(s0)
-800017c8:	00271713          	slli	a4,a4,0x2
-800017cc:	21c78793          	addi	a5,a5,540 # 8102721c <barrier_bool+0xffffdf58>
-800017d0:	00f707b3          	add	a5,a4,a5
-800017d4:	00200713          	li	a4,2
-800017d8:	00e7a023          	sw	a4,0(a5)
-800017dc:	fec42783          	lw	a5,-20(s0)
-800017e0:	00178793          	addi	a5,a5,1
-800017e4:	fef42623          	sw	a5,-20(s0)
-800017e8:	fec42703          	lw	a4,-20(s0)
-800017ec:	0ff00793          	li	a5,255
-800017f0:	fae7dae3          	bge	a5,a4,800017a4 <initialize_mats+0x14>
-800017f4:	00000013          	nop
-800017f8:	01c12403          	lw	s0,28(sp)
-800017fc:	02010113          	addi	sp,sp,32
-80001800:	00008067          	ret
+80001790 <sc_time_stamp>:
+80001790:	ff010113          	addi	sp,sp,-16
+80001794:	00812623          	sw	s0,12(sp)
+80001798:	01010413          	addi	s0,sp,16
+8000179c:	00000793          	li	a5,0
+800017a0:	00000813          	li	a6,0
+800017a4:	00078513          	mv	a0,a5
+800017a8:	00080593          	mv	a1,a6
+800017ac:	00c12403          	lw	s0,12(sp)
+800017b0:	01010113          	addi	sp,sp,16
+800017b4:	00008067          	ret
 
-80001804 <print_matrix>:
-80001804:	fd010113          	addi	sp,sp,-48
-80001808:	02112623          	sw	ra,44(sp)
-8000180c:	02812423          	sw	s0,40(sp)
-80001810:	03010413          	addi	s0,sp,48
-80001814:	fca42e23          	sw	a0,-36(s0)
-80001818:	810007b7          	lui	a5,0x81000
-8000181c:	11878513          	addi	a0,a5,280 # 81000118 <barrier_bool+0xfffd6e54>
-80001820:	fb5fe0ef          	jal	ra,800007d4 <vx_print_str>
-80001824:	fe042623          	sw	zero,-20(s0)
-80001828:	0580006f          	j	80001880 <print_matrix+0x7c>
-8000182c:	fec42783          	lw	a5,-20(s0)
-80001830:	00078e63          	beqz	a5,8000184c <print_matrix+0x48>
-80001834:	fec42783          	lw	a5,-20(s0)
-80001838:	00f7f793          	andi	a5,a5,15
-8000183c:	00079863          	bnez	a5,8000184c <print_matrix+0x48>
+800017b8 <initialize_mats>:
+800017b8:	fe010113          	addi	sp,sp,-32
+800017bc:	00812e23          	sw	s0,28(sp)
+800017c0:	02010413          	addi	s0,sp,32
+800017c4:	fe042623          	sw	zero,-20(s0)
+800017c8:	0480006f          	j	80001810 <initialize_mats+0x58>
+800017cc:	810267b7          	lui	a5,0x81026
+800017d0:	fec42703          	lw	a4,-20(s0)
+800017d4:	00271713          	slli	a4,a4,0x2
+800017d8:	21c78793          	addi	a5,a5,540 # 8102621c <barrier_bool+0xffffcf58>
+800017dc:	00f707b3          	add	a5,a4,a5
+800017e0:	00300713          	li	a4,3
+800017e4:	00e7a023          	sw	a4,0(a5)
+800017e8:	810277b7          	lui	a5,0x81027
+800017ec:	fec42703          	lw	a4,-20(s0)
+800017f0:	00271713          	slli	a4,a4,0x2
+800017f4:	21c78793          	addi	a5,a5,540 # 8102721c <barrier_bool+0xffffdf58>
+800017f8:	00f707b3          	add	a5,a4,a5
+800017fc:	00200713          	li	a4,2
+80001800:	00e7a023          	sw	a4,0(a5)
+80001804:	fec42783          	lw	a5,-20(s0)
+80001808:	00178793          	addi	a5,a5,1
+8000180c:	fef42623          	sw	a5,-20(s0)
+80001810:	fec42703          	lw	a4,-20(s0)
+80001814:	0ff00793          	li	a5,255
+80001818:	fae7dae3          	bge	a5,a4,800017cc <initialize_mats+0x14>
+8000181c:	00000013          	nop
+80001820:	01c12403          	lw	s0,28(sp)
+80001824:	02010113          	addi	sp,sp,32
+80001828:	00008067          	ret
+
+8000182c <print_matrix>:
+8000182c:	fd010113          	addi	sp,sp,-48
+80001830:	02112623          	sw	ra,44(sp)
+80001834:	02812423          	sw	s0,40(sp)
+80001838:	03010413          	addi	s0,sp,48
+8000183c:	fca42e23          	sw	a0,-36(s0)
 80001840:	810007b7          	lui	a5,0x81000
-80001844:	13c78513          	addi	a0,a5,316 # 8100013c <barrier_bool+0xfffd6e78>
+80001844:	11878513          	addi	a0,a5,280 # 81000118 <barrier_bool+0xfffd6e54>
 80001848:	f8dfe0ef          	jal	ra,800007d4 <vx_print_str>
-8000184c:	fec42783          	lw	a5,-20(s0)
-80001850:	00279793          	slli	a5,a5,0x2
-80001854:	fdc42703          	lw	a4,-36(s0)
-80001858:	00f707b3          	add	a5,a4,a5
-8000185c:	0007a783          	lw	a5,0(a5)
-80001860:	00078513          	mv	a0,a5
-80001864:	fadfe0ef          	jal	ra,80000810 <vx_print_hex>
+8000184c:	fe042623          	sw	zero,-20(s0)
+80001850:	0580006f          	j	800018a8 <print_matrix+0x7c>
+80001854:	fec42783          	lw	a5,-20(s0)
+80001858:	00078e63          	beqz	a5,80001874 <print_matrix+0x48>
+8000185c:	fec42783          	lw	a5,-20(s0)
+80001860:	00f7f793          	andi	a5,a5,15
+80001864:	00079863          	bnez	a5,80001874 <print_matrix+0x48>
 80001868:	810007b7          	lui	a5,0x81000
-8000186c:	14078513          	addi	a0,a5,320 # 81000140 <barrier_bool+0xfffd6e7c>
+8000186c:	13c78513          	addi	a0,a5,316 # 8100013c <barrier_bool+0xfffd6e78>
 80001870:	f65fe0ef          	jal	ra,800007d4 <vx_print_str>
 80001874:	fec42783          	lw	a5,-20(s0)
-80001878:	00178793          	addi	a5,a5,1
-8000187c:	fef42623          	sw	a5,-20(s0)
-80001880:	fec42703          	lw	a4,-20(s0)
-80001884:	0ff00793          	li	a5,255
-80001888:	fae7d2e3          	bge	a5,a4,8000182c <print_matrix+0x28>
-8000188c:	810007b7          	lui	a5,0x81000
-80001890:	14478513          	addi	a0,a5,324 # 81000144 <barrier_bool+0xfffd6e80>
-80001894:	f41fe0ef          	jal	ra,800007d4 <vx_print_str>
-80001898:	00000013          	nop
-8000189c:	02c12083          	lw	ra,44(sp)
-800018a0:	02812403          	lw	s0,40(sp)
-800018a4:	03010113          	addi	sp,sp,48
-800018a8:	00008067          	ret
+80001878:	00279793          	slli	a5,a5,0x2
+8000187c:	fdc42703          	lw	a4,-36(s0)
+80001880:	00f707b3          	add	a5,a4,a5
+80001884:	0007a783          	lw	a5,0(a5)
+80001888:	00078513          	mv	a0,a5
+8000188c:	f85fe0ef          	jal	ra,80000810 <vx_print_hex>
+80001890:	810007b7          	lui	a5,0x81000
+80001894:	14078513          	addi	a0,a5,320 # 81000140 <barrier_bool+0xfffd6e7c>
+80001898:	f3dfe0ef          	jal	ra,800007d4 <vx_print_str>
+8000189c:	fec42783          	lw	a5,-20(s0)
+800018a0:	00178793          	addi	a5,a5,1
+800018a4:	fef42623          	sw	a5,-20(s0)
+800018a8:	fec42703          	lw	a4,-20(s0)
+800018ac:	0ff00793          	li	a5,255
+800018b0:	fae7d2e3          	bge	a5,a4,80001854 <print_matrix+0x28>
+800018b4:	810007b7          	lui	a5,0x81000
+800018b8:	14478513          	addi	a0,a5,324 # 81000144 <barrier_bool+0xfffd6e80>
+800018bc:	f19fe0ef          	jal	ra,800007d4 <vx_print_str>
+800018c0:	00000013          	nop
+800018c4:	02c12083          	lw	ra,44(sp)
+800018c8:	02812403          	lw	s0,40(sp)
+800018cc:	03010113          	addi	sp,sp,48
+800018d0:	00008067          	ret
 
-800018ac <main>:
-800018ac:	ff010113          	addi	sp,sp,-16
-800018b0:	00112623          	sw	ra,12(sp)
-800018b4:	00812423          	sw	s0,8(sp)
-800018b8:	01010413          	addi	s0,sp,16
-800018bc:	ed5ff0ef          	jal	ra,80001790 <initialize_mats>
-800018c0:	810267b7          	lui	a5,0x81026
-800018c4:	21c78513          	addi	a0,a5,540 # 8102621c <barrier_bool+0xffffcf58>
-800018c8:	f3dff0ef          	jal	ra,80001804 <print_matrix>
-800018cc:	00000793          	li	a5,0
-800018d0:	00078513          	mv	a0,a5
-800018d4:	00c12083          	lw	ra,12(sp)
-800018d8:	00812403          	lw	s0,8(sp)
-800018dc:	01010113          	addi	sp,sp,16
-800018e0:	00008067          	ret
+800018d4 <main>:
+800018d4:	ff010113          	addi	sp,sp,-16
+800018d8:	00812623          	sw	s0,12(sp)
+800018dc:	01010413          	addi	s0,sp,16
+800018e0:	00000793          	li	a5,0
+800018e4:	00078513          	mv	a0,a5
+800018e8:	00c12403          	lw	s0,12(sp)
+800018ec:	01010113          	addi	sp,sp,16
+800018f0:	00008067          	ret
 
 Disassembly of section .rodata:
 
@@ -1720,7 +1726,7 @@ Disassembly of section .rodata:
 8100002a:	0000                	unimp
 8100002c:	0062                	c.slli	zero,0x18
 8100002e:	0000                	unimp
-81000030:	00000063          	beqz	zero,81000030 <main+0xffe784>
+81000030:	00000063          	beqz	zero,81000030 <main+0xffe75c>
 81000034:	0064                	addi	s1,sp,12
 81000036:	0000                	unimp
 81000038:	0065                	c.nop	25
@@ -1757,7 +1763,7 @@ Disassembly of section .rodata:
 8100007e:	0000                	unimp
 81000080:	0062                	c.slli	zero,0x18
 81000082:	0000                	unimp
-81000084:	00000063          	beqz	zero,81000084 <main+0xffe7d8>
+81000084:	00000063          	beqz	zero,81000084 <main+0xffe7b0>
 81000088:	0064                	addi	s1,sp,12
 8100008a:	0000                	unimp
 8100008c:	0065                	c.nop	25
@@ -1788,7 +1794,7 @@ Disassembly of section .rodata:
 810000c2:	0000                	unimp
 810000c4:	0062                	c.slli	zero,0x18
 810000c6:	0000                	unimp
-810000c8:	00000063          	beqz	zero,810000c8 <main+0xffe81c>
+810000c8:	00000063          	beqz	zero,810000c8 <main+0xffe7f4>
 810000cc:	0064                	addi	s1,sp,12
 810000ce:	0000                	unimp
 810000d0:	0065                	c.nop	25
@@ -1817,7 +1823,7 @@ Disassembly of section .rodata:
 81000102:	0000                	unimp
 81000104:	0062                	c.slli	zero,0x18
 81000106:	0000                	unimp
-81000108:	00000063          	beqz	zero,81000108 <main+0xffe85c>
+81000108:	00000063          	beqz	zero,81000108 <main+0xffe834>
 8100010c:	0064                	addi	s1,sp,12
 8100010e:	0000                	unimp
 81000110:	0065                	c.nop	25

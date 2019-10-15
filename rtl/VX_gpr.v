@@ -55,7 +55,11 @@ module VX_gpr (
 		// .q1    (out_b_reg_data)
 	// );
 
+	wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
+
 	// Port A is a read port, Port B is a write port
+
+	/* verilator lint_off PINCONNECTEMPTY */
    rf2_32x128_wm1 first_ram (
          .CENYA(),
          .AYA(),
@@ -70,7 +74,7 @@ module VX_gpr (
          .AA(VX_gpr_read.rs1),
          .CLKB(clk),
          .CENB(1'b0),
-         .WENB({32{~(VX_writeback_inter.wb_valid[3])}, 32{~(VX_writeback_inter.wb_valid[2])}, 32{~(VX_writeback_inter.wb_valid[1])}, 32{~(VX_writeback_inter.wb_valid[0])}}),
+         .WENB(write_bit_mask),
          .AB(VX_writeback_inter.rd),
          .DB(VX_writeback_inter.write_data),
          .EMAA(3'b011),
@@ -92,7 +96,9 @@ module VX_gpr (
          .SEB(1'b0),
          .COLLDISN(1'b1)
    );
+   /* verilator lint_on PINCONNECTEMPTY */
 
+   /* verilator lint_off PINCONNECTEMPTY */
    rf2_32x128_wm1 second_ram (
          .CENYA(),
          .AYA(),
@@ -107,7 +113,7 @@ module VX_gpr (
          .AA(VX_gpr_read.rs2),
          .CLKB(clk),
          .CENB(1'b0),
-         .WENB({32{~(VX_writeback_inter.wb_valid[3])}, 32{~(VX_writeback_inter.wb_valid[2])}, 32{~(VX_writeback_inter.wb_valid[1])}, 32{~(VX_writeback_inter.wb_valid[0])}}),
+         .WENB(write_bit_mask),
          .AB(VX_writeback_inter.rd),
          .DB(VX_writeback_inter.write_data),
          .EMAA(3'b011),
@@ -129,6 +135,7 @@ module VX_gpr (
          .SEB(1'b0),
          .COLLDISN(1'b1)
    );
+   /* verilator lint_on PINCONNECTEMPTY */
 // >>>>>>> 5680b997b599ce2900997cab976681fe3881e880
 
 

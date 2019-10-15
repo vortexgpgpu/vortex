@@ -56,6 +56,12 @@
 `define ARM_MEM_HOLD 0.500
 `define ARM_MEM_COLLISION 3.000
 
+`define REALTIME 1
+
+`undef POWER_PINS
+`undef ARM_MESSAGES
+/* verilator lint_off UNUSED */
+
 module datapath_latch_rf2_32x128_wm1 (CLK,Q_update,SE,SI,D,DFTRAMBYP,mem_path,XQ,Q);
 	input CLK,Q_update,SE,SI,D,DFTRAMBYP,mem_path,XQ;
 	output Q;
@@ -77,7 +83,7 @@ module datapath_latch_rf2_32x128_wm1 (CLK,Q_update,SE,SI,D,DFTRAMBYP,mem_path,XQ
 
    // model output side of RAM latch
    always @(posedge Q_update or posedge XQ) begin
-      #0;
+      //#0;
       if (XQ===1'b0) begin
          if (DFTRAMBYP===1'b1)
            Q=D_int;
@@ -97,7 +103,7 @@ endmodule // datapath_latch_rf2_32x128_wm1
 // ARM_UD_DP Defines the delay through Data Paths, for Memory Models it represents BIST MUX output delays.
 `ifdef ARM_UD_DP
 `else
-`define ARM_UD_DP #0.001
+`define ARM_UD_DP //#0.001
 `endif
 // ARM_UD_CP Defines the delay through Clock Path Cells, for Memory Models it is not used.
 `ifdef ARM_UD_CP
@@ -107,7 +113,7 @@ endmodule // datapath_latch_rf2_32x128_wm1
 // ARM_UD_SEQ Defines the delay through the Memory, for Memory Models it is used for CLK->Q delays.
 `ifdef ARM_UD_SEQ
 `else
-`define ARM_UD_SEQ #0.01
+`define ARM_UD_SEQ //#0.01
 `endif
 
 `celldefine
@@ -1125,23 +1131,23 @@ module rf2_32x128_wm1 (CENYA, AYA, CENYB, WENYB, AYB, QA, SOA, SOB, CLKA, CENA, 
 `ifdef INITIALIZE_MEMORY
   integer i;
   initial begin
-    #0;
+    //#0;
     for (i = 0; i < MEM_HEIGHT; i = i + 1)
       mem[i] = {MEM_WIDTH{1'b0}};
   end
 `endif
-  always @ (EMAA_) begin
-  	if(EMAA_ < 3) 
-   	$display("Warning: Set Value for EMAA doesn't match Default value 3 in %m at %0t", $time);
-  end
-  always @ (EMASA_) begin
-  	if(EMASA_ < 0) 
-   	$display("Warning: Set Value for EMASA doesn't match Default value 0 in %m at %0t", $time);
-  end
-  always @ (EMAB_) begin
-  	if(EMAB_ < 3) 
-   	$display("Warning: Set Value for EMAB doesn't match Default value 3 in %m at %0t", $time);
-  end
+  // always @ (EMAA_) begin
+  // 	if(EMAA_ < 3) 
+  //  	//$display("Warning: Set Value for EMAA doesn't match Default value 3 in %m at %0t", 0);
+  // end
+  // always @ (EMASA_) begin
+  // 	if(EMASA_ < 0) 
+  //  	//$display("Warning: Set Value for EMASA doesn't match Default value 0 in %m at %0t", 0);
+  // end
+  // always @ (EMAB_) begin
+  // 	if(EMAB_ < 3) 
+  //  	//$display("Warning: Set Value for EMAB doesn't match Default value 3 in %m at %0t", 0);
+  // end
 
   task failedWrite;
   input port_f;
@@ -1262,7 +1268,7 @@ task dumpmem;
 	reg [BITS-1:0] wordtemp;
 	reg [4:0] Atemp;
   begin
-	dump_file_desc = $fopen(filename_dump);
+	dump_file_desc = $fopen(filename_dump, "w");
      if (CENA_ === 1'b1 && CENB_ === 1'b1) begin
 	  for (i=0;i<WORDS;i=i+1) begin
 	  Atemp = i;
@@ -1654,24 +1660,24 @@ task dumpaddr;
   	end
   end
 
-`ifdef POWER_PINS
-  always @ (VDDCE) begin
-      if (VDDCE != 1'b1) begin
-       if (VDDPE == 1'b1) begin
-        $display("VDDCE should be powered down after VDDPE, Illegal power down sequencing in %m at %0t", $time);
-       end
-        $display("In PowerDown Mode in %m at %0t", $time);
-        failedWrite(0);
-      end
-      if (VDDCE == 1'b1) begin
-       if (VDDPE == 1'b1) begin
-        $display("VDDPE should be powered up after VDDCE in %m at %0t", $time);
-        $display("Illegal power up sequencing in %m at %0t", $time);
-       end
-        failedWrite(0);
-      end
-  end
-`endif
+// `ifdef POWER_PINS
+//   always @ (VDDCE) begin
+//       if (VDDCE != 1'b1) begin
+//        if (VDDPE == 1'b1) begin
+//         //$display("VDDCE should be powered down after VDDPE, Illegal power down sequencing in %m at %0t", 0);
+//        end
+//         //$display("In PowerDown Mode in %m at %0t", 0);
+//         failedWrite(0);
+//       end
+//       if (VDDCE == 1'b1) begin
+//        if (VDDPE == 1'b1) begin
+//         //$display("VDDPE should be powered up after VDDCE in %m at %0t", 0);
+//         //$display("Illegal power up sequencing in %m at %0t", 0);
+//        end
+//         failedWrite(0);
+//       end
+//   end
+// `endif
 `ifdef POWER_PINS
   always @ (RET1N_ or VDDPE or VDDCE) begin
 `else     
@@ -1748,13 +1754,13 @@ task dumpaddr;
       COLLDISN_int = 1'bx;
     end
     RET1N_int = RET1N_;
-    #0;
+    //#0;
         QA_update = 1'b0;
-    #0;#0;  XQA = 1'b0;
+    //#0;//#0;  XQA = 1'b0;
   end
 
   always @ (CLKB_ or DFTRAMBYP_p2) begin
-  	#0;
+  	//#0;
   	if(CLKB_ == 1'b1 && (DFTRAMBYP_int === 1'b1 || CENB_int != 1'b1)) begin
   	  if (RET1N_ == 1'b1) begin
 	        DB_sh_update = 1'b1; 
@@ -1764,14 +1770,14 @@ task dumpaddr;
 
   always @ CLKA_ begin
 // If POWER_PINS is defined at Simulator Command Line, it selects the module definition with Power Ports
-`ifdef POWER_PINS
-    if (VDDCE === 1'bx || VDDCE === 1'bz)
-      $display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, $time);
-    if (VDDPE === 1'bx || VDDPE === 1'bz)
-      $display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, $time);
-    if (VSSE === 1'bx || VSSE === 1'bz)
-      $display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, $time);
-`endif
+// `ifdef POWER_PINS
+//     if (VDDCE === 1'bx || VDDCE === 1'bz)
+//       //$display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, 0);
+//     if (VDDPE === 1'bx || VDDPE === 1'bz)
+//       //$display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, 0);
+//     if (VSSE === 1'bx || VSSE === 1'bz)
+//       //$display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, 0);
+// `endif
 `ifdef POWER_PINS
   if (RET1N_ == 1'b0 && VDDPE == 1'b0) begin
 `else     
@@ -1836,12 +1842,12 @@ task dumpaddr;
       end
       clk0_int = 1'b0;
     ReadA;
-      if (CENA_int === 1'b0) previous_CLKA = $realtime;
-    #0;
+      if (CENA_int === 1'b0) previous_CLKA = `REALTIME;
+    //#0;
       if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && COLLDISN_int === 1'b1 && is_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
          if((|WENB_int) == 1'b1) begin
-          $display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -1871,12 +1877,12 @@ task dumpaddr;
             WENB_int[8], WENB_int[7], WENB_int[6], WENB_int[5], WENB_int[4], WENB_int[3],
             WENB_int[2], WENB_int[1], WENB_int[0]};
         mem_path = (partial_mask & {128{1'bx}}) | (~partial_mask & mem_path);
-        #0;
+        //#0;
         QA_update = 1'b0;
-        #0;
+        //#0;
         QA_update = 1'b1;
          end else begin
-          $display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -1884,30 +1890,30 @@ task dumpaddr;
          end
       end else if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && COLLDISN_int === 1'b1 && row_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
-`ifdef ARM_MESSAGES
-          $display("%s row contention: in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s row contention: in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           ROW_CC = 1;
-`ifdef ARM_MESSAGES
-          $display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end else if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && (COLLDISN_int === 1'b0 || COLLDISN_int 
        === 1'bx) && row_contention(AA_int, AB_int, 1'b1, 1'b0)) begin
           ROW_CC = 1;
-          $display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, 0);
           READ_WRITE = 1;
         DB_int = {128{1'bx}};
         WriteB;
         if (col_contention(AA_int,AB_int)) begin
-          $display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, 0);
           COL_CC = 1;
           READ_WRITE = 1;
         XQA = 1'b1; QA_update = 1'b1;
       end else begin
-`ifdef ARM_MESSAGES
-          $display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end
       end
@@ -2144,22 +2150,22 @@ task dumpaddr;
       COLLDISN_int = 1'bx;
     end
     RET1N_int = RET1N_;
-    #0;
+    //#0;
         QA_update = 1'b0;
         DB_sh_update = 1'b0; 
-    #0;#0;  XDB_sh = 1'b0; 
+    //#0;//#0;  XDB_sh = 1'b0; 
   end
 
   always @ CLKB_ begin
 // If POWER_PINS is defined at Simulator Command Line, it selects the module definition with Power Ports
-`ifdef POWER_PINS
-    if (VDDCE === 1'bx || VDDCE === 1'bz)
-      $display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, $time);
-    if (VDDPE === 1'bx || VDDPE === 1'bz)
-      $display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, $time);
-    if (VSSE === 1'bx || VSSE === 1'bz)
-      $display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, $time);
-`endif
+// `ifdef POWER_PINS
+//     if (VDDCE === 1'bx || VDDCE === 1'bz)
+//       //$display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, 0);
+//     if (VDDPE === 1'bx || VDDPE === 1'bz)
+//       //$display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, 0);
+//     if (VSSE === 1'bx || VSSE === 1'bz)
+//       //$display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, 0);
+// `endif
 `ifdef POWER_PINS
   if (RET1N_ == 1'b0 && VDDPE == 1'b0) begin
 `else     
@@ -2226,12 +2232,12 @@ task dumpaddr;
       end else begin
       WriteB;
       end
-      if (CENB_int === 1'b0) previous_CLKB = $realtime;
-    #0;
+      if (CENB_int === 1'b0) previous_CLKB = `REALTIME;
+    //#0;
       if (((previous_CLKA == previous_CLKB)) && COLLDISN_int === 1'b1 && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && is_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
          if((|WENB_int) == 1'b1) begin
-          $display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -2261,12 +2267,12 @@ task dumpaddr;
             WENB_int[8], WENB_int[7], WENB_int[6], WENB_int[5], WENB_int[4], WENB_int[3],
             WENB_int[2], WENB_int[1], WENB_int[0]};
         mem_path = (partial_mask & {128{1'bx}}) | (~partial_mask & mem_path);
-        #0;
+        //#0;
         QA_update = 1'b0;
-        #0;
+        //#0;
         QA_update = 1'b1;
          end else begin
-          $display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -2274,30 +2280,30 @@ task dumpaddr;
          end
       end else if (((previous_CLKA == previous_CLKB)) && COLLDISN_int === 1'b1 && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && row_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
-`ifdef ARM_MESSAGES
-          $display("%s row contention: in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s row contention: in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           ROW_CC = 1;
-`ifdef ARM_MESSAGES
-          $display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end else if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && (COLLDISN_int === 1'b0 || COLLDISN_int 
        === 1'bx) && row_contention(AA_int, AB_int,1'b1, 1'b0)) begin
           ROW_CC = 1;
-          $display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, 0);
           READ_WRITE = 1;
         DB_int = {128{1'bx}};
         WriteB;
         if (col_contention(AA_int,AB_int)) begin
-          $display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, 0);
           COL_CC = 1;
           READ_WRITE = 1;
         XQA = 1'b1; QA_update = 1'b1;
       end else begin
-`ifdef ARM_MESSAGES
-          $display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end
       end
@@ -2444,16 +2450,16 @@ task dumpaddr;
 
 
 // If POWER_PINS is defined at Simulator Command Line, it selects the module definition with Power Ports
-`ifdef POWER_PINS
- always @ (VDDCE or VDDPE or VSSE) begin
-    if (VDDCE === 1'bx || VDDCE === 1'bz)
-      $display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, $time);
-    if (VDDPE === 1'bx || VDDPE === 1'bz)
-      $display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, $time);
-    if (VSSE === 1'bx || VSSE === 1'bz)
-      $display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, $time);
- end
-`endif
+// `ifdef POWER_PINS
+//  always @ (VDDCE or VDDPE or VSSE) begin
+//     if (VDDCE === 1'bx || VDDCE === 1'bz)
+//       //$display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, 0);
+//     if (VDDPE === 1'bx || VDDPE === 1'bz)
+//       //$display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, 0);
+//     if (VSSE === 1'bx || VSSE === 1'bz)
+//       //$display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, 0);
+//  end
+// `endif
 
   function row_contention;
     input [4:0] aa;
@@ -3612,23 +3618,23 @@ module rf2_32x128_wm1 (CENYA, AYA, CENYB, WENYB, AYB, QA, SOA, SOB, CLKA, CENA, 
 `ifdef INITIALIZE_MEMORY
   integer i;
   initial begin
-    #0;
+    //#0;
     for (i = 0; i < MEM_HEIGHT; i = i + 1)
       mem[i] = {MEM_WIDTH{1'b0}};
   end
 `endif
-  always @ (EMAA_) begin
-  	if(EMAA_ < 3) 
-   	$display("Warning: Set Value for EMAA doesn't match Default value 3 in %m at %0t", $time);
-  end
-  always @ (EMASA_) begin
-  	if(EMASA_ < 0) 
-   	$display("Warning: Set Value for EMASA doesn't match Default value 0 in %m at %0t", $time);
-  end
-  always @ (EMAB_) begin
-  	if(EMAB_ < 3) 
-   	$display("Warning: Set Value for EMAB doesn't match Default value 3 in %m at %0t", $time);
-  end
+  // always @ (EMAA_) begin
+  // 	if(EMAA_ < 3) 
+  //  	//$display("Warning: Set Value for EMAA doesn't match Default value 3 in %m at %0t", 0);
+  // end
+  // always @ (EMASA_) begin
+  // 	if(EMASA_ < 0) 
+  //  	//$display("Warning: Set Value for EMASA doesn't match Default value 0 in %m at %0t", 0);
+  // end
+  // always @ (EMAB_) begin
+  // 	if(EMAB_ < 3) 
+  //  	//$display("Warning: Set Value for EMAB doesn't match Default value 3 in %m at %0t", 0);
+  // end
 
   task failedWrite;
   input port_f;
@@ -3749,7 +3755,7 @@ task dumpmem;
 	reg [BITS-1:0] wordtemp;
 	reg [4:0] Atemp;
   begin
-	dump_file_desc = $fopen(filename_dump);
+	dump_file_desc = $fopen(filename_dump, "w");
      if (CENA_ === 1'b1 && CENB_ === 1'b1) begin
 	  for (i=0;i<WORDS;i=i+1) begin
 	  Atemp = i;
@@ -4141,24 +4147,24 @@ task dumpaddr;
   	end
   end
 
-`ifdef POWER_PINS
-  always @ (VDDCE) begin
-      if (VDDCE != 1'b1) begin
-       if (VDDPE == 1'b1) begin
-        $display("VDDCE should be powered down after VDDPE, Illegal power down sequencing in %m at %0t", $time);
-       end
-        $display("In PowerDown Mode in %m at %0t", $time);
-        failedWrite(0);
-      end
-      if (VDDCE == 1'b1) begin
-       if (VDDPE == 1'b1) begin
-        $display("VDDPE should be powered up after VDDCE in %m at %0t", $time);
-        $display("Illegal power up sequencing in %m at %0t", $time);
-       end
-        failedWrite(0);
-      end
-  end
-`endif
+// `ifdef POWER_PINS
+//   always @ (VDDCE) begin
+//       if (VDDCE != 1'b1) begin
+//        if (VDDPE == 1'b1) begin
+//         //$display("VDDCE should be powered down after VDDPE, Illegal power down sequencing in %m at %0t", 0);
+//        end
+//         //$display("In PowerDown Mode in %m at %0t", 0);
+//         failedWrite(0);
+//       end
+//       if (VDDCE == 1'b1) begin
+//        if (VDDPE == 1'b1) begin
+//         //$display("VDDPE should be powered up after VDDCE in %m at %0t", 0);
+//         //$display("Illegal power up sequencing in %m at %0t", 0);
+//        end
+//         failedWrite(0);
+//       end
+//   end
+// `endif
 `ifdef POWER_PINS
   always @ (RET1N_ or VDDPE or VDDCE) begin
 `else     
@@ -4235,13 +4241,13 @@ task dumpaddr;
       COLLDISN_int = 1'bx;
     end
     RET1N_int = RET1N_;
-    #0;
+    //#0;
         QA_update = 1'b0;
-    #0;#0;  XQA = 1'b0;
+    //#0;//#0;  XQA = 1'b0;
   end
 
   always @ (CLKB_ or DFTRAMBYP_p2) begin
-  	#0;
+  	//#0;
   	if(CLKB_ == 1'b1 && (DFTRAMBYP_int === 1'b1 || CENB_int != 1'b1)) begin
   	  if (RET1N_ == 1'b1) begin
 	        DB_sh_update = 1'b1; 
@@ -4251,14 +4257,14 @@ task dumpaddr;
 
   always @ CLKA_ begin
 // If POWER_PINS is defined at Simulator Command Line, it selects the module definition with Power Ports
-`ifdef POWER_PINS
-    if (VDDCE === 1'bx || VDDCE === 1'bz)
-      $display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, $time);
-    if (VDDPE === 1'bx || VDDPE === 1'bz)
-      $display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, $time);
-    if (VSSE === 1'bx || VSSE === 1'bz)
-      $display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, $time);
-`endif
+// `ifdef POWER_PINS
+//     if (VDDCE === 1'bx || VDDCE === 1'bz)
+//       //$display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, 0);
+//     if (VDDPE === 1'bx || VDDPE === 1'bz)
+//       //$display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, 0);
+//     if (VSSE === 1'bx || VSSE === 1'bz)
+//       //$display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, 0);
+// `endif
 `ifdef POWER_PINS
   if (RET1N_ == 1'b0 && VDDPE == 1'b0) begin
 `else     
@@ -4323,12 +4329,12 @@ task dumpaddr;
       end
       clk0_int = 1'b0;
     ReadA;
-      if (CENA_int === 1'b0) previous_CLKA = $realtime;
-    #0;
+      if (CENA_int === 1'b0) previous_CLKA = `REALTIME;
+    //#0;
       if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && COLLDISN_int === 1'b1 && is_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
          if((|WENB_int) == 1'b1) begin
-          $display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4358,12 +4364,12 @@ task dumpaddr;
             WENB_int[8], WENB_int[7], WENB_int[6], WENB_int[5], WENB_int[4], WENB_int[3],
             WENB_int[2], WENB_int[1], WENB_int[0]};
         mem_path = (partial_mask & {128{1'bx}}) | (~partial_mask & mem_path);
-        #0;
+        //#0;
         QA_update = 1'b0;
-        #0;
+        //#0;
         QA_update = 1'b1;
          end else begin
-          $display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4371,30 +4377,30 @@ task dumpaddr;
          end
       end else if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && COLLDISN_int === 1'b1 && row_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
-`ifdef ARM_MESSAGES
-          $display("%s row contention: in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s row contention: in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           ROW_CC = 1;
-`ifdef ARM_MESSAGES
-          $display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end else if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && (COLLDISN_int === 1'b0 || COLLDISN_int 
        === 1'bx) && row_contention(AA_int, AB_int, 1'b1, 1'b0)) begin
           ROW_CC = 1;
-          $display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, 0);
           READ_WRITE = 1;
         DB_int = {128{1'bx}};
         WriteB;
         if (col_contention(AA_int,AB_int)) begin
-          $display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, 0);
           COL_CC = 1;
           READ_WRITE = 1;
         XQA = 1'b1; QA_update = 1'b1;
       end else begin
-`ifdef ARM_MESSAGES
-          $display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end
       end
@@ -4413,7 +4419,7 @@ task dumpaddr;
   initial cont_flag0_int = 1'b0;
 
   always @ globalNotifier0 begin
-    if ($realtime == 0) begin
+    if (`REALTIME == 0) begin
     end else if ((EMAA_int[0] === 1'bx & DFTRAMBYP_int === 1'b1) || (EMAA_int[1] === 1'bx & DFTRAMBYP_int === 1'b1) || 
       (EMAA_int[2] === 1'bx & DFTRAMBYP_int === 1'b1) || (EMASA_int === 1'bx & DFTRAMBYP_int === 1'b1)
       ) begin
@@ -4436,7 +4442,7 @@ task dumpaddr;
       AB_int, 1'b1, 1'b0)) begin
       cont_flag0_int = 1'b0;
          if((|WENB_int) == 1'b1) begin
-          $display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4465,12 +4471,12 @@ task dumpaddr;
             WENB_int[8], WENB_int[7], WENB_int[6], WENB_int[5], WENB_int[4], WENB_int[3],
             WENB_int[2], WENB_int[1], WENB_int[0]};
         mem_path = (partial_mask & {128{1'bx}}) | (~partial_mask & mem_path);
-        #0;
+        //#0;
         QA_update = 1'b0;
-        #0;
+        //#0;
         QA_update = 1'b1;
          end else begin
-          $display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4480,26 +4486,26 @@ task dumpaddr;
      1'bx) && row_contention(AA_int, AB_int,1'b1, 1'b0)) begin
       cont_flag0_int = 1'b0;
           ROW_CC = 1;
-          $display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, 0);
           READ_WRITE = 1;
         DB_int = {128{1'bx}};
         WriteB;
         if (col_contention(AA_int,AB_int)) begin
-          $display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, 0);
           COL_CC = 1;
           READ_WRITE = 1;
         XQA = 1'b1; QA_update = 1'b1;
       end else begin
-`ifdef ARM_MESSAGES
-          $display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end
     end else begin
-      #0;#0;
+      //#0;//#0;
       ReadA;
    end
-      #0;
+      //#0;
         QA_update = 1'b0;
     globalNotifier0 = 1'b0;
   end
@@ -4727,22 +4733,22 @@ task dumpaddr;
       COLLDISN_int = 1'bx;
     end
     RET1N_int = RET1N_;
-    #0;
+    //#0;
         QA_update = 1'b0;
         DB_sh_update = 1'b0; 
-    #0;#0;  XDB_sh = 1'b0; 
+    //#0;//#0;  XDB_sh = 1'b0; 
   end
 
   always @ CLKB_ begin
 // If POWER_PINS is defined at Simulator Command Line, it selects the module definition with Power Ports
-`ifdef POWER_PINS
-    if (VDDCE === 1'bx || VDDCE === 1'bz)
-      $display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, $time);
-    if (VDDPE === 1'bx || VDDPE === 1'bz)
-      $display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, $time);
-    if (VSSE === 1'bx || VSSE === 1'bz)
-      $display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, $time);
-`endif
+// `ifdef POWER_PINS
+//     if (VDDCE === 1'bx || VDDCE === 1'bz)
+//       //$display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, 0);
+//     if (VDDPE === 1'bx || VDDPE === 1'bz)
+//       //$display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, 0);
+//     if (VSSE === 1'bx || VSSE === 1'bz)
+//       //$display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, 0);
+// `endif
 `ifdef POWER_PINS
   if (RET1N_ == 1'b0 && VDDPE == 1'b0) begin
 `else     
@@ -4809,12 +4815,12 @@ task dumpaddr;
       end else begin
       WriteB;
       end
-      if (CENB_int === 1'b0) previous_CLKB = $realtime;
-    #0;
+      if (CENB_int === 1'b0) previous_CLKB = `REALTIME;
+    //#0;
       if (((previous_CLKA == previous_CLKB)) && COLLDISN_int === 1'b1 && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && is_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
          if((|WENB_int) == 1'b1) begin
-          $display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4844,12 +4850,12 @@ task dumpaddr;
             WENB_int[8], WENB_int[7], WENB_int[6], WENB_int[5], WENB_int[4], WENB_int[3],
             WENB_int[2], WENB_int[1], WENB_int[0]};
         mem_path = (partial_mask & {128{1'bx}}) | (~partial_mask & mem_path);
-        #0;
+        //#0;
         QA_update = 1'b0;
-        #0;
+        //#0;
         QA_update = 1'b1;
          end else begin
-          $display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4857,30 +4863,30 @@ task dumpaddr;
          end
       end else if (((previous_CLKA == previous_CLKB)) && COLLDISN_int === 1'b1 && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && row_contention(AA_int,
         AB_int, 1'b1, 1'b0)) begin
-`ifdef ARM_MESSAGES
-          $display("%s row contention: in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s row contention: in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           ROW_CC = 1;
-`ifdef ARM_MESSAGES
-          $display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: write B succeeds, read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end else if (((previous_CLKA == previous_CLKB)) && (CENA_int !== 1'b1 && CENB_int !== 1'b1 && DFTRAMBYP_ !== 1'b1) && (COLLDISN_int === 1'b0 || COLLDISN_int 
        === 1'bx) && row_contention(AA_int, AB_int,1'b1, 1'b0)) begin
           ROW_CC = 1;
-          $display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, 0);
           READ_WRITE = 1;
         DB_int = {128{1'bx}};
         WriteB;
         if (col_contention(AA_int,AB_int)) begin
-          $display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, 0);
           COL_CC = 1;
           READ_WRITE = 1;
         XQA = 1'b1; QA_update = 1'b1;
       end else begin
-`ifdef ARM_MESSAGES
-          $display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
-`endif
+// `ifdef ARM_MESSAGES
+//           //$display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
+// `endif
           READ_WRITE = 1;
       end
       end
@@ -4898,7 +4904,7 @@ task dumpaddr;
   initial cont_flag1_int = 1'b0;
 
   always @ globalNotifier1 begin
-    if ($realtime == 0) begin
+    if (`REALTIME == 0) begin
     end else if ((EMAB_int[0] === 1'bx & DFTRAMBYP_int === 1'b1) || (EMAB_int[1] === 1'bx & DFTRAMBYP_int === 1'b1) || 
       (EMAB_int[2] === 1'bx & DFTRAMBYP_int === 1'b1)) begin
         XDB_sh = 1'b1; 
@@ -4924,7 +4930,7 @@ task dumpaddr;
       AB_int, 1'b1, 1'b0)) begin
       cont_flag1_int = 1'b0;
          if((|WENB_int) == 1'b1) begin
-          $display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B partially, read A partially in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4953,12 +4959,12 @@ task dumpaddr;
             WENB_int[8], WENB_int[7], WENB_int[6], WENB_int[5], WENB_int[4], WENB_int[3],
             WENB_int[2], WENB_int[1], WENB_int[0]};
         mem_path = (partial_mask & {128{1'bx}}) | (~partial_mask & mem_path);
-        #0;
+        //#0;
         QA_update = 1'b0;
-        #0;
+        //#0;
         QA_update = 1'b1;
          end else begin
-          $display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B succeeds, read A fails in %m at %0t",ASSERT_PREFIX, 0);
           ROW_CC = 1;
           COL_CC = 1;
           READ_WRITE = 1;
@@ -4968,26 +4974,26 @@ task dumpaddr;
      1'bx) && row_contention(AA_int, AB_int,1'b1, 1'b0)) begin
       cont_flag1_int = 1'b0;
           ROW_CC = 1;
-          $display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: write B fails in %m at %0t",ASSERT_PREFIX, 0);
           READ_WRITE = 1;
         DB_int = {128{1'bx}};
         WriteB;
         if (col_contention(AA_int,AB_int)) begin
-          $display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A fails in %m at %0t",ASSERT_PREFIX, 0);
           COL_CC = 1;
           READ_WRITE = 1;
         XQA = 1'b1; QA_update = 1'b1;
       end else begin
 `ifdef ARM_MESSAGES
-          $display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, $time);
+          //$display("%s contention: read A succeeds in %m at %0t",ASSERT_PREFIX, 0);
 `endif
           READ_WRITE = 1;
       end
     end else begin
-      #0;#0;
+      //#0;//#0;
       WriteB;
    end
-      #0;
+      //#0;
         DB_sh_update = 1'b0; 
     globalNotifier1 = 1'b0;
   end
@@ -5126,16 +5132,16 @@ task dumpaddr;
 
 
 // If POWER_PINS is defined at Simulator Command Line, it selects the module definition with Power Ports
-`ifdef POWER_PINS
- always @ (VDDCE or VDDPE or VSSE) begin
-    if (VDDCE === 1'bx || VDDCE === 1'bz)
-      $display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, $time);
-    if (VDDPE === 1'bx || VDDPE === 1'bz)
-      $display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, $time);
-    if (VSSE === 1'bx || VSSE === 1'bz)
-      $display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, $time);
- end
-`endif
+// `ifdef POWER_PINS
+//  always @ (VDDCE or VDDPE or VSSE) begin
+//     if (VDDCE === 1'bx || VDDCE === 1'bz)
+//       //$display("Warning: Unknown value for VDDCE %b in %m at %0t", VDDCE, 0);
+//     if (VDDPE === 1'bx || VDDPE === 1'bz)
+//       //$display("Warning: Unknown value for VDDPE %b in %m at %0t", VDDPE, 0);
+//     if (VSSE === 1'bx || VSSE === 1'bz)
+//       //$display("Warning: Unknown value for VSSE %b in %m at %0t", VSSE, 0);
+//  end
+// `endif
 
   function row_contention;
     input [4:0] aa;
@@ -15359,3 +15365,8 @@ begin
       Q_out = Q_in;
    end
 endmodule
+
+
+/* verilator lint_on UNUSED */
+
+

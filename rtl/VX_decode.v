@@ -33,9 +33,7 @@ module VX_decode(
 
 		assign VX_frE_to_bckE_req.curr_PC  = in_curr_PC;
 
-		wire            in_valid[`NT_M1:0];
-		genvar index;
-		for (index = 0; index <= `NT_M1; index = index + 1) assign in_valid[index] = fd_inst_meta_de.valid[index];
+		wire[`NT_M1:0]  in_valid = fd_inst_meta_de.valid;
 
 		wire[6:0]  curr_opcode;
 

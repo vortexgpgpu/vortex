@@ -10,6 +10,11 @@ unsigned z[1024] = {0};
 #define NUM_COLS 16
 #define NUM_ROWS 16
 
+double sc_time_stamp()
+{
+	return 0;
+}
+
 void initialize_mats()
 {
 	for (int i = 0; i < (MAT_DIM * MAT_DIM); i++)
@@ -36,14 +41,14 @@ int main()
 
 	// vx_print_hex(11);
 
-	initialize_mats();
+	// initialize_mats();
 
 	// matrix multiplication
 	// vx_sq_mat_mult(x, y, z, MAT_DIM);
 	// vx_print_str("\n\nMatrix multiplication\n");
 	// print_matrix(z);
 
-	print_matrix(x);
+	// print_matrix(x);
 
 	// // matrix addition
 	// vx_mat_add(x, y, z, NUM_ROWS, NUM_COLS);
