@@ -47,7 +47,7 @@ module VX_gpr_stage (
 	assign VX_gpr_jal.curr_PC = VX_bckE_req.curr_PC;
 
 
-	VX_gpr_data_inter           VX_gpr_datf;
+	VX_gpr_data_inter           VX_gpr_datf();
 
 
 	VX_gpr_wrapper vx_grp_wrapper(
@@ -65,12 +65,14 @@ module VX_gpr_stage (
 	// assign VX_bckE_req.is_csr   = is_csr;
 	// assign VX_bckE_req_out.csr_mask = (VX_bckE_req.sr_immed == 1'b1) ?  {27'h0, VX_bckE_req.rs1} : VX_gpr_data.a_reg_data[0];
 
+	wire zero_temp = 0;
+
 	VX_generic_register #(.N(256)) reg_data 
 	(
 		.clk  (clk),
-		.reset(0),
-		.stall(0),
-		.flush(0),
+		.reset(zero_temp),
+		.stall(zero_temp),
+		.flush(zero_temp),
 		.in   ({VX_gpr_datf.a_reg_data, VX_gpr_datf.b_reg_data}),
 		.out  ({VX_gpr_data.a_reg_data, VX_gpr_data.b_reg_data})
 	);
@@ -79,10 +81,10 @@ module VX_gpr_stage (
 
 	VX_d_e_reg gpr_stage_reg(
 			.clk               (clk),
-			.reset             (0),
+			.reset             (zero_temp),
 			.in_fwd_stall      (stall),
-			.in_branch_stall   (0),
-			.in_freeze         (0),
+			.in_branch_stall   (zero_temp),
+			.in_freeze         (zero_temp),
 			.in_gpr_stall      (out_gpr_stall),
 			.VX_frE_to_bckE_req(VX_bckE_req),
 			.VX_bckE_req       (VX_bckE_req_out)
