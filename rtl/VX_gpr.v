@@ -48,7 +48,7 @@ module VX_gpr (
 	// 	.q1    (out_b_reg_data)
 	// );
 
-	// wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
+	wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
 	/* verilator lint_off PINCONNECTEMPTY */
    rf2_32x128_wm1 first_ram (
          .CENYA(),
