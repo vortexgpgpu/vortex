@@ -16,9 +16,11 @@ module VX_generic_register
 
 	reg[N-1:0] value;
 
+	wire do_rest = reset || flush;
 
-	always @(posedge clk or posedge reset) begin
-		if (reset || flush) begin
+
+	always @(posedge clk) begin
+		if (do_rest) begin
 			value <= 0;
 		end else if (~stall) begin
 			value <= in;
