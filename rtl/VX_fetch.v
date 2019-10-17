@@ -79,7 +79,7 @@ module VX_fetch (
 		assign fe_inst_meta_fd.valid     = thread_mask;
 
 		// assign fe_inst_meta_fd.instruction = (pipe_stall || warp_stall) ? 32'b0 : icache_response.instruction;;
-		assign fe_inst_meta_fd.instruction = (thread_mask == 0) ? 32'0 : icache_response.instruction;;
+		assign fe_inst_meta_fd.instruction = (thread_mask == 0) ? 32'b0 : icache_response.instruction;;
 		assign fe_inst_meta_fd.inst_pc     = warp_pc;
 
 

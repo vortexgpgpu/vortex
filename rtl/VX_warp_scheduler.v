@@ -50,6 +50,25 @@ module VX_warp_scheduler (
 	reg[`NT_M1:0] thread_masks[`NW-1:0];
 	reg[31:0]     warp_pcs[`NW-1:0];
 
+
+	// Choosing a warp to wsapwn
+	wire[`NW_M1:0] warp_to_wsapwn;
+	wire           found_wspawn;
+
+	wire[`NW_M1:0] warp_to_schedule;
+	wire           schedule;
+
+	wire hazard;
+	wire global_stall;
+
+	wire real_schedule;
+
+	wire[31:0] new_pc;
+
+	/* verilator lint_off UNUSED */
+	wire[`NW_M1:0] num_active;
+	/* verilator lint_on UNUSED */
+
 	reg[1:0] start;
 	initial begin
 		warp_pcs[0] = (32'h80000000 - 4);
@@ -123,11 +142,11 @@ module VX_warp_scheduler (
 	wire should_jal = (jal && (warp_to_schedule == jal_warp_num));
 	wire should_bra = (branch_dir && (warp_to_schedule == branch_warp_num));
 
-	wire hazard = (should_jal || should_bra) && schedule;
+	assign hazard = (should_jal || should_bra) && schedule;
 
-	wire real_schedule = schedule && !warp_stalled[warp_to_schedule];
+	assign real_schedule = schedule && !warp_stalled[warp_to_schedule];
 
-	wire global_stall = (stall || wstall || hazard || !real_schedule);
+	assign global_stall = (stall || wstall || hazard || !real_schedule);
 
 
 	assign warp_pc     = warp_pcs[warp_to_schedule];
@@ -135,23 +154,19 @@ module VX_warp_scheduler (
 	assign warp_num    = warp_to_schedule;
 
 
-	wire[31:0] new_pc = warp_pc + 4;
+	assign new_pc = warp_pc + 4;
 
 
 	assign use_active = (num_active <= 1) ? (warp_active & (~warp_stalled)) : visible_active;
 
 	// Choosing a warp to schedule
-	wire[`NW_M1:0] warp_to_schedule;
-	wire           schedule;
 	VX_priority_encoder choose_schedule(
 		.valids(use_active),
 		.index (warp_to_schedule),
 		.found (schedule)
 	);
 
-	// Choosing a warp to wsapwn
-	wire[`NW_M1:0] warp_to_wsapwn;
-	wire           found_wspawn;
+
 	VX_priority_encoder choose_wsapwn(
 		.valids(~warp_active),
 		.index (warp_to_wsapwn),
@@ -160,9 +175,6 @@ module VX_warp_scheduler (
 
 
 	// Valid counter
-	/* verilator lint_off UNUSED */
-	wire[`NW_M1:0] num_active;
-	/* verilator lint_on UNUSED */
 	VX_one_counter valid_counter(
 		.valids(visible_active),
 		.ones_found(num_active)
