@@ -5,14 +5,14 @@ vortex_test.elf:     file format elf32-littleriscv
 Disassembly of section .text:
 
 80000000 <_start>:
-80000000:	00200593          	li	a1,2
-80000004:	00000013          	nop
-80000008:	00000013          	nop
-8000000c:	00000013          	nop
-80000010:	00058613          	mv	a2,a1
-80000014:	00000013          	nop
-80000018:	00000013          	nop
-8000001c:	00000013          	nop
+80000000:	00800513          	li	a0,8
+80000004:	02051073          	csrw	0x20,a0
+80000008:	00400513          	li	a0,4
+8000000c:	02151073          	csrw	0x21,a0
+80000010:	f1401073          	csrw	mhartid,zero
+80000014:	30101073          	csrw	misa,zero
+80000018:	7ffff137          	lui	sp,0x7ffff
+8000001c:	0b9010ef          	jal	ra,800018d4 <main>
 80000020:	00000073          	ecall
 
 80000024 <vx_createThreads>:
@@ -28,7 +28,7 @@ Disassembly of section .text:
 80000038:	00755c63          	bge	a0,t2,80000050 <loop_done>
 
 8000003c <loop_body>:
-8000003c:	80010113          	addi	sp,sp,-2048
+8000003c:	80010113          	addi	sp,sp,-2048 # 7fffe800 <SIZE+0x7fffe7ce>
 80000040:	00050313          	mv	t1,a0
 80000044:	0003506b          	0x3506b
 
@@ -1693,13 +1693,19 @@ Disassembly of section .text:
 
 800018d4 <main>:
 800018d4:	ff010113          	addi	sp,sp,-16
-800018d8:	00812623          	sw	s0,12(sp)
-800018dc:	01010413          	addi	s0,sp,16
-800018e0:	00000793          	li	a5,0
-800018e4:	00078513          	mv	a0,a5
-800018e8:	00c12403          	lw	s0,12(sp)
-800018ec:	01010113          	addi	sp,sp,16
-800018f0:	00008067          	ret
+800018d8:	00112623          	sw	ra,12(sp)
+800018dc:	00812423          	sw	s0,8(sp)
+800018e0:	01010413          	addi	s0,sp,16
+800018e4:	ed5ff0ef          	jal	ra,800017b8 <initialize_mats>
+800018e8:	810267b7          	lui	a5,0x81026
+800018ec:	21c78513          	addi	a0,a5,540 # 8102621c <barrier_bool+0xffffcf58>
+800018f0:	f3dff0ef          	jal	ra,8000182c <print_matrix>
+800018f4:	00000793          	li	a5,0
+800018f8:	00078513          	mv	a0,a5
+800018fc:	00c12083          	lw	ra,12(sp)
+80001900:	00812403          	lw	s0,8(sp)
+80001904:	01010113          	addi	sp,sp,16
+80001908:	00008067          	ret
 
 Disassembly of section .rodata:
 
