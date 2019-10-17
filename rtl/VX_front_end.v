@@ -84,10 +84,12 @@ VX_decode vx_decode(
 
 wire special_what = total_freeze || forwarding_fwd_stall;
 
+wire temp_fwd_stall = 0;
+
 VX_d_e_reg vx_d_e_reg(
 		.clk            (clk),
 		.reset          (reset),
-		.in_fwd_stall   (0),
+		.in_fwd_stall   (temp_fwd_stall),
 		.in_branch_stall(execute_branch_stall),
 		.in_freeze      (special_what),
 		.in_gpr_stall (decode_gpr_stall),
