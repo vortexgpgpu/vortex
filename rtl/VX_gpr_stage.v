@@ -47,6 +47,9 @@ module VX_gpr_stage (
 	assign VX_gpr_jal.curr_PC = VX_bckE_req.curr_PC;
 
 
+	VX_gpr_data_inter           VX_gpr_datf;
+
+
 	VX_gpr_wrapper vx_grp_wrapper(
 			.clk            (clk),
 			.VX_writeback_inter(VX_writeback_inter),
@@ -62,7 +65,6 @@ module VX_gpr_stage (
 	// assign VX_bckE_req.is_csr   = is_csr;
 	// assign VX_bckE_req_out.csr_mask = (VX_bckE_req.sr_immed == 1'b1) ?  {27'h0, VX_bckE_req.rs1} : VX_gpr_data.a_reg_data[0];
 
-	VX_gpr_data_inter           VX_gpr_datf;
 	VX_generic_register #(.N(256)) reg_data 
 	(
 		.clk  (clk),
