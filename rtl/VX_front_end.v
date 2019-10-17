@@ -9,6 +9,7 @@ module VX_front_end (
 
 	input wire           execute_branch_stall,
 	input wire           in_gpr_stall,
+	input wire           schedule_delay,
 
 	VX_warp_ctl_inter         VX_warp_ctl,
 
@@ -18,7 +19,6 @@ module VX_front_end (
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
 
-	VX_wb_inter               VX_writeback_inter,
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 
 
@@ -38,7 +38,7 @@ wire           decode_branch_stall;
 wire           decode_gpr_stall;
 
 
-wire total_freeze = memory_delay || fetch_delay || in_gpr_stall;
+wire total_freeze = memory_delay || fetch_delay || in_gpr_stall || schedule_delay;
 
 /* verilator lint_off UNUSED */
 wire real_fetch_ebreak;
@@ -49,6 +49,7 @@ VX_fetch vx_fetch(
 		.in_memory_delay    (memory_delay),
 		.in_branch_stall    (decode_branch_stall),
 		.in_fwd_stall       (forwarding_fwd_stall),
+		.schedule_delay     (schedule_delay),
 		.in_branch_stall_exe(execute_branch_stall),
 		.in_gpr_stall     (decode_gpr_stall),
 		.VX_jal_rsp         (VX_jal_rsp),

@@ -1,6 +1,7 @@
 module VX_gpr_stage (
 	input wire                 clk,
 	input wire                 in_fwd_stall,
+	input wire                 schedule_delay,
 	// inputs
 		// Instruction Information
 	VX_frE_to_bckE_req_inter   VX_bckE_req,
@@ -62,7 +63,7 @@ module VX_gpr_stage (
 	// assign VX_bckE_req_out.csr_mask = (VX_bckE_req.sr_immed == 1'b1) ?  {27'h0, VX_bckE_req.rs1} : VX_gpr_data.a_reg_data[0];
 
 	VX_gpr_data_inter           VX_gpr_datf;
-	VX_generic_register #(.N(256)) d_e_reg 
+	VX_generic_register #(.N(256)) reg_data 
 	(
 		.clk  (clk),
 		.reset(0),
@@ -72,10 +73,12 @@ module VX_gpr_stage (
 		.out  ({VX_gpr_data.a_reg_data, VX_gpr_data.b_reg_data})
 	);
 
-	VX_d_e_reg vx_d_e_reg(
+	wire stall = in_fwd_stall || schedule_delay;
+
+	VX_d_e_reg gpr_stage_reg(
 			.clk               (clk),
 			.reset             (0),
-			.in_fwd_stall      (in_fwd_stall),
+			.in_fwd_stall      (stall),
 			.in_branch_stall   (0),
 			.in_freeze         (0),
 			.in_gpr_stall      (out_gpr_stall),

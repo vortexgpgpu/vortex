@@ -8,6 +8,7 @@ module VX_fetch (
 	input  wire           in_fwd_stall,
 	input  wire           in_branch_stall_exe,
 	input  wire           in_gpr_stall,
+	input  wire           schedule_delay,
 	VX_icache_response_inter icache_response,
 	VX_icache_request_inter icache_request,
 
@@ -28,7 +29,7 @@ module VX_fetch (
 		wire warp_stall;
 
 
-		assign pipe_stall = in_gpr_stall || in_fwd_stall || in_freeze;
+		assign pipe_stall = in_gpr_stall || in_fwd_stall || in_freeze || schedule_delay;
 
 		assign warp_stall = in_branch_stall || (in_branch_stall_exe && 0);
 

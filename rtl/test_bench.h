@@ -372,11 +372,11 @@ bool Vortex::simulate(std::string file_to_simulate)
     // unsigned cycles;
     counter = 0;
     this->stats_total_cycles = 10;
-    while (this->stop && ((counter < 5)))
+    while (this->stop && ((counter < 6)))
     // while (this->stats_total_cycles < 10)
     {
         // std::cout << "Counter: " << counter << "\n";
-        if ((this->stats_total_cycles) % 5000 == 0) std::cout << "************* Cycle: " << (this->stats_total_cycles) << "\n";
+        // if ((this->stats_total_cycles) % 5000 == 0) std::cout << "************* Cycle: " << (this->stats_total_cycles) << "\n";
         // dstop = !dbus_driver();
 
         vortex->clk = 1;

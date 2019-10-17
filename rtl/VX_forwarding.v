@@ -111,7 +111,8 @@ module VX_forwarding (
 			                      (!src1_mem_fwd));
 
 
-		assign out_src1_fwd  = src1_exe_fwd || src1_mem_fwd || (src1_wb_fwd && 0);
+		// assign out_src1_fwd  = src1_exe_fwd || src1_mem_fwd || (src1_wb_fwd && 0);
+		assign out_src1_fwd  = 0;
 
 
 
@@ -137,15 +138,19 @@ module VX_forwarding (
 		                (in_writeback_warp_num == in_decode_warp_num);
 
 
-		assign out_src2_fwd  = src2_exe_fwd || src2_mem_fwd || (src2_wb_fwd && 0);
+		// assign out_src2_fwd  = src2_exe_fwd || src2_mem_fwd || (src2_wb_fwd && 0);
+		assign out_src2_fwd  = 0;
 
 
 
 
-		wire exe_mem_read_stall = ((src1_exe_fwd || src2_exe_fwd) && exe_mem_read) ? `STALL : `NO_STALL;
-		wire mem_mem_read_stall = ((src1_mem_fwd || src2_mem_fwd) && mem_mem_read) ? `STALL : `NO_STALL;
+		// wire exe_mem_read_stall = ((src1_exe_fwd || src2_exe_fwd) && exe_mem_read) ? `STALL : `NO_STALL;
+		// wire mem_mem_read_stall = ((src1_mem_fwd || src2_mem_fwd) && mem_mem_read) ? `STALL : `NO_STALL;
+		wire exe_mem_read_stall = `NO_STALL;
+		wire mem_mem_read_stall = `NO_STALL;
 
-		assign out_fwd_stall = exe_mem_read_stall || mem_mem_read_stall; 
+		// assign out_fwd_stall = exe_mem_read_stall || mem_mem_read_stall; 
+		assign out_fwd_stall = 0; 
 
 		// always @(*) begin
 		// 	if (out_fwd_stall) $display("FWD STALL");

@@ -3,7 +3,7 @@ all: RUNFILE
 # -LDFLAGS '-lsystemc'
 VERILATOR:
 	echo "#define VCD_OFF" > tb_debug.h
-	verilator --compiler gcc -Wno-fatal -Wno-UNOPTFLAT -Wno-UNDRIVEN -Wno-UNSIGNED -Wno-lint -cc Vortex.v -I. -I../models/memory/cln28hpc/rf2_32x128_wm1/ -I/usr/local/systemc/ -Iinterfaces/ -Ipipe_regs/ --exe test_bench.cpp -CFLAGS '-std=c++11 -O3' -LDFLAGS '-L/usr/local/systemc/'
+	verilator --compiler gcc --Wno-PINMISSING -cc Vortex.v -I. -I../models/memory/cln28hpc/rf2_32x128_wm1/ -I/usr/local/systemc/ -Iinterfaces/ -Ipipe_regs/ --exe test_bench.cpp -CFLAGS '-std=c++11 -O3' -LDFLAGS '-L/usr/local/systemc/'
 
 compdebug:
 	echo "#define VCD_OUTPUT" > tb_debug.h

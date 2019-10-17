@@ -73,6 +73,7 @@ VX_warp_ctl_inter        VX_warp_ctl();
 
 
 wire out_gpr_stall;
+wire schedule_delay;
 
 
 VX_front_end vx_front_end(
@@ -81,11 +82,11 @@ VX_front_end vx_front_end(
 	.VX_warp_ctl         (VX_warp_ctl),
 	.forwarding_fwd_stall(forwarding_fwd_stall),
 	.execute_branch_stall(execute_branch_stall),
-	.VX_writeback_inter  (VX_writeback_inter),
 	.VX_bckE_req         (VX_bckE_req),
 	.decode_csr_address  (decode_csr_address),
 	.memory_delay        (memory_delay),
 	.fetch_delay         (fetch_delay),
+	.schedule_delay      (schedule_delay),
 	.icache_response_fe  (icache_response_fe),
 	.icache_request_fe   (icache_request_fe),
 	.VX_jal_rsp          (VX_jal_rsp),
@@ -94,10 +95,17 @@ VX_front_end vx_front_end(
 	.in_gpr_stall        (out_gpr_stall)
 	);
 
+VX_scheduler schedule(
+	.clk               (clk),
+	.VX_bckE_req       (VX_bckE_req),
+	.VX_writeback_inter(VX_writeback_inter),
+	.schedule_delay    (schedule_delay)
+	);
 
 VX_back_end vx_back_end(
 	.clk                 (clk),
 	.reset               (reset),
+	.schedule_delay      (schedule_delay),
 	.fetch_delay         (fetch_delay),
 	.in_fwd_stall        (forwarding_fwd_stall),
 	.VX_fwd_req_de       (VX_fwd_req_de),

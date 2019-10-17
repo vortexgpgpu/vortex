@@ -2,8 +2,9 @@ module VX_back_end (
 	input wire clk, 
 	input wire reset, 
 	input wire fetch_delay,
+	input wire schedule_delay,
 
-	input wire[31:0]        csr_decode_csr_data,
+	input wire[31:0]         csr_decode_csr_data,
 	output wire              execute_branch_stall,
 	input wire               in_fwd_stall,
 
@@ -64,6 +65,7 @@ VX_frE_to_bckE_req_inter VX_bckE_req_out();
 
 VX_gpr_stage VX_gpr_stage(
 	.clk               (clk),
+	.schedule_delay    (schedule_delay),
 	.VX_writeback_inter(VX_writeback_inter),
 	.VX_fwd_rsp        (VX_fwd_rsp),
 	.in_fwd_stall      (in_fwd_stall),
