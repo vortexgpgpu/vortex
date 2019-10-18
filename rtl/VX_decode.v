@@ -36,10 +36,11 @@ module VX_decode(
 		wire       is_e_inst;
 
 		wire       is_gpgpu;
-		// wire       is_clone;
-		wire       is_jalrs;
-		wire       is_jmprt;
 		wire       is_wspawn;
+		wire       is_tmc;
+		wire       is_split;
+		wire       is_join;
+		wire       is_barrier;
 
 		wire[2:0]  func3;
 		wire[6:0]  func7;
@@ -110,38 +111,26 @@ module VX_decode(
 		assign is_e_inst    = (curr_opcode == `SYS_INST) && (func3 == 0);
 
 		assign is_gpgpu     = (curr_opcode == `GPGPU_INST);
-		// assign is_clone     = is_gpgpu && (func3 == 5);
-		assign is_jalrs     = is_gpgpu && (func3 == 6);
-		assign is_jmprt     = is_gpgpu && (func3 == 4);
-		assign is_wspawn    = is_gpgpu && (func3 == 0);
+
+		assign is_tmc       = is_gpgpu && (func3 == 0); // Goes to BE
+		assign is_wspawn    = is_gpgpu && (func3 == 1); // Goes to BE
+		assign is_barrier   = is_gpgpu && (func3 == 4); // Goes to BE
+		assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
+		assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
+
+		assign VX_frE_to_bckE_req.is_wspawn  = is_wspawn;
+		assign VX_frE_to_bckE_req.is_tmc     = is_tmc;
+		assign VX_frE_to_bckE_req.is_split   = is_split;
+		assign VX_frE_to_bckE_req.is_barrier = is_barrier;
+
 
 
 		assign VX_frE_to_bckE_req.csr_immed = is_csr_immed;
-		assign VX_frE_to_bckE_req.wspawn    = is_wspawn;
 
 
 
-		// wire[`NT_M1:0] jalrs_thread_mask = 0;
-		// wire[`NT_M1:0] jmprt_thread_mask;
 
-		// genvar tm_i;
-		// generate
-		// 	for (tm_i = 0; tm_i < `NT; tm_i = tm_i + 1) begin
-		// 			assign jalrs_thread_mask[tm_i] = $signed(tm_i) <= $signed(VX_frE_to_bckE_req.b_reg_data[0]);
-		// 	end
-		// endgenerate
-
-
-		// genvar tm_ji;
-		// generate
-		// 	assign jmprt_thread_mask[0] = 1;
-		// 	for (tm_ji = 1; tm_ji < `NT; tm_ji = tm_ji + 1) begin
-		// 			assign jmprt_thread_mask[tm_ji] = 0;
-		// 	end
-		// endgenerate
-
-
-		assign VX_frE_to_bckE_req.wb       = (is_jal || is_jalr || is_jalrs || is_e_inst) ? `WB_JAL :
+		assign VX_frE_to_bckE_req.wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :
 			                   					is_linst ? `WB_MEM :
 			                   	     				(is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
 			                   	     	    			`NO_WB;
@@ -199,14 +188,6 @@ module VX_decode(
 					begin
 		        		temp_jal        = 1'b1 && in_valid[0];
 						temp_jal_offset = jal_2_offset;
-					end
-				`GPGPU_INST:
-					begin
-						if (is_jalrs || is_jmprt)
-						begin
-			        		temp_jal        = 1'b1 && in_valid[0];
-							temp_jal_offset = 32'h0;
-						end
 					end
 				`SYS_INST:
 					begin
@@ -293,14 +274,6 @@ module VX_decode(
 						temp_branch_type  = `NO_BRANCH;
 						temp_branch_stall = 1'b1 && in_valid[0];
 					end
-				`GPGPU_INST:
-					begin
-						if (is_jalrs || is_jmprt)
-						begin
-							temp_branch_type  = `NO_BRANCH;
-							temp_branch_stall = 1'b1 && in_valid[0];
-						end
-					end
 				default:
 					begin
 						temp_branch_type  = `NO_BRANCH;
@@ -311,7 +284,7 @@ module VX_decode(
 
 		assign VX_frE_to_bckE_req.branch_type = temp_branch_type;
 
-		assign VX_wstall.wstall               = temp_branch_stall && in_valid[0];
+		assign VX_wstall.wstall               = (temp_branch_stall || is_tmc || is_split || is_join || is_barrier) && (|in_valid);
 		assign VX_wstall.warp_num             = in_warp_num;
 
 		always @(*) begin

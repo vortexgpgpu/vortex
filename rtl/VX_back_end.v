@@ -52,12 +52,15 @@ VX_inst_mem_wb_inter     VX_mem_wb();
 VX_exec_unit_req_inter   VX_exec_unit_req();
 VX_inst_exec_wb_inter    VX_inst_exec_wb();
 
+
+// GPU unit input
+VX_gpu_inst_req_inter    VX_gpu_inst_req();
+
 VX_gpr_stage VX_gpr_stage(
 	.clk               (clk),
 	.schedule_delay    (schedule_delay),
 	.VX_writeback_inter(VX_writeback_inter),
 	.VX_bckE_req       (VX_bckE_req),
-	.VX_warp_ctl       (VX_warp_ctl),
 	.VX_bckE_req_out   (VX_bckE_req_out),
 	.VX_gpr_data       (VX_gpr_data)
 	);
@@ -67,7 +70,8 @@ VX_inst_multiplex VX_inst_mult(
 	.VX_bckE_req     (VX_bckE_req_out),
 	.VX_gpr_data     (VX_gpr_data),
 	.VX_exec_unit_req(VX_exec_unit_req),
-	.VX_lsu_req      (VX_lsu_req)
+	.VX_lsu_req      (VX_lsu_req),
+	.VX_gpu_inst_req (VX_gpu_inst_req)
 	);
 
 
@@ -92,6 +96,12 @@ VX_execute_unit VX_execUnit(
 	.out_csr_address (VX_csr_w_req.csr_address),
 	.out_is_csr      (VX_csr_w_req.is_csr),
 	.out_csr_result  (VX_csr_w_req.csr_result)
+	);
+
+
+VX_gpgpu_inst VX_gpgpu_inst(
+	.VX_gpu_inst_req(VX_gpu_inst_req),
+	.VX_warp_ctl    (VX_warp_ctl)
 	);
 
 VX_writeback VX_wb(

@@ -11,8 +11,6 @@ module VX_gpr_stage (
 
 
 	// Outputs
-		// Warp Control
-	VX_warp_ctl_inter          VX_warp_ctl,
 		// Original Request 1 cycle later
 	VX_frE_to_bckE_req_inter   VX_bckE_req_out,
 		// Data Read
@@ -74,23 +72,5 @@ module VX_gpr_stage (
 			.VX_frE_to_bckE_req(VX_bckE_req),
 			.VX_bckE_req       (VX_bckE_req_out)
 		);
-
-
-	// assign VX_warp_ctl.warp_num    = VX_bckE_req_out.warp_num;
-	// assign VX_warp_ctl.wspawn      = VX_bckE_req_out.wspawn;
-	// assign VX_warp_ctl.wspawn_pc   = VX_bckE_req_out.a_reg_data[0];
-
-	// assign VX_warp_ctl.thread_mask = is_jalrs ? jalrs_thread_mask : jmprt_thread_mask;
-	// assign VX_warp_ctl.change_mask = is_jalrs || is_jmprt;
-	// assign VX_warp_ctl.ebreak      = VX_bckE_req_out.ebreak;
-
-
-	assign VX_warp_ctl.warp_num    = 0;
-	assign VX_warp_ctl.wspawn      = 0;
-	assign VX_warp_ctl.wspawn_pc   = 0;
-
-	assign VX_warp_ctl.thread_mask = 0;
-	assign VX_warp_ctl.change_mask = 0;
-	assign VX_warp_ctl.ebreak      = 0;
 
 endmodule

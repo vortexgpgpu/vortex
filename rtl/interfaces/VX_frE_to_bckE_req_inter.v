@@ -25,7 +25,6 @@ interface VX_frE_to_bckE_req_inter ();
 	wire[31:0]           curr_PC;
 	/* verilator lint_off UNUSED */
 	wire                 ebreak;
-	wire                 wspawn;
 	/* verilator lint_on UNUSED */
 	wire                 jalQual;
 	wire                 jal;
@@ -33,6 +32,12 @@ interface VX_frE_to_bckE_req_inter ();
 	wire[31:0]           PC_next;
 	wire[`NT_M1:0]       valid;
 	wire[`NW_M1:0]       warp_num;
+
+	// GPGPU stuff
+	wire                 is_wspawn;
+	wire                 is_tmc;   
+	wire                 is_split; 
+	wire                 is_barrier;
 
 
 endinterface
