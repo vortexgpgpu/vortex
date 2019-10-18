@@ -4,6 +4,7 @@
 
 module VX_scheduler (
 	input wire                clk,
+	input wire                memory_delay,
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,
 
@@ -38,7 +39,7 @@ module VX_scheduler (
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual ;
 
 
-	assign schedule_delay = (rename_valid) && (|VX_bckE_req.valid);
+	assign schedule_delay = (rename_valid) && (|VX_bckE_req.valid) || memory_delay;
 
 
 	always @(posedge clk) begin

@@ -4,7 +4,6 @@ module VX_front_end (
 	input wire clk,
 	input wire reset,
 
-	input wire           memory_delay,
 	input wire           schedule_delay,
 
 	VX_warp_ctl_inter         VX_warp_ctl,
@@ -19,7 +18,6 @@ module VX_front_end (
 
 
 	output wire[11:0] decode_csr_address,
-	output wire fetch_delay,
 	output wire fetch_ebreak
 );
 
@@ -33,7 +31,7 @@ VX_inst_meta_inter       fd_inst_meta_de();
 wire           decode_branch_stall;
 
 
-wire total_freeze = memory_delay || fetch_delay || schedule_delay;
+wire total_freeze = schedule_delay;
 
 /* verilator lint_off UNUSED */
 wire real_fetch_ebreak;
@@ -45,7 +43,6 @@ VX_wstall_inter          VX_wstall();
 VX_fetch vx_fetch(
 		.clk                (clk),
 		.VX_wstall          (VX_wstall),
-		.in_memory_delay    (memory_delay),
 		.schedule_delay     (schedule_delay),
 		.VX_jal_rsp         (VX_jal_rsp),
 		.icache_response    (icache_response_fe),
@@ -53,7 +50,6 @@ VX_fetch vx_fetch(
 
 		.icache_request     (icache_request_fe),
 		.VX_branch_rsp      (VX_branch_rsp),
-		.out_delay          (fetch_delay),
 		.out_ebreak         (real_fetch_ebreak), // fetch_ebreak
 		.fe_inst_meta_fd    (fe_inst_meta_fd)
 	);

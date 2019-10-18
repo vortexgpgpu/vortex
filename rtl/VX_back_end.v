@@ -1,7 +1,6 @@
 module VX_back_end (
 	input wire clk, 
 	input wire reset, 
-	input wire fetch_delay,
 	input wire schedule_delay,
 
 	input wire[31:0]          csr_decode_csr_data,
@@ -23,12 +22,6 @@ module VX_back_end (
 	VX_csr_write_request_inter VX_csr_w_req
 );
 
-wire   memory_delay;
-
-assign out_mem_delay = memory_delay;
-
-
-wire total_freeze = fetch_delay || memory_delay;
 
 wire[11:0]      execute_csr_address;
 wire            execute_is_csr;
@@ -84,7 +77,7 @@ VX_lsu load_store_unit(
 	.VX_mem_wb    (VX_mem_wb),
 	.VX_dcache_rsp(VX_dcache_rsp),
 	.VX_dcache_req(VX_dcache_req),
-	.out_delay    (memory_delay)
+	.out_delay    (out_mem_delay)
 	);
 
 

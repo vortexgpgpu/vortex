@@ -43,14 +43,12 @@ assign icache_request_pc_address      = icache_request_fe.pc_address;
 
 // Front-end to Back-end
 VX_frE_to_bckE_req_inter      VX_bckE_req(); // New instruction request to EXE/MEM
-wire                          fetch_delay;
 
 
 // Back-end to Front-end
 VX_wb_inter                   VX_writeback_inter(); // Writeback to GPRs
 VX_branch_response_inter      VX_branch_rsp();      // Branch Resolution to Fetch
 VX_jal_response_inter         VX_jal_rsp();         // Jump resolution to Fetch
-wire                          memory_delay;
 
 // CSR Buses
 VX_csr_write_request_inter VX_csr_w_req();
@@ -61,6 +59,7 @@ wire[11:0]                 decode_csr_address;
 VX_warp_ctl_inter        VX_warp_ctl();
 
 
+wire memory_delay;
 wire schedule_delay;
 
 
@@ -70,8 +69,6 @@ VX_front_end vx_front_end(
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
 	.decode_csr_address  (decode_csr_address),
-	.memory_delay        (memory_delay),
-	.fetch_delay         (fetch_delay),
 	.schedule_delay      (schedule_delay),
 	.icache_response_fe  (icache_response_fe),
 	.icache_request_fe   (icache_request_fe),
@@ -82,6 +79,7 @@ VX_front_end vx_front_end(
 
 VX_scheduler schedule(
 	.clk               (clk),
+	.memory_delay      (memory_delay),
 	.VX_bckE_req       (VX_bckE_req),
 	.VX_writeback_inter(VX_writeback_inter),
 	.schedule_delay    (schedule_delay)
@@ -91,7 +89,6 @@ VX_back_end vx_back_end(
 	.clk                 (clk),
 	.reset               (reset),
 	.schedule_delay      (schedule_delay),
-	.fetch_delay         (fetch_delay),
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
 	.csr_decode_csr_data (csr_decode_csr_data),

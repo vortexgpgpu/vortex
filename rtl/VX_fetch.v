@@ -3,13 +3,11 @@
 
 module VX_fetch (
 	input  wire              clk,
-	input  wire              in_memory_delay,
 	VX_wstall_inter          VX_wstall,
 	input  wire              schedule_delay,
 	VX_icache_response_inter icache_response,
 	VX_icache_request_inter  icache_request,
 
-	output wire              out_delay,
 	output wire              out_ebreak,
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
@@ -17,15 +15,11 @@ module VX_fetch (
 	VX_warp_ctl_inter        VX_warp_ctl
 );
 
-		// Inputs
-		wire in_freeze = out_delay || in_memory_delay;
-
-
 		// Locals
 		wire pipe_stall;
 
 
-		assign pipe_stall = in_freeze || schedule_delay;
+		assign pipe_stall = schedule_delay;
 
 		wire[`NT_M1:0] thread_mask;
 		wire[`NW_M1:0] warp_num;
@@ -65,8 +59,6 @@ module VX_fetch (
 			.out_ebreak     (out_ebreak)
 			);
 	
-
-		assign out_delay        = 0;
 
 		assign icache_request.pc_address = warp_pc;
 		assign fe_inst_meta_fd.warp_num  = warp_num;
