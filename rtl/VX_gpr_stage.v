@@ -16,9 +16,7 @@ module VX_gpr_stage (
 		// Original Request 1 cycle later
 	VX_frE_to_bckE_req_inter   VX_bckE_req_out,
 		// Data Read
-	VX_gpr_data_inter          VX_gpr_data,
-
-	output wire                out_gpr_stall
+	VX_gpr_data_inter          VX_gpr_data
 );
 
 
@@ -47,8 +45,7 @@ module VX_gpr_stage (
 			.VX_gpr_jal        (VX_gpr_jal),
 
 			.out_a_reg_data (VX_gpr_datf.a_reg_data),
-			.out_b_reg_data (VX_gpr_datf.b_reg_data),
-			.out_gpr_stall(out_gpr_stall)
+			.out_b_reg_data (VX_gpr_datf.b_reg_data)
 		);
 
 	// assign VX_bckE_req.is_csr   = is_csr;
@@ -66,13 +63,14 @@ module VX_gpr_stage (
 		.out  ({VX_gpr_data.a_reg_data, VX_gpr_data.b_reg_data})
 	);
 
+	wire stall = schedule_delay;
+
 
 	VX_d_e_reg gpr_stage_reg(
 			.clk               (clk),
 			.reset             (zero_temp),
-			.in_branch_stall   (schedule_delay),
+			.in_branch_stall   (stall),
 			.in_freeze         (zero_temp),
-			.in_gpr_stall      (out_gpr_stall),
 			.VX_frE_to_bckE_req(VX_bckE_req),
 			.VX_bckE_req       (VX_bckE_req_out)
 		);

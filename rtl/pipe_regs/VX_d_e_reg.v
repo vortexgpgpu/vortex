@@ -7,7 +7,6 @@ module VX_d_e_reg (
 		input wire               reset,
 		input wire               in_branch_stall,
 		input wire               in_freeze,
-		input wire               in_gpr_stall,
 		VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
 
 
@@ -16,7 +15,7 @@ module VX_d_e_reg (
 
 
 		wire stall = in_freeze;
-		wire flush = (in_branch_stall == `STALL) || (in_gpr_stall == `STALL);
+		wire flush = (in_branch_stall == `STALL);
 
 
 	VX_generic_register #(.N(237)) d_e_reg 

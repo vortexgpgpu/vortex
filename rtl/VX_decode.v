@@ -7,13 +7,10 @@ module VX_decode(
 
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
-	output reg               out_gpr_stall,
-	output reg               out_branch_stall,
+	VX_wstall_inter          VX_wstall,
 	output wire              out_ebreak
 
 );
-
-		assign out_gpr_stall = 0;
 
 		wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
 		wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
@@ -313,7 +310,9 @@ module VX_decode(
 		end
 
 		assign VX_frE_to_bckE_req.branch_type = temp_branch_type;
-		assign out_branch_stall               = temp_branch_stall && in_valid[0];
+
+		assign VX_wstall.wstall               = temp_branch_stall && in_valid[0];
+		assign VX_wstall.warp_num             = in_warp_num;
 
 		always @(*) begin
 			// ALU OP

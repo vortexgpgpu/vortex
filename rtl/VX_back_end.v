@@ -5,10 +5,7 @@ module VX_back_end (
 	input wire schedule_delay,
 
 	input wire[31:0]          csr_decode_csr_data,
-	output wire               execute_branch_stall,
-
 	output wire               out_mem_delay,
-	output wire               out_gpr_stall,
 
 	VX_jal_response_inter     VX_jal_rsp,
 	VX_branch_response_inter  VX_branch_rsp,
@@ -69,8 +66,7 @@ VX_gpr_stage VX_gpr_stage(
 	.VX_bckE_req       (VX_bckE_req),
 	.VX_warp_ctl       (VX_warp_ctl),
 	.VX_bckE_req_out   (VX_bckE_req_out),
-	.VX_gpr_data       (VX_gpr_data),
-	.out_gpr_stall     (out_gpr_stall)
+	.VX_gpr_data       (VX_gpr_data)
 	);
 
 
@@ -102,8 +98,7 @@ VX_execute_unit VX_execUnit(
 	.in_csr_data     (csr_decode_csr_data),
 	.out_csr_address (VX_csr_w_req.csr_address),
 	.out_is_csr      (VX_csr_w_req.is_csr),
-	.out_csr_result  (VX_csr_w_req.csr_result),
-	.out_branch_stall(execute_branch_stall)
+	.out_csr_result  (VX_csr_w_req.csr_result)
 	);
 
 VX_writeback VX_wb(

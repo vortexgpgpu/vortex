@@ -4,10 +4,7 @@ module VX_front_end (
 	input wire clk,
 	input wire reset,
 
-	input wire memory_delay,
-
-	input wire           execute_branch_stall,
-	input wire           in_gpr_stall,
+	input wire           memory_delay,
 	input wire           schedule_delay,
 
 	VX_warp_ctl_inter         VX_warp_ctl,
@@ -34,22 +31,22 @@ VX_inst_meta_inter       fd_inst_meta_de();
 
 // From decode
 wire           decode_branch_stall;
-wire           decode_gpr_stall;
 
 
-wire total_freeze = memory_delay || fetch_delay || in_gpr_stall || schedule_delay;
+wire total_freeze = memory_delay || fetch_delay || schedule_delay;
 
 /* verilator lint_off UNUSED */
 wire real_fetch_ebreak;
 /* verilator lint_on UNUSED */
 
+
+VX_wstall_inter          VX_wstall();
+
 VX_fetch vx_fetch(
 		.clk                (clk),
+		.VX_wstall          (VX_wstall),
 		.in_memory_delay    (memory_delay),
-		.in_branch_stall    (decode_branch_stall),
 		.schedule_delay     (schedule_delay),
-		.in_branch_stall_exe(execute_branch_stall),
-		.in_gpr_stall     (decode_gpr_stall),
 		.VX_jal_rsp         (VX_jal_rsp),
 		.icache_response    (icache_response_fe),
 		.VX_warp_ctl        (VX_warp_ctl),
@@ -65,7 +62,6 @@ VX_f_d_reg vx_f_d_reg(
 		.clk            (clk),
 		.reset          (reset),
 		.in_freeze      (total_freeze),
-		.in_gpr_stall (decode_gpr_stall),
 		.fe_inst_meta_fd(fe_inst_meta_fd),
 		.fd_inst_meta_de(fd_inst_meta_de)
 	);
@@ -74,17 +70,17 @@ VX_f_d_reg vx_f_d_reg(
 VX_decode vx_decode(
 		.fd_inst_meta_de   (fd_inst_meta_de),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
-		.out_gpr_stall     (decode_gpr_stall),
-		.out_branch_stall  (decode_branch_stall),
+		.VX_wstall         (VX_wstall),
 		.out_ebreak        (fetch_ebreak)
 	);
+
+wire no_br_stall = 0;
 
 VX_d_e_reg vx_d_e_reg(
 		.clk            (clk),
 		.reset          (reset),
-		.in_branch_stall(execute_branch_stall),
+		.in_branch_stall(no_br_stall),
 		.in_freeze      (total_freeze),
-		.in_gpr_stall (decode_gpr_stall),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_bckE_req       (VX_bckE_req)
 	);

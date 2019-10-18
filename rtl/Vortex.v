@@ -50,7 +50,6 @@ wire                          fetch_delay;
 VX_wb_inter                   VX_writeback_inter(); // Writeback to GPRs
 VX_branch_response_inter      VX_branch_rsp();      // Branch Resolution to Fetch
 VX_jal_response_inter         VX_jal_rsp();         // Jump resolution to Fetch
-wire                          execute_branch_stall;
 wire                          memory_delay;
 
 // CSR Buses
@@ -62,7 +61,6 @@ wire[11:0]                 decode_csr_address;
 VX_warp_ctl_inter        VX_warp_ctl();
 
 
-wire out_gpr_stall;
 wire schedule_delay;
 
 
@@ -70,7 +68,6 @@ VX_front_end vx_front_end(
 	.clk                 (clk),
 	.reset               (reset),
 	.VX_warp_ctl         (VX_warp_ctl),
-	.execute_branch_stall(execute_branch_stall),
 	.VX_bckE_req         (VX_bckE_req),
 	.decode_csr_address  (decode_csr_address),
 	.memory_delay        (memory_delay),
@@ -80,8 +77,7 @@ VX_front_end vx_front_end(
 	.icache_request_fe   (icache_request_fe),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
-	.fetch_ebreak        (out_ebreak),
-	.in_gpr_stall        (out_gpr_stall)
+	.fetch_ebreak        (out_ebreak)
 	);
 
 VX_scheduler schedule(
@@ -99,15 +95,13 @@ VX_back_end vx_back_end(
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
 	.csr_decode_csr_data (csr_decode_csr_data),
-	.execute_branch_stall(execute_branch_stall),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
 	.VX_dcache_rsp       (VX_dcache_rsp),
 	.VX_dcache_req       (VX_dcache_req),
 	.VX_csr_w_req        (VX_csr_w_req),
 	.VX_writeback_inter  (VX_writeback_inter),
-	.out_mem_delay       (memory_delay),
-	.out_gpr_stall       (out_gpr_stall)
+	.out_mem_delay       (memory_delay)
 	);
 
 VX_csr_handler vx_csr_handler(

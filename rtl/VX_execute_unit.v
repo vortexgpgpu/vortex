@@ -15,10 +15,7 @@ module VX_execute_unit (
 	input  wire[31:0]        in_csr_data,
 	output wire[11:0]        out_csr_address,
 	output wire              out_is_csr,
-	output reg[31:0]         out_csr_result,
-	output wire              out_branch_stall
-
-
+	output reg[31:0]         out_csr_result
 );
 
 
@@ -111,7 +108,6 @@ module VX_execute_unit (
 		assign VX_branch_rsp.branch_dir      = temp_branch_dir;
 		assign VX_branch_rsp.branch_warp_num = VX_exec_unit_req.warp_num;
 		assign VX_branch_rsp.branch_dest     = $signed(VX_exec_unit_req.curr_PC) + ($signed(VX_exec_unit_req.itype_immed) << 1); // itype_immed = branch_offset
-		assign out_branch_stall              = ((in_branch_type != `NO_BRANCH) || in_jal ) ? `STALL : `NO_STALL;
 
 
 		always @(*) begin

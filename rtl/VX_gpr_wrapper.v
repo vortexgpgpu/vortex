@@ -7,8 +7,7 @@ module VX_gpr_wrapper (
 	VX_gpr_jal_inter            VX_gpr_jal,
 
 	output wire[`NT_M1:0][31:0] out_a_reg_data,
-	output wire[`NT_M1:0][31:0] out_b_reg_data,
-	output wire                 out_gpr_stall
+	output wire[`NT_M1:0][31:0] out_b_reg_data
 	
 );
 
@@ -40,10 +39,7 @@ module VX_gpr_wrapper (
 
 		end
 
-	endgenerate
-
-	assign out_gpr_stall = 0;
-	
+	endgenerate	
 
 
 endmodule

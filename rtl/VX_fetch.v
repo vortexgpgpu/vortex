@@ -2,17 +2,15 @@
 `include "VX_define.v"
 
 module VX_fetch (
-	input  wire           clk,
-	input  wire           in_memory_delay,
-	input  wire           in_branch_stall,
-	input  wire           in_branch_stall_exe,
-	input  wire           in_gpr_stall,
-	input  wire           schedule_delay,
+	input  wire              clk,
+	input  wire              in_memory_delay,
+	VX_wstall_inter          VX_wstall,
+	input  wire              schedule_delay,
 	VX_icache_response_inter icache_response,
-	VX_icache_request_inter icache_request,
+	VX_icache_request_inter  icache_request,
 
-	output wire           out_delay,
-	output wire           out_ebreak,
+	output wire              out_delay,
+	output wire              out_ebreak,
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
 	VX_inst_meta_inter       fe_inst_meta_fd,
@@ -25,12 +23,9 @@ module VX_fetch (
 
 		// Locals
 		wire pipe_stall;
-		wire warp_stall;
 
 
-		assign pipe_stall = in_gpr_stall || in_freeze || schedule_delay;
-
-		assign warp_stall = in_branch_stall || (in_branch_stall_exe && 0);
+		assign pipe_stall = in_freeze || schedule_delay;
 
 		wire[`NT_M1:0] thread_mask;
 		wire[`NW_M1:0] warp_num;
@@ -49,8 +44,8 @@ module VX_fetch (
 			.whalt          (VX_warp_ctl.ebreak),
 			.whalt_warp_num (VX_warp_ctl.warp_num),
 			// Wstall
-			.wstall         (warp_stall),
-			.wstall_warp_num(VX_warp_ctl.warp_num),
+			.wstall         (VX_wstall.wstall),
+			.wstall_warp_num(VX_wstall.warp_num),
 
 			// JAL
 			.jal            (VX_jal_rsp.jal),
@@ -77,7 +72,6 @@ module VX_fetch (
 		assign fe_inst_meta_fd.warp_num  = warp_num;
 		assign fe_inst_meta_fd.valid     = thread_mask;
 
-		// assign fe_inst_meta_fd.instruction = (pipe_stall || warp_stall) ? 32'b0 : icache_response.instruction;;
 		assign fe_inst_meta_fd.instruction = (thread_mask == 0) ? 32'b0 : icache_response.instruction;;
 		assign fe_inst_meta_fd.inst_pc     = warp_pc;
 
