@@ -9,9 +9,7 @@ interface VX_frE_to_bckE_req_inter ();
 
 	wire[11:0]           csr_address;
 	wire                 is_csr;
-	/* verilator lint_off UNUSED */
 	wire                 csr_immed;
-	/* verilator lint_on UNUSED */
 	wire[31:0]           csr_mask;
 	wire[4:0]            rd;
 	wire[4:0]            rs1;

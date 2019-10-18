@@ -1,10 +1,10 @@
 all: RUNFILE
 
-INCLUDE=-I. -I../models/memory/cln28hpc/rf2_32x128_wm1/ -I/usr/local/systemc/ -Iinterfaces/ -Ipipe_regs/
+INCLUDE=-I. -I../models/memory/cln28hpc/rf2_32x128_wm1/ -I/usr/local/systemc/ -Iinterfaces/ -Ipipe_regs/ -Isimulate
 
 FILE=Vortex.v
 
-EXE=--exe test_bench.cpp
+EXE=--exe ./simulate/test_bench.cpp
 
 COMP=--compiler gcc
 

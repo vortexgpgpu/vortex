@@ -43,9 +43,7 @@ interface VX_exec_unit_req_inter ();
 	// CSR info
 	wire                 is_csr;
 	wire[11:0]           csr_address;
-		/* verilator lint_off UNUSED */
 	wire                 csr_immed;
-		/* verilator lint_on UNUSED */
 	wire[31:0]           csr_mask;
 endinterface
 
