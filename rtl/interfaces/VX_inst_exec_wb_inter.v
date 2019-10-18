@@ -1,13 +1,13 @@
 
 `include "../VX_define.v"
 
-`ifndef VX_MEM_WB_INST_INTER
+`ifndef VX_EXEC_UNIT_WB_INST_INTER
 
-`define VX_MEM_WB_INST_INTER
+`define VX_EXEC_UNIT_WB_INST_INTER
 
-interface VX_inst_mem_wb_inter ();
+interface VX_inst_exec_wb_inter ();
 
-	wire[`NT_M1:0][31:0]  loaded_data; 
+	wire[`NT_M1:0][31:0]  alu_result; 
 	wire[4:0]      		  rd;
 	wire[1:0]      		  wb;
 	wire[`NT_M1:0]        wb_valid;
