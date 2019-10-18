@@ -14,12 +14,13 @@ module VX_gpgpu_inst (
 		assign tmc_new_mask[curr_t] = curr_t < VX_gpu_inst_req.a_reg_data[0];
 	end
 
+	wire valid_inst = (|VX_gpu_inst_req.valid);
 
 	assign VX_warp_ctl.warp_num    = VX_gpu_inst_req.warp_num;
-	assign VX_warp_ctl.change_mask = (VX_gpu_inst_req.is_tmc || VX_gpu_inst_req.is_split) && (|VX_gpu_inst_req.valid);
+	assign VX_warp_ctl.change_mask = (VX_gpu_inst_req.is_tmc || VX_gpu_inst_req.is_split) && valid_inst;
 	assign VX_warp_ctl.thread_mask = VX_gpu_inst_req.is_tmc ? tmc_new_mask : 0;
 
-	assign VX_warp_ctl.ebreak = (VX_gpu_inst_req.a_reg_data[0] == 0);
+	assign VX_warp_ctl.ebreak = (VX_gpu_inst_req.a_reg_data[0] == 0) && valid_inst;
 
 	assign VX_warp_ctl.wspawn = 0;
 	assign VX_warp_ctl.wspawn_pc = 0;

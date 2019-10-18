@@ -30,7 +30,14 @@ wire            execute_jal;
 wire[31:0]      execute_jal_dest;
 
 
+VX_wb_inter             VX_writeback_temp();
+assign VX_writeback_inter.wb           = VX_writeback_temp.wb;
+assign VX_writeback_inter.rd           = VX_writeback_temp.rd;
+assign VX_writeback_inter.write_data   = VX_writeback_temp.write_data;
+assign VX_writeback_inter.wb_valid     = VX_writeback_temp.wb_valid;
+assign VX_writeback_inter.wb_warp_num  = VX_writeback_temp.wb_warp_num;
 
+// assign VX_writeback_inter(VX_writeback_temp);
 
 
 VX_mw_wb_inter           VX_mw_wb();
@@ -59,7 +66,7 @@ VX_gpu_inst_req_inter    VX_gpu_inst_req();
 VX_gpr_stage VX_gpr_stage(
 	.clk               (clk),
 	.schedule_delay    (schedule_delay),
-	.VX_writeback_inter(VX_writeback_inter),
+	.VX_writeback_inter(VX_writeback_temp),
 	.VX_bckE_req       (VX_bckE_req),
 	.VX_bckE_req_out   (VX_bckE_req_out),
 	.VX_gpr_data       (VX_gpr_data)
@@ -108,7 +115,7 @@ VX_writeback VX_wb(
 	.VX_mem_wb         (VX_mem_wb),
 	.VX_inst_exec_wb   (VX_inst_exec_wb),
 
-	.VX_writeback_inter(VX_writeback_inter)
+	.VX_writeback_inter(VX_writeback_temp)
 	);
 
 endmodule

@@ -1,5 +1,3 @@
-
-
 `include "VX_define.v"
 
 module VX_warp_scheduler (
@@ -39,6 +37,12 @@ module VX_warp_scheduler (
 	output wire           out_ebreak
 
 );
+
+
+	wire in_wspawn = wspawn;
+	wire in_ctm = ctm;
+	wire in_whalt = whalt;
+	wire in_wstall = wstall;
 
 	reg[`NW-1:0] warp_active;
 	reg[`NW-1:0] warp_stalled;
@@ -95,6 +99,7 @@ module VX_warp_scheduler (
 		// Changing thread masks
 		if (ctm) begin
 			thread_masks[ctm_warp_num] <= ctm_mask;
+			warp_stalled[ctm_warp_num] <= 0;
 		end
 
 		// Stalling the scheduling of warps

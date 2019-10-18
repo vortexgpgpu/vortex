@@ -30,6 +30,7 @@ module VX_fetch (
 			// Wspawn
 			.wspawn         (VX_warp_ctl.wspawn),
 			.wsapwn_pc      (VX_warp_ctl.wspawn_pc),
+			// .wspawn_warp_num(VX_warp_ctl.warp_num),
 			// CTM
 			.ctm            (VX_warp_ctl.change_mask),
 			.ctm_mask       (VX_warp_ctl.thread_mask),

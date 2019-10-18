@@ -14,8 +14,8 @@ module VX_inst_multiplex (
 	wire[`NT_M1:0] is_gpu_mask;
 
 	wire is_mem = (VX_bckE_req.mem_write != `NO_MEM_WRITE) || (VX_bckE_req.mem_read != `NO_MEM_READ);
-	// wire is_gpu = (VX_bckE_req.is_wspawn || VX_bckE_req.is_tmc || VX_bckE_req.is_barrier || VX_bckE_req.is_split);
-	wire is_gpu = 0;
+	wire is_gpu = (VX_bckE_req.is_wspawn || VX_bckE_req.is_tmc || VX_bckE_req.is_barrier || VX_bckE_req.is_split);
+	// wire is_gpu = 0;
 
 	genvar currT;
 	for (currT = 0; currT < `NT; currT = currT + 1) begin

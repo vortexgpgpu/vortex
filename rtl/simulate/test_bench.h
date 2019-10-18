@@ -378,21 +378,19 @@ bool Vortex::simulate(std::string file_to_simulate)
         // std::cout << "Counter: " << counter << "\n";
         // if ((this->stats_total_cycles) % 5000 == 0) std::cout << "************* Cycle: " << (this->stats_total_cycles) << "\n";
         // dstop = !dbus_driver();
-
-        vortex->clk = 1;
-        vortex->eval();
         #ifdef VCD_OUTPUT
         m_trace->dump(2*this->stats_total_cycles);
         #endif
+        vortex->clk = 1;
+        vortex->eval();
         istop =  ibus_driver();
         dstop = !dbus_driver();
 
-
-        vortex->clk = 0;
-        vortex->eval();
         #ifdef VCD_OUTPUT
         m_trace->dump((2*this->stats_total_cycles)+1);
         #endif
+        vortex->clk = 0;
+        vortex->eval();
         // stop = istop && dstop;
         stop = vortex->out_ebreak;
 

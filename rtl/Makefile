@@ -21,15 +21,15 @@ MAKECPP=(cd obj_dir && make -j -f VVortex.mk)
 
 # -LDFLAGS '-lsystemc'
 VERILATOR:
-	echo "#define VCD_OFF" > tb_debug.h
+	echo "#define VCD_OFF" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)
 
 VERILATORnoWarnings:
-	echo "#define VCD_OFF" > tb_debug.h
+	echo "#define VCD_OFF" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)  $(WNO)
 
 compdebug:
-	echo "#define VCD_OUTPUT" > tb_debug.h
+	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
 
 RUNFILE: VERILATOR
