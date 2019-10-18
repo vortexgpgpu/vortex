@@ -8,9 +8,10 @@ EXE=--exe ./simulate/test_bench.cpp
 
 COMP=--compiler gcc
 
-WNO=-Wno-fatal -Wno-UNOPTFLAT -Wno-UNDRIVEN -Wno-UNSIGNED -Wno-lint --Wno-PINMISSING
+WNO=-Wno-fatal -Wno-UNOPTFLAT -Wno-UNDRIVEN -Wno-UNSIGNED -Wno-lint --Wno-PINMISSING -Wno-STMTDLY
 
-LIB=-LDFLAGS '-L/usr/local/systemc/'
+# LIB=-LDFLAGS '-L/usr/local/systemc/'
+LIB=
 
 CF=-CFLAGS '-std=c++11 -O3'
 

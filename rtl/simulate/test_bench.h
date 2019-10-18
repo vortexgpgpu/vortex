@@ -21,6 +21,13 @@
 #include <verilated_vcd_c.h>
 #endif
 
+unsigned long time_stamp = 0;
+
+double sc_time_stamp() 
+{ 
+  return time_stamp / 1000.0; 
+}
+
 class Vortex
 {
     public:
@@ -404,6 +411,7 @@ bool Vortex::simulate(std::string file_to_simulate)
             counter = 0;
         }
 
+        ++time_stamp;
         ++stats_total_cycles;
     }
 

@@ -1,7 +1,7 @@
-# Dynamic Instructions: 52683
-# of total cycles:      52699
+# Dynamic Instructions: 15
+# of total cycles:      28
 # of forwarding stalls: 0
 # of branch stalls:     0
-# CPI:                  1.0003
-# time to simulate:     0 milliseconds
+# CPI:                  1.86667
+# time to simulate:     6.95313e-310 milliseconds
 # GRADE:                Failed on test: 4294967295

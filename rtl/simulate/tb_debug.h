@@ -1,1 +1,1 @@
-#define VCD_OFF
+#define VCD_OUTPUT
