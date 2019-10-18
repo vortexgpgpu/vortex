@@ -5,18 +5,6 @@ module VX_decode(
 	// Fetch Inputs
 	VX_inst_meta_inter     fd_inst_meta_de,
 
-	// WriteBack inputs
-	// VX_wb_inter            VX_writeback_inter,
-
-
-	// Fwd Request
-	// VX_forward_reqeust_inter VX_fwd_req_de,
-
-	// FORWARDING INPUTS
-	// VX_forward_response_inter   VX_fwd_rsp,
-
-	// input wire[`NW_M1:0]          in_which_wspawn,
-
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
 	output reg               out_gpr_stall,
@@ -89,50 +77,6 @@ module VX_decode(
 		reg[4:0]   csr_alu;
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
-
-
-
-		// assign VX_fwd_req_de.src1        = VX_frE_to_bckE_req.rs1;
-		// assign VX_fwd_req_de.src2        = VX_frE_to_bckE_req.rs2;
-		// assign VX_fwd_req_de.warp_num    = VX_frE_to_bckE_req.warp_num;
-
-
-		// VX_gpr_read_inter VX_gpr_read();
-		// assign VX_gpr_read.rs1      = VX_frE_to_bckE_req.rs1;
-		// assign VX_gpr_read.rs2      = VX_frE_to_bckE_req.rs2;
-		// assign VX_gpr_read.warp_num = VX_frE_to_bckE_req.warp_num;
-
-		// VX_gpr_jal_inter VX_gpr_jal();
-		// assign VX_gpr_jal.is_jal  = is_jal;
-		// assign VX_gpr_jal.curr_PC = in_curr_PC;
-
-
-		// VX_gpr_clone_inter VX_gpr_clone();
-		// assign VX_gpr_clone.is_clone = is_clone;
-		// assign VX_gpr_clone.warp_num = VX_frE_to_bckE_req.warp_num;
-
-
-		// VX_gpr_wspawn_inter VX_gpr_wspawn();
-		// assign VX_gpr_wspawn.is_wspawn    = is_wspawn;
-		// assign VX_gpr_wspawn.which_wspawn = in_which_wspawn;
-		// // assign VX_gpr_wspawn.warp_num     = VX_frE_to_bckE_req.warp_num;
-
-		// VX_gpr_wrapper vx_grp_wrapper(
-		// 		.clk            (clk),
-		// 		.VX_writeback_inter(VX_writeback_inter),
-		// 		.VX_fwd_rsp        (VX_fwd_rsp),
-		// 		.VX_gpr_read       (VX_gpr_read),
-		// 		.VX_gpr_jal        (VX_gpr_jal),
-		// 		.VX_gpr_clone      (VX_gpr_clone),
-		// 		.VX_gpr_wspawn     (VX_gpr_wspawn),
-
-		// 		.out_a_reg_data (VX_frE_to_bckE_req.a_reg_data),
-		// 		.out_b_reg_data (VX_frE_to_bckE_req.b_reg_data),
-		// 		.out_gpr_stall(out_gpr_stall)
-		// 	);
-
-
-
 
 
 		assign VX_frE_to_bckE_req.valid    = fd_inst_meta_de.valid;

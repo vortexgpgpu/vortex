@@ -3,7 +3,6 @@
 module VX_f_d_reg (
 	input wire             clk,
 	input wire             reset,
-	input wire             in_fwd_stall,
 	input wire             in_freeze,
 	input wire             in_gpr_stall,
 
@@ -13,7 +12,7 @@ module VX_f_d_reg (
 );
 
 	wire flush = 1'b0;
-	wire stall = in_fwd_stall == 1'b1 || in_freeze == 1'b1 || in_gpr_stall;
+	wire stall = in_freeze == 1'b1 || in_gpr_stall;
 
 
 

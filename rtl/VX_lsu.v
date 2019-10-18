@@ -9,10 +9,6 @@ module VX_lsu (
 		// Write back to GPR
 		VX_inst_mem_wb_inter     VX_mem_wb,
 
-		// FWD info
-		VX_forward_mem_inter     VX_fwd_mem,
-
-
 		VX_dcache_response_inter VX_dcache_rsp,
 		VX_dcache_request_inter  VX_dcache_req,
 		output wire              out_delay
@@ -63,14 +59,6 @@ module VX_lsu (
 	// 	.in   ({VX_mem_wb_temp.loaded_data, VX_mem_wb_temp.rd, VX_mem_wb_temp.wb, VX_mem_wb_temp.wb_valid, VX_mem_wb_temp.wb_warp_num}),
 	// 	.out  ({VX_mem_wb.loaded_data     , VX_mem_wb.rd     , VX_mem_wb.wb     , VX_mem_wb.wb_valid     , VX_mem_wb.wb_warp_num     })
 	// );
-
-		// Delete
-		assign VX_fwd_mem.dest        = 0;
-		assign VX_fwd_mem.wb          = 0;
-		assign VX_fwd_mem.alu_result  = 0;
-		assign VX_fwd_mem.mem_data    = 0;
-		assign VX_fwd_mem.PC_next     = 0;
-		assign VX_fwd_mem.warp_num    = 0;
 
 
 endmodule // Memory

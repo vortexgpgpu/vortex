@@ -11,9 +11,6 @@ module VX_execute_unit (
 	VX_jal_response_inter    VX_jal_rsp,
 		// Branch Response
 	VX_branch_response_inter VX_branch_rsp,
-		// Forward data
-	VX_forward_exe_inter     VX_fwd_exe,
-
 
 	input  wire[31:0]        in_csr_data,
 	output wire[11:0]        out_csr_address,
@@ -23,12 +20,6 @@ module VX_execute_unit (
 
 
 );
-
-		assign VX_fwd_exe.dest              = 0;
-		assign VX_fwd_exe.wb                = 0;
-		assign VX_fwd_exe.alu_result        = 0;
-		assign VX_fwd_exe.PC_next           = 0;
-		assign VX_fwd_exe.warp_num          = 0;
 
 
 

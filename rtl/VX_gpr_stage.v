@@ -1,21 +1,16 @@
 module VX_gpr_stage (
 	input wire                 clk,
-	input wire                 in_fwd_stall,
 	input wire                 schedule_delay,
 	// inputs
 		// Instruction Information
 	VX_frE_to_bckE_req_inter   VX_bckE_req,
 		// WriteBack inputs
 	VX_wb_inter                VX_writeback_inter,
-		// FORWARDING INPUTS
-	VX_forward_response_inter  VX_fwd_rsp,
 
 
 
 
 	// Outputs
-		// Fwd Request
-	VX_forward_reqeust_inter   VX_fwd_req_de,
 		// Warp Control
 	VX_warp_ctl_inter          VX_warp_ctl,
 		// Original Request 1 cycle later
@@ -31,11 +26,6 @@ module VX_gpr_stage (
 	wire[2:0] branchType = VX_bckE_req.branch_type;
 
 	wire jalQual = VX_bckE_req.jalQual;
-
-
-	assign VX_fwd_req_de.src1        = VX_bckE_req.rs1;
-	assign VX_fwd_req_de.src2        = VX_bckE_req.rs2;
-	assign VX_fwd_req_de.warp_num    = VX_bckE_req.warp_num;
 
 	VX_gpr_read_inter VX_gpr_read();
 	assign VX_gpr_read.rs1      = VX_bckE_req.rs1;
@@ -53,7 +43,6 @@ module VX_gpr_stage (
 	VX_gpr_wrapper vx_grp_wrapper(
 			.clk            (clk),
 			.VX_writeback_inter(VX_writeback_inter),
-			.VX_fwd_rsp        (VX_fwd_rsp),
 			.VX_gpr_read       (VX_gpr_read),
 			.VX_gpr_jal        (VX_gpr_jal),
 
@@ -77,13 +66,11 @@ module VX_gpr_stage (
 		.out  ({VX_gpr_data.a_reg_data, VX_gpr_data.b_reg_data})
 	);
 
-	wire stall = in_fwd_stall || schedule_delay;
 
 	VX_d_e_reg gpr_stage_reg(
 			.clk               (clk),
 			.reset             (zero_temp),
-			.in_fwd_stall      (stall),
-			.in_branch_stall   (zero_temp),
+			.in_branch_stall   (schedule_delay),
 			.in_freeze         (zero_temp),
 			.in_gpr_stall      (out_gpr_stall),
 			.VX_frE_to_bckE_req(VX_bckE_req),

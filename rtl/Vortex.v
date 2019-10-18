@@ -53,16 +53,6 @@ VX_jal_response_inter         VX_jal_rsp();         // Jump resolution to Fetch
 wire                          execute_branch_stall;
 wire                          memory_delay;
 
-// Forwarding Buses
-VX_forward_reqeust_inter      VX_fwd_req_de(); // Forward request
-VX_forward_response_inter     VX_fwd_rsp();    // Forward Response
-VX_forward_exe_inter          VX_fwd_exe();    // Data available in EXE
-VX_forward_mem_inter          VX_fwd_mem();    // Data available in MEM
-VX_forward_wb_inter           VX_fwd_wb();     // Data available in WB
-wire                          forwarding_fwd_stall;
-
-
-
 // CSR Buses
 VX_csr_write_request_inter VX_csr_w_req();
 wire[31:0]                 csr_decode_csr_data;
@@ -80,7 +70,6 @@ VX_front_end vx_front_end(
 	.clk                 (clk),
 	.reset               (reset),
 	.VX_warp_ctl         (VX_warp_ctl),
-	.forwarding_fwd_stall(forwarding_fwd_stall),
 	.execute_branch_stall(execute_branch_stall),
 	.VX_bckE_req         (VX_bckE_req),
 	.decode_csr_address  (decode_csr_address),
@@ -107,33 +96,18 @@ VX_back_end vx_back_end(
 	.reset               (reset),
 	.schedule_delay      (schedule_delay),
 	.fetch_delay         (fetch_delay),
-	.in_fwd_stall        (forwarding_fwd_stall),
-	.VX_fwd_req_de       (VX_fwd_req_de),
-	.VX_fwd_rsp          (VX_fwd_rsp),
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
-	.VX_fwd_exe          (VX_fwd_exe),
 	.csr_decode_csr_data (csr_decode_csr_data),
 	.execute_branch_stall(execute_branch_stall),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
 	.VX_dcache_rsp       (VX_dcache_rsp),
 	.VX_dcache_req       (VX_dcache_req),
-	.VX_fwd_mem          (VX_fwd_mem),
-	.VX_fwd_wb           (VX_fwd_wb),
 	.VX_csr_w_req        (VX_csr_w_req),
 	.VX_writeback_inter  (VX_writeback_inter),
 	.out_mem_delay       (memory_delay),
 	.out_gpr_stall       (out_gpr_stall)
-	);
-
-VX_forwarding vx_forwarding(
-		.VX_fwd_req_de(VX_fwd_req_de),
-		.VX_fwd_exe   (VX_fwd_exe),
-		.VX_fwd_mem   (VX_fwd_mem),
-		.VX_fwd_wb    (VX_fwd_wb),
-		.VX_fwd_rsp   (VX_fwd_rsp),
-		.out_fwd_stall(forwarding_fwd_stall)
 	);
 
 VX_csr_handler vx_csr_handler(

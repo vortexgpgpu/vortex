@@ -3,9 +3,7 @@
 module VX_gpr_wrapper (
 	input wire                  clk,
 	VX_gpr_read_inter           VX_gpr_read,
-	VX_wb_inter                 VX_writeback_inter,
-	VX_forward_response_inter   VX_fwd_rsp,
-	
+	VX_wb_inter                 VX_writeback_inter,	
 	VX_gpr_jal_inter            VX_gpr_jal,
 
 	output wire[`NT_M1:0][31:0] out_a_reg_data,
@@ -22,8 +20,8 @@ module VX_gpr_wrapper (
 	for (index = 0; index <= `NT_M1; index = index + 1) assign jal_data[index] = VX_gpr_jal.curr_PC;
 
 
-	assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (VX_fwd_rsp.src1_fwd ? VX_fwd_rsp.src1_fwd_data : temp_a_reg_data[VX_gpr_read.warp_num]));
-	assign out_b_reg_data =                                    (VX_fwd_rsp.src2_fwd ? VX_fwd_rsp.src2_fwd_data : temp_b_reg_data[VX_gpr_read.warp_num]);
+	assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (temp_a_reg_data[VX_gpr_read.warp_num]));
+	assign out_b_reg_data =                                    (temp_b_reg_data[VX_gpr_read.warp_num]);
 
 	genvar warp_index;
 	generate

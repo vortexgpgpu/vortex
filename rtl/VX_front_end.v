@@ -4,7 +4,6 @@ module VX_front_end (
 	input wire clk,
 	input wire reset,
 
-	input wire forwarding_fwd_stall,
 	input wire memory_delay,
 
 	input wire           execute_branch_stall,
@@ -48,7 +47,6 @@ VX_fetch vx_fetch(
 		.clk                (clk),
 		.in_memory_delay    (memory_delay),
 		.in_branch_stall    (decode_branch_stall),
-		.in_fwd_stall       (forwarding_fwd_stall),
 		.schedule_delay     (schedule_delay),
 		.in_branch_stall_exe(execute_branch_stall),
 		.in_gpr_stall     (decode_gpr_stall),
@@ -66,7 +64,6 @@ VX_fetch vx_fetch(
 VX_f_d_reg vx_f_d_reg(
 		.clk            (clk),
 		.reset          (reset),
-		.in_fwd_stall   (forwarding_fwd_stall),
 		.in_freeze      (total_freeze),
 		.in_gpr_stall (decode_gpr_stall),
 		.fe_inst_meta_fd(fe_inst_meta_fd),
@@ -82,16 +79,11 @@ VX_decode vx_decode(
 		.out_ebreak        (fetch_ebreak)
 	);
 
-wire special_what = total_freeze || forwarding_fwd_stall;
-
-wire temp_fwd_stall = 0;
-
 VX_d_e_reg vx_d_e_reg(
 		.clk            (clk),
 		.reset          (reset),
-		.in_fwd_stall   (temp_fwd_stall),
 		.in_branch_stall(execute_branch_stall),
-		.in_freeze      (special_what),
+		.in_freeze      (total_freeze),
 		.in_gpr_stall (decode_gpr_stall),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_bckE_req       (VX_bckE_req)

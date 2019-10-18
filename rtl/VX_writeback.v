@@ -8,17 +8,9 @@ module VX_writeback (
 		// EXEC Unit WB info
 		VX_inst_exec_wb_inter    VX_inst_exec_wb,
 
-		VX_forward_wb_inter      VX_fwd_wb,
 		// Actual WB to GPR
 		VX_wb_inter              VX_writeback_inter
 	);
-
-		assign VX_fwd_wb.dest        = 0;
-		assign VX_fwd_wb.wb          = 0;
-		assign VX_fwd_wb.alu_result  = 0;
-		assign VX_fwd_wb.mem_data    = 0;
-		assign VX_fwd_wb.PC_next     = 0;
-		assign VX_fwd_wb.warp_num    = 0;
 
 
 
