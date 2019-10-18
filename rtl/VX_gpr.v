@@ -27,28 +27,7 @@ module VX_gpr (
 		.q2    (out_b_reg_data)
 	);
 
-// =======
-	// byte_enabled_simple_dual_port_ram first_ram(
-	// 	.we    (write_enable),
-	// 	.clk   (clk),
-	// 	.waddr (VX_writeback_inter.rd),
-	// 	.raddr1(VX_gpr_read.rs1),
-	// 	.be    (VX_writeback_inter.wb_valid),
-	// 	.wdata (VX_writeback_inter.write_data),
-	// 	.q1    (out_a_reg_data)
-	// );
-
-	// byte_enabled_simple_dual_port_ram second_ram(
-	// 	.we    (write_enable),
-	// 	.clk   (clk),
-	// 	.waddr (VX_writeback_inter.rd),
-	// 	.raddr1(VX_gpr_read.rs2),
-	// 	.be    (VX_writeback_inter.wb_valid),
-	// 	.wdata (VX_writeback_inter.write_data),
-	// 	.q1    (out_b_reg_data)
-	// );
-
-	// // wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
+	// wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
 	// /* verilator lint_off PINCONNECTEMPTY */
  //   rf2_32x128_wm1 first_ram (
  //         .CENYA(),
@@ -125,5 +104,6 @@ module VX_gpr (
  //         .SEB(1'b0),
  //         .COLLDISN(1'b1)
  //   );
+ //   /* verilator lint_on PINCONNECTEMPTY */
 
 endmodule
