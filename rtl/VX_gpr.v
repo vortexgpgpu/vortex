@@ -36,6 +36,14 @@ module VX_gpr (
 		assign write_bit_mask[curr_t] = {32{~local_write}};
 	end
 
+	wire going_to_write = write_enable & (|VX_writeback_inter.wb_valid);
+
+
+	wire cenb    = !going_to_write;
+
+	wire cena_1  = (VX_gpr_read.rs1 == 0);
+	wire cena_2  = (VX_gpr_read.rs2 == 0);
+
 	// wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
 	/* verilator lint_off PINCONNECTEMPTY */
    rf2_32x128_wm1 first_ram (
@@ -48,10 +56,10 @@ module VX_gpr (
          .SOA(),
          .SOB(),
          .CLKA(clk),
-         .CENA(1'b0),
+         .CENA(cena_1),
          .AA(VX_gpr_read.rs1),
          .CLKB(clk),
-         .CENB(1'b0),
+         .CENB(cenb),
          .WENB(write_bit_mask),
          .AB(VX_writeback_inter.rd),
          .DB(VX_writeback_inter.write_data),
@@ -87,10 +95,10 @@ module VX_gpr (
          .SOA(),
          .SOB(),
          .CLKA(clk),
-         .CENA(1'b0),
+         .CENA(cena_2),
          .AA(VX_gpr_read.rs2),
          .CLKB(clk),
-         .CENB(1'b0),
+         .CENB(cenb),
          .WENB(write_bit_mask),
          .AB(VX_writeback_inter.rd),
          .DB(VX_writeback_inter.write_data),
