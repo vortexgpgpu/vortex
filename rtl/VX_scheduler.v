@@ -4,6 +4,7 @@
 
 module VX_scheduler (
 	input wire                clk,
+	input wire                reset,
 	input wire                memory_delay,
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,
@@ -15,11 +16,6 @@ module VX_scheduler (
 
 
 	reg rename_table[31:0];
-
-	initial begin
-		integer i;
-		for (i = 0; i < 32; i = i + 1) rename_table[i] = 0;
-	end
 
 	wire valid_wb  = (VX_writeback_inter.wb != 0) && (|VX_writeback_inter.wb_valid) && (VX_writeback_inter.rd != 0);
 	wire wb_inc    = (VX_bckE_req.wb != 0) && (VX_bckE_req.rd != 0);
@@ -41,10 +37,16 @@ module VX_scheduler (
 
 	assign schedule_delay = (rename_valid) && (|VX_bckE_req.valid) || memory_delay;
 
+	integer i;
 
-	always @(posedge clk) begin
-		if (valid_wb                 ) rename_table[VX_writeback_inter.rd] <= 0;
-		if (!schedule_delay && wb_inc) rename_table[VX_bckE_req.rd]        <= 1;
+	always @(posedge clk or posedge reset) begin
+
+		if (reset) begin
+			for (i = 0; i < 32; i = i + 1) rename_table[i] = 0;
+		end else begin
+			if (valid_wb                 ) rename_table[VX_writeback_inter.rd] <= 0;
+			if (!schedule_delay && wb_inc) rename_table[VX_bckE_req.rd]        <= 1;
+		end
 	end
 
 

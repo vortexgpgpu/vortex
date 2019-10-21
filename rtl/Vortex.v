@@ -76,6 +76,7 @@ VX_front_end vx_front_end(
 
 VX_scheduler schedule(
 	.clk               (clk),
+	.reset             (reset),
 	.memory_delay      (memory_delay),
 	.VX_bckE_req       (VX_bckE_req),
 	.VX_writeback_inter(VX_writeback_inter),
