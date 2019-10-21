@@ -49,6 +49,11 @@ module VX_warp_scheduler (
 
 );
 
+	wire[(1+32+`NT_M1):0] d;
+
+	wire           join_fall;
+	wire[31:0]     join_pc;
+	wire[`NT_M1:0] join_tm;
 
 	wire in_wspawn = wspawn;
 	wire in_ctm = ctm;
@@ -164,12 +169,6 @@ module VX_warp_scheduler (
 	wire[(1+32+`NT_M1):0] q1 = {1'b1, warp_pcs[split_warp_num], thread_masks[split_warp_num]};
 	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
 
-
-	wire[(1+32+`NT_M1):0] d;
-
-	wire           join_fall;
-	wire[31:0]     join_pc;
-	wire[`NT_M1:0] join_tm;
 
 	assign {join_fall, join_pc, join_tm} = d;
 
