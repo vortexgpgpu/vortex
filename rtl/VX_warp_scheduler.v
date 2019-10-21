@@ -20,6 +20,12 @@ module VX_warp_scheduler (
 	input  wire           wstall,
 	input  wire[`NW_M1:0] wstall_warp_num,
 
+	// Split
+	input wire           is_split,
+	input wire[`NT_M1:0] split_new_mask,
+	input wire[`NT_M1:0] split_later_mask,
+	input wire[31:0]     split_save_pc,	
+
 	// JAL
 	input wire           jal,
 	input wire[31:0]     jal_dest,

@@ -51,9 +51,7 @@ VX_branch_response_inter      VX_branch_rsp();      // Branch Resolution to Fetc
 VX_jal_response_inter         VX_jal_rsp();         // Jump resolution to Fetch
 
 // CSR Buses
-VX_csr_write_request_inter VX_csr_w_req();
-wire[31:0]                 csr_decode_csr_data;
-wire[11:0]                 decode_csr_address;
+// VX_csr_write_request_inter VX_csr_w_req();
 
 
 VX_warp_ctl_inter        VX_warp_ctl();
@@ -68,7 +66,6 @@ VX_front_end vx_front_end(
 	.reset               (reset),
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
-	.decode_csr_address  (decode_csr_address),
 	.schedule_delay      (schedule_delay),
 	.icache_response_fe  (icache_response_fe),
 	.icache_request_fe   (icache_request_fe),
@@ -91,24 +88,22 @@ VX_back_end vx_back_end(
 	.schedule_delay      (schedule_delay),
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
-	.csr_decode_csr_data (csr_decode_csr_data),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
 	.VX_dcache_rsp       (VX_dcache_rsp),
 	.VX_dcache_req       (VX_dcache_req),
-	.VX_csr_w_req        (VX_csr_w_req),
 	.VX_writeback_inter  (VX_writeback_inter),
 	.out_mem_delay       (memory_delay)
 	);
 
-VX_csr_handler vx_csr_handler(
-		.clk                  (clk),
-		.in_decode_csr_address(decode_csr_address),
-		.VX_csr_w_req         (VX_csr_w_req),
-		.in_wb_valid          (VX_writeback_inter.wb_valid[0]),
+// VX_csr_handler vx_csr_handler(
+// 		.clk                  (clk),
+// 		.in_decode_csr_address(decode_csr_address),
+// 		.VX_csr_w_req         (VX_csr_w_req),
+// 		.in_wb_valid          (VX_writeback_inter.wb_valid[0]),
 
-		.out_decode_csr_data  (csr_decode_csr_data)
-	);
+// 		.out_decode_csr_data  (csr_decode_csr_data)
+// 	);
 
 
 

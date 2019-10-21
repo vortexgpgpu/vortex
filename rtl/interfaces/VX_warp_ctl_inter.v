@@ -16,6 +16,13 @@ interface VX_warp_ctl_inter ();
 
 	wire           ebreak;
 
+
+	wire           is_split;
+	wire[`NT_M1:0] split_new_mask;
+	wire[`NT_M1:0] split_later_mask;
+	wire[31:0]     split_save_pc;
+
+
 endinterface
 
 

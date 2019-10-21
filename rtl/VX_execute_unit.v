@@ -10,12 +10,7 @@ module VX_execute_unit (
 		// JAL Response
 	VX_jal_response_inter    VX_jal_rsp,
 		// Branch Response
-	VX_branch_response_inter VX_branch_rsp,
-
-	input  wire[31:0]        in_csr_data,
-	output wire[11:0]        out_csr_address,
-	output wire              out_is_csr,
-	output reg[31:0]         out_csr_result
+	VX_branch_response_inter VX_branch_rsp
 );
 
 
@@ -27,7 +22,6 @@ module VX_execute_unit (
 		wire[31:0]           in_itype_immed;
 		wire[2:0]            in_branch_type;
 		wire[19:0]           in_upper_immed;
-		wire[31:0]           in_csr_mask;
 		wire                 in_jal;
 		wire[31:0]           in_jal_offset;
 		wire[31:0]           in_curr_PC;
@@ -39,7 +33,6 @@ module VX_execute_unit (
 		assign in_itype_immed = VX_exec_unit_req.itype_immed;
 		assign in_branch_type = VX_exec_unit_req.branch_type;
 		assign in_upper_immed = VX_exec_unit_req.upper_immed;
-		assign in_csr_mask    = VX_exec_unit_req.csr_mask;
 		assign in_jal         = VX_exec_unit_req.jal;
 		assign in_jal_offset  = VX_exec_unit_req.jal_offset;
 		assign in_curr_PC     = VX_exec_unit_req.curr_PC;
@@ -58,7 +51,6 @@ module VX_execute_unit (
 						.in_itype_immed(in_itype_immed),
 						.in_upper_immed(in_upper_immed),
 						.in_alu_op     (in_alu_op),
-						.in_csr_data   (in_csr_data),
 						.in_curr_PC    (in_curr_PC),
 						.out_alu_result(alu_result[index_out_reg])
 					);
@@ -110,18 +102,18 @@ module VX_execute_unit (
 		assign VX_branch_rsp.branch_dest     = $signed(VX_exec_unit_req.curr_PC) + ($signed(VX_exec_unit_req.itype_immed) << 1); // itype_immed = branch_offset
 
 
-		always @(*) begin
-			case(in_alu_op)
-				`CSR_ALU_RW: out_csr_result = in_csr_mask;
-				`CSR_ALU_RS: out_csr_result = in_csr_data | in_csr_mask;
-				`CSR_ALU_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
-				default:     out_csr_result = 32'hdeadbeef;
-			endcase
+		// always @(*) begin
+		// 	case(in_alu_op)
+		// 		`CSR_ALU_RW: out_csr_result = in_csr_mask;
+		// 		`CSR_ALU_RS: out_csr_result = in_csr_data | in_csr_mask;
+		// 		`CSR_ALU_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
+		// 		default:     out_csr_result = 32'hdeadbeef;
+		// 	endcase
 		
-		end
+		// end
 
 
-		assign out_is_csr        = VX_exec_unit_req.is_csr;
-		assign out_csr_address   = VX_exec_unit_req.csr_address;
+		// assign out_is_csr        = VX_exec_unit_req.is_csr;
+		// assign out_csr_address   = VX_exec_unit_req.csr_address;
 
 endmodule

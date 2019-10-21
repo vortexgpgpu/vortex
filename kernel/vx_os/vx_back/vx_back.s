@@ -6,20 +6,21 @@
 .type _start, @function
 .global _start
 _start:
-    # li  a0, 7
-    # sw  a0, 0(zero)
-    # lw  a1, 0(zero)
-    # ecall
-    li a0, 8          # Num Warps
-    csrw 0x20, a0     # Setting the number of available warps 
-    li a0, 4          # Num Threads
-    csrw 0x21, a0     # Setting the number of available threads
-    csrw mhartid,zero
-    csrw misa,zero
-    lui  sp, 0x7ffff
-    # jal  vx_before_main
-    jal  main
+    li a0, 4
+    .word 0x0005006b    # tmc a0
+    csrr a1, 0x20       # read thread IDs
+    csrr a2, 0x21       # read warp   IDs
     ecall
+    # li a0, 8          # Num Warps
+    # csrw 0x20, a0     # Setting the number of available warps 
+    # li a0, 4          # Num Threads
+    # csrw 0x21, a0     # Setting the number of available threads
+    # csrw mhartid,zero
+    # csrw misa,zero
+    # lui  sp, 0x7ffff
+    # # jal  vx_before_main
+    # jal  main
+    # ecall
 
 # Hi:
 #     li a2, 7

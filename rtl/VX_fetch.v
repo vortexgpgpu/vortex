@@ -42,6 +42,12 @@ module VX_fetch (
 			.wstall         (VX_wstall.wstall),
 			.wstall_warp_num(VX_wstall.warp_num),
 
+			// Split
+			.is_split        (VX_warp_ctl.is_split),
+			.split_new_mask  (VX_warp_ctl.split_new_mask),
+			.split_later_mask(VX_warp_ctl.split_later_mask),
+			.split_save_pc   (VX_warp_ctl.split_save_pc),
+
 			// JAL
 			.jal            (VX_jal_rsp.jal),
 			.jal_dest       (VX_jal_rsp.jal_dest),

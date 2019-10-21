@@ -3,7 +3,6 @@ module VX_back_end (
 	input wire reset, 
 	input wire schedule_delay,
 
-	input wire[31:0]          csr_decode_csr_data,
 	output wire               out_mem_delay,
 
 	VX_jal_response_inter     VX_jal_rsp,
@@ -16,18 +15,9 @@ module VX_back_end (
 	VX_warp_ctl_inter         VX_warp_ctl,
 
 	VX_dcache_response_inter  VX_dcache_rsp,
-	VX_dcache_request_inter   VX_dcache_req,
+	VX_dcache_request_inter   VX_dcache_req
 
-
-	VX_csr_write_request_inter VX_csr_w_req
 );
-
-
-wire[11:0]      execute_csr_address;
-wire            execute_is_csr;
-reg[31:0]       execute_csr_result;
-wire            execute_jal;
-wire[31:0]      execute_jal_dest;
 
 
 VX_wb_inter             VX_writeback_temp();
@@ -63,6 +53,10 @@ VX_inst_exec_wb_inter    VX_inst_exec_wb();
 // GPU unit input
 VX_gpu_inst_req_inter    VX_gpu_inst_req();
 
+// CSR unit inputs
+VX_csr_req_inter         VX_csr_req();
+VX_csr_wb_inter          VX_csr_wb();
+
 VX_gpr_stage VX_gpr_stage(
 	.clk               (clk),
 	.schedule_delay    (schedule_delay),
@@ -78,7 +72,8 @@ VX_inst_multiplex VX_inst_mult(
 	.VX_gpr_data     (VX_gpr_data),
 	.VX_exec_unit_req(VX_exec_unit_req),
 	.VX_lsu_req      (VX_lsu_req),
-	.VX_gpu_inst_req (VX_gpu_inst_req)
+	.VX_gpu_inst_req (VX_gpu_inst_req),
+	.VX_csr_req      (VX_csr_req)
 	);
 
 
@@ -97,12 +92,7 @@ VX_execute_unit VX_execUnit(
 	.VX_exec_unit_req(VX_exec_unit_req),
 	.VX_inst_exec_wb (VX_inst_exec_wb),
 	.VX_jal_rsp      (VX_jal_rsp),
-	.VX_branch_rsp   (VX_branch_rsp),
-
-	.in_csr_data     (csr_decode_csr_data),
-	.out_csr_address (VX_csr_w_req.csr_address),
-	.out_is_csr      (VX_csr_w_req.is_csr),
-	.out_csr_result  (VX_csr_w_req.csr_result)
+	.VX_branch_rsp   (VX_branch_rsp)
 	);
 
 
@@ -111,9 +101,15 @@ VX_gpgpu_inst VX_gpgpu_inst(
 	.VX_warp_ctl    (VX_warp_ctl)
 	);
 
+VX_csr_wrapper VX_csr_wrapper(
+	.VX_csr_req(VX_csr_req),
+	.VX_csr_wb (VX_csr_wb)
+	);
+
 VX_writeback VX_wb(
 	.VX_mem_wb         (VX_mem_wb),
 	.VX_inst_exec_wb   (VX_inst_exec_wb),
+	.VX_csr_wb         (VX_csr_wb),
 
 	.VX_writeback_inter(VX_writeback_temp)
 	);

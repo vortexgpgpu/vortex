@@ -16,8 +16,6 @@ module VX_front_end (
 
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 
-
-	output wire[11:0] decode_csr_address,
 	output wire fetch_ebreak
 );
 
@@ -80,10 +78,6 @@ VX_d_e_reg vx_d_e_reg(
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_bckE_req       (VX_bckE_req)
 	);
-
-
-assign decode_csr_address = VX_frE_to_bckE_req.csr_address;
-
 
 endmodule
 

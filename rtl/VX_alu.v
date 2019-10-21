@@ -8,7 +8,6 @@ module VX_alu(
 	input wire[31:0]  in_itype_immed,
 	input wire[19:0]  in_upper_immed,
 	input wire[4:0]   in_alu_op,
-	input wire[31:0]  in_csr_data, // done
 	input wire[31:0]  in_curr_PC,
 	output reg[31:0]  out_alu_result
 	);
@@ -60,9 +59,6 @@ module VX_alu(
 				`SUBU:       out_alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
 				`LUI_ALU:    out_alu_result = upper_immed;
 				`AUIPC_ALU:  out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
-				`CSR_ALU_RW: out_alu_result = in_csr_data;
-				`CSR_ALU_RS: out_alu_result = in_csr_data;
-				`CSR_ALU_RC: out_alu_result = in_csr_data;
 				`MUL:        begin out_alu_result = mult_signed_result[31:0]; end
 				`MULH:       out_alu_result = mult_signed_result[63:32];
 				`MULHSU:     out_alu_result = mult_signed_un_result[63:32];

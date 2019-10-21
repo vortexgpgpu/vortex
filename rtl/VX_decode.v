@@ -126,8 +126,7 @@ module VX_decode(
 
 
 		assign VX_frE_to_bckE_req.csr_immed = is_csr_immed;
-
-
+		assign VX_frE_to_bckE_req.is_csr    = is_csr;
 
 
 		assign VX_frE_to_bckE_req.wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :
