@@ -2,6 +2,7 @@
 
 module VX_warp_scheduler (
 	input wire           clk,    // Clock
+	input wire           reset,
 	input wire           stall,
 	// Wspawn
 	input wire           wspawn,
@@ -90,16 +91,24 @@ module VX_warp_scheduler (
 	/* verilator lint_on UNUSED */
 
 	reg[1:0] start;
-	initial begin
-		warp_pcs[0] = (32'h80000000 - 4);
-		start = 0;
-		warp_active[0]     = 1; // Activating first warp
-		visible_active[0]  = 1; // Activating first warp
-		thread_masks[0][0] = 1; // Activating first thread in first warp
-	end
+	// initial begin
+	// 	warp_pcs[0] = (32'h80000000 - 4);
+	// 	start = 0;
+	// 	warp_active[0]     = 1; // Activating first warp
+	// 	visible_active[0]  = 1; // Activating first warp
+	// 	thread_masks[0][0] = 1; // Activating first thread in first warp
+	// end
 
 
-	always @(posedge clk) begin
+	always @(posedge clk or posedge reset) begin
+		if (reset) begin
+			warp_pcs[0] = (32'h80000000 - 4);
+			start = 0;
+			warp_active[0]     = 1; // Activating first warp
+			visible_active[0]  = 1; // Activating first warp
+			thread_masks[0][0] = 1; // Activating first thread in first warp
+		end
+
 		// Wsapwning warps
 		if (wspawn && found_wspawn) begin
 			warp_pcs[warp_to_wsapwn]       <= wsapwn_pc;
@@ -183,6 +192,7 @@ module VX_warp_scheduler (
 		wire pop  = is_join  && correct_warp_j;
 		VX_generic_stack #(.WIDTH(1+32+`NT), .DEPTH($clog2(`NT))) ipdom_stack(
 			.clk  (clk),
+			.reset(reset),
 			.push (push),
 			.pop  (pop),
 			.d    (d),

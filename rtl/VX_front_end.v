@@ -41,6 +41,7 @@ VX_join_inter            VX_join();
 
 VX_fetch vx_fetch(
 		.clk                (clk),
+		.reset              (reset),
 		.VX_wstall          (VX_wstall),
 		.VX_join            (VX_join),
 		.schedule_delay     (schedule_delay),

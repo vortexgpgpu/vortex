@@ -3,6 +3,7 @@
 
 module VX_fetch (
 	input  wire              clk,
+	input  wire              reset,
 	VX_wstall_inter          VX_wstall,
 	VX_join_inter            VX_join,
 	input  wire              schedule_delay,
@@ -27,6 +28,7 @@ module VX_fetch (
 		wire[31:0]     warp_pc;
 		VX_warp_scheduler warp_scheduler(
 			.clk            (clk),
+			.reset          (reset),
 			.stall          (pipe_stall),
 			// Wspawn
 			.wspawn         (VX_warp_ctl.wspawn),
