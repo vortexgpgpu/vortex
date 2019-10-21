@@ -59,6 +59,7 @@ VX_csr_wb_inter          VX_csr_wb();
 
 VX_gpr_stage VX_gpr_stage(
 	.clk               (clk),
+	.reset             (reset),
 	.schedule_delay    (schedule_delay),
 	.VX_writeback_inter(VX_writeback_temp),
 	.VX_bckE_req       (VX_bckE_req),

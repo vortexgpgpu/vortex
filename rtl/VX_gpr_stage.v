@@ -1,5 +1,6 @@
 module VX_gpr_stage (
 	input wire                 clk,
+	input wire                 reset,
 	input wire                 schedule_delay,
 	// inputs
 		// Instruction Information
@@ -54,7 +55,7 @@ module VX_gpr_stage (
 	VX_generic_register #(.N(256)) reg_data 
 	(
 		.clk  (clk),
-		.reset(zero_temp),
+		.reset(reset),
 		.stall(zero_temp),
 		.flush(zero_temp),
 		.in   ({VX_gpr_datf.a_reg_data, VX_gpr_datf.b_reg_data}),
@@ -66,7 +67,7 @@ module VX_gpr_stage (
 
 	VX_d_e_reg gpr_stage_reg(
 			.clk               (clk),
-			.reset             (zero_temp),
+			.reset             (reset),
 			.in_branch_stall   (stall),
 			.in_freeze         (zero_temp),
 			.VX_frE_to_bckE_req(VX_bckE_req),
