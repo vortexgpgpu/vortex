@@ -102,76 +102,76 @@ module VX_warp_scheduler (
 
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
-			warp_pcs[0] = (32'h80000000 - 4);
-			start = 0;
-			warp_active[0]     = 1; // Activating first warp
-			visible_active[0]  = 1; // Activating first warp
-			thread_masks[0][0] = 1; // Activating first thread in first warp
-		end
-
-		// Wsapwning warps
-		if (wspawn && found_wspawn) begin
-			warp_pcs[warp_to_wsapwn]       <= wsapwn_pc;
-			warp_active[warp_to_wsapwn]    <= 1;
-			visible_active[warp_to_wsapwn] <= 1;
-		end
-		// Halting warps
-		if (whalt) begin
-			warp_active[whalt_warp_num]    <= 0;
-			visible_active[whalt_warp_num] <= 0;
-		end
-
-		// Changing thread masks
-		if (ctm) begin
-			thread_masks[ctm_warp_num] <= ctm_mask;
-			warp_stalled[ctm_warp_num] <= 0;
-		end
-
-		// Stalling the scheduling of warps
-		if (wstall) begin
-			warp_stalled[wstall_warp_num]   <= 1;
-			visible_active[wstall_warp_num] <= 0;
-		end
-
-		if (is_split) begin
-			warp_stalled[split_warp_num] <= 0;
-			thread_masks[split_warp_num] <= split_new_mask;
-		end
-
-		if (is_join) begin
-			if (!join_fall) begin
-				warp_pcs[join_warp_num] <= join_pc;
+			warp_pcs[0]        <= (32'h80000000 - 4);
+			start              <= 0;
+			warp_active[0]     <= 1; // Activating first warp
+			visible_active[0]  <= 1; // Activating first warp
+			thread_masks[0][0] <= 1; // Activating first thread in first warp
+		end else begin
+			// Wsapwning warps
+			if (wspawn && found_wspawn) begin
+				warp_pcs[warp_to_wsapwn]       <= wsapwn_pc;
+				warp_active[warp_to_wsapwn]    <= 1;
+				visible_active[warp_to_wsapwn] <= 1;
 			end
-			thread_masks[join_warp_num] <= join_tm;
-		end
+			// Halting warps
+			if (whalt) begin
+				warp_active[whalt_warp_num]    <= 0;
+				visible_active[whalt_warp_num] <= 0;
+			end
 
-		// Refilling active warps
-		if ((visible_active == 0) && !(stall || wstall || hazard || is_join)) begin
-			visible_active <= warp_active & (~warp_stalled);
-		end
+			// Changing thread masks
+			if (ctm) begin
+				thread_masks[ctm_warp_num] <= ctm_mask;
+				warp_stalled[ctm_warp_num] <= 0;
+			end
 
-		// First cycle
-		if (start <= 2) begin
-			start <= 1;
-			visible_active <= warp_active & (~warp_stalled);
-		end
+			// Stalling the scheduling of warps
+			if (wstall) begin
+				warp_stalled[wstall_warp_num]   <= 1;
+				visible_active[wstall_warp_num] <= 0;
+			end
 
-		// Don't change state if stall
-		if (!global_stall && real_schedule && (thread_mask != 0)) begin
-			visible_active[warp_to_schedule] <= 0;
-			warp_pcs[warp_to_schedule]       <= new_pc;
-		end
+			if (is_split) begin
+				warp_stalled[split_warp_num] <= 0;
+				thread_masks[split_warp_num] <= split_new_mask;
+			end
 
-		// Jal
-		if (jal) begin
-			warp_pcs[jal_warp_num]     <= jal_dest;
-			warp_stalled[jal_warp_num] <= 0;
-		end
+			if (is_join) begin
+				if (!join_fall) begin
+					warp_pcs[join_warp_num] <= join_pc;
+				end
+				thread_masks[join_warp_num] <= join_tm;
+			end
 
-		// Branch
-		if (branch_valid) begin
-			if (branch_dir) warp_pcs[branch_warp_num]     <= branch_dest;
-			warp_stalled[branch_warp_num] <= 0;
+			// Refilling active warps
+			if ((visible_active == 0) && !(stall || wstall || hazard || is_join)) begin
+				visible_active <= warp_active & (~warp_stalled);
+			end
+
+			// First cycle
+			if (start <= 2) begin
+				start <= 1;
+				visible_active <= warp_active & (~warp_stalled);
+			end
+
+			// Don't change state if stall
+			if (!global_stall && real_schedule && (thread_mask != 0)) begin
+				visible_active[warp_to_schedule] <= 0;
+				warp_pcs[warp_to_schedule]       <= new_pc;
+			end
+
+			// Jal
+			if (jal) begin
+				warp_pcs[jal_warp_num]     <= jal_dest;
+				warp_stalled[jal_warp_num] <= 0;
+			end
+
+			// Branch
+			if (branch_valid) begin
+				if (branch_dir) warp_pcs[branch_warp_num]     <= branch_dest;
+				warp_stalled[branch_warp_num] <= 0;
+			end
 		end
 	end
 
