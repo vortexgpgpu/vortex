@@ -22,19 +22,17 @@ module VX_generic_stack
 		if (reset) begin
 			ptr <= 0;
 			for (i = 0; i < (1 << DEPTH); i=i+1) stack[i] <= 0;
-		end else 
-		if (push)
+		end else if (push)
 			ptr <= ptr + 2;
-		else if (pop)
+		else if (pop) begin
 			ptr <= ptr - 1;
-	end
-
-	always @(posedge clk) begin
-		if (push) begin
+		end else if (push) begin
 			stack[ptr]   <= q1;
 			stack[ptr+1] <= q2;
 		end
+
 	end
+
 
 	assign d = stack[ptr - 1];
 
