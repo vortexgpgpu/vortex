@@ -8,6 +8,7 @@ module VX_decode(
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
 	VX_wstall_inter          VX_wstall,
+	VX_join_inter            VX_join,
 	output wire              out_ebreak
 
 );
@@ -117,6 +118,11 @@ module VX_decode(
 		assign is_barrier   = is_gpgpu && (func3 == 4); // Goes to BE
 		assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
 		assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
+
+
+		assign VX_join.is_join       = is_join;
+		assign VX_join.join_warp_num = in_warp_num;
+
 
 		assign VX_frE_to_bckE_req.is_wspawn  = is_wspawn;
 		assign VX_frE_to_bckE_req.is_tmc     = is_tmc;
@@ -283,7 +289,7 @@ module VX_decode(
 
 		assign VX_frE_to_bckE_req.branch_type = temp_branch_type;
 
-		assign VX_wstall.wstall               = (temp_branch_stall || is_tmc || is_split || is_join || is_barrier) && (|in_valid);
+		assign VX_wstall.wstall               = (temp_branch_stall || is_tmc || is_split || is_barrier) && (|in_valid);
 		assign VX_wstall.warp_num             = in_warp_num;
 
 		always @(*) begin

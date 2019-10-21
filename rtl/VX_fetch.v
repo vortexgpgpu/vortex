@@ -4,6 +4,7 @@
 module VX_fetch (
 	input  wire              clk,
 	VX_wstall_inter          VX_wstall,
+	VX_join_inter            VX_join,
 	input  wire              schedule_delay,
 	VX_icache_response_inter icache_response,
 	VX_icache_request_inter  icache_request,
@@ -42,11 +43,16 @@ module VX_fetch (
 			.wstall         (VX_wstall.wstall),
 			.wstall_warp_num(VX_wstall.warp_num),
 
+			// Join
+			.is_join         (VX_join.is_join),
+			.join_warp_num   (VX_join.join_warp_num),
+
 			// Split
 			.is_split        (VX_warp_ctl.is_split),
 			.split_new_mask  (VX_warp_ctl.split_new_mask),
 			.split_later_mask(VX_warp_ctl.split_later_mask),
 			.split_save_pc   (VX_warp_ctl.split_save_pc),
+			.split_warp_num  (VX_warp_ctl.warp_num),
 
 			// JAL
 			.jal            (VX_jal_rsp.jal),

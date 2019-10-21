@@ -37,10 +37,12 @@ wire real_fetch_ebreak;
 
 
 VX_wstall_inter          VX_wstall();
+VX_join_inter            VX_join();
 
 VX_fetch vx_fetch(
 		.clk                (clk),
 		.VX_wstall          (VX_wstall),
+		.VX_join            (VX_join),
 		.schedule_delay     (schedule_delay),
 		.VX_jal_rsp         (VX_jal_rsp),
 		.icache_response    (icache_response_fe),
@@ -65,6 +67,7 @@ VX_decode vx_decode(
 		.fd_inst_meta_de   (fd_inst_meta_de),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_wstall         (VX_wstall),
+		.VX_join           (VX_join),
 		.out_ebreak        (fetch_ebreak)
 	);
 

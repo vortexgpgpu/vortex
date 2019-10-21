@@ -18,6 +18,7 @@ interface VX_warp_ctl_inter ();
 
 
 	wire           is_split;
+	wire[`NW_M1:0] split_warp_num;
 	wire[`NT_M1:0] split_new_mask;
 	wire[`NT_M1:0] split_later_mask;
 	wire[31:0]     split_save_pc;

@@ -13,7 +13,7 @@ interface VX_gpu_inst_req_inter();
 	wire                 is_split; 
 	wire                 is_barrier;
 
-	wire                 pc_next;
+	wire[31:0]           pc_next;
 
 	wire[`NT_M1:0][31:0] a_reg_data;
 	wire[31:0]           rd2;

@@ -21,10 +21,15 @@ module VX_warp_scheduler (
 	input  wire[`NW_M1:0] wstall_warp_num,
 
 	// Split
-	input wire           is_split,
-	input wire[`NT_M1:0] split_new_mask,
-	input wire[`NT_M1:0] split_later_mask,
-	input wire[31:0]     split_save_pc,	
+	input wire            is_split,
+	input wire[`NT_M1:0]  split_new_mask,
+	input wire[`NT_M1:0]  split_later_mask,
+	input wire[31:0]      split_save_pc,	
+	input wire[`NW_M1:0]  split_warp_num,
+
+	// Join
+	input wire            is_join,
+	input wire[`NW_M1:0]  join_warp_num,
 
 	// JAL
 	input wire           jal,
@@ -114,9 +119,20 @@ module VX_warp_scheduler (
 			visible_active[wstall_warp_num] <= 0;
 		end
 
+		if (is_split) begin
+			warp_stalled[split_warp_num] <= 0;
+			thread_masks[split_warp_num] <= split_new_mask;
+		end
+
+		if (is_join) begin
+			if (!join_fall) begin
+				warp_pcs[join_warp_num] <= join_pc;
+			end
+			thread_masks[join_warp_num] <= join_tm;
+		end
+
 		// Refilling active warps
-		if ((visible_active == 0) && !(stall || wstall || hazard)) begin
-		// if ((num_active <= 1) && !(globa)) begin
+		if ((visible_active == 0) && !(stall || wstall || hazard || is_join)) begin
 			visible_active <= warp_active & (~warp_stalled);
 		end
 
@@ -145,8 +161,36 @@ module VX_warp_scheduler (
 		end
 	end
 
+	wire[(1+32+`NT_M1):0] q1 = {1'b1, warp_pcs[split_warp_num], thread_masks[split_warp_num]};
+	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
 
 
+	wire[(1+32+`NT_M1):0] d;
+
+	wire           join_fall;
+	wire[31:0]     join_pc;
+	wire[`NT_M1:0] join_tm;
+
+	assign {join_fall, join_pc, join_tm} = d;
+
+
+
+	genvar curr_warp;
+	for (curr_warp = 0; curr_warp < `NW; curr_warp = curr_warp + 1) begin
+		wire correct_warp_s = (curr_warp == split_warp_num);
+		wire correct_warp_j = (curr_warp == join_warp_num);
+
+		wire push = is_split && correct_warp_s;
+		wire pop  = is_join  && correct_warp_j;
+		VX_generic_stack #(.WIDTH(1+32+`NT), .DEPTH($clog2(`NT))) ipdom_stack(
+			.clk  (clk),
+			.push (push),
+			.pop  (pop),
+			.d    (d),
+			.q1   (q1),
+			.q2   (q2)
+			);
+	end
 
 	// wire should_stall = stall || (jal && (warp_to_schedule == jal_warp_num)) || (branch_dir && (warp_to_schedule == branch_warp_num));
 
@@ -157,7 +201,7 @@ module VX_warp_scheduler (
 
 	assign real_schedule = schedule && !warp_stalled[warp_to_schedule];
 
-	assign global_stall = (stall || wstall || hazard || !real_schedule);
+	assign global_stall = (stall || wstall || hazard || !real_schedule || is_join);
 
 
 	assign warp_pc     = warp_pcs[warp_to_schedule];
