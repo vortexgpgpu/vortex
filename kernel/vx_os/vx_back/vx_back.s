@@ -9,6 +9,9 @@ _start:
       la a0, 0xFF003300
       li a1, 7
       sw a1, 4(a0)
+      nop
+      nop
+      nop
       lw a2, 4(a0)
       li a0, 0
       .word 0x0005006b    # tmc a0

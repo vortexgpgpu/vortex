@@ -82,7 +82,7 @@ module VX_gpr_stage (
 	wire flush_rest = schedule_delay;
 
 
-	wire stall_lsu  = is_lsu && memory_delay;
+	wire stall_lsu  = memory_delay;
 	wire flush_lsu  = schedule_delay && !stall_lsu;
 
 

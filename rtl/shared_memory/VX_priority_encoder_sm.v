@@ -16,73 +16,84 @@ module VX_priority_encoder_sm
 	// To SM Module
 	output reg[NB:0]         	    out_valid,
 	output reg[NB:0][31:0]  	    out_address,
-	output reg[NB:0][31:0] 		out_data,
+	output reg[NB:0][31:0] 		    out_data,
 
 	// To Processor
 	output wire[NB:0][1:0]		    req_num,
 	output reg 			            stall,
-	output wire                      send_data // Finished all of the requests
+	output wire                     send_data // Finished all of the requests
 );
 
-wire[NB:0][`NT_M1:0] bank_valids;
-wire[NB:0][`NT_M1:0] temp_bank_valids;
-reg[NB:0][`NT_M1:0] temp_valid; // State - If there's any ones here, then stall
-wire[NB:0] temp_stall;
-integer counter[NB:0] ;
-wire[NB:0][`NT_M1:0] mask;
-wire[NB:0] update_temp_valid; 
-reg[NB:0] req_done;
+	reg[`NT_M1:0] left_requests;
 
-VX_bank_valids #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_bank_valid(
-	.in_valids(in_valid),
-	.in_addr(in_address),
-	.bank_valids(bank_valids)
-	);
-
-genvar j;
-for(j=0; j <= NB; j++) begin
-	assign temp_stall[j] = ($countones(temp_valid[j]) != 0);
-	assign temp_bank_valids[j] = (temp_stall[j] || req_done[j]) ? temp_valid[j] : bank_valids[j];
-	assign update_temp_valid[j]  = !req_done[j] && ($countones(bank_valids[j]) > 1);
-
-	VX_generic_priority_encoder #(.N(4)) vx_priority_encoder(
-	    .valids(temp_bank_valids[j]),
-	    .index(req_num[j]),
-	    .found(out_valid[j])
-	  );
-
-	VX_set_bit vx_set_bit(
-		.index(req_num[j]),
-		.mask (mask[j])
-	);
-
-	assign out_address[j] = out_valid[j] ? in_address[req_num[j]] : 0;
-	assign out_data[j]    = out_valid[j] ? in_data[req_num[j]] : 0;
-end
+	wire[`NT_M1:0] use_valid;
 
 
-assign stall = |temp_stall;
-assign send_data = &req_done;
+	wire requests_left = (|left_requests);
 
-genvar i;
-always @(posedge clk) begin
-	for(i = 0; i <= NB; i = i+1) begin
-		if (update_temp_valid[i]) begin
-			counter[i] <= counter[i] + 1;
-			if(counter[i] == 0) temp_valid[i] <= bank_valids[i] & mask[i];
-			else if (counter[i] > 0) temp_valid[i] <= temp_bank_valids[i] & mask[i];
-		end 
-		if(($countones(in_valid) > 0) && ($countones(bank_valids[i]) == 0)) begin
-			req_done[i] <= 1;
-		end
-		else if((counter[i][2:0] == ($countones(bank_valids[i])-1))) begin 
-			req_done[i] <= 1;
-			counter[i] <= 0;
-		end
-		else begin
-			req_done[i] <= 0;
+	assign use_valid = (requests_left) ? left_requests : in_valid;
+
+
+	wire[NB:0][`NT_M1:0] bank_valids;
+	VX_bank_valids #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_bank_valid(
+		.in_valids(use_valid),
+		.in_addr(in_address),
+		.bank_valids(bank_valids)
+		);
+
+	wire[NB:0] more_than_one_valid;
+
+	genvar curr_bank;
+	for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) 
+	begin
+		assign more_than_one_valid[curr_bank] = $countones(bank_valids[curr_bank]) > 1;
+	end
+
+
+	assign stall     = (|more_than_one_valid);
+	assign send_data = (!stall) && (|in_valid); // change
+
+	wire[NB:0][1:0] internal_req_num;
+	wire[NB:0]      internal_out_valid;
+
+
+	// There's one or less valid per bank
+	genvar curr_bank_o;
+	for (curr_bank_o = 0; curr_bank_o <= NB; curr_bank_o = curr_bank_o + 1) 
+	begin
+
+		VX_generic_priority_encoder #(.N(4)) vx_priority_encoder(
+		    .valids(bank_valids[curr_bank_o]),
+		    .index(internal_req_num[curr_bank_o]),
+		    .found(internal_out_valid[curr_bank_o])
+		  );
+		assign out_address[curr_bank_o] = internal_out_valid[curr_bank_o] ? in_address[internal_req_num[curr_bank_o]] : 0;
+		assign out_data[curr_bank_o]    = internal_out_valid[curr_bank_o] ? in_data[internal_req_num[curr_bank_o]] : 0;
+	end
+
+	reg[`NT_M1:0] serviced;
+	genvar curr_b;
+	always @(*) begin
+		serviced = 0;
+		for (curr_b = 0; curr_b <= NB; curr_b=curr_b+1) begin
+			serviced[internal_req_num[curr_b]] = 1;
 		end
 	end
-end
+
+
+	assign req_num   = internal_req_num;
+	assign out_valid = internal_out_valid;
+
+
+	wire[`NT_M1:0] serviced_qual = in_valid & (serviced);
+
+	wire[`NT_M1:0] new_left_requests = (left_requests == 0) ? (in_valid & ~serviced_qual) : (left_requests & ~ serviced_qual);
+
+	// wire[`NT_M1:0] new_left_requests = left_requests & ~(serviced_qual);
+
+	always @(posedge clk) begin
+		if (!stall)    left_requests <= 0;
+		else           left_requests <= new_left_requests;
+	end
 
 endmodule

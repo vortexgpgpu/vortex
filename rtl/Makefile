@@ -13,7 +13,7 @@ COMP=--compiler gcc
 
 WNO=-Wno-UNOPTFLAT -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED
 
-LIGHTW=-Wno-UNOPTFLAT --Wno-PINMISSING -Wno-WIDTH -Wno-STMTDLY
+LIGHTW=-Wno-UNOPTFLAT
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
 LIB=
 
@@ -27,7 +27,7 @@ MAKECPP=(cd obj_dir && make -j -f VVortex.mk)
 # -LDFLAGS '-lsystemc'
 VERILATOR:
 	echo "#define VCD_OFF" > simulate/tb_debug.h
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)
+	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW)
 
 VERILATORnoWarnings:
 	echo "#define VCD_OFF" > simulate/tb_debug.h
