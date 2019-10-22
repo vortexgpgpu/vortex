@@ -83,6 +83,45 @@ module VX_gpr (
  //         .COLLDISN(1'b1)
  //   );
  //   /* verilator lint_on PINCONNECTEMPTY */
+	// wire[127:0] write_bit_mask = {{32{~(VX_writeback_inter.wb_valid[3])}}, {32{~(VX_writeback_inter.wb_valid[2])}}, {32{~(VX_writeback_inter.wb_valid[1])}}, {32{~(VX_writeback_inter.wb_valid[0])}}};
+	// /* verilator lint_off PINCONNECTEMPTY */
+ //   rf2_32x128_wm1 first_ram (
+ //         .CENYA(),
+ //         .AYA(),
+ //         .CENYB(),
+ //         .WENYB(),
+ //         .AYB(),
+ //         .QA(out_a_reg_data),
+ //         .SOA(),
+ //         .SOB(),
+ //         .CLKA(clk),
+ //         .CENA(cena_1),
+ //         .AA(VX_gpr_read.rs1),
+ //         .CLKB(clk),
+ //         .CENB(cenb),
+ //         .WENB(write_bit_mask),
+ //         .AB(VX_writeback_inter.rd),
+ //         .DB(VX_writeback_inter.write_data),
+ //         .EMAA(3'b011),
+ //         .EMASA(1'b0),
+ //         .EMAB(3'b011),
+ //         .TENA(1'b1),
+ //         .TCENA(1'b0),
+ //         .TAA(5'b0),
+ //         .TENB(1'b1),
+ //         .TCENB(1'b0),
+ //         .TWENB(128'b0),
+ //         .TAB(5'b0),
+ //         .TDB(128'b0),
+ //         .RET1N(1'b1),
+ //         .SIA(2'b0),
+ //         .SEA(1'b0),
+ //         .DFTRAMBYP(1'b0),
+ //         .SIB(2'b0),
+ //         .SEB(1'b0),
+ //         .COLLDISN(1'b1)
+ //   );
+ //   /* verilator lint_on PINCONNECTEMPTY */
 
  //   /* verilator lint_off PINCONNECTEMPTY */
  //   rf2_32x128_wm1 second_ram (

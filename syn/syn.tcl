@@ -19,6 +19,10 @@ set_ideal_network [get_ports clk]
 set_max_fanout 20 [get_ports reset]
 set_false_path -from [get_ports reset]
 
+set_register_merging Vortex FALSE
+set compile_seqmap_propagate_constants false
+set compile_seqmap_propagate_high_effort false
+
 compile_ultra -no_autoungroup
 ungroup -all -flatten
 uniquify
