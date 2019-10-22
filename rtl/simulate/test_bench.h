@@ -385,7 +385,7 @@ bool Vortex::simulate(std::string file_to_simulate)
     // unsigned cycles;
     counter = 0;
     this->stats_total_cycles = 10;
-    while (this->stop && ((counter < 6)))
+    while (this->stop && ((counter < 2)))
     // while (this->stats_total_cycles < 10)
     {
         // std::cout << "Counter: " << counter << "\n";

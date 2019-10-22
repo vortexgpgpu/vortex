@@ -6,30 +6,49 @@
 .type _start, @function
 .global _start
 _start:
-    li a0, 4
+#     li a0, 4
+#     la a1, SPAWN
+#     .word 0x00b5106b
+#     j SPAWN
+#     nop
+#     nop
+#     nop
+#     nop
+#     nop
+#     nop
+#     nop
+#     nop
+# SPAWN:
+#     li a2, 7
+#     li a0, 0
+#     .word 0x0005006b # tmc a0
+    ###########################
+#     li a0, 4
+#     .word 0x0005006b    # tmc a0
+#     csrr a1, 0x20       # read thread IDs
+#     # csrr a2, 0x21     # read warp   IDs
+#     slti a0, a1, 2
+#     .word 0x0005206b    # split a0
+#     beq a0, zero, ELSE
+#     li a2, 5
+#     j DONE
+# ELSE:
+#     li a2, 7
+# DONE:
+#     .word 0x0000306b    #join
+#     ecall
+    ############################
+    li a0, 8          # Num Warps
+    csrw 0x20, a0     # Setting the number of available warps 
+    li a0, 4          # Num Threads
+    csrw 0x21, a0     # Setting the number of available threads
+    csrw mhartid,zero
+    csrw misa,zero
+    lui  sp, 0x7ffff
+    # jal  vx_before_main
+    jal  main
+    li a0, 0
     .word 0x0005006b    # tmc a0
-    csrr a1, 0x20       # read thread IDs
-    # csrr a2, 0x21     # read warp   IDs
-    slti a0, a1, 2
-    .word 0x0005206b    # split a0
-    beq a0, zero, ELSE
-    li a2, 5
-    j DONE
-ELSE:
-    li a2, 7
-DONE:
-    .word 0x0000306b    #join
-    ecall
-    # li a0, 8          # Num Warps
-    # csrw 0x20, a0     # Setting the number of available warps 
-    # li a0, 4          # Num Threads
-    # csrw 0x21, a0     # Setting the number of available threads
-    # csrw mhartid,zero
-    # csrw misa,zero
-    # lui  sp, 0x7ffff
-    # # jal  vx_before_main
-    # jal  main
-    # ecall
 
 # Hi:
 #     li a2, 7

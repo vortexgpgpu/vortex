@@ -7,6 +7,7 @@ module VX_warp_scheduler (
 	// Wspawn
 	input wire           wspawn,
 	input wire[31:0]     wsapwn_pc,
+	input wire[`NW-1:0]  wspawn_new_active,
 
 	// CTM
 	input  wire           ctm,
@@ -50,6 +51,10 @@ module VX_warp_scheduler (
 
 );
 
+	wire update_use_wspawn;
+
+	wire update_visible_active;
+
 	wire[(1+32+`NT_M1):0] d[`NW-1:0];
 
 	wire           join_fall;
@@ -72,9 +77,9 @@ module VX_warp_scheduler (
 	reg[31:0]     warp_pcs[`NW-1:0];
 
 
-	// Choosing a warp to wsapwn
-	wire[`NW_M1:0] warp_to_wsapwn;
-	wire           found_wspawn;
+	// wsapwn
+	reg[31:0]    use_wsapwn_pc;
+	reg[`NW-1:0] use_wsapwn;
 
 	wire[`NW_M1:0] warp_to_schedule;
 	wire           schedule;
@@ -111,15 +116,19 @@ module VX_warp_scheduler (
 				warp_pcs[curr_w_help]        <= 0;
 				warp_active[curr_w_help]     <= 0; // Activating first warp
 				visible_active[curr_w_help]  <= 0; // Activating first warp
-				thread_masks[curr_w_help]    <= 0; // Activating first thread in first warp
+				thread_masks[curr_w_help]    <= 1; // Activating first thread in first warp
 			end
 
 		end else begin
 			// Wsapwning warps
-			if (wspawn && found_wspawn) begin
-				warp_pcs[warp_to_wsapwn]       <= wsapwn_pc;
-				warp_active[warp_to_wsapwn]    <= 1;
-				visible_active[warp_to_wsapwn] <= 1;
+			if (wspawn) begin
+				warp_active    <= wspawn_new_active;
+				use_wsapwn_pc  <= wsapwn_pc;
+				use_wsapwn     <= wspawn_new_active & (~`NW'b1);
+			end
+
+			if (update_use_wspawn) begin
+				use_wsapwn[warp_to_schedule] <= 0;
 			end
 			// Halting warps
 			if (whalt) begin
@@ -152,13 +161,7 @@ module VX_warp_scheduler (
 			end
 
 			// Refilling active warps
-			if ((visible_active == 0) && !(stall || wstall || hazard || is_join)) begin
-				visible_active <= warp_active & (~warp_stalled);
-			end
-
-			// First cycle
-			if (start <= 2) begin
-				start <= 1;
+			if (update_visible_active) begin
 				visible_active <= warp_active & (~warp_stalled);
 			end
 
@@ -181,6 +184,9 @@ module VX_warp_scheduler (
 			end
 		end
 	end
+
+
+	assign update_visible_active = ($countones(visible_active) < 1) && !(stall || wstall || hazard || is_join);
 
 	wire[(1+32+`NT_M1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
 	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
@@ -220,28 +226,24 @@ module VX_warp_scheduler (
 	assign global_stall = (stall || wstall || hazard || !real_schedule || is_join);
 
 
-	assign warp_pc     = warp_pcs[warp_to_schedule];
+	wire real_use_wspawn = use_wsapwn[warp_to_schedule];
+
+	assign warp_pc     = real_use_wspawn ? use_wsapwn_pc : warp_pcs[warp_to_schedule];
 	assign thread_mask = (global_stall) ? 0 : thread_masks[warp_to_schedule];
 	assign warp_num    = warp_to_schedule;
 
+	assign update_use_wspawn = use_wsapwn[warp_to_schedule] && !global_stall;
 
 	assign new_pc = warp_pc + 4;
 
 
-	assign use_active = (num_active <= 1) ? (warp_active & (~warp_stalled)) : visible_active;
+	assign use_active = (num_active < 1) ? (warp_active & (~warp_stalled)) : visible_active;
 
 	// Choosing a warp to schedule
 	VX_priority_encoder choose_schedule(
 		.valids(use_active),
 		.index (warp_to_schedule),
 		.found (schedule)
-	);
-
-
-	VX_priority_encoder choose_wsapwn(
-		.valids(~warp_active),
-		.index (warp_to_wsapwn),
-		.found (found_wspawn)
 	);
 
 
@@ -252,7 +254,8 @@ module VX_warp_scheduler (
 		);
 
 
-	assign out_ebreak = (warp_active == 0);
+	wire ebreak = (warp_active == 0);
+	assign out_ebreak = ebreak;
 
 
 

@@ -32,7 +32,7 @@ wire           decode_branch_stall;
 wire total_freeze = schedule_delay;
 
 /* verilator lint_off UNUSED */
-wire real_fetch_ebreak;
+// wire real_fetch_ebreak;
 /* verilator lint_on UNUSED */
 
 
@@ -51,7 +51,7 @@ VX_fetch vx_fetch(
 
 		.icache_request     (icache_request_fe),
 		.VX_branch_rsp      (VX_branch_rsp),
-		.out_ebreak         (real_fetch_ebreak), // fetch_ebreak
+		.out_ebreak         (fetch_ebreak), // fetch_ebreak
 		.fe_inst_meta_fd    (fe_inst_meta_fd)
 	);
 
@@ -68,8 +68,7 @@ VX_decode vx_decode(
 		.fd_inst_meta_de   (fd_inst_meta_de),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_wstall         (VX_wstall),
-		.VX_join           (VX_join),
-		.out_ebreak        (fetch_ebreak)
+		.VX_join           (VX_join)
 	);
 
 wire no_br_stall = 0;

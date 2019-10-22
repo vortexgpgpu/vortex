@@ -13,6 +13,7 @@ interface VX_warp_ctl_inter ();
 
 	wire           wspawn;
 	wire[31:0]     wspawn_pc;
+	wire[`NW-1:0]  wspawn_new_active;
 
 	wire           ebreak;
 

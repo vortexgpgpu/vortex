@@ -20,14 +20,27 @@ module VX_gpgpu_inst (
 	wire valid_inst = (|curr_valids);
 
 	assign VX_warp_ctl.warp_num    = VX_gpu_inst_req.warp_num;
-	assign VX_warp_ctl.change_mask = (VX_gpu_inst_req.is_tmc || VX_gpu_inst_req.is_split) && valid_inst;
+	assign VX_warp_ctl.change_mask = (VX_gpu_inst_req.is_tmc) && valid_inst;
 	assign VX_warp_ctl.thread_mask = VX_gpu_inst_req.is_tmc ? tmc_new_mask : 0;
 
-	assign VX_warp_ctl.ebreak = (VX_gpu_inst_req.a_reg_data[0] == 0) && valid_inst;
+	// assign VX_warp_ctl.ebreak = (VX_gpu_inst_req.a_reg_data[0] == 0) && valid_inst;
+	assign VX_warp_ctl.ebreak = VX_warp_ctl.change_mask && (VX_warp_ctl.thread_mask == 0);
 
-	assign VX_warp_ctl.wspawn = 0;
-	assign VX_warp_ctl.wspawn_pc = 0;
 
+	wire       wspawn    = VX_gpu_inst_req.is_wspawn;
+	wire[31:0] wspawn_pc = VX_gpu_inst_req.rd2;
+	wire[`NW-1:0] wspawn_new_active;
+	genvar curr_w;
+	for (curr_w = 0; curr_w < `NW; curr_w=curr_w+1)
+	begin
+		assign wspawn_new_active[curr_w] = curr_w < VX_gpu_inst_req.a_reg_data[0];
+	end
+
+
+
+	assign VX_warp_ctl.wspawn            = wspawn;
+	assign VX_warp_ctl.wspawn_pc         = wspawn_pc;
+	assign VX_warp_ctl.wspawn_new_active = wspawn_new_active;
 
 	wire[`NT_M1:0] split_new_use_mask;
 	wire[`NT_M1:0] split_new_later_mask;
@@ -49,7 +62,7 @@ module VX_gpgpu_inst (
 		);
 
 	
-	assign VX_warp_ctl.is_split         = is_split && (num_valids > 1);
+	assign VX_warp_ctl.is_split         = is_split && (num_valids > 1) && (split_new_use_mask != 0) && (split_new_use_mask != {`NT{1'b1}});
 	assign VX_warp_ctl.split_new_mask   = split_new_use_mask;
 	assign VX_warp_ctl.split_later_mask = split_new_later_mask;
 	assign VX_warp_ctl.split_save_pc    = VX_gpu_inst_req.pc_next;

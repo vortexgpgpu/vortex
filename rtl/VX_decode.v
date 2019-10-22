@@ -8,8 +8,7 @@ module VX_decode(
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
 	VX_wstall_inter          VX_wstall,
-	VX_join_inter            VX_join,
-	output wire              out_ebreak
+	VX_join_inter            VX_join
 
 );
 
@@ -218,7 +217,7 @@ module VX_decode(
 		// assign is_ebreak = is_e_inst;
 		wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && (|in_valid));
 		assign VX_frE_to_bckE_req.ebreak = ebreak;
-		assign out_ebreak = ebreak;
+		wire out_ebreak = ebreak;
 
 
 
