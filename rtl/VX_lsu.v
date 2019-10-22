@@ -16,7 +16,7 @@ module VX_lsu (
 
 	// VX_inst_mem_wb_inter VX_mem_wb_temp();
 
-	assign out_delay = 1'b0;
+	assign out_delay = VX_dcache_rsp.delay;
 
 
 	// Generate Addresses

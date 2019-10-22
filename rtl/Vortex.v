@@ -15,19 +15,25 @@ module Vortex(
 	output wire           out_ebreak
 	);
 
+// assign out_cache_driver_in_address   = 0;
+assign out_cache_driver_in_mem_read  = `NO_MEM_READ;
+assign out_cache_driver_in_mem_write = `NO_MEM_WRITE;
+// assign out_cache_driver_in_valid     = 0;
+// assign out_cache_driver_in_data      = 0;
+
+// assign out_cache_driver_in_address   = VX_dcache_req.out_cache_driver_in_address;
+// assign out_cache_driver_in_mem_read  = VX_dcache_req.out_cache_driver_in_mem_read;
+// assign out_cache_driver_in_mem_write = VX_dcache_req.out_cache_driver_in_mem_write;
+// assign out_cache_driver_in_valid     = VX_dcache_req.out_cache_driver_in_valid;
+// assign out_cache_driver_in_data      = VX_dcache_req.out_cache_driver_in_data;
+
+// assign VX_dcache_rsp.in_cache_driver_out_data = in_cache_driver_out_data;
+
+
 // Dcache Interface
 
 VX_dcache_response_inter VX_dcache_rsp();
-VX_dcache_request_inter VX_dcache_req();
-
-assign out_cache_driver_in_address   = VX_dcache_req.out_cache_driver_in_address;
-assign out_cache_driver_in_mem_read  = VX_dcache_req.out_cache_driver_in_mem_read;
-assign out_cache_driver_in_mem_write = VX_dcache_req.out_cache_driver_in_mem_write;
-assign out_cache_driver_in_valid     = VX_dcache_req.out_cache_driver_in_valid;
-assign out_cache_driver_in_data      = VX_dcache_req.out_cache_driver_in_data;
-
-assign VX_dcache_rsp.in_cache_driver_out_data = in_cache_driver_out_data;
-
+VX_dcache_request_inter  VX_dcache_req();
 
 // Icache Interface
 
@@ -100,6 +106,12 @@ VX_back_end vx_back_end(
 	.gpr_stage_delay     (gpr_stage_delay)
 	);
 
+
+VX_dmem_controller VX_dmem_controller(
+	.clk          (clk),
+	.VX_dcache_req(VX_dcache_req),
+	.VX_dcache_rsp(VX_dcache_rsp)
+	);
 // VX_csr_handler vx_csr_handler(
 // 		.clk                  (clk),
 // 		.in_decode_csr_address(decode_csr_address),

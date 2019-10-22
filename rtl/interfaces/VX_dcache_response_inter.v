@@ -7,7 +7,8 @@
 
 interface VX_dcache_response_inter ();
 
-		wire[31:0]  in_cache_driver_out_data[`NT_M1:0];
+		wire[`NT_M1:0][31:0] in_cache_driver_out_data;
+		wire                 delay;
 
 endinterface
 

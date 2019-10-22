@@ -6,6 +6,12 @@
 .type _start, @function
 .global _start
 _start:
+      la a0, 0xFF003300
+      li a1, 7
+      sw a1, 4(a0)
+      lw a2, 4(a0)
+      li a0, 0
+      .word 0x0005006b    # tmc a0
 #     li a0, 4
 #     la a1, SPAWN
 #     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
@@ -40,17 +46,17 @@ _start:
 #     .word 0x0000306b    #join
 #     ecall
     ############################
-    li a0, 8          # Num Warps
-    csrw 0x20, a0     # Setting the number of available warps 
-    li a0, 4          # Num Threads
-    csrw 0x21, a0     # Setting the number of available threads
-    csrw mhartid,zero
-    csrw misa,zero
-    lui  sp, 0x7ffff
-    # jal  vx_before_main
-    jal  main
-    li a0, 0
-    .word 0x0005006b    # tmc a0
+    # li a0, 8          # Num Warps
+    # csrw 0x20, a0     # Setting the number of available warps 
+    # li a0, 4          # Num Threads
+    # csrw 0x21, a0     # Setting the number of available threads
+    # csrw mhartid,zero
+    # csrw misa,zero
+    # lui  sp, 0x7ffff
+    # # jal  vx_before_main
+    # jal  main
+    # li a0, 0
+    # .word 0x0005006b    # tmc a0
 
 # Hi:
 #     li a2, 7

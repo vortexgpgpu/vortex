@@ -1135,7 +1135,7 @@ module rf2_32x128_wm1 (CENYA, AYA, CENYB, WENYB, AYB, QA, SOA, SOB, CLKA, CENA, 
     $display("Warning: Set Value for EMAA doesn't match Default value 3 in %m at %0t", $time);
   end
   always @ (EMASA_) begin
-    if(EMASA_ < 0) 
+    if($signed(EMASA_) < 0) 
     $display("Warning: Set Value for EMASA doesn't match Default value 0 in %m at %0t", $time);
   end
   always @ (EMAB_) begin
@@ -3622,7 +3622,7 @@ module rf2_32x128_wm1 (CENYA, AYA, CENYB, WENYB, AYB, QA, SOA, SOB, CLKA, CENA, 
     $display("Warning: Set Value for EMAA doesn't match Default value 3 in %m at %0t", $time);
   end
   always @ (EMASA_) begin
-    if(EMASA_ < 0) 
+    if($signed(EMASA_) < 0) 
     $display("Warning: Set Value for EMASA doesn't match Default value 0 in %m at %0t", $time);
   end
   always @ (EMAB_) begin

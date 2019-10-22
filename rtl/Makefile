@@ -1,6 +1,9 @@
 all: RUNFILE
 
-INCLUDE=-I. -I../models/memory/cln28hpc/rf2_32x128_wm1/ -I/usr/local/systemc/ -Iinterfaces/ -Ipipe_regs/ -Isimulate
+# /rf2_256x128_wm1/
+BaseMEM=../models/memory/cln28hpm
+
+INCLUDE=-I. -Ishared_memory -I$(BaseMEM)/rf2_128x128_wm1/ -I$(BaseMEM)/rf2_256x128_wm1/ -I$(BaseMEM)/rf2_256x19_wm1/ -I$(BaseMEM)/rf2_32x128_wm1/ -Iinterfaces/ -Ipipe_regs/ -Isimulate
 
 FILE=Vortex.v
 
@@ -8,7 +11,7 @@ EXE=--exe ./simulate/test_bench.cpp
 
 COMP=--compiler gcc
 
-WNO=-Wno-UNOPTFLAT -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH
+WNO=-Wno-UNOPTFLAT -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED
 
 LIGHTW=-Wno-UNOPTFLAT --Wno-PINMISSING -Wno-WIDTH -Wno-STMTDLY
 # LIB=-LDFLAGS '-L/usr/local/systemc/'

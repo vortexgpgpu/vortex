@@ -1273,7 +1273,7 @@ task dumpmem;
 	reg [BITS-1:0] wordtemp;
 	reg [6:0] Atemp;
   begin
-	dump_file_desc = $fopen(filename_dump);
+	dump_file_desc = $fopen(filename_dump, "w");
      if (CENA_ === 1'b1 && CENB_ === 1'b1) begin
 	  for (i=0;i<WORDS;i=i+1) begin
 	  Atemp = i;
@@ -3768,7 +3768,7 @@ task dumpmem;
 	reg [BITS-1:0] wordtemp;
 	reg [6:0] Atemp;
   begin
-	dump_file_desc = $fopen(filename_dump);
+	dump_file_desc = $fopen(filename_dump, "w");
      if (CENA_ === 1'b1 && CENB_ === 1'b1) begin
 	  for (i=0;i<WORDS;i=i+1) begin
 	  Atemp = i;
@@ -16511,7 +16511,7 @@ task dumpmem;
 	reg [BITS-1:0] wordtemp;
 	reg [6:0] Atemp;
   begin
-	dump_file_desc = $fopen(filename_dump);
+	dump_file_desc = $fopen(filename_dump, "w");
      if (CENA_ === 1'b1 && CENB_ === 1'b1) begin
 	  for (i=0;i<WORDS;i=i+1) begin
 	  Atemp = i;
@@ -18755,7 +18755,7 @@ task dumpmem;
 	reg [BITS-1:0] wordtemp;
 	reg [6:0] Atemp;
   begin
-	dump_file_desc = $fopen(filename_dump);
+	dump_file_desc = $fopen(filename_dump, "w");
      if (CENA_ === 1'b1 && CENB_ === 1'b1) begin
 	  for (i=0;i<WORDS;i=i+1) begin
 	  Atemp = i;
