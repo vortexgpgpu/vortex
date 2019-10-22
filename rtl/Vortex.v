@@ -58,6 +58,7 @@ VX_warp_ctl_inter        VX_warp_ctl();
 
 
 wire memory_delay;
+wire gpr_stage_delay;
 wire schedule_delay;
 
 
@@ -78,6 +79,7 @@ VX_scheduler schedule(
 	.clk               (clk),
 	.reset             (reset),
 	.memory_delay      (memory_delay),
+	.gpr_stage_delay   (gpr_stage_delay),
 	.VX_bckE_req       (VX_bckE_req),
 	.VX_writeback_inter(VX_writeback_inter),
 	.schedule_delay    (schedule_delay)
@@ -94,7 +96,8 @@ VX_back_end vx_back_end(
 	.VX_dcache_rsp       (VX_dcache_rsp),
 	.VX_dcache_req       (VX_dcache_req),
 	.VX_writeback_inter  (VX_writeback_inter),
-	.out_mem_delay       (memory_delay)
+	.out_mem_delay       (memory_delay),
+	.gpr_stage_delay     (gpr_stage_delay)
 	);
 
 // VX_csr_handler vx_csr_handler(

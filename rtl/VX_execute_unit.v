@@ -58,9 +58,9 @@ module VX_execute_unit (
 		endgenerate
 
 
-		wire [`NW_M1:0] branch_use_index;
-		wire            branch_found_valid;
-		VX_priority_encoder choose_alu_result(
+		wire [$clog2(`NT)-1:0] branch_use_index;
+		wire                   branch_found_valid;
+		VX_generic_priority_encoder #(.N(`NT)) choose_alu_result(
 			.valids(VX_exec_unit_req.valid),
 			.index (branch_use_index),
 			.found (branch_found_valid)

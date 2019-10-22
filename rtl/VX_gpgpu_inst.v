@@ -39,7 +39,9 @@ module VX_gpgpu_inst (
 
 	assign VX_warp_ctl.is_barrier = VX_gpu_inst_req.is_barrier && valid_inst;
 	assign VX_warp_ctl.barrier_id = VX_gpu_inst_req.a_reg_data[0];
-	assign VX_warp_ctl.num_warps  = VX_gpu_inst_req.rd2 - 1;
+
+	wire[31:0] num_warps_m1       = VX_gpu_inst_req.rd2 - 1;
+	assign VX_warp_ctl.num_warps  = num_warps_m1[$clog2(`NW):0];
 
 	assign VX_warp_ctl.wspawn            = wspawn;
 	assign VX_warp_ctl.wspawn_pc         = wspawn_pc;
@@ -58,11 +60,7 @@ module VX_gpgpu_inst (
 	end
 
 
-	wire[`NW_M1:0] num_valids;
-	VX_one_counter one_counter(
-		.valids    (curr_valids),
-		.ones_found(num_valids)
-		);
+	wire[`NW_M1:0] num_valids = $countones(curr_valids);
 
 	
 	assign VX_warp_ctl.is_split         = is_split && (num_valids > 1) && (split_new_use_mask != 0) && (split_new_use_mask != {`NT{1'b1}});

@@ -6,6 +6,7 @@ module VX_scheduler (
 	input wire                clk,
 	input wire                reset,
 	input wire                memory_delay,
+	input wire                gpr_stage_delay,
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,
 
@@ -28,14 +29,17 @@ module VX_scheduler (
 	wire rs2_rename = rename_table[VX_bckE_req.rs2];
 
 	wire is_store = (VX_bckE_req.mem_write != `NO_MEM_WRITE);
+	wire is_load  = (VX_bckE_req.mem_read  != `NO_MEM_READ);
+
+	wire is_mem   = is_store || is_load;
 
 	wire rs1_rename_qual = (rs1_rename && (VX_bckE_req.rs1 != 0));
-	wire rs2_rename_qual = (rs2_rename && (VX_bckE_req.rs2 != 0) && ((VX_bckE_req.rs2_src == `RS2_REG) || is_store));
+	wire rs2_rename_qual = (rs2_rename && (VX_bckE_req.rs2 != 0) && ((VX_bckE_req.rs2_src == `RS2_REG) || is_store)) || (VX_bckE_req.is_barrier) || (VX_bckE_req.is_wspawn);
 
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual ;
 
 
-	assign schedule_delay = (rename_valid) && (|VX_bckE_req.valid) || memory_delay;
+	assign schedule_delay = (rename_valid) && (|VX_bckE_req.valid) || (memory_delay && (is_mem)) || (gpr_stage_delay && is_mem);
 
 	integer i;
 

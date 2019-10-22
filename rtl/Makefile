@@ -24,7 +24,7 @@ MAKECPP=(cd obj_dir && make -j -f VVortex.mk)
 # -LDFLAGS '-lsystemc'
 VERILATOR:
 	echo "#define VCD_OFF" > simulate/tb_debug.h
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW)
+	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)
 
 VERILATORnoWarnings:
 	echo "#define VCD_OFF" > simulate/tb_debug.h

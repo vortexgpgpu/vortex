@@ -4,7 +4,7 @@ module VX_back_end (
 	input wire schedule_delay,
 
 	output wire               out_mem_delay,
-
+	output wire               gpr_stage_delay,
 	VX_jal_response_inter     VX_jal_rsp,
 	VX_branch_response_inter  VX_branch_rsp,
 
@@ -37,9 +37,6 @@ VX_mem_req_inter  VX_exe_mem_req();
 VX_mem_req_inter  VX_mem_req();
 
 
-VX_gpr_data_inter           VX_gpr_data();
-
-VX_frE_to_bckE_req_inter VX_bckE_req_out();
 
 // LSU input + output
 VX_lsu_req_inter         VX_lsu_req();
@@ -63,18 +60,14 @@ VX_gpr_stage VX_gpr_stage(
 	.schedule_delay    (schedule_delay),
 	.VX_writeback_inter(VX_writeback_temp),
 	.VX_bckE_req       (VX_bckE_req),
-	.VX_bckE_req_out   (VX_bckE_req_out),
-	.VX_gpr_data       (VX_gpr_data)
-	);
-
-
-VX_inst_multiplex VX_inst_mult(
-	.VX_bckE_req     (VX_bckE_req_out),
-	.VX_gpr_data     (VX_gpr_data),
+	// New
 	.VX_exec_unit_req(VX_exec_unit_req),
 	.VX_lsu_req      (VX_lsu_req),
 	.VX_gpu_inst_req (VX_gpu_inst_req),
-	.VX_csr_req      (VX_csr_req)
+	.VX_csr_req      (VX_csr_req),
+	// End new
+	.memory_delay      (out_mem_delay),
+	.gpr_stage_delay   (gpr_stage_delay)
 	);
 
 

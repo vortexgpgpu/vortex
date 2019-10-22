@@ -18,10 +18,10 @@ module VX_warp_scheduler (
 	input  wire           whalt,
 	input  wire[`NW_M1:0] whalt_warp_num,
 
-	input wire            is_barrier,
-	input wire[31:0]      barrier_id,
-	input wire[`NW_M1:0]  num_warps,
-	input wire[`NW_M1:0]  barrier_warp_num,
+	input wire                 is_barrier,
+	input wire[31:0]           barrier_id,
+	input wire[$clog2(`NW):0]  num_warps,
+	input wire[`NW_M1:0]       barrier_warp_num,
 
 	// WSTALL
 	input  wire           wstall,
@@ -86,7 +86,7 @@ module VX_warp_scheduler (
 	reg[`NW-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
 	wire         reached_barrier_limit;
 	wire[`NW-1:0] curr_barrier_mask;
-	wire[($clog2(`NUM_BARRIERS)-1):0] curr_barrier_count;
+	wire[$clog2(`NW):0] curr_barrier_count;
 
 	// wsapwn
 	reg[31:0]    use_wsapwn_pc;
@@ -141,39 +141,33 @@ module VX_warp_scheduler (
 				end else begin
 					barrier_stall_mask[barrier_id][barrier_warp_num] <= 1;
 				end
+			end else if (ctm) begin
+				thread_masks[ctm_warp_num] <= ctm_mask;
+				warp_stalled[ctm_warp_num] <= 0;
+			end else if (is_join) begin
+				if (!join_fall) begin
+					warp_pcs[join_warp_num] <= join_pc;
+				end
+				thread_masks[join_warp_num] <= join_tm;
+			end else if (is_split) begin
+				warp_stalled[split_warp_num] <= 0;
+				thread_masks[split_warp_num] <= split_new_mask;
 			end
-
-			if (update_use_wspawn) begin
-				use_wsapwn[warp_to_schedule] <= 0;
-			end
-			// Halting warps
+			
 			if (whalt) begin
 				warp_active[whalt_warp_num]    <= 0;
 				visible_active[whalt_warp_num] <= 0;
 			end
 
-			// Changing thread masks
-			if (ctm) begin
-				thread_masks[ctm_warp_num] <= ctm_mask;
-				warp_stalled[ctm_warp_num] <= 0;
+			if (update_use_wspawn) begin
+				use_wsapwn[warp_to_schedule] <= 0;
 			end
+
 
 			// Stalling the scheduling of warps
 			if (wstall) begin
 				warp_stalled[wstall_warp_num]   <= 1;
 				visible_active[wstall_warp_num] <= 0;
-			end
-
-			if (is_split) begin
-				warp_stalled[split_warp_num] <= 0;
-				thread_masks[split_warp_num] <= split_new_mask;
-			end
-
-			if (is_join) begin
-				if (!join_fall) begin
-					warp_pcs[join_warp_num] <= join_pc;
-				end
-				thread_masks[join_warp_num] <= join_tm;
 			end
 
 			// Refilling active warps
