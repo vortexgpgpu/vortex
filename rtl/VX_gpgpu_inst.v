@@ -37,6 +37,9 @@ module VX_gpgpu_inst (
 	end
 
 
+	assign VX_warp_ctl.is_barrier = VX_gpu_inst_req.is_barrier && valid_inst;
+	assign VX_warp_ctl.barrier_id = VX_gpu_inst_req.a_reg_data[0];
+	assign VX_warp_ctl.num_warps  = VX_gpu_inst_req.rd2 - 1;
 
 	assign VX_warp_ctl.wspawn            = wspawn;
 	assign VX_warp_ctl.wspawn_pc         = wspawn_pc;

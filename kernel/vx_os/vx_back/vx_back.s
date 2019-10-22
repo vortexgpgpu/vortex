@@ -8,7 +8,7 @@
 _start:
 #     li a0, 4
 #     la a1, SPAWN
-#     .word 0x00b5106b
+#     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
 #     j SPAWN
 #     nop
 #     nop
@@ -21,8 +21,10 @@ _start:
 # SPAWN:
 #     li a2, 7
 #     li a0, 0
+#     li a1, 4
+#     .word 0x00b5406b # barrier a0(barrier id), a1(numWarps)
 #     .word 0x0005006b # tmc a0
-    ###########################
+    ##########################
 #     li a0, 4
 #     .word 0x0005006b    # tmc a0
 #     csrr a1, 0x20       # read thread IDs

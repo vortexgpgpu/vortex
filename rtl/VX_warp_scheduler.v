@@ -18,6 +18,11 @@ module VX_warp_scheduler (
 	input  wire           whalt,
 	input  wire[`NW_M1:0] whalt_warp_num,
 
+	input wire            is_barrier,
+	input wire[31:0]      barrier_id,
+	input wire[`NW_M1:0]  num_warps,
+	input wire[`NW_M1:0]  barrier_warp_num,
+
 	// WSTALL
 	input  wire           wstall,
 	input  wire[`NW_M1:0] wstall_warp_num,
@@ -72,10 +77,16 @@ module VX_warp_scheduler (
 	reg[`NW-1:0] visible_active;
 	wire[`NW-1:0] use_active;
 
+	wire wstall_this_cycle;
 
 	reg[`NT_M1:0] thread_masks[`NW-1:0];
 	reg[31:0]     warp_pcs[`NW-1:0];
 
+	// barriers
+	reg[`NW-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
+	wire         reached_barrier_limit;
+	wire[`NW-1:0] curr_barrier_mask;
+	wire[($clog2(`NUM_BARRIERS)-1):0] curr_barrier_count;
 
 	// wsapwn
 	reg[31:0]    use_wsapwn_pc;
@@ -91,27 +102,23 @@ module VX_warp_scheduler (
 
 	wire[31:0] new_pc;
 
+	reg[`NW-1:0] total_barrier_stall;
+
 	/* verilator lint_off UNUSED */
 	wire[`NW_M1:0] num_active;
 	/* verilator lint_on UNUSED */
 
-	reg[1:0] start;
-	// initial begin
-	// 	warp_pcs[0] = (32'h80000000 - 4);
-	// 	start = 0;
-	// 	warp_active[0]     = 1; // Activating first warp
-	// 	visible_active[0]  = 1; // Activating first warp
-	// 	thread_masks[0][0] = 1; // Activating first thread in first warp
-	// end
-
 	integer curr_w_help;
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
-			start              <= 0;
-			warp_pcs[0]        <= (32'h80000000 - 4);
-			warp_active[0]     <= 1; // Activating first warp
-			visible_active[0]  <= 1; // Activating first warp
-			thread_masks[0]    <= 1; // Activating first thread in first warp
+			barrier_stall_mask[0] <= 0;
+			barrier_stall_mask[1] <= 0;
+			use_wsapwn_pc         <= 0;
+			use_wsapwn            <= 0;
+			warp_pcs[0]           <= (32'h80000000 - 4);
+			warp_active[0]        <= 1; // Activating first warp
+			visible_active[0]     <= 1; // Activating first warp
+			thread_masks[0]       <= 1; // Activating first thread in first warp
 			for (curr_w_help = 1; curr_w_help < `NW; curr_w_help=curr_w_help+1) begin
 				warp_pcs[curr_w_help]        <= 0;
 				warp_active[curr_w_help]     <= 0; // Activating first warp
@@ -125,6 +132,15 @@ module VX_warp_scheduler (
 				warp_active    <= wspawn_new_active;
 				use_wsapwn_pc  <= wsapwn_pc;
 				use_wsapwn     <= wspawn_new_active & (~`NW'b1);
+			end
+
+			if (is_barrier) begin
+				warp_stalled[barrier_warp_num]       <= 0;
+				if (reached_barrier_limit) begin
+					barrier_stall_mask[barrier_id] <= 0;
+				end else begin
+					barrier_stall_mask[barrier_id][barrier_warp_num] <= 1;
+				end
 			end
 
 			if (update_use_wspawn) begin
@@ -162,7 +178,7 @@ module VX_warp_scheduler (
 
 			// Refilling active warps
 			if (update_visible_active) begin
-				visible_active <= warp_active & (~warp_stalled);
+				visible_active <= warp_active & (~warp_stalled) & (~total_barrier_stall);
 			end
 
 			// Don't change state if stall
@@ -185,8 +201,23 @@ module VX_warp_scheduler (
 		end
 	end
 
+	assign curr_barrier_mask     = barrier_stall_mask[barrier_id][`NW-1:0];
+	assign curr_barrier_count    = $countones(curr_barrier_mask);
+	assign reached_barrier_limit = curr_barrier_count == (num_warps);
 
-	assign update_visible_active = ($countones(visible_active) < 1) && !(stall || wstall || hazard || is_join);
+	assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
+
+	genvar curr_b;
+	always @(*) begin
+		total_barrier_stall = 0;
+		for (curr_b = 0; curr_b < `NUM_BARRIERS; curr_b=curr_b+1)
+		begin
+			total_barrier_stall[`NW-1:0] = total_barrier_stall[`NW-1:0] | barrier_stall_mask[curr_b[($clog2(`NUM_BARRIERS)-1):0]][`NW-1:0];
+		end
+	end
+
+
+	assign update_visible_active = ($countones(visible_active) < 1) && !(stall || wstall_this_cycle || hazard || is_join);
 
 	wire[(1+32+`NT_M1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
 	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
@@ -221,9 +252,9 @@ module VX_warp_scheduler (
 
 	assign hazard = (should_jal || should_bra) && schedule;
 
-	assign real_schedule = schedule && !warp_stalled[warp_to_schedule];
+	assign real_schedule = schedule && !warp_stalled[warp_to_schedule] && !total_barrier_stall[warp_to_schedule];
 
-	assign global_stall = (stall || wstall || hazard || !real_schedule || is_join);
+	assign global_stall = (stall || wstall_this_cycle || hazard || !real_schedule || is_join);
 
 
 	wire real_use_wspawn = use_wsapwn[warp_to_schedule];
@@ -237,7 +268,7 @@ module VX_warp_scheduler (
 	assign new_pc = warp_pc + 4;
 
 
-	assign use_active = (num_active < 1) ? (warp_active & (~warp_stalled)) : visible_active;
+	assign use_active = (num_active < 1) ? (warp_active & (~warp_stalled) & (~total_barrier_stall)) : visible_active;
 
 	// Choosing a warp to schedule
 	VX_priority_encoder choose_schedule(

@@ -17,6 +17,10 @@ interface VX_warp_ctl_inter ();
 
 	wire           ebreak;
 
+	// barrier
+	wire           is_barrier;
+	wire[31:0]     barrier_id;
+	wire[`NW_M1:0]  num_warps;
 
 	wire           is_split;
 	wire[`NW_M1:0] split_warp_num;

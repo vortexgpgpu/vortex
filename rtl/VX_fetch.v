@@ -30,6 +30,12 @@ module VX_fetch (
 			.clk              (clk),
 			.reset            (reset),
 			.stall            (pipe_stall),
+
+			.is_barrier       (VX_warp_ctl.is_barrier),
+			.barrier_id       (VX_warp_ctl.barrier_id),
+			.num_warps        (VX_warp_ctl.num_warps),
+			.barrier_warp_num (VX_warp_ctl.warp_num),
+
 			// Wspawn
 			.wspawn           (VX_warp_ctl.wspawn),
 			.wsapwn_pc        (VX_warp_ctl.wspawn_pc),

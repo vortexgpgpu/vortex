@@ -11,6 +11,7 @@ interface VX_gpu_inst_req_inter();
 	wire                 is_wspawn;
 	wire                 is_tmc;   
 	wire                 is_split; 
+
 	wire                 is_barrier;
 
 	wire[31:0]           pc_next;

@@ -10,6 +10,8 @@
 // `define ONLY
 
 
+`define NUM_BARRIERS 4
+
 `define R_INST 7'd51
 `define L_INST 7'd3
 `define ALU_INST 7'd19
