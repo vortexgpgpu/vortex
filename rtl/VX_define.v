@@ -10,6 +10,11 @@
 // `define ONLY
 
 
+
+`define NUMBER_BANKS 8
+`define NUM_WORDS_PER_BLOCK 4
+
+
 `define NUM_BARRIERS 4
 
 `define R_INST 7'd51

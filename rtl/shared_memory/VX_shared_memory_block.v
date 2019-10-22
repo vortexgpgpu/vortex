@@ -33,10 +33,10 @@ module VX_shared_memory_block (
 
 	// wire[3:0][31:0] write_bit_mask;
 
-	// assign write_bit_mask[0] = (we == 2'b00) ? 0 : {32{1'b1}};
-	// assign write_bit_mask[1] = (we == 2'b01) ? 0 : {32{1'b1}};
-	// assign write_bit_mask[2] = (we == 2'b10) ? 0 : {32{1'b1}};
-	// assign write_bit_mask[3] = (we == 2'b11) ? 0 : {32{1'b1}};
+	// assign write_bit_mask[0] = (we == 2'b00) ? 1 : {32{1'b0}};
+	// assign write_bit_mask[1] = (we == 2'b01) ? 1 : {32{1'b0}};
+	// assign write_bit_mask[2] = (we == 2'b10) ? 1 : {32{1'b0}};
+	// assign write_bit_mask[3] = (we == 2'b11) ? 1 : {32{1'b0}};
 
 	// // Using ASIC MEM
 	// /* verilator lint_off PINCONNECTEMPTY */
