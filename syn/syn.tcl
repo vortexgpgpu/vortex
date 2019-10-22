@@ -36,9 +36,11 @@ report_hierarchy
 report_cell
 report_reference
 report_port
+report_power
 
 write -hierarchy -format verilog -output Vortex.netlist.v
 remove_ideal_network [get_ports clk]
 set_propagated_clock [get_ports clk]
 write_sdc -version 1.9 Vortex.sdc
+write_file -format ddc -output Vortex.ddc
 exit
