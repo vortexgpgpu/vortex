@@ -186,23 +186,23 @@ module VX_decode(
 			case(curr_opcode)
 				`JAL_INST:
 					begin
-		       		 	temp_jal        = 1'b1 && in_valid[0];
+		       		 	temp_jal        = 1'b1 && (|in_valid);
 						temp_jal_offset = jal_1_offset;
 					end
 				`JALR_INST:
 					begin
-		        		temp_jal        = 1'b1 && in_valid[0];
+		        		temp_jal        = 1'b1 && (|in_valid);
 						temp_jal_offset = jal_2_offset;
 					end
 				`SYS_INST:
 					begin
-						// $display("SYS EBREAK %h", (jal_sys_jal && in_valid[0]) );
-						temp_jal        = jal_sys_jal && in_valid[0];
+						// $display("SYS EBREAK %h", (jal_sys_jal && (|in_valid)) );
+						temp_jal        = jal_sys_jal && (|in_valid);
 						temp_jal_offset = jal_sys_off;
 					end
 				default:
 					begin
-						temp_jal          = 1'b0 && in_valid[0];
+						temp_jal          = 1'b0 && (|in_valid);
 						temp_jal_offset   = 32'hdeadbeef;
 					end
 			endcase
@@ -216,7 +216,7 @@ module VX_decode(
 
 
 		// assign is_ebreak = is_e_inst;
-		wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && in_valid[0]);
+		wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && (|in_valid));
 		assign VX_frE_to_bckE_req.ebreak = ebreak;
 		assign out_ebreak = ebreak;
 
@@ -257,7 +257,7 @@ module VX_decode(
 				`B_INST:
 					begin
 						// $display("BRANCH IN DECODE");
-						temp_branch_stall = 1'b1 && in_valid[0];
+						temp_branch_stall = 1'b1 && (|in_valid);
 						case(func3)
 							3'h0: temp_branch_type = `BEQ;
 							3'h1: temp_branch_type = `BNE;
@@ -272,17 +272,17 @@ module VX_decode(
 				`JAL_INST:
 					begin
 						temp_branch_type  = `NO_BRANCH;
-						temp_branch_stall = 1'b1 && in_valid[0];
+						temp_branch_stall = 1'b1 && (|in_valid);
 					end
 				`JALR_INST:
 					begin
 						temp_branch_type  = `NO_BRANCH;
-						temp_branch_stall = 1'b1 && in_valid[0];
+						temp_branch_stall = 1'b1 && (|in_valid);
 					end
 				default:
 					begin
 						temp_branch_type  = `NO_BRANCH;
-						temp_branch_stall = 1'b0 && in_valid[0];
+						temp_branch_stall = 1'b0 && (|in_valid);
 					end
 			endcase
 		end

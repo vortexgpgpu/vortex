@@ -50,7 +50,7 @@ module VX_warp_scheduler (
 
 );
 
-	wire[(1+32+`NT_M1):0] d;
+	wire[(1+32+`NT_M1):0] d[`NW-1:0];
 
 	wire           join_fall;
 	wire[31:0]     join_pc;
@@ -182,11 +182,11 @@ module VX_warp_scheduler (
 		end
 	end
 
-	wire[(1+32+`NT_M1):0] q1 = {1'b1, warp_pcs[split_warp_num], thread_masks[split_warp_num]};
+	wire[(1+32+`NT_M1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
 	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
 
 
-	assign {join_fall, join_pc, join_tm} = d;
+	assign {join_fall, join_pc, join_tm} = d[join_warp_num];
 
 
 
@@ -202,7 +202,7 @@ module VX_warp_scheduler (
 			.reset(reset),
 			.push (push),
 			.pop  (pop),
-			.d    (d),
+			.d    (d[curr_warp]),
 			.q1   (q1),
 			.q2   (q2)
 			);

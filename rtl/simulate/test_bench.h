@@ -373,8 +373,14 @@ bool Vortex::simulate(std::string file_to_simulate)
     bool cont = false;
     // for (int i = 0; i < 500; i++)
 
-    vortex->clk = 0;
+    vortex->reset = 1;
+    vortex->clk   = 0;
     vortex->eval();
+    vortex->reset = 1;
+    vortex->clk   = 1;
+    vortex->eval();
+    vortex->reset = 0;
+    vortex->clk   = 0;
 
     // unsigned cycles;
     counter = 0;

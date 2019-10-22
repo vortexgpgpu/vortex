@@ -42,7 +42,7 @@ module VX_scheduler (
 	always @(posedge clk or posedge reset) begin
 
 		if (reset) begin
-			for (i = 0; i < 32; i = i + 1) rename_table[i] = 0;
+			for (i = 0; i < 32; i = i + 1) rename_table[i] <= 0;
 		end else begin
 			if (valid_wb                 ) rename_table[VX_writeback_inter.rd] <= 0;
 			if (!schedule_delay && wb_inc) rename_table[VX_bckE_req.rd]        <= 1;

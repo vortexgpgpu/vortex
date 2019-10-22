@@ -58,16 +58,26 @@ module VX_execute_unit (
 		endgenerate
 
 
+		wire [`NW_M1:0] branch_use_index;
+		wire            branch_found_valid;
+		VX_priority_encoder choose_alu_result(
+			.valids(VX_exec_unit_req.valid),
+			.index (branch_use_index),
+			.found (branch_found_valid)
+			);
+
+		wire[31:0] branch_use_alu_result = alu_result[branch_use_index];
+
 		reg temp_branch_dir;
 		always @(*)
 		begin
 			case(VX_exec_unit_req.branch_type)
-				`BEQ:       temp_branch_dir = (alu_result[0]     == 0) ? `TAKEN     : `NOT_TAKEN;
-				`BNE:       temp_branch_dir = (alu_result[0]     == 0) ? `NOT_TAKEN : `TAKEN;
-				`BLT:       temp_branch_dir = (alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN;
-				`BGT:       temp_branch_dir = (alu_result[0][31] == 0) ? `TAKEN     : `NOT_TAKEN;
-				`BLTU:      temp_branch_dir = (alu_result[0][31] == 0) ? `NOT_TAKEN : `TAKEN; 
-				`BGTU:      temp_branch_dir = (alu_result[0][31] == 0) ? `TAKEN     : `NOT_TAKEN;
+				`BEQ:       temp_branch_dir = (branch_use_alu_result     == 0) ? `TAKEN     : `NOT_TAKEN;
+				`BNE:       temp_branch_dir = (branch_use_alu_result     == 0) ? `NOT_TAKEN : `TAKEN;
+				`BLT:       temp_branch_dir = (branch_use_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;
+				`BGT:       temp_branch_dir = (branch_use_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
+				`BLTU:      temp_branch_dir = (branch_use_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN; 
+				`BGTU:      temp_branch_dir = (branch_use_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
 				`NO_BRANCH: temp_branch_dir = `NOT_TAKEN;
 				default:    temp_branch_dir = `NOT_TAKEN;
 			endcase // in_branch_type
