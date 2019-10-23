@@ -4,7 +4,7 @@
 
 `define NUM_WORDS_PER_BLOCK 4
 
-`include "VX_define.v"
+`include "../VX_define.v"
 `include "VX_cache_data.v"
 
 module VX_Cache_Bank
@@ -39,18 +39,9 @@ module VX_Cache_Bank
     parameter ways_per_set = 4;
     parameter Number_Blocks = 32;
 
-    localparam CACHE_IDLE = 0; // Idle
-    localparam SORT_BY_BANK = 1; // Determines the bank each thread will access
-    localparam INITIAL_ACCESS = 2; // Accesses the bank and checks if it is a hit or miss
-    localparam INITIAL_PROCESSING = 3; // Check to see if there were misses 
-    localparam CONTINUED_PROCESSING = 4; // Keep checking status of banks that need to be written back or fetched
-    localparam DIRTY_EVICT_GRAB_BLOCK = 5; // Grab the full block of dirty data
-    localparam DIRTY_EVICT_WB = 6; // Write back this block into memory
-    localparam FETCH_FROM_MEM = 7; // Send a request to mem looking for read data
-    localparam FETCH2 = 8; // Stall until memory gets back with the data
-    localparam UPDATE_CACHE  = 9; // Update the cache with the data read from mem
-    localparam RE_ACCESS = 10; // Access the cache after the block has been fetched from memory
-    localparam RE_ACCESS_PROCESSING = 11; // Access the cache after the block has been fetched from memory
+    localparam CACHE_IDLE    = 0; // Idle
+    localparam SEND_MEM_REQ  = 1; // Write back this block into memory
+    localparam RECIV_MEM_RSP = 2;
 
     // Inputs
     input wire clk;
@@ -101,8 +92,8 @@ module VX_Cache_Bank
 
     assign eviction_wb  = miss && (dirty_use != 1'b0);
     assign eviction_tag = tag_use;
-    assign access = (state == INITIAL_ACCESS || state == RE_ACCESS) && valid_in;
-    assign write_from_mem = (state == UPDATE_CACHE) && valid_in;
+    assign access = (state == CACHE_IDLE) && valid_in;
+    assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in;
     assign readdata     = (access) ? data_use[block_offset] : 32'b0; // Fix with actual data
     assign hit          = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data

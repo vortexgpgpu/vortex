@@ -33,7 +33,7 @@ module VX_lsu (
 	for (index = 0; index <= `NT_M1; index = index + 1) begin
 		assign VX_dcache_req.out_cache_driver_in_address[index]   = address[index];
 		assign VX_dcache_req.out_cache_driver_in_data[index]      = VX_lsu_req.store_data[index];
-		assign VX_dcache_req.out_cache_driver_in_valid[index]     = VX_lsu_req.valid[index];
+		assign VX_dcache_req.out_cache_driver_in_valid[index]     = (VX_lsu_req.valid[index] && !VX_dcache_rsp.delay);
 
 		assign VX_mem_wb.loaded_data[index]                       = VX_dcache_rsp.in_cache_driver_out_data[index];
 	end

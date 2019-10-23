@@ -33,7 +33,7 @@ module VX_dmem_controller (
 	wire[`NT_M1:0][31:0] sm_driver_out_data;
 	wire[`NT_M1:0]       cache_driver_out_valid; // Not used for now
 	wire                 sm_delay;
-	wire                 cache_done;
+	wire                 cache_delay;
 
 
 	VX_shared_memory #(.NB(7), .BITS_PER_BANK(3)) shared_memory (
@@ -57,7 +57,7 @@ module VX_dmem_controller (
 		.i_p_writedata      (cache_driver_in_data),
 		.i_p_read_or_write  (read_or_write),
 		.o_p_readdata       (cache_driver_out_data),
-		.o_p_waitrequest    (cache_done),
+		.o_p_delay          (cache_delay),
 		.o_m_addr           (VX_dram_req_rsp.o_m_addr),
 		.o_m_valid          (VX_dram_req_rsp.o_m_valid),
 		.o_m_writedata      (VX_dram_req_rsp.o_m_writedata),
@@ -69,7 +69,7 @@ module VX_dmem_controller (
 
 	assign VX_dcache_rsp.in_cache_driver_out_data = to_shm ? sm_driver_out_data : cache_driver_out_data;
 	// assign VX_dcache_rsp.delay                    = sm_delay;
-	assign VX_dcache_rsp.delay                    = sm_delay || (!cache_done);
+	assign VX_dcache_rsp.delay                    = sm_delay || (!cache_delay);
 
 
 endmodule
