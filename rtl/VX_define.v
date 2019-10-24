@@ -11,6 +11,7 @@
 
 // `define SYN 1
 
+`define CACHE_NUM_BANKS 8
 
 `define NUMBER_BANKS 8
 `define NUM_WORDS_PER_BLOCK 4

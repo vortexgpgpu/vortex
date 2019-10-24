@@ -8,7 +8,8 @@
 interface VX_dram_req_rsp_inter ();
 
 	// Req
-    wire [31:0]                                              o_m_addr;
+	wire [31:0]                                              o_m_evict_addr;
+    wire [31:0]                                              o_m_read_addr;
     wire                                                     o_m_valid;
     wire[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] o_m_writedata;
     wire                                                     o_m_read_or_write;

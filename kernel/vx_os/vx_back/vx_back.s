@@ -6,7 +6,7 @@
 .type _start, @function
 .global _start
 _start:
-      la a0, 0xFF003300
+      la a0, 0x020000
       li a1, 7
       sw a1, 4(a0)
       nop

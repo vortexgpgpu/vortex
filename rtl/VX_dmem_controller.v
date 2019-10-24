@@ -17,9 +17,7 @@ module VX_dmem_controller (
 	wire[`NT_M1:0]       sm_driver_in_valid     = VX_dcache_req.out_cache_driver_in_valid & {`NT{to_shm}};
 	wire[`NT_M1:0]       cache_driver_in_valid  = VX_dcache_req.out_cache_driver_in_valid & {`NT{~to_shm}};
 	
-	// Cache don't understand
-	wire initial_request = (|cache_driver_in_valid);
-	wire read_or_write   = (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE);
+	wire read_or_write   = (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE) && (|cache_driver_in_valid);
 
 
 
@@ -58,7 +56,8 @@ module VX_dmem_controller (
 		.i_p_read_or_write  (read_or_write),
 		.o_p_readdata       (cache_driver_out_data),
 		.o_p_delay          (cache_delay),
-		.o_m_addr           (VX_dram_req_rsp.o_m_addr),
+		.o_m_evict_addr     (VX_dram_req_rsp.o_m_evict_addr),
+		.o_m_read_addr      (VX_dram_req_rsp.o_m_read_addr),
 		.o_m_valid          (VX_dram_req_rsp.o_m_valid),
 		.o_m_writedata      (VX_dram_req_rsp.o_m_writedata),
 		.o_m_read_or_write  (VX_dram_req_rsp.o_m_read_or_write),
@@ -68,8 +67,7 @@ module VX_dmem_controller (
 
 
 	assign VX_dcache_rsp.in_cache_driver_out_data = to_shm ? sm_driver_out_data : cache_driver_out_data;
-	// assign VX_dcache_rsp.delay                    = sm_delay;
-	assign VX_dcache_rsp.delay                    = sm_delay || (!cache_delay);
+	assign VX_dcache_rsp.delay                    = sm_delay || cache_delay;
 
 
 endmodule

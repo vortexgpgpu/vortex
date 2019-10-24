@@ -25,10 +25,6 @@ VX_inst_meta_inter        fe_inst_meta_fd();
 VX_frE_to_bckE_req_inter VX_frE_to_bckE_req();
 VX_inst_meta_inter       fd_inst_meta_de();
 
-// From decode
-wire           decode_branch_stall;
-
-
 wire total_freeze = schedule_delay;
 
 /* verilator lint_off UNUSED */

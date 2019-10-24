@@ -10,16 +10,15 @@ module VX_priority_encoder_w_mask
   );
 
 	integer i;
-	always @(*) begin
+	always @(valids) begin
 		index = 0;
 		found = 0;
 		mask  = 0;
-		for (i = 0; i < N; i=i+1) 
-		begin
-			if (!found && valids[i]) begin
+		for (i = 0; i < N; i=i+1) begin
+			if (valids[i]) begin
 				index = i[$clog2(N)-1:0];
 				found = 1;
-				mask[i[$clog2(N)-1:0]] = 1;
+				mask[i[$clog2(N)-1:0]] = 1 << i;
 			end
 		end
 	end

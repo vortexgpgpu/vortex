@@ -11,18 +11,20 @@ EXE=--exe ./simulate/test_bench.cpp
 
 COMP=--compiler gcc
 
-WNO=-Wno-UNOPTFLAT -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED
+# WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED
+WNO=
 
-LIGHTW=-Wno-UNOPTFLAT
+LIGHTW=
+# LIGHTW=-Wno-UNOPTFLAT
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
 LIB=
 
 CF=-CFLAGS '-std=c++11 -O3'
 
-DEB=--prof-cfuncs -DVL_DEBUG=1 --coverage --trace 
+DEB=--trace --prof-cfuncs -DVL_DEBUG=1 
 
 
-MAKECPP=(cd obj_dir && make -j -f VVortex.mk)
+MAKECPP=(cd obj_dir && make -j -f VVortex.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
 
 # -LDFLAGS '-lsystemc'
 VERILATOR:
@@ -35,7 +37,7 @@ VERILATORnoWarnings:
 
 compdebug:
 	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
+	verilator_bin_dbg $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
 
 RUNFILE: VERILATOR
 	$(MAKECPP)

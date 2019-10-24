@@ -46,7 +46,7 @@ module VX_Cache_Bank
     // Inputs
     input wire clk;
     input wire [3:0] state;
-    //input wire write_from_mem;
+//input wire write_from_mem;
 
       // Reading Data
     input wire[$clog2(NUMBER_INDEXES)-1:0] actual_index;
@@ -118,7 +118,6 @@ module VX_Cache_Bank
         .evict     (write_from_mem),
         .data_write(data_write),
         .tag_write (o_tag),
-
         // Outputs
         .tag_use   (tag_use),
         .data_use  (data_use),

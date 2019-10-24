@@ -10,7 +10,7 @@
 
 `include "../VX_define.v"
 //`include "VX_priority_encoder.v"
-`include "VX_Cache_Bank.v"
+// `include "VX_Cache_Bank.v"
 //`include "cache_set.v"
 
 
@@ -102,7 +102,6 @@ module VX_d_cache(clk,
 
 
 
-    reg[`NT_M1:0] threads_serviced_Qual;
 
     VX_cache_bank_valid #(.NUMBER_BANKS(NUMBER_BANKS)) multip_banks(
       .i_p_valid         (use_valid),
@@ -111,38 +110,52 @@ module VX_d_cache(clk,
       );
 
 
-    reg detect_bank_conflict;
-    genvar bank_ind;
-    for (bank_ind = 0; bank_ind < NUMBER_BANKS; bank_ind=bank_ind+1)
-    begin
-      assign detect_bank_conflict = detect_bank_conflict | ($countones(thread_track_banks[bank_ind]) > 1);
-    
-      VX_priority_encoder_w_mask #(.N(`NT)) choose_thread(
-        .valids(thread_track_banks[bank_ind]),
-        .mask  (use_mask_per_bank[bank_ind]),
-        .index (index_per_bank[bank_ind]),
-        .found (valid_per_bank[bank_ind])
-        );
+    reg[`NT_M1:0] threads_serviced_Qual;
+    // reg           detect_bank_conflict;
+    // genvar bank_ind;
+    // always @(*) begin
+    //   for (bank_ind = 0; bank_ind < NUMBER_BANKS; bank_ind=bank_ind+1)
+    //   begin
+    //     detect_bank_conflict = detect_bank_conflict | ($countones(thread_track_banks[bank_ind]) > 1);
 
-      ////////////////
-
-      assign new_final_data_read[index_per_bank[bank_ind]] = hit_per_bank[bank_ind] ? readdata_per_bank[bank_ind] : 0;
-
-      assign threads_serviced_per_bank[bank_ind] = use_mask_per_bank[bank_ind] & {`NT{hit_per_bank[bank_ind]}};
-
-    end
+    //   end
+    // end
 
     genvar bid;
     for (bid = 0; bid < NUMBER_BANKS; bid=bid+1)
     begin
-      assign threads_serviced_Qual = threads_serviced_Qual | threads_serviced_per_bank[bid];
+      wire[`NT_M1:0] use_threads_track_banks = thread_track_banks[bid];
+        VX_priority_encoder_w_mask #(.N(`NT)) choose_thread(
+          .valids(use_threads_track_banks),
+          .mask  (use_mask_per_bank[bid]),
+          .index (index_per_bank[bid]),
+          .found (valid_per_bank[bid])
+          );
+
+        assign new_final_data_read[index_per_bank[bid]] = hit_per_bank[bid] ? readdata_per_bank[bid] : 0;
+
+        assign threads_serviced_per_bank[bid] = use_mask_per_bank[bid] & {`NT{hit_per_bank[bid]}};
     end
 
 
-    wire[NUMBER_BANKS - 1 : 0] detect_bank_miss = (valid_per_bank & ~hit_per_bank);
+    // genvar tid;
+
+    assign threads_serviced_Qual = threads_serviced_per_bank[0] | threads_serviced_per_bank[1] | threads_serviced_per_bank[2] | threads_serviced_per_bank[3] | threads_serviced_per_bank[4] | threads_serviced_per_bank[5] | threads_serviced_per_bank[6] | threads_serviced_per_bank[7];
+    // for(tid = 0; tid )
+    wire[NUMBER_BANKS - 1 : 0] detect_bank_miss;
+    // genvar bbid;
+    // always @(*) begin
+    //   for (bbid = 0; bbid < NUMBER_BANKS; bbid=bbid+1)
+    //   begin
+    //     assign threads_serviced_Qual = threads_serviced_Qual | threads_serviced_per_bank[bbid];
+    //   end
+    // end
+
+
+    assign detect_bank_miss = (valid_per_bank & ~hit_per_bank);
 
     wire   delay;
-    assign delay = (new_stored_valid != 0); // add other states
+    assign delay = (new_stored_valid != 0) || (state != CACHE_IDLE); // add other states
 
     assign o_p_delay = delay;
 
@@ -173,7 +186,7 @@ module VX_d_cache(clk,
   always @(posedge clk) begin
     state           <= new_state;
 
-    if (state == CACHE_IDLE) stored_valid    <= new_stored_valid;
+    stored_valid    <= new_stored_valid;
 
     if (miss_found) begin
       miss_addr   <= i_p_addr[send_index_to_bank[miss_bank_index]];
@@ -220,10 +233,10 @@ module VX_d_cache(clk,
           .readdata         (readdata_per_bank[bank_id]),          // Data read
           .eviction_addr    (eviction_addr_per_bank[bank_id]), 
           .data_evicted     (o_m_writedata[bank_id]),
-          .eviction_wb      (eviction_wb[bank_ind]),       // Something needs to be written back
+          .eviction_wb      (eviction_wb[bank_id]),       // Something needs to be written back
 
 
-          .fetched_writedata(i_m_readdata[bank_ind]) // Data From memory
+          .fetched_writedata(i_m_readdata[bank_id]) // Data From memory
         );
 
       end

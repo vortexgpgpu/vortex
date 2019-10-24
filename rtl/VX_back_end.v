@@ -72,7 +72,8 @@ VX_gpr_stage VX_gpr_stage(
 
 
 VX_lsu load_store_unit(
-	// .clk          (clk),
+	.clk          (clk),
+	.reset        (reset),
 	.VX_lsu_req   (VX_lsu_req),
 	.VX_mem_wb    (VX_mem_wb),
 	.VX_dcache_rsp(VX_dcache_rsp),
