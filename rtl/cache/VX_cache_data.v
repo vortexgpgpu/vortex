@@ -7,7 +7,7 @@ module VX_cache_data (
 	// Addr
 	input wire[$clog2(NUMBER_INDEXES)-1:0] addr,
 	// WE
-	input wire[`NUM_WORDS_PER_BLOCK-1:0]   we,
+	input wire[`NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
 	input wire                             evict,
 	// Data
 	input wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write, // Update Data
@@ -33,7 +33,7 @@ module VX_cache_data (
     `ifndef SYN
 
         // (3:0)  4 bytes
-        reg[`NUM_WORDS_PER_BLOCK-1:0][31:0] data[NUMBER_INDEXES-1:0]; // Actual Data
+        reg[`NUM_WORDS_PER_BLOCK-1:0][3:0][7:0] data[NUMBER_INDEXES-1:0]; // Actual Data
         reg[16:0]                           tag[NUMBER_INDEXES-1:0];
         reg                                 valid[NUMBER_INDEXES-1:0];
         reg                                 dirty[NUMBER_INDEXES-1:0];
@@ -46,14 +46,18 @@ module VX_cache_data (
         assign dirty_use = dirty[addr];
 
 
-        integer f;
+        genvar f;
+        genvar z;
         always @(posedge clk) begin : dirty_update
           if (update_dirty) dirty[addr] <= dirt_new; // WRite Port
         end
 
         always @(posedge clk) begin : data_update
           for (f = 0; f < `NUM_WORDS_PER_BLOCK; f = f + 1) begin
-            if (we[f]) data[addr][f] <= data_write[f];
+            if (we[f][0]) data[addr][f][0] <= data_write[f][7 :0 ];
+            if (we[f][1]) data[addr][f][1] <= data_write[f][15:8 ];
+            if (we[f][2]) data[addr][f][2] <= data_write[f][23:16];
+            if (we[f][3]) data[addr][f][3] <= data_write[f][31:24];
           end
         end
 

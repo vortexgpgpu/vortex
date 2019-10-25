@@ -57,6 +57,8 @@ module VX_dmem_controller (
 		.i_p_addr           (cache_driver_in_address),
 		.i_p_writedata      (cache_driver_in_data),
 		.i_p_read_or_write  (read_or_write),
+		.i_p_mem_read       (cache_driver_in_mem_read),
+		.i_p_mem_write      (cache_driver_in_mem_write),
 		.o_p_readdata       (cache_driver_out_data),
 		.o_p_delay          (cache_delay),
 		.o_m_evict_addr     (VX_dram_req_rsp.o_m_evict_addr),

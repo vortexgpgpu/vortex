@@ -1604,7 +1604,7 @@ Disassembly of section .text:
 80001778:	00178793          	addi	a5,a5,1
 8000177c:	fef42623          	sw	a5,-20(s0)
 80001780:	fec42703          	lw	a4,-20(s0)
-80001784:	00300793          	li	a5,3
+80001784:	0ff00793          	li	a5,255
 80001788:	fae7dae3          	bge	a5,a4,8000173c <initialize_mats+0x14>
 8000178c:	00000013          	nop
 80001790:	01c12403          	lw	s0,28(sp)
@@ -1625,7 +1625,7 @@ Disassembly of section .text:
 800017c4:	fec42783          	lw	a5,-20(s0)
 800017c8:	00078e63          	beqz	a5,800017e4 <print_matrix+0x48>
 800017cc:	fec42783          	lw	a5,-20(s0)
-800017d0:	0017f793          	andi	a5,a5,1
+800017d0:	00f7f793          	andi	a5,a5,15
 800017d4:	00079863          	bnez	a5,800017e4 <print_matrix+0x48>
 800017d8:	810007b7          	lui	a5,0x81000
 800017dc:	13c78513          	addi	a0,a5,316 # 8100013c <barrier_bool+0xfffd6e74>
@@ -1644,7 +1644,7 @@ Disassembly of section .text:
 80001810:	00178793          	addi	a5,a5,1
 80001814:	fef42623          	sw	a5,-20(s0)
 80001818:	fec42703          	lw	a4,-20(s0)
-8000181c:	00300793          	li	a5,3
+8000181c:	0ff00793          	li	a5,255
 80001820:	fae7d2e3          	bge	a5,a4,800017c4 <print_matrix+0x28>
 80001824:	810007b7          	lui	a5,0x81000
 80001828:	14478513          	addi	a0,a5,324 # 81000144 <barrier_bool+0xfffd6e7c>
@@ -1660,14 +1660,16 @@ Disassembly of section .text:
 80001848:	00112623          	sw	ra,12(sp)
 8000184c:	00812423          	sw	s0,8(sp)
 80001850:	01010413          	addi	s0,sp,16
-80001854:	00b00513          	li	a0,11
-80001858:	fa5fe0ef          	jal	ra,800007fc <vx_print_hex>
-8000185c:	00000793          	li	a5,0
-80001860:	00078513          	mv	a0,a5
-80001864:	00c12083          	lw	ra,12(sp)
-80001868:	00812403          	lw	s0,8(sp)
-8000186c:	01010113          	addi	sp,sp,16
-80001870:	00008067          	ret
+80001854:	ed5ff0ef          	jal	ra,80001728 <initialize_mats>
+80001858:	810267b7          	lui	a5,0x81026
+8000185c:	22078513          	addi	a0,a5,544 # 81026220 <barrier_bool+0xffffcf58>
+80001860:	f3dff0ef          	jal	ra,8000179c <print_matrix>
+80001864:	00000793          	li	a5,0
+80001868:	00078513          	mv	a0,a5
+8000186c:	00c12083          	lw	ra,12(sp)
+80001870:	00812403          	lw	s0,8(sp)
+80001874:	01010113          	addi	sp,sp,16
+80001878:	00008067          	ret
 
 Disassembly of section .rodata:
 

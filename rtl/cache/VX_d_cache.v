@@ -20,6 +20,8 @@ module VX_d_cache(clk,
                //i_p_byte_en,
                i_p_writedata,
                i_p_read_or_write, // 0 = Read | 1 = Write
+               i_p_mem_read,
+               i_p_mem_write,
                i_p_valid,
                //i_p_write,
                o_p_readdata,
@@ -60,6 +62,8 @@ module VX_d_cache(clk,
     input wire[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata;
     input wire i_m_ready;
 
+    input wire[2:0] i_p_mem_read;
+    input wire[2:0] i_p_mem_write;
 
 
     // Buffer for final data
@@ -229,6 +233,7 @@ module VX_d_cache(clk,
         wire[7:0]  cache_index  = bank_addr[14:7];
         wire[16:0] cache_tag    = bank_addr[31:15];
         wire[1:0]  cache_offset = bank_addr[6:5];
+        wire[1:0]  byte_select  = bank_addr[1:0];
 
         wire       normal_valid_in = valid_per_bank[bank_id];
         wire       use_valid_in    = ((state == RECIV_MEM_RSP) && i_m_ready)  ? 1'b1 :
@@ -245,6 +250,9 @@ module VX_d_cache(clk,
           .block_offset     (cache_offset),
           .writedata        (i_p_writedata[send_index_to_bank[bank_id]]),
           .read_or_write    (i_p_read_or_write),
+          .i_p_mem_read     (i_p_mem_read),
+          .i_p_mem_write    (i_p_mem_write),
+          .byte_select      (byte_select),
           .hit              (hit_per_bank[bank_id]),
           .readdata         (readdata_per_bank[bank_id]),          // Data read
           .eviction_addr    (eviction_addr_per_bank[bank_id]), 

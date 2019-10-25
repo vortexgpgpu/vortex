@@ -16,6 +16,8 @@ module VX_Cache_Bank
             clk,
             state,
             read_or_write, // Read = 0 | Write = 1
+           i_p_mem_read,
+           i_p_mem_write,
             valid_in,
             //write_from_mem,
             actual_index,
@@ -24,6 +26,7 @@ module VX_Cache_Bank
             writedata,
             fetched_writedata,
 
+            byte_select,
 
             readdata,
             hit,
@@ -57,8 +60,9 @@ module VX_Cache_Bank
     input wire read_or_write; // Specifies if it is a read or write operation
 
     input wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
-
-
+    input wire[2:0] i_p_mem_read;
+    input wire[2:0] i_p_mem_write;
+    input wire[1:0] byte_select;
 
     // Outputs
       // Normal shit
@@ -94,18 +98,67 @@ module VX_Cache_Bank
     assign eviction_tag = tag_use;
     assign access = (state == CACHE_IDLE) && valid_in;
     assign write_from_mem = (state == RECIV_MEM_RSP);
-    assign readdata     = (access) ? data_use[block_offset] : 32'b0; // Fix with actual data
     assign hit          = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data
     assign eviction_addr = {eviction_tag, actual_index, 7'b0}; // Fix with actual data
 
 
-    wire[`NUM_WORDS_PER_BLOCK-1:0]       we;
+
+
+    wire lb  = (i_p_mem_read == `LB_MEM_READ);
+    wire lh  = (i_p_mem_read == `LH_MEM_READ);
+    wire lhu = (i_p_mem_read == `LHU_MEM_READ);
+    wire lbu = (i_p_mem_read == `LBU_MEM_READ);
+
+    wire sw  = (i_p_mem_write == `SW_MEM_WRITE);
+    wire sb  = (i_p_mem_write == `SB_MEM_WRITE);
+    wire sh = (i_p_mem_write == `SH_MEM_WRITE);
+
+    wire b0 = (byte_select == 0);
+    wire b1 = (byte_select == 1);
+    wire b2 = (byte_select == 2);
+    wire b3 = (byte_select == 3);
+
+    wire[31:0] data_unQual = b0 ? (data_use[block_offset]     )  :
+                             b1 ? (data_use[block_offset] >> 8)  :
+                             b2 ? (data_use[block_offset] >> 16) :
+                             (data_use[block_offset] >> 24);
+
+
+    wire[31:0] lb_data     = (data_unQual[7] ) ? (data_unQual | 32'hFFFFFF00) : (data_unQual & 32'hFF);
+    wire[31:0] lh_data     = (data_unQual[15]) ? (data_unQual | 32'hFFFF0000) : (data_unQual & 32'hFFFF);
+    wire[31:0] lbu_data    = (data_unQual & 32'hFF);
+    wire[31:0] lhu_data    = (data_unQual & 32'hFFFF);
+    wire[31:0] lw_data     = (data_unQual);
+
+    wire[31:0] data_Qual   = lb  ? lb_data  :
+                             lh  ? lh_data  :
+                             lhu ? lhu_data :
+                             lbu ? lbu_data :
+                             lw_data;
+
+
+    assign readdata     = (access) ? data_Qual : 32'b0; // Fix with actual data
+
+
+    wire[3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
+    wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
+
+
+    wire[`NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
     wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
     for (g = 0; g < `NUM_WORDS_PER_BLOCK; g = g + 1) begin
         wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
-        assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
+
+        assign we[g]      = (write_from_mem)     ? 4'b1111  : 
+                            (normal_write && sw) ? 4'b1111  :
+                            (normal_write && sb) ? sb_mask  :
+                            (normal_write && sh) ? sh_mask  :
+                            4'b0000;
+
+
+        // assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : writedata;
     end
 

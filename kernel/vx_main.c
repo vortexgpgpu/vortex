@@ -7,10 +7,10 @@ unsigned z[1024] = {0};
 
 unsigned temp = 6;
 
-#define MAT_DIM 2
+#define MAT_DIM 16
 
-#define NUM_COLS 2
-#define NUM_ROWS 2
+#define NUM_COLS 16
+#define NUM_ROWS 16
 
 double sc_time_stamp()
 {
@@ -43,17 +43,17 @@ int main()
 
 	// unsigned f = temp;
 
-	vx_print_hex(11);
+	// vx_print_hex(11);
 	// vx_printc(0, 'a');
 
-	// initialize_mats();
+	initialize_mats();
 
 	// matrix multiplication
 	// vx_sq_mat_mult(x, y, z, MAT_DIM);
 	// vx_print_str("\n\nMatrix multiplication\n");
 	// print_matrix(z);
 
-	// print_matrix(x);
+	print_matrix(x);
 
 	// // matrix addition
 	// vx_mat_add(x, y, z, NUM_ROWS, NUM_COLS);
