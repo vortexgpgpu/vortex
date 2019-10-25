@@ -2,16 +2,17 @@
 //        Also add a bit about wheter the "Way ID" is valid / being held or if it is just default
 //        Also make sure all possible output states are transmitted back to the bank correctly
 
-`define NUM_WORDS_PER_BLOCK 4
-
 `include "../VX_define.v"
 `include "VX_cache_data.v"
 
+
 module VX_Cache_Bank
-          #(
-            // parameter NUMBER_INDEXES = 256
-            parameter NUMBER_INDEXES = 256
-          )
+            #(
+              parameter CACHE_SIZE = 4096, // Bytes
+              parameter CACHE_WAYS = 1,
+              parameter CACHE_BLOCK = 128, // Bytes
+              parameter CACHE_BANKS = 8
+            )
           (
             clk,
             state,
@@ -38,9 +39,10 @@ module VX_Cache_Bank
             data_evicted
            );
 
-    parameter cache_entry = 14;
-    parameter ways_per_set = 4;
-    parameter Number_Blocks = 32;
+    localparam NUMBER_BANKS         = CACHE_BANKS;
+    localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
+    localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
+    localparam NUMBER_INDEXES       = `NUM_IND;
 
     localparam CACHE_IDLE    = 0; // Idle
     localparam SEND_MEM_REQ  = 1; // Write back this block into memory
@@ -52,14 +54,18 @@ module VX_Cache_Bank
 //input wire write_from_mem;
 
       // Reading Data
-    input wire[$clog2(NUMBER_INDEXES)-1:0] actual_index;
-    input wire[16:0] o_tag; // When write_from_mem = 1, o_tag is the new tag
-    input wire[1:0]  block_offset;
+    input wire[`CACHE_IND_SIZE_RNG] actual_index;
+
+
+    input wire[`CACHE_TAG_SIZE_RNG] o_tag; // When write_from_mem = 1, o_tag is the new tag
+    input wire[`CACHE_OFFSET_SIZE_RNG]  block_offset;
+
+
     input wire[31:0] writedata;
     input wire       valid_in;
     input wire read_or_write; // Specifies if it is a read or write operation
 
-    input wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
+    input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
     input wire[2:0] i_p_mem_read;
     input wire[2:0] i_p_mem_write;
     input wire[1:0] byte_select;
@@ -75,11 +81,11 @@ module VX_Cache_Bank
     output wire[31:0] eviction_addr; // What's the eviction tag
 
       // Eviction Data (Extraction)
-    output wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
+    output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
 
 
 
-    wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
+    wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
     wire[16:0] tag_use;
     wire[16:0] eviction_tag;
     wire       valid_use;
@@ -97,7 +103,7 @@ module VX_Cache_Bank
     assign eviction_wb  = (dirty_use != 1'b0) && valid_use;
     assign eviction_tag = tag_use;
     assign access = (state == CACHE_IDLE) && valid_in;
-    assign write_from_mem = (state == RECIV_MEM_RSP);
+    assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in; // TODO
     assign hit          = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data
     assign eviction_addr = {eviction_tag, actual_index, 7'b0}; // Fix with actual data
@@ -145,10 +151,10 @@ module VX_Cache_Bank
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
 
 
-    wire[`NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
-    wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
+    wire[NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
+    wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
-    for (g = 0; g < `NUM_WORDS_PER_BLOCK; g = g + 1) begin
+    for (g = 0; g < NUM_WORDS_PER_BLOCK; g = g + 1) begin
         wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
 
         assign we[g]      = (write_from_mem)     ? 4'b1111  : 
@@ -162,7 +168,11 @@ module VX_Cache_Bank
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : writedata;
     end
 
-    VX_cache_data data_structures(
+    VX_cache_data #(
+          .CACHE_SIZE(CACHE_SIZE),
+          .CACHE_WAYS(CACHE_WAYS),
+          .CACHE_BLOCK(CACHE_BLOCK),
+          .CACHE_BANKS(CACHE_BANKS)) data_structures(
         .clk       (clk),
         // Inputs
         .addr      (actual_index),

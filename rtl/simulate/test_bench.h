@@ -266,38 +266,6 @@ bool Vortex::dbus_driver()
                     // printf("+++++++ (%x) writeback[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, new_value);
                     // printf("+++++++ (%x) i_m_readdata[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
                 }
-
-                // unsigned ordered_mem[32];
-
-                // // Create unordered mem
-                // unsigned unordered_mem[32];
-                // for (int i = 0; i < CACHE_NUM_BANKS; i++)
-                // {
-                //     for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
-                //     {
-                //         unordered_mem[(i*CACHE_WORDS_PER_BLOCK)+j] = vortex->o_m_writedata[i][j];
-                //     }
-                // }
-
-                // // Order the memory
-                // int num_iter = 0;
-                // for (int i = 0; i < CACHE_NUM_BANKS; i++)
-                // {
-                //     for (int j = 0; j < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); j+=CACHE_WORDS_PER_BLOCK)
-                //     {
-                //         printf("i: %d, j: %d, num_iter: %d\n", i, j, num_iter);
-                //         ordered_mem[i+j] = unordered_mem[num_iter];
-                //         num_iter++;
-                //     }
-                // }
-
-                // // Save the memory
-                // for (int i = 0; i < (CACHE_WORDS_PER_BLOCK * CACHE_NUM_BANKS); i++)
-                // {
-                //     unsigned addr        = (vortex->o_m_evict_addr) + (4*i);
-                //     unsigned * data_addr = ordered_mem + i;
-                //     ram.writeWord( addr, data_addr);
-                // }
                 
             }
 

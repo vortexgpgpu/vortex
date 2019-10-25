@@ -50,7 +50,14 @@ module VX_dmem_controller (
 		);
 
 
-	VX_d_cache dcache(
+	VX_d_cache
+	#(
+		.CACHE_SIZE(4096), // Bytes
+		.CACHE_WAYS(1),
+		.CACHE_BLOCK(128), // Bytes
+		.CACHE_BANKS(8)
+	) dcache
+	(
 		.clk                (clk),
 		.rst                (reset),
 		.i_p_valid          (cache_driver_in_valid), 

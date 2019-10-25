@@ -13,8 +13,15 @@
 // `include "VX_Cache_Bank.v"
 //`include "cache_set.v"
 
-
-module VX_d_cache(clk,
+module VX_d_cache
+    #(
+      parameter CACHE_SIZE = 4096, // Bytes
+      parameter CACHE_WAYS = 1,
+      parameter CACHE_BLOCK = 128, // Bytes
+      parameter CACHE_BANKS = 8
+    )
+    (
+               clk,
                rst,
                i_p_addr,
                //i_p_byte_en,
@@ -39,7 +46,10 @@ module VX_d_cache(clk,
                i_m_ready
      );
 
-    parameter NUMBER_BANKS = 8;
+    parameter NUMBER_BANKS         = CACHE_BANKS;
+    localparam NUM_WORDS_PER_BLOCK = CACHE_BLOCK / (CACHE_BANKS*4);
+
+    localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / NUMBER_BANKS);
 
     localparam CACHE_IDLE    = 0; // Idle
     localparam SEND_MEM_REQ  = 1; // Write back this block into memory
@@ -57,9 +67,9 @@ module VX_d_cache(clk,
     output reg [31:0]  o_m_evict_addr; // Address is xxxxxxxxxxoooobbbyy
     output reg [31:0]  o_m_read_addr;
     output reg         o_m_valid;
-    output reg[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] o_m_writedata;
+    output reg[NUMBER_BANKS - 1:0][NUM_WORDS_PER_BLOCK-1:0][31:0] o_m_writedata;
     output reg                                                     o_m_read_or_write; //, o_m_write;
-    input wire[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata;
+    input wire[NUMBER_BANKS - 1:0][NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata;
     input wire i_m_ready;
 
     input wire[2:0] i_p_mem_read;
@@ -118,15 +128,6 @@ module VX_d_cache(clk,
 
 
     reg[`NT_M1:0] threads_serviced_Qual;
-    // reg           detect_bank_conflict;
-    // genvar bank_ind;
-    // always @(*) begin
-    //   for (bank_ind = 0; bank_ind < NUMBER_BANKS; bank_ind=bank_ind+1)
-    //   begin
-    //     detect_bank_conflict = detect_bank_conflict | ($countones(thread_track_banks[bank_ind]) > 1);
-
-    //   end
-    // end
 
     reg[`NT_M1:0] debug_hit_per_bank_mask[NUMBER_BANKS-1:0];
 
@@ -229,11 +230,11 @@ module VX_d_cache(clk,
                                   i_p_addr[send_index_to_bank[bank_id]];
 
 
+        wire[1:0]  byte_select                    = bank_addr[1:0];
+        wire[`CACHE_OFFSET_SIZE_RNG] cache_offset = bank_addr[`CACHE_ADDR_OFFSET_RNG];
+        wire[`CACHE_IND_SIZE_RNG]    cache_index  = bank_addr[`CACHE_ADDR_IND_RNG];
+        wire[`CACHE_TAG_SIZE_RNG]    cache_tag    = bank_addr[`CACHE_ADDR_TAG_RNG];
 
-        wire[7:0]  cache_index  = bank_addr[14:7];
-        wire[16:0] cache_tag    = bank_addr[31:15];
-        wire[1:0]  cache_offset = bank_addr[6:5];
-        wire[1:0]  byte_select  = bank_addr[1:0];
 
         wire       normal_valid_in = valid_per_bank[bank_id];
         wire       use_valid_in    = ((state == RECIV_MEM_RSP) && i_m_ready)  ? 1'b1 :
@@ -241,7 +242,12 @@ module VX_d_cache(clk,
                                      ((state == SEND_MEM_REQ))                ? 1'b0 :
                                      normal_valid_in;
 
-        VX_Cache_Bank bank_structure (
+        VX_Cache_Bank #(
+          .CACHE_SIZE(CACHE_SIZE),
+          .CACHE_WAYS(CACHE_WAYS),
+          .CACHE_BLOCK(CACHE_BLOCK),
+          .CACHE_BANKS(CACHE_BANKS)) bank_structure
+        (
           .clk              (clk),
           .state            (state),
           .valid_in         (use_valid_in),

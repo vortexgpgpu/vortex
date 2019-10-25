@@ -1,28 +1,38 @@
 
-`define NUM_WORDS_PER_BLOCK 4
 
-module VX_cache_data (
+`include "../VX_define.v"
+
+module VX_cache_data
+    #(
+      parameter CACHE_SIZE     = 4096, // Bytes
+      parameter CACHE_WAYS     = 1,
+      parameter CACHE_BLOCK    = 128, // Bytes
+      parameter CACHE_BANKS    = 8
+    )
+    (
 	input wire clk,    // Clock
 
 	// Addr
-	input wire[$clog2(NUMBER_INDEXES)-1:0] addr,
+	input wire[`CACHE_IND_SIZE_RNG] addr,
 	// WE
-	input wire[`NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
+	input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
 	input wire                             evict,
 	// Data
-	input wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write, // Update Data
-	input wire[16:0]                           tag_write,
+	input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write, // Update Data
+	input wire[`CACHE_TAG_SIZE_RNG]                           tag_write,
 
 
-	output wire[16:0]                           tag_use,
-	output wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_use,
+	output wire[`CACHE_TAG_SIZE_RNG]           tag_use,
+	output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use,
 	output wire                                 valid_use,
 	output wire                                 dirty_use
 	
 );
 
-
-	parameter NUMBER_INDEXES = 256;
+    localparam NUMBER_BANKS         = CACHE_BANKS;
+    localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
+    localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
+	localparam NUMBER_INDEXES       = `NUM_IND;
 
     wire currently_writing = (|we);
     wire update_dirty      = ((!dirty_use) && currently_writing) || (evict);
@@ -33,7 +43,7 @@ module VX_cache_data (
     `ifndef SYN
 
         // (3:0)  4 bytes
-        reg[`NUM_WORDS_PER_BLOCK-1:0][3:0][7:0] data[NUMBER_INDEXES-1:0]; // Actual Data
+        reg[NUM_WORDS_PER_BLOCK-1:0][3:0][7:0] data[NUMBER_INDEXES-1:0]; // Actual Data
         reg[16:0]                           tag[NUMBER_INDEXES-1:0];
         reg                                 valid[NUMBER_INDEXES-1:0];
         reg                                 dirty[NUMBER_INDEXES-1:0];
@@ -53,7 +63,7 @@ module VX_cache_data (
         end
 
         always @(posedge clk) begin : data_update
-          for (f = 0; f < `NUM_WORDS_PER_BLOCK; f = f + 1) begin
+          for (f = 0; f < NUM_WORDS_PER_BLOCK; f = f + 1) begin
             if (we[f][0]) data[addr][f][0] <= data_write[f][7 :0 ];
             if (we[f][1]) data[addr][f][1] <= data_write[f][15:8 ];
             if (we[f][2]) data[addr][f][2] <= data_write[f][23:16];
@@ -75,11 +85,11 @@ module VX_cache_data (
         wire cena = 1;
 
         wire cenb_d  = (|we);
-        wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_d = data_write;
-        wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] write_bit_mask_d;
-        wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_d;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_d = data_write;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] write_bit_mask_d;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_d;
         genvar cur_b;
-        for (cur_b = 0; cur_b < `NUM_WORDS_PER_BLOCK; cur_b=cur_b+1) begin
+        for (cur_b = 0; cur_b < NUM_WORDS_PER_BLOCK; cur_b=cur_b+1) begin
             assign write_bit_mask_d[cur_b] = {32{~we[cur_b]}};
         end
         assign data_use = data_out_d;
@@ -144,8 +154,8 @@ module VX_cache_data (
 
 
 
-        wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_m = {new_tag, new_dirty, new_valid};
-        wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_m;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_m = {new_tag, new_dirty, new_valid};
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_m;
 
         assign {old_tag, old_dirty, old_valid} = data_out_m;
 
