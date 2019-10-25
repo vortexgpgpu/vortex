@@ -15,10 +15,11 @@
 
 module VX_d_cache
     #(
-      parameter CACHE_SIZE = 4096, // Bytes
-      parameter CACHE_WAYS = 1,
+      parameter CACHE_SIZE  = 4096, // Bytes
+      parameter CACHE_WAYS  = 1,
       parameter CACHE_BLOCK = 128, // Bytes
-      parameter CACHE_BANKS = 8
+      parameter CACHE_BANKS = 8,
+      parameter NUM_REQ     = 8
     )
     (
                clk,
@@ -58,11 +59,11 @@ module VX_d_cache
     
     //parameter cache_entry = 9;
     input wire         clk, rst;
-    input wire [`NT_M1:0] i_p_valid;
-    input wire  [`NT_M1:0][31:0] i_p_addr; // FIXME
-    input wire [`NT_M1:0][31:0]  i_p_writedata;
+    input wire [NUM_REQ-1:0] i_p_valid;
+    input wire  [NUM_REQ-1:0][31:0] i_p_addr; // FIXME
+    input wire [NUM_REQ-1:0][31:0]  i_p_writedata;
     input wire         i_p_read_or_write; //, i_p_write;
-    output reg [`NT_M1:0][31:0]  o_p_readdata;
+    output reg [NUM_REQ-1:0][31:0]  o_p_readdata;
     output wire        o_p_delay;
     output reg [31:0]  o_m_evict_addr; // Address is xxxxxxxxxxoooobbbyy
     output reg [31:0]  o_m_read_addr;
@@ -77,19 +78,19 @@ module VX_d_cache
 
 
     // Buffer for final data
-    reg [`NT_M1:0][31:0] final_data_read;
-    reg [`NT_M1:0][31:0] new_final_data_read;
-    wire[`NT_M1:0][31:0] new_final_data_read_Qual;
+    reg [NUM_REQ-1:0][31:0] final_data_read;
+    reg [NUM_REQ-1:0][31:0] new_final_data_read;
+    wire[NUM_REQ-1:0][31:0] new_final_data_read_Qual;
 
     assign o_p_readdata = new_final_data_read_Qual;
 
 
 
-    wire[NUMBER_BANKS - 1 : 0][`NT_M1:0]         thread_track_banks;        // Valid thread mask per bank
-    wire[NUMBER_BANKS - 1 : 0][$clog2(`NT)-1:0]  index_per_bank;            // Index of thread each bank will try to service
-    wire[NUMBER_BANKS - 1 : 0][`NT_M1:0]         use_mask_per_bank;         // A mask of index_per_bank
+    wire[NUMBER_BANKS - 1 : 0][NUM_REQ-1:0]         thread_track_banks;        // Valid thread mask per bank
+    wire[NUMBER_BANKS - 1 : 0][$clog2(NUM_REQ)-1:0]  index_per_bank;            // Index of thread each bank will try to service
+    wire[NUMBER_BANKS - 1 : 0][NUM_REQ-1:0]         use_mask_per_bank;         // A mask of index_per_bank
     wire[NUMBER_BANKS - 1 : 0]                   valid_per_bank;            // Valid request going to each bank
-    wire[NUMBER_BANKS - 1 : 0][`NT_M1:0]         threads_serviced_per_bank; // Bank successfully serviced per bank
+    wire[NUMBER_BANKS - 1 : 0][NUM_REQ-1:0]         threads_serviced_per_bank; // Bank successfully serviced per bank
 
     wire[NUMBER_BANKS-1:0][31:0]         readdata_per_bank; // Data read from each bank
     wire[NUMBER_BANKS-1:0]               hit_per_bank;      // Whether each bank got a hit or a miss
@@ -99,9 +100,9 @@ module VX_d_cache
     reg [3:0] state;
     wire[3:0] new_state;
 
-    wire[`NT_M1:0] use_valid;        // Valid used throught the code
-    reg[`NT_M1:0]  stored_valid;     // Saving the threads still left (bank conflict or bank miss)
-    wire[`NT_M1:0] new_stored_valid; // New stored valid
+    wire[NUM_REQ-1:0] use_valid;        // Valid used throught the code
+    reg[NUM_REQ-1:0]  stored_valid;     // Saving the threads still left (bank conflict or bank miss)
+    wire[NUM_REQ-1:0] new_stored_valid; // New stored valid
 
 
 
@@ -127,18 +128,18 @@ module VX_d_cache
       );
 
 
-    reg[`NT_M1:0] threads_serviced_Qual;
+    reg[NUM_REQ-1:0] threads_serviced_Qual;
 
-    reg[`NT_M1:0] debug_hit_per_bank_mask[NUMBER_BANKS-1:0];
+    reg[NUM_REQ-1:0] debug_hit_per_bank_mask[NUMBER_BANKS-1:0];
 
     genvar bid;
     for (bid = 0; bid < NUMBER_BANKS; bid=bid+1)
     begin
-      wire[`NT_M1:0]        use_threads_track_banks = thread_track_banks[bid];
-      wire[$clog2(`NT)-1:0] use_thread_index        = index_per_bank[bid];
+      wire[NUM_REQ-1:0]        use_threads_track_banks = thread_track_banks[bid];
+      wire[$clog2(NUM_REQ)-1:0] use_thread_index        = index_per_bank[bid];
       wire                  use_write_final_data    = hit_per_bank[bid];
       wire[31:0]            use_data_final_data     = readdata_per_bank[bid];
-        VX_priority_encoder_w_mask #(.N(`NT)) choose_thread(
+        VX_priority_encoder_w_mask #(.N(NUM_REQ)) choose_thread(
           .valids(use_threads_track_banks),
           .mask  (use_mask_per_bank[bid]),
           .index (index_per_bank[bid]),
@@ -149,7 +150,7 @@ module VX_d_cache
           if (use_write_final_data) new_final_data_read[use_thread_index] = use_data_final_data;
         end
         // assign new_final_data_read[use_thread_index] = use_write_final_data ? use_data_final_data : 0;
-        assign debug_hit_per_bank_mask[bid]   = {`NT{hit_per_bank[bid]}};
+        assign debug_hit_per_bank_mask[bid]   = {NUM_REQ{hit_per_bank[bid]}};
         assign threads_serviced_per_bank[bid] = use_mask_per_bank[bid] & debug_hit_per_bank_mask[bid];
     end
 
@@ -170,7 +171,7 @@ module VX_d_cache
 
 
     genvar tid;
-    for (tid = 0; tid < `NT; tid =tid+1)
+    for (tid = 0; tid < NUM_REQ; tid =tid+1)
     begin
       assign new_final_data_read_Qual[tid] = threads_serviced_Qual[tid] ? new_final_data_read[tid] : final_data_read[tid];
     end
@@ -183,7 +184,7 @@ module VX_d_cache
 
     assign o_p_delay = delay;
 
-    wire[NUMBER_BANKS - 1 : 0][$clog2(`NT)-1:0] send_index_to_bank = index_per_bank;
+    wire[NUMBER_BANKS - 1 : 0][$clog2(NUM_REQ)-1:0] send_index_to_bank = index_per_bank;
 
 
     wire[$clog2(NUMBER_BANKS)-1:0] miss_bank_index;
