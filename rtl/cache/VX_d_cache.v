@@ -64,9 +64,10 @@ module VX_d_cache(clk,
 
     // Buffer for final data
     reg [`NT_M1:0][31:0] final_data_read;
-    wire[`NT_M1:0][31:0] new_final_data_read;
+    reg [`NT_M1:0][31:0] new_final_data_read;
+    wire[`NT_M1:0][31:0] new_final_data_read_Qual;
 
-    assign o_p_readdata = final_data_read;
+    assign o_p_readdata = new_final_data_read_Qual;
 
 
 
@@ -95,6 +96,8 @@ module VX_d_cache(clk,
     reg[31:0] miss_addr;
     reg[31:0] evict_addr;
 
+    wire curr_processor_request_valid = (|i_p_valid);
+
 
     assign use_valid = (stored_valid == 0) ?  i_p_valid : stored_valid;
 
@@ -121,10 +124,15 @@ module VX_d_cache(clk,
     //   end
     // end
 
+    reg[`NT_M1:0] debug_hit_per_bank_mask[NUMBER_BANKS-1:0];
+
     genvar bid;
     for (bid = 0; bid < NUMBER_BANKS; bid=bid+1)
     begin
-      wire[`NT_M1:0] use_threads_track_banks = thread_track_banks[bid];
+      wire[`NT_M1:0]        use_threads_track_banks = thread_track_banks[bid];
+      wire[$clog2(`NT)-1:0] use_thread_index        = index_per_bank[bid];
+      wire                  use_write_final_data    = hit_per_bank[bid];
+      wire[31:0]            use_data_final_data     = readdata_per_bank[bid];
         VX_priority_encoder_w_mask #(.N(`NT)) choose_thread(
           .valids(use_threads_track_banks),
           .mask  (use_mask_per_bank[bid]),
@@ -132,17 +140,20 @@ module VX_d_cache(clk,
           .found (valid_per_bank[bid])
           );
 
-        assign new_final_data_read[index_per_bank[bid]] = hit_per_bank[bid] ? readdata_per_bank[bid] : 0;
-
-        assign threads_serviced_per_bank[bid] = use_mask_per_bank[bid] & {`NT{hit_per_bank[bid]}};
+        always @(*) begin
+          if (use_write_final_data) new_final_data_read[use_thread_index] = use_data_final_data;
+        end
+        // assign new_final_data_read[use_thread_index] = use_write_final_data ? use_data_final_data : 0;
+        assign debug_hit_per_bank_mask[bid]   = {`NT{hit_per_bank[bid]}};
+        assign threads_serviced_per_bank[bid] = use_mask_per_bank[bid] & debug_hit_per_bank_mask[bid];
     end
 
 
-    // genvar tid;
-
-    assign threads_serviced_Qual = threads_serviced_per_bank[0] | threads_serviced_per_bank[1] | threads_serviced_per_bank[2] | threads_serviced_per_bank[3] | threads_serviced_per_bank[4] | threads_serviced_per_bank[5] | threads_serviced_per_bank[6] | threads_serviced_per_bank[7];
-    // for(tid = 0; tid )
     wire[NUMBER_BANKS - 1 : 0] detect_bank_miss;
+    assign threads_serviced_Qual = threads_serviced_per_bank[0] | threads_serviced_per_bank[1] |
+                                   threads_serviced_per_bank[2] | threads_serviced_per_bank[3] |
+                                   threads_serviced_per_bank[4] | threads_serviced_per_bank[5] |
+                                   threads_serviced_per_bank[6] | threads_serviced_per_bank[7];
     // genvar bbid;
     // always @(*) begin
     //   for (bbid = 0; bbid < NUMBER_BANKS; bbid=bbid+1)
@@ -150,6 +161,14 @@ module VX_d_cache(clk,
     //     assign threads_serviced_Qual = threads_serviced_Qual | threads_serviced_per_bank[bbid];
     //   end
     // end
+
+
+
+    genvar tid;
+    for (tid = 0; tid < `NT; tid =tid+1)
+    begin
+      assign new_final_data_read_Qual[tid] = threads_serviced_Qual[tid] ? new_final_data_read[tid] : final_data_read[tid];
+    end
 
 
     assign detect_bank_miss = (valid_per_bank & ~hit_per_bank);
@@ -193,10 +212,7 @@ module VX_d_cache(clk,
       evict_addr  <= eviction_addr_per_bank[miss_bank_index];
     end
 
-    for (cur_t = 0; cur_t < `NT; cur_t=cur_t+1)
-    begin
-      if (threads_serviced_Qual[cur_t]) final_data_read[cur_t] <= new_final_data_read[cur_t];
-    end
+    final_data_read <= new_final_data_read_Qual;
   end
 
 
@@ -245,8 +261,8 @@ module VX_d_cache(clk,
     // Mem Rsp
 
     // Req to mem:
-    assign o_m_evict_addr     = evict_addr;
-    assign o_m_read_addr      = miss_addr;
+    assign o_m_evict_addr     = evict_addr & 32'hffffffc0;
+    assign o_m_read_addr      = miss_addr  & 32'hffffffc0;
     assign o_m_valid          = (state == SEND_MEM_REQ);
     assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb);
     //end

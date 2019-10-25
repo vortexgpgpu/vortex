@@ -31,6 +31,7 @@ assign VX_writeback_inter.wb_warp_num  = VX_writeback_temp.wb_warp_num;
 
 
 VX_mw_wb_inter           VX_mw_wb();
+wire no_slot_mem;
 
 
 VX_mem_req_inter  VX_exe_mem_req();
@@ -78,7 +79,8 @@ VX_lsu load_store_unit(
 	.VX_mem_wb    (VX_mem_wb),
 	.VX_dcache_rsp(VX_dcache_rsp),
 	.VX_dcache_req(VX_dcache_req),
-	.out_delay    (out_mem_delay)
+	.out_delay    (out_mem_delay),
+	.no_slot_mem  (no_slot_mem)
 	);
 
 
@@ -106,7 +108,8 @@ VX_writeback VX_wb(
 	.VX_inst_exec_wb   (VX_inst_exec_wb),
 	.VX_csr_wb         (VX_csr_wb),
 
-	.VX_writeback_inter(VX_writeback_temp)
+	.VX_writeback_inter(VX_writeback_temp),
+	.no_slot_mem       (no_slot_mem)
 	);
 
 endmodule

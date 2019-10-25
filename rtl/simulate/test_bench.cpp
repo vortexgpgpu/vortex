@@ -5,7 +5,7 @@
 int main(int argc, char **argv)
 {
 
-	Verilated::debug(1);
+	// Verilated::debug(1);
 
 	Verilated::commandArgs(argc, argv);
 

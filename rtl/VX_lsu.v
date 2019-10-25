@@ -5,6 +5,7 @@
 module VX_lsu (
 		input wire               clk,
 		input wire               reset,
+		input wire               no_slot_mem,
 		VX_lsu_req_inter         VX_lsu_req,
 
 		// Write back to GPR
@@ -15,9 +16,9 @@ module VX_lsu (
 		output wire              out_delay
 	);
 
-	VX_inst_mem_wb_inter VX_mem_wb_temp();
+	// VX_inst_mem_wb_inter VX_mem_wb_temp();
 
-	assign out_delay = VX_dcache_rsp.delay;
+	assign out_delay = VX_dcache_rsp.delay || no_slot_mem;
 
 
 	// Generate Addresses
@@ -36,30 +37,30 @@ module VX_lsu (
 		assign VX_dcache_req.out_cache_driver_in_data[index]      = VX_lsu_req.store_data[index];
 		assign VX_dcache_req.out_cache_driver_in_valid[index]     = (VX_lsu_req.valid[index]);
 
-		assign VX_mem_wb_temp.loaded_data[index]                       = VX_dcache_rsp.in_cache_driver_out_data[index];
+		assign VX_mem_wb.loaded_data[index]                       = VX_dcache_rsp.in_cache_driver_out_data[index];
 	end
 
 		assign VX_dcache_req.out_cache_driver_in_mem_read  = VX_lsu_req.mem_read;
 		assign VX_dcache_req.out_cache_driver_in_mem_write = VX_lsu_req.mem_write;
 
 
-		assign VX_mem_wb_temp.rd          = VX_lsu_req.rd;
-		assign VX_mem_wb_temp.wb          = VX_lsu_req.wb;
-		assign VX_mem_wb_temp.wb_valid    = VX_lsu_req.valid;
-		assign VX_mem_wb_temp.wb_warp_num = VX_lsu_req.warp_num;
+		assign VX_mem_wb.rd          = VX_lsu_req.rd;
+		assign VX_mem_wb.wb          = VX_lsu_req.wb & {!VX_dcache_rsp.delay, !VX_dcache_rsp.delay};
+		assign VX_mem_wb.wb_valid    = VX_lsu_req.valid;
+		assign VX_mem_wb.wb_warp_num = VX_lsu_req.warp_num;
 
 
 
-	wire zero_temp = 0;
-	VX_generic_register #(.N(142)) register_wb_data 
-	(
-		.clk  (clk),
-		.reset(reset),
-		.stall(zero_temp),
-		.flush(out_delay),
-		.in   ({VX_mem_wb_temp.loaded_data, VX_mem_wb_temp.rd, VX_mem_wb_temp.wb, VX_mem_wb_temp.wb_valid, VX_mem_wb_temp.wb_warp_num}),
-		.out  ({VX_mem_wb.loaded_data     , VX_mem_wb.rd     , VX_mem_wb.wb     , VX_mem_wb.wb_valid     , VX_mem_wb.wb_warp_num     })
-	);
+	// wire zero_temp = 0;
+	// VX_generic_register #(.N(142)) register_wb_data 
+	// (
+	// 	.clk  (clk),
+	// 	.reset(reset),
+	// 	.stall(zero_temp),
+	// 	.flush(out_delay),
+	// 	.in   ({VX_mem_wb_temp.loaded_data, VX_mem_wb_temp.rd, VX_mem_wb_temp.wb, VX_mem_wb_temp.wb_valid, VX_mem_wb_temp.wb_warp_num}),
+	// 	.out  ({VX_mem_wb.loaded_data     , VX_mem_wb.rd     , VX_mem_wb.wb     , VX_mem_wb.wb_valid     , VX_mem_wb.wb_warp_num     })
+	// );
 
 
 endmodule // Memory

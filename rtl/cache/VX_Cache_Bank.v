@@ -90,10 +90,10 @@ module VX_Cache_Bank
 
     assign data_evicted = data_use;
 
-    assign eviction_wb  = miss && (dirty_use != 1'b0);
+    assign eviction_wb  = (dirty_use != 1'b0) && valid_use;
     assign eviction_tag = tag_use;
     assign access = (state == CACHE_IDLE) && valid_in;
-    assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in;
+    assign write_from_mem = (state == RECIV_MEM_RSP);
     assign readdata     = (access) ? data_use[block_offset] : 32'b0; // Fix with actual data
     assign hit          = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data
@@ -104,9 +104,8 @@ module VX_Cache_Bank
     wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
     for (g = 0; g < `NUM_WORDS_PER_BLOCK; g = g + 1) begin
-        wire correct_block   = (block_offset == g);
-        assign we[g]         = (read_or_write  && ((access && correct_block) || (write_from_mem && !correct_block)) ) ? 1'b1 : 1'b0;
-        //assign we[g]         = (!(write_from_mem && correct_block) && ((write_from_mem || correct_block) && read_or_write == 1'b1)) ? 1 : 0; // added the "not"
+        wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
+        assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : writedata;
     end
 

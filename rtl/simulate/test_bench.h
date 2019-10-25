@@ -39,6 +39,7 @@ class Vortex
         void print_stats(bool = true);
         bool ibus_driver();
         bool dbus_driver();
+        void io_handler();
 
         RAM ram;
 
@@ -188,77 +189,115 @@ bool Vortex::ibus_driver()
 
 }
 
+void Vortex::io_handler()
+{
+    if (vortex->io_valid)
+    {
+        uint32_t data_write = (uint32_t) vortex->io_data;
+
+        char c = (char) data_write;
+        std::cerr << c;
+    }
+}
 
 
 bool Vortex::dbus_driver()
 {
 
+    // printf("****************************\n");
+
+    vortex->i_m_ready = 0;
+    for (int i = 0; i < CACHE_NUM_BANKS; i++)
+    {
+        for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
+        {
+            vortex->i_m_readdata[i][j] = 0;
+        }
+    }
 
 
     if (this->refill)
     {
         this->refill = false;
-        unsigned unordered_mem[32];
-        int num_iter = 0;
-        for (int i = 0; i < CACHE_WORDS_PER_BLOCK; i++)
-        {
-            for (int j = 0; j < (CACHE_NUM_BANKS*8); j+=8)
-            {
-                unsigned addr = this->refill_addr + (4*num_iter);
-                unsigned data_read;
-                ram.getWord(addr, &data_read);
-                unordered_mem[i+j] = data_read;
-                num_iter++;
-            }
-        }
 
         vortex->i_m_ready = 1;
-        for (int i = 0; i < CACHE_NUM_BANKS; i++)
+        for (int curr_e = 0; curr_e < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); curr_e++)
         {
-            for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
-            {
-                vortex->i_m_readdata[i][j] = unordered_mem[(i*CACHE_WORDS_PER_BLOCK)+j];
+            unsigned new_addr = this->refill_addr + (4*curr_e);
 
-            }
+
+            unsigned addr_without_byte = new_addr >> 2;
+            unsigned bank_num          = addr_without_byte & 0x7;
+            unsigned addr_wihtout_bank = addr_without_byte >> 3;
+            unsigned offset_num        = addr_wihtout_bank & 0x3;
+
+            unsigned value;
+            ram.getWord(new_addr, &value);
+
+            // printf("-------- (%x) i_m_readdata[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
+            vortex->i_m_readdata[bank_num][offset_num] = value;
+
         }
     }
     else
     {
         if (vortex->o_m_valid)
         {
+            // printf("Valid o_m_valid\n");
             if (vortex->o_m_read_or_write)
             {
-                unsigned ordered_mem[32];
+                // printf("Valid write\n");
 
-                // Create unordered mem
-                unsigned unordered_mem[32];
-                for (int i = 0; i < CACHE_NUM_BANKS; i++)
+                for (int curr_e = 0; curr_e < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); curr_e++)
                 {
-                    for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
-                    {
-                        unordered_mem[(i*CACHE_WORDS_PER_BLOCK)+j] = vortex->o_m_writedata[i][j];
-                    }
+                    unsigned new_addr = vortex->o_m_evict_addr + (4*curr_e);
+
+
+                    unsigned addr_without_byte = new_addr >> 2;
+                    unsigned bank_num          = addr_without_byte & 0x7;
+                    unsigned addr_wihtout_bank = addr_without_byte >> 3;
+                    unsigned offset_num        = addr_wihtout_bank & 0x3;
+
+
+                    unsigned new_value         = vortex->o_m_writedata[bank_num][offset_num];
+
+                    ram.writeWord( new_addr, &new_value);
+
+                    // printf("+++++++ (%x) writeback[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, new_value);
+                    // printf("+++++++ (%x) i_m_readdata[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
                 }
 
-                // Order the memory
-                int num_iter = 0;
-                for (int i = 0; i < CACHE_NUM_BANKS; i++)
-                {
-                    for (int j = 0; j < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); j+=CACHE_WORDS_PER_BLOCK)
-                    {
-                        printf("i: %d, j: %d, num_iter: %d\n", i, j, num_iter);
-                        ordered_mem[i+j] = unordered_mem[num_iter];
-                        num_iter++;
-                    }
-                }
+                // unsigned ordered_mem[32];
 
-                // Save the memory
-                for (int i = 0; i < (CACHE_WORDS_PER_BLOCK * CACHE_NUM_BANKS); i++)
-                {
-                    unsigned addr        = (vortex->o_m_evict_addr) + (4*i);
-                    unsigned * data_addr = ordered_mem + i;
-                    ram.writeWord( addr, data_addr);
-                }
+                // // Create unordered mem
+                // unsigned unordered_mem[32];
+                // for (int i = 0; i < CACHE_NUM_BANKS; i++)
+                // {
+                //     for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
+                //     {
+                //         unordered_mem[(i*CACHE_WORDS_PER_BLOCK)+j] = vortex->o_m_writedata[i][j];
+                //     }
+                // }
+
+                // // Order the memory
+                // int num_iter = 0;
+                // for (int i = 0; i < CACHE_NUM_BANKS; i++)
+                // {
+                //     for (int j = 0; j < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); j+=CACHE_WORDS_PER_BLOCK)
+                //     {
+                //         printf("i: %d, j: %d, num_iter: %d\n", i, j, num_iter);
+                //         ordered_mem[i+j] = unordered_mem[num_iter];
+                //         num_iter++;
+                //     }
+                // }
+
+                // // Save the memory
+                // for (int i = 0; i < (CACHE_WORDS_PER_BLOCK * CACHE_NUM_BANKS); i++)
+                // {
+                //     unsigned addr        = (vortex->o_m_evict_addr) + (4*i);
+                //     unsigned * data_addr = ordered_mem + i;
+                //     ram.writeWord( addr, data_addr);
+                // }
                 
             }
 
@@ -267,122 +306,6 @@ bool Vortex::dbus_driver()
             this->refill_addr = vortex->o_m_read_addr;
         }
     }
-
-    // uint32_t data_read;
-    // uint32_t data_write;
-    // uint32_t addr;
-    // // std::cout << "DBUS DRIVER\n" << std::endl;
-    // ////////////////////// DBUS //////////////////////
-
-    // bool did = false;
-
-    // for (unsigned curr_th = 0; curr_th < NT; curr_th++)
-    // {
-    //     if ((vortex->out_cache_driver_in_mem_write != NO_MEM_WRITE) && vortex->out_cache_driver_in_valid[curr_th])
-    //     {
-    //             did = true;
-    //             data_write = (uint32_t) vortex->out_cache_driver_in_data[curr_th];
-    //             addr       = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
-
-    //             if (addr == 0x00010000)
-    //             {
-    //               std::cerr << (char) data_write;
-    //             }
-
-    //             // if ((addr >= 0x810002cc) && (addr < 0x810002d0))
-    //             // {
-    //             //     int index = (addr - 0x810002cc) / 4;
-    //             //     // std::cerr << GREEN << "1done[" << index << "] = " << data_write << DEFAULT << "\n";
-    //             // }
-
-    //             // if ((addr >= 0x810059f4) && (addr < 0x810059f4))
-    //             // {
-    //             //     int index = (addr - 0x810059f4) / 4;
-    //             //     // std::cerr << RED << "2done[" << index << "] = " << data_write << DEFAULT << "\n";
-    //             // }
-
-    //             if (vortex->out_cache_driver_in_mem_write == SB_MEM_WRITE)
-    //             {
-    //                 data_write = ( data_write) & 0xFF;
-    //                 ram.writeByte( addr, &data_write);
-
-    //             } else if (vortex->out_cache_driver_in_mem_write == SH_MEM_WRITE)
-    //             {
-    //                 data_write = ( data_write) & 0xFFFF;
-    //                 ram.writeHalf( addr, &data_write);
-    //             } else if (vortex->out_cache_driver_in_mem_write == SW_MEM_WRITE)
-    //             {
-    //                 // printf("STORING %x in %x \n", data_write, addr);
-    //                 data_write = data_write;
-    //                 ram.writeWord( addr, &data_write);
-    //             }
-
-    //     }
-
-    // }
-
-
-
-
-    // // printf("----\n");
-    // for (unsigned curr_th = 0; curr_th < NT; curr_th++)
-    // {
-
-    //     if ((vortex->out_cache_driver_in_mem_read != NO_MEM_READ) && vortex->out_cache_driver_in_valid[curr_th])
-    //     {
-    //             did = true;
-    //             addr = (uint32_t) vortex->out_cache_driver_in_address[curr_th];
-    //             ram.getWord(addr, &data_read);
-
-    //             if (vortex->out_cache_driver_in_mem_read == LB_MEM_READ)
-    //             {
-
-    //                 vortex->in_cache_driver_out_data[curr_th] = (data_read & 0x80) ? (data_read | 0xFFFFFF00) : (data_read & 0xFF);
-
-    //             } else if (vortex->out_cache_driver_in_mem_read == LH_MEM_READ)
-    //             {
-
-    //                 vortex->in_cache_driver_out_data[curr_th] = (data_read & 0x8000) ? (data_read | 0xFFFF0000) : (data_read & 0xFFFF);
-
-    //             } else if (vortex->out_cache_driver_in_mem_read == LW_MEM_READ)
-    //             {
-    //                 // printf("Reading mem - Addr: %x = %x\n", addr, data_read);
-    //                 // std::cout << "READING - Addr: " << std::hex << addr << " = " << data_read << "\n";
-    //                 // std::cout << std::dec;
-    //                 vortex->in_cache_driver_out_data[curr_th] = data_read;
-
-    //             } else if (vortex->out_cache_driver_in_mem_read == LBU_MEM_READ)
-    //             {
-
-    //                 vortex->in_cache_driver_out_data[curr_th] = (data_read & 0xFF);
-
-    //             } else if (vortex->out_cache_driver_in_mem_read == LHU_MEM_READ)
-    //             {
-
-    //                 vortex->in_cache_driver_out_data[curr_th] = (data_read & 0xFFFF);
-
-    //             }
-    //             else
-    //             {
-    //                 vortex->in_cache_driver_out_data[curr_th] = 0xbabebabe;
-    //             }
-    //     }
-    //     else
-    //     {
-    //         vortex->in_cache_driver_out_data[curr_th] = 0xbabebabe;
-    //     }
-
-    // }
-
-    // if (did && (NW > 1))
-    // {
-
-    //     if (NW < NT)
-    //     {
-    //         this->stats_total_cycles += NT % (NW -1);
-    //     }
-    // }
-    // printf("******\n");
 
 
     return false;
@@ -465,9 +388,11 @@ bool Vortex::simulate(std::string file_to_simulate)
     // unsigned cycles;
     counter = 0;
     this->stats_total_cycles = 12;
-    while (this->stop && ((counter < 2)))
+    while (this->stop && ((counter < 5)))
     // while (this->stats_total_cycles < 10)
     {
+
+        // printf("-------------------------\n");
         // std::cout << "Counter: " << counter << "\n";
         // if ((this->stats_total_cycles) % 5000 == 0) std::cout << "************* Cycle: " << (this->stats_total_cycles) << "\n";
         // dstop = !dbus_driver();
@@ -478,6 +403,7 @@ bool Vortex::simulate(std::string file_to_simulate)
         vortex->eval();
         istop =  ibus_driver();
         dstop = !dbus_driver();
+                  io_handler();
 
         #ifdef VCD_OUTPUT
         m_trace->dump((2*this->stats_total_cycles)+1);

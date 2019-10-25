@@ -5,10 +5,12 @@ unsigned x[1024] = {0};
 unsigned y[1024] = {0};
 unsigned z[1024] = {0};
 
-#define MAT_DIM 16
+unsigned temp = 6;
 
-#define NUM_COLS 16
-#define NUM_ROWS 16
+#define MAT_DIM 2
+
+#define NUM_COLS 2
+#define NUM_ROWS 2
 
 double sc_time_stamp()
 {
@@ -39,16 +41,19 @@ void print_matrix(unsigned * z)
 int main()
 {
 
-	// vx_print_hex(11);
+	// unsigned f = temp;
 
-	initialize_mats();
+	vx_print_hex(11);
+	// vx_printc(0, 'a');
+
+	// initialize_mats();
 
 	// matrix multiplication
 	// vx_sq_mat_mult(x, y, z, MAT_DIM);
 	// vx_print_str("\n\nMatrix multiplication\n");
 	// print_matrix(z);
 
-	print_matrix(x);
+	// print_matrix(x);
 
 	// // matrix addition
 	// vx_mat_add(x, y, z, NUM_ROWS, NUM_COLS);

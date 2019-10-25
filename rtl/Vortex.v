@@ -7,6 +7,9 @@ module Vortex(
 	input  wire           reset,
 	input  wire[31:0] icache_response_instruction,
 	output wire[31:0] icache_request_pc_address,
+	// IO
+	output wire        io_valid,
+	output wire[31:0]  io_data,
 	// Req
     output reg [31:0]  o_m_read_addr,
     output reg [31:0]  o_m_evict_addr,
@@ -20,10 +23,19 @@ module Vortex(
 	output wire        out_ebreak
 	);
 
-// Dcache Interface
+wire memory_delay;
+wire gpr_stage_delay;
+wire schedule_delay;
 
+
+// Dcache Interface
 VX_dcache_response_inter VX_dcache_rsp();
 VX_dcache_request_inter  VX_dcache_req();
+
+wire temp_io_valid      = (!memory_delay) && (|VX_dcache_req.out_cache_driver_in_valid) && (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE) && (VX_dcache_req.out_cache_driver_in_address[0] == 32'h00010000);
+wire[31:0] temp_io_data = VX_dcache_req.out_cache_driver_in_data[0];
+assign io_valid         = temp_io_valid;
+assign io_data          = temp_io_data;
 
 
 VX_dram_req_rsp_inter    VX_dram_req_rsp();
@@ -72,11 +84,6 @@ VX_jal_response_inter         VX_jal_rsp();         // Jump resolution to Fetch
 
 
 VX_warp_ctl_inter        VX_warp_ctl();
-
-
-wire memory_delay;
-wire gpr_stage_delay;
-wire schedule_delay;
 
 
 VX_front_end vx_front_end(

@@ -22,8 +22,8 @@ module VX_dmem_controller (
 
 
 	wire[`NT_M1:0][31:0] cache_driver_in_address   = VX_dcache_req.out_cache_driver_in_address;
-	wire[2:0]            cache_driver_in_mem_read  = VX_dcache_req.out_cache_driver_in_mem_read;
-	wire[2:0]            cache_driver_in_mem_write = VX_dcache_req.out_cache_driver_in_mem_write;
+	wire[2:0]            cache_driver_in_mem_read  = !(|cache_driver_in_valid) ? `NO_MEM_READ  : VX_dcache_req.out_cache_driver_in_mem_read;
+	wire[2:0]            cache_driver_in_mem_write = !(|cache_driver_in_valid) ? `NO_MEM_WRITE : VX_dcache_req.out_cache_driver_in_mem_write;
 	wire[`NT_M1:0][31:0] cache_driver_in_data      = VX_dcache_req.out_cache_driver_in_data;
 
 
@@ -32,6 +32,9 @@ module VX_dmem_controller (
 	wire[`NT_M1:0]       cache_driver_out_valid; // Not used for now
 	wire                 sm_delay;
 	wire                 cache_delay;
+
+
+	wire valid_read_cache = !cache_delay && cache_driver_in_valid[0];
 
 
 	VX_shared_memory #(.NB(7), .BITS_PER_BANK(3)) shared_memory (

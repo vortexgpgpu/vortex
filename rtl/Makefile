@@ -11,11 +11,11 @@ EXE=--exe ./simulate/test_bench.cpp
 
 COMP=--compiler gcc
 
-# WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED
-WNO=
+WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT
+# WNO=
 
-LIGHTW=
-# LIGHTW=-Wno-UNOPTFLAT
+# LIGHTW=
+LIGHTW=-Wno-UNOPTFLAT
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
 LIB=
 
