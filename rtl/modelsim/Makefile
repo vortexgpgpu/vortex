@@ -91,7 +91,17 @@ SRC = \
 
 CMD= \
 -do "vcd file vortex.vcd; \
-run"
+	 vcd add -r vortex_tb; \
+	 run; \
+	 quit -f"
+
+
+OPT=-sv -sv12compat
+
+LIB = vortex_lib
+
+# LOG=-logfile vortex_tb.log
+LOG=
 
 # ../shared_memory/VX_set_bit.v \
 # ../cache/bank.v \
@@ -112,11 +122,11 @@ run"
 #           vlib 
 
 comp:
-	vlog -sv -sv12compat -work vortex_lib $(SRC)
+	vlog $(OPT) -work $(LIB) $(SRC)
 
 
 sim: comp
-	vsim vortex_tb -logfile vortex_tb.log -c -lib vortex_lib $(CMD)
+	vsim vortex_tb $(LOG) -c -lib $(LIB) $(CMD)
 
 
 

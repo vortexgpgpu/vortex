@@ -28,18 +28,19 @@ module vortex_tb (
 
 	integer temp;
 	initial begin
-
+		// $dumpfile("vortex2.vcd");
+		$dumpvars(0, vortex);
 		for (temp = 0; temp < 10; temp=temp+1)
 		begin
 
-			icache_response_instruction = 32'h0;
-			$display("SIMULATING");
+			if (temp == 0) begin
+				icache_response_instruction = 32'h00000513;
+				$display("Cycle 1");
+			end if (temp == 1) begin
+				$display("Cycle 2",);
+				icache_response_instruction = 32'h0005006b;
+			end
 		end
-
-		// while (!out_ebreak) begin
-		// 	icache_response_instruction = 0;
-		// end
-
 	end
 
 	Vortex vortex(
