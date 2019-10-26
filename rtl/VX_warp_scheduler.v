@@ -105,7 +105,7 @@ module VX_warp_scheduler (
 	reg[`NW-1:0] total_barrier_stall;
 
 	/* verilator lint_off UNUSED */
-	wire[`NW_M1:0] num_active;
+	wire[$clog2(`NW):0] num_active;
 	/* verilator lint_on UNUSED */
 
 	integer curr_w_help;
