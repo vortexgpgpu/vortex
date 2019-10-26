@@ -28,7 +28,7 @@ module vortex_tb (
 
 	initial begin
 
-		while (!ebreak) begin
+		while (!out_ebreak) begin
 			icache_response_instruction = 0;
 		end
 

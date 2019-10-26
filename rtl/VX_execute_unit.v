@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_execute_unit (
 	// input wire               clk,
 	// Input

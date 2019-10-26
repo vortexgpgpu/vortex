@@ -2,7 +2,7 @@
 //        Also add a bit about wheter the "Way ID" is valid / being held or if it is just default
 //        Also make sure all possible output states are transmitted back to the bank correctly
 
-`include "VX_define.v"
+// `include "VX_define.v"
 module cache_set(clk,
            rst,
            // These next 4 are possible modes that the Set could be in, I am making them 4 different variables for indexing purposes

@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_gpgpu_inst (
 	// Input
 	VX_gpu_inst_req_inter    VX_gpu_inst_req,

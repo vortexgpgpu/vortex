@@ -1,4 +1,4 @@
-
+`include "VX_define.v"
 
 module VX_priority_encoder (
     input  wire[`NW-1:0] valids,

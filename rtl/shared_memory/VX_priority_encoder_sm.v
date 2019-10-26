@@ -72,7 +72,7 @@ module VX_priority_encoder_sm
 	end
 
 	reg[`NT_M1:0] serviced;
-	genvar curr_b;
+	integer curr_b;
 	always @(*) begin
 		serviced = 0;
 		for (curr_b = 0; curr_b <= NB; curr_b=curr_b+1) begin

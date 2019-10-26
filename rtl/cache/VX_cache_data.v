@@ -4,10 +4,11 @@
 
 module VX_cache_data
     #(
-      parameter CACHE_SIZE     = 4096, // Bytes
-      parameter CACHE_WAYS     = 1,
-      parameter CACHE_BLOCK    = 128, // Bytes
-      parameter CACHE_BANKS    = 8
+      parameter CACHE_SIZE          = 4096, // Bytes
+      parameter CACHE_WAYS          = 1,
+      parameter CACHE_BLOCK         = 128, // Bytes
+      parameter CACHE_BANKS         = 8,
+      parameter NUM_WORDS_PER_BLOCK = 4
     )
     (
 	input wire clk,    // Clock
@@ -31,7 +32,7 @@ module VX_cache_data
 
     localparam NUMBER_BANKS         = CACHE_BANKS;
     localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
-    localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
+    // localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
 	localparam NUMBER_INDEXES       = `NUM_IND;
 
     wire currently_writing = (|we);
@@ -56,12 +57,11 @@ module VX_cache_data
         assign dirty_use = dirty[addr];
 
 
-        genvar f;
-        genvar z;
         always @(posedge clk) begin : dirty_update
           if (update_dirty) dirty[addr] <= dirt_new; // WRite Port
         end
 
+        integer f;
         always @(posedge clk) begin : data_update
           for (f = 0; f < NUM_WORDS_PER_BLOCK; f = f + 1) begin
             if (we[f][0]) data[addr][f][0] <= data_write[f][7 :0 ];

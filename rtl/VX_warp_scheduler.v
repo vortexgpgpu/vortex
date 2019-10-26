@@ -201,7 +201,7 @@ module VX_warp_scheduler (
 
 	assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
 
-	genvar curr_b;
+	integer curr_b;
 	always @(*) begin
 		total_barrier_stall = 0;
 		for (curr_b = 0; curr_b < `NUM_BARRIERS; curr_b=curr_b+1)
@@ -273,10 +273,11 @@ module VX_warp_scheduler (
 
 
 	// Valid counter
-	VX_one_counter valid_counter(
-		.valids(visible_active),
-		.ones_found(num_active)
-		);
+	assign num_active = $countones(visible_active);
+	// VX_one_counter valid_counter(
+	// 	.valids(visible_active),
+	// 	.ones_found()
+	// 	);
 
 
 	wire ebreak = (warp_active == 0);

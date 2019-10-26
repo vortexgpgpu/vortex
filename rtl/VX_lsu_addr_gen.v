@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_lsu_addr_gen (
 	input  wire[`NT_M1:0][31:0] base_address,
 	input  wire[31:0]           offset,

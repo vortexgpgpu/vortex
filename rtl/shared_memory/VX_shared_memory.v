@@ -39,13 +39,15 @@ reg shm_write;
 wire [`NT_M1:0] orig_in_valid;
 
 
-genvar i;
-for(i = 0; i <= `NT_M1; i = i+1) begin
-	assign orig_in_valid[i] = in_valid[i];
-end
+genvar f;
+	generate
+		for(f = 0; f < `NT; f = f+1) begin
+			assign orig_in_valid[f] = in_valid[f];
+		end
 
-assign out_valid  = send_data ? temp_out_valid : 0;
-assign out_data   = send_data ? temp_out_data : 0;
+		assign out_valid  = send_data ? temp_out_valid : 0;
+		assign out_data   = send_data ? temp_out_data : 0;
+	endgenerate
 
 
 VX_priority_encoder_sm #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_encoder_sm(
@@ -65,6 +67,7 @@ VX_priority_encoder_sm #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_enc
 	);
 
 genvar j;
+integer i;
 generate
 for(j=0; j<= NB; j=j+1) begin
 	VX_shared_memory_block vx_shared_memory_block(
@@ -76,7 +79,6 @@ for(j=0; j<= NB; j=j+1) begin
 		.data_out(block_rdata[j])
 	);
 end	
-endgenerate
 
 
 always @(*) begin
@@ -131,5 +133,8 @@ always @(*) begin
 		end
 	end
 end
+
+endgenerate
+
 
 endmodule

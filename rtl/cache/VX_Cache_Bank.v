@@ -172,7 +172,8 @@ module VX_Cache_Bank
           .CACHE_SIZE(CACHE_SIZE),
           .CACHE_WAYS(CACHE_WAYS),
           .CACHE_BLOCK(CACHE_BLOCK),
-          .CACHE_BANKS(CACHE_BANKS)) data_structures(
+          .CACHE_BANKS(CACHE_BANKS),
+          .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(
         .clk       (clk),
         // Inputs
         .addr      (actual_index),

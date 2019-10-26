@@ -16,12 +16,13 @@ module VX_writeback (
 	);
 
 
-		assign no_slot_mem = mem_wb && (exec_wb || csr_wb);
 
 		wire exec_wb = (VX_inst_exec_wb.wb != 0) && (|VX_inst_exec_wb.wb_valid);
 		wire mem_wb  = (VX_mem_wb.wb       != 0) && (|VX_mem_wb.wb_valid);
 		wire csr_wb  = (VX_csr_wb.wb       != 0) && (|VX_csr_wb.valid);
 
+
+		assign no_slot_mem = mem_wb && (exec_wb || csr_wb);
 
 		assign VX_writeback_inter.write_data  = exec_wb ? VX_inst_exec_wb.alu_result :
 		                                        csr_wb  ? VX_csr_wb.csr_result       :

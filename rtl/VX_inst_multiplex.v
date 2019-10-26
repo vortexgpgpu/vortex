@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_inst_multiplex (
 	// Inputs
 	VX_frE_to_bckE_req_inter VX_bckE_req,
