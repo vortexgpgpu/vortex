@@ -105,7 +105,7 @@ module VX_warp_scheduler (
 	reg[`NW-1:0] total_barrier_stall;
 
 	/* verilator lint_off UNUSED */
-	wire[$clog2(`NW):0] num_active;
+	// wire[$clog2(`NW):0] num_active;
 	/* verilator lint_on UNUSED */
 
 	integer curr_w_help;
@@ -195,8 +195,20 @@ module VX_warp_scheduler (
 		end
 	end
 
+	VX_countones #(.N(`NW)) barrier_count(
+		.valids(curr_barrier_mask),
+		.count (curr_barrier_count)
+		);
+
+	wire[$clog2(`NW):0] count_visible_active;
+	VX_countones #(.N(`NW)) num_visible(
+		.valids(visible_active),
+		.count (count_visible_active)
+		);
+
+	// assign curr_barrier_count    = $countones(curr_barrier_mask);
+
 	assign curr_barrier_mask     = barrier_stall_mask[barrier_id][`NW-1:0];
-	assign curr_barrier_count    = $countones(curr_barrier_mask);
 	assign reached_barrier_limit = curr_barrier_count == (num_warps);
 
 	assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
@@ -211,7 +223,7 @@ module VX_warp_scheduler (
 	end
 
 
-	assign update_visible_active = ($countones(visible_active) < 1) && !(stall || wstall_this_cycle || hazard || is_join);
+	assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);
 
 	wire[(1+32+`NT_M1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
 	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
@@ -262,7 +274,7 @@ module VX_warp_scheduler (
 	assign new_pc = warp_pc + 4;
 
 
-	assign use_active = (num_active < 1) ? (warp_active & (~warp_stalled) & (~total_barrier_stall)) : visible_active;
+	assign use_active = (count_visible_active < 1) ? (warp_active & (~warp_stalled) & (~total_barrier_stall)) : visible_active;
 
 	// Choosing a warp to schedule
 	VX_priority_encoder choose_schedule(
@@ -272,8 +284,9 @@ module VX_warp_scheduler (
 	);
 
 
+
 	// Valid counter
-	assign num_active = $countones(visible_active);
+	// assign num_active = $countones(visible_active);
 	// VX_one_counter valid_counter(
 	// 	.valids(visible_active),
 	// 	.ones_found()
