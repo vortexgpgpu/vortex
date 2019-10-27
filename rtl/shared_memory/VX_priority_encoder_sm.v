@@ -7,8 +7,8 @@ module VX_priority_encoder_sm
 	)
 	(
 	//INPUTS
-	input wire				clk,
-	//input wire				reset,
+	input wire			        	clk,
+	input wire				        reset,
 	input wire[`NT_M1:0]			in_valid,
 	input wire[`NT_M1:0][31:0] 		in_address,
 	input wire[`NT_M1:0][31:0] 		in_data,
@@ -25,6 +25,8 @@ module VX_priority_encoder_sm
 );
 
 	reg[`NT_M1:0] left_requests;
+	reg[`NT_M1:0] serviced;
+
 
 	wire[`NT_M1:0] use_valid;
 
@@ -71,7 +73,6 @@ module VX_priority_encoder_sm
 		assign out_data[curr_bank_o]    = internal_out_valid[curr_bank_o] ? in_data[internal_req_num[curr_bank_o]] : 0;
 	end
 
-	reg[`NT_M1:0] serviced;
 	integer curr_b;
 	always @(*) begin
 		serviced = 0;
@@ -91,9 +92,14 @@ module VX_priority_encoder_sm
 
 	// wire[`NT_M1:0] new_left_requests = left_requests & ~(serviced_qual);
 
-	always @(posedge clk) begin
-		if (!stall)    left_requests <= 0;
-		else           left_requests <= new_left_requests;
+	always @(posedge clk, posedge reset) begin
+		if (reset) begin
+			left_requests <= 0;
+			serviced       = 0;
+		end else begin
+			if (!stall)    left_requests <= 0;
+			else           left_requests <= new_left_requests;
+		end
 	end
 
 endmodule

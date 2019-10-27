@@ -1,7 +1,28 @@
-// `include "../VX_define.v"
-// `include "../Vortex.v"
+
+`include "../VX_define.v"
+
+`define NUMBER_BANKS 8
+`define NUM_WORDS_PER_BLOCK 4
 
 `timescale 1ns/1ps
+
+import "DPI-C" load_file   = function void load_file(input string filename);
+
+import "DPI-C" ibus_driver = function void ibus_driver(input  int pc_addr,
+	                                                   output int instruction);
+
+import "DPI-C" dbus_driver = function void dbus_driver( input int o_m_read_addr,
+													    input int o_m_evict_addr,
+													    input reg o_m_valid,
+													    input reg [31:0] o_m_writedata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
+													    input reg o_m_read_or_write,
+
+													    // Rsp
+													    output reg [31:0] i_m_readdata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
+													    output reg        i_m_ready);
+
+import "DPI-C" io_handler  = function void io_handler(input reg io_valid, input int io_data);
+
 
 module vortex_tb (
 	
@@ -26,21 +47,21 @@ module vortex_tb (
     reg        i_m_ready;
 	reg        out_ebreak;
 
-	integer temp;
-	initial begin
-		// $dumpfile("vortex2.vcd");
-		$dumpvars(0, vortex);
-		for (temp = 0; temp < 10; temp=temp+1)
-		begin
 
-			if (temp == 0) begin
-				icache_response_instruction = 32'h00000513;
-				$display("Cycle 1");
-			end if (temp == 1) begin
-				$display("Cycle 2",);
-				icache_response_instruction = 32'h0005006b;
-			end
-		end
+	reg[31:0] hi;
+
+	integer temp;
+	integer num_cycles;
+
+	initial begin
+		// $fdumpfile("vortex1.vcd");
+		load_file("../../kernel/vortex_test.hex");
+		$dumpvars(0, vortex_tb);
+		reset = 1;
+		clk = 0;
+		#5 reset = 1;
+		clk = 1;
+		num_cycles = 0;
 	end
 
 	Vortex vortex(
@@ -61,6 +82,37 @@ module vortex_tb (
 		);
 
 
-	always @(clk) #5 clk <= ~clk;
+	always @(clk, posedge reset) begin
+		// $display("FROM ALWAYS");
+		// $display("num_cycles: %d",num_cycles);
+		num_cycles = num_cycles + 1;
+		if (num_cycles == 1000) begin
+			// $dumpall;
+			// $dumpflush;
+			// $finish;
+		end
+		// if (num_cycles == 1000) $stop;
+		if (reset) begin
+			reset = 0;
+			clk = 0;
+		end
+
+		if (clk == 0) begin
+			ibus_driver(icache_request_pc_address, icache_response_instruction);
+			dbus_driver(o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, i_m_readdata, i_m_ready);
+			io_handler(io_valid, io_data);
+		end
+
+		// $display("clk: %d, out_ebreak: %d",clk, out_ebreak);
+		#5 clk <= ~clk;
+		if (out_ebreak) $finish;
+	end
 
 endmodule
+
+
+
+
+
+
+

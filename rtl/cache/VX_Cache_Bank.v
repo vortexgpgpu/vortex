@@ -15,6 +15,7 @@ module VX_Cache_Bank
             )
           (
             clk,
+            rst,
             state,
             read_or_write, // Read = 0 | Write = 1
            i_p_mem_read,
@@ -49,6 +50,7 @@ module VX_Cache_Bank
     localparam RECIV_MEM_RSP = 2;
 
     // Inputs
+    input wire rst;
     input wire clk;
     input wire [3:0] state;
 //input wire write_from_mem;
@@ -175,6 +177,7 @@ module VX_Cache_Bank
           .CACHE_BANKS(CACHE_BANKS),
           .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(
         .clk       (clk),
+        .rst       (rst),
         // Inputs
         .addr      (actual_index),
         .we        (we),

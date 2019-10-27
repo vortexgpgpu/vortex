@@ -109,16 +109,20 @@ module VX_warp_scheduler (
 	/* verilator lint_on UNUSED */
 
 	integer curr_w_help;
+	integer curr_barrier;
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
-			barrier_stall_mask[0] <= 0;
-			barrier_stall_mask[1] <= 0;
+			for (curr_barrier = 0; curr_barrier < `NUM_BARRIERS; curr_barrier=curr_barrier+1) begin
+				barrier_stall_mask[curr_barrier] <= 0;
+			end
 			use_wsapwn_pc         <= 0;
 			use_wsapwn            <= 0;
 			warp_pcs[0]           <= (32'h80000000 - 4);
 			warp_active[0]        <= 1; // Activating first warp
 			visible_active[0]     <= 1; // Activating first warp
 			thread_masks[0]       <= 1; // Activating first thread in first warp
+			warp_stalled          <= 0;
+			total_barrier_stall    = 0;
 			for (curr_w_help = 1; curr_w_help < `NW; curr_w_help=curr_w_help+1) begin
 				warp_pcs[curr_w_help]        <= 0;
 				warp_active[curr_w_help]     <= 0; // Activating first warp
@@ -283,6 +287,10 @@ module VX_warp_scheduler (
 		.found (schedule)
 	);
 
+	// always @(*) begin
+	// 	$display("WarpPC: %h",warp_pc);
+	// 	$display("real_schedule: %d, schedule: %d, warp_stalled: %d, warp_to_schedule: %d, total_barrier_stall: %d",real_schedule, schedule, warp_stalled[warp_to_schedule], warp_to_schedule,  total_barrier_stall[warp_to_schedule]);
+	// end
 
 
 	// Valid counter

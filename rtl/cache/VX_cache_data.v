@@ -11,7 +11,7 @@ module VX_cache_data
       parameter NUM_WORDS_PER_BLOCK = 4
     )
     (
-	input wire clk,    // Clock
+	input wire clk, rst,    // Clock
 
 	// Addr
 	input wire[`CACHE_IND_SIZE_RNG] addr,
@@ -56,27 +56,28 @@ module VX_cache_data
         assign valid_use = valid[addr];
         assign dirty_use = dirty[addr];
 
-
-        always @(posedge clk) begin : dirty_update
-          if (update_dirty) dirty[addr] <= dirt_new; // WRite Port
-        end
-
         integer f;
-        always @(posedge clk) begin : data_update
-          for (f = 0; f < NUM_WORDS_PER_BLOCK; f = f + 1) begin
-            if (we[f][0]) data[addr][f][0] <= data_write[f][7 :0 ];
-            if (we[f][1]) data[addr][f][1] <= data_write[f][15:8 ];
-            if (we[f][2]) data[addr][f][2] <= data_write[f][23:16];
-            if (we[f][3]) data[addr][f][3] <= data_write[f][31:24];
+        integer ini_ind;
+        always @(posedge clk, posedge rst) begin : update_all
+          if (rst) begin
+            for (ini_ind = 0; ini_ind < NUMBER_INDEXES; ini_ind=ini_ind+1) begin
+                data[ini_ind]  = 0;
+                tag[ini_ind]   = 0;
+                valid[ini_ind] = 0;
+                dirty[ini_ind] = 0;
+            end
+          end else begin
+              if (update_dirty) dirty[addr] <= dirt_new; // WRite Port
+              if (evict) tag[addr] <= tag_write;
+              if (evict) valid[addr] <= 1;
+
+              for (f = 0; f < NUM_WORDS_PER_BLOCK; f = f + 1) begin
+                if (we[f][0]) data[addr][f][0] <= data_write[f][7 :0 ];
+                if (we[f][1]) data[addr][f][1] <= data_write[f][15:8 ];
+                if (we[f][2]) data[addr][f][2] <= data_write[f][23:16];
+                if (we[f][3]) data[addr][f][3] <= data_write[f][31:24];
+              end
           end
-        end
-
-        always @(posedge clk) begin : tag_update
-        	if (evict) tag[addr] <= tag_write;
-        end
-
-        always @(posedge clk) begin : valid_update
-        	if (evict) valid[addr] <= 1;
         end
 
     `else 

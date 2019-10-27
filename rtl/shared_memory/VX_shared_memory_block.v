@@ -1,9 +1,10 @@
 module VX_shared_memory_block (
-	input clk,    // Clock
-	input wire[6:0]       addr,
-	input wire[3:0][31:0] wdata,
-	input wire[1:0] we,
-	input wire shm_write,
+	input wire             clk,    // Clock
+	input wire             reset,
+	input wire[6:0]        addr,
+	input wire[3:0][31:0]  wdata,
+	input wire[1:0]        we,
+	input wire             shm_write,
 
 	output wire[3:0][31:0] data_out
 	
@@ -12,12 +13,17 @@ module VX_shared_memory_block (
 
 	`ifndef SYN
 
-		logic [3:0][31:0] shared_memory[127:0];
+		reg[3:0][31:0] shared_memory[127:0];
 
 		//wire need_to_write = (|we);
-
-		always @(posedge clk) begin
-			if(shm_write) begin
+		integer curr_ind;
+		always @(posedge clk, posedge reset) begin
+			if (reset) begin
+				for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
+				begin
+					shared_memory[curr_ind] = 0;
+				end
+			end else if(shm_write) begin
 				if (we == 2'b00) shared_memory[addr][0][31:0] <= wdata[0][31:0]; 
 				if (we == 2'b01) shared_memory[addr][1][31:0] <= wdata[1][31:0]; 
 				if (we == 2'b10) shared_memory[addr][2][31:0] <= wdata[2][31:0]; 

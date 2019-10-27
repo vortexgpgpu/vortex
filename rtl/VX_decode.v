@@ -1,5 +1,5 @@
 
-// `include "VX_define.v"
+`include "VX_define.v"
 
 module VX_decode(
 	// Fetch Inputs
@@ -75,7 +75,16 @@ module VX_decode(
 		reg[4:0]   csr_alu;
 		reg[4:0]   alu_op;
 		reg[4:0]   mul_alu;
+		reg[19:0]  temp_upper_immed;
+		reg       temp_jal;
+		reg[31:0] temp_jal_offset;
+		reg[31:0] temp_itype_immed;
+		reg[2:0] temp_branch_type;
+		reg      temp_branch_stall;
 
+		// always @(posedge reset) begin
+		
+		// end
 
 		assign VX_frE_to_bckE_req.valid    = fd_inst_meta_de.valid;
 
@@ -147,7 +156,6 @@ module VX_decode(
 		assign VX_frE_to_bckE_req.mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
 
 		// UPPER IMMEDIATE
-		reg[19:0] temp_upper_immed;
 		always @(*) begin
 			case(curr_opcode)
 				`LUI_INST:   temp_upper_immed  = {func7, VX_frE_to_bckE_req.rs2, VX_frE_to_bckE_req.rs1, func3};
@@ -179,8 +187,6 @@ module VX_decode(
 		assign jal_sys_off = (jal_sys_cond1 && jal_sys_cond2) ? 32'hb0000000 : 32'hdeadbeef;
 
 		// JAL 
-		reg       temp_jal;
-		reg[31:0] temp_jal_offset;
 		always @(*) begin
 			case(curr_opcode)
 				`JAL_INST:
@@ -235,7 +241,6 @@ module VX_decode(
 		assign alu_tempp = alu_shift_i ? alu_shift_i_immed : u_12;
 
 
-		reg[31:0] temp_itype_immed;
 		always @(*) begin
 			case(curr_opcode)
 					`ALU_INST: temp_itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
@@ -249,8 +254,7 @@ module VX_decode(
 		assign VX_frE_to_bckE_req.itype_immed = temp_itype_immed;
 	
 
-		reg[2:0] temp_branch_type;
-		reg      temp_branch_stall;
+
 		always @(*) begin
 			case(curr_opcode)
 				`B_INST:

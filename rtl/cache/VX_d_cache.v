@@ -206,19 +206,36 @@ module VX_d_cache
   // Handle if there is more than one miss
   assign new_stored_valid = use_valid & (~threads_serviced_Qual);
 
-
+///////////////////////////////////////////////////////////////////////
   genvar cur_t;
-  always @(posedge clk) begin
-    state           <= new_state;
+  integer init_b;
+  always @(posedge clk, posedge rst) begin
+    if (rst) begin
+      final_data_read         <= 0;
+      new_final_data_read      = 0;
+      state                   <= 0;
+      stored_valid            <= 0;
+      // eviction_addr_per_bank  <= 0;
+      miss_addr               <= 0;
+      evict_addr              <= 0;
+      // threads_serviced_Qual    = 0;
+      // for (init_b = 0; init_b < NUMBER_BANKS; init_b=init_b+1)
+      // begin
+      //   debug_hit_per_bank_mask[init_b] <= 0;
+      // end
+      
+    end else begin
+      state           <= new_state;
 
-    stored_valid    <= new_stored_valid;
+      stored_valid    <= new_stored_valid;
 
-    if (miss_found) begin
-      miss_addr   <= i_p_addr[send_index_to_bank[miss_bank_index]];
-      evict_addr  <= eviction_addr_per_bank[miss_bank_index];
+      if (miss_found) begin
+        miss_addr   <= i_p_addr[send_index_to_bank[miss_bank_index]];
+        evict_addr  <= eviction_addr_per_bank[miss_bank_index];
+      end
+
+      final_data_read <= new_final_data_read_Qual;
     end
-
-    final_data_read <= new_final_data_read_Qual;
   end
 
 
@@ -250,6 +267,7 @@ module VX_d_cache
           .CACHE_BANKS(CACHE_BANKS)) bank_structure
         (
           .clk              (clk),
+          .rst              (rst),
           .state            (state),
           .valid_in         (use_valid_in),
           .actual_index     (cache_index),

@@ -5,6 +5,7 @@
 module byte_enabled_simple_dual_port_ram
 (
 	input we, clk,
+	input wire reset,
 	input wire[4:0] waddr, raddr1, raddr2,
 	input wire[`NT_M1:0] be,
 	input wire[`NT_M1:0][31:0] wdata,
@@ -17,13 +18,15 @@ module byte_enabled_simple_dual_port_ram
 	//     Thread   Byte  Bit
 	logic [`NT_M1:0][3:0][7:0] GPR[31:0];
 
-	integer ini;
-	initial begin
-		for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] = 0;
-	end
+	// initial begin
+	// 	for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] = 0;
+	// end
 
-	always@(posedge clk) begin
-		if(we) begin
+	integer ini;
+	always@(posedge clk, posedge reset) begin
+		if (reset) begin
+			for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] = 0;
+		end else if(we) begin
 			integer thread_ind;
 			for (thread_ind = 0; thread_ind <= `NT_M1; thread_ind = thread_ind + 1) begin
 				if(be[thread_ind]) GPR[waddr][thread_ind][0] <= wdata[thread_ind][7:0];

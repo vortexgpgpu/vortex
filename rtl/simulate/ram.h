@@ -2,9 +2,13 @@
 
 #define __RAM__
 
-#include "string.h"
+// #include "string.h"
+#include <stdio.h>
 #include <stdint.h>
-#include <cstdint>
+// #include <cstdint>
+
+// #define NULL 0
+
 class RAM{
 public:
     uint8_t* mem[1 << 12];
@@ -157,11 +161,12 @@ uint32_t hToI(char *c, uint32_t size) {
 
 
 
-void loadHexImpl(std::string path,RAM* mem) {
+void loadHexImpl(char * path,RAM* mem) {
     mem->clear();
     FILE *fp = fopen(&path[0], "r");
     if(fp == 0){
-        std::cout << path << " not found" << std::endl;
+        printf("Path not found %s\n", path);
+        // std::cout << path << " not found" << std::endl;
     }
     //Preload 0x0 <-> 0x80000000 jumps
     ((uint32_t*)mem->get(0))[1] = 0xf1401073;

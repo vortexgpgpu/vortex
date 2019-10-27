@@ -8,6 +8,7 @@ module VX_shared_memory
 	(
 	//INPUTS
 	input wire clk,
+	input wire reset,
 	input wire[`NT_M1:0] in_valid,
 	input wire[`NT_M1:0][31:0] in_address,
 	input wire[`NT_M1:0][31:0] in_data,
@@ -52,7 +53,7 @@ genvar f;
 
 VX_priority_encoder_sm #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_encoder_sm(
 	.clk(clk),
-	//.reset(reset),
+	.reset(reset),
 	.in_valid(orig_in_valid),
 	.in_address(in_address),
 	.in_data(in_data),
@@ -71,12 +72,13 @@ integer i;
 generate
 for(j=0; j<= NB; j=j+1) begin
 	VX_shared_memory_block vx_shared_memory_block(
-		.clk(clk),
-		.addr(block_addr[j]),
-		.wdata(block_wdata[j]),
-		.we(block_we[j]),
+		.clk      (clk),
+		.reset    (reset),
+		.addr     (block_addr[j]),
+		.wdata    (block_wdata[j]),
+		.we       (block_we[j]),
 		.shm_write(shm_write),
-		.data_out(block_rdata[j])
+		.data_out (block_rdata[j])
 	);
 end	
 

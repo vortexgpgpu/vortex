@@ -100,7 +100,7 @@ Vortex::~Vortex()
 
 void Vortex::ProcessFile(void)
 {
-    loadHexImpl(this->instruction_file_name, &this->ram);
+    loadHexImpl("../../kernel/vortex_test.hex", &this->ram);
 }
 
 void Vortex::print_stats(bool cycle_test)

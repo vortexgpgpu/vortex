@@ -3,6 +3,7 @@
 
 module VX_gpr (
 	input wire                  clk,
+	input wire                  reset,
 	input wire                  valid_write_request,
 	VX_gpr_read_inter           VX_gpr_read,
 	VX_wb_inter                 VX_writeback_inter,
@@ -23,6 +24,7 @@ module VX_gpr (
 		byte_enabled_simple_dual_port_ram first_ram(
 			.we    (write_enable),
 			.clk   (clk),
+			.reset (reset),
 			.waddr (VX_writeback_inter.rd),
 			.raddr1(VX_gpr_read.rs1),
 			.raddr2(VX_gpr_read.rs2),

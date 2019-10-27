@@ -1,5 +1,5 @@
 
-// `include "VX_define.v"
+`include "VX_define.v"
 
 module VX_dmem_controller (
 	input wire               clk,
@@ -39,6 +39,7 @@ module VX_dmem_controller (
 
 	VX_shared_memory #(.NB(7), .BITS_PER_BANK(3)) shared_memory (
 		.clk       (clk),
+		.reset     (reset),
 		.in_valid  (sm_driver_in_valid),
 		.in_address(cache_driver_in_address),
 		.in_data   (cache_driver_in_data),

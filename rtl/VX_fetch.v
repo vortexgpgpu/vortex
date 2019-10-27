@@ -80,12 +80,15 @@ module VX_fetch (
 			.out_ebreak       (out_ebreak)
 			);
 	
+		// always @(*) begin
+		// 	$display("Inside verilog instr: %h, pc: %h", icache_response.instruction, warp_pc);
+		// end
 
 		assign icache_request.pc_address = warp_pc;
 		assign fe_inst_meta_fd.warp_num  = warp_num;
 		assign fe_inst_meta_fd.valid     = thread_mask;
 
-		assign fe_inst_meta_fd.instruction = (thread_mask == 0) ? 32'b0 : icache_response.instruction;;
+		assign fe_inst_meta_fd.instruction = (thread_mask == 0) ? 32'b0 : icache_response.instruction;
 		assign fe_inst_meta_fd.inst_pc     = warp_pc;
 
 

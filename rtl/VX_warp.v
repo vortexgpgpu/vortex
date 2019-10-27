@@ -38,7 +38,7 @@ module VX_warp (
 		end
 
 
-		always @(posedge clk) begin
+		always @(posedge clk, posedge reset) begin
 			if (remove) begin
 				valid <= valid_zero;
 			end else if (in_change_mask) begin

@@ -1,18 +1,4 @@
-###############################################################################
-#
-# ICARUS VERILOG & GTKWAVE MAKEFILE
-# MADE BY WILLIAM GIBB FOR HACDC
-# williamgibb@gmail.com
-# 
-# USE THE FOLLOWING COMMANDS WITH THIS MAKEFILE
-#	"make check" - compiles your verilog design - good for checking code
-#	"make simulate" - compiles your design+TB & simulates your design
-#	"make display" - compiles, simulates and displays waveforms
-# 
-###############################################################################
-#
-# CHANGE THESE THREE LINES FOR YOUR DESIGN
-#
+
 
 ALL:sim
 
@@ -86,13 +72,14 @@ SRC = \
 ../shared_memory/VX_bank_valids.v \
 ../shared_memory/VX_priority_encoder_sm.v \
 ../shared_memory/VX_shared_memory.v \
-../shared_memory/VX_shared_memory_block.v
+../shared_memory/VX_shared_memory_block.v \
+vortex_dpi.cpp 
 
 
 CMD= \
 -do "vcd file vortex.vcd; \
-	 vcd add -r vortex_tb; \
-	 run; \
+	 vcd add -r /vortex/*; \
+	 run -all; \
 	 quit -f"
 
 
@@ -103,26 +90,11 @@ LIB = vortex_lib
 # LOG=-logfile vortex_tb.log
 LOG=
 
-# ../shared_memory/VX_set_bit.v \
-# ../cache/bank.v \
-# ../cache/VX_d_cache_tb.v \
-# ../cache/VX_d_cache_encapsulate.v \
-# ../VX_rename.v \
-# ../cache/VX_Cache_Block_DM.v \
-# ../VX_one_counter.v \
-###############################################################################
-# BE CAREFUL WHEN CHANGING ITEMS BELOW THIS LINE
-###############################################################################
-#TOOLS
-#TOOL OUTPUT
-###############################################################################
-#MAKE DIRECTIVES
-
 # setup: 	source cshrc.modelsim
 #           vlib 
 
 comp:
-	vlog $(OPT) -work $(LIB) $(SRC)
+	vlog -O0 $(OPT) -work $(LIB) $(SRC)
 
 
 sim: comp

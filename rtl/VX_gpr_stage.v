@@ -49,7 +49,8 @@ module VX_gpr_stage (
 
 
 	VX_gpr_wrapper vx_grp_wrapper(
-			.clk            (clk),
+			.clk               (clk),
+			.reset             (reset),
 			.VX_writeback_inter(VX_writeback_inter),
 			.VX_gpr_read       (VX_gpr_read),
 			.VX_gpr_jal        (VX_gpr_jal),

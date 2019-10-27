@@ -2,6 +2,7 @@
 
 module VX_gpr_wrapper (
 	input wire                  clk,
+	input wire                  reset,
 	VX_gpr_read_inter           VX_gpr_read,
 	VX_wb_inter                 VX_writeback_inter,	
 	VX_gpr_jal_inter            VX_gpr_jal,
@@ -30,6 +31,7 @@ module VX_gpr_wrapper (
 			wire valid_write_request = warp_index == VX_writeback_inter.wb_warp_num;
 			VX_gpr vx_gpr(
 				.clk                (clk),
+				.reset              (reset),
 				.valid_write_request(valid_write_request),
 				.VX_gpr_read        (VX_gpr_read),
 				.VX_writeback_inter (VX_writeback_inter),
