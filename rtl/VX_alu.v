@@ -1,5 +1,5 @@
 
-// `include "VX_define.v"
+`include "VX_define.v"
 
 module VX_alu(
 	input wire[31:0]  in_1,

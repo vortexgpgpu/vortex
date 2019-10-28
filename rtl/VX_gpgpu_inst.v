@@ -61,8 +61,12 @@ module VX_gpgpu_inst (
 		assign split_new_later_mask[curr_s_t] = curr_valids[curr_s_t] & (!curr_bool);
 	end
 
+	VX_countones #(.N(`NT)) valids_counter (
+		.valids(curr_valids),
+		.count (num_valids)
+		);
 
-	wire[`NW_M1:0] num_valids = $countones(curr_valids);
+	// wire[`NW_M1:0] num_valids = $countones(curr_valids);
 
 	
 	assign VX_warp_ctl.is_split         = is_split && (num_valids > 1) && (split_new_use_mask != 0) && (split_new_use_mask != {`NT{1'b1}});

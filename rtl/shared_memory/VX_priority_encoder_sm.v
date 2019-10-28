@@ -46,10 +46,19 @@ module VX_priority_encoder_sm
 	wire[NB:0] more_than_one_valid;
 
 	genvar curr_bank;
-	for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) 
-	begin
-		assign more_than_one_valid[curr_bank] = $countones(bank_valids[curr_bank]) > 1;
-	end
+	generate
+		for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) 
+		begin
+			wire[$clog2(`NT):0] num_valids;
+
+			VX_countones #(.N(`NT)) valids_counter (
+				.valids(bank_valids[curr_bank]),
+				.count (num_valids)
+				);
+			assign more_than_one_valid[curr_bank] = num_valids > 1;
+			// assign more_than_one_valid[curr_bank] = $countones(bank_valids[curr_bank]) > 1;
+		end
+	endgenerate
 
 
 	assign stall     = (|more_than_one_valid);

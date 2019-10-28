@@ -1,3 +1,6 @@
+
+`include "VX_define.v"
+
 module VX_csr_wrapper (
 	VX_csr_req_inter VX_csr_req,
 
