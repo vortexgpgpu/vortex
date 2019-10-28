@@ -644,32 +644,16 @@ Warning:  ../rtl/shared_memory/VX_bank_valids.v:21: signed to unsigned part sele
 Warning:  ../rtl/shared_memory/VX_bank_valids.v:21: signed to unsigned part selection occurs. (VER-318)
 Warning:  ../rtl/shared_memory/VX_bank_valids.v:21: signed to unsigned part selection occurs. (VER-318)
 Presto compilation completed successfully.
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
 Information: Building the design 'VX_cache_data' instantiated from design 'VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8' with
 	the parameters "CACHE_SIZE=4096,CACHE_WAYS=1,CACHE_BLOCK=128,CACHE_BANKS=8,NUM_WORDS_PER_BLOCK=4". (HDL-193)
 Presto compilation completed successfully.
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 1
 link
@@ -685,52 +669,20 @@ link
   USERLIB_ss_0p81v_0p81v_m40c (library) /home/gtcad9/lzhu308/work/projects/vortex/design/Vortex/models/memory/cln28hpm/2d_hardmacro_db/rf2_128x128_wm1_ss_0p81v_0p81v_m40c.db
   dw_foundation.sldb (library) /tools/synopsys/synthesis/syn/O-2018.06-SP3/libraries/syn/dw_foundation.sldb
 
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (LINK-5)
 0
@@ -768,7 +720,7 @@ Information: Evaluating DesignWare library utilization. (UISN-27)
 
 Information: Sequential output inversion is enabled.  SVF file must be used for formal verification. (OPT-1208)
 
-Information: There are 9575 potential problems in your design. Please run 'check_design' for more information. (LINT-99)
+Information: There are 9060 potential problems in your design. Please run 'check_design' for more information. (LINT-99)
 
 Information: Uniquified 4 instances of design 'VX_alu'. (OPT-1056)
 Information: Uniquified 9 instances of design 'VX_generic_priority_encoder_N4'. (OPT-1056)
@@ -782,52 +734,20 @@ Information: Uniquified 8 instances of design 'VX_gpr_I_VX_gpr_read_VX_gpr_read_
 Information: Uniquified 8 instances of design 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4'. (OPT-1056)
   Simplifying Design 'Vortex'
 
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_7'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_7'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_6'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_6'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_5'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_5'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_3'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_3'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_2'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_2'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_1'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_1'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_128x128_wm1' in 'VX_shared_memory_block_0'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block_0'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_7'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_7'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_7'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_7'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_6'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_6'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_6'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_6'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_5'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_5'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_5'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_5'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_4'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_4'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_4'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_4'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_3'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_3'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_3'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_3'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_2'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_2'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_2'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_2'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_1'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_1'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_1'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_1'. (LINK-5)
-Error: Width mismatch on port 'TAA' of reference to 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_0'. (LINK-3)
-Warning: Unable to resolve reference 'rf2_256x128_wm1' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_0'. (LINK-5)
 Error: Width mismatch on port 'QA' of reference to 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_0'. (LINK-3)
 Warning: Unable to resolve reference 'rf2_256x19_wm0' in 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_0'. (LINK-5)
 Loaded alib file './alib-52/sc12mc_cln28hpm_base_ulvt_c35_ssg_typical_max_0p81v_m40c.db.alib'
@@ -835,21 +755,3 @@ Information: State dependent leakage is now switched from on to off.
 
   Beginning Pass 1 Mapping
   ------------------------
-  Processing 'VX_shared_memory_NB7_BITS_PER_BANK3'
-  Processing 'VX_d_cache_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_REQ4'
-  Processing 'VX_warp_scheduler'
-Information: Added key list 'DesignWare' to design 'VX_warp_scheduler'. (DDB-72)
- Implement Synthetic for 'VX_warp_scheduler'.
-  Processing 'Vortex'
-  Processing 'VX_generic_register_N487'
-  Processing 'VX_gpr_wrapper_I_VX_gpr_read_VX_gpr_read_inter__I_VX_writeback_inter_VX_wb_inter__I_VX_gpr_jal_VX_gpr_jal_inter__'
-  Processing 'VX_execute_unit_I_VX_exec_unit_req_VX_exec_unit_req_inter__I_VX_inst_exec_wb_VX_inst_exec_wb_inter__I_VX_jal_rsp_VX_jal_response_inter__I_VX_branch_rsp_VX_branch_response_inter__'
- Implement Synthetic for 'VX_execute_unit_I_VX_exec_unit_req_VX_exec_unit_req_inter__I_VX_inst_exec_wb_VX_inst_exec_wb_inter__I_VX_jal_rsp_VX_jal_response_inter__I_VX_branch_rsp_VX_branch_response_inter__'.
-  Processing 'VX_gpr_I_VX_gpr_read_VX_gpr_read_inter__I_VX_writeback_inter_VX_wb_inter___0'
-  Processing 'VX_writeback_I_VX_mem_wb_VX_inst_mem_wb_inter__I_VX_inst_exec_wb_VX_inst_exec_wb_inter__I_VX_csr_wb_VX_csr_wb_inter__I_VX_writeback_inter_VX_wb_inter__'
-  Processing 'VX_fetch_I_VX_wstall_VX_wstall_inter__I_VX_join_VX_join_inter__I_icache_response_VX_icache_response_inter__I_icache_request_VX_icache_request_inter__I_VX_jal_rsp_VX_jal_response_inter__I_VX_branch_rsp_VX_branch_response_inter__I_fe_inst_meta_fd_VX_inst_meta_inter__I_VX_warp_ctl_VX_warp_ctl_inter__'
-  Processing 'VX_generic_register_N203'
-  Processing 'VX_cache_data_CACHE_SIZE4096_CACHE_WAYS1_CACHE_BLOCK128_CACHE_BANKS8_NUM_WORDS_PER_BLOCK4_0'
-  Processing 'VX_d_e_reg_I_VX_frE_to_bckE_req_VX_frE_to_bckE_req_inter__I_VX_bckE_req_VX_frE_to_bckE_req_inter__'
-  Processing 'VX_alu_0'
- Implement Synthetic for 'VX_alu_0'.
