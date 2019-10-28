@@ -61,6 +61,8 @@ module VX_gpgpu_inst (
 		assign split_new_later_mask[curr_s_t] = curr_valids[curr_s_t] & (!curr_bool);
 	end
 
+	wire[$clog2(`NT):0] num_valids;
+
 	VX_countones #(.N(`NT)) valids_counter (
 		.valids(curr_valids),
 		.count (num_valids)
