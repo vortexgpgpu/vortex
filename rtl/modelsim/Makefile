@@ -95,7 +95,7 @@ LOG=
 #           vlib 
 
 comp:
-	vlog -O0 $(OPT) -work $(LIB) $(SRC)
+	vlog $(OPT) -work $(LIB) $(SRC)
 	# vlog -O0 -dpiheader vortex_dpi.h $(OPT) -work $(LIB) $(SRC)
 
 
