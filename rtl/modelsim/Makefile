@@ -4,6 +4,7 @@ ALL:sim
 
 #TOOL INPUT
 SRC = \
+  vortex_dpi.cpp  \
   vortex_tb.v \
 ../VX_define.v \
 ../interfaces/VX_branch_response_inter.v \
@@ -72,13 +73,13 @@ SRC = \
 ../shared_memory/VX_bank_valids.v \
 ../shared_memory/VX_priority_encoder_sm.v \
 ../shared_memory/VX_shared_memory.v \
-../shared_memory/VX_shared_memory_block.v \
-vortex_dpi.cpp 
+../shared_memory/VX_shared_memory_block.v
+# vortex_dpi.h 
 
 
 CMD= \
 -do "vcd file vortex.vcd; \
-	 vcd add -r /vortex/*; \
+	 vcd add -r /vortex_tb/*; \
 	 run -all; \
 	 quit -f"
 
@@ -95,6 +96,7 @@ LOG=
 
 comp:
 	vlog -O0 $(OPT) -work $(LIB) $(SRC)
+	# vlog -O0 -dpiheader vortex_dpi.h $(OPT) -work $(LIB) $(SRC)
 
 
 sim: comp

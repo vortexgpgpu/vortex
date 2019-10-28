@@ -9,6 +9,12 @@
 
 // #define NULL 0
 
+class RAM;
+
+uint32_t hti(char);
+uint32_t hToI(char *, uint32_t);
+void loadHexImpl(char *,RAM*);
+
 class RAM{
 public:
     uint8_t* mem[1 << 12];
@@ -36,10 +42,10 @@ public:
         if(mem[address >> 20] == NULL) {
             uint8_t* ptr = new uint8_t[1024*1024];
             for(uint32_t i = 0;i < 1024*1024;i+=4) {
-                ptr[i + 0] = 0xFF;
-                ptr[i + 1] = 0xFF;
-                ptr[i + 2] = 0xFF;
-                ptr[i + 3] = 0xFF;
+                ptr[i + 0] = 0x00;
+                ptr[i + 1] = 0x00;
+                ptr[i + 2] = 0x00;
+                ptr[i + 3] = 0x00;
             }
             mem[address >> 20] = ptr;
         }

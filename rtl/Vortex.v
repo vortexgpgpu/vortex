@@ -7,7 +7,9 @@ module Vortex
       parameter CACHE_SIZE     = 4096, // Bytes
       parameter CACHE_WAYS     = 1,
       parameter CACHE_BLOCK    = 128, // Bytes
-      parameter CACHE_BANKS    = 8
+      parameter CACHE_BANKS    = 8,
+	localparam NUMBER_BANKS        = 8,
+	localparam NUM_WORDS_PER_BLOCK = 4
     )
 	(
 	input  wire           clk,
@@ -29,9 +31,6 @@ module Vortex
     input  wire        i_m_ready,
 	output wire        out_ebreak
 	);
-
-	localparam NUMBER_BANKS        = 8;
-	localparam NUM_WORDS_PER_BLOCK = 4;
 
 wire memory_delay;
 wire gpr_stage_delay;

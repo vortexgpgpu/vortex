@@ -8,25 +8,30 @@
 
 import "DPI-C" load_file   = function void load_file(input string filename);
 
-import "DPI-C" ibus_driver = function void ibus_driver(input  int pc_addr,
+import "DPI-C" ibus_driver = function void ibus_driver(input logic clk, input  int pc_addr,
 	                                                   output int instruction);
 
-import "DPI-C" dbus_driver = function void dbus_driver( input int o_m_read_addr,
+import "DPI-C" dbus_driver = function void dbus_driver( input logic clk,
+														input int o_m_read_addr,
 													    input int o_m_evict_addr,
-													    input reg o_m_valid,
-													    input reg [31:0] o_m_writedata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
-													    input reg o_m_read_or_write,
+													    input logic o_m_valid,
+													    input reg[31:0] o_m_writedata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
+													    input logic o_m_read_or_write,
 
 													    // Rsp
-													    output reg [31:0] i_m_readdata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
-													    output reg        i_m_ready);
+													    output reg[31:0] i_m_readdata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
+													    output logic        i_m_ready);
 
-import "DPI-C" io_handler  = function void io_handler(input reg io_valid, input int io_data);
 
+import "DPI-C" io_handler  = function void io_handler(input logic clk, input logic io_valid, input int io_data);
+
+import "DPI-C" gracefulExit = function void gracefulExit();
 
 module vortex_tb (
 	
 );
+
+	reg[31:0]     cycle_num;
 
 	reg           clk;
 	reg           reset;
@@ -43,15 +48,14 @@ module vortex_tb (
     reg         o_m_read_or_write;
 
     // Rsp
-    reg [31:0] i_m_readdata[8 - 1:0][4-1:0];
-    reg        i_m_ready;
-	reg        out_ebreak;
+    reg [31:0]  i_m_readdata[8 - 1:0][4-1:0];
+    reg         i_m_ready;
+	reg         out_ebreak;
 
 
 	reg[31:0] hi;
 
 	integer temp;
-	integer num_cycles;
 
 	initial begin
 		// $fdumpfile("vortex1.vcd");
@@ -61,7 +65,7 @@ module vortex_tb (
 		clk = 0;
 		#5 reset = 1;
 		clk = 1;
-		num_cycles = 0;
+		cycle_num = 0;
 	end
 
 	Vortex vortex(
@@ -81,31 +85,26 @@ module vortex_tb (
 		.out_ebreak                 (out_ebreak)
 		);
 
+	always @(*) begin
+		ibus_driver(clk, icache_request_pc_address, icache_response_instruction);
+		dbus_driver(clk, o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, i_m_readdata, i_m_ready);
+		io_handler (clk, io_valid, io_data);
+		
+	end
 
 	always @(clk, posedge reset) begin
-		// $display("FROM ALWAYS");
-		// $display("num_cycles: %d",num_cycles);
-		num_cycles = num_cycles + 1;
-		if (num_cycles == 1000) begin
-			// $dumpall;
-			// $dumpflush;
-			// $finish;
-		end
-		// if (num_cycles == 1000) $stop;
 		if (reset) begin
 			reset = 0;
 			clk = 0;
 		end
 
-		if (clk == 0) begin
-			ibus_driver(icache_request_pc_address, icache_response_instruction);
-			dbus_driver(o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, i_m_readdata, i_m_ready);
-			io_handler(io_valid, io_data);
+		#5 clk <= ~clk;
+
+		if (out_ebreak) begin
+			gracefulExit();
+			$finish;
 		end
 
-		// $display("clk: %d, out_ebreak: %d",clk, out_ebreak);
-		#5 clk <= ~clk;
-		if (out_ebreak) $finish;
 	end
 
 endmodule

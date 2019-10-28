@@ -1660,14 +1660,16 @@ Disassembly of section .text:
 80001848:	00112623          	sw	ra,12(sp)
 8000184c:	00812423          	sw	s0,8(sp)
 80001850:	01010413          	addi	s0,sp,16
-80001854:	00b00513          	li	a0,11
-80001858:	fa5fe0ef          	jal	ra,800007fc <vx_print_hex>
-8000185c:	00000793          	li	a5,0
-80001860:	00078513          	mv	a0,a5
-80001864:	00c12083          	lw	ra,12(sp)
-80001868:	00812403          	lw	s0,8(sp)
-8000186c:	01010113          	addi	sp,sp,16
-80001870:	00008067          	ret
+80001854:	ed5ff0ef          	jal	ra,80001728 <initialize_mats>
+80001858:	810267b7          	lui	a5,0x81026
+8000185c:	22078513          	addi	a0,a5,544 # 81026220 <barrier_bool+0xffffcf58>
+80001860:	f3dff0ef          	jal	ra,8000179c <print_matrix>
+80001864:	00000793          	li	a5,0
+80001868:	00078513          	mv	a0,a5
+8000186c:	00c12083          	lw	ra,12(sp)
+80001870:	00812403          	lw	s0,8(sp)
+80001874:	01010113          	addi	sp,sp,16
+80001878:	00008067          	ret
 
 Disassembly of section .rodata:
 
