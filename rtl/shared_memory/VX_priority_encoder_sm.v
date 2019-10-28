@@ -104,7 +104,7 @@ module VX_priority_encoder_sm
 	always @(posedge clk, posedge reset) begin
 		if (reset) begin
 			left_requests <= 0;
-			serviced       = 0;
+			// serviced       = 0;
 		end else begin
 			if (!stall)    left_requests <= 0;
 			else           left_requests <= new_left_requests;

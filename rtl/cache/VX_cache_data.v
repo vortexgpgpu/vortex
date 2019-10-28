@@ -13,20 +13,37 @@ module VX_cache_data
     (
 	input wire clk, rst,    // Clock
 
-	// Addr
-	input wire[`CACHE_IND_SIZE_RNG] addr,
-	// WE
-	input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
-	input wire                             evict,
-	// Data
-	input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write, // Update Data
-	input wire[`CACHE_TAG_SIZE_RNG]                           tag_write,
+    `ifdef PARAM
+    	// Addr
+    	input wire[`CACHE_IND_SIZE_RNG]          addr,
+    	// WE
+    	input wire[NUM_WORDS_PER_BLOCK-1:0][3:0] we,
+    	input wire                               evict,
+    	// Data
+    	input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write,
+    	input wire[`CACHE_TAG_SIZE_RNG]                           tag_write,
 
 
-	output wire[`CACHE_TAG_SIZE_RNG]           tag_use,
-	output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use,
-	output wire                                 valid_use,
-	output wire                                 dirty_use
+    	output wire[`CACHE_TAG_SIZE_RNG]            tag_use,
+    	output wire[NUM_WORDS_PER_BLOCK-1:0][31:0]  data_use,
+    	output wire                                 valid_use,
+    	output wire                                 dirty_use
+    `else 
+        // Addr
+        input wire[7:0]                            addr,
+        // WE
+        input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
+        input wire                                 evict,
+        // Data
+        input wire[NUM_WORDS_PER_BLOCK-1:0][31:0]  data_write, // Update Data
+        input wire[16:0]                           tag_write,
+
+
+        output wire[16:0]                          tag_use,
+        output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use,
+        output wire                                valid_use,
+        output wire                                dirty_use
+    `endif
 	
 );
 
@@ -61,10 +78,10 @@ module VX_cache_data
         always @(posedge clk, posedge rst) begin : update_all
           if (rst) begin
             for (ini_ind = 0; ini_ind < NUMBER_INDEXES; ini_ind=ini_ind+1) begin
-                data[ini_ind]  = 0;
-                tag[ini_ind]   = 0;
-                valid[ini_ind] = 0;
-                dirty[ini_ind] = 0;
+                data[ini_ind]  <= 0;
+                tag[ini_ind]   <= 0;
+                valid[ini_ind] <= 0;
+                dirty[ini_ind] <= 0;
             end
           end else begin
               if (update_dirty) dirty[addr] <= dirt_new; // WRite Port

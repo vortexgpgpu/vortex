@@ -115,6 +115,7 @@
 
 `define ZERO_REG 5'h0
 
+// `define PARAM
 
 // Offset
 `define CACHE_OFFSET_NB ($clog2(NUM_WORDS_PER_BLOCK))

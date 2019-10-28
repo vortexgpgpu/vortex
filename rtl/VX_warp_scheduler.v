@@ -122,7 +122,7 @@ module VX_warp_scheduler (
 			visible_active[0]     <= 1; // Activating first warp
 			thread_masks[0]       <= 1; // Activating first thread in first warp
 			warp_stalled          <= 0;
-			total_barrier_stall    = 0;
+			// total_barrier_stall    = 0;
 			for (curr_w_help = 1; curr_w_help < `NW; curr_w_help=curr_w_help+1) begin
 				warp_pcs[curr_w_help]        <= 0;
 				warp_active[curr_w_help]     <= 0; // Activating first warp
@@ -217,14 +217,15 @@ module VX_warp_scheduler (
 
 	assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
 
-	integer curr_b;
-	always @(*) begin
-		total_barrier_stall = 0;
-		for (curr_b = 0; curr_b < `NUM_BARRIERS; curr_b=curr_b+1)
-		begin
-			total_barrier_stall[`NW-1:0] = total_barrier_stall[`NW-1:0] | barrier_stall_mask[curr_b[($clog2(`NUM_BARRIERS)-1):0]][`NW-1:0];
-		end
-	end
+	assign total_barrier_stall = barrier_stall_mask[0] | barrier_stall_mask[1] | barrier_stall_mask[2] | barrier_stall_mask[3];
+	// integer curr_b;
+	// always @(*) begin
+	// 	total_barrier_stall = 0;
+	// 	for (curr_b = 0; curr_b < `NUM_BARRIERS; curr_b=curr_b+1)
+	// 	begin
+	// 		total_barrier_stall[`NW-1:0] = total_barrier_stall[`NW-1:0] | barrier_stall_mask[curr_b];
+	// 	end
+	// end
 
 
 	assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);

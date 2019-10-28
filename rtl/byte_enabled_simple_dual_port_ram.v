@@ -25,7 +25,7 @@ module byte_enabled_simple_dual_port_ram
 	integer ini;
 	always@(posedge clk, posedge reset) begin
 		if (reset) begin
-			for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] = 0;
+			for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] <= 0;
 		end else if(we) begin
 			integer thread_ind;
 			for (thread_ind = 0; thread_ind <= `NT_M1; thread_ind = thread_ind + 1) begin

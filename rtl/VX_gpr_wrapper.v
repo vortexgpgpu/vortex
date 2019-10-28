@@ -17,7 +17,9 @@ module VX_gpr_wrapper (
 
 	wire[`NT_M1:0][31:0] jal_data;
 	genvar index;
-	for (index = 0; index <= `NT_M1; index = index + 1) assign jal_data[index] = VX_gpr_jal.curr_PC;
+	for (index = 0; index <= `NT_M1; index = index + 1) begin
+		assign jal_data[index] = VX_gpr_jal.curr_PC;
+	end
 
 
 	assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (temp_a_reg_data[VX_gpr_read.warp_num]));

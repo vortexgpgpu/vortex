@@ -146,12 +146,19 @@ module VX_d_cache
           .found (valid_per_bank[bid])
           );
 
-        always @(*) begin
-          if (use_write_final_data) new_final_data_read[use_thread_index] = use_data_final_data;
-        end
-        // assign new_final_data_read[use_thread_index] = use_write_final_data ? use_data_final_data : 0;
         assign debug_hit_per_bank_mask[bid]   = {NUM_REQ{hit_per_bank[bid]}};
         assign threads_serviced_per_bank[bid] = use_mask_per_bank[bid] & debug_hit_per_bank_mask[bid];
+    end
+
+    integer test_bid;
+    always @(*) begin
+      new_final_data_read = 0;
+      for (test_bid=0; test_bid < NUMBER_BANKS; test_bid=test_bid+1)
+      begin
+          if (hit_per_bank[test_bid]) begin
+            new_final_data_read[index_per_bank[test_bid]] = readdata_per_bank[test_bid];
+          end
+      end
     end
 
 
@@ -212,7 +219,7 @@ module VX_d_cache
   always @(posedge clk, posedge rst) begin
     if (rst) begin
       final_data_read         <= 0;
-      new_final_data_read      = 0;
+      // new_final_data_read      = 0;
       state                   <= 0;
       stored_valid            <= 0;
       // eviction_addr_per_bank  <= 0;
