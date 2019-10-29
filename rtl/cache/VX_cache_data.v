@@ -137,11 +137,11 @@ module VX_cache_data
              .EMAB(3'b011),
              .TENA(1'b1),
              .TCENA(1'b0),
-             .TAA(5'b0),
+             .TAA(8'b0),
              .TENB(1'b1),
              .TCENB(1'b0),
              .TWENB(128'b0),
-             .TAB(5'b0),
+             .TAB(8'b0),
              .TDB(128'b0),
              .RET1N(1'b1),
              .SIA(2'b0),
@@ -171,9 +171,13 @@ module VX_cache_data
 
 
 
+		// Try to fix the error in memory conneciton, modified by Lingjun Zhu on Oct. 28 2019
+        // wire[NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_m = {new_tag, new_dirty, new_valid};
+        // wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_m;
 
-        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_m = {new_tag, new_dirty, new_valid};
-        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_m;
+        wire[19-1:0] wdata_m = {new_tag, new_dirty, new_valid};
+
+        wire[19-1:0] data_out_m;
 
         assign {old_tag, old_dirty, old_valid} = data_out_m;
 
@@ -205,12 +209,12 @@ module VX_cache_data
              .EMAB(3'b011),
              .TENA(1'b1),
              .TCENA(1'b0),
-             .TAA(5'b0),
+             .TAA(8'b0),
              .TENB(1'b1),
              .TCENB(1'b0),
              // .TWENB(128'b0),
-             .TAB(5'b0),
-             .TDB(128'b0),
+             .TAB(8'b0),
+             .TDB(19'b0),
              .RET1N(1'b1),
              .SIA(2'b0),
              .SEA(1'b0),
