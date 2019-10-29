@@ -102,7 +102,7 @@ module vortex_tb (
 
 		if (out_ebreak) begin
 			gracefulExit();
-			$finish;
+			#20 $finish;
 		end
 
 	end

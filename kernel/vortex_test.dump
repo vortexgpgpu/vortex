@@ -5,8 +5,8 @@ vortex_test.elf:     file format elf32-littleriscv
 Disassembly of section .text:
 
 80000000 <_start>:
-80000000:	7ffff137          	lui	sp,0x7ffff
-80000004:	041010ef          	jal	ra,80001844 <main>
+80000000:	00400593          	li	a1,4
+80000004:	00b58633          	add	a2,a1,a1
 80000008:	00000513          	li	a0,0
 8000000c:	0005006b          	0x5006b
 
@@ -23,7 +23,7 @@ Disassembly of section .text:
 80000024:	00755c63          	bge	a0,t2,8000003c <loop_done>
 
 80000028 <loop_body>:
-80000028:	80010113          	addi	sp,sp,-2048 # 7fffe800 <SIZE+0x7fffe7ce>
+80000028:	80010113          	addi	sp,sp,-2048
 8000002c:	00050313          	mv	t1,a0
 80000030:	0003506b          	0x3506b
 

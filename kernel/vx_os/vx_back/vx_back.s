@@ -6,6 +6,11 @@
 .type _start, @function
 .global _start
 _start:
+    li a1, 4
+    add a2, a1, a1
+    li a0, 0
+    .word 0x0005006b    # tmc a0
+    ###########################
       # la a0, 0x10000000
       # li a1, 7
       # sw a1, 0(a0)
@@ -67,11 +72,11 @@ _start:
 #     .word 0x0000306b    #join
 #     ecall
     ############################
-    lui  sp, 0x7ffff
-    # jal  vx_before_main
-    jal  main
-    li a0, 0
-    .word 0x0005006b    # tmc a0
+    # lui  sp, 0x7ffff
+    # # jal  vx_before_main
+    # jal  main
+    # li a0, 0
+    # .word 0x0005006b    # tmc a0
 
 # Hi:
 #     li a2, 7

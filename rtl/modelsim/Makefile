@@ -73,13 +73,20 @@ SRC = \
 ../shared_memory/VX_bank_valids.v \
 ../shared_memory/VX_priority_encoder_sm.v \
 ../shared_memory/VX_shared_memory.v \
-../shared_memory/VX_shared_memory_block.v
+../shared_memory/VX_shared_memory_block.v \
+../../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v \
+../../models/memory/cln28hpm/rf2_256x128_wm1/rf2_256x128_wm1.v \
+../../models/memory/cln28hpm/rf2_256x19_wm0/rf2_256x19_wm0.v \
+../../models/memory/cln28hpm/rf2_32x128_wm1/rf2_32x128_wm1.v 
+# ../../models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v
+
 # vortex_dpi.h 
 
 
 CMD= \
 -do "vcd file vortex.vcd; \
 	 vcd add -r /vortex_tb/*; \
+	 vcd add -r /vortex/*; \
 	 run -all; \
 	 quit -f"
 
