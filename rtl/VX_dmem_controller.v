@@ -54,7 +54,11 @@ module VX_dmem_controller (
 	VX_d_cache
 	#(
 		.CACHE_SIZE(4096), // Bytes
+		`ifdef SYN
 		.CACHE_WAYS(1),
+		`else 
+		.CACHE_WAYS(4),
+		`endif
 		.CACHE_BLOCK(128), // Bytes
 		.CACHE_BANKS(8),
 		.NUM_REQ(`NT)

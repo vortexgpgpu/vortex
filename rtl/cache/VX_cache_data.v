@@ -13,37 +13,37 @@ module VX_cache_data
     (
 	input wire clk, rst,    // Clock
 
-    `ifdef PARAM
+    // `ifdef PARAM
     	// Addr
-    	input wire[`CACHE_IND_SIZE_RNG]          addr,
+    	input wire[`CACHE_IND_SIZE_RNG]             addr,
     	// WE
-    	input wire[NUM_WORDS_PER_BLOCK-1:0][3:0] we,
-    	input wire                               evict,
+    	input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]    we,
+    	input wire                                  evict,
     	// Data
-    	input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write,
-    	input wire[`CACHE_TAG_SIZE_RNG]                           tag_write,
+    	input wire[NUM_WORDS_PER_BLOCK-1:0][31:0]   data_write,
+    	input wire[`CACHE_TAG_SIZE_RNG]             tag_write,
 
 
     	output wire[`CACHE_TAG_SIZE_RNG]            tag_use,
     	output wire[NUM_WORDS_PER_BLOCK-1:0][31:0]  data_use,
     	output wire                                 valid_use,
     	output wire                                 dirty_use
-    `else 
-        // Addr
-        input wire[7:0]                            addr,
-        // WE
-        input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
-        input wire                                 evict,
-        // Data
-        input wire[NUM_WORDS_PER_BLOCK-1:0][31:0]  data_write, // Update Data
-        input wire[16:0]                           tag_write,
+    // `else 
+    //     // Addr
+    //     input wire[7:0]                            addr,
+    //     // WE
+    //     input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]   we,
+    //     input wire                                 evict,
+    //     // Data
+    //     input wire[NUM_WORDS_PER_BLOCK-1:0][31:0]  data_write, // Update Data
+    //     input wire[16:0]                           tag_write,
 
 
-        output wire[16:0]                          tag_use,
-        output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use,
-        output wire                                valid_use,
-        output wire                                dirty_use
-    `endif
+    //     output wire[16:0]                          tag_use,
+    //     output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use,
+    //     output wire                                valid_use,
+    //     output wire                                dirty_use
+    // `endif
 	
 );
 
@@ -62,9 +62,9 @@ module VX_cache_data
 
         // (3:0)  4 bytes
         reg[NUM_WORDS_PER_BLOCK-1:0][3:0][7:0] data[NUMBER_INDEXES-1:0]; // Actual Data
-        reg[16:0]                           tag[NUMBER_INDEXES-1:0];
-        reg                                 valid[NUMBER_INDEXES-1:0];
-        reg                                 dirty[NUMBER_INDEXES-1:0];
+        reg[`CACHE_TAG_SIZE_RNG]               tag[NUMBER_INDEXES-1:0];
+        reg                                    valid[NUMBER_INDEXES-1:0];
+        reg                                    dirty[NUMBER_INDEXES-1:0];
 
 
         //     16 bytes

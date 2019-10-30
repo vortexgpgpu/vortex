@@ -24,6 +24,7 @@ RAM ram;
 bool     refill;
 unsigned refill_addr;
 
+unsigned num_cycles;
 
 unsigned getIndex(int, int, int);
 unsigned getIndex(int r, int c, int numCols)
@@ -48,6 +49,7 @@ void ibus_driver(bool clk, unsigned pc_addr, unsigned * instruction)
 	// printf("Inside ibus_driver\n");
     if (clk)
     {
+        num_cycles++;
         (*instruction) = 0;
     }
     else
@@ -199,6 +201,7 @@ void io_handler(bool clk, bool io_valid, unsigned io_data)
 
 void gracefulExit()
 {
+    fprintf(stderr, "Num Cycles: %d\n", num_cycles);
     fprintf(stderr, "\n*********************\n\n");
 }
 

@@ -68,6 +68,7 @@ SRC = \
 ../cache/VX_d_cache.v \
 ../cache/VX_generic_pe.v \
 ../cache/cache_set.v \
+../cache/VX_cache_data_per_index.v \
 ../pipe_regs/VX_d_e_reg.v \
 ../pipe_regs/VX_f_d_reg.v \
 ../shared_memory/VX_bank_valids.v \
@@ -103,7 +104,7 @@ LOG=
 #           vlib 
 
 comp:
-	vlog -O0 $(OPT) -work $(LIB) $(SRC)
+	vlog $(OPT) -work $(LIB) $(SRC)
 	# vlog -O0 -dpiheader vortex_dpi.h $(OPT) -work $(LIB) $(SRC)
 
 

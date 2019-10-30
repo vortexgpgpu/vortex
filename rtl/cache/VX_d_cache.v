@@ -96,6 +96,11 @@ module VX_d_cache
     wire[NUMBER_BANKS-1:0]               hit_per_bank;      // Whether each bank got a hit or a miss
     wire[NUMBER_BANKS-1:0]               eviction_wb;
 
+
+    wire[NUMBER_BANKS -1 : 0][$clog2(CACHE_WAYS)-1:0] evicted_way_new;
+    reg [NUMBER_BANKS -1 : 0][$clog2(CACHE_WAYS)-1:0] evicted_way_old;
+    wire[NUMBER_BANKS -1 : 0][$clog2(CACHE_WAYS)-1:0] way_used;
+
     // Internal State
     reg [3:0] state;
     wire[3:0] new_state;
@@ -230,6 +235,7 @@ module VX_d_cache
       // begin
       //   debug_hit_per_bank_mask[init_b] <= 0;
       // end
+      evicted_way_old <= 0;
       
     end else begin
       state           <= new_state;
@@ -242,6 +248,7 @@ module VX_d_cache
       end
 
       final_data_read <= new_final_data_read_Qual;
+      evicted_way_old <= evicted_way_new;
     end
   end
 
@@ -254,6 +261,9 @@ module VX_d_cache
                                   (state == RECIV_MEM_RSP) ? miss_addr   :
                                   i_p_addr[send_index_to_bank[bank_id]];
 
+        assign evicted_way_new[bank_id] = (state == SEND_MEM_REQ)  ? way_used[bank_id]        :
+                                          (state == RECIV_MEM_RSP) ? evicted_way_old[bank_id] :
+                                          0;
 
         wire[1:0]  byte_select                    = bank_addr[1:0];
         wire[`CACHE_OFFSET_SIZE_RNG] cache_offset = bank_addr[`CACHE_ADDR_OFFSET_RNG];
@@ -290,9 +300,9 @@ module VX_d_cache
           .eviction_addr    (eviction_addr_per_bank[bank_id]), 
           .data_evicted     (o_m_writedata[bank_id]),
           .eviction_wb      (eviction_wb[bank_id]),       // Something needs to be written back
-
-
-          .fetched_writedata(i_m_readdata[bank_id]) // Data From memory
+          .fetched_writedata(i_m_readdata[bank_id]), // Data From memory
+          .evicted_way      (evicted_way_new[bank_id]),
+          .way_use          (way_used[bank_id])
         );
 
       end

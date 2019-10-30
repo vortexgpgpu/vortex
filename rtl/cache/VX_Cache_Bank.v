@@ -18,8 +18,8 @@ module VX_Cache_Bank
             rst,
             state,
             read_or_write, // Read = 0 | Write = 1
-           i_p_mem_read,
-           i_p_mem_write,
+            i_p_mem_read,
+            i_p_mem_write,
             valid_in,
             //write_from_mem,
             actual_index,
@@ -37,7 +37,9 @@ module VX_Cache_Bank
             eviction_wb, // Need to evict
             eviction_addr, // What's the eviction tag
 
-            data_evicted
+            data_evicted,
+            evicted_way,
+            way_use
            );
 
     localparam NUMBER_BANKS         = CACHE_BANKS;
@@ -72,6 +74,10 @@ module VX_Cache_Bank
     input wire[2:0] i_p_mem_write;
     input wire[1:0] byte_select;
 
+
+    input  wire[$clog2(CACHE_WAYS)-1:0] evicted_way;
+    output wire[$clog2(CACHE_WAYS)-1:0] way_use;
+
     // Outputs
       // Normal shit
     output wire[31:0] readdata;
@@ -88,8 +94,8 @@ module VX_Cache_Bank
 
 
     wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
-    wire[16:0] tag_use;
-    wire[16:0] eviction_tag;
+    wire[`CACHE_TAG_SIZE_RNG] tag_use;
+    wire[`CACHE_TAG_SIZE_RNG] eviction_tag;
     wire       valid_use;
     wire       dirty_use;
     wire       access;
@@ -97,19 +103,23 @@ module VX_Cache_Bank
     wire miss; // -10/21
 
 
+
+    wire[$clog2(CACHE_WAYS)-1:0] update_way;
+    wire[$clog2(CACHE_WAYS)-1:0] way_to_update;
+
     assign miss = (tag_use != o_tag) && valid_use && valid_in;
 
 
     assign data_evicted = data_use;
 
-    assign eviction_wb  = (dirty_use != 1'b0) && valid_use;
-    assign eviction_tag = tag_use;
-    assign access = (state == CACHE_IDLE) && valid_in;
+    assign eviction_wb    = miss && (dirty_use != 1'b0) && valid_use;
+    assign eviction_tag   = tag_use;
+    assign access         = (state == CACHE_IDLE) && valid_in;
     assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in; // TODO
-    assign hit          = (access && (tag_use == o_tag) && valid_use);
+    assign hit            = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data
-    assign eviction_addr = {eviction_tag, actual_index, 7'b0}; // Fix with actual data
-
+    assign eviction_addr  = {eviction_tag, actual_index, 7'b0}; // Fix with actual data
+    assign update_way     = hit ? way_use : 0;
 
 
 
@@ -168,28 +178,54 @@ module VX_Cache_Bank
 
         // assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : writedata;
+        assign way_to_update = write_from_mem ? evicted_way          : update_way;
     end
 
-    VX_cache_data #(
+
+    VX_cache_data_per_index #(
           .CACHE_SIZE(CACHE_SIZE),
           .CACHE_WAYS(CACHE_WAYS),
           .CACHE_BLOCK(CACHE_BLOCK),
           .CACHE_BANKS(CACHE_BANKS),
           .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(
-        .clk       (clk),
-        .rst       (rst),
+        .clk          (clk),
+        .rst          (rst),
+        .valid_in     (valid_in),
         // Inputs
-        .addr      (actual_index),
-        .we        (we),
-        .evict     (write_from_mem),
-        .data_write(data_write),
-        .tag_write (o_tag),
+        .addr         (actual_index),
+        .we           (we),
+        .evict        (write_from_mem),
+        .data_write   (data_write),
+        .tag_write    (o_tag),
+        .way_to_update(way_to_update),
         // Outputs
-        .tag_use   (tag_use),
-        .data_use  (data_use),
-        .valid_use (valid_use),
-        .dirty_use (dirty_use)
+        .tag_use      (tag_use),
+        .data_use     (data_use),
+        .valid_use    (valid_use),
+        .dirty_use    (dirty_use),
+        .way          (way_use)
       );
+
+    // VX_cache_data #(
+    //       .CACHE_SIZE(CACHE_SIZE),
+    //       .CACHE_WAYS(CACHE_WAYS),
+    //       .CACHE_BLOCK(CACHE_BLOCK),
+    //       .CACHE_BANKS(CACHE_BANKS),
+    //       .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(
+    //     .clk       (clk),
+    //     .rst       (rst),
+    //     // Inputs
+    //     .addr      (actual_index),
+    //     .we        (we),
+    //     .evict     (write_from_mem),
+    //     .data_write(data_write),
+    //     .tag_write (o_tag),
+    //     // Outputs
+    //     .tag_use   (tag_use),
+    //     .data_use  (data_use),
+    //     .valid_use (valid_use),
+    //     .dirty_use (dirty_use)
+    //   );
 
 
 endmodule
