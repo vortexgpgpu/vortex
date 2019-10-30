@@ -35,6 +35,7 @@ unsigned getIndex(int r, int c, int numCols)
 
 void load_file(char * filename)
 {
+    num_cycles = 0;
     // printf("\n\n\n\n**********************\n");
 	// printf("Inside load_file\n");
 
