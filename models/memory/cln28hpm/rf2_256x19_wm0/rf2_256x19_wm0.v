@@ -47,6 +47,8 @@
 //
 //      Known Work Arounds: N/A
 //
+
+`define ARM_UD_MODEL
 `timescale 1 ns/1 ps
 `define ARM_MEM_PROP 1.000
 `define ARM_MEM_RETAIN 1.000

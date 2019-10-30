@@ -84,7 +84,8 @@ SRC = \
 
 
 CMD= \
--do "vcd file vortex.vcd; \
+-do "VoptFlow = 0; \
+	 vcd file vortex.vcd; \
 	 vcd add -r /vortex_tb/*; \
 	 vcd add -r /vortex/*; \
 	 run -all; \
@@ -102,12 +103,13 @@ LOG=
 #           vlib 
 
 comp:
-	vlog $(OPT) -work $(LIB) $(SRC)
+	vlog -O0 $(OPT) -work $(LIB) $(SRC)
 	# vlog -O0 -dpiheader vortex_dpi.h $(OPT) -work $(LIB) $(SRC)
 
 
 sim: comp
-	vsim vortex_tb $(LOG) -c -lib $(LIB) $(CMD)
+	vsim vortex_tb $(LOG) -c -lib $(LIB) $(CMD) > vortex_sim.log
+	# vsim -novopt vortex_tb $(LOG) -c -lib $(LIB) $(CMD) > vortex_sim.log
 
 
 

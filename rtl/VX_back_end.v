@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_back_end (
 	input wire clk, 
 	input wire reset, 
@@ -7,7 +9,6 @@ module VX_back_end (
 	output wire               gpr_stage_delay,
 	VX_jal_response_inter     VX_jal_rsp,
 	VX_branch_response_inter  VX_branch_rsp,
-
 
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,

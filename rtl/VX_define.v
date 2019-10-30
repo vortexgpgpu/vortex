@@ -10,6 +10,7 @@
 // `define ONLY
 
 // `define SYN 1
+`define ASIC 1
 
 `define CACHE_NUM_BANKS 8
 

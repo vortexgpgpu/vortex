@@ -47,19 +47,30 @@
 //
 //      Known Work Arounds: N/A
 //
-`define ARM_UD_MODEL
 
 `timescale 1 ns/1 ps
-`define ARM_MEM_PROP 1.000
-`define ARM_MEM_RETAIN 1.000
-`define ARM_MEM_PERIOD 3.000
-`define ARM_MEM_WIDTH 1.000
-`define ARM_MEM_SETUP 1.000
-`define ARM_MEM_HOLD 0.500
-`define ARM_MEM_COLLISION 3.000
+// `define ARM_MEM_PROP 1.000
+// `define ARM_MEM_RETAIN 1.000
+// `define ARM_MEM_PERIOD 3.000
+// `define ARM_MEM_WIDTH 1.000
+// `define ARM_MEM_SETUP 1.000
+// `define ARM_MEM_HOLD 0.500
+// `define ARM_MEM_COLLISION 3.000
+`define ARM_MEM_PROP 0
+`define ARM_MEM_RETAIN 0
+`define ARM_MEM_PERIOD 0
+`define ARM_MEM_WIDTH 0
+`define ARM_MEM_SETUP 0
+`define ARM_MEM_HOLD 0
+`define ARM_MEM_COLLISION 0
+
 // If ARM_HVM_MODEL is defined at Simulator Command Line, it Selects the Hierarchical Verilog Model
 `ifdef ARM_HVM_MODEL
 
+`undef ARM_MESSAGES
+`define ARM_UD_MODEL
+
+// ARM_MEM_SETUP, `ARM_MEM_HOLD,
 
 module datapath_latch_rf2_32x128_wm1 (CLK,Q_update,SE,SI,D,DFTRAMBYP,mem_path,XQ,Q);
 	input CLK,Q_update,SE,SI,D,DFTRAMBYP,mem_path,XQ;

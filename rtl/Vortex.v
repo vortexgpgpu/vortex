@@ -83,7 +83,6 @@ assign icache_request_pc_address      = icache_request_fe.pc_address;
 // Front-end to Back-end
 VX_frE_to_bckE_req_inter      VX_bckE_req(); // New instruction request to EXE/MEM
 
-
 // Back-end to Front-end
 VX_wb_inter                   VX_writeback_inter(); // Writeback to GPRs
 VX_branch_response_inter      VX_branch_rsp();      // Branch Resolution to Fetch

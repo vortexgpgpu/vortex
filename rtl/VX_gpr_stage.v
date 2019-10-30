@@ -12,6 +12,7 @@ module VX_gpr_stage (
 	// inputs
 		// Instruction Information
 	VX_frE_to_bckE_req_inter   VX_bckE_req,
+
 		// WriteBack inputs
 	VX_wb_inter                VX_writeback_inter,
 
@@ -40,9 +41,15 @@ module VX_gpr_stage (
 	assign VX_gpr_read.rs2      = VX_bckE_req.rs2;
 	assign VX_gpr_read.warp_num = VX_bckE_req.warp_num;
 
-	VX_gpr_jal_inter VX_gpr_jal();
-	assign VX_gpr_jal.is_jal  = VX_bckE_req.jalQual;
-	assign VX_gpr_jal.curr_PC = VX_bckE_req.curr_PC;
+	`ifndef ASIC
+		VX_gpr_jal_inter VX_gpr_jal();
+		assign VX_gpr_jal.is_jal  = VX_bckE_req.jalQual;
+		assign VX_gpr_jal.curr_PC = VX_bckE_req.curr_PC;
+	`else 
+		VX_gpr_jal_inter VX_gpr_jal();
+		assign VX_gpr_jal.is_jal  = VX_exec_unit_req.jalQual;
+		assign VX_gpr_jal.curr_PC = VX_exec_unit_req.curr_PC;
+	`endif
 
 
 	VX_gpr_data_inter           VX_gpr_datf();
@@ -86,9 +93,92 @@ module VX_gpr_stage (
 	wire stall_lsu  = memory_delay;
 	wire flush_lsu  = schedule_delay && !stall_lsu;
 
-
 	assign gpr_stage_delay = stall_lsu;
 
+	`ifdef ASIC
+		wire delayed_lsu_last_cycle;
+
+		VX_generic_register #(.N(1)) delayed_reg (
+			.clk  (clk),
+			.reset(reset),
+			.stall(stall_rest),
+			.flush(stall_rest),
+			.in   (stall_lsu),
+			.out  (delayed_lsu_last_cycle)
+			);
+
+
+		wire[`NT_M1:0][31:0] temp_store_data;
+		wire[`NT_M1:0][31:0] temp_base_address; // A reg data
+
+		wire[`NT_M1:0][31:0] real_store_data;
+		wire[`NT_M1:0][31:0] real_base_address; // A reg data
+
+		wire store_curr_real = !delayed_lsu_last_cycle && stall_lsu;
+
+		VX_generic_register #(.N(256)) lsu_data(
+			.clk  (clk),
+			.reset(reset),
+			.stall(!store_curr_real),
+			.flush(stall_rest),
+			.in   ({real_store_data, real_base_address}),
+			.out  ({temp_store_data, temp_base_address})
+			);
+
+		assign real_store_data   = VX_lsu_req_temp.store_data;
+		assign real_base_address = VX_lsu_req_temp.base_address;
+
+
+		assign VX_lsu_req.store_data   = (delayed_lsu_last_cycle) ? temp_store_data   : real_store_data;
+		assign VX_lsu_req.base_address = (delayed_lsu_last_cycle) ? temp_base_address : real_base_address;
+
+
+		VX_generic_register #(.N(52)) lsu_reg(
+			.clk  (clk),
+			.reset(reset),
+			.stall(stall_lsu),
+			.flush(flush_lsu),
+			.in   ({VX_lsu_req_temp.valid, VX_lsu_req_temp.warp_num, VX_lsu_req_temp.offset, VX_lsu_req_temp.mem_read, VX_lsu_req_temp.mem_write, VX_lsu_req_temp.rd, VX_lsu_req_temp.wb}),
+			.out  ({VX_lsu_req.valid     , VX_lsu_req.warp_num     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
+			);
+
+		VX_generic_register #(.N(231)) exec_unit_reg(
+			.clk  (clk),
+			.reset(reset),
+			.stall(stall_rest),
+			.flush(flush_rest),
+			.in   ({VX_exec_unit_req_temp.valid, VX_exec_unit_req_temp.warp_num, VX_exec_unit_req_temp.curr_PC, VX_exec_unit_req_temp.PC_next, VX_exec_unit_req_temp.rd, VX_exec_unit_req_temp.wb, VX_exec_unit_req_temp.alu_op, VX_exec_unit_req_temp.rs1, VX_exec_unit_req_temp.rs2, VX_exec_unit_req_temp.rs2_src, VX_exec_unit_req_temp.itype_immed, VX_exec_unit_req_temp.upper_immed, VX_exec_unit_req_temp.branch_type, VX_exec_unit_req_temp.jalQual, VX_exec_unit_req_temp.jal, VX_exec_unit_req_temp.jal_offset, VX_exec_unit_req_temp.ebreak, VX_exec_unit_req_temp.wspawn, VX_exec_unit_req_temp.is_csr, VX_exec_unit_req_temp.csr_address, VX_exec_unit_req_temp.csr_immed, VX_exec_unit_req_temp.csr_mask}),
+			.out  ({VX_exec_unit_req.valid     , VX_exec_unit_req.warp_num     , VX_exec_unit_req.curr_PC     , VX_exec_unit_req.PC_next     , VX_exec_unit_req.rd     , VX_exec_unit_req.wb     , VX_exec_unit_req.alu_op     , VX_exec_unit_req.rs1     , VX_exec_unit_req.rs2     , VX_exec_unit_req.rs2_src     , VX_exec_unit_req.itype_immed     , VX_exec_unit_req.upper_immed     , VX_exec_unit_req.branch_type     , VX_exec_unit_req.jalQual     , VX_exec_unit_req.jal     , VX_exec_unit_req.jal_offset     , VX_exec_unit_req.ebreak     , VX_exec_unit_req.wspawn     , VX_exec_unit_req.is_csr     , VX_exec_unit_req.csr_address     , VX_exec_unit_req.csr_immed     , VX_exec_unit_req.csr_mask     })
+			);
+
+		assign VX_exec_unit_req.a_reg_data = real_base_address;
+		assign VX_exec_unit_req.b_reg_data = real_store_data;
+
+		VX_generic_register #(.N(43)) gpu_inst_reg(
+			.clk  (clk),
+			.reset(reset),
+			.stall(stall_rest),
+			.flush(flush_rest),
+			.in   ({VX_gpu_inst_req_temp.valid, VX_gpu_inst_req_temp.warp_num, VX_gpu_inst_req_temp.is_wspawn, VX_gpu_inst_req_temp.is_tmc, VX_gpu_inst_req_temp.is_split, VX_gpu_inst_req_temp.is_barrier, VX_gpu_inst_req_temp.pc_next}),
+			.out  ({VX_gpu_inst_req.valid     , VX_gpu_inst_req.warp_num     , VX_gpu_inst_req.is_wspawn     , VX_gpu_inst_req.is_tmc     , VX_gpu_inst_req.is_split     , VX_gpu_inst_req.is_barrier     , VX_gpu_inst_req.pc_next     })
+			);
+
+		assign VX_gpu_inst_req.a_reg_data = real_base_address;
+		assign VX_gpu_inst_req.rd2        = real_store_data;
+
+		VX_generic_register #(.N(60)) csr_reg(
+			.clk  (clk),
+			.reset(reset),
+			.stall(stall_rest),
+			.flush(flush_rest),
+			.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
+			.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
+			);
+
+
+		// assign 
+		
+	`else 
 
 	VX_generic_register #(.N(308)) lsu_reg(
 		.clk  (clk),
@@ -126,29 +216,6 @@ module VX_gpr_stage (
 		.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
 		);
 
-
-	// wire zero_temp = 0;
-
-	// VX_generic_register #(.N(256)) reg_data 
-	// (
-	// 	.clk  (clk),
-	// 	.reset(reset),
-	// 	.stall(zero_temp),
-	// 	.flush(zero_temp),
-	// 	.in   ({VX_gpr_datf.a_reg_data, VX_gpr_datf.b_reg_data}),
-	// 	.out  ({VX_gpr_data.a_reg_data, VX_gpr_data.b_reg_data})
-	// );
-
-	// wire stall = schedule_delay;
-
-
-	// VX_d_e_reg gpr_stage_reg(
-	// 		.clk               (clk),
-	// 		.reset             (reset),
-	// 		.in_branch_stall   (stall),
-	// 		.in_freeze         (zero_temp),
-	// 		.VX_frE_to_bckE_req(VX_bckE_req),
-	// 		.VX_bckE_req       (VX_bckE_req_out)
-	// 	);
+	`endif
 
 endmodule
