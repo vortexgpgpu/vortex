@@ -57,7 +57,7 @@ module VX_dmem_controller (
 		`ifdef SYN
 		.CACHE_WAYS(1),
 		`else 
-		.CACHE_WAYS(4),
+		.CACHE_WAYS(2),
 		`endif
 		.CACHE_BLOCK(128), // Bytes
 		.CACHE_BANKS(8),

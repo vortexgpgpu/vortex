@@ -22,8 +22,8 @@ be:
 .type vx_printc, @function
 .global vx_printc
 vx_printc:
-    la a7, 0x00010000
-    sw a1, 0(a7)
+    la t0, 0x00010000
+    sw a1, 0(t0)
     ret
 
 

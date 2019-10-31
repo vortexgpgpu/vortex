@@ -27,13 +27,13 @@ import "DPI-C" dbus_driver = function void dbus_driver( input logic clk,
 
 import "DPI-C" io_handler  = function void io_handler(input logic clk, input logic io_valid, input int io_data);
 
-import "DPI-C" gracefulExit = function void gracefulExit();
+import "DPI-C" gracefulExit = function void gracefulExit(input int cycle_num);
 
 module vortex_tb (
 	
 );
 
-	reg[31:0]     cycle_num;
+	int     cycle_num;
 
 	reg           clk;
 	reg           reset;
@@ -61,7 +61,7 @@ module vortex_tb (
 
 	initial begin
 		// $fdumpfile("vortex1.vcd");
-		load_file("../../kernel/vortex_test.hex");
+		load_file("../../runtime/vortex_runtime.hex");
 		$dumpvars(0, vortex_tb);
 		reset = 1;
 		clk = 0;
@@ -87,11 +87,22 @@ module vortex_tb (
 		.out_ebreak                 (out_ebreak)
 		);
 
-	always @(*) begin
+	always @(negedge clk) begin
 		ibus_driver(clk, icache_request_pc_address, icache_response_instruction);
 		dbus_driver(clk, o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, i_m_readdata, i_m_ready);
 		io_handler (clk, io_valid, io_data);
 		
+	end
+
+	always @(posedge clk) begin
+		if (out_ebreak) begin
+			gracefulExit(cycle_num);
+			#40 $finish;
+		end
+	end
+
+	always @(posedge clk) begin
+		cycle_num = cycle_num + 1;
 	end
 
 	always @(clk, posedge reset) begin
@@ -101,11 +112,6 @@ module vortex_tb (
 		end
 
 		#5 clk <= ~clk;
-
-		if (out_ebreak) begin
-			gracefulExit();
-			#20 $finish;
-		end
 
 	end
 
