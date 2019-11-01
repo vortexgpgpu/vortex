@@ -95,6 +95,7 @@ module VX_d_cache
     wire[NUMBER_BANKS-1:0][31:0]         readdata_per_bank; // Data read from each bank
     wire[NUMBER_BANKS-1:0]               hit_per_bank;      // Whether each bank got a hit or a miss
     wire[NUMBER_BANKS-1:0]               eviction_wb;
+    reg[NUMBER_BANKS-1:0]               eviction_wb_old;
 
 
     wire[NUMBER_BANKS -1 : 0][$clog2(CACHE_WAYS)-1:0] evicted_way_new;
@@ -236,6 +237,7 @@ module VX_d_cache
       //   debug_hit_per_bank_mask[init_b] <= 0;
       // end
       evicted_way_old <= 0;
+      eviction_wb_old <= 0;
       
     end else begin
       state           <= new_state;
@@ -249,6 +251,7 @@ module VX_d_cache
 
       final_data_read <= new_final_data_read_Qual;
       evicted_way_old <= evicted_way_new;
+      eviction_wb_old <= eviction_wb;
     end
   end
 
@@ -314,7 +317,7 @@ module VX_d_cache
     assign o_m_evict_addr     = evict_addr & 32'hffffffc0;
     assign o_m_read_addr      = miss_addr  & 32'hffffffc0;
     assign o_m_valid          = (state == SEND_MEM_REQ);
-    assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb);
+    assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb_old);
     //end
 
 endmodule

@@ -66,10 +66,10 @@ module VX_cache_data_per_index
 
 
 
-    wire hit       = |hit_per_way && valid_in;
-    wire miss      = ~hit && valid_in;
-    wire update    = |we  && valid_in && !miss;
-    wire valid     = &valid_use_per_way && valid_in;
+    wire hit       = |hit_per_way;
+    wire miss      = ~hit;
+    wire update    = |we && !miss;
+    wire valid     = &valid_use_per_way;
 
 	  assign way 		   = hit ? way_index : (valid ? eviction_way_index[addr] : (invalid_found ? invalid_index : 0));
     assign tag_use   = hit ? tag_use_per_way[way_index]   : (valid ? tag_use_per_way[eviction_way_index[addr]] : (invalid_found ? tag_use_per_way[invalid_index] : 0));
