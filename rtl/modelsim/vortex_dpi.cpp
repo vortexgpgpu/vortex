@@ -202,7 +202,7 @@ void io_handler(bool clk, bool io_valid, unsigned io_data)
 
 void gracefulExit(int cycles)
 {
-    fprintf(stderr, "\n*********************\n\n");
+    fprintf(stderr, "*********************\n\n");
     fprintf(stderr, "DPI Cycle Num: %d\tVerilog Cycle Num: %d\n", num_cycles, cycles);
 }
 

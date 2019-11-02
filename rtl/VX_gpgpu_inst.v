@@ -71,7 +71,8 @@ module VX_gpgpu_inst (
 	// wire[`NW_M1:0] num_valids = $countones(curr_valids);
 
 	
-	assign VX_warp_ctl.is_split         = is_split && (num_valids > 1) && (split_new_use_mask != 0) && (split_new_use_mask != {`NT{1'b1}});
+	assign VX_warp_ctl.is_split         = is_split && (num_valids > 1);
+	assign VX_warp_ctl.dont_split       = VX_warp_ctl.is_split && ((split_new_use_mask == 0) || (split_new_use_mask == {`NT{1'b1}}));
 	assign VX_warp_ctl.split_new_mask   = split_new_use_mask;
 	assign VX_warp_ctl.split_later_mask = split_new_later_mask;
 	assign VX_warp_ctl.split_save_pc    = VX_gpu_inst_req.pc_next;

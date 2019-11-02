@@ -60,15 +60,15 @@ module VX_execute_unit (
 		endgenerate
 
 
-		wire [$clog2(`NT)-1:0] branch_use_index;
-		wire                   branch_found_valid;
+		wire [$clog2(`NT)-1:0] jal_branch_use_index;
+		wire                   jal_branch_found_valid;
 		VX_generic_priority_encoder #(.N(`NT)) choose_alu_result(
 			.valids(VX_exec_unit_req.valid),
-			.index (branch_use_index),
-			.found (branch_found_valid)
+			.index (jal_branch_use_index),
+			.found (jal_branch_found_valid)
 			);
 
-		wire[31:0] branch_use_alu_result = alu_result[branch_use_index];
+		wire[31:0] branch_use_alu_result = alu_result[jal_branch_use_index];
 
 		reg temp_branch_dir;
 		always @(*)
@@ -104,7 +104,7 @@ module VX_execute_unit (
 
 		// Jal rsp
 		assign VX_jal_rsp.jal           = in_jal;
-		assign VX_jal_rsp.jal_dest      = $signed(in_a_reg_data[0]) + $signed(in_jal_offset);
+		assign VX_jal_rsp.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
 		assign VX_jal_rsp.jal_warp_num  = VX_exec_unit_req.warp_num;
 
 		// Branch rsp

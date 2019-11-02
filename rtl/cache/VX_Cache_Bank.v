@@ -149,6 +149,23 @@ module VX_Cache_Bank
     wire[31:0] lhu_data    = (data_unQual & 32'hFFFF);
     wire[31:0] lw_data     = (data_unQual);
 
+
+    wire[31:0] sw_data     = writedata;
+
+    wire[31:0] sb_data     = b1 ? {{16{1'b0}}, writedata[7:0], { 8{1'b0}}} :
+                             b2 ? {{ 8{1'b0}}, writedata[7:0], {16{1'b0}}} :
+                             b3 ? {{ 0{1'b0}}, writedata[7:0], {24{1'b0}}} :
+                             writedata;
+
+    wire[31:0] sh_data     = b2 ? {writedata[15:0], {16{1'b0}}} : writedata;
+
+
+
+    wire[31:0] use_write_data  = sb ? sb_data :
+                                 sh ? sh_data :
+                                 sw_data;
+
+
     wire[31:0] data_Qual   = lb  ? lb_data  :
                              lh  ? lh_data  :
                              lhu ? lhu_data :
@@ -177,7 +194,7 @@ module VX_Cache_Bank
 
 
         // assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
-        assign data_write[g] = write_from_mem ? fetched_writedata[g] : writedata;
+        assign data_write[g] = write_from_mem ? fetched_writedata[g] : use_write_data;
         assign way_to_update = write_from_mem ? evicted_way          : update_way;
     end
 

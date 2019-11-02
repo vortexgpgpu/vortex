@@ -22,3 +22,13 @@ unsigned vx_threadID(void);
 
 // Get hardware warp ID
 unsigned vx_warpID(void);
+
+
+
+#define __if(b) vx_split(b); \
+                if (b) \
+
+#define __else else
+
+
+#define __endif vx_join();

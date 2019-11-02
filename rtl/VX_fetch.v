@@ -57,6 +57,7 @@ module VX_fetch (
 
 			// Split
 			.is_split          (VX_warp_ctl.is_split),
+			.dont_split        (VX_warp_ctl.dont_split),
 			.split_new_mask    (VX_warp_ctl.split_new_mask),
 			.split_later_mask  (VX_warp_ctl.split_later_mask),
 			.split_save_pc     (VX_warp_ctl.split_save_pc),

@@ -27,6 +27,7 @@ vx_barrier:
 .global vx_split
 vx_split:
 	.word 0x0005206b    # split a0
+	ret
 
 .type vx_join, @function
 .global vx_join

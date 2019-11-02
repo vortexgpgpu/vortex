@@ -29,6 +29,7 @@ module VX_warp_scheduler (
 
 	// Split
 	input wire            is_split,
+	input wire            dont_split,
 	input wire[`NT_M1:0]  split_new_mask,
 	input wire[`NT_M1:0]  split_later_mask,
 	input wire[31:0]      split_save_pc,	
@@ -104,6 +105,8 @@ module VX_warp_scheduler (
 
 	reg[`NW-1:0] total_barrier_stall;
 
+	reg didnt_split;
+
 	/* verilator lint_off UNUSED */
 	// wire[$clog2(`NW):0] num_active;
 	/* verilator lint_on UNUSED */
@@ -122,6 +125,7 @@ module VX_warp_scheduler (
 			visible_active[0]     <= 1; // Activating first warp
 			thread_masks[0]       <= 1; // Activating first thread in first warp
 			warp_stalled          <= 0;
+			didnt_split           <= 0;
 			// total_barrier_stall    = 0;
 			for (curr_w_help = 1; curr_w_help < `NW; curr_w_help=curr_w_help+1) begin
 				warp_pcs[curr_w_help]        <= 0;
@@ -148,14 +152,20 @@ module VX_warp_scheduler (
 			end else if (ctm) begin
 				thread_masks[ctm_warp_num] <= ctm_mask;
 				warp_stalled[ctm_warp_num] <= 0;
-			end else if (is_join) begin
+			end else if (is_join && !didnt_split) begin
 				if (!join_fall) begin
 					warp_pcs[join_warp_num] <= join_pc;
 				end
 				thread_masks[join_warp_num] <= join_tm;
+				didnt_split                 <= 0;
 			end else if (is_split) begin
 				warp_stalled[split_warp_num] <= 0;
-				thread_masks[split_warp_num] <= split_new_mask;
+				if (!dont_split) begin
+					thread_masks[split_warp_num] <= split_new_mask;
+					didnt_split                  <= 0;
+				end else begin
+					didnt_split                  <= 1;
+				end
 			end
 			
 			if (whalt) begin
@@ -243,9 +253,9 @@ module VX_warp_scheduler (
 		wire correct_warp_s = (curr_warp == split_warp_num);
 		wire correct_warp_j = (curr_warp == join_warp_num);
 
-		wire push = is_split && correct_warp_s;
+		wire push = (is_split && !dont_split) && correct_warp_s;
 		wire pop  = is_join  && correct_warp_j;
-		VX_generic_stack #(.WIDTH(1+32+`NT), .DEPTH($clog2(`NT))) ipdom_stack(
+		VX_generic_stack #(.WIDTH(1+32+`NT), .DEPTH($clog2(`NT)+1)) ipdom_stack(
 			.clk  (clk),
 			.reset(reset),
 			.push (push),
