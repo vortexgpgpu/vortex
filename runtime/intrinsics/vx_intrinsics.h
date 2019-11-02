@@ -1,4 +1,8 @@
 
+#ifndef VX_INTRINSICS
+
+#define VX_INTRINSICS
+
 // Spawns Warps
 void vx_wspawn (unsigned numWarps, unsigned PC_spawn);
 
@@ -32,3 +36,7 @@ unsigned vx_warpID(void);
 
 
 #define __endif vx_join();
+
+
+
+#endif

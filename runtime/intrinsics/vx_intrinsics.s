@@ -4,9 +4,9 @@
 .section .text
 
 
-.type vx_wsapwn, @function
-.global vx_wsapwn
-vx_wsapwn:
+.type vx_wspawn, @function
+.global vx_wspawn
+vx_wspawn:
 	.word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
 	ret
 
