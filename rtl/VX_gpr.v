@@ -51,7 +51,8 @@ module VX_gpr (
 
 
 
-		wire cenb    = !going_to_write;
+		// wire cenb    = !going_to_write;
+		wire cenb    = 0;
 
 		// wire cena_1  = (VX_gpr_read.rs1 == 0);
 		// wire cena_2  = (VX_gpr_read.rs2 == 0);
@@ -68,8 +69,8 @@ module VX_gpr (
 			begin
 				for (curr_bit = 0; curr_bit < 32; curr_bit=curr_bit+1)
 				begin
-					assign out_a_reg_data[thread][curr_bit] = (temp_a[thread][curr_bit] === 1'dx) ? 1'b0 : temp_a[thread][curr_bit];
-					assign out_b_reg_data[thread][curr_bit] = (temp_b[thread][curr_bit] === 1'dx) ? 1'b0 : temp_b[thread][curr_bit];
+					assign out_a_reg_data[thread][curr_bit] = ((temp_a[thread][curr_bit] === 1'dx) || cena_1 )? 1'b0 : temp_a[thread][curr_bit];
+					assign out_b_reg_data[thread][curr_bit] = ((temp_b[thread][curr_bit] === 1'dx) || cena_2) ? 1'b0 : temp_b[thread][curr_bit];
 				end
 			end
 

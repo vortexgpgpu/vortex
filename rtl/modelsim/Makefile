@@ -103,6 +103,9 @@ LOG=
 # setup: 	source cshrc.modelsim
 #           vlib 
 
+lib:
+	vlib vortex_lib
+
 comp:
 	vlog $(OPT) -work $(LIB) $(SRC)
 	# vlog -O0 -dpiheader vortex_dpi.h $(OPT) -work $(LIB) $(SRC)

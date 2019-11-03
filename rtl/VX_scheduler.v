@@ -16,40 +16,52 @@ module VX_scheduler (
 
 
 
-	reg rename_table[31:0];
+	reg[31:0] rename_table[`NW-1:0];
 
 	wire valid_wb  = (VX_writeback_inter.wb != 0) && (|VX_writeback_inter.wb_valid) && (VX_writeback_inter.rd != 0);
 	wire wb_inc    = (VX_bckE_req.wb != 0) && (VX_bckE_req.rd != 0);
 
-
-	// wire pass_through = ((VX_bckE_req.rs1 == VX_writeback_inter.rd) || (VX_bckE_req.rs2 == VX_writeback_inter.rd)) && valid_wb;
-	// wire pass_through = 0;
-
-	wire rs1_rename = rename_table[VX_bckE_req.rs1];
-	wire rs2_rename = rename_table[VX_bckE_req.rs2];
+	wire rs1_rename = rename_table[VX_bckE_req.warp_num][VX_bckE_req.rs1];
+	wire rs2_rename = rename_table[VX_bckE_req.warp_num][VX_bckE_req.rs2];
 
 	wire is_store = (VX_bckE_req.mem_write != `NO_MEM_WRITE);
 	wire is_load  = (VX_bckE_req.mem_read  != `NO_MEM_READ);
 
 	wire is_mem   = is_store || is_load;
 
-	wire rs1_rename_qual = (rs1_rename && (VX_bckE_req.rs1 != 0));
-	wire rs2_rename_qual = (rs2_rename && (VX_bckE_req.rs2 != 0) && ((VX_bckE_req.rs2_src == `RS2_REG) || is_store)) || (VX_bckE_req.is_barrier) || (VX_bckE_req.is_wspawn);
+
+	wire rs1_pass        = ((valid_wb && (VX_writeback_inter.rd == VX_bckE_req.rs1)));
+	wire rs2_pass        = ((valid_wb && (VX_writeback_inter.rd == VX_bckE_req.rs2)));
+
+	// wire rs1_pass        = 0;
+	// wire rs2_pass        = 0;
+
+	wire using_rs2       = (VX_bckE_req.rs2_src == `RS2_REG) || is_store || VX_bckE_req.is_barrier || VX_bckE_req.is_wspawn;
+
+	wire rs1_rename_qual = ((rs1_rename || (rs1_pass && 0)) && (VX_bckE_req.rs1 != 0));
+	wire rs2_rename_qual = ((rs2_rename || (rs2_pass && 0)) && (VX_bckE_req.rs2 != 0 && using_rs2));
+
 
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual ;
 
 
-	assign schedule_delay = (rename_valid) && (|VX_bckE_req.valid) || (memory_delay && (is_mem)) || (gpr_stage_delay && is_mem);
+	assign schedule_delay = ((rename_valid) && (|VX_bckE_req.valid)) || (memory_delay && (is_mem)) || (gpr_stage_delay && is_mem);
 
 	integer i;
-
+	integer w;
 	always @(posedge clk or posedge reset) begin
 
 		if (reset) begin
-			for (i = 0; i < 32; i = i + 1) rename_table[i] <= 0;
+			for (w = 0; w < `NW; w=w+1)
+			begin
+				for (i = 0; i < 32; i = i + 1)
+				begin
+				 rename_table[w][i] <= 0;
+				end
+			end
 		end else begin
-			if (valid_wb                 ) rename_table[VX_writeback_inter.rd] <= 0;
-			if (!schedule_delay && wb_inc) rename_table[VX_bckE_req.rd]        <= 1;
+			if (valid_wb                 ) rename_table[VX_writeback_inter.wb_warp_num][VX_writeback_inter.rd] <= 0;
+			if (!schedule_delay && wb_inc) rename_table[VX_bckE_req.warp_num       ][VX_bckE_req.rd]        <= 1;
 		end
 	end
 

@@ -3,9 +3,15 @@
 .type _start, @function
 .global _start
 _start:
-    # la a1, vx_set_sp
-    # li a0, 8
-    # .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
+    # li a0, 2
+    # add a1, a0, a0
+    # add a2, a1, a0
+    # li a0, 0
+    # .word 0x0005006b    # tmc a0
+    ###########################
+    la a1, vx_set_sp
+    li a0, 4
+    .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
     jal vx_set_sp
     jal  main
     li a0, 0
@@ -33,8 +39,6 @@ vx_set_sp:
     li a0, 0
     .word 0x0005006b    # tmc 0
 RETURN:
-    li a0, 1      
-    .word 0x0005006b    # tmc 1
     ret
 
 

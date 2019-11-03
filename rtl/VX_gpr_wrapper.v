@@ -22,8 +22,27 @@ module VX_gpr_wrapper (
 	end
 
 
-	assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (temp_a_reg_data[VX_gpr_read.warp_num]));
-	assign out_b_reg_data =                                    (temp_b_reg_data[VX_gpr_read.warp_num]);
+	`ifndef ASIC
+		assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (temp_a_reg_data[VX_gpr_read.warp_num]));
+		assign out_b_reg_data =                                    (temp_b_reg_data[VX_gpr_read.warp_num]);
+	`else 
+
+		wire zer = 0;
+
+		wire[`NW_M1:0] old_warp_num;	
+		VX_generic_register #(`NW_M1+1) store_wn(
+			.clk  (clk),
+			.reset(reset),
+			.stall(zer),
+			.flush(zer),
+			.in   (VX_gpr_read.warp_num),
+			.out  (old_warp_num)
+			);
+
+		assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (temp_a_reg_data[old_warp_num]));
+		assign out_b_reg_data =                                    (temp_b_reg_data[old_warp_num]);
+
+	`endif
 
 	genvar warp_index;
 	generate
