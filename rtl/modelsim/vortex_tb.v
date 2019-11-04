@@ -61,8 +61,8 @@ module vortex_tb (
 
 	initial begin
 		// $fdumpfile("vortex1.vcd");
-		//load_file("../../runtime/vortex_runtime.hex");
-		load_file("../../kernel/vortex_test.hex");
+		load_file("../../runtime/vortex_runtime.hex");
+		//load_file("../../kernel/vortex_test.hex");
 		$dumpvars(0, vortex_tb);
 		reset = 1;
 		clk = 0;

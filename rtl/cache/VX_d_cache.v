@@ -200,7 +200,7 @@ module VX_d_cache
     wire[`CACHE_BANKS - 1 : 0][$clog2(`NUM_REQ)-1:0] send_index_to_bank = index_per_bank;
 
 
-    wire[`CACHE_WAY_INDEX-1:0] miss_bank_index;
+    wire[$clog2(`CACHE_BANKS)-1:0] miss_bank_index;
     wire                           miss_found;
     VX_generic_priority_encoder #(.N(`CACHE_BANKS)) get_miss_index
     (

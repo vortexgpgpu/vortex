@@ -3,13 +3,13 @@
 
 
 module Vortex
-    #(
+    /*#(
       parameter CACHE_SIZE     = 4096, // Bytes
-      parameter CACHE_WAYS     = 1,
+      parameter CACHE_WAYS     = 2,
       parameter CACHE_BLOCK    = 128, // Bytes
       parameter CACHE_BANKS    = 8,
       parameter NUM_WORDS_PER_BLOCK = 4
-    )
+    )*/
 	(
 	input  wire           clk,
 	input  wire           reset,
@@ -22,11 +22,11 @@ module Vortex
     output reg [31:0]  o_m_read_addr,
     output reg [31:0]  o_m_evict_addr,
     output reg         o_m_valid,
-    output reg [31:0]  o_m_writedata[CACHE_BANKS - 1:0][NUM_WORDS_PER_BLOCK-1:0],
+    output reg [31:0]  o_m_writedata[`CACHE_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
     output reg         o_m_read_or_write,
 
     // Rsp
-    input  wire [31:0] i_m_readdata[CACHE_BANKS - 1:0][NUM_WORDS_PER_BLOCK-1:0],
+    input  wire [31:0] i_m_readdata[`CACHE_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
     input  wire        i_m_ready,
 	output wire        out_ebreak
 	);
@@ -59,9 +59,9 @@ assign VX_dram_req_rsp.i_m_ready = i_m_ready;
 
 genvar curr_bank;
 genvar curr_word;
-for (curr_bank = 0; curr_bank < CACHE_BANKS; curr_bank = curr_bank + 1) begin
+for (curr_bank = 0; curr_bank < `CACHE_BANKS; curr_bank = curr_bank + 1) begin
 
-	for (curr_word = 0; curr_word < NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
+	for (curr_word = 0; curr_word < `NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
 		assign o_m_writedata[curr_bank][curr_word]                = VX_dram_req_rsp.o_m_writedata[curr_bank][curr_word];
 		assign VX_dram_req_rsp.i_m_readdata[curr_bank][curr_word] = i_m_readdata[curr_bank][curr_word];
 
