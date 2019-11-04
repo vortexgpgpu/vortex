@@ -27,6 +27,7 @@ unsigned vx_threadID(void);
 // Get hardware warp ID
 unsigned vx_warpID(void);
 
+void vx_resetStack(void);
 
 
 #define __if(b) vx_split(b); \

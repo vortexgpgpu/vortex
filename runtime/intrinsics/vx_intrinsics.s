@@ -49,3 +49,27 @@ vx_threadID:
 	csrr a0, 0x20 # read thread IDs
 	ret
 	
+
+.type vx_resetStack, @function
+.global vx_resetStack
+vx_resetStack:
+    li a0, 4
+    .word 0x0005006b    # tmc 4
+
+    csrr a3, 0x21        # get wid
+    slli a3, a3, 15      # shift by wid
+    csrr a2, 0x20        # get tid
+    slli a1, a2, 10      # multiply tid by 1024
+    slli a2, a2, 2       # multiply tid by 4
+    lui  sp, 0x6ffff     # load base sp
+    sub  sp, sp, a1      # sub sp - (1024*tid)
+    sub  sp, sp, a3      # shoft per warp
+    add  sp, sp, a2      # shift sp for better performance
+
+    csrr a3, 0x21        # get wid
+    beqz a3, RETURN
+    li a0, 0
+    .word 0x0005006b    # tmc 0
+RETURN:
+    ret
+
