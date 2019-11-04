@@ -116,21 +116,39 @@
 
 `define ZERO_REG 5'h0
 
+
+
 // `define PARAM
 
-// Offset
-`define CACHE_OFFSET_NB ($clog2(NUM_WORDS_PER_BLOCK))
+//Cache configurations
+`define CACHE_SIZE  4096 //Bytes
+`ifdef SYN
+`define CACHE_WAYS  1
+`else
+`define CACHE_WAYS  2
+`endif
+`define CACHE_BLOCK 128 //Bytes
+`define CACHE_BANKS 8
+`define NUM_WORDS_PER_BLOCK 4
+`define NUM_REQ    `NT
 
-`define CACHE_OFFSET_ST  (2+$clog2(NUMBER_BANKS))
+`define CACHE_WAY_INDEX $clog2(`CACHE_WAYS) //set this to 1 if CACHE_WAYS is 1
+//`define CACHE_WAY_INDEX 1
+`define CACHE_BLOCK_PER_BANK  (`CACHE_BLOCK / `CACHE_BANKS)
+
+// Offset
+`define CACHE_OFFSET_NB ($clog2(`NUM_WORDS_PER_BLOCK))
+
+`define CACHE_OFFSET_ST  (2+$clog2(`NUMBER_BANKS))
 `define CACHE_OFFSET_ED  (`CACHE_OFFSET_ST+(`CACHE_OFFSET_NB)-1)
 
 
 `define CACHE_ADDR_OFFSET_RNG `CACHE_OFFSET_ED:`CACHE_OFFSET_ST
-`define CACHE_OFFSET_SIZE_RNG ($clog2(NUM_WORDS_PER_BLOCK)-1):0
+`define CACHE_OFFSET_SIZE_RNG ($clog2(`NUM_WORDS_PER_BLOCK)-1):0
 
 
 // Index
-`define NUM_IND (CACHE_SIZE / (CACHE_WAYS * CACHE_BLOCK_PER_BANK))
+`define NUM_IND (`CACHE_SIZE / (`CACHE_WAYS * `CACHE_BLOCK_PER_BANK))
 `define CACHE_IND_NB ($clog2(`NUM_IND))
 
 `define CACHE_IND_ST  (`CACHE_OFFSET_ED+1)

@@ -7,12 +7,12 @@
 
 
 module VX_Cache_Bank
-            #(
+            /*#(
               parameter CACHE_SIZE = 4096, // Bytes
               parameter CACHE_WAYS = 1,
               parameter CACHE_BLOCK = 128, // Bytes
               parameter CACHE_BANKS = 8
-            )
+            )*/
           (
             clk,
             rst,
@@ -42,10 +42,10 @@ module VX_Cache_Bank
             way_use
            );
 
-    localparam NUMBER_BANKS         = CACHE_BANKS;
-    localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
-    localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
-    localparam NUMBER_INDEXES       = `NUM_IND;
+   // localparam NUMBER_BANKS         = `CACHE_BANKS;
+   // localparam CACHE_BLOCK_PER_BANK = (`CACHE_BLOCK / `CACHE_BANKS);
+   // localparam NUM_WORDS_PER_BLOCK  = `CACHE_BLOCK / (`CACHE_BANKS*4);
+   // localparam NUMBER_INDEXES       = `NUM_IND;
 
     localparam CACHE_IDLE    = 0; // Idle
     localparam SEND_MEM_REQ  = 1; // Write back this block into memory
@@ -69,14 +69,14 @@ module VX_Cache_Bank
     input wire       valid_in;
     input wire read_or_write; // Specifies if it is a read or write operation
 
-    input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
+    input wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
     input wire[2:0] i_p_mem_read;
     input wire[2:0] i_p_mem_write;
     input wire[1:0] byte_select;
 
 
-    input  wire[$clog2(CACHE_WAYS)-1:0] evicted_way;
-    output wire[$clog2(CACHE_WAYS)-1:0] way_use;
+    input  wire[`CACHE_WAY_INDEX-1:0] evicted_way;
+    output wire[`CACHE_WAY_INDEX-1:0] way_use;
 
     // Outputs
       // Normal shit
@@ -89,11 +89,11 @@ module VX_Cache_Bank
     output wire[31:0] eviction_addr; // What's the eviction tag
 
       // Eviction Data (Extraction)
-    output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
+    output wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
 
 
 
-    wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
+    wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
     wire[`CACHE_TAG_SIZE_RNG] tag_use;
     wire[`CACHE_TAG_SIZE_RNG] eviction_tag;
     wire       valid_use;
@@ -104,8 +104,8 @@ module VX_Cache_Bank
 
 
 
-    wire[$clog2(CACHE_WAYS)-1:0] update_way;
-    wire[$clog2(CACHE_WAYS)-1:0] way_to_update;
+    wire[`CACHE_WAY_INDEX-1:0] update_way;
+    wire[`CACHE_WAY_INDEX-1:0] way_to_update;
 
     assign miss = (tag_use != o_tag) && valid_use && valid_in;
 
@@ -180,10 +180,10 @@ module VX_Cache_Bank
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
 
 
-    wire[NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
-    wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
+    wire[`NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
+    wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
-    for (g = 0; g < NUM_WORDS_PER_BLOCK; g = g + 1) begin
+    for (g = 0; g < `NUM_WORDS_PER_BLOCK; g = g + 1) begin
         wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
 
         assign we[g]      = (write_from_mem)     ? 4'b1111  : 
@@ -199,12 +199,13 @@ module VX_Cache_Bank
     end
 
 
-    VX_cache_data_per_index #(
+    /*VX_cache_data_per_index #(
           .CACHE_SIZE(CACHE_SIZE),
           .CACHE_WAYS(CACHE_WAYS),
           .CACHE_BLOCK(CACHE_BLOCK),
           .CACHE_BANKS(CACHE_BANKS),
-          .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(
+          .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(*/
+    VX_cache_data_per_index data_structures(
         .clk          (clk),
         .rst          (rst),
         .valid_in     (valid_in),
