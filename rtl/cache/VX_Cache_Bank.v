@@ -58,25 +58,25 @@ module VX_Cache_Bank
 //input wire write_from_mem;
 
       // Reading Data
-    input wire[`CACHE_IND_SIZE_RNG] actual_index;
+    input wire[`DCACHE_IND_SIZE_RNG] actual_index;
 
 
-    input wire[`CACHE_TAG_SIZE_RNG] o_tag; // When write_from_mem = 1, o_tag is the new tag
-    input wire[`CACHE_OFFSET_SIZE_RNG]  block_offset;
+    input wire[`DCACHE_TAG_SIZE_RNG] o_tag; // When write_from_mem = 1, o_tag is the new tag
+    input wire[`DCACHE_OFFSET_SIZE_RNG]  block_offset;
 
 
     input wire[31:0] writedata;
     input wire       valid_in;
     input wire read_or_write; // Specifies if it is a read or write operation
 
-    input wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
+    input wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
     input wire[2:0] i_p_mem_read;
     input wire[2:0] i_p_mem_write;
     input wire[1:0] byte_select;
 
 
-    input  wire[`CACHE_WAY_INDEX-1:0] evicted_way;
-    output wire[`CACHE_WAY_INDEX-1:0] way_use;
+    input  wire[`DCACHE_WAY_INDEX-1:0] evicted_way;
+    output wire[`DCACHE_WAY_INDEX-1:0] way_use;
 
     // Outputs
       // Normal shit
@@ -89,13 +89,13 @@ module VX_Cache_Bank
     output wire[31:0] eviction_addr; // What's the eviction tag
 
       // Eviction Data (Extraction)
-    output wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
+    output wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
 
 
 
-    wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
-    wire[`CACHE_TAG_SIZE_RNG] tag_use;
-    wire[`CACHE_TAG_SIZE_RNG] eviction_tag;
+    wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
+    wire[`DCACHE_TAG_SIZE_RNG] tag_use;
+    wire[`DCACHE_TAG_SIZE_RNG] eviction_tag;
     wire       valid_use;
     wire       dirty_use;
     wire       access;
@@ -104,8 +104,8 @@ module VX_Cache_Bank
 
 
 
-    wire[`CACHE_WAY_INDEX-1:0] update_way;
-    wire[`CACHE_WAY_INDEX-1:0] way_to_update;
+    wire[`DCACHE_WAY_INDEX-1:0] update_way;
+    wire[`DCACHE_WAY_INDEX-1:0] way_to_update;
 
     assign miss = (tag_use != o_tag) && valid_use && valid_in;
 
@@ -180,10 +180,10 @@ module VX_Cache_Bank
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
 
 
-    wire[`NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
-    wire[`NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
+    wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
+    wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
-    for (g = 0; g < `NUM_WORDS_PER_BLOCK; g = g + 1) begin
+    for (g = 0; g < `DCACHE_NUM_WORDS_PER_BLOCK; g = g + 1) begin
         wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
 
         assign we[g]      = (write_from_mem)     ? 4'b1111  : 

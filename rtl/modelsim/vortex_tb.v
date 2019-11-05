@@ -1,8 +1,8 @@
 
 `include "../VX_define.v"
 
-`define NUMBER_BANKS 8
-`define NUM_WORDS_PER_BLOCK 4
+//`define NUMBER_BANKS 8
+//`define NUM_WORDS_PER_BLOCK 4
 
 `define ARM_UD_MODEL
 
@@ -17,11 +17,11 @@ import "DPI-C" dbus_driver = function void dbus_driver( input logic clk,
 														input int o_m_read_addr,
 													    input int o_m_evict_addr,
 													    input logic o_m_valid,
-													    input reg[31:0] o_m_writedata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
+													    input reg[31:0] o_m_writedata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
 													    input logic o_m_read_or_write,
 
 													    // Rsp
-													    output reg[31:0] i_m_readdata[`NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0],
+													    output reg[31:0] i_m_readdata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
 													    output logic        i_m_ready);
 
 
@@ -46,11 +46,11 @@ module vortex_tb (
     reg [31:0]  o_m_read_addr;
     reg [31:0]  o_m_evict_addr;
     reg         o_m_valid;
-    reg [31:0]  o_m_writedata[8 - 1:0][4-1:0];
+    reg [31:0]  o_m_writedata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0];
     reg         o_m_read_or_write;
 
     // Rsp
-    reg [31:0]  i_m_readdata[8 - 1:0][4-1:0];
+    reg [31:0]  i_m_readdata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK -1:0];
     reg         i_m_ready;
 	reg         out_ebreak;
 
