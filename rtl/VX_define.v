@@ -12,12 +12,6 @@
 // `define SYN 1
 `define ASIC 1
 
-`define DCACHE_NUM_BANKS 8
-
-`define DCACHE_NUMBER_BANKS 8
-`define DCACHE_NUM_WORDS_PER_BLOCK 4
-
-
 `define NUM_BARRIERS 4
 
 `define R_INST 7'd51
@@ -139,7 +133,7 @@
 // Offset
 `define DCACHE_OFFSET_NB ($clog2(`DCACHE_NUM_WORDS_PER_BLOCK))
 
-`define DCACHE_OFFSET_ST  (2+$clog2(`DCACHE_NUMBER_BANKS))
+`define DCACHE_OFFSET_ST  (2+$clog2(`DCACHE_BANKS))
 `define DCACHE_OFFSET_ED  (`DCACHE_OFFSET_ST+(`DCACHE_OFFSET_NB)-1)
 
 
