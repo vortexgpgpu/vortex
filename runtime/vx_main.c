@@ -90,9 +90,9 @@ int main()
 	vx_tmc(1);
 
 
-	// Test wspawn
-	vx_print_str("test_wspawn\n");
-	test_wsapwn();
+	// // Test wspawn
+	// vx_print_str("test_wspawn\n");
+	// test_wsapwn();
 
 	return 0;
 }

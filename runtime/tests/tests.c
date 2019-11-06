@@ -106,14 +106,14 @@ void test_wsapwn()
 
 void intrinsics_tests()
 {
-	// TMC test
-	test_tmc();
+	// // TMC test
+	// test_tmc();
 
-	// Control Divergence Test
-	vx_print_str("test_divergence\n");
-	vx_tmc(4);
-	test_divergence();
-	vx_tmc(1);
+	// // Control Divergence Test
+	// vx_print_str("test_divergence\n");
+	// vx_tmc(4);
+	// test_divergence();
+	// vx_tmc(1);
 
 
 	// Test wspawn
