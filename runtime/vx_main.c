@@ -77,22 +77,22 @@ int main()
 
 		      * when test_wspawn is called with other tests from main it works fine...
 	*/
-	// intrinsics_tests(); 
+	intrinsics_tests(); 
 
 	///////////////////////////////////////////////////////////////////////
 
-	test_tmc();
+	// test_tmc();
 
-	// Control Divergence Test
-	vx_print_str("test_divergence\n");
-	vx_tmc(4);
-	test_divergence();
-	vx_tmc(1);
+	// // Control Divergence Test
+	// vx_print_str("test_divergence\n");
+	// vx_tmc(4);
+	// test_divergence();
+	// vx_tmc(1);
 
 
-	// Test wspawn
-	vx_print_str("test_wspawn\n");
-	test_wsapwn();
+	// // Test wspawn
+	// vx_print_str("test_wspawn\n");
+	// test_wsapwn();
 
 	return 0;
 }
