@@ -102,6 +102,7 @@ module VX_execute_unit (
 		assign VX_inst_exec_wb.wb_warp_num = VX_exec_unit_req.warp_num;
 		assign VX_inst_exec_wb.alu_result  = VX_exec_unit_req.jal ? duplicate_PC_data : alu_result;
 
+		assign VX_inst_exec_wb.exec_wb_pc  = in_curr_PC;
 		// Jal rsp
 		assign VX_jal_rsp.jal           = in_jal;
 		assign VX_jal_rsp.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);

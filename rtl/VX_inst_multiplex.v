@@ -40,6 +40,7 @@ module VX_inst_multiplex (
 	assign VX_lsu_req.mem_write    = VX_bckE_req.mem_write;
 	assign VX_lsu_req.rd           = VX_bckE_req.rd;
 	assign VX_lsu_req.wb           = VX_bckE_req.wb;
+	assign VX_lsu_req.lsu_pc       = VX_bckE_req.curr_PC;
 
 
 	// Execute Unit

@@ -9,7 +9,7 @@ module VX_cache_bank_valid
 (
 	input  wire [NUM_REQ-1:0]                       i_p_valid,
 	input  wire [NUM_REQ-1:0][31:0]                 i_p_addr,
-	output reg [NUMBER_BANKS - 1 : 0][`NT_M1:0]  thread_track_banks
+	output reg [NUMBER_BANKS - 1 : 0][NUM_REQ-1:0]  thread_track_banks
 );
 
 	generate

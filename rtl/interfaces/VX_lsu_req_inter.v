@@ -8,6 +8,7 @@
 interface VX_lsu_req_inter ();
 
 	wire[`NT_M1:0]       valid;
+	wire[31:0]           lsu_pc;
 	wire[`NW_M1:0]       warp_num;
 	wire[`NT_M1:0][31:0] store_data;
 	wire[`NT_M1:0][31:0] base_address; // A reg data

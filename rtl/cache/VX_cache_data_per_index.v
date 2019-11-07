@@ -93,7 +93,7 @@ module VX_cache_data_per_index
 
 
     genvar ways;
-	  for(ways=0; ways < CACHE_WAYS; ways = ways + 1) begin
+	  for(ways=0; ways < CACHE_WAYS; ways = ways + 1) begin : each_way
 
 	    assign hit_per_way[ways]            = ((valid_use_per_way[ways] == 1'b1) &&  (tag_use_per_way[ways] == tag_write)) ? 1'b1 : 0;
 	    assign we_per_way[ways]             = (evict == 1'b1) || (update == 1'b1) ? ((ways == way_to_update) ? (we) : 0) : 0;

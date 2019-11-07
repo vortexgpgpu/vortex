@@ -73,7 +73,8 @@ module VX_dmem_controller (
           .ADDR_OFFSET_START   (`DCACHE_ADDR_OFFSET_ST),
           .ADDR_OFFSET_END     (`DCACHE_ADDR_OFFSET_ED),
           .ADDR_IND_START      (`DCACHE_IND_ST),
-          .ADDR_IND_END        (`DCACHE_IND_ED)
+          .ADDR_IND_END        (`DCACHE_IND_ED),
+          .MEM_ADDR_REQ_MASK   (`DCACHE_MEM_REQ_ADDR_MASK)
     )
 	 dcache
 	(

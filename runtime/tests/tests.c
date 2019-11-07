@@ -4,28 +4,32 @@
 #include "../intrinsics/vx_intrinsics.h"
 #include "../io/vx_io.h"
 
+int tmc_array[4] = {5,5,5,5};
+
 void test_tmc()
 {
-	vx_print_str("test_tmc\n");
+	vx_print_str("testing_tmc\n");
 
 	vx_tmc(4);
 
 	unsigned tid = vx_threadID(); // Get TID
-	arr[tid] = tid;
+	tmc_array[tid] = tid;
 
 	vx_tmc(1);
 
-	vx_print_hex(arr[0]);
+	vx_print_hex(tmc_array[0]);
 	vx_print_str("\n");
-	vx_print_hex(arr[1]);
+	vx_print_hex(tmc_array[1]);
 	vx_print_str("\n");
-	vx_print_hex(arr[2]);
+	vx_print_hex(tmc_array[2]);
 	vx_print_str("\n");
-	vx_print_hex(arr[3]);
+	vx_print_hex(tmc_array[3]);
 	vx_print_str("\n");
 
 	return;
 }
+
+int div_arr[4];
 
 void test_divergence()
 {
@@ -37,11 +41,11 @@ void test_divergence()
 		bool c = tid < 1;
 		__if (c)
 		{
-			arr[tid] = 10;
+			div_arr[tid] = 10;
 		}
 		__else
 		{
-			arr[tid] = 11;
+			div_arr[tid] = 11;
 		}
 		__endif
 	}
@@ -50,23 +54,23 @@ void test_divergence()
 		bool c = tid < 3;
 		__if (c)
 		{
-			arr[tid] = 12;
+			div_arr[tid] = 12;
 		}
 		__else
 		{
-			arr[tid] = 13;
+			div_arr[tid] = 13;
 		}
 		__endif
 	}
 	__endif
 
-	vx_print_hex(arr[0]);
+	vx_print_hex(div_arr[0]);
 	vx_print_str("\n");
-	vx_print_hex(arr[1]);
+	vx_print_hex(div_arr[1]);
 	vx_print_str("\n");
-	vx_print_hex(arr[2]);
+	vx_print_hex(div_arr[2]);
 	vx_print_str("\n");
-	vx_print_hex(arr[3]);
+	vx_print_hex(div_arr[3]);
 	vx_print_str("\n");
 
 }

@@ -8,6 +8,7 @@
 interface VX_inst_exec_wb_inter ();
 
 	wire[`NT_M1:0][31:0]  alu_result; 
+	wire[31:0]            exec_wb_pc;
 	wire[4:0]      		  rd;
 	wire[1:0]      		  wb;
 	wire[`NT_M1:0]        wb_valid;

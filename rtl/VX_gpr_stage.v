@@ -133,13 +133,13 @@ module VX_gpr_stage (
 		assign VX_lsu_req.base_address = (delayed_lsu_last_cycle) ? temp_base_address : real_base_address;
 
 
-		VX_generic_register #(.N(52)) lsu_reg(
+		VX_generic_register #(.N(84)) lsu_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_lsu),
 			.flush(flush_lsu),
-			.in   ({VX_lsu_req_temp.valid, VX_lsu_req_temp.warp_num, VX_lsu_req_temp.offset, VX_lsu_req_temp.mem_read, VX_lsu_req_temp.mem_write, VX_lsu_req_temp.rd, VX_lsu_req_temp.wb}),
-			.out  ({VX_lsu_req.valid     , VX_lsu_req.warp_num     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
+			.in   ({VX_lsu_req_temp.valid, VX_lsu_req_temp.lsu_pc, VX_lsu_req_temp.warp_num, VX_lsu_req_temp.offset, VX_lsu_req_temp.mem_read, VX_lsu_req_temp.mem_write, VX_lsu_req_temp.rd, VX_lsu_req_temp.wb}),
+			.out  ({VX_lsu_req.valid     , VX_lsu_req.lsu_pc     ,VX_lsu_req.warp_num     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
 			);
 
 		VX_generic_register #(.N(231)) exec_unit_reg(
@@ -180,13 +180,13 @@ module VX_gpr_stage (
 		
 	`else 
 
-	VX_generic_register #(.N(308)) lsu_reg(
+	VX_generic_register #(.N(340)) lsu_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_lsu),
 		.flush(flush_lsu),
-		.in   ({VX_lsu_req_temp.valid, VX_lsu_req_temp.warp_num, VX_lsu_req_temp.store_data, VX_lsu_req_temp.base_address, VX_lsu_req_temp.offset, VX_lsu_req_temp.mem_read, VX_lsu_req_temp.mem_write, VX_lsu_req_temp.rd, VX_lsu_req_temp.wb}),
-		.out  ({VX_lsu_req.valid     , VX_lsu_req.warp_num     , VX_lsu_req.store_data     , VX_lsu_req.base_address     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
+		.in   ({VX_lsu_req_temp.valid, VX_lsu_req_temp.lsu_pc, VX_lsu_req_temp.warp_num, VX_lsu_req_temp.store_data, VX_lsu_req_temp.base_address, VX_lsu_req_temp.offset, VX_lsu_req_temp.mem_read, VX_lsu_req_temp.mem_write, VX_lsu_req_temp.rd, VX_lsu_req_temp.wb}),
+		.out  ({VX_lsu_req.valid     , VX_lsu_req.lsu_pc     , VX_lsu_req.warp_num     , VX_lsu_req.store_data     , VX_lsu_req.base_address     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
 		);
 
 	VX_generic_register #(.N(487)) exec_unit_reg(

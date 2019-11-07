@@ -49,6 +49,7 @@ module VX_lsu (
 		assign VX_mem_wb.wb_valid    = VX_lsu_req.valid;
 		assign VX_mem_wb.wb_warp_num = VX_lsu_req.warp_num;
 
+		assign VX_mem_wb.mem_wb_pc   = VX_lsu_req.lsu_pc;
 
 		integer curr_t;
 		always @(negedge clk) begin

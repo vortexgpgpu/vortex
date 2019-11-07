@@ -487,6 +487,7 @@ void Instruction::executeOn(Warp &c) {
         // //std::cout << "FUNC3: " << func3 << "\n";
         if ((memAddr == 0x00010000) && (t == 0))
         {
+          unsigned num = reg[rsrc[1]];
           fprintf(stderr, "%c", (char) reg[rsrc[1]]);
           break;
         }

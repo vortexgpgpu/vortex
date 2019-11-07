@@ -51,4 +51,10 @@ module VX_writeback (
 		                                        0;    		
 
 
+
+		assign VX_writeback_inter.wb_pc       = exec_wb ? VX_inst_exec_wb.exec_wb_pc  :
+												csr_wb  ? 32'hdeadbeef                :
+												mem_wb  ? VX_mem_wb.mem_wb_pc         :
+												32'hdeadbeef;
+
 endmodule // VX_writeback

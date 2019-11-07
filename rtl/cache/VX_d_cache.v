@@ -36,7 +36,8 @@ module VX_d_cache
       parameter ADDR_OFFSET_START   = 5,
       parameter ADDR_OFFSET_END     = 6,
       parameter ADDR_IND_START      = 7,
-      parameter ADDR_IND_END        = 14
+      parameter ADDR_IND_END        = 14,
+      parameter MEM_ADDR_REQ_MASK   = 32'hffffffc0
     )
     (
                clk,
@@ -353,8 +354,8 @@ module VX_d_cache
     // Mem Rsp
 
     // Req to mem:
-    assign o_m_evict_addr     = evict_addr & 32'hffffffc0;
-    assign o_m_read_addr      = miss_addr  & 32'hffffffc0;
+    assign o_m_evict_addr     = evict_addr & MEM_ADDR_REQ_MASK;
+    assign o_m_read_addr      = miss_addr  & MEM_ADDR_REQ_MASK;
     assign o_m_valid          = (state == SEND_MEM_REQ);
     assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb_old);
     //end

@@ -19,7 +19,8 @@ import "DPI-C" dbus_driver = function void dbus_driver( input logic clk,
 													    input logic o_m_valid,
 													    input reg[31:0] o_m_writedata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
 													    input logic o_m_read_or_write,
-
+													    input int cache_banks,
+													    input int words_per_block,
 													    // Rsp
 													    output reg[31:0] i_m_readdata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
 													    output logic        i_m_ready);
@@ -90,7 +91,7 @@ module vortex_tb (
 
 	always @(negedge clk) begin
 		ibus_driver(clk, icache_request_pc_address, icache_response_instruction);
-		dbus_driver(clk, o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, i_m_readdata, i_m_ready);
+		dbus_driver(clk, o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, `DCACHE_BANKS, `DCACHE_NUM_WORDS_PER_BLOCK, i_m_readdata, i_m_ready);
 		io_handler (clk, io_valid, io_data);
 		
 	end

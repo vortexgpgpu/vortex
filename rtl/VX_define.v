@@ -115,20 +115,24 @@
 // `define PARAM
 
 //Cache configurations
-`define DCACHE_SIZE  4096 //Bytes
+//Bytes
+`define DCACHE_SIZE  4096
 `ifdef SYN
 `define DCACHE_WAYS  1
 `else
 `define DCACHE_WAYS  2
 `endif
-`define DCACHE_BLOCK 128 //Bytes
+
+//Bytes
+`define DCACHE_BLOCK 128 
 `define DCACHE_BANKS 8
 `define DCACHE_LOG_NUM_BANKS $clog2(`DCACHE_BANKS)
 `define DCACHE_NUM_WORDS_PER_BLOCK 4
 `define DCACHE_NUM_REQ    `NT
 `define DCACHE_LOG_NUM_REQ $clog2(`DCACHE_NUM_REQ)
 
-`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS) //set this to 1 if CACHE_WAYS is 1
+//set this to 1 if CACHE_WAYS is 1
+`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS)
 //`define DCACHE_WAY_INDEX 1
 `define DCACHE_BLOCK_PER_BANK  (`DCACHE_BLOCK / `DCACHE_BANKS)
 
@@ -167,6 +171,7 @@
 `define DCACHE_ADDR_TAG_END    31
 
 
-
+// Mask
+`define DCACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`DCACHE_BLOCK-1))
 
 
