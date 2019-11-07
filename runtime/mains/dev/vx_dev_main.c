@@ -1,8 +1,8 @@
 
-#include "intrinsics/vx_intrinsics.h"
-#include "io/vx_io.h"
-#include "tests/tests.h"
-#include "vx_api/vx_api.h"
+#include "../../intrinsics/vx_intrinsics.h"
+#include "../../io/vx_io.h"
+#include "../../tests/tests.h"
+#include "../../vx_api/vx_api.h"
 
 typedef struct
 {
@@ -52,37 +52,33 @@ int main()
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
-	///////////////////////////////////////////////////////////////////////
 
-	// mat_add_args_t arguments;
-	// arguments.x         = x;
-	// arguments.y         = y;
-	// arguments.z         = z;
-	// arguments.numColums = 4;
-	// arguments.numRows   = 4;
+	vx_print_str("Dev Main");
+
+	mat_add_args_t arguments;
+	arguments.x         = x;
+	arguments.y         = y;
+	arguments.z         = z;
+	arguments.numColums = 4;
+	arguments.numRows   = 4;
 
 
-	// int numWarps   = 4;
-	// int numThreads = 4;
+	int numWarps   = 4;
+	int numThreads = 4;
 
-	// vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
 
-	// for (int i = 0; i < arguments.numRows; i++)
-	// {
-	// 	for (int j = 0; j < arguments.numColums; j++)
-	// 	{
-	// 		unsigned index = (i * arguments.numColums) + j;
-	// 		vx_print_hex(z[index]);
-	// 		vx_print_str(" ");
-	// 	}
-	// 	vx_print_str("\n");
-	// }
+	for (int i = 0; i < arguments.numRows; i++)
+	{
+		for (int j = 0; j < arguments.numColums; j++)
+		{
+			unsigned index = (i * arguments.numColums) + j;
+			vx_print_hex(z[index]);
+			vx_print_str(" ");
+		}
+		vx_print_str("\n");
+	}
 
-	///////////////////////////////////////////////////////////////////////
-
-	intrinsics_tests(); 
-
-	///////////////////////////////////////////////////////////////////////
 
 	return 0;
 }
