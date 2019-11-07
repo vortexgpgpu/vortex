@@ -14,15 +14,15 @@ typedef struct
 } mat_add_args_t;
 
 
-unsigned x[] = {1, 1, 1, 1,
+unsigned x[] = {5, 5, 5, 5,
+                6, 6, 6, 6,
+                7, 7, 7, 7,
+                8, 8, 8, 8};
+
+unsigned y[] = {1, 1, 1, 1,
                 1, 1, 1, 1,
                 1, 1, 1, 1,
                 1, 1, 1, 1};
-
-unsigned y[] = {6, 6, 6, 6,
-                6, 6, 6, 6,
-                6, 6, 6, 6,
-                6, 6, 6, 6};
 
 unsigned z[] = {0, 0, 0, 0,
                 0, 0, 0, 0,
@@ -51,48 +51,38 @@ int main()
 {
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
-	///////////////////////////////////////////////////////////////////////
-
-	// mat_add_args_t arguments;
-	// arguments.x         = x;
-	// arguments.y         = y;
-	// arguments.z         = z;
-	// arguments.numColums = 4;
-	// arguments.numRows   = 4;
-
-
-	// int numWarps   = 4;
-	// int numThreads = 4;
-
-	// vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
 
 	///////////////////////////////////////////////////////////////////////
 
-	/*
-		NOTE: * when test_wspawn is called from instrinsic_tests, RA 80000458 is stored at address 6fffefbc,
-		      but when read back again it reads zeros even though no other write request is made to that
-		      address (when only test_wsapwn is called by itself).
+	mat_add_args_t arguments;
+	arguments.x         = x;
+	arguments.y         = y;
+	arguments.z         = z;
+	arguments.numColums = 4;
+	arguments.numRows   = 4;
 
-		      * When test_wsapwn is called by itself from main new lines are not printed....
 
-		      * when test_wspawn is called with other tests from main it works fine...
-	*/
+	int numWarps   = 4;
+	int numThreads = 4;
+
+	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+
+	for (int i = 0; i < arguments.numRows; i++)
+	{
+		for (int j = 0; j < arguments.numColums; j++)
+		{
+			unsigned index = (i * arguments.numColums) + j;
+			vx_print_hex(z[index]);
+			vx_print_str(" ");
+		}
+		vx_print_str("\n");
+	}
+
+	///////////////////////////////////////////////////////////////////////
+
 	// intrinsics_tests(); 
 
 	///////////////////////////////////////////////////////////////////////
-
-	test_tmc();
-
-	// Control Divergence Test
-	vx_print_str("test_divergence\n");
-	vx_tmc(4);
-	test_divergence();
-	vx_tmc(1);
-
-
-	// // Test wspawn
-	// vx_print_str("test_wspawn\n");
-	// test_wsapwn();
 
 	return 0;
 }

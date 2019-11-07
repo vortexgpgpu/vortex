@@ -3,6 +3,7 @@
 *******************************************************************************/
 
 #include <iostream>
+#include  <iomanip>
 
 // #define USE_DEBUG 7
 // #define PRINT_ACTIVE_THREADS
@@ -36,7 +37,7 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   a(a), iDec(d), mem(mem), steps(0)
 {
   for (unsigned i = 0; i < a.getNWarps(); ++i)
-    w.push_back(Warp(this));
+    w.push_back(Warp(this, i));
 
   w[0].activeThreads = 1;
   w[0].spawned = true;
@@ -52,6 +53,7 @@ void Core::step() {
   #ifdef PRINT_ACTIVE_THREADS
   cout << endl << "Threads:";
   #endif
+
 
   for (unsigned i = 0; i < w.size(); ++i) {
     if (w[i].activeThreads) {
@@ -93,11 +95,12 @@ void Core::printStats() const {
 }
 
 Warp::Warp(Core *c, Word id) : 
-  core(c), pc(0), interruptEnable(true),
+  core(c), pc(0x80000000), interruptEnable(true),
   supervisorMode(true), activeThreads(0), reg(0), pred(0),
   shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id),
   spawned(false), steps(0), insts(0), loads(0), stores(0)
 {
+  D(3, "Creating a new thread with PC: " << hex << this->pc << '\n');
   /* Build the register file. */
   Word regNum(0);
   for (Word j = 0; j < core->a.getNThds(); ++j) {
@@ -111,8 +114,10 @@ Warp::Warp(Core *c, Word id) :
       pred[j].push_back(Reg<bool>(id, regNum++));
     }
 
-    tmask.push_back(true);
-    shadowTmask.push_back(true);
+    bool act = false;
+    if (j == 0) act = true;
+    tmask.push_back(act);
+    shadowTmask.push_back(act);
   }
 
   Word csrNum(0);
@@ -197,9 +202,9 @@ void Warp::step() {
   if (USE_DEBUG >= 3) {
     D(3, "Register state:");
     for (unsigned i = 0; i < reg[0].size(); ++i) {
-      D_RAW("  %r" << dec << i << ':');
+      D_RAW("  %r" << setfill(' ') << setw(2) << dec << i << ':');
       for (unsigned j = 0; j < reg.size(); ++j) 
-        D_RAW(' ' << hex << reg[j][i] << ' ');
+        D_RAW(' ' << setfill('0') << setw(8) << hex << reg[j][i] << setfill(' ') << ' ');
       D_RAW('(' << shadowReg[i] << ')' << endl);
     }
     // D(3, "Predicate state:");

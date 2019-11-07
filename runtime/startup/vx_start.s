@@ -19,7 +19,7 @@ vx_set_sp:
     .word 0x0005006b    # tmc 4
 
     csrr a3, 0x21        # get wid
-    slli a3, a3, 15      # shift by wid
+    slli a3, a3, 0x1a    # shift by wid
     csrr a2, 0x20        # get tid
     slli a1, a2, 10      # multiply tid by 1024
     slli a2, a2, 2       # multiply tid by 4

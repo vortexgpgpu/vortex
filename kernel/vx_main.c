@@ -69,7 +69,7 @@ int main()
 	// unsigned scal = 3;
 
 	// // matrix element add
-	// vx_e_mat_add(z, &scal, z, NUM_ROWS, NUM_COLS);
+	vx_e_mat_add(z, &scal, z, NUM_ROWS, NUM_COLS);
 	// vx_print_str("\n\nMatrix Element Addition\n");
 	// print_matrix(z);
 

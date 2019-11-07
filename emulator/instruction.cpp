@@ -138,18 +138,38 @@ void Instruction::executeOn(Warp &c) {
     bool join  = (op == GPGPU) && (func3 == 3);
 
 
-    predicated = (op == GPGPU) && ((func3 == 7) || (func3 == 2));
+    // predicated = (op == GPGPU) && ((func3 == 7) || (func3 == 2));
 
+
+    // bool is_branch = (op == B_INST);
+    // bool is_jump   = (op == JAL_INST) || (op == JALR_INST); 
+
+    bool is_gpgpu   = (op == GPGPU);
+
+    bool is_tmc     = is_gpgpu && (func3 == 0); 
+    bool is_wspawn  = is_gpgpu && (func3 == 1); 
+    bool is_barrier = is_gpgpu && (func3 == 4); 
+    bool is_split   = is_gpgpu && (func3 == 2); 
+    bool is_join    = is_gpgpu && (func3 == 3);
+
+    bool gpgpu_zero = (is_tmc || is_barrier || is_wspawn) && (t != 0);
+
+    bool not_active = !c.tmask[t];
+
+    if (not_active || gpgpu_zero)
+    {
+      continue;
+    }
 
     // printf("Predicated: %d, split: %d, join: %d\n",predicated, split, join );
     // printf("%d && ((%d) || (%d))\n",(op == GPGPU), (func3 == 7), (func3 == 2) );
 
     // cout << "before " << op << " = " << GPGPU << "\n";
-    if (((predicated && !reg[pred]) || !c.tmask[t]) && !split && !join)
-    {
-      // cout << "about to continue\n";
-      continue;
-    }
+    // if (((predicated && !reg[pred]) || !c.tmask[t]) && !split && !join)
+    // {
+    //   // cout << "about to continue\n";
+    //   continue;
+    // }
     // cout << "after\n";
 
     ++c.insts;
@@ -163,6 +183,7 @@ void Instruction::executeOn(Warp &c) {
     bool m_exten;
     // std::cout << "op = " << op << "\n";
     // std::cout << "R_INST: " << R_INST << "\n";
+    int num_to_wspawn;
     switch (op) {
 
       case NOP:
@@ -462,11 +483,11 @@ void Instruction::executeOn(Warp &c) {
         //std::cout << "S_INST\n";
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
-        // //std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
+        std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
         // //std::cout << "FUNC3: " << func3 << "\n";
-        if (memAddr == 0x00010000)
+        if ((memAddr == 0x00010000) && (t == 0))
         {
-          std::cout << (char) reg[rsrc[1]];
+          fprintf(stderr, "%c", (char) reg[rsrc[1]]);
           break;
         }
         switch (func3)
@@ -558,7 +579,7 @@ void Instruction::executeOn(Warp &c) {
       case JAL_INST:
         //std::cout << "JAL_INST\n";
         if (!pcSet) nextPc = (c.pc - 4) + immsrc;
-        if (!pcSet) //std::cout << "JAL... SETTING PC: " << nextPc << "\n"; 
+        if (!pcSet) {/*std::cout << "JAL... SETTING PC: " << nextPc << "\n"; */}
         if (rdest != 0)
         {
           reg[rdest] = c.pc;
@@ -566,9 +587,9 @@ void Instruction::executeOn(Warp &c) {
         pcSet = true;
         break;
       case JALR_INST:
-        //std::cout << "JALR_INST\n";
+        std::cout << "JALR_INST\n";
         if (!pcSet) nextPc = reg[rsrc[0]] + immsrc;
-        if (!pcSet) //std::cout << "JALR... SETTING PC: " << nextPc << "\n"; 
+        if (!pcSet) {/*std::cout << "JALR... SETTING PC: " << nextPc << "\n";*/ }
         if (rdest != 0)
         {
           reg[rdest] = c.pc;
@@ -578,76 +599,85 @@ void Instruction::executeOn(Warp &c) {
       case SYS_INST:
         //std::cout << "SYS_INST\n";
         temp = reg[rsrc[0]];
-        switch (func3)
+        if (immsrc == 0x20) // ThreadID
         {
-          case 1:
-            // printf("Case 1\n");
-            if (rdest != 0)
-            {
-              reg[rdest] = c.csr[immsrc & 0x00000FFF];
-            }
-            c.csr[immsrc & 0x00000FFF] = temp;
-            
-            break;
-          case 2:
-            // printf("Case 2\n");
-            if (rdest != 0)
-            {
-              // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
-              reg[rdest] = c.csr[immsrc & 0x00000FFF];
-            }
-            // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
-            c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
-            
-            break;
-          case 3:
-            // printf("Case 3\n");
-            if (rdest != 0)
-            {              
-              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
-            }
-              c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
-            
-            break;
-          case 5:
-            // printf("Case 5\n");
-            if (rdest != 0)
-            {
-              reg[rdest] = c.csr[immsrc & 0x00000FFF];
-            }
-              c.csr[immsrc & 0x00000FFF] = rsrc[0];
-            
-            break;
-          case 6:
-            // printf("Case 6\n");
-            if (rdest != 0)
-            {              
-              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
-            }
-              c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
-            
-            break;
-          case 7:
-            // printf("Case 7\n");
-            if (rdest != 0)
-            {              
-              reg[rdest] = c.csr[immsrc & 0x00000FFF];
-            }
-              c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
-            
-            break;
-          case 0:
-          if (immsrc < 2)
-          {
-            //std::cout << "INTERRUPT ECALL/EBREAK\n";
-            nextActiveThreads = 0;
-            c.spawned = false;
-            // c.interrupt(0);
-          }
-            break;
-          default:
-            break;
+          reg[rdest] = t;
+          D(2, "CSR Reading tid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+        } else if (immsrc == 0x21) // WarpID
+        {
+          reg[rdest] = c.id;
+          D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
         }
+        // switch (func3)
+        // {
+        //   case 1:
+        //     // printf("Case 1\n");
+        //     if (rdest != 0)
+        //     {
+        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
+        //     }
+        //     c.csr[immsrc & 0x00000FFF] = temp;
+            
+        //     break;
+        //   case 2:
+        //     // printf("Case 2\n");
+        //     if (rdest != 0)
+        //     {
+        //       // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
+        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
+        //     }
+        //     // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
+        //     c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
+            
+        //     break;
+        //   case 3:
+        //     // printf("Case 3\n");
+        //     if (rdest != 0)
+        //     {              
+        //       reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+        //     }
+        //       c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
+            
+        //     break;
+        //   case 5:
+        //     // printf("Case 5\n");
+        //     if (rdest != 0)
+        //     {
+        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
+        //     }
+        //       c.csr[immsrc & 0x00000FFF] = rsrc[0];
+            
+        //     break;
+        //   case 6:
+        //     // printf("Case 6\n");
+        //     if (rdest != 0)
+        //     {              
+        //       reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+        //     }
+        //       c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
+            
+        //     break;
+        //   case 7:
+        //     // printf("Case 7\n");
+        //     if (rdest != 0)
+        //     {              
+        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
+        //     }
+        //       c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
+            
+        //     break;
+        //   case 0:
+        //   if (immsrc < 2)
+        //   {
+        //     //std::cout << "INTERRUPT ECALL/EBREAK\n";
+        //     nextActiveThreads = 0;
+        //     c.spawned = false;
+        //     // c.interrupt(0);
+        //   }
+        //     break;
+        //   default:
+        //     break;
+        // }
         break;
       case TRAP:
         //std::cout << "INTERRUPT TRAP\n";
@@ -670,30 +700,44 @@ void Instruction::executeOn(Warp &c) {
         //std::cout << "GPGPU\n";
         switch(func3)
         {
-          case 0:
+          case 1:
             // WSPAWN
-            //std::cout << "WSPAWN\n";
+            std::cout << "WSPAWN\n";
             if (sjOnce)
             {
               sjOnce = false;
-              D(0, "Spawning a new warp.");
               // //std::cout << "SIZE: " << c.core->w.size() << "\n";
-              for (unsigned i = 0; i < c.core->w.size(); ++i)
+              num_to_wspawn = reg[rsrc[0]];
+
+              D(0, "Spawning " << num_to_wspawn << " new warps at PC: " << hex << reg[rsrc[1]]);
+              for (unsigned i = 1; i < num_to_wspawn; ++i)
               {
                 // std::cout << "SPAWNING WARP\n";
                 Warp &newWarp(c.core->w[i]);
                 // //std::cout << "STARTING\n";
-                if (newWarp.spawned == false) {
+                // if (newWarp.spawned == false)
+                {
                   // //std::cout << "ABOUT TO START\n";
-                  newWarp.pc     = reg[rsrc[0]];
-                  newWarp.reg[0] = reg;
-                  newWarp.csr = c.csr;
+                  newWarp.pc     = reg[rsrc[1]];
+                  // newWarp.reg[0] = reg;
+                  // newWarp.csr = c.csr;
+                  for (int kk = 0; kk < newWarp.tmask.size(); kk++)
+                  {
+                    if (kk == 0)
+                    {
+                      newWarp.tmask[kk] = true;
+                    }
+                    else
+                    {
+                      newWarp.tmask[kk] = false;
+                    }
+                  }
                   newWarp.activeThreads = 1;
                   newWarp.supervisorMode = false;
                   newWarp.spawned = true;
-                  break;
                 }
               }
+              break;
             }
             break;
           case 2:
@@ -704,12 +748,16 @@ void Instruction::executeOn(Warp &c) {
             {
               sjOnce = false;
               if (checkUnanimous(pred, c.reg, c.tmask)) {
-                //std::cout << "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n";
+                std::cout << "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n";
                 DomStackEntry e(c.tmask);
                 e.uni = true;
                 c.domStack.push(e);
                 break;
               }
+              cout << "Split: Original TM: ";
+              for (auto y : c.tmask) cout << y << " ";
+              cout << "\n";
+
               DomStackEntry e(pred, c.reg, c.tmask, c.pc);
               c.domStack.push(c.tmask);
               c.domStack.push(e);
@@ -717,49 +765,79 @@ void Instruction::executeOn(Warp &c) {
               {
                 c.tmask[i] = !e.tmask[i] && c.tmask[i];
               }
+
+
+              cout << "Split: New TM\n";
+              for (auto y : c.tmask) cout << y << " ";
+              cout << "\n";
+              cout << "Split: Pushed TM PC: " << hex << e.pc << dec << "\n";
+              for (auto y : e.tmask) cout << y << " ";
+              cout << "\n";
             }
-          }
             break;
+          }
           case 3:
             // JOIN
             //std::cout << "JOIN\n";
+            D(3, "JOIN INSTRUCTION");
             if (sjOnce)
             {
               sjOnce = false;
               if (!c.domStack.empty() && c.domStack.top().uni) {
                 D(2, "Uni branch at join");
+                printf("NEW DOMESTACK: \n");
                 c.tmask = c.domStack.top().tmask;
                 c.domStack.pop();
                 break;
               }
               if (!c.domStack.top().fallThrough) {
-                if (!pcSet) nextPc = c.domStack.top().pc;
+                if (!pcSet) {
+                  nextPc = c.domStack.top().pc;
+                  cout << "join: NOT FALLTHROUGH PC: " << hex << nextPc << dec << '\n';
+                }
                   pcSet = true;
               }
+
+              cout << "Join: Old TM: ";
+              for (auto y : c.tmask) cout << y << " ";
+              cout << "\n";
               c.tmask = c.domStack.top().tmask;
+
+              cout << "Join: New TM: " << '\n';
+              for (auto y : c.tmask) cout << y << " ";
+              cout << "\n";
+
               c.domStack.pop();
             }
             break;
           case 4:
-            // JMPRT
-            //std::cout << "JMPRT\n";
-            nextActiveThreads = 1;
-            if (!pcSet) nextPc = reg[rsrc[0]];
-            pcSet = true;
+            // is_barrier
             break;
-          case 5:
-            // CLONE
-            //std::cout << "CLONE\n";
-            // //std::cout << "CLONING REG: " << rsrc[0] << " lane: " << reg[rsrc[0]] << "\n";
-            c.reg[reg[rsrc[0]]] = reg;
-            break;
-          case 6:
-            // JALRS
+          case 0:
+            // TMC
             //std::cout << "JALRS\n";
-            nextActiveThreads = reg[rsrc[1]];
-            reg[rdest] = c.pc;
-            if (!pcSet) nextPc = reg[rsrc[0]];
-            pcSet = true;
+
+            nextActiveThreads = reg[rsrc[0]];
+            {
+              for (int ff = 0; ff < c.tmask.size(); ff++)
+              {
+                if (ff < nextActiveThreads)
+                {
+                  c.tmask[ff] = true;
+                }
+                else
+                {
+                  c.tmask[ff] = false;
+                }
+              }
+            }
+            if (nextActiveThreads == 0)
+            {
+              c.spawned = false;
+            }
+            // reg[rdest] = c.pc;
+            // if (!pcSet) nextPc = reg[rsrc[0]];
+            // pcSet = true;
             // //std::cout << "ACTIVE_THREDS: " << rsrc[1] << " val: " << reg[rsrc[1]] << "\n";
             // //std::cout << "nextPC: " << rsrc[0] << " val: " << std::hex << reg[rsrc[0]] << "\n";
             break;
@@ -794,7 +872,11 @@ void Instruction::executeOn(Warp &c) {
 
   // This way, if pc was set by a side effect (such as interrupt), it will
   // retain its new value.
-  if (pcSet) c.pc = nextPc;
+  if (pcSet)
+  {
+    c.pc = nextPc;
+    cout << "Next PC: " << hex << nextPc << dec << "\n";
+  }
   
   if (nextActiveThreads > c.reg.size()) {
     cerr << "Error: attempt to spawn " << nextActiveThreads << " threads. "

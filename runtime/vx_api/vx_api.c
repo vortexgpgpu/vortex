@@ -31,7 +31,7 @@ void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void
 	global_function_pointer = func_ptr;
 	global_argument_struct  = args;
 	global_num_threads      = numThreads;
-	vx_wspawn(numWarps, (unsigned) func_ptr);
+	vx_wspawn(numWarps, (unsigned) setup_call);
 	setup_call();
 
 }
