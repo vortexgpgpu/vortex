@@ -17,6 +17,7 @@ module VX_cache_data_per_index
 	input wire clk,    // Clock
   input wire rst,
   input wire valid_in,
+  input wire [3:0] state,
 	// Addr
 	input wire[IND_SIZE_END:IND_SIZE_START] 			addr,
 	// WE
@@ -54,6 +55,10 @@ module VX_cache_data_per_index
     wire [CACHE_WAY_INDEX-1:0]  way_index;
     wire [CACHE_WAY_INDEX-1:0] invalid_index;
 
+
+    localparam CACHE_IDLE    = 0; // Idle
+    localparam SEND_MEM_REQ  = 1; // Write back this block into memory
+    localparam RECIV_MEM_RSP = 2;
 
     if(CACHE_WAYS != 1) begin
         VX_generic_priority_encoder #(.N(CACHE_WAYS)) valid_index
@@ -127,7 +132,7 @@ module VX_cache_data_per_index
       if (rst) begin
         eviction_way_index <= 0;
       end else begin
-      	if(miss && dirty_use && valid_use && !evict && valid_in) begin // can be either evict or invalid cache entries
+        if((miss && dirty_use && valid_use && !evict && valid_in)) begin // can be either evict or invalid cache entries
      			if((eviction_way_index[addr]+1) == CACHE_WAYS) begin
      				eviction_way_index[addr] <= 0;
      			end else begin

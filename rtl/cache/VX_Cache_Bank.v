@@ -130,7 +130,8 @@ module VX_Cache_Bank
 
     assign data_evicted = data_use;
 
-    assign eviction_wb    = miss && (dirty_use != 1'b0) && valid_use;
+    // assign eviction_wb    = miss && (dirty_use != 1'b0) && valid_use;
+    assign eviction_wb    = (dirty_use != 1'b0);
     assign eviction_tag   = tag_use;
     assign access         = (state == CACHE_IDLE) && valid_in;
     assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in; // TODO
@@ -230,6 +231,7 @@ module VX_Cache_Bank
         .clk          (clk),
         .rst          (rst),
         .valid_in     (valid_in),
+        .state        (state),
         // Inputs
         .addr         (actual_index),
         .we           (we),

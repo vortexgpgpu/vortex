@@ -357,7 +357,7 @@ module VX_d_cache
     assign o_m_evict_addr     = evict_addr & MEM_ADDR_REQ_MASK;
     assign o_m_read_addr      = miss_addr  & MEM_ADDR_REQ_MASK;
     assign o_m_valid          = (state == SEND_MEM_REQ);
-    assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb_old);
+    assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb);
     //end
 
 endmodule
