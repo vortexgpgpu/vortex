@@ -53,7 +53,7 @@ int main()
 	vx_tmc(1);
 
 
-	vx_print_str("Dev Main");
+	vx_print_str("Dev Main\n");
 
 	mat_add_args_t arguments;
 	arguments.x         = x;
