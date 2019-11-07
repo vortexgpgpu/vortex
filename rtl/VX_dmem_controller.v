@@ -51,18 +51,31 @@ module VX_dmem_controller (
 		);
 
 
-	VX_d_cache
-	/*#(
-		.CACHE_SIZE(4096), // Bytes
-		`ifdef SYN
-		.CACHE_WAYS(1),
-		`else 
-		.CACHE_WAYS(2),
-		`endif
-		.CACHE_BLOCK(128), // Bytes
-		.CACHE_BANKS(8),
-		.NUM_REQ(`NT)
-	)*/ dcache
+	VX_d_cache#(
+          .CACHE_SIZE          (`DCACHE_SIZE),
+          .CACHE_WAYS          (`DCACHE_WAYS),
+          .CACHE_BLOCK         (`DCACHE_BLOCK),
+          .CACHE_BANKS         (`DCACHE_BANKS),
+          .LOG_NUM_BANKS       (`DCACHE_LOG_NUM_BANKS),
+          .NUM_REQ             (`DCACHE_NUM_REQ),
+          .LOG_NUM_REQ         (`DCACHE_LOG_NUM_REQ),
+          .NUM_IND			   (`DCACHE_NUM_IND),
+          .CACHE_WAY_INDEX     (`DCACHE_WAY_INDEX),
+          .NUM_WORDS_PER_BLOCK (`DCACHE_NUM_WORDS_PER_BLOCK),
+          .OFFSET_SIZE_START   (`DCACHE_OFFSET_ST),
+          .OFFSET_SIZE_END     (`DCACHE_OFFSET_ED),
+          .TAG_SIZE_START      (`DCACHE_TAG_SIZE_START),
+          .TAG_SIZE_END        (`DCACHE_TAG_SIZE_END),
+          .IND_SIZE_START      (`DCACHE_IND_SIZE_START),
+          .IND_SIZE_END        (`DCACHE_IND_SIZE_END),
+          .ADDR_TAG_START      (`DCACHE_ADDR_TAG_START),
+          .ADDR_TAG_END        (`DCACHE_ADDR_TAG_END),
+          .ADDR_OFFSET_START   (`DCACHE_ADDR_OFFSET_ST),
+          .ADDR_OFFSET_END     (`DCACHE_ADDR_OFFSET_ED),
+          .ADDR_IND_START      (`DCACHE_IND_ST),
+          .ADDR_IND_END        (`DCACHE_IND_ED)
+    )
+	 dcache
 	(
 		.clk                (clk),
 		.rst                (reset),

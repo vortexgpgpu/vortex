@@ -48,7 +48,9 @@ assign io_valid         = temp_io_valid;
 assign io_data          = temp_io_data;
 
 
-VX_dram_req_rsp_inter    VX_dram_req_rsp();
+VX_dram_req_rsp_inter #(
+	.NUMBER_BANKS(`DCACHE_BANKS),
+	.NUM_WORDS_PER_BLOCK(`DCACHE_NUM_WORDS_PER_BLOCK))    VX_dram_req_rsp();
 
 assign o_m_read_addr     = VX_dram_req_rsp.o_m_read_addr;
 assign o_m_evict_addr    = VX_dram_req_rsp.o_m_evict_addr;

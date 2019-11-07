@@ -7,12 +7,30 @@
 
 
 module VX_Cache_Bank
-            /*#(
-              parameter CACHE_SIZE = 4096, // Bytes
-              parameter CACHE_WAYS = 1,
-              parameter CACHE_BLOCK = 128, // Bytes
-              parameter CACHE_BANKS = 8
-            )*/
+    #(
+      parameter CACHE_SIZE          = 4096, // Bytes
+      parameter CACHE_WAYS          = 1,
+      parameter CACHE_BLOCK         = 128, // Bytes
+      parameter CACHE_BANKS         = 8,
+      parameter LOG_NUM_BANKS       = 3,
+      parameter NUM_REQ             = 8,
+      parameter LOG_NUM_REQ         = 3,
+      parameter NUM_IND             = 8,
+      parameter CACHE_WAY_INDEX     = 1,
+      parameter NUM_WORDS_PER_BLOCK = 4, 
+      parameter OFFSET_SIZE_START   = 0,
+      parameter OFFSET_SIZE_END     = 1,
+      parameter TAG_SIZE_START      = 0,
+      parameter TAG_SIZE_END        = 16,
+      parameter IND_SIZE_START      = 0,
+      parameter IND_SIZE_END        = 7,
+      parameter ADDR_TAG_START      = 15,
+      parameter ADDR_TAG_END        = 31,
+      parameter ADDR_OFFSET_START   = 5,
+      parameter ADDR_OFFSET_END     = 6,
+      parameter ADDR_IND_START      = 7,
+      parameter ADDR_IND_END        = 14
+    )
           (
             clk,
             rst,
@@ -58,25 +76,25 @@ module VX_Cache_Bank
 //input wire write_from_mem;
 
       // Reading Data
-    input wire[`DCACHE_IND_SIZE_RNG] actual_index;
+    input wire[IND_SIZE_END:IND_SIZE_START] actual_index;
 
 
-    input wire[`DCACHE_TAG_SIZE_RNG] o_tag; // When write_from_mem = 1, o_tag is the new tag
-    input wire[`DCACHE_OFFSET_SIZE_RNG]  block_offset;
+    input wire[TAG_SIZE_END:TAG_SIZE_START] o_tag; // When write_from_mem = 1, o_tag is the new tag
+    input wire[OFFSET_SIZE_END:OFFSET_SIZE_START]  block_offset;
 
 
     input wire[31:0] writedata;
     input wire       valid_in;
     input wire read_or_write; // Specifies if it is a read or write operation
 
-    input wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
+    input wire[NUM_WORDS_PER_BLOCK-1:0][31:0] fetched_writedata;
     input wire[2:0] i_p_mem_read;
     input wire[2:0] i_p_mem_write;
     input wire[1:0] byte_select;
 
 
-    input  wire[`DCACHE_WAY_INDEX-1:0] evicted_way;
-    output wire[`DCACHE_WAY_INDEX-1:0] way_use;
+    input  wire[CACHE_WAY_INDEX-1:0] evicted_way;
+    output wire[CACHE_WAY_INDEX-1:0] way_use;
 
     // Outputs
       // Normal shit
@@ -89,13 +107,13 @@ module VX_Cache_Bank
     output wire[31:0] eviction_addr; // What's the eviction tag
 
       // Eviction Data (Extraction)
-    output wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
+    output wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_evicted;
 
 
 
-    wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
-    wire[`DCACHE_TAG_SIZE_RNG] tag_use;
-    wire[`DCACHE_TAG_SIZE_RNG] eviction_tag;
+    wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_use;
+    wire[TAG_SIZE_END:TAG_SIZE_START] tag_use;
+    wire[TAG_SIZE_END:TAG_SIZE_START] eviction_tag;
     wire       valid_use;
     wire       dirty_use;
     wire       access;
@@ -104,8 +122,8 @@ module VX_Cache_Bank
 
 
 
-    wire[`DCACHE_WAY_INDEX-1:0] update_way;
-    wire[`DCACHE_WAY_INDEX-1:0] way_to_update;
+    wire[CACHE_WAY_INDEX-1:0] update_way;
+    wire[CACHE_WAY_INDEX-1:0] way_to_update;
 
     assign miss = (tag_use != o_tag) && valid_use && valid_in;
 
@@ -181,10 +199,10 @@ module VX_Cache_Bank
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
 
 
-    wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
-    wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
+    wire[NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
+    wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
-    for (g = 0; g < `DCACHE_NUM_WORDS_PER_BLOCK; g = g + 1) begin
+    for (g = 0; g < NUM_WORDS_PER_BLOCK; g = g + 1) begin
         wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
 
         assign we[g]      = (write_from_mem)     ? 4'b1111  : 
@@ -200,13 +218,15 @@ module VX_Cache_Bank
     end
 
 
-    /*VX_cache_data_per_index #(
-          .CACHE_SIZE(CACHE_SIZE),
-          .CACHE_WAYS(CACHE_WAYS),
-          .CACHE_BLOCK(CACHE_BLOCK),
-          .CACHE_BANKS(CACHE_BANKS),
-          .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(*/
-    VX_cache_data_per_index data_structures(
+    VX_cache_data_per_index #(
+          .CACHE_WAYS         (CACHE_WAYS),
+          .NUM_IND            (NUM_IND),
+          .CACHE_WAY_INDEX    (CACHE_WAY_INDEX),
+          .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK),
+          .TAG_SIZE_START     (TAG_SIZE_START),
+          .TAG_SIZE_END       (TAG_SIZE_END),
+          .IND_SIZE_START     (IND_SIZE_START),
+          .IND_SIZE_END       (IND_SIZE_END)) data_structures(
         .clk          (clk),
         .rst          (rst),
         .valid_in     (valid_in),
@@ -225,26 +245,6 @@ module VX_Cache_Bank
         .way          (way_use)
       );
 
-    // VX_cache_data #(
-    //       .CACHE_SIZE(CACHE_SIZE),
-    //       .CACHE_WAYS(CACHE_WAYS),
-    //       .CACHE_BLOCK(CACHE_BLOCK),
-    //       .CACHE_BANKS(CACHE_BANKS),
-    //       .NUM_WORDS_PER_BLOCK(NUM_WORDS_PER_BLOCK)) data_structures(
-    //     .clk       (clk),
-    //     .rst       (rst),
-    //     // Inputs
-    //     .addr      (actual_index),
-    //     .we        (we),
-    //     .evict     (write_from_mem),
-    //     .data_write(data_write),
-    //     .tag_write (o_tag),
-    //     // Outputs
-    //     .tag_use   (tag_use),
-    //     .data_use  (data_use),
-    //     .valid_use (valid_use),
-    //     .dirty_use (dirty_use)
-    //   );
 
 
 endmodule

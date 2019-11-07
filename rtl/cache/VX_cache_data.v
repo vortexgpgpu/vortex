@@ -3,29 +3,30 @@
 `include "../VX_define.v"
 
 module VX_cache_data
-    /*#(
-      parameter CACHE_SIZE          = 4096, // Bytes
-      parameter CACHE_WAYS          = 1,
-      parameter CACHE_BLOCK         = 128, // Bytes
-      parameter CACHE_BANKS         = 8,
-      parameter NUM_WORDS_PER_BLOCK = 4
-    )*/
+    #(
+        parameter NUM_IND             = 8, 
+        parameter NUM_WORDS_PER_BLOCK = 4,
+        parameter TAG_SIZE_START      = 0,
+        parameter TAG_SIZE_END        = 16,
+        parameter IND_SIZE_START      = 0, 
+        parameter IND_SIZE_END        = 7
+    )
     (
 	input wire clk, rst,    // Clock
 
     // `ifdef PARAM
     	// Addr
-    	input wire[`DCACHE_IND_SIZE_RNG]             addr,
+    	input wire[IND_SIZE_END:IND_SIZE_START]             addr,
     	// WE
-    	input wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][3:0]    we,
+    	input wire[NUM_WORDS_PER_BLOCK-1:0][3:0]    we,
     	input wire                                  evict,
     	// Data
-    	input wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0]   data_write,
-    	input wire[`DCACHE_TAG_SIZE_RNG]             tag_write,
+    	input wire[NUM_WORDS_PER_BLOCK-1:0][31:0]   data_write,
+    	input wire[TAG_SIZE_END:TAG_SIZE_START]             tag_write,
 
 
-    	output wire[`DCACHE_TAG_SIZE_RNG]            tag_use,
-    	output wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0]  data_use,
+    	output wire[TAG_SIZE_END:TAG_SIZE_START]            tag_use,
+    	output wire[NUM_WORDS_PER_BLOCK-1:0][31:0]  data_use,
     	output wire                                 valid_use,
     	output wire                                 dirty_use
     // `else 
@@ -50,7 +51,7 @@ module VX_cache_data
     //localparam NUMBER_BANKS         = CACHE_BANKS;
     //localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
     // localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
-	//localparam NUMBER_INDEXES       = `DCACHE_NUM_IND;
+	//localparam NUMBER_INDEXES       = NUM_IND;
 
     wire currently_writing = (|we);
     wire update_dirty      = ((!dirty_use) && currently_writing) || (evict);
@@ -61,10 +62,10 @@ module VX_cache_data
     `ifndef SYN
 
         // (3:0)  4 bytes
-        reg[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][3:0][7:0] data[`DCACHE_NUM_IND-1:0]; // Actual Data
-        reg[`DCACHE_TAG_SIZE_RNG]               tag[`DCACHE_NUM_IND-1:0];
-        reg                                    valid[`DCACHE_NUM_IND-1:0];
-        reg                                    dirty[`DCACHE_NUM_IND-1:0];
+        reg[NUM_WORDS_PER_BLOCK-1:0][3:0][7:0] data[NUM_IND-1:0]; // Actual Data
+        reg[TAG_SIZE_END:TAG_SIZE_START]               tag[NUM_IND-1:0];
+        reg                                    valid[NUM_IND-1:0];
+        reg                                    dirty[NUM_IND-1:0];
 
 
         //     16 bytes
@@ -77,7 +78,7 @@ module VX_cache_data
         integer ini_ind;
         always @(posedge clk, posedge rst) begin : update_all
           if (rst) begin
-            for (ini_ind = 0; ini_ind < `DCACHE_NUM_IND; ini_ind=ini_ind+1) begin
+            for (ini_ind = 0; ini_ind < NUM_IND; ini_ind=ini_ind+1) begin
                 data[ini_ind]  <= 0;
                 tag[ini_ind]   <= 0;
                 valid[ini_ind] <= 0;
@@ -88,7 +89,7 @@ module VX_cache_data
               if (evict) tag[addr] <= tag_write;
               if (evict) valid[addr] <= 1;
 
-              for (f = 0; f < `DCACHE_NUM_WORDS_PER_BLOCK; f = f + 1) begin
+              for (f = 0; f < NUM_WORDS_PER_BLOCK; f = f + 1) begin
                 if (we[f][0]) data[addr][f][0] <= data_write[f][7 :0 ];
                 if (we[f][1]) data[addr][f][1] <= data_write[f][15:8 ];
                 if (we[f][2]) data[addr][f][2] <= data_write[f][23:16];
@@ -103,11 +104,11 @@ module VX_cache_data
         wire cena = 1;
 
         wire cenb_d  = (|we);
-        wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_d = data_write;
-        wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] write_bit_mask_d;
-        wire[`DCACHE_NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_d;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] wdata_d = data_write;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] write_bit_mask_d;
+        wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_out_d;
         genvar cur_b;
-        for (cur_b = 0; cur_b < `DCACHE_NUM_WORDS_PER_BLOCK; cur_b=cur_b+1) begin
+        for (cur_b = 0; cur_b < NUM_WORDS_PER_BLOCK; cur_b=cur_b+1) begin
             assign write_bit_mask_d[cur_b] = {32{~we[cur_b]}};
         end
         assign data_use = data_out_d;
