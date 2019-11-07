@@ -169,17 +169,18 @@ module VX_d_cache
 
 
     wire[`DCACHE_BANKS - 1 : 0] detect_bank_miss;
-    assign threads_serviced_Qual = threads_serviced_per_bank[0] | threads_serviced_per_bank[1] |
-                                   threads_serviced_per_bank[2] | threads_serviced_per_bank[3] |
-                                   threads_serviced_per_bank[4] | threads_serviced_per_bank[5] |
-                                   threads_serviced_per_bank[6] | threads_serviced_per_bank[7];
-    // genvar bbid;
-    // always @(*) begin
-    //   for (bbid = 0; bbid < NUMBER_BANKS; bbid=bbid+1)
-    //   begin
-    //     assign threads_serviced_Qual = threads_serviced_Qual | threads_serviced_per_bank[bbid];
-    //   end
-    // end
+    //assign threads_serviced_Qual = threads_serviced_per_bank[0] | threads_serviced_per_bank[1] |
+    //                               threads_serviced_per_bank[2] | threads_serviced_per_bank[3] |
+    //                               threads_serviced_per_bank[4] | threads_serviced_per_bank[5] |
+    //                               threads_serviced_per_bank[6] | threads_serviced_per_bank[7];
+     integer bbid;
+     always @(*) begin
+       threads_serviced_Qual = 0;
+       for (bbid = 0; bbid < `DCACHE_BANKS; bbid=bbid+1)
+       begin
+         threads_serviced_Qual = threads_serviced_Qual | threads_serviced_per_bank[bbid];
+       end
+     end
 
 
 

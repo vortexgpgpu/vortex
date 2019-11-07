@@ -123,6 +123,7 @@ module VX_Cache_Bank
 
 
 
+    wire lw  = (i_p_mem_read == `LW_MEM_READ);
     wire lb  = (i_p_mem_read == `LB_MEM_READ);
     wire lh  = (i_p_mem_read == `LH_MEM_READ);
     wire lhu = (i_p_mem_read == `LHU_MEM_READ);
@@ -137,7 +138,7 @@ module VX_Cache_Bank
     wire b2 = (byte_select == 2);
     wire b3 = (byte_select == 3);
 
-    wire[31:0] data_unQual = b0 ? (data_use[block_offset]     )  :
+    wire[31:0] data_unQual = (b0 || lw) ? (data_use[block_offset]     )  :
                              b1 ? (data_use[block_offset] >> 8)  :
                              b2 ? (data_use[block_offset] >> 16) :
                              (data_use[block_offset] >> 24);

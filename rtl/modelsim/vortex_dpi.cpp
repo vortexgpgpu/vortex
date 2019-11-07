@@ -6,6 +6,7 @@
 
 #include <../simulate/ram.h>
 #include <stdio.h>
+#include <math.h>
 #include "svdpi.h"
 
 #include "../simulate/VX_define.h"
@@ -27,9 +28,20 @@ unsigned refill_addr;
 unsigned num_cycles;
 
 unsigned getIndex(int, int, int);
+unsigned calculate_bits_per_bank_num(int);
+
 unsigned getIndex(int r, int c, int numCols)
 {
 	return (r * numCols) + c;
+}
+
+unsigned calculate_bits_per_bank_num(int num)
+{
+	int shifted_num = 0;
+	for(int i = 0; i < num; i++){
+		shifted_num = (shifted_num << 1)| 1 ;
+	}
+	return shifted_num;
 }
 
 
@@ -68,6 +80,7 @@ void ibus_driver(bool clk, unsigned pc_addr, unsigned * instruction)
     }
 
 }
+
 
 void dbus_driver(bool clk, unsigned o_m_read_addr, unsigned o_m_evict_addr, bool o_m_valid, svLogicVecVal * o_m_writedata, bool o_m_read_or_write, svLogicVecVal * i_m_readdata, bool * i_m_ready)
 {
@@ -116,8 +129,10 @@ void dbus_driver(bool clk, unsigned o_m_read_addr, unsigned o_m_evict_addr, bool
 
 
                 unsigned addr_without_byte = new_addr >> 2;
-                unsigned bank_num          = addr_without_byte & 0x7;
-                unsigned addr_wihtout_bank = addr_without_byte >> 3;
+		unsigned bits_per_bank = (int)log2(CACHE_NUM_BANKS); 
+		unsigned maskbits_per_bank = calculate_bits_per_bank_num(bits_per_bank); 
+                unsigned bank_num          = addr_without_byte & maskbits_per_bank;
+                unsigned addr_wihtout_bank = addr_without_byte >> bits_per_bank;
                 unsigned offset_num        = addr_wihtout_bank & 0x3;
 
                 unsigned value;
@@ -149,8 +164,10 @@ void dbus_driver(bool clk, unsigned o_m_read_addr, unsigned o_m_evict_addr, bool
 
 
                         unsigned addr_without_byte = new_addr >> 2;
-                        unsigned bank_num          = addr_without_byte & 0x7;
-                        unsigned addr_wihtout_bank = addr_without_byte >> 3;
+			unsigned bits_per_bank = (int)log2(CACHE_NUM_BANKS);
+			unsigned maskbits_per_bank = calculate_bits_per_bank_num(bits_per_bank); 
+                        unsigned bank_num          = addr_without_byte & maskbits_per_bank;
+                        unsigned addr_wihtout_bank = addr_without_byte >> bits_per_bank;
                         unsigned offset_num        = addr_wihtout_bank & 0x3;
                         unsigned index             = getIndex(bank_num,offset_num, CACHE_WORDS_PER_BLOCK);
 
