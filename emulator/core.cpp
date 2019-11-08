@@ -257,13 +257,13 @@ bool Warp::interrupt(Word r0) {
 }
 
 void Warp::printStats() const {
-  cout << "Steps : " << steps << endl
+  cerr << "Steps : " << steps << endl
        << "Insts : " << insts << endl
        << "Loads : " << loads << endl
        << "Stores: " << stores << endl;
 
   unsigned const grade = reg[0][28];
 
-  if (grade == 1) cout << "GRADE: PASSED\n";
-  else              cout << "GRADE: FAILED "  << (grade >> 1) << "\n";
+  if (grade == 1) cerr << "GRADE: PASSED\n";
+  else              cerr << "GRADE: FAILED "  << (grade >> 1) << "\n";
 }
