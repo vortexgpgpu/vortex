@@ -10,8 +10,22 @@
 
 import "DPI-C" load_file   = function void load_file(input string filename);
 
+/*
 import "DPI-C" ibus_driver = function void ibus_driver(input logic clk, input  int pc_addr,
 	                                                   output int instruction);
+	                                                   */
+
+import "DPI-C" ibus_driver = function void ibus_driver( input logic clk,
+														input int o_m_read_addr,
+													    input int o_m_evict_addr,
+													    input logic o_m_valid,
+													    input reg[31:0] o_m_writedata[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0],
+													    input logic o_m_read_or_write,
+													    input int cache_banks,
+													    input int words_per_block,
+													    // Rsp
+													    output reg[31:0] i_m_readdata[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0],
+													    output logic        i_m_ready);
 
 import "DPI-C" dbus_driver = function void dbus_driver( input logic clk,
 														input int o_m_read_addr,
@@ -36,24 +50,35 @@ module vortex_tb (
 
 	int     cycle_num;
 
-	reg           clk;
-	reg           reset;
-	reg[31:0] icache_response_instruction;
-	reg[31:0] icache_request_pc_address;
-	// IO
-	reg        io_valid;
-	reg[31:0]  io_data;
-	// Req
-    reg [31:0]  o_m_read_addr;
-    reg [31:0]  o_m_evict_addr;
-    reg         o_m_valid;
-    reg [31:0]  o_m_writedata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0];
-    reg         o_m_read_or_write;
+reg           clk;
+reg           reset;
+reg[31:0] icache_response_instruction;
+reg[31:0] icache_request_pc_address;
+// IO
+reg        io_valid;
+reg[31:0]  io_data;
+// Req
+	reg [31:0]  o_m_read_addr_d;
+	reg [31:0]  o_m_evict_addr_d;
+	reg         o_m_valid_d;
+	reg [31:0]  o_m_writedata_d[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0];
+	reg         o_m_read_or_write_d;
 
-    // Rsp
-    reg [31:0]  i_m_readdata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK -1:0];
-    reg         i_m_ready;
-	reg         out_ebreak;
+	// Rsp
+	reg [31:0]  i_m_readdata_d[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0];
+	reg         i_m_ready_d;
+
+// Req
+	reg [31:0]  o_m_read_addr_i;
+	reg [31:0]  o_m_evict_addr_i;
+	reg         o_m_valid_i;
+	reg [31:0]  o_m_writedata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0];
+	reg         o_m_read_or_write_i;
+
+	// Rsp
+	reg [31:0]  i_m_readdata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0];
+	reg         i_m_ready_i;
+reg         out_ebreak;
 
 
 	reg[31:0] hi;
@@ -73,25 +98,32 @@ module vortex_tb (
 	end
 
 	Vortex vortex(
-		.clk                        (clk),
-		.reset                      (reset),
-		.icache_response_instruction(icache_response_instruction),
-		.icache_request_pc_address  (icache_request_pc_address),
-		.io_valid                   (io_valid),
-		.io_data                    (io_data),
-		.o_m_read_addr              (o_m_read_addr),
-		.o_m_evict_addr             (o_m_evict_addr),
-		.o_m_valid                  (o_m_valid),
-		.o_m_writedata              (o_m_writedata),
-		.o_m_read_or_write          (o_m_read_or_write),
-		.i_m_readdata               (i_m_readdata),
-		.i_m_ready                  (i_m_ready),
-		.out_ebreak                 (out_ebreak)
+		.clk                          (clk),
+		.reset                        (reset),
+		.icache_response_instruction  (icache_response_instruction),
+		.icache_request_pc_address    (icache_request_pc_address),
+		.io_valid                     (io_valid),
+		.io_data                      (io_data),
+		.o_m_read_addr_d              (o_m_read_addr_d),
+		.o_m_evict_addr_d             (o_m_evict_addr_d),
+		.o_m_valid_d                  (o_m_valid_d),
+		.o_m_writedata_d              (o_m_writedata_d),
+		.o_m_read_or_write_d          (o_m_read_or_write_d),
+		.i_m_readdata_d               (i_m_readdata_d),
+		.i_m_ready_d                  (i_m_ready_d),
+		.o_m_read_addr_i              (o_m_read_addr_i),
+		.o_m_evict_addr_i             (o_m_evict_addr_i),
+		.o_m_valid_i                  (o_m_valid_i),
+		.o_m_writedata_i              (o_m_writedata_i),
+		.o_m_read_or_write_i          (o_m_read_or_write_i),
+		.i_m_readdata_i               (i_m_readdata_i),
+		.i_m_ready_i                  (i_m_ready_i),
+		.out_ebreak                   (out_ebreak)
 		);
 
 	always @(negedge clk) begin
-		ibus_driver(clk, icache_request_pc_address, icache_response_instruction);
-		dbus_driver(clk, o_m_read_addr, o_m_evict_addr, o_m_valid, o_m_writedata, o_m_read_or_write, `DCACHE_BANKS, `DCACHE_NUM_WORDS_PER_BLOCK, i_m_readdata, i_m_ready);
+		ibus_driver(clk, o_m_read_addr_i, o_m_evict_addr_i, o_m_valid_i, o_m_writedata_i, o_m_read_or_write_i, `ICACHE_BANKS, `ICACHE_NUM_WORDS_PER_BLOCK, i_m_readdata_i, i_m_ready_i);
+		dbus_driver(clk, o_m_read_addr_d, o_m_evict_addr_d, o_m_valid_d, o_m_writedata_d, o_m_read_or_write_d, `DCACHE_BANKS, `DCACHE_NUM_WORDS_PER_BLOCK, i_m_readdata_d, i_m_ready_d);
 		io_handler (clk, io_valid, io_data);
 		
 	end
