@@ -52,48 +52,48 @@ int main()
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
-	vx_print_str("Simple Main\n");
+	// vx_print_str("Simple Main\n");
 
 
-	// // TMC test
-	test_tmc();
+	// // // TMC test
+	// test_tmc();
 
-	// Control Divergence Test
-	vx_print_str("test_divergence\n");
-	vx_tmc(4);
-	test_divergence();
-	vx_tmc(1);
+	// // Control Divergence Test
+	// vx_print_str("test_divergence\n");
+	// vx_tmc(4);
+	// test_divergence();
+	// vx_tmc(1);
 
 
 	// Test wspawn
-	vx_print_str("test_wspawn\n");
+	// vx_print_str("test_wspawn\n");
 	test_wsapwn();
 
-	vx_print_str("vx_spawnWarps mat_add_kernel\n");
+	// vx_print_str("vx_spawnWarps mat_add_kernel\n");
 
-	mat_add_args_t arguments;
-	arguments.x         = x;
-	arguments.y         = y;
-	arguments.z         = z;
-	arguments.numColums = 4;
-	arguments.numRows   = 4;
+	// mat_add_args_t arguments;
+	// arguments.x         = x;
+	// arguments.y         = y;
+	// arguments.z         = z;
+	// arguments.numColums = 4;
+	// arguments.numRows   = 4;
 
 
-	int numWarps   = 4;
-	int numThreads = 4;
+	// int numWarps   = 4;
+	// int numThreads = 4;
 
-	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	// vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
 
-	for (int i = 0; i < arguments.numRows; i++)
-	{
-		for (int j = 0; j < arguments.numColums; j++)
-		{
-			unsigned index = (i * arguments.numColums) + j;
-			vx_print_hex(z[index]);
-			vx_print_str(" ");
-		}
-		vx_print_str("\n");
-	}
+	// for (int i = 0; i < arguments.numRows; i++)
+	// {
+	// 	for (int j = 0; j < arguments.numColums; j++)
+	// 	{
+	// 		unsigned index = (i * arguments.numColums) + j;
+	// 		vx_print_hex(z[index]);
+	// 		vx_print_str(" ");
+	// 	}
+	// 	vx_print_str("\n");
+	// }
 
 	return 0;
 }

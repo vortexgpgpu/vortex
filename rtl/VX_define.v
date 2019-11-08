@@ -128,20 +128,24 @@
 
 //Cache configurations
 //Cache configurations
-`define ICACHE_SIZE  4096 //Bytes
+ //Bytes
+`define ICACHE_SIZE  1024
 `ifdef SYN
 `define ICACHE_WAYS  1
 `else
 `define ICACHE_WAYS  2
 `endif
-`define ICACHE_BLOCK 128 //Bytes
+//Bytes
+`define ICACHE_BLOCK 8
 `define ICACHE_BANKS 1
 `define ICACHE_LOG_NUM_BANKS `CLOG2(`ICACHE_BANKS)
-`define ICACHE_NUM_WORDS_PER_BLOCK 16
+
+`define ICACHE_NUM_WORDS_PER_BLOCK (`ICACHE_BLOCK / (`ICACHE_BANKS * 4))
 `define ICACHE_NUM_REQ    1
 `define ICACHE_LOG_NUM_REQ `CLOG2(`ICACHE_NUM_REQ)
 
-`define ICACHE_WAY_INDEX `CLOG2(`ICACHE_WAYS) //set this to 1 if CACHE_WAYS is 1
+ //set this to 1 if CACHE_WAYS is 1
+`define ICACHE_WAY_INDEX `CLOG2(`ICACHE_WAYS)
 //`define ICACHE_WAY_INDEX 1
 `define ICACHE_BLOCK_PER_BANK  (`ICACHE_BLOCK / `ICACHE_BANKS)
 
@@ -180,20 +184,24 @@
 `define ICACHE_ADDR_TAG_END    31
 
 //Cache configurations
-`define DCACHE_SIZE  4096 //Bytes
+//Bytes
+`define DCACHE_SIZE  4096 
 `ifdef SYN
 `define DCACHE_WAYS  1
 `else
-`define DCACHE_WAYS  4
+`define DCACHE_WAYS  2
 `endif
-`define DCACHE_BLOCK 128 //Bytes
+
+//Bytes
+`define DCACHE_BLOCK 64
 `define DCACHE_BANKS 4
 `define DCACHE_LOG_NUM_BANKS $clog2(`DCACHE_BANKS)
-`define DCACHE_NUM_WORDS_PER_BLOCK 4
+`define DCACHE_NUM_WORDS_PER_BLOCK (`DCACHE_BLOCK / (`DCACHE_BANKS * 4))
 `define DCACHE_NUM_REQ    `NT
 `define DCACHE_LOG_NUM_REQ $clog2(`DCACHE_NUM_REQ)
 
-`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS) //set this to 1 if CACHE_WAYS is 1
+//set this to 1 if CACHE_WAYS is 1
+`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS)
 //`define DCACHE_WAY_INDEX 1
 `define DCACHE_BLOCK_PER_BANK  (`DCACHE_BLOCK / `DCACHE_BANKS)
 

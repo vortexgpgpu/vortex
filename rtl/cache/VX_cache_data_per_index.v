@@ -46,7 +46,7 @@ module VX_cache_data_per_index
     wire [CACHE_WAYS-1:0] 									valid_use_per_way;
     wire [CACHE_WAYS-1:0] 									dirty_use_per_way;
     wire [CACHE_WAYS-1:0] 									hit_per_way;
-    reg  [NUM_IND-1:0][CACHE_WAY_INDEX-1:0] 		eviction_way_index;
+    reg  [CACHE_WAY_INDEX-1:0] 		eviction_way_index;
     wire [CACHE_WAYS-1:0][NUM_WORDS_PER_BLOCK-1:0][3:0] 	we_per_way;
     wire [CACHE_WAYS-1:0][NUM_WORDS_PER_BLOCK-1:0][31:0] 	data_write_per_way;
     wire [CACHE_WAYS-1:0] 									write_from_mem_per_way;
@@ -89,11 +89,11 @@ module VX_cache_data_per_index
     wire update    = |we && !miss;
     wire valid     = &valid_use_per_way;
 
-	  assign way 		   = hit ? way_index : (valid ? eviction_way_index[addr] : (invalid_found ? invalid_index : 0));
-    assign tag_use   = hit ? tag_use_per_way[way_index]   : (valid ? tag_use_per_way[eviction_way_index[addr]] : (invalid_found ? tag_use_per_way[invalid_index] : 0));
-    assign data_use  = hit ? data_use_per_way[way_index]  : (valid ? data_use_per_way[eviction_way_index[addr]] : (invalid_found ? data_use_per_way[invalid_index] : 0));
-    assign valid_use = hit ? valid_use_per_way[way_index] : (valid ? valid_use_per_way[eviction_way_index[addr]] : (invalid_found ? valid_use_per_way[invalid_index] : 0));
-    assign dirty_use = hit ? dirty_use_per_way[way_index] : (valid ? dirty_use_per_way[eviction_way_index[addr]] : (invalid_found ? dirty_use_per_way[invalid_index] : 0));
+	  assign way 		   = hit ? way_index : (valid ? eviction_way_index : (invalid_found ? invalid_index : 0));
+    assign tag_use   = hit ? tag_use_per_way[way_index]   : (valid ? tag_use_per_way[eviction_way_index] : (invalid_found ? tag_use_per_way[invalid_index] : 0));
+    assign data_use  = hit ? data_use_per_way[way_index]  : (valid ? data_use_per_way[eviction_way_index] : (invalid_found ? data_use_per_way[invalid_index] : 0));
+    assign valid_use = hit ? valid_use_per_way[way_index] : (valid ? valid_use_per_way[eviction_way_index] : (invalid_found ? valid_use_per_way[invalid_index] : 0));
+    assign dirty_use = hit ? dirty_use_per_way[way_index] : (valid ? dirty_use_per_way[eviction_way_index] : (invalid_found ? dirty_use_per_way[invalid_index] : 0));
 
 
 
@@ -132,11 +132,12 @@ module VX_cache_data_per_index
       if (rst) begin
         eviction_way_index <= 0;
       end else begin
-        if((miss && dirty_use && valid_use && !evict && valid_in)) begin // can be either evict or invalid cache entries
-     			if((eviction_way_index[addr]+1) == CACHE_WAYS) begin
-     				eviction_way_index[addr] <= 0;
+        // if((miss && dirty_use && valid_use && !evict && valid_in)) begin // can be either evict or invalid cache entries
+        if((state == SEND_MEM_REQ)) begin // can be either evict or invalid cache entries
+     			if((eviction_way_index+1) == CACHE_WAYS) begin
+     				eviction_way_index <= 0;
      			end else begin
-     				eviction_way_index[addr] <= (eviction_way_index[addr] + 1);
+     				eviction_way_index <= (eviction_way_index + 1);
      			end
       	end
       end

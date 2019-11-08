@@ -26,6 +26,7 @@ module VX_fetch (
 		wire[`NT_M1:0] thread_mask;
 		wire[`NW_M1:0] warp_num;
 		wire[31:0]     warp_pc;
+		wire           scheduled_warp;
 		VX_warp_scheduler warp_scheduler(
 			.clk              (clk),
 			.reset            (reset),
@@ -78,7 +79,8 @@ module VX_fetch (
 			.thread_mask      (thread_mask),
 			.warp_num         (warp_num),
 			.warp_pc          (warp_pc),
-			.out_ebreak       (out_ebreak)
+			.out_ebreak       (out_ebreak),
+			.scheduled_warp   (scheduled_warp)
 			);
 	
 		// always @(*) begin
@@ -86,7 +88,7 @@ module VX_fetch (
 		// end
 
 		assign icache_request.pc_address 						= warp_pc;
-		assign icache_request.out_cache_driver_in_valid 		= !schedule_delay;
+		assign icache_request.out_cache_driver_in_valid 		= !schedule_delay && scheduled_warp;
 		assign icache_request.out_cache_driver_in_mem_read		= `LW_MEM_READ;
 		assign icache_request.out_cache_driver_in_mem_write		= `NO_MEM_WRITE;
 	  	assign icache_request.out_cache_driver_in_data			= 32'b0;
