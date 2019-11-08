@@ -110,29 +110,90 @@
 
 `define ZERO_REG 5'h0
 
+`define CLOG2(x) \
+   (x <= 2) ? 1 : \
+   (x <= 4) ? 2 : \
+   (x <= 8) ? 3 : \
+   (x <= 16) ? 4 : \
+   (x <= 32) ? 5 : \
+   (x <= 64) ? 6 : \
+   (x <= 128) ? 7 : \
+   (x <= 256) ? 8 : \
+   (x <= 512) ? 9 : \
+   (x <= 1024) ? 10 : \
+   -199
 
 
 // `define PARAM
 
 //Cache configurations
-//Bytes
-`define DCACHE_SIZE  4096
+//Cache configurations
+`define ICACHE_SIZE  4096 //Bytes
+`ifdef SYN
+`define ICACHE_WAYS  1
+`else
+`define ICACHE_WAYS  2
+`endif
+`define ICACHE_BLOCK 128 //Bytes
+`define ICACHE_BANKS 1
+`define ICACHE_LOG_NUM_BANKS `CLOG2(`ICACHE_BANKS)
+`define ICACHE_NUM_WORDS_PER_BLOCK 16
+`define ICACHE_NUM_REQ    1
+`define ICACHE_LOG_NUM_REQ `CLOG2(`ICACHE_NUM_REQ)
+
+`define ICACHE_WAY_INDEX `CLOG2(`ICACHE_WAYS) //set this to 1 if CACHE_WAYS is 1
+//`define ICACHE_WAY_INDEX 1
+`define ICACHE_BLOCK_PER_BANK  (`ICACHE_BLOCK / `ICACHE_BANKS)
+
+// Offset
+`define ICACHE_OFFSET_NB (`CLOG2(`ICACHE_NUM_WORDS_PER_BLOCK))
+
+`define ICACHE_ADDR_OFFSET_ST  (2+$clog2(`ICACHE_BANKS))
+`define ICACHE_ADDR_OFFSET_ED  (`ICACHE_ADDR_OFFSET_ST+(`ICACHE_OFFSET_NB)-1)
+
+
+`define ICACHE_ADDR_OFFSET_RNG `ICACHE_ADDR_OFFSET_ED:`ICACHE_ADDR_OFFSET_ST
+`define ICACHE_OFFSET_SIZE_RNG (`CLOG2(`ICACHE_NUM_WORDS_PER_BLOCK)-1):0
+`define ICACHE_OFFSET_ST 0
+`define ICACHE_OFFSET_ED ($clog2(`ICACHE_NUM_WORDS_PER_BLOCK)-1)
+
+// Index
+`define ICACHE_NUM_IND (`ICACHE_SIZE / (`ICACHE_WAYS * `ICACHE_BLOCK_PER_BANK))
+`define ICACHE_IND_NB (`CLOG2(`ICACHE_NUM_IND))
+
+`define ICACHE_IND_ST  (`ICACHE_ADDR_OFFSET_ED+1)
+`define ICACHE_IND_ED  (`ICACHE_IND_ST+`ICACHE_IND_NB-1)
+
+`define ICACHE_ADDR_IND_RNG `ICACHE_IND_ED:`ICACHE_IND_ST
+`define ICACHE_IND_SIZE_RNG `ICACHE_IND_NB-1:0
+
+`define ICACHE_IND_SIZE_START 0
+`define ICACHE_IND_SIZE_END   `ICACHE_IND_NB-1
+
+
+// Tag
+`define ICACHE_ADDR_TAG_RNG 31:(`ICACHE_IND_ED+1)
+`define ICACHE_TAG_SIZE_RNG (32-(`ICACHE_IND_ED+1)-1):0
+`define ICACHE_TAG_SIZE_START 0
+`define ICACHE_TAG_SIZE_END	  (32-(`ICACHE_IND_ED+1)-1)
+`define ICACHE_ADDR_TAG_START  (`ICACHE_IND_ED+1)
+`define ICACHE_ADDR_TAG_END    31
+
+//Cache configurations
+`define DCACHE_SIZE  4096 //Bytes
 `ifdef SYN
 `define DCACHE_WAYS  1
 `else
-`define DCACHE_WAYS  2
+`define DCACHE_WAYS  4
 `endif
-
-//Bytes
-`define DCACHE_BLOCK 128 
-`define DCACHE_BANKS 8
+`define DCACHE_BLOCK 128 //Bytes
+`define DCACHE_BANKS 4
 `define DCACHE_LOG_NUM_BANKS $clog2(`DCACHE_BANKS)
 `define DCACHE_NUM_WORDS_PER_BLOCK 4
 `define DCACHE_NUM_REQ    `NT
 `define DCACHE_LOG_NUM_REQ $clog2(`DCACHE_NUM_REQ)
 
-//set this to 1 if CACHE_WAYS is 1
-`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS)
+`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS) //set this to 1 if CACHE_WAYS is 1
 //`define DCACHE_WAY_INDEX 1
 `define DCACHE_BLOCK_PER_BANK  (`DCACHE_BLOCK / `DCACHE_BANKS)
 
@@ -159,7 +220,7 @@
 `define DCACHE_IND_SIZE_RNG `DCACHE_IND_NB-1:0
 
 `define DCACHE_IND_SIZE_START 0
-`define DCACHE_IND_SIZE_END   `DCACHE_IND_NB-1 
+`define DCACHE_IND_SIZE_END   `DCACHE_IND_NB-1
 
 
 // Tag
@@ -170,8 +231,8 @@
 `define DCACHE_ADDR_TAG_START  (`DCACHE_IND_ED+1)
 `define DCACHE_ADDR_TAG_END    31
 
-
 // Mask
 `define DCACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`DCACHE_BLOCK-1))
+`define ICACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`ICACHE_BLOCK-1))
 
 

@@ -18,17 +18,29 @@ module Vortex
 	// IO
 	output wire        io_valid,
 	output wire[31:0]  io_data,
-	// Req
-    output reg [31:0]  o_m_read_addr,
-    output reg [31:0]  o_m_evict_addr,
-    output reg         o_m_valid,
-    output reg [31:0]  o_m_writedata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
-    output reg         o_m_read_or_write,
 
-    // Rsp
-    input  wire [31:0] i_m_readdata[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
-    input  wire        i_m_ready,
-	output wire        out_ebreak
+	// Req D Mem
+    output reg [31:0]  o_m_read_addr_d,
+    output reg [31:0]  o_m_evict_addr_d,
+    output reg         o_m_valid_d,
+    output reg [31:0]  o_m_writedata_d[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
+    output reg         o_m_read_or_write_d,
+
+    // Rsp D Mem
+    input  wire [31:0] i_m_readdata_d[`DCACHE_BANKS - 1:0][`DCACHE_NUM_WORDS_PER_BLOCK-1:0],
+    input  wire        i_m_ready_d,
+
+    // Req I Mem
+    output reg [31:0]  o_m_read_addr_i,
+    output reg [31:0]  o_m_evict_addr_i,
+    output reg         o_m_valid_i,
+    output reg [31:0]  o_m_writedata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0],
+    output reg         o_m_read_or_write_i,
+
+    // Rsp I Mem
+    input  wire [31:0] i_m_readdata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0],
+    input  wire        i_m_ready_i,
+    output wire        out_ebreak
 	);
 
 
@@ -49,34 +61,85 @@ assign io_data          = temp_io_data;
 
 
 VX_dram_req_rsp_inter #(
-	.NUMBER_BANKS(`DCACHE_BANKS),
-	.NUM_WORDS_PER_BLOCK(`DCACHE_NUM_WORDS_PER_BLOCK))    VX_dram_req_rsp();
+		.NUMBER_BANKS(`DCACHE_BANKS),
+		.NUM_WORDS_PER_BLOCK(`DCACHE_NUM_WORDS_PER_BLOCK))    VX_dram_req_rsp();
 
-assign o_m_read_addr     = VX_dram_req_rsp.o_m_read_addr;
-assign o_m_evict_addr    = VX_dram_req_rsp.o_m_evict_addr;
-assign o_m_valid         = VX_dram_req_rsp.o_m_valid;
-assign o_m_read_or_write = VX_dram_req_rsp.o_m_read_or_write;
+	VX_icache_response_inter icache_response_fe();
+	VX_icache_request_inter  icache_request_fe();
+	VX_dram_req_rsp_inter #(
+		.NUMBER_BANKS(`ICACHE_BANKS),
+		.NUM_WORDS_PER_BLOCK(`ICACHE_NUM_WORDS_PER_BLOCK))    VX_dram_req_rsp_icache();
 
-assign VX_dram_req_rsp.i_m_ready = i_m_ready;
+	//assign icache_response_fe.instruction = icache_response_instruction;
+	assign icache_request_pc_address      = icache_request_fe.pc_address;
 
-genvar curr_bank;
-genvar curr_word;
+	// Need to fix this so that it is only 1 set of outputs
+	// o_m Values
+
+	// L2 Cache
+	/*
+	assign VX_L2cache_req.out_cache_driver_in_valid         = VX_dram_req_rsp.o_m_valid || VX_dram_req_rsp_icache.o_m_valid; // Ask about this (width)
+	// Ask about the adress
+	assign VX_L2cache_req.out_cache_driver_in_address     = (VX_dram_req_rsp_icache.o_m_valid) ? icache_request_fe.pc_address: VX_dcache_req.out_cache_driver_in_address;
+	//assign VX_L2cache_req.out_cache_driver_in_address     = (VX_dram_req_rsp_icache.o_m_valid) ? VX_dram_req_rsp_icache.o_m_read_addr: VX_dram_req_rsp.o_m_read_addr;
+	//assign VX_L2cache_req.out_cache_driver_in_address     = (VX_dram_req_rsp_icache.o_m_valid) ? VX_dram_req_rsp_icache.o_m_evict_addr    : VX_dram_req_rsp.o_m_evict_addr;
+	assign VX_L2cache_req.out_cache_driver_in_mem_read = (VX_dram_req_rsp_icache.o_m_valid) ? (VX_dram_req_rsp_icache.o_m_read_or_write ? icache_request_fe.out_cache_driver_in_mem_write : icache_request_fe.out_cache_driver_in_mem_read)
+	    : (VX_dram_req_rsp.o_m_read_or_write ? VX_dcache_req.out_cache_driver_in_mem_write : VX_dcache_req.out_cache_driver_in_mem_read);
+	//assign VX_dram_req_rsp.i_m_ready = i_m_ready && !VX_dram_req_rsp_icache.o_m_valid && VX_dram_req_rsp.o_m_valid;
+	//assign VX_dram_req_rsp_icache.i_m_ready = i_m_ready && VX_dram_req_rsp_icache.o_m_valid;
+	genvar cur_bank;
+	genvar cur_word;
+	for (cur_bank = 0; cur_bank < CACHE_BANKS; cur_bank = cur_bank + 1) begin
+		for (cur_word = 0; cur_word < NUM_WORDS_PER_BLOCK; cur_word = cur_word + 1) begin
+			assign VX_L2cache_req.out_cache_driver_in_data[cur_bank][cur_word] = (VX_dram_req_rsp_icache.o_m_valid) ? VX_dram_req_rsp_icache.o_m_writedata[cur_bank][cur_word]
+				: VX_dram_req_rsp.o_m_writedata[cur_bank][cur_word];
+			assign VX_dram_req_rsp.i_m_readdata[cur_bank][cur_word] = VX_dram_req_rsp_L2.i_m_readdata[cur_bank][cur_word]; // fill in correct response data
+	        assign VX_dram_req_rsp_icache.i_m_readdata[cur_bank][cur_word] = VX_dram_req_rsp_L2.i_m_readdata[cur_bank][cur_word]; // fill in correct response data
+		end
+	end
+	*/
+
+
+	assign o_m_valid_i                      = VX_dram_req_rsp_icache.o_m_valid;
+	assign o_m_valid_d                      = VX_dram_req_rsp.o_m_valid;
+	assign o_m_read_addr_i                  = VX_dram_req_rsp_icache.o_m_read_addr;
+	assign o_m_read_addr_d                  = VX_dram_req_rsp.o_m_read_addr;
+	assign o_m_evict_addr_i                 = VX_dram_req_rsp_icache.o_m_evict_addr;
+	assign o_m_evict_addr_d                 = VX_dram_req_rsp.o_m_evict_addr;
+	assign o_m_read_or_write_i              = VX_dram_req_rsp_icache.o_m_read_or_write;
+	assign o_m_read_or_write_d              = VX_dram_req_rsp.o_m_read_or_write;
+	assign VX_dram_req_rsp.i_m_ready        = i_m_ready_d;
+	assign VX_dram_req_rsp_icache.i_m_ready = i_m_ready_i;
+	genvar curr_bank;
+	genvar curr_word;
+	/*
+	for (curr_bank = 0; curr_bank < CACHE_BANKS; curr_bank = curr_bank + 1) begin
+	    for (curr_word = 0; curr_word < NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
+	        assign o_m_writedata_i[curr_bank][curr_word]                     = VX_dram_req_rsp_icache.o_m_writedata[curr_bank][curr_word];
+	        assign o_m_writedata_d[curr_bank][curr_word]                     = VX_dram_req_rsp.o_m_writedata[curr_bank][curr_word];
+	        assign VX_dram_req_rsp.i_m_readdata[curr_bank][curr_word]        = i_m_readdata_d[curr_bank][curr_word]; // fixed
+	        assign VX_dram_req_rsp_icache.i_m_readdata[curr_bank][curr_word] = i_m_readdata_i[curr_bank][curr_word]; // fixed
+	    end
+	end
+	*/
+
 for (curr_bank = 0; curr_bank < `DCACHE_BANKS; curr_bank = curr_bank + 1) begin
-
 	for (curr_word = 0; curr_word < `DCACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
-		assign o_m_writedata[curr_bank][curr_word]                = VX_dram_req_rsp.o_m_writedata[curr_bank][curr_word];
-		assign VX_dram_req_rsp.i_m_readdata[curr_bank][curr_word] = i_m_readdata[curr_bank][curr_word];
+
+	assign o_m_writedata_d[curr_bank][curr_word]                     = VX_dram_req_rsp.o_m_writedata[curr_bank][curr_word];
+	assign VX_dram_req_rsp.i_m_readdata[curr_bank][curr_word]        = i_m_readdata_d[curr_bank][curr_word]; // fixed
 
 	end
 end
 
-// Icache Interface
 
-VX_icache_response_inter icache_response_fe();
-VX_icache_request_inter  icache_request_fe();
+for (curr_bank = 0; curr_bank < `ICACHE_BANKS; curr_bank = curr_bank + 1) begin
+	for (curr_word = 0; curr_word < `ICACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
+		assign o_m_writedata_i[curr_bank][curr_word]                     = VX_dram_req_rsp_icache.o_m_writedata[curr_bank][curr_word];
+		assign VX_dram_req_rsp_icache.i_m_readdata[curr_bank][curr_word] = i_m_readdata_i[curr_bank][curr_word]; // fixed
+	end
+end
 
-assign icache_response_fe.instruction = icache_response_instruction;
-assign icache_request_pc_address      = icache_request_fe.pc_address;
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -137,11 +200,14 @@ VX_back_end vx_back_end(
 
 
 VX_dmem_controller VX_dmem_controller(
-	.clk            (clk),
-	.reset          (reset),
-	.VX_dram_req_rsp(VX_dram_req_rsp),
-	.VX_dcache_req  (VX_dcache_req),
-	.VX_dcache_rsp  (VX_dcache_rsp)
+	.clk                      (clk),
+	.reset                    (reset),
+	.VX_dram_req_rsp          (VX_dram_req_rsp),
+	.VX_dram_req_rsp_icache   (VX_dram_req_rsp_icache),
+	.VX_icache_req            (icache_request_fe),
+	.VX_icache_rsp            (icache_response_fe),
+	.VX_dcache_req            (VX_dcache_req),
+	.VX_dcache_rsp            (VX_dcache_rsp)
 	);
 // VX_csr_handler vx_csr_handler(
 // 		.clk                  (clk),

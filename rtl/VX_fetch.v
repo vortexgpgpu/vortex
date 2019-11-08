@@ -21,7 +21,7 @@ module VX_fetch (
 		wire pipe_stall;
 
 
-		assign pipe_stall = schedule_delay;
+		assign pipe_stall = schedule_delay || icache_response.delay;
 
 		wire[`NT_M1:0] thread_mask;
 		wire[`NW_M1:0] warp_num;
@@ -85,7 +85,12 @@ module VX_fetch (
 		// 	$display("Inside verilog instr: %h, pc: %h", icache_response.instruction, warp_pc);
 		// end
 
-		assign icache_request.pc_address = warp_pc;
+		assign icache_request.pc_address 						= warp_pc;
+		assign icache_request.out_cache_driver_in_valid 		= !schedule_delay;
+		assign icache_request.out_cache_driver_in_mem_read		= `LW_MEM_READ;
+		assign icache_request.out_cache_driver_in_mem_write		= `NO_MEM_WRITE;
+	  	assign icache_request.out_cache_driver_in_data			= 32'b0;
+
 		assign fe_inst_meta_fd.warp_num  = warp_num;
 		assign fe_inst_meta_fd.valid     = thread_mask;
 

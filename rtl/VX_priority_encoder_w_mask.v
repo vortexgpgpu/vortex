@@ -1,3 +1,4 @@
+`include "../VX_define.v"
 module VX_priority_encoder_w_mask
   #(
   	parameter N = 10
@@ -5,7 +6,9 @@ module VX_priority_encoder_w_mask
   (
     input  wire[N-1:0]        valids,
     output reg [N-1:0]        mask,
-    output reg[$clog2(N)-1:0] index,
+    //output reg[$clog2(N)-1:0] index,
+    output reg[(`CLOG2(N))-1:0] index,
+    //output reg[`CLOG2(N):0] index, // eh
     output reg                found
   );
 
@@ -16,7 +19,8 @@ module VX_priority_encoder_w_mask
 		// mask  = 0;
 		for (i = 0; i < N; i=i+1) begin
 			if (valids[i]) begin
-				index = i[$clog2(N)-1:0];
+				//index = i[$clog2(N)-1:0];
+        		index = i[(`CLOG2(N))-1:0];
 				found = 1;
 				// mask[index] = (1 << i);
 				// $display("%h",(1 << i));
