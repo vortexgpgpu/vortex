@@ -136,7 +136,7 @@
 `define ICACHE_WAYS  2
 `endif
 //Bytes
-`define ICACHE_BLOCK 8
+`define ICACHE_BLOCK 16
 `define ICACHE_BANKS 1
 `define ICACHE_LOG_NUM_BANKS `CLOG2(`ICACHE_BANKS)
 

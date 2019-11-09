@@ -103,6 +103,8 @@ module VX_d_cache
     assign o_p_readdata = new_final_data_read_Qual;
 
 
+    reg[CACHE_WAY_INDEX-1:0] global_way_to_evict;
+
 
     wire[CACHE_BANKS - 1 : 0][NUM_REQ-1:0]         thread_track_banks;        // Valid thread mask per bank
     wire[CACHE_BANKS - 1 : 0][LOG_NUM_REQ-1:0]  index_per_bank;            // Index of thread each bank will try to service
@@ -116,9 +118,9 @@ module VX_d_cache
     reg[CACHE_BANKS-1:0]               eviction_wb_old;
 
 
-    wire[CACHE_BANKS -1 : 0][CACHE_WAY_INDEX-1:0] evicted_way_new;
-    reg [CACHE_BANKS -1 : 0][CACHE_WAY_INDEX-1:0] evicted_way_old;
-    wire[CACHE_BANKS -1 : 0][CACHE_WAY_INDEX-1:0] way_used;
+    // wire[CACHE_BANKS -1 : 0][CACHE_WAY_INDEX-1:0] evicted_way_new;
+    // reg [CACHE_BANKS -1 : 0][CACHE_WAY_INDEX-1:0] evicted_way_old;
+    // wire[CACHE_BANKS -1 : 0][CACHE_WAY_INDEX-1:0] way_used;
 
     // Internal State
     reg [3:0] state;
@@ -133,7 +135,7 @@ module VX_d_cache
     reg[CACHE_BANKS - 1 : 0][31:0] eviction_addr_per_bank;
 
     reg[31:0] miss_addr;
-    reg[31:0] evict_addr;
+    // reg[31:0] evict_addr;
 
     wire curr_processor_request_valid = (|i_p_valid);
 
@@ -240,6 +242,9 @@ module VX_d_cache
   // Handle if there is more than one miss
   assign new_stored_valid = use_valid & (~threads_serviced_Qual);
 
+
+  wire update_global_way_to_evict = ((state == RECIV_MEM_RSP) && (new_state == CACHE_IDLE) && (CACHE_WAYS)) && (CACHE_WAYS > 1);
+
 ///////////////////////////////////////////////////////////////////////
   genvar cur_t;
   integer init_b;
@@ -251,28 +256,37 @@ module VX_d_cache
       stored_valid            <= 0;
       // eviction_addr_per_bank  <= 0;
       miss_addr               <= 0;
-      evict_addr              <= 0;
+      // evict_addr              <= 0;
       // threads_serviced_Qual    = 0;
       // for (init_b = 0; init_b < NUMBER_BANKS; init_b=init_b+1)
       // begin
       //   debug_hit_per_bank_mask[init_b] <= 0;
       // end
-      evicted_way_old <= 0;
-      eviction_wb_old <= 0;
+      // evicted_way_old <= 0;
+      // eviction_wb_old <= 0;
+      global_way_to_evict <= 0;
       
     end else begin
+
+      global_way_to_evict <= (update_global_way_to_evict) ? (global_way_to_evict+1) : global_way_to_evict;
+
       state           <= new_state;
 
       stored_valid    <= new_stored_valid;
 
-      if (miss_found) begin
-        miss_addr   <= i_p_addr[send_index_to_bank[miss_bank_index]];
-        evict_addr  <= eviction_addr_per_bank[miss_bank_index];
+      if (state == CACHE_IDLE) begin
+        if (miss_found) begin
+          miss_addr   <= i_p_addr[send_index_to_bank[miss_bank_index]];
+          // evict_addr  <= eviction_addr_per_bank[miss_bank_index];
+        end else begin
+          miss_addr   <= 0;
+          // evict_addr  <= 0;
+        end
       end
 
       final_data_read <= new_final_data_read_Qual;
-      evicted_way_old <= evicted_way_new;
-      eviction_wb_old <= eviction_wb;
+      // evicted_way_old <= evicted_way_new;
+      // eviction_wb_old <= eviction_wb;
     end
   end
 
@@ -281,13 +295,13 @@ module VX_d_cache
   generate
     for (bank_id = 0; bank_id < CACHE_BANKS; bank_id = bank_id + 1)
       begin
-        wire[31:0] bank_addr    = (state == SEND_MEM_REQ)  ? evict_addr  :
+        wire[31:0] bank_addr    = (state == SEND_MEM_REQ)  ? miss_addr  :
                                   (state == RECIV_MEM_RSP) ? miss_addr   :
                                   i_p_addr[send_index_to_bank[bank_id]];
 
-        assign evicted_way_new[bank_id] = (state == SEND_MEM_REQ)  ? way_used[bank_id]        :
-                                          (state == RECIV_MEM_RSP) ? evicted_way_old[bank_id] :
-                                          0;
+        // assign evicted_way_new[bank_id] = (state == SEND_MEM_REQ)  ? way_used[bank_id]        :
+        //                                   (state == RECIV_MEM_RSP) ? evicted_way_old[bank_id] :
+        //                                   0;
 
         wire[1:0]  byte_select                    = bank_addr[1:0];
         wire[OFFSET_SIZE_END:OFFSET_SIZE_START] cache_offset = bank_addr[ADDR_OFFSET_END:ADDR_OFFSET_START];
@@ -344,8 +358,7 @@ module VX_d_cache
           .data_evicted     (o_m_writedata[bank_id]),
           .eviction_wb      (eviction_wb[bank_id]),       // Something needs to be written back
           .fetched_writedata(i_m_readdata[bank_id]), // Data From memory
-          .evicted_way      (evicted_way_new[bank_id]),
-          .way_use          (way_used[bank_id])
+          .evicted_way      (global_way_to_evict)
         );
 
       end
@@ -354,7 +367,7 @@ module VX_d_cache
     // Mem Rsp
 
     // Req to mem:
-    assign o_m_evict_addr     = evict_addr & MEM_ADDR_REQ_MASK;
+    assign o_m_evict_addr     = (eviction_addr_per_bank[0]) & MEM_ADDR_REQ_MASK; // Could be anything because tag+index are same
     assign o_m_read_addr      = miss_addr  & MEM_ADDR_REQ_MASK;
     assign o_m_valid          = (state == SEND_MEM_REQ);
     assign o_m_read_or_write  = (state == SEND_MEM_REQ) && (|eviction_wb);

@@ -56,8 +56,7 @@ module VX_Cache_Bank
             eviction_addr, // What's the eviction tag
 
             data_evicted,
-            evicted_way,
-            way_use
+            evicted_way
            );
 
    // localparam NUMBER_BANKS         = `CACHE_BANKS;
@@ -69,6 +68,8 @@ module VX_Cache_Bank
     localparam SEND_MEM_REQ  = 1; // Write back this block into memory
     localparam RECIV_MEM_RSP = 2;
 
+
+    localparam BLOCK_NUM_BITS = `CLOG2(CACHE_BLOCK);
     // Inputs
     input wire rst;
     input wire clk;
@@ -94,7 +95,6 @@ module VX_Cache_Bank
 
 
     input  wire[CACHE_WAY_INDEX-1:0] evicted_way;
-    output wire[CACHE_WAY_INDEX-1:0] way_use;
 
     // Outputs
       // Normal shit
@@ -122,7 +122,6 @@ module VX_Cache_Bank
 
 
 
-    wire[CACHE_WAY_INDEX-1:0] update_way;
     wire[CACHE_WAY_INDEX-1:0] way_to_update;
 
     assign miss = (tag_use != o_tag) && valid_use && valid_in;
@@ -137,8 +136,7 @@ module VX_Cache_Bank
     assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in; // TODO
     assign hit            = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data
-    assign eviction_addr  = {eviction_tag, actual_index, 7'b0}; // Fix with actual data
-    assign update_way     = hit ? way_use : 0;
+    assign eviction_addr  = {eviction_tag, actual_index, {(BLOCK_NUM_BITS){1'b0}}}; // Fix with actual data
 
 
 
@@ -215,7 +213,7 @@ module VX_Cache_Bank
 
         // assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : use_write_data;
-        assign way_to_update = write_from_mem ? evicted_way          : update_way;
+        assign way_to_update = evicted_way;
     end
 
 
@@ -243,8 +241,7 @@ module VX_Cache_Bank
         .tag_use      (tag_use),
         .data_use     (data_use),
         .valid_use    (valid_use),
-        .dirty_use    (dirty_use),
-        .way          (way_use)
+        .dirty_use    (dirty_use)
       );
 
 
