@@ -35,3 +35,15 @@ void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void
 	setup_call();
 
 }
+
+
+// void vx_cl_spawnWarps(char * args, char * pocl_context, long group_x, long group_y, long group_z)
+// {
+// 	if (group_z != 1)
+// 	{
+// 		vx_printf("ERROR: group_z should be set equal to 1");
+// 		return;
+// 	}
+
+// 	vx_spawnWarps(group_y, group_x, )
+// }

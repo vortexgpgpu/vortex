@@ -4,6 +4,14 @@
 #include "../../tests/tests.h"
 #include "../../vx_api/vx_api.h"
 
+
+// #include <utlist.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
 typedef struct
 {
 	unsigned * x;
@@ -46,14 +54,31 @@ void mat_add_kernel(void * void_arguments)
 	__endif
 }
 
+void vx_print_mat(unsigned * matPtr, int numRows, int numCols)
+{
+	vx_print_str("---------------------\n");
+	for (int i = 0; i < numRows; i++)
+	{
+		for (int j = 0; j < numCols; j++)
+		{
+			unsigned index = (i * numCols) + j;
+			vx_print_hex(matPtr[index]);
+			vx_print_str(" ");
+		}
+		vx_print_str("\n");
+	}
+}
+
 
 int main()
 {
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
-
+	// void * hellp = malloc(4);
 	vx_print_str("Dev Main\n");
+
+	vx_print_str("vx_spawnWarps\n");
 
 	mat_add_args_t arguments;
 	arguments.x         = x;
@@ -66,19 +91,26 @@ int main()
 	int numWarps   = 4;
 	int numThreads = 4;
 
+	// First kernel call
 	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_print_mat(z, arguments.numRows, arguments.numColums);
 
-	for (int i = 0; i < arguments.numRows; i++)
-	{
-		for (int j = 0; j < arguments.numColums; j++)
-		{
-			unsigned index = (i * arguments.numColums) + j;
-			vx_print_hex(z[index]);
-			vx_print_str(" ");
-		}
-		vx_print_str("\n");
-	}
+
+	arguments.x         = z;
+	arguments.y         = y;
+	arguments.z         = z;
+	arguments.numColums = 4;
+	arguments.numRows   = 4;
+
+	// Second Kernel Call
+	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_print_mat(z, arguments.numRows, arguments.numColums);
 
 
 	return 0;
 }
+
+
+
+
+

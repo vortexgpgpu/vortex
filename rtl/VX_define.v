@@ -130,11 +130,7 @@
 //Cache configurations
  //Bytes
 `define ICACHE_SIZE  1024
-`ifdef SYN
-`define ICACHE_WAYS  1
-`else
 `define ICACHE_WAYS  2
-`endif
 //Bytes
 `define ICACHE_BLOCK 16
 `define ICACHE_BANKS 1
@@ -186,11 +182,7 @@
 //Cache configurations
 //Bytes
 `define DCACHE_SIZE  4096 
-`ifdef SYN
-`define DCACHE_WAYS  1
-`else
 `define DCACHE_WAYS  2
-`endif
 
 //Bytes
 `define DCACHE_BLOCK 64

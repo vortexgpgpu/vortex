@@ -83,6 +83,7 @@ namespace Harp {
 
     bool interrupt(Word r0);
     bool running() const;
+
     void step();
 
     void printStats() const;

@@ -19,9 +19,9 @@ module VX_cache_bank_valid
 		    for (t_id = 0; t_id < NUM_REQ; t_id = t_id + 1)
 		    begin
 					if (NUMBER_BANKS != 1) begin
-		    		thread_track_banks[i_p_addr[t_id][2+LOG_NUM_BANKS-1:2]][t_id] = i_p_valid[t_id];
+		    			thread_track_banks[i_p_addr[t_id][2+LOG_NUM_BANKS-1:2]][t_id] = i_p_valid[t_id];
 					end else begin
-						thread_track_banks[t_id] = i_p_valid[t_id];
+						thread_track_banks[0][t_id] = i_p_valid[t_id];
 					end
 		    end
 		end

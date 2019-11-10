@@ -243,7 +243,7 @@ module VX_d_cache
   assign new_stored_valid = use_valid & (~threads_serviced_Qual);
 
 
-  wire update_global_way_to_evict = ((state == RECIV_MEM_RSP) && (new_state == CACHE_IDLE) && (CACHE_WAYS)) && (CACHE_WAYS > 1);
+  wire update_global_way_to_evict = ((state == RECIV_MEM_RSP) && (new_state == CACHE_IDLE)) && (CACHE_WAYS > 1);
 
 ///////////////////////////////////////////////////////////////////////
   genvar cur_t;

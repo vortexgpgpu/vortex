@@ -87,7 +87,7 @@ reg         out_ebreak;
 
 	initial begin
 		// $fdumpfile("vortex1.vcd");
-		load_file("../../runtime/mains/simple/vx_simple_main.hex");
+		load_file("../../runtime/mains/dev/vx_dev_main.hex");
 		//load_file("../../kernel/vortex_test.hex");
 		$dumpvars(0, vortex_tb);
 		reset = 1;

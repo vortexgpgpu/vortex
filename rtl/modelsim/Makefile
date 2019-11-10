@@ -112,8 +112,8 @@ comp:
 
 
 sim: comp
-	# vsim vortex_tb $(LOG) -c -lib $(LIB) $(CMD) > vortex_sim.log
-	vsim -novopt vortex_tb $(LOG) -c -lib $(LIB) $(CMD) > vortex_sim.log
+	vsim vortex_tb $(LOG) -c -lib $(LIB) $(CMD) > vortex_sim.log
+	# vsim -novopt vortex_tb $(LOG) -c -lib $(LIB) $(CMD) > vortex_sim.log
 
 
 
