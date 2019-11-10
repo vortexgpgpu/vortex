@@ -188,7 +188,7 @@ module VX_cache_data
         assign tag_use   = old_tag;
 
         /* verilator lint_off PINCONNECTEMPTY */
-       rf2_256x19_wm0 meta (
+       rf2_32x19_wm0 meta (
              .CENYA(),
              .AYA(),
              .CENYB(),
