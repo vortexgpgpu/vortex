@@ -116,7 +116,7 @@ module VX_cache_data
 
         // Using ASIC MEM
         /* verilator lint_off PINCONNECTEMPTY */
-       rf2_256x128_wm1 data (
+       rf2_32x128_wm1 data (
              .CENYA(),
              .AYA(),
              .CENYB(),
