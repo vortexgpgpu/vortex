@@ -63,6 +63,7 @@ module VX_gpr (
 		wire[`NT_M1:0][31:0] temp_b;
 
 
+		`ifndef SYN
 			genvar thread;
 			genvar curr_bit;
 			for (thread = 0; thread < `NT; thread = thread + 1)
@@ -73,6 +74,13 @@ module VX_gpr (
 					assign out_b_reg_data[thread][curr_bit] = ((temp_b[thread][curr_bit] === 1'dx) || cena_2) ? 1'b0 : temp_b[thread][curr_bit];
 				end
 			end
+
+		`else
+
+		assign out_a_reg_data = temp_a;
+		assign out_b_reg_data = temp_b;
+
+		`endif 
 
 
 		wire[`NT_M1:0][31:0] to_write = (VX_writeback_inter.rd != 0) ? VX_writeback_inter.write_data : 0;
