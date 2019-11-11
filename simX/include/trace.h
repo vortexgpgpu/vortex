@@ -28,6 +28,9 @@ namespace Harp {
 
     // Instruction execute
     bool stall_warp;
+    bool wspawn;
+
+    bool stalled;
   } trace_inst_t;
 
 }

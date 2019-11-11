@@ -13,8 +13,9 @@ LIB=
 CF=-CFLAGS '-std=c++11 -fPIC -O3'
 
 LIGHTW=-Wno-UNOPTFLAT -Wno-BLKLOOPINIT
-
+DEB=--trace --prof-cfuncs -DVL_DEBUG=1 
 EXE=--exe $(LIB_OBJS)
+
 all: simX
 
 # simX:
@@ -22,7 +23,7 @@ all: simX
 
 
 simX:
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW)
+	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW) $(DEB)
 	(cd obj_dir && make -j -f Vcache_simX.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
 
 clean:

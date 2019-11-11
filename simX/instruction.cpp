@@ -78,7 +78,7 @@ Word signExt(Word w, Size bit, Word mask) {
   return w;
 }
 
-void Instruction::executeOn(Warp &c) {
+void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
   D(3, "Begin instruction execute.");
 
   /* If I try to execute a privileged instruction in user mode, throw an
@@ -357,14 +357,14 @@ void Instruction::executeOn(Warp &c) {
         break;
       case L_INST:
            //std::cout << "L_INST\n";
+
            memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);
            shift_by  = ((reg[rsrc[0]] + immsrc) & 0x00000003) * 8;
            data_read = c.core->mem.read(memAddr, c.supervisorMode);
+           trace_inst->is_lw = true;
+           trace_inst->mem_addresses[t] = memAddr;
            // //std::cout <<std::hex<< "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
-#ifdef EMU_INSTRUMENTATION
-           Harp::OSDomain::osDomain->
-             do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
-#endif
+
         switch (func3)
         {
 
@@ -484,6 +484,8 @@ void Instruction::executeOn(Warp &c) {
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
         std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
+        trace_inst->is_sw = true;
+        trace_inst->mem_addresses[t] = memAddr;
         // //std::cout << "FUNC3: " << func3 << "\n";
         if ((memAddr == 0x00010000) && (t == 0))
         {
@@ -517,6 +519,7 @@ void Instruction::executeOn(Warp &c) {
         break;
       case B_INST:
         //std::cout << "B_INST\n";
+        trace_inst->stall_warp = true;
         switch (func3)
         {
           case 0:
@@ -579,6 +582,7 @@ void Instruction::executeOn(Warp &c) {
         break;
       case JAL_INST:
         //std::cout << "JAL_INST\n";
+        trace_inst->stall_warp = true;
         if (!pcSet) nextPc = (c.pc - 4) + immsrc;
         if (!pcSet) {/*std::cout << "JAL... SETTING PC: " << nextPc << "\n"; */}
         if (rdest != 0)
@@ -589,6 +593,7 @@ void Instruction::executeOn(Warp &c) {
         break;
       case JALR_INST:
         std::cout << "JALR_INST\n";
+        trace_inst->stall_warp = true;
         if (!pcSet) nextPc = reg[rsrc[0]] + immsrc;
         if (!pcSet) {/*std::cout << "JALR... SETTING PC: " << nextPc << "\n";*/ }
         if (rdest != 0)
@@ -704,6 +709,7 @@ void Instruction::executeOn(Warp &c) {
           case 1:
             // WSPAWN
             std::cout << "WSPAWN\n";
+            trace_inst->wspawn = true;
             if (sjOnce)
             {
               sjOnce = false;
@@ -745,6 +751,7 @@ void Instruction::executeOn(Warp &c) {
           {
             // SPLIT
             //std::cout << "SPLIT\n";
+            trace_inst->stall_warp = true;
             if (sjOnce)
             {
               sjOnce = false;
@@ -812,12 +819,13 @@ void Instruction::executeOn(Warp &c) {
             }
             break;
           case 4:
+            trace_inst->stall_warp = true;
             // is_barrier
             break;
           case 0:
             // TMC
             //std::cout << "JALRS\n";
-
+            trace_inst->stall_warp = true;
             nextActiveThreads = reg[rsrc[0]];
             {
               for (int ff = 0; ff < c.tmask.size(); ff++)

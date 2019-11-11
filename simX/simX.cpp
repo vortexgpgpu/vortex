@@ -104,6 +104,24 @@ int emu_main(int argc, char **argv) {
 
     // core.w[0].pc = 0x8000007c; // If I want to start at a specific location
     std::cout << "ABOUT TO START\n";
+    // bool count_down = false;
+    // int cycles_left;
+    // while (!count_down || (count_down && (cycles_left == 0)))
+    // {
+
+    //   if (count_down)
+    //   {
+    //     cycles_left--;
+    //   }
+
+    //   console.poll();
+    //   core.step();
+    //   bool run = core.running();
+    //   if (!run)
+    //   {
+    //     count_down = true;
+    //   }
+    // }
     while (core.running()) { console.poll(); core.step(); }
 
     if (showStats) core.printStats();

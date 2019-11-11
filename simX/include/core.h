@@ -19,9 +19,9 @@
 #include "Vcache_simX.h"
 #include "verilated.h"
 
-#ifdef VCD_OUTPUT
+// #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
-#endif
+// #endif
 
 
 #include "trace.h"
@@ -92,17 +92,34 @@ namespace Harp {
   public:
     Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id=0);
 
-    Vcache_simX * cache_simulator;
+    Vcache_simX   * cache_simulator;
+    VerilatedVcdC * m_trace;
+
+    bool renameTable[32][32];
+    bool stallWarp[32];
+    bool foundSchedule;
+
+    trace_inst_t inst_in_fetch;
+    trace_inst_t inst_in_decode;
+    trace_inst_t inst_in_scheduler;
+    trace_inst_t inst_in_exe;
+    trace_inst_t inst_in_lsu;
+    trace_inst_t inst_in_wb;
+
+    bool release_warp;
+    int release_warp_num;
 
     bool interrupt(Word r0);
     bool running() const;
 
+    void getCacheDelays(trace_inst_t *);
+    void warpScheduler();
     void fetch();
     void decode();
     void scheduler();
-    void gpr_read();
     void execute_unit();
     void load_store();
+    void writeback();
 
     void step();
 
@@ -117,6 +134,7 @@ namespace Harp {
     unsigned long steps;
     std::vector<Warp> w;
     std::map<Word, std::set<Warp *> > b; // Barriers
+    int schedule_w;
   };
 
   class Warp {

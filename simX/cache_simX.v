@@ -93,25 +93,26 @@ module cache_simX (
 	always @(posedge clk, posedge reset) begin
 		if (reset)
 		begin
-			icache_i_m_ready <= 0;
-			dcache_i_m_ready <= 0;
+			icache_i_m_ready = 0;
+			dcache_i_m_ready = 0;
 		end else begin
 
 			if (VX_dram_req_rsp_icache.o_m_valid) begin
-				icache_i_m_ready <= 1;
+				icache_i_m_ready = 1;
+				// $display("cache_simX.v: setting icache_i_m_ready = %d", icache_i_m_ready);
 			end else if (icache_i_m_ready) begin
-				icache_i_m_ready <= 0;
+				icache_i_m_ready = 0;
 			end else begin
-				icache_i_m_ready <= 0;
+				icache_i_m_ready = 0;
 			end
 
 
 			if (VX_dram_req_rsp.o_m_valid) begin
-				dcache_i_m_ready <= 1;
+				dcache_i_m_ready = 1;
 			end else if (dcache_i_m_ready) begin
-				dcache_i_m_ready <= 0;
+				dcache_i_m_ready = 0;
 			end else begin
-				dcache_i_m_ready <= 0;
+				dcache_i_m_ready = 0;
 			end
 
 		end

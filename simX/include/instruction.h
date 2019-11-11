@@ -8,7 +8,7 @@
 #include <iostream>
 
 #include "types.h"
-
+#include "trace.h"
 namespace Harp {
   class Warp;
   class Ref;
@@ -79,7 +79,7 @@ namespace Harp {
       {
       }
 
-    void executeOn(Warp &warp);
+    void executeOn(Warp &warp, trace_inst_t *);
     friend std::ostream &operator<<(std::ostream &, Instruction &);
 
     /* Setters used to "craft" the instruction. */
