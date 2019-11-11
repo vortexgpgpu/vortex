@@ -100,6 +100,7 @@ module VX_cache_data
 
     `else 
 
+        wire[IND_SIZE_END:IND_SIZE_START] use_addr = addr;
 
         wire cena = 1;
 
@@ -127,11 +128,11 @@ module VX_cache_data
              .SOB(),
              .CLKA(clk),
              .CENA(cena),
-             .AA(addr),
+             .AA(use_addr),
              .CLKB(clk),
              .CENB(cenb_d),
              .WENB(write_bit_mask_d),
-             .AB(addr),
+             .AB(use_addr),
              .DB(wdata_d),
              .EMAA(3'b011),
              .EMASA(1'b0),
@@ -199,11 +200,11 @@ module VX_cache_data
              .SOB(),
              .CLKA(clk),
              .CENA(cena),
-             .AA(addr),
+             .AA(use_addr),
              .CLKB(clk),
              .CENB(cenb_m),
              // .WENB(write_bit_mask_m),
-             .AB(addr),
+             .AB(use_addr),
              .DB(wdata_m),
              .EMAA(3'b011),
              .EMASA(1'b0),

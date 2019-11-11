@@ -28,8 +28,8 @@ NanGate_15nm_OCL.db
 set symbol_library		{}
 set target_library		[concat NanGate_15nm_OCL.db]
 NanGate_15nm_OCL.db
-set verilog_files 	[ list VX_countones.v rf2_128x128_wm1.v VX_priority_encoder_w_mask.v VX_dram_req_rsp_inter.v VX_cache_bank_valid.v VX_cache_data_per_index.v VX_Cache_Bank.v VX_cache_data.v VX_d_cache.v VX_bank_valids.v VX_priority_encoder_sm.v VX_shared_memory.v VX_shared_memory_block.v VX_dmem_controller.v VX_generic_priority_encoder.v VX_generic_stack.v VX_join_inter.v VX_csr_wrapper.v VX_csr_req_inter.v VX_csr_wb_inter.v  VX_gpgpu_inst.v VX_gpu_inst_req_inter.v VX_wstall_inter.v VX_inst_exec_wb_inter.v VX_lsu.v VX_execute_unit.v VX_lsu_addr_gen.v VX_inst_multiplex.v VX_exec_unit_req_inter.v VX_lsu_req_inter.v VX_alu.v VX_back_end.v VX_gpr_stage.v VX_gpr_data_inter.v VX_csr_handler.v VX_decode.v VX_define.v VX_scheduler.v VX_fetch.v VX_front_end.v VX_generic_register.v VX_gpr.v VX_gpr_wrapper.v VX_priority_encoder.v VX_warp_scheduler.v VX_writeback.v byte_enabled_simple_dual_port_ram.v VX_branch_response_inter.v VX_dcache_request_inter.v VX_dcache_response_inter.v VX_frE_to_bckE_req_inter.v VX_gpr_clone_inter.v VX_gpr_jal_inter.v VX_gpr_read_inter.v VX_gpr_wspawn_inter.v VX_icache_request_inter.v VX_icache_response_inter.v VX_inst_mem_wb_inter.v VX_inst_meta_inter.v VX_jal_response_inter.v VX_mem_req_inter.v VX_mw_wb_inter.v VX_warp_ctl_inter.v VX_wb_inter.v VX_d_e_reg.v VX_f_d_reg.v Vortex.v 					]
-VX_countones.v rf2_128x128_wm1.v VX_priority_encoder_w_mask.v VX_dram_req_rsp_inter.v VX_cache_bank_valid.v VX_cache_data_per_index.v VX_Cache_Bank.v VX_cache_data.v VX_d_cache.v VX_bank_valids.v VX_priority_encoder_sm.v VX_shared_memory.v VX_shared_memory_block.v VX_dmem_controller.v VX_generic_priority_encoder.v VX_generic_stack.v VX_join_inter.v VX_csr_wrapper.v VX_csr_req_inter.v VX_csr_wb_inter.v VX_gpgpu_inst.v VX_gpu_inst_req_inter.v VX_wstall_inter.v VX_inst_exec_wb_inter.v VX_lsu.v VX_execute_unit.v VX_lsu_addr_gen.v VX_inst_multiplex.v VX_exec_unit_req_inter.v VX_lsu_req_inter.v VX_alu.v VX_back_end.v VX_gpr_stage.v VX_gpr_data_inter.v VX_csr_handler.v VX_decode.v VX_define.v VX_scheduler.v VX_fetch.v VX_front_end.v VX_generic_register.v VX_gpr.v VX_gpr_wrapper.v VX_priority_encoder.v VX_warp_scheduler.v VX_writeback.v byte_enabled_simple_dual_port_ram.v VX_branch_response_inter.v VX_dcache_request_inter.v VX_dcache_response_inter.v VX_frE_to_bckE_req_inter.v VX_gpr_clone_inter.v VX_gpr_jal_inter.v VX_gpr_read_inter.v VX_gpr_wspawn_inter.v VX_icache_request_inter.v VX_icache_response_inter.v VX_inst_mem_wb_inter.v VX_inst_meta_inter.v VX_jal_response_inter.v VX_mem_req_inter.v VX_mw_wb_inter.v VX_warp_ctl_inter.v VX_wb_inter.v VX_d_e_reg.v VX_f_d_reg.v Vortex.v
+set verilog_files 	[ list VX_countones.v VX_priority_encoder_w_mask.v VX_dram_req_rsp_inter.v VX_cache_bank_valid.v VX_cache_data_per_index.v VX_Cache_Bank.v VX_cache_data.v VX_d_cache.v VX_bank_valids.v VX_priority_encoder_sm.v VX_shared_memory.v VX_shared_memory_block.v VX_dmem_controller.v VX_generic_priority_encoder.v VX_generic_stack.v VX_join_inter.v VX_csr_wrapper.v VX_csr_req_inter.v VX_csr_wb_inter.v  VX_gpgpu_inst.v VX_gpu_inst_req_inter.v VX_wstall_inter.v VX_inst_exec_wb_inter.v VX_lsu.v VX_execute_unit.v VX_lsu_addr_gen.v VX_inst_multiplex.v VX_exec_unit_req_inter.v VX_lsu_req_inter.v VX_alu.v VX_back_end.v VX_gpr_stage.v VX_gpr_data_inter.v VX_csr_handler.v VX_decode.v VX_define.v VX_scheduler.v VX_fetch.v VX_front_end.v VX_generic_register.v VX_gpr.v VX_gpr_wrapper.v VX_priority_encoder.v VX_warp_scheduler.v VX_writeback.v byte_enabled_simple_dual_port_ram.v VX_branch_response_inter.v VX_dcache_request_inter.v VX_dcache_response_inter.v VX_frE_to_bckE_req_inter.v VX_gpr_clone_inter.v VX_gpr_jal_inter.v VX_gpr_read_inter.v VX_gpr_wspawn_inter.v VX_icache_request_inter.v VX_icache_response_inter.v VX_inst_mem_wb_inter.v VX_inst_meta_inter.v VX_jal_response_inter.v VX_mem_req_inter.v VX_mw_wb_inter.v VX_warp_ctl_inter.v VX_wb_inter.v VX_d_e_reg.v VX_f_d_reg.v Vortex.v rf2_128x128_wm1.v 					]
+VX_countones.v VX_priority_encoder_w_mask.v VX_dram_req_rsp_inter.v VX_cache_bank_valid.v VX_cache_data_per_index.v VX_Cache_Bank.v VX_cache_data.v VX_d_cache.v VX_bank_valids.v VX_priority_encoder_sm.v VX_shared_memory.v VX_shared_memory_block.v VX_dmem_controller.v VX_generic_priority_encoder.v VX_generic_stack.v VX_join_inter.v VX_csr_wrapper.v VX_csr_req_inter.v VX_csr_wb_inter.v VX_gpgpu_inst.v VX_gpu_inst_req_inter.v VX_wstall_inter.v VX_inst_exec_wb_inter.v VX_lsu.v VX_execute_unit.v VX_lsu_addr_gen.v VX_inst_multiplex.v VX_exec_unit_req_inter.v VX_lsu_req_inter.v VX_alu.v VX_back_end.v VX_gpr_stage.v VX_gpr_data_inter.v VX_csr_handler.v VX_decode.v VX_define.v VX_scheduler.v VX_fetch.v VX_front_end.v VX_generic_register.v VX_gpr.v VX_gpr_wrapper.v VX_priority_encoder.v VX_warp_scheduler.v VX_writeback.v byte_enabled_simple_dual_port_ram.v VX_branch_response_inter.v VX_dcache_request_inter.v VX_dcache_response_inter.v VX_frE_to_bckE_req_inter.v VX_gpr_clone_inter.v VX_gpr_jal_inter.v VX_gpr_read_inter.v VX_gpr_wspawn_inter.v VX_icache_request_inter.v VX_icache_response_inter.v VX_inst_mem_wb_inter.v VX_inst_meta_inter.v VX_jal_response_inter.v VX_mem_req_inter.v VX_mw_wb_inter.v VX_warp_ctl_inter.v VX_wb_inter.v VX_d_e_reg.v VX_f_d_reg.v Vortex.v rf2_128x128_wm1.v
 # set verilog_files 	[ list VX_countones.v VX_priority_encoder_w_mask.v VX_dram_req_rsp_inter.v cache_set.v VX_Cache_Bank.v VX_Cache_Block_DM.v VX_cache_data.v VX_d_cache.v VX_bank_valids.v VX_priority_encoder_sm.v VX_shared_memory.v VX_shared_memory_block.v VX_dmem_controller.v VX_generic_priority_encoder.v VX_generic_stack.v VX_join_inter.v VX_csr_wrapper.v VX_csr_req_inter.v VX_csr_wb_inter.v  VX_gpgpu_inst.v VX_gpu_inst_req_inter.v VX_wstall_inter.v VX_inst_exec_wb_inter.v VX_lsu.v VX_execute_unit.v VX_lsu_addr_gen.v VX_inst_multiplex.v VX_exec_unit_req_inter.v VX_lsu_req_inter.v VX_alu.v VX_back_end.v VX_gpr_stage.v VX_gpr_data_inter.v VX_csr_handler.v VX_decode.v VX_define.v VX_scheduler.v VX_fetch.v VX_front_end.v VX_generic_register.v VX_gpr.v VX_gpr_wrapper.v VX_one_counter.v VX_priority_encoder.v VX_warp_scheduler.v VX_writeback.v byte_enabled_simple_dual_port_ram.v VX_branch_response_inter.v VX_dcache_request_inter.v VX_dcache_response_inter.v VX_frE_to_bckE_req_inter.v VX_gpr_clone_inter.v VX_gpr_jal_inter.v VX_gpr_read_inter.v VX_gpr_wspawn_inter.v VX_icache_request_inter.v VX_icache_response_inter.v VX_inst_mem_wb_inter.v VX_inst_meta_inter.v VX_jal_response_inter.v VX_mem_req_inter.v VX_mw_wb_inter.v VX_warp_ctl_inter.v VX_wb_inter.v VX_d_e_reg.v VX_f_d_reg.v Vortex.v # 					]
 set top_level Vortex
 Vortex
@@ -40,7 +40,6 @@ Searching for ../models/memory/cln28hpm/rf2_256x128_wm1/VX_countones.v
 Searching for ../models/memory/cln28hpm/rf2_256_19_wm0/VX_countones.v
 Searching for ../models/memory/cln28hpm/rf2_32x128_wm1/VX_countones.v
 Searching for ../rtl/VX_countones.v
-Searching for ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v
 Searching for ../models/memory/cln28hpm/rf2_128x128_wm1/VX_priority_encoder_w_mask.v
 Searching for ../models/memory/cln28hpm/rf2_256x128_wm1/VX_priority_encoder_w_mask.v
 Searching for ../models/memory/cln28hpm/rf2_256_19_wm0/VX_priority_encoder_w_mask.v
@@ -429,7 +428,165 @@ Searching for ../models/memory/cln28hpm/rf2_256x128_wm1/Vortex.v
 Searching for ../models/memory/cln28hpm/rf2_256_19_wm0/Vortex.v
 Searching for ../models/memory/cln28hpm/rf2_32x128_wm1/Vortex.v
 Searching for ../rtl/Vortex.v
+Searching for ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v
 Compiling source file ../rtl/VX_countones.v
+Compiling source file ../rtl/VX_priority_encoder_w_mask.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/interfaces/VX_dram_req_rsp_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_dram_req_rsp_inter.v:10: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/cache/VX_cache_bank_valid.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/cache/VX_cache_data_per_index.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/cache/VX_Cache_Bank.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/cache/VX_cache_data.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/cache/VX_d_cache.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/shared_memory/VX_bank_valids.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/shared_memory/VX_priority_encoder_sm.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/shared_memory/VX_shared_memory.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/shared_memory/VX_shared_memory_block.v
+Compiling source file ../rtl/VX_dmem_controller.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_generic_priority_encoder.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/VX_generic_stack.v
+Compiling source file ../rtl/interfaces/VX_join_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_join_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/VX_csr_wrapper.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/interfaces/VX_csr_req_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_csr_req_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_csr_wb_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_csr_wb_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/VX_gpgpu_inst.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/interfaces/VX_gpu_inst_req_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_gpu_inst_req_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_wstall_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_wstall_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_inst_exec_wb_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_inst_exec_wb_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/VX_lsu.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_execute_unit.v
+Opening include file ../rtl//VX_define.v
+Warning:  ../rtl/VX_lsu.v:59: Invalid escape sequence '\x' in call to '$display'. (VER-941)
+Warning:  ../rtl/VX_lsu.v:59: Invalid escape sequence '\x' in call to '$display'. (VER-941)
+Warning:  ../rtl/VX_lsu.v:63: Invalid escape sequence '\x' in call to '$display'. (VER-941)
+Warning:  ../rtl/VX_lsu.v:63: Invalid escape sequence '\x' in call to '$display'. (VER-941)
+Compiling source file ../rtl/VX_lsu_addr_gen.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_inst_multiplex.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/interfaces/VX_exec_unit_req_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_exec_unit_req_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_lsu_req_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_lsu_req_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/VX_alu.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_back_end.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_gpr_stage.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/interfaces/VX_gpr_data_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_gpr_data_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/VX_csr_handler.v
+Compiling source file ../rtl/VX_decode.v
+Opening include file ../rtl//VX_define.v
+Warning:  ../rtl/VX_csr_handler.v:41: The statements in initial blocks are ignored. (VER-281)
+Compiling source file ../rtl/VX_define.v
+Compiling source file ../rtl/VX_scheduler.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_fetch.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_front_end.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_generic_register.v
+Compiling source file ../rtl/VX_gpr.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_gpr_wrapper.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_priority_encoder.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_warp_scheduler.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/VX_writeback.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/byte_enabled_simple_dual_port_ram.v
+Opening include file ../rtl//VX_define.v
+Compiling source file ../rtl/interfaces/VX_branch_response_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_branch_response_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_dcache_request_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_dcache_request_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_dcache_response_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_dcache_response_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_frE_to_bckE_req_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_frE_to_bckE_req_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_gpr_clone_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_gpr_clone_inter.v:9: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_gpr_jal_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_gpr_jal_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_gpr_read_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_gpr_read_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_gpr_wspawn_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_gpr_wspawn_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_icache_request_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_icache_request_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_icache_response_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_icache_response_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_inst_mem_wb_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_inst_mem_wb_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_inst_meta_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_inst_meta_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_jal_response_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_jal_response_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_mem_req_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_mem_req_inter.v:7: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_mw_wb_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_mw_wb_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_warp_ctl_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_warp_ctl_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/interfaces/VX_wb_inter.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Information:  ../rtl/interfaces/VX_wb_inter.v:8: List () of one, unnamed, port is ignored. (VER-988)
+Compiling source file ../rtl/pipe_regs/VX_d_e_reg.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/pipe_regs/VX_f_d_reg.v
+Opening include file ../rtl/interfaces/../VX_define.v
+Compiling source file ../rtl/Vortex.v
+Opening include file ../rtl/interfaces/../VX_define.v
 Compiling source file ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v
 Error:  ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v:15443: real declarations are not supported by synthesis. (VER-177)
 Error:  ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v:15444: real declarations are not supported by synthesis. (VER-177)
@@ -686,11 +843,11 @@ Statistics for MUX_OPs
 ==================================================================================
 Presto compilation completed successfully.
 Information: Building the design 'VX_d_cache' instantiated from design 'VX_dmem_controller_I_VX_dram_req_rsp_VX_dram_req_rsp_inter__NUMBER_BANKS_4_NUM_WORDS_PER_BLOCK_4I_VX_dram_req_rsp_icache_VX_dram_req_rsp_inter__NUMBER_BANKS_1_NUM_WORDS_PER_BLOCK_4I_VX_icache_req_VX_icache_request_inter__I_VX_icache_rsp_VX_icache_response_inter__I_VX_dcache_req_VX_dcache_request_inter__I_VX_dcache_rsp_VX_dcache_response_inter__' with
-	the parameters "CACHE_SIZE=4096,CACHE_WAYS=2,CACHE_BLOCK=64,CACHE_BANKS=4,LOG_NUM_BANKS=2,NUM_REQ=4,LOG_NUM_REQ=2,NUM_IND=128,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,OFFSET_SIZE_START=0,OFFSET_SIZE_END=1,TAG_SIZE_START=0,TAG_SIZE_END=18,IND_SIZE_START=0,IND_SIZE_END=6,ADDR_TAG_START=13,ADDR_TAG_END=31,ADDR_OFFSET_START=4,ADDR_OFFSET_END=5,ADDR_IND_START=6,ADDR_IND_END=12,MEM_ADDR_REQ_MASK=32'hffffffc0". (HDL-193)
+	the parameters "CACHE_SIZE=4096,CACHE_WAYS=2,CACHE_BLOCK=64,CACHE_BANKS=4,LOG_NUM_BANKS=2,NUM_REQ=4,LOG_NUM_REQ=2,NUM_IND=32,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,OFFSET_SIZE_START=0,OFFSET_SIZE_END=1,TAG_SIZE_START=0,TAG_SIZE_END=20,IND_SIZE_START=0,IND_SIZE_END=4,ADDR_TAG_START=11,ADDR_TAG_END=31,ADDR_OFFSET_START=4,ADDR_OFFSET_END=5,ADDR_IND_START=6,ADDR_IND_END=10,MEM_ADDR_REQ_MASK=32'hffffffc0". (HDL-193)
 Warning:  ../rtl/cache/VX_d_cache.v:237: signed to unsigned assignment occurs. (VER-318)
 
 Inferred memory devices in process
-	in routine VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0 line 251 in file
+	in routine VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0 line 251 in file
 		'../rtl/cache/VX_d_cache.v'.
 ===================================================================================
 |      Register Name      |   Type    | Width | Bus | MB | AR | AS | SR | SS | ST |
@@ -702,20 +859,20 @@ Inferred memory devices in process
 |      miss_addr_reg      | Flip-flop |  30   |  Y  | N  | Y  | N  | N  | N  | N  |
 ===================================================================================
 Statistics for MUX_OPs
-========================================================================================================================
-|                               block name/line                                 | Inputs | Outputs | # sel inputs | MB |
-========================================================================================================================
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/279 |   4    |    2    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/279 |   4    |   30    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/298 |   4    |   30    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/342 |   4    |   32    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/298 |   4    |   30    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/342 |   4    |   32    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/298 |   4    |   30    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/342 |   4    |   32    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/298 |   4    |   30    |      2       | N  |
-| VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0/342 |   4    |   32    |      2       | N  |
-========================================================================================================================
+=======================================================================================================================
+|                               block name/line                                | Inputs | Outputs | # sel inputs | MB |
+=======================================================================================================================
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/279 |   4    |    2    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/279 |   4    |   30    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/298 |   4    |   30    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/342 |   4    |   32    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/298 |   4    |   30    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/342 |   4    |   32    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/298 |   4    |   30    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/342 |   4    |   32    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/298 |   4    |   30    |      2       | N  |
+| VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0/342 |   4    |   32    |      2       | N  |
+=======================================================================================================================
 Presto compilation completed successfully.
 Information: Building the design 'VX_d_cache' instantiated from design 'VX_dmem_controller_I_VX_dram_req_rsp_VX_dram_req_rsp_inter__NUMBER_BANKS_4_NUM_WORDS_PER_BLOCK_4I_VX_dram_req_rsp_icache_VX_dram_req_rsp_inter__NUMBER_BANKS_1_NUM_WORDS_PER_BLOCK_4I_VX_icache_req_VX_icache_request_inter__I_VX_icache_rsp_VX_icache_response_inter__I_VX_dcache_req_VX_dcache_request_inter__I_VX_dcache_rsp_VX_dcache_response_inter__' with
 	the parameters "CACHE_SIZE=1024,CACHE_WAYS=2,CACHE_BLOCK=16,CACHE_BANKS=1,LOG_NUM_BANKS=1,NUM_REQ=1,LOG_NUM_REQ=1,NUM_IND=32,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,OFFSET_SIZE_START=0,OFFSET_SIZE_END=1,TAG_SIZE_START=0,TAG_SIZE_END=22,IND_SIZE_START=0,IND_SIZE_END=4,ADDR_TAG_START=9,ADDR_TAG_END=31,ADDR_OFFSET_START=2,ADDR_OFFSET_END=3,ADDR_IND_START=4,ADDR_IND_END=8,MEM_ADDR_REQ_MASK=32'hfffffff0". (HDL-193)
@@ -943,31 +1100,31 @@ Statistics for MUX_OPs
 Presto compilation completed successfully.
 Information: Building the design 'VX_shared_memory_block'. (HDL-193)
 Presto compilation completed successfully.
-Information: Building the design 'VX_cache_bank_valid' instantiated from design 'VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0' with
+Information: Building the design 'VX_cache_bank_valid' instantiated from design 'VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0' with
 	the parameters "NUMBER_BANKS=4,LOG_NUM_BANKS=2,NUM_REQ=4". (HDL-193)
 Presto compilation completed successfully.
-Information: Building the design 'VX_priority_encoder_w_mask' instantiated from design 'VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0' with
+Information: Building the design 'VX_priority_encoder_w_mask' instantiated from design 'VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0' with
 	the parameters "N=4". (HDL-193)
 Warning:  ../rtl/VX_priority_encoder_w_mask.v:23: signed to unsigned part selection occurs. (VER-318)
 Warning:  ../rtl/VX_priority_encoder_w_mask.v:31: signed to unsigned assignment occurs. (VER-318)
 Presto compilation completed successfully.
-Information: Building the design 'VX_Cache_Bank' instantiated from design 'VX_d_cache_4096_2_64_4_2_4_2_128_1_4_0_1_0_18_0_6_13_31_4_5_6_12_ffffffc0' with
-	the parameters "CACHE_SIZE=4096,CACHE_WAYS=2,CACHE_BLOCK=64,CACHE_BANKS=4,LOG_NUM_BANKS=2,NUM_REQ=4,LOG_NUM_REQ=2,NUM_IND=128,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,OFFSET_SIZE_START=0,OFFSET_SIZE_END=1,TAG_SIZE_START=0,TAG_SIZE_END=18,IND_SIZE_START=0,IND_SIZE_END=6,ADDR_TAG_START=13,ADDR_TAG_END=31,ADDR_OFFSET_START=4,ADDR_OFFSET_END=5,ADDR_IND_START=6,ADDR_IND_END=12". (HDL-193)
+Information: Building the design 'VX_Cache_Bank' instantiated from design 'VX_d_cache_4096_2_64_4_2_4_2_32_1_4_0_1_0_20_0_4_11_31_4_5_6_10_ffffffc0' with
+	the parameters "CACHE_SIZE=4096,CACHE_WAYS=2,CACHE_BLOCK=64,CACHE_BANKS=4,LOG_NUM_BANKS=2,NUM_REQ=4,LOG_NUM_REQ=2,NUM_IND=32,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,OFFSET_SIZE_START=0,OFFSET_SIZE_END=1,TAG_SIZE_START=0,TAG_SIZE_END=20,IND_SIZE_START=0,IND_SIZE_END=4,ADDR_TAG_START=11,ADDR_TAG_END=31,ADDR_OFFSET_START=4,ADDR_OFFSET_END=5,ADDR_IND_START=6,ADDR_IND_END=10". (HDL-193)
 Warning:  ../rtl/cache/VX_Cache_Bank.v:216: Net way_to_update[0] or a directly connected net may be driven by more than one process or block. (ELAB-405)
 Statistics for MUX_OPs
-============================================================================================================================================================================================================================================================================================================================================================================================================
-|                                                                                                                                                                         block name/line                                                                                                                                                                           | Inputs | Outputs | # sel inputs | MB |
-============================================================================================================================================================================================================================================================================================================================================================================================================
-| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6_ADDR_TAG_START13_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END12/158 |   4    |   32    |      2       | N  |
-| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6_ADDR_TAG_START13_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END12/158 |   4    |   24    |      2       | N  |
-| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6_ADDR_TAG_START13_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END12/158 |   4    |   16    |      2       | N  |
-| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6_ADDR_TAG_START13_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END12/158 |   4    |    8    |      2       | N  |
-============================================================================================================================================================================================================================================================================================================================================================================================================
+===========================================================================================================================================================================================================================================================================================================================================================================================================
+|                                                                                                                                                                         block name/line                                                                                                                                                                          | Inputs | Outputs | # sel inputs | MB |
+===========================================================================================================================================================================================================================================================================================================================================================================================================
+| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START11_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END10/158 |   4    |   32    |      2       | N  |
+| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START11_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END10/158 |   4    |   24    |      2       | N  |
+| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START11_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END10/158 |   4    |   16    |      2       | N  |
+| VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START11_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END10/158 |   4    |    8    |      2       | N  |
+===========================================================================================================================================================================================================================================================================================================================================================================================================
 Presto compilation completed successfully.
 Warning: Filename too long >255 chars. Renaming file:
-'/nethome/felsabbagh3/research/UseVortex/syn/VX_CACHE_BANK_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6_ADDR_TAG_START13_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END12.mr'
+'/nethome/felsabbagh3/research/UseVortex/syn/VX_CACHE_BANK_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START11_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END10.mr'
 to
-'/nethome/felsabbagh3/research/UseVortex/syn/VX_CACHE_BANK_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE__882FB6297E42F542C0AF530517BB2B1CE826960222199217_000.mr'
+'/nethome/felsabbagh3/research/UseVortex/syn/VX_CACHE_BANK_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_S_537630905D4739C0E486C3ED611033A5BC0FF1DECD31D8DB_000.mr'
 Information: Building the design 'VX_cache_bank_valid' instantiated from design 'VX_d_cache_1024_2_16_1_1_1_1_32_1_4_0_1_0_22_0_4_9_31_2_3_4_8_fffffff0' with
 	the parameters "NUMBER_BANKS=1,LOG_NUM_BANKS=1,NUM_REQ=1". (HDL-193)
 Presto compilation completed successfully.
@@ -1053,20 +1210,20 @@ Warning:  ../rtl/shared_memory/VX_bank_valids.v:21: signed to unsigned part sele
 Presto compilation completed successfully.
 Information: Building the design 'rf2_128x128_wm1'. (HDL-193)
 Warning: Cannot find the design 'rf2_128x128_wm1' in the library 'WORK'. (LBR-1)
-Information: Building the design 'VX_cache_data_per_index' instantiated from design 'VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6_ADDR_TAG_START13_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END12' with
-	the parameters "CACHE_WAYS=2,NUM_IND=128,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,TAG_SIZE_START=0,TAG_SIZE_END=18,IND_SIZE_START=0,IND_SIZE_END=6". (HDL-193)
+Information: Building the design 'VX_cache_data_per_index' instantiated from design 'VX_Cache_Bank_CACHE_SIZE4096_CACHE_WAYS2_CACHE_BLOCK64_CACHE_BANKS4_LOG_NUM_BANKS2_NUM_REQ4_LOG_NUM_REQ2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START11_ADDR_TAG_END31_ADDR_OFFSET_START4_ADDR_OFFSET_END5_ADDR_IND_START6_ADDR_IND_END10' with
+	the parameters "CACHE_WAYS=2,NUM_IND=32,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,TAG_SIZE_START=0,TAG_SIZE_END=20,IND_SIZE_START=0,IND_SIZE_END=4". (HDL-193)
 Presto compilation completed successfully.
 Information: Building the design 'VX_cache_data_per_index' instantiated from design 'VX_Cache_Bank_CACHE_SIZE1024_CACHE_WAYS2_CACHE_BLOCK16_CACHE_BANKS1_LOG_NUM_BANKS1_NUM_REQ1_LOG_NUM_REQ1_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_OFFSET_SIZE_START0_OFFSET_SIZE_END1_TAG_SIZE_START0_TAG_SIZE_END22_IND_SIZE_START0_IND_SIZE_END4_ADDR_TAG_START9_ADDR_TAG_END31_ADDR_OFFSET_START2_ADDR_OFFSET_END3_ADDR_IND_START4_ADDR_IND_END8' with
 	the parameters "CACHE_WAYS=2,NUM_IND=32,CACHE_WAY_INDEX=1,NUM_WORDS_PER_BLOCK=4,TAG_SIZE_START=0,TAG_SIZE_END=22,IND_SIZE_START=0,IND_SIZE_END=4". (HDL-193)
 Presto compilation completed successfully.
 Information: Building the design 'rf2_32x128_wm1'. (HDL-193)
 Warning: Cannot find the design 'rf2_32x128_wm1' in the library 'WORK'. (LBR-1)
-Information: Building the design 'VX_generic_priority_encoder' instantiated from design 'VX_cache_data_per_index_CACHE_WAYS2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6' with
+Information: Building the design 'VX_generic_priority_encoder' instantiated from design 'VX_cache_data_per_index_CACHE_WAYS2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4' with
 	the parameters "N=2". (HDL-193)
 Warning:  ../rtl/VX_generic_priority_encoder.v:22: signed to unsigned part selection occurs. (VER-318)
 Presto compilation completed successfully.
-Information: Building the design 'VX_cache_data' instantiated from design 'VX_cache_data_per_index_CACHE_WAYS2_NUM_IND128_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6' with
-	the parameters "NUM_IND=128,NUM_WORDS_PER_BLOCK=4,TAG_SIZE_START=0,TAG_SIZE_END=18,IND_SIZE_START=0,IND_SIZE_END=6". (HDL-193)
+Information: Building the design 'VX_cache_data' instantiated from design 'VX_cache_data_per_index_CACHE_WAYS2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4' with
+	the parameters "NUM_IND=32,NUM_WORDS_PER_BLOCK=4,TAG_SIZE_START=0,TAG_SIZE_END=20,IND_SIZE_START=0,IND_SIZE_END=4". (HDL-193)
 Presto compilation completed successfully.
 Information: Building the design 'VX_cache_data' instantiated from design 'VX_cache_data_per_index_CACHE_WAYS2_NUM_IND32_CACHE_WAY_INDEX1_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END22_IND_SIZE_START0_IND_SIZE_END4' with
 	the parameters "NUM_IND=32,NUM_WORDS_PER_BLOCK=4,TAG_SIZE_START=0,TAG_SIZE_END=22,IND_SIZE_START=0,IND_SIZE_END=4". (HDL-193)
@@ -1090,8 +1247,8 @@ Information: Building the design 'rf2_32x19_wm0'. (HDL-193)
 Warning: Cannot find the design 'rf2_32x19_wm0' in the library 'WORK'. (LBR-1)
 Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
 Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_gpr_I_VX_gpr_read_VX_gpr_read_inter__I_VX_writeback_inter_VX_wb_inter__'. (LINK-5)
-Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_cache_data_NUM_IND128_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6'. (LINK-5)
-Warning: Unable to resolve reference 'rf2_32x19_wm0' in 'VX_cache_data_NUM_IND128_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6'. (LINK-5)
+Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
+Warning: Unable to resolve reference 'rf2_32x19_wm0' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
 Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END22_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
 Warning: Unable to resolve reference 'rf2_32x19_wm0' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END22_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
 0
@@ -1109,8 +1266,8 @@ Information: Building the design 'rf2_32x19_wm0'. (HDL-193)
 Warning: Cannot find the design 'rf2_32x19_wm0' in the library 'WORK'. (LBR-1)
 Warning: Unable to resolve reference 'rf2_128x128_wm1' in 'VX_shared_memory_block'. (LINK-5)
 Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_gpr_I_VX_gpr_read_VX_gpr_read_inter__I_VX_writeback_inter_VX_wb_inter__'. (LINK-5)
-Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_cache_data_NUM_IND128_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6'. (LINK-5)
-Warning: Unable to resolve reference 'rf2_32x19_wm0' in 'VX_cache_data_NUM_IND128_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END18_IND_SIZE_START0_IND_SIZE_END6'. (LINK-5)
+Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
+Warning: Unable to resolve reference 'rf2_32x19_wm0' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END20_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
 Warning: Unable to resolve reference 'rf2_32x128_wm1' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END22_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
 Warning: Unable to resolve reference 'rf2_32x19_wm0' in 'VX_cache_data_NUM_IND32_NUM_WORDS_PER_BLOCK4_TAG_SIZE_START0_TAG_SIZE_END22_IND_SIZE_START0_IND_SIZE_END4'. (LINK-5)
 Warning: Design 'Vortex' has '6' unresolved references. For more detailed information, use the "link" command. (UID-341)
