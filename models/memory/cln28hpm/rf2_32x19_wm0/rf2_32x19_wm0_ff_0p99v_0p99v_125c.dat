@@ -1,0 +1,322 @@
+#
+# CONFIDENTIAL AND PROPRIETARY SOFTWARE OF ARM PHYSICAL IP, INC.
+#
+# Copyright (c) 1993 - 2019 ARM Physical IP, Inc.  All Rights Reserved.
+#
+# Use of this Software is subject to the terms and conditions of the
+# applicable license agreement with ARM Physical IP, Inc.
+# In addition, this Software is protected by patents, copyright law 
+# and international treaties.
+#
+# The copyright notice(s) in this Software does not indicate actual or
+# intended publication of this Software.
+#
+# Compiler Name: High Density Two Port Register File SVT MVT Compiler
+#
+# Creation Date: Mon Nov 11 11:59:34 2019
+#
+# Instance Options:
+#   Instance Name:                 rf2_32x19_wm0
+#   Number of Words:               32
+#   Number of Bits:                19
+#   Multiplexer Width:             2
+#   Multi-Vt selection:            BASE
+#   Frequency <MHz>:               1
+#   Activity Factor <%>:           50
+#   Pipeline:                      off
+#   Word-Write Mask:               off
+#   Word Partition Size:           1
+#   Write through:                 off
+#   Top Metal Layer:               m5-m10
+#   Power Type:                    otc
+#   Redundancy:                    off
+#   Redundant Columns:             2
+#   Redundant Rows:                0
+#   BIST MUXes:                    on
+#   Soft Error Repair (SER):       none
+#   Power Gating:                  off
+#   Back Biasing:                  off
+#   Retention:                     on
+#   Extra Margin Adjustment:       on
+#   Advanced Test Features:        off
+#   Customer Comment:              This is a memory instance
+#   Bus-notation:                  on
+#   Power Ground Rename:           vddpe:VDDPE,vddce:VDDCE,vsse:VSSE
+#   Name Case:                     upper
+#   Check Instance Name:           off
+#   Diodes:                        on
+#   Drive Strength:                6
+#   Site Definitions:              off
+#   Library Name:                  USERLIB
+#   Liberty setting:               nldm
+#
+# Compiler Versions:
+#   Memory Version:                r4p0
+#   Lang compiler Version:         4.1.6-EAC2
+#   View Name:                     datatable
+#   AMCI Version:                  1.4.3-EAC
+#   datatable_memcomp Version:       1.3.0-amci
+#
+# Modeling Assumptions: N/A
+#
+# Modeling Limitations: N/A
+#
+# Known Bugs: N/A
+#
+# Known Work Arounds: N/A
+#
+# Units used in Datatable :
+#   geomx:                         micron
+#   geomy:                         micron
+#   Voltage:                       volts
+#   Temprature:                    Degree Celsius
+#   Current:                       mA
+#   Time:                          ns
+#
+name      	ff_0p99v_0p99v_125c
+S	N
+geomx     	21.1650   
+geomy     	100.9400  
+volt      	0.9900    
+temp      	125.0000  
+# High Density Two Port Register File SVT MVT Compiler : Propagation Delay specific information.
+tcenacenya	0.0917	
+ttcenacenya	0.0905	
+ttenacenyapu	0.1191	
+ttenacenyanu	0.1399	
+tdftrambypcenya	0.0912	
+taaaya	0.0751	
+ttaaaya	0.0751	
+ttenaayapu	0.1377	
+ttenaayanu	0.1335	
+tdftrambypaya	0.0823	
+tcenbcenyb	0.0947	
+ttcenbcenyb	0.0939	
+ttenbcenybpu	0.1240	
+ttenbcenybnu	0.1515	
+tdftrambypcenyb	0.0907	
+tabayb	0.0753	
+ttabayb	0.0779	
+ttenbaybpu	0.1447	
+ttenbaybnu	0.1398	
+tdftrambypayb	0.0822	
+taccqa_rd0	0.2718	
+taccqa_rd1	0.2724	
+taccqa_rd2	0.2724	
+taccqa_rd3	0.2729	
+taccqa_rd4	0.3149	
+taccqa_rd5	0.3516	
+taccqa_rd6	0.3900	
+taccqa_rd7	0.4267	
+taccqa_scan0	0.2718	
+taccqa_scan1	0.2724	
+taccqa_scan2	0.2724	
+taccqa_scan3	0.2729	
+taccqa_scan4	0.3149	
+taccqa_scan5	0.3516	
+taccqa_scan6	0.3900	
+taccqa_scan7	0.4267	
+tclkasoa_rd0	0.2903	
+tclkasoa_rd1	0.2908	
+tclkasoa_rd2	0.2909	
+tclkasoa_rd3	0.2914	
+tclkasoa_rd4	0.3334	
+tclkasoa_rd5	0.3700	
+tclkasoa_rd6	0.4085	
+tclkasoa_rd7	0.4452	
+tclkasoa_scan0	0.2903	
+tclkasoa_scan1	0.2908	
+tclkasoa_scan2	0.2909	
+tclkasoa_scan3	0.2914	
+tclkasoa_scan4	0.3334	
+tclkasoa_scan5	0.3700	
+tclkasoa_scan6	0.4085	
+tclkasoa_scan7	0.4452	
+tclkbsob	0.1594	
+# High Density Two Port Register File SVT MVT Compiler : Kload specific information.
+kload_cenya	1.7116	
+kload_aya	1.4236	
+kload_cenyb	1.6712	
+kload_ayb	1.4006	
+kload_qa	0.5053	
+kload_soa	1.3720	
+kload_sob	1.4400	
+# High Density Two Port Register File SVT MVT Compiler : Cycle time specific information.
+tcyca_ema0	0.3800	
+tcyca_ema1	0.3806	
+tcyca_ema2	0.3806	
+tcyca_ema3	0.3812	
+tcyca_ema4	0.4238	
+tcyca_ema5	0.4610	
+tcyca_ema6	0.5000	
+tcyca_ema7	0.5373	
+tcycb_ema0	0.4062	
+tcycb_ema1	0.4106	
+tcycb_ema2	0.4143	
+tcycb_ema3	0.4208	
+tcycb_ema4	0.4729	
+tcycb_ema5	0.5088	
+tcycb_ema6	0.5566	
+tcycb_ema7	0.5917	
+# High Density Two Port Register File SVT MVT Compiler : Clock collision specific information.
+tcracwb_rd0	0.1913	
+tcracwb_rd1	0.1919	
+tcracwb_rd2	0.1920	
+tcracwb_rd3	0.1925	
+tcracwb_rd4	0.2344	
+tcracwb_rd5	0.2711	
+tcracwb_rd6	0.3096	
+tcracwb_rd7	0.3463	
+tcwbcra_wr0	0.2458	
+tcwbcra_wr1	0.2501	
+tcwbcra_wr2	0.2538	
+tcwbcra_wr3	0.2603	
+tcwbcra_wr4	0.3115	
+tcwbcra_wr5	0.3469	
+tcwbcra_wr6	0.3940	
+tcwbcra_wr7	0.4286	
+# High Density Two Port Register File SVT MVT Compiler : Pulse width specific information.
+tckah	0.0926	
+tckal	0.0897	
+tckbh	0.0958	
+tckbl	0.0907	
+# High Density Two Port Register File SVT MVT Compiler : Setup time specific information.
+tcenas	0.0902	
+taas	0.0928	
+tcenbs	0.0960	
+tabs	0.0993	
+tdbs	0.0373	
+temaas	0.4065	
+temasas	0.4065	
+temabs	0.4461	
+ttenas	0.1737	
+ttcenas	0.0905	
+ttaas	0.0948	
+ttenbs	0.2348	
+ttcenbs	0.0965	
+ttabs	0.1030	
+ttdbs	0.0382	
+tsias	0.1911	
+tseas	0.1911	
+tdftrambypas	0.1493	
+tdftrambypbs	0.1493	
+tsibs	0.0373	
+tsebs	0.2348	
+tcolldisnas	0.4065	
+tcolldisnbs	0.4461	
+# High Density Two Port Register File SVT MVT Compiler : Hold time specific information.
+tcenah	0.0398	
+tcenaf_ret1nfh	0.4558	
+tcenaf_ret1nrh	0.2536	
+taah	0.0695	
+tcenbh	0.0422	
+tcenbf_ret1nfh	0.4558	
+tcenbf_ret1nrh	0.2536	
+tabh	0.0637	
+tdbh	0.0950	
+temaah	0.6293	
+temasah	0.6293	
+temabh	0.6267	
+ttenah	0.0764	
+ttcenah	0.0410	
+ttcenaf_ret1nfh	0.4558	
+ttcenaf_ret1nrh	0.2536	
+ttaah	0.0695	
+ttenbh	0.1045	
+ttcenbh	0.0435	
+ttcenbf_ret1nfh	0.4558	
+ttcenbf_ret1nrh	0.2536	
+ttabh	0.0637	
+ttdbh	0.0950	
+tret1nf_dftrambypfh	0.0241	
+tret1nr_dftrambypfh	0.4558	
+tret1nf_cenbrh	0.0241	
+tret1nf_cenarh	0.0226	
+tret1nf_tcenarh	0.0226	
+tret1nf_tcenbrh	0.0241	
+tret1nr_tcenbrh	0.4558	
+tret1nr_tcenarh	0.4162	
+tret1nr_cenbrh	0.4558	
+tret1nr_cenarh	0.4162	
+tsiah	0.0756	
+tseah	0.6293	
+tdftrambypah	0.6293	
+tdftrambypbh	0.4558	
+tdftrambypr_ret1nfh	0.4558	
+tdftrambypr_ret1nrh	0.2536	
+tsibh	0.0950	
+tsebh	0.1045	
+tcolldisnah	0.6293	
+tcolldisnbh	0.6267	
+# High Density Two Port Register File SVT MVT Compiler : Input Capacitance specific information.
+icap_clka	0.0105	
+icap_cena	0.0018	
+icap_aa	0.0012	
+icap_clkb	0.0106	
+icap_cenb	0.0015	
+icap_ab	0.0012	
+icap_db	0.0019	
+icap_emaa	0.0059	
+icap_emasa	0.0021	
+icap_emab	0.0057	
+icap_tena	0.0010	
+icap_tcena	0.0016	
+icap_taa	0.0014	
+icap_tenb	0.0012	
+icap_tcenb	0.0016	
+icap_tab	0.0014	
+icap_tdb	0.0016	
+icap_sia	0.0015	
+icap_sea	0.0019	
+icap_dftrambyp	0.0021	
+icap_sib	0.0056	
+icap_seb	0.0019	
+icap_colldisn	0.0024	
+icap_ret1n	0.0035	
+# High Density Two Port Register File SVT MVT Compiler : current specific information.
+icc_standby_c_chipdisable	0.047469	
+icc_standby_p_chipdisable	0.315359	
+icc_standby_c_ret1	0.049704	
+icc_standby_p_ret1	0.029192	
+icc_standby_c_selective_precharge	0.043909	
+icc_standby_p_selective_precharge	0.300193	
+icc_c_rd0_a	3.684e-05	
+icc_c_rd1_a	3.686e-05	
+icc_c_rd2_a	3.688e-05	
+icc_c_rd3_a	3.699e-05	
+icc_c_rd4_a	3.716e-05	
+icc_c_rd5_a	3.721e-05	
+icc_c_rd6_a	3.740e-05	
+icc_c_rd7_a	3.740e-05	
+icc_p_rd0_a	7.939e-04	
+icc_p_rd1_a	7.939e-04	
+icc_p_rd2_a	7.945e-04	
+icc_p_rd3_a	7.945e-04	
+icc_p_rd4_a	7.945e-04	
+icc_p_rd5_a	7.973e-04	
+icc_p_rd6_a	7.989e-04	
+icc_p_rd7_a	7.991e-04	
+icc_c_wr0_b	4.675e-05	
+icc_c_wr1_b	4.677e-05	
+icc_c_wr2_b	4.678e-05	
+icc_c_wr3_b	4.689e-05	
+icc_c_wr4_b	4.706e-05	
+icc_c_wr5_b	4.712e-05	
+icc_c_wr6_b	4.731e-05	
+icc_c_wr7_b	4.731e-05	
+icc_p_wr0_b	8.078e-04	
+icc_p_wr1_b	8.078e-04	
+icc_p_wr2_b	8.084e-04	
+icc_p_wr3_b	8.084e-04	
+icc_p_wr4_b	8.084e-04	
+icc_p_wr5_b	8.112e-04	
+icc_p_wr6_b	8.128e-04	
+icc_p_wr7_b	8.130e-04	
+icc_c_desela	0.000e+00	
+icc_p_desela	6.071e-05	
+icc_c_deselb	0.000e+00	
+icc_p_deselb	1.273e-04	
+icc_c_peak	3.469816	
+icc_p_peak	17.441054	
+icc_c_inrush	2.619715	
+icc_p_inrush	12.101938	
