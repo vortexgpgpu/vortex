@@ -9,7 +9,7 @@
 // Uncomment the below line if NW=1
 // `define ONLY
 
-`define SYN 1
+// `define SYN 1
 `define ASIC 1
 
 `define NUM_BARRIERS 4

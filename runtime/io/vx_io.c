@@ -3,22 +3,22 @@
 
 void vx_print_hex(unsigned f)
 {
-	vx_print_str(hextoa[f]);
-	// if (f < 16)
-	// {
-	// 	vx_print_str(hextoa[f]);
-	// 	return;
-	// }
-	// int temp;
-	// int sf = 32;
-	// bool start = false;
-	// do
-	// {
-	// 	temp = (f >> (sf - 4)) & 0xf;
-	// 	if (temp != 0) start = true;
-	// 	if (start) vx_print_str(hextoa[temp]);
-	// 	sf -= 4;
-	// } while(sf > 0);
+	// vx_print_str(hextoa[f]);
+	if (f < 16)
+	{
+		vx_print_str(hextoa[f]);
+		return;
+	}
+	int temp;
+	int sf = 32;
+	bool start = false;
+	do
+	{
+		temp = (f >> (sf - 4)) & 0xf;
+		if (temp != 0) start = true;
+		if (start) vx_print_str(hextoa[temp]);
+		sf -= 4;
+	} while(sf > 0);
 }
 
 

@@ -103,6 +103,8 @@ int emu_main(int argc, char **argv) {
     std::cout << "ABOUT TO START\n";
     while (core.running()) { console.poll(); core.step(); }
 
+    printf("-----------------------------------\n\n\n\n");
+
     if (showStats) core.printStats();
 
 

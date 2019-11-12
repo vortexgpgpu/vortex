@@ -86,12 +86,12 @@ void Core::printStats() const {
   for (unsigned i = 0; i < w.size(); ++i)
     insts += w[i].insts;
 
-  cout << "Total steps: " << steps << endl;
+  cerr << "Total steps: " << steps << endl;
   cout << "Total insts: " << insts << endl;
-  for (unsigned i = 0; i < w.size(); ++i) {
-    cout << "=== Warp " << i << " ===" << endl;
-    w[i].printStats();
-  }
+  // for (unsigned i = 0; i < w.size(); ++i) {
+  //   cout << "=== Warp " << i << " ===" << endl;
+  //   w[i].printStats();
+  // }
 }
 
 Warp::Warp(Core *c, Word id) : 

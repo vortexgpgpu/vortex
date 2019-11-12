@@ -21,6 +21,7 @@
 #include "include/args.h"
 #include "include/help.h"
 
+#include <sys/stat.h>
 
 //////////////
 /////////////
@@ -122,6 +123,10 @@ int emu_main(int argc, char **argv) {
     //     count_down = true;
     //   }
     // }
+
+    struct stat hello;
+    fstat(0, &hello);
+
     while (core.running()) { console.poll(); core.step(); }
 
     if (showStats) core.printStats();
