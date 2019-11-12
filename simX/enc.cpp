@@ -93,6 +93,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
   bool predicated = false;
   if (predicated) { inst.setPred((code>>(inst_s-p-1))&pMask); }
 
+  printf("CUrrent CODE: %x\n", code);
+
   Opcode op = (Opcode)((code>>shift_opcode)&opcode_mask);
   // std::cout << "opcode: " << op << "\n";
   inst.setOpcode(op);

@@ -18,11 +18,17 @@
 #define FILE_IO_WRITE 0x71000000
 #define FILE_IO_READ  0x72000000
 
+
+typedef void (*funct_t)(void);
+
+funct_t trap_to_simulator = (funct_t) 0x70000000;
+
 void upload(char ** ptr, char * src, int size)
 {
 	char * drain = *ptr;
 
-	*drain = size;
+	*((int *) drain) = size;
+
 	drain += 4;
 
 
@@ -66,11 +72,29 @@ int _fstat(int file, struct stat * st)
 	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
 	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
 
-	vx_fstat();
+	trap_to_simulator();
 
 	char * read_buffer = (char *) FILE_IO_READ;
 
-	download((char **) &read_buffer, (char *) st);
+	struct stat newSt;
+
+	download((char **) &read_buffer, (char *) &st);
+
+	// st->st_mode = S_IFCHR;
+
+	vx_printf("st_mode: ", st->st_mode);
+	vx_printf("st_dev: ", st->st_dev);
+	vx_printf("st_ino: ", st->st_ino);
+	vx_printf("st_uid: ", st->st_uid);
+	vx_printf("st_gid: ", st->st_gid);
+	vx_printf("st_rdev: ", st->st_rdev);
+	vx_printf("st_size: ", st->st_size);
+	vx_printf("st_blksize: ", st->st_blksize);
+	vx_printf("st_blocks: ", st->st_blocks);
+
+
+	// st->st_mode = newSt.st_mode;
+	return  0;
 }
 
 int _isatty (int file)
@@ -100,11 +124,10 @@ int _write (int file, char *buf, int nbytes)
 
 	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
 	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
-
 	upload((char **) &write_buffer, (char *)  buf  , nbytes);
 
-	vx_write();
 
+	trap_to_simulator();
 
 	// int i;
 

@@ -13,7 +13,7 @@ SECTIONS
   . = 0x70000000;
   .FileIO       :
   {
-
+    *(.FileIO)
   }
   . = 0x80000000;
   .text           :

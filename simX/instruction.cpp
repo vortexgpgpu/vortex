@@ -14,6 +14,8 @@
 #include "include/qsim-harp.h"
 #endif
 
+#include <sys/stat.h>
+
 using namespace Harp;
 using namespace std;
 
@@ -78,6 +80,168 @@ Word signExt(Word w, Size bit, Word mask) {
   return w;
 }
 
+void upload(unsigned * addr, char * src, int size, Warp & c)
+{
+  // c.core->mem.write(current_addr, reg[rsrc[1]] & 0x000000FF, c.supervisorMode, 1);
+
+  unsigned current_addr = *addr;
+
+  c.core->mem.write(current_addr, size, c.supervisorMode, 4);
+  current_addr += 4;
+
+
+  for (int i = 0; i < size; i++)
+  {
+    unsigned value = src[i] & 0x000000FF;
+    c.core->mem.write(current_addr, value, c.supervisorMode, 1);
+    current_addr += 1;
+  }
+
+  *addr = current_addr;
+}
+
+void download(unsigned * addr, char * drain, Warp & c)
+{
+  unsigned current_addr = *addr;
+
+  int size;
+
+  size = c.core->mem.read(current_addr, c.supervisorMode);
+  current_addr += 4;
+
+
+  for (int i = 0; i < size; i++)
+  {
+    unsigned read_word = c.core->mem.read(current_addr, c.supervisorMode);
+    char     read_byte = (char) (read_word & 0x000000FF);
+    drain[i] = read_byte;
+    current_addr += 1;
+  }
+
+  *addr = current_addr;
+}
+
+void downloadAlloc(unsigned * addr, char ** drain_ptr, int & size, Warp & c)
+{
+  unsigned current_addr = *addr;
+
+  size = c.core->mem.read(current_addr, c.supervisorMode);
+  current_addr += 4;
+
+  (*drain_ptr) = (char *) malloc(size);
+
+  char * drain = *drain_ptr;
+
+  for (int i = 0; i < size; i++)
+  {
+    unsigned read_word = c.core->mem.read(current_addr, c.supervisorMode);
+    char     read_byte = (char) (read_word & 0x000000FF);
+    drain[i] = read_byte;
+    current_addr += 1;
+  }
+
+  *addr = current_addr;
+}
+
+#define CLOSE  1
+#define ISATTY 2
+#define LSEEK  3
+#define READ   4
+#define WRITE  5
+#define FSTAT  6
+
+void trap_to_simulator(Warp & c)
+{
+    unsigned read_buffer  = 0x71000000;
+    unsigned write_buffer = 0x72000000;
+
+    // cerr << "RAW READ BUFFER:\n";
+    // for (int i = 0; i < 10; i++)
+    // {
+    //     unsigned new_addr = read_buffer + (4*i);
+    //     unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
+    //     cerr << hex << new_addr << ": " << data_read << "\n";
+    // }
+
+    int command;
+    download(&read_buffer, (char *) &command, c);
+
+    cerr << "Command: " << hex << command << dec << '\n';
+
+    switch (command)
+    {
+        case(CLOSE):
+        {
+            cerr << "trap_to_simulator: CLOSE not supported yet\n";
+        }
+        break;
+        case(ISATTY):
+        {
+
+            cerr << "trap_to_simulator: ISATTY not supported yet\n";
+        }
+        break;
+        case (LSEEK):
+        {
+
+            cerr << "trap_to_simulator: LSEEK not supported yet\n";
+        }
+        break;
+        case (READ):
+        {
+
+            cerr << "trap_to_simulator: READ not supported yet\n";
+        }
+        break;
+        case (WRITE):
+        {
+            int file;
+            download(&read_buffer, (char *) &file, c);
+
+            file = (file == 1) ? 2 : file;
+
+            int size;
+            char * buf;
+            downloadAlloc(&read_buffer, &buf, size, c);
+
+            write(file, buf, size);
+            free(buf);
+        }
+        break;
+        case (FSTAT):
+        {
+            cerr << "trap_to_simulator: FSTAT not supported yet\n";
+            int file;
+            download(&read_buffer, (char *) &file, c);
+
+            struct stat st;
+            fstat(file, &st);
+
+            fprintf(stderr, "------------------------\n");
+            fprintf(stderr, "st_mode: %d\n", st.st_mode);
+            fprintf(stderr, "st_dev: %d\n", st.st_dev);
+            fprintf(stderr, "st_ino: %d\n", st.st_ino);
+            fprintf(stderr, "st_uid: %d\n", st.st_uid);
+            fprintf(stderr, "st_gid: %d\n", st.st_gid);
+            fprintf(stderr, "st_rdev: %d\n", st.st_rdev);
+            fprintf(stderr, "st_size: %d\n", st.st_size);
+            fprintf(stderr, "st_blksize: %d\n", st.st_blksize);
+            fprintf(stderr, "st_blocks: %d\n", st.st_blocks);
+            fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
+
+            upload(&write_buffer, (char *) &st, sizeof(struct stat), c);
+        }
+        break;
+        default:
+        {
+
+            cerr << "trap_to_simulator: DEFAULT not supported yet\n";
+        }
+        break;
+    }
+
+}
+
 void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
   D(3, "Begin instruction execute.");
 
@@ -89,17 +253,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
     return;
   }
 
-  // /* Also throw exceptions on non-masked divergent branches. */
-  // if (instTable[op].controlFlow) {
-  //   Size t, count, active;
-  //   for (t = 0, count = 0, active = 0; t < c.activeThreads; ++t) {
-  //     if ((!predicated || c.pred[t][pred]) && c.tmask[t]) ++count;
-  //     if (c.tmask[t]) ++active;
-  //   }
 
-  //   if (count != 0 && count != active)
-  //     throw DivergentBranchException();
-  // }
+
+
 
   Size nextActiveThreads = c.activeThreads;
   Size wordSz = c.core->a.getWordSize();
@@ -107,17 +263,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
   c.memAccesses.clear();
   
-  // If we have a load, overwriting a register's contents, we have to make sure
-  // ahead of time it will not fault. Otherwise we may perform an indirect load
-  // by mistake.
-  // if (op == L_INST && rdest == rsrc[0]) {
-  //   for (Size t = 0; t < c.activeThreads; t++) {
-  //     if ((!predicated || c.pred[t][pred]) && c.tmask[t]) {
-  //       Word memAddr = c.reg[t][rsrc[0]] + immsrc;
-  //       c.core->mem.read(memAddr, c.supervisorMode);
-  //     }
-  //   }
-  // }
+
+  unsigned real_pc = c.pc - 4;
+  if ((real_pc) == (0x70000000))
+  {
+    trap_to_simulator(c);
+  }
 
   bool sjOnce(true), // Has not yet split or joined once.
        pcSet(false); // PC has already been set
@@ -126,23 +277,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
     vector<Reg<bool> > &pReg(c.pred[t]);
     stack<DomStackEntry> &domStack(c.domStack);
 
-    //std::cout << std::hex << "opcode: " << op << "  func3: " << func3 << "\n";
-    //if (op == GPGPU) //std::cout << "OPCODE MATCHED GPGPU\n";
-
-    // If this thread is masked out, don't execute the instruction, unless it's
-    // a split or join.
-    // if (((predicated && !pReg[pred]) || !c.tmask[t]) &&
-    //       op != SPLIT && op != JOIN) continue;
 
     bool split = (op == GPGPU) && (func3 == 2);
     bool join  = (op == GPGPU) && (func3 == 3);
 
-
-    // predicated = (op == GPGPU) && ((func3 == 7) || (func3 == 2));
-
-
-    // bool is_branch = (op == B_INST);
-    // bool is_jump   = (op == JAL_INST) || (op == JALR_INST); 
 
     bool is_gpgpu   = (op == GPGPU);
 
@@ -160,17 +298,6 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
     {
       continue;
     }
-
-    // printf("Predicated: %d, split: %d, join: %d\n",predicated, split, join );
-    // printf("%d && ((%d) || (%d))\n",(op == GPGPU), (func3 == 7), (func3 == 2) );
-
-    // cout << "before " << op << " = " << GPGPU << "\n";
-    // if (((predicated && !reg[pred]) || !c.tmask[t]) && !split && !join)
-    // {
-    //   // cout << "about to continue\n";
-    //   continue;
-    // }
-    // cout << "after\n";
 
     ++c.insts;
 
@@ -855,7 +982,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         }
         break;
       default:
-        cout << "pc: " << hex << (c.pc) << "\n";
+        cout << "pc: " << hex << (c.pc-4) << "\n";
         cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;
         exit(1);
     }

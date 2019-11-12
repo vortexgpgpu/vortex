@@ -24,9 +24,6 @@ int main()
 
 	printf("printf: Newlib Main %d\n", 456);
 
-	vx_close();
-
-
 	return 0;
 }
 

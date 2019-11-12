@@ -13,7 +13,7 @@ VX_INT  = ../../intrinsics/vx_intrinsics.s
 VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
 VX_TEST = ../../tests/tests.c
-VX_FIO  = ../../fileio/fileio.c
+VX_FIO  = ../../fileio/fileio.s
 
 VX_MAIN = ./vx_nl_main.c
 

@@ -365,6 +365,35 @@ namespace Harp {
       ((uint32_t*)this->get(0xf00fff10))[0] = 0x12345678;
 
 
+
+      ((uint32_t*)this->get(0x70000000))[0] = 0x00008067;
+
+      {
+        uint32_t init_addr = 0x70000004;
+        for (int off = 0; off < 1024; off+=4)
+        {
+          uint32_t new_addr = init_addr+off;
+          ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
+        }
+      }
+
+      {
+        uint32_t init_addr = 0x71000000;
+        for (int off = 0; off < 1024; off+=4)
+        {
+          uint32_t new_addr = init_addr+off;
+          ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
+        }
+      }
+
+      {
+        uint32_t init_addr = 0x72000000;
+        for (int off = 0; off < 1024; off+=4)
+        {
+          uint32_t new_addr = init_addr+off;
+          ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
+        }
+      }
       
 
       fseek(fp, 0, SEEK_END);
