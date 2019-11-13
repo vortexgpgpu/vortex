@@ -49,6 +49,9 @@ void download(char ** ptr, char * drain)
 	size = *((int *) src);
 	src += 4;
 
+	vx_printf("newlib.c: Size of download: ", size);
+	vx_printf("newlib.c: Real size: ", sizeof(struct stat));
+
 	for (int i = 0; i < size; i++)
 	{
 		drain[i] = (*src);
@@ -78,9 +81,10 @@ int _fstat(int file, struct stat * st)
 
 	struct stat newSt;
 
-	download((char **) &read_buffer, (char *) &st);
+	download((char **) &read_buffer, (char *) &newSt);
 
-	// st->st_mode = S_IFCHR;
+	st->st_mode = S_IFCHR;
+
 
 	vx_printf("st_mode: ", st->st_mode);
 	vx_printf("st_dev: ", st->st_dev);
@@ -93,7 +97,6 @@ int _fstat(int file, struct stat * st)
 	vx_printf("st_blocks: ", st->st_blocks);
 
 
-	// st->st_mode = newSt.st_mode;
 	return  0;
 }
 

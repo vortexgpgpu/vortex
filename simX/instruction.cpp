@@ -218,6 +218,7 @@ void trap_to_simulator(Warp & c)
             fstat(file, &st);
 
             fprintf(stderr, "------------------------\n");
+            fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
             fprintf(stderr, "st_mode: %d\n", st.st_mode);
             fprintf(stderr, "st_dev: %d\n", st.st_dev);
             fprintf(stderr, "st_ino: %d\n", st.st_ino);
@@ -230,6 +231,15 @@ void trap_to_simulator(Warp & c)
             fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 
             upload(&write_buffer, (char *) &st, sizeof(struct stat), c);
+
+            cerr << "RAW Write BUFFER:\n";
+            unsigned original_write_buffer = 0x72000000;
+            for (int i = 0; i < 10; i++)
+            {
+                unsigned new_addr = original_write_buffer + (4*i);
+                unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
+                cerr << hex << new_addr << ": " << data_read << "\n";
+            }
         }
         break;
         default:
