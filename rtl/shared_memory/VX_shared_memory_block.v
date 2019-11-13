@@ -36,15 +36,15 @@ module VX_shared_memory_block (
 
 	`else 
 
-		wire cena = 1;
-		wire cenb = shm_write;
+		wire cena = 0;
+		wire cenb = !shm_write;
 
 		wire[3:0][31:0] write_bit_mask;
 
-		assign write_bit_mask[0] = (we == 2'b00) ? 1 : {32{1'b0}};
-		assign write_bit_mask[1] = (we == 2'b01) ? 1 : {32{1'b0}};
-		assign write_bit_mask[2] = (we == 2'b10) ? 1 : {32{1'b0}};
-		assign write_bit_mask[3] = (we == 2'b11) ? 1 : {32{1'b0}};
+		assign write_bit_mask[0] = (we == 2'b00) ? {32{1'b1}} : {32{1'b0}};
+		assign write_bit_mask[1] = (we == 2'b01) ? {32{1'b1}} : {32{1'b0}};
+		assign write_bit_mask[2] = (we == 2'b10) ? {32{1'b1}} : {32{1'b0}};
+		assign write_bit_mask[3] = (we == 2'b11) ? {32{1'b1}} : {32{1'b0}};
 
 		// Using ASIC MEM
 		/* verilator lint_off PINCONNECTEMPTY */

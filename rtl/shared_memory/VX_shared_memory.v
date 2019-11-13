@@ -35,7 +35,6 @@ reg [NB:0][1:0] block_we;
 wire send_data;
 
 reg[NB:0][1:0] req_num;
-reg shm_write;
 
 wire [`NT_M1:0] orig_in_valid;
 
@@ -67,10 +66,14 @@ VX_priority_encoder_sm #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_enc
 	.send_data(send_data)
 	);
 
+
 genvar j;
 integer i;
 generate
-for(j=0; j<= NB; j=j+1) begin
+for(j=0; j<= NB; j=j+1) begin : sm_mem_block
+
+	wire shm_write = (mem_write != `NO_MEM_WRITE) && temp_in_valid[j];
+
 	VX_shared_memory_block vx_shared_memory_block(
 		.clk      (clk),
 		.reset    (reset),
@@ -93,7 +96,6 @@ always @(*) begin
 			if((temp_address[i][31:24]) == 8'hFF) begin
 			// STORES
 				if(mem_write != `NO_MEM_WRITE) begin 
-					shm_write = 1'b1;
 					if(mem_write == `SB_MEM_WRITE) begin
 						//TODO
 					end
@@ -108,7 +110,6 @@ always @(*) begin
 				end
 				//LOADS
 				else if(mem_read != `NO_MEM_READ) begin 
-					shm_write = 1'b0;
 					if(mem_read == `LB_MEM_READ) begin
 						//TODO
 					end
