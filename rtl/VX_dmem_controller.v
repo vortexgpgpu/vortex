@@ -30,6 +30,10 @@ module VX_dmem_controller (
 	wire[`NT_M1:0][31:0] cache_driver_in_data      = VX_dcache_req.out_cache_driver_in_data;
 
 
+	wire[2:0]            sm_driver_in_mem_read  = !(|sm_driver_in_valid) ? `NO_MEM_READ   : VX_dcache_req.out_cache_driver_in_mem_read;
+	wire[2:0]            sm_driver_in_mem_write = !(|sm_driver_in_valid) ? `NO_MEM_WRITE  : VX_dcache_req.out_cache_driver_in_mem_write;
+
+
 	wire[`NT_M1:0][31:0] cache_driver_out_data;
 	wire[`NT_M1:0][31:0] sm_driver_out_data;
 	wire[`NT_M1:0]       cache_driver_out_valid; // Not used for now
@@ -57,8 +61,8 @@ module VX_dmem_controller (
 		.in_valid  (sm_driver_in_valid),
 		.in_address(cache_driver_in_address),
 		.in_data   (cache_driver_in_data),
-		.mem_read  (cache_driver_in_mem_read),
-		.mem_write (cache_driver_in_mem_write),
+		.mem_read  (sm_driver_in_mem_read),
+		.mem_write (sm_driver_in_mem_write),
 		.out_valid (cache_driver_out_valid),
 		.out_data  (sm_driver_out_data),
 		.stall     (sm_delay)
