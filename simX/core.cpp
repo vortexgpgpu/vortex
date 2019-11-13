@@ -101,7 +101,6 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   a(a), iDec(d), mem(mem), steps(4)
 {
-
   release_warp = false;
   foundSchedule = true;
   schedule_w = 0;

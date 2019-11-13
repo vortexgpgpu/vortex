@@ -49,7 +49,7 @@ reg[`NT_M1:0][31:0] temp_out_data;
 reg [SM_BANKS - 1:0][$clog2(SM_HEIGHT) - 1:0] block_addr;
 reg [SM_BANKS - 1:0][SM_WORDS_PER_READ-1:0][31:0] block_wdata;
 reg [SM_BANKS - 1:0][SM_WORDS_PER_READ-1:0][31:0] block_rdata;
-reg [SM_BANKS - 1:0][SM_LOG_WORDS_PER_READ:0] block_we;
+reg [SM_BANKS - 1:0][SM_LOG_WORDS_PER_READ-1:0] block_we;
 
 wire send_data;
 

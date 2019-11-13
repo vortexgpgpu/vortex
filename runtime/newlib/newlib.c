@@ -27,7 +27,12 @@ void upload(char ** ptr, char * src, int size)
 {
 	char * drain = *ptr;
 
-	*((int *) drain) = size;
+	// *((int *) drain) = size;
+	char * size_ptr = (char *) size;
+	drain[0] = size_ptr[0];
+	drain[1] = size_ptr[1];
+	drain[2] = size_ptr[2];
+	drain[3] = size_ptr[3];
 
 	drain += 4;
 
@@ -46,11 +51,19 @@ void download(char ** ptr, char * drain)
 	char * src = *ptr;
 
 	int size;
-	size = *((int *) src);
+
+	// size = *((int *) src);
+	char * size_ptr = (char *) size;
+	size_ptr[0] = src[0];
+	size_ptr[1] = src[1];
+	size_ptr[2] = src[2];
+	size_ptr[3] = src[3];
+
+
 	src += 4;
 
-	vx_printf("newlib.c: Size of download: ", size);
-	vx_printf("newlib.c: Real size: ", sizeof(struct stat));
+	// vx_printf("newlib.c: Size of download: ", size);
+	// vx_printf("newlib.c: Real size: ", sizeof(struct stat));
 
 	for (int i = 0; i < size; i++)
 	{
@@ -79,12 +92,24 @@ int _fstat(int file, struct stat * st)
 
 	char * read_buffer = (char *) FILE_IO_READ;
 
-	struct stat newSt;
+	unsigned value;
+	download((char **) &read_buffer, (char *) &value);
+	st->st_mode = value;
+	download((char **) &read_buffer, (char *) &value);
+	st->st_dev = value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_uid = value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_gid = value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_size = value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_blksize = value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_blocks = value;
 
-	download((char **) &read_buffer, (char *) &newSt);
-
-	st->st_mode = S_IFCHR;
-
+	// st->st_mode = S_IFCHR;
+	// st->st_mode = 33279;
 
 	vx_printf("st_mode: ", st->st_mode);
 	vx_printf("st_dev: ", st->st_dev);

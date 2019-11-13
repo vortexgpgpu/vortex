@@ -176,7 +176,7 @@ module VX_warp_scheduler (
 
 			if (update_use_wspawn) begin
 				use_wsapwn[warp_to_schedule]   <= 0;
-				thread_masks[warp_to_schedule] <= 1'b1;
+				thread_masks[warp_to_schedule] <= 1;
 			end
 
 
@@ -284,7 +284,7 @@ module VX_warp_scheduler (
 	wire real_use_wspawn = use_wsapwn[warp_to_schedule];
 
 	assign warp_pc     = real_use_wspawn ? use_wsapwn_pc : warp_pcs[warp_to_schedule];
-	assign thread_mask = (global_stall) ? 0 : (real_use_wspawn ? 1'b1 : thread_masks[warp_to_schedule]);
+	assign thread_mask = (global_stall) ? 0 : (real_use_wspawn ? `NT'b1 : thread_masks[warp_to_schedule]);
 	assign warp_num    = warp_to_schedule;
 
 	assign update_use_wspawn = use_wsapwn[warp_to_schedule] && !global_stall;

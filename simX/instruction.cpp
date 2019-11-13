@@ -82,7 +82,8 @@ Word signExt(Word w, Size bit, Word mask) {
 
 void upload(unsigned * addr, char * src, int size, Warp & c)
 {
-  // c.core->mem.write(current_addr, reg[rsrc[1]] & 0x000000FF, c.supervisorMode, 1);
+
+  cerr << "WRITING FINAL: " << *src << " size: " << size << "\n";
 
   unsigned current_addr = *addr;
 
@@ -93,6 +94,7 @@ void upload(unsigned * addr, char * src, int size, Warp & c)
   for (int i = 0; i < size; i++)
   {
     unsigned value = src[i] & 0x000000FF;
+    cerr << "UPLOAD: (" << hex << current_addr << dec << ") = " << hex << ( value) << dec << "\n";
     c.core->mem.write(current_addr, value, c.supervisorMode, 1);
     current_addr += 1;
   }
@@ -155,13 +157,18 @@ void trap_to_simulator(Warp & c)
     unsigned read_buffer  = 0x71000000;
     unsigned write_buffer = 0x72000000;
 
-    // cerr << "RAW READ BUFFER:\n";
-    // for (int i = 0; i < 10; i++)
-    // {
-    //     unsigned new_addr = read_buffer + (4*i);
-    //     unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
-    //     cerr << hex << new_addr << ": " << data_read << "\n";
-    // }
+    cerr << "RAW READ BUFFER:\n";
+    for (int i = 0; i < 10; i++)
+    {
+        unsigned new_addr = read_buffer + (4*i);
+        unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
+        cerr << hex << new_addr << ": " << data_read << "\n";
+    }
+
+    for (int j = 0; j < 1024; j+=1)
+    {
+      c.core->mem.write((write_buffer+j), 0, c.supervisorMode, 1);
+    }
 
     int command;
     download(&read_buffer, (char *) &command, c);
@@ -219,18 +226,26 @@ void trap_to_simulator(Warp & c)
 
             fprintf(stderr, "------------------------\n");
             fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
-            fprintf(stderr, "st_mode: %d\n", st.st_mode);
-            fprintf(stderr, "st_dev: %d\n", st.st_dev);
-            fprintf(stderr, "st_ino: %d\n", st.st_ino);
-            fprintf(stderr, "st_uid: %d\n", st.st_uid);
-            fprintf(stderr, "st_gid: %d\n", st.st_gid);
-            fprintf(stderr, "st_rdev: %d\n", st.st_rdev);
-            fprintf(stderr, "st_size: %d\n", st.st_size);
-            fprintf(stderr, "st_blksize: %d\n", st.st_blksize);
-            fprintf(stderr, "st_blocks: %d\n", st.st_blocks);
+            fprintf(stderr, "st_mode: %x\n", st.st_mode);
+            fprintf(stderr, "st_dev: %x\n", st.st_dev);
+            fprintf(stderr, "st_ino: %x\n", st.st_ino);
+            fprintf(stderr, "st_uid: %x\n", st.st_uid);
+            fprintf(stderr, "st_gid: %x\n", st.st_gid);
+            fprintf(stderr, "st_rdev: %x\n", st.st_rdev);
+            fprintf(stderr, "st_size: %x\n", st.st_size);
+            fprintf(stderr, "st_blksize: %x\n", st.st_blksize);
+            fprintf(stderr, "st_blocks: %x\n", st.st_blocks);
             fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 
-            upload(&write_buffer, (char *) &st, sizeof(struct stat), c);
+            upload(&write_buffer, (char *) &st.st_mode    , sizeof(st.st_mode), c);
+            upload(&write_buffer, (char *) &st.st_dev     , sizeof(st.st_dev), c);
+            // upload(&write_buffer, (char *) &st.st_uid     , sizeof(st.st_uid), c);
+            // upload(&write_buffer, (char *) &st.st_gid     , sizeof(st.st_gid), c);
+            // upload(&write_buffer, (char *) &st.st_size    , sizeof(st.st_size), c);
+            // upload(&write_buffer, (char *) &st.st_blksize , sizeof(st.st_blksize), c);
+            // upload(&write_buffer, (char *) &st.st_blocks  , sizeof(st.st_blocks), c);
+
+            // upload(&write_buffer, (char *) &st, sizeof(struct stat), c);
 
             cerr << "RAW Write BUFFER:\n";
             unsigned original_write_buffer = 0x72000000;

@@ -52,6 +52,7 @@ int main()
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
+
 	vx_print_str("Simple Main\n");
 
 
@@ -68,6 +69,22 @@ int main()
 	// Test wspawn
 	vx_print_str("test_wspawn\n");
 	test_wsapwn();
+
+	vx_print_str("Shared Memory test\n");
+	unsigned * ptr = (unsigned *) 0xFFFF0000;
+	unsigned value = 0;
+	for (int i = 0; i < 5; i++)
+	{
+		*ptr = value;
+		unsigned read_valud = *ptr;
+		vx_printf("ptr: ", (unsigned) ptr);
+		vx_printf("Original Value: ", value);
+		vx_printf("Read Value: ", read_valud);
+		vx_print_str("-------------------\n");
+		value++;
+		ptr++;
+
+	}
 
 	vx_print_str("vx_spawnWarps mat_add_kernel\n");
 
