@@ -1,50 +1,73 @@
-module VX_shared_memory_block (
+module VX_shared_memory_block
+#(
+		parameter SMB_SIZE               = 4096, // Bytes
+		parameter SMB_BYTES_PER_READ     = 16,
+		parameter SMB_WORDS_PER_READ     = 4,
+		parameter SMB_LOG_WORDS_PER_READ = 2,
+		parameter SMB_HEIGHT             = 128, // Bytes
+		parameter BITS_PER_BANK          = 3
+)
+(
 	input wire             clk,    // Clock
 	input wire             reset,
-	input wire[6:0]        addr,
-	input wire[3:0][31:0]  wdata,
-	input wire[1:0]        we,
-	input wire             shm_write,
+	//input wire[6:0]        addr,
+	//input wire[3:0][31:0]  wdata,
+	//input wire[1:0]        we,
+	//input wire             shm_write,
 
-	output wire[3:0][31:0] data_out
-	
+	//output wire[3:0][31:0] data_out
+	input wire[$clog2(SMB_HEIGHT) - 1:0]        addr,
+	input wire[SMB_WORDS_PER_READ-1:0][31:0]    wdata,
+	input wire[SMB_LOG_WORDS_PER_READ-1:0]      we,
+	input wire                                  shm_write,
+
+	output wire[SMB_WORDS_PER_READ-1:0][31:0]   data_out
+
 );
 
 
 	`ifndef SYN
 
-		reg[3:0][31:0] shared_memory[127:0];
+		//reg[3:0][31:0] shared_memory[127:0];
+		reg[SMB_WORDS_PER_READ-1:0][31:0] shared_memory[SMB_HEIGHT-1:0];
 
 		//wire need_to_write = (|we);
 		integer curr_ind;
 		always @(posedge clk, posedge reset) begin
 			if (reset) begin
-				for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
+				//for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
+				for (curr_ind = 0; curr_ind < SMB_HEIGHT; curr_ind = curr_ind + 1)
 				begin
 					shared_memory[curr_ind] <= 0;
 				end
 			end else if(shm_write) begin
-				if (we == 2'b00) shared_memory[addr][0][31:0] <= wdata[0][31:0]; 
-				if (we == 2'b01) shared_memory[addr][1][31:0] <= wdata[1][31:0]; 
-				if (we == 2'b10) shared_memory[addr][2][31:0] <= wdata[2][31:0]; 
-				if (we == 2'b11) shared_memory[addr][3][31:0] <= wdata[3][31:0]; 
+				shared_memory[addr][we][31:0] <= wdata[we][31:0]; // - Ethan's addition
+				//if (we == 2'b00) shared_memory[addr][0][31:0] <= wdata[0][31:0];
+				//if (we == 2'b01) shared_memory[addr][1][31:0] <= wdata[1][31:0];
+				//if (we == 2'b10) shared_memory[addr][2][31:0] <= wdata[2][31:0];
+				//if (we == 2'b11) shared_memory[addr][3][31:0] <= wdata[3][31:0];
 			end
 		end
 
 
 		assign data_out = shm_write ? 0 : shared_memory[addr];
 
-	`else 
+	`else
 
 		wire cena = 0;
 		wire cenb = !shm_write;
 
-		wire[3:0][31:0] write_bit_mask;
+		//wire[3:0][31:0] write_bit_mask;
 
-		assign write_bit_mask[0] = (we == 2'b00) ? {32{1'b1}} : {32{1'b0}};
-		assign write_bit_mask[1] = (we == 2'b01) ? {32{1'b1}} : {32{1'b0}};
-		assign write_bit_mask[2] = (we == 2'b10) ? {32{1'b1}} : {32{1'b0}};
-		assign write_bit_mask[3] = (we == 2'b11) ? {32{1'b1}} : {32{1'b0}};
+		//assign write_bit_mask[0] = (we == 2'b00) ? {32{1'b1}} : {32{1'b0}};
+		//assign write_bit_mask[1] = (we == 2'b01) ? {32{1'b1}} : {32{1'b0}};
+		//assign write_bit_mask[2] = (we == 2'b10) ? {32{1'b1}} : {32{1'b0}};
+		//assign write_bit_mask[3] = (we == 2'b11) ? {32{1'b1}} : {32{1'b0}};
+		integer curr_word;
+		for (curr_word = 0; curr_word < SMB_WORDS_PER_READ; curr_word = curr_word + 1)
+		begin
+			assign write_bit_mask[curr_word] = (we == curr_word) ? 1 : {32{1'b0}};
+		end
 
 		// Using ASIC MEM
 		/* verilator lint_off PINCONNECTEMPTY */
