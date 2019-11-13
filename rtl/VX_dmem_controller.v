@@ -19,7 +19,7 @@ module VX_dmem_controller (
 
 	wire[`NT_M1:0]       sm_driver_in_valid     = VX_dcache_req.out_cache_driver_in_valid & {`NT{to_shm}};
 	wire[`NT_M1:0]       cache_driver_in_valid  = VX_dcache_req.out_cache_driver_in_valid & {`NT{~to_shm}};
-	
+
 	wire read_or_write   = (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE) && (|cache_driver_in_valid);
 
 
@@ -55,7 +55,24 @@ module VX_dmem_controller (
 	wire valid_read_cache = !cache_delay && cache_driver_in_valid[0];
 
 
-	VX_shared_memory #(.NB(7), .BITS_PER_BANK(3)) shared_memory (
+	VX_shared_memory #(
+		.SM_SIZE                (`SHARED_MEMORY_SIZE),
+	  .SM_BANKS 				      (`SHARED_MEMORY_BANKS),
+	  .SM_BYTES_PER_READ      (`SHARED_MEMORY_BYTES_PER_READ),
+	  .SM_WORDS_PER_READ      (`SHARED_MEMORY_WORDS_PER_READ),
+	  .SM_LOG_WORDS_PER_READ  (`SHARED_MEMORY_LOG_WORDS_PER_READ),
+	  .SM_BANK_OFFSET_START   (`SHARED_MEMORY_BANK_OFFSET_ST),
+	  .SM_BANK_OFFSET_END     (`SHARED_MEMORY_BANK_OFFSET_ED),
+	  .SM_BLOCK_OFFSET_START  (`SHARED_MEMORY_BLOCK_OFFSET_ST),
+	  .SM_BLOCK_OFFSET_END    (`SHARED_MEMORY_BLOCK_OFFSET_ED),
+	  .SM_INDEX_START         (`SHARED_MEMORY_INDEX_OFFSET_ST),
+	  .SM_INDEX_END           (`SHARED_MEMORY_INDEX_OFFSET_ED),
+	  .SM_HEIGHT 				      (`SHARED_MEMORY_HEIGHT),
+	  .NUM_REQ                (`SHARED_MEMORY_NUM_REQ),
+	  .BITS_PER_BANK 			    (`SHARED_MEMORY_BITS_PER_BANK) 
+		)
+		shared_memory
+		(
 		.clk       (clk),
 		.reset     (reset),
 		.in_valid  (sm_driver_in_valid),
@@ -98,7 +115,7 @@ module VX_dmem_controller (
 	(
 		.clk                (clk),
 		.rst                (reset),
-		.i_p_valid          (cache_driver_in_valid), 
+		.i_p_valid          (cache_driver_in_valid),
 		.i_p_addr           (cache_driver_in_address),
 		.i_p_writedata      (cache_driver_in_data),
 		.i_p_read_or_write  (read_or_write),
