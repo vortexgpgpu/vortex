@@ -157,13 +157,13 @@ void trap_to_simulator(Warp & c)
     unsigned read_buffer  = 0x71000000;
     unsigned write_buffer = 0x72000000;
 
-    cerr << "RAW READ BUFFER:\n";
-    for (int i = 0; i < 10; i++)
-    {
-        unsigned new_addr = read_buffer + (4*i);
-        unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
-        cerr << hex << new_addr << ": " << data_read << "\n";
-    }
+    // cerr << "RAW READ BUFFER:\n";
+    // for (int i = 0; i < 10; i++)
+    // {
+    //     unsigned new_addr = read_buffer + (4*i);
+    //     unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
+    //     cerr << hex << new_addr << ": " << data_read << "\n";
+    // }
 
     for (int j = 0; j < 1024; j+=1)
     {
@@ -224,18 +224,18 @@ void trap_to_simulator(Warp & c)
             struct stat st;
             fstat(file, &st);
 
-            fprintf(stderr, "------------------------\n");
-            fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
-            fprintf(stderr, "st_mode: %x\n", st.st_mode);
-            fprintf(stderr, "st_dev: %x\n", st.st_dev);
-            fprintf(stderr, "st_ino: %x\n", st.st_ino);
-            fprintf(stderr, "st_uid: %x\n", st.st_uid);
-            fprintf(stderr, "st_gid: %x\n", st.st_gid);
-            fprintf(stderr, "st_rdev: %x\n", st.st_rdev);
-            fprintf(stderr, "st_size: %x\n", st.st_size);
-            fprintf(stderr, "st_blksize: %x\n", st.st_blksize);
-            fprintf(stderr, "st_blocks: %x\n", st.st_blocks);
-            fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
+            // fprintf(stderr, "------------------------\n");
+            // fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
+            // fprintf(stderr, "st_mode: %x\n", st.st_mode);
+            // fprintf(stderr, "st_dev: %x\n", st.st_dev);
+            // fprintf(stderr, "st_ino: %x\n", st.st_ino);
+            // fprintf(stderr, "st_uid: %x\n", st.st_uid);
+            // fprintf(stderr, "st_gid: %x\n", st.st_gid);
+            // fprintf(stderr, "st_rdev: %x\n", st.st_rdev);
+            // fprintf(stderr, "st_size: %x\n", st.st_size);
+            // fprintf(stderr, "st_blksize: %x\n", st.st_blksize);
+            // fprintf(stderr, "st_blocks: %x\n", st.st_blocks);
+            // fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 
             upload(&write_buffer, (char *) &st.st_mode    , sizeof(st.st_mode), c);
             upload(&write_buffer, (char *) &st.st_dev     , sizeof(st.st_dev), c);

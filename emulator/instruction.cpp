@@ -360,11 +360,10 @@ void Instruction::executeOn(Warp &c) {
            memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);
            shift_by  = ((reg[rsrc[0]] + immsrc) & 0x00000003) * 8;
            data_read = c.core->mem.read(memAddr, c.supervisorMode);
-           // //std::cout <<std::hex<< "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
-#ifdef EMU_INSTRUMENTATION
-           Harp::OSDomain::osDomain->
-             do_mem(0, memAddr, c.core->mem.virtToPhys(memAddr), 8, true);
-#endif
+           // std::cout << std::hex << "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
+
+           D(3, "LOAD WORD: " << hex << "0x" << memAddr << " = " << data_read << dec << '\n');
+
         switch (func3)
         {
 
@@ -483,7 +482,8 @@ void Instruction::executeOn(Warp &c) {
         //std::cout << "S_INST\n";
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
-        std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
+           D(3, "STORE WORD: " << hex << "0x" << memAddr << " = " << reg[rsrc[1]] << dec << '\n');
+        // std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
         // //std::cout << "FUNC3: " << func3 << "\n";
         if ((memAddr == 0x00010000) && (t == 0))
         {

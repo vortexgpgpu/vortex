@@ -674,6 +674,7 @@ void Warp::step(trace_inst_t * trace_inst) {
   // ++steps;
   
   D(3, "in step pc=0x" << hex << pc);
+  cout << "help: in PC: " << hex << pc << dec << '\n';
 
   // std::cout << "pc: " << hex << pc << "\n";
 

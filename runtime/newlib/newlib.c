@@ -2,7 +2,7 @@
 
 #include "../io/vx_io.h"
 #include "../fileio/fileio.h"
-
+#include "../intrinsics/vx_intrinsics.h"
 
 #include <sys/stat.h>
 #include <errno.h>
@@ -76,27 +76,27 @@ void download(char ** ptr, char * drain)
 
 void _close()
 {
-	vx_print_str("Hello from _close\n");
+	//vx_print_str("Hello from _close\n");
 }
 
 int _fstat(int file, struct stat * st)
 {
-	char * write_buffer = (char *) FILE_IO_WRITE;
+	// char * write_buffer = (char *) FILE_IO_WRITE;
 
-	int cmd_id = FSTAT;
+	// int cmd_id = FSTAT;
 
-	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	// upload((char **) &write_buffer, (char *) &file  , sizeof(int));
 
-	trap_to_simulator();
+	// trap_to_simulator();
 
-	char * read_buffer = (char *) FILE_IO_READ;
+	// char * read_buffer = (char *) FILE_IO_READ;
 
-	unsigned value;
-	download((char **) &read_buffer, (char *) &value);
-	st->st_mode = value;
-	download((char **) &read_buffer, (char *) &value);
-	st->st_dev = value;
+	// unsigned value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_mode = value;
+	// download((char **) &read_buffer, (char *) &value);
+	// st->st_dev = value;
 	// download((char **) &read_buffer, (char *) &value);
 	// st->st_uid = value;
 	// download((char **) &read_buffer, (char *) &value);
@@ -108,18 +108,19 @@ int _fstat(int file, struct stat * st)
 	// download((char **) &read_buffer, (char *) &value);
 	// st->st_blocks = value;
 
-	// st->st_mode = S_IFCHR;
+	//vx_print_str("Hello from fstat\n");
+	st->st_mode = S_IFCHR;
 	// st->st_mode = 33279;
 
-	vx_printf("st_mode: ", st->st_mode);
-	vx_printf("st_dev: ", st->st_dev);
-	vx_printf("st_ino: ", st->st_ino);
-	vx_printf("st_uid: ", st->st_uid);
-	vx_printf("st_gid: ", st->st_gid);
-	vx_printf("st_rdev: ", st->st_rdev);
-	vx_printf("st_size: ", st->st_size);
-	vx_printf("st_blksize: ", st->st_blksize);
-	vx_printf("st_blocks: ", st->st_blocks);
+	// vx_printf("st_mode: ", st->st_mode);
+	// vx_printf("st_dev: ", st->st_dev);
+	// vx_printf("st_ino: ", st->st_ino);
+	// vx_printf("st_uid: ", st->st_uid);
+	// vx_printf("st_gid: ", st->st_gid);
+	// vx_printf("st_rdev: ", st->st_rdev);
+	// vx_printf("st_size: ", st->st_size);
+	// vx_printf("st_blksize: ", st->st_blksize);
+	// vx_printf("st_blocks: ", st->st_blocks);
 
 
 	return  0;
@@ -127,46 +128,48 @@ int _fstat(int file, struct stat * st)
 
 int _isatty (int file)
 {
-  vx_print_str("Hello from _isatty\n");
+  //vx_print_str("Hello from _isatty\n");
   return 1;
 }
 
 void _lseek()
 {
 
-	vx_print_str("Hello from _lseek\n");
+	//vx_print_str("Hello from _lseek\n");
 }
 
 void _read()
 {
 
-	vx_print_str("Hello from _read\n");
+	//vx_print_str("Hello from _read\n");
 }
 
 int _write (int file, char *buf, int nbytes)
 {
 
-	char * write_buffer = (char *) FILE_IO_WRITE;
+	// char * write_buffer = (char *) FILE_IO_WRITE;
 
-	int cmd_id = WRITE;
+	// int cmd_id = WRITE;
 
-	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
-	upload((char **) &write_buffer, (char *)  buf  , nbytes);
+	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	// upload((char **) &write_buffer, (char *) &file  , sizeof(int));
+	// upload((char **) &write_buffer, (char *)  buf  , nbytes);
 
 
-	trap_to_simulator();
+	// trap_to_simulator();
 
-	// int i;
+	//vx_print_str("Hello from _write\n");
 
-	// unsigned int volatile * const print_addr = (unsigned int *) 0x00010000;
+	int i;
 
-	// for (i = 0; i < nbytes; i++)
-	// {
-	// 	(*print_addr) = buf[i];
- //    }
+	unsigned int volatile * const print_addr = (unsigned int *) 0x00010000;
+
+	for (i = 0; i < nbytes; i++)
+	{
+		(*print_addr) = buf[i];
+    }
         
-	// return nbytes;
+	return nbytes;
 
 }
 
@@ -180,7 +183,7 @@ void * _sbrk (int nbytes)
 	//vx_print_str("Hello from _sbrk\n");
 	//vx_printf("nbytes: ", nbytes);
 
-	//if (nbytes < 0) vx_print_str("nbytes less than zero\n");
+	//if (nbytes < 0) //vx_print_str("nbytes less than zero\n");
 	// printf("nBytes: %d\n", nbytes);
 
 	if (nbytes < 0)
@@ -198,9 +201,9 @@ void * _sbrk (int nbytes)
     {
 		int base  = heap_start;
 		heap_start  += nbytes;
-		//vx_print_str("_sbrk returning: ");
+		////vx_print_str("_sbrk returning: ");
 		//vx_print_hex((unsigned) base);
-		//vx_print_str("\n");
+		////vx_print_str("\n");
 		return (void *) base;
     }
 	else
@@ -210,6 +213,46 @@ void * _sbrk (int nbytes)
     }
 }       /* _sbrk () */
 
+
+void _exit()
+{
+	//vx_print_str("Hello from exit\n");
+	vx_tmc(0);
+}
+
+void _open()
+{
+	//vx_print_str("ERROR: _open not yet implemented\n");
+}
+
+void _kill()
+{
+	//vx_print_str("ERROR: _kill not yet implemented\n");
+}
+
+unsigned _getpid()
+{
+	return vx_threadID();
+}
+
+void _unlink()
+{
+	//vx_print_str("ERROR: _unlink not yet implemented\n");
+}
+
+static int curr_time = 0;
+
+int _gettimeofday()
+{
+	//vx_print_str("ERROR: _gettimeofday not yet implemented\n");
+	return curr_time++;
+}
+
+
+void _link()
+{
+	//vx_print_str("ERROR: _link not yet implemented\n");
+}
 
 
 
