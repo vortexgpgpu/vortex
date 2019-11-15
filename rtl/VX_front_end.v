@@ -31,6 +31,11 @@ wire total_freeze = schedule_delay;
 // wire real_fetch_ebreak;
 /* verilator lint_on UNUSED */
 
+wire vortex_ebreak;
+wire terminate_sim;
+
+assign fetch_ebreak = vortex_ebreak || terminate_sim;
+
 
 VX_wstall_inter          VX_wstall();
 VX_join_inter            VX_join();
@@ -47,7 +52,7 @@ VX_fetch vx_fetch(
 
 		.icache_request     (icache_request_fe),
 		.VX_branch_rsp      (VX_branch_rsp),
-		.out_ebreak         (fetch_ebreak), // fetch_ebreak
+		.out_ebreak         (vortex_ebreak), // fetch_ebreak
 		.fe_inst_meta_fd    (fe_inst_meta_fd)
 	);
 
@@ -64,7 +69,8 @@ VX_decode vx_decode(
 		.fd_inst_meta_de   (fd_inst_meta_de),
 		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
 		.VX_wstall         (VX_wstall),
-		.VX_join           (VX_join)
+		.VX_join           (VX_join),
+		.terminate_sim     (terminate_sim)
 	);
 
 wire no_br_stall = 0;

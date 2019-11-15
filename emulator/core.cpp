@@ -203,7 +203,7 @@ void Warp::step() {
     D(3, "Register state:");
     for (unsigned i = 0; i < reg[0].size(); ++i) {
       D_RAW("  %r" << setfill(' ') << setw(2) << dec << i << ':');
-      for (unsigned j = 0; j < reg.size(); ++j) 
+      for (unsigned j = 0; j < (this->activeThreads); ++j) 
         D_RAW(' ' << setfill('0') << setw(8) << hex << reg[j][i] << setfill(' ') << ' ');
       D_RAW('(' << shadowReg[i] << ')' << endl);
     }

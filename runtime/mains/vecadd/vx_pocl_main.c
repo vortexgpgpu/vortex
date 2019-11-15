@@ -55,8 +55,17 @@ static int g_num_kernels = 0;
 static kernel_info_t g_kernels [MAX_KERNELS];
 
 int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, uint32_t num_locals, const uint8_t* arg_types, const uint32_t* local_sizes) {
+  printf("******** _pocl_register_kernel\n");
+  printf("Name to register: %s\n", name);
+  printf("PTR of name: %x\n", name);
   if (g_num_kernels == MAX_KERNELS)
-    return -1;
+  {
+  	printf("ERROR: REACHED MAX KERNELS\n");
+    return -1;	
+  }
+
+  printf("Going to register at index: %d\n", g_num_kernels);
+
   kernel_info_t* kernel = g_kernels + g_num_kernels++;
   kernel->name = name;
   kernel->pfn = pfn;
@@ -64,14 +73,23 @@ int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, 
   kernel->num_locals = num_locals;
   kernel->arg_types = arg_types;
   kernel->local_sizes = local_sizes;
+  printf("New kernel name: %s\n", kernel->name);
   return 0;
 }
 
 int _pocl_query_kernel(const char* name, const void** p_pfn, uint32_t* p_num_args, uint32_t* p_num_locals, const uint8_t** p_arg_types, const uint32_t** p_local_sizes) {
+  printf("********* Inside _pocl_query_kernel\n");
+  printf("name: %s\n", name);
+  printf("g_num_kernels: %d\n", g_num_kernels);
   for (int i = 0; i < g_num_kernels; ++i) {
+  	printf("Currently quering index %d\n", i);
     kernel_info_t* kernel = g_kernels + i;
     if (strcmp(kernel->name, name) != 0)
+    {
+      printf("STR CMP failed! kernel->name = %s \t name: %s\n", kernel->name, name);
       continue;
+    }
+    printf("!!!!!!!!!STR CMP PASSED\n");
     if (p_pfn) *p_pfn = kernel->pfn;
     if (p_num_args) *p_num_args = kernel->num_args;
     if (p_num_locals) *p_num_locals = kernel->num_locals;

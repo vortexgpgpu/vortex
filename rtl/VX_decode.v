@@ -8,7 +8,9 @@ module VX_decode(
 	// Outputs
 	VX_frE_to_bckE_req_inter VX_frE_to_bckE_req,
 	VX_wstall_inter          VX_wstall,
-	VX_join_inter            VX_join
+	VX_join_inter            VX_join,
+
+	output wire              terminate_sim
 
 );
 
@@ -224,7 +226,7 @@ module VX_decode(
 		wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && (|in_valid));
 		assign VX_frE_to_bckE_req.ebreak = ebreak;
 		wire out_ebreak = ebreak;
-
+		assign terminate_sim = is_e_inst;
 
 
 		// CSR

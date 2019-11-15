@@ -14,7 +14,7 @@ VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
 VX_TEST = ../../tests/tests.c
 VX_FIO  = ../../fileio/fileio.s
-LIBS    = ./libs/libvecadd.a ./libs/libOpenCL.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = ./libs/libvecadd.a /home/fares/dev/pocl/drops_riscv_rt/lib/static/libOpenCL.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_pocl_main
 
