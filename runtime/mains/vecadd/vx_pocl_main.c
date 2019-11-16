@@ -59,16 +59,16 @@ extern "C" {
 #endif
 
 int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, uint32_t num_locals, const uint8_t* arg_types, const uint32_t* local_sizes) {
-  printf("******** _pocl_register_kernel\n");
-  printf("Name to register: %s\n", name);
-  printf("PTR of name: %x\n", name);
+  //printf("******** _pocl_register_kernel\n");
+  //printf("Name to register: %s\n", name);
+  //printf("PTR of name: %x\n", name);
   if (g_num_kernels == MAX_KERNELS)
   {
-  	printf("ERROR: REACHED MAX KERNELS\n");
+  	//printf("ERROR: REACHED MAX KERNELS\n");
     return -1;	
   }
 
-  printf("Going to register at index: %d\n", g_num_kernels);
+  //printf("Going to register at index: %d\n", g_num_kernels);
 
   kernel_info_t* kernel = g_kernels + g_num_kernels++;
   kernel->name = name;
@@ -77,23 +77,23 @@ int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, 
   kernel->num_locals = num_locals;
   kernel->arg_types = arg_types;
   kernel->local_sizes = local_sizes;
-  printf("New kernel name: %s\n", kernel->name);
+  //printf("New kernel name: %s\n", kernel->name);
   return 0;
 }
 
 int _pocl_query_kernel(const char* name, const void** p_pfn, uint32_t* p_num_args, uint32_t* p_num_locals, const uint8_t** p_arg_types, const uint32_t** p_local_sizes) {
-  printf("********* Inside _pocl_query_kernel\n");
-  printf("name: %s\n", name);
-  printf("g_num_kernels: %d\n", g_num_kernels);
+  //printf("********* Inside _pocl_query_kernel\n");
+  //printf("name: %s\n", name);
+  //printf("g_num_kernels: %d\n", g_num_kernels);
   for (int i = 0; i < g_num_kernels; ++i) {
-  	printf("Currently quering index %d\n", i);
+  	//printf("Currently quering index %d\n", i);
     kernel_info_t* kernel = g_kernels + i;
     if (strcmp(kernel->name, name) != 0)
     {
-      printf("STR CMP failed! kernel->name = %s \t name: %s\n", kernel->name, name);
+      //printf("STR CMP failed! kernel->name = %s \t name: %s\n", kernel->name, name);
       continue;
     }
-    printf("!!!!!!!!!STR CMP PASSED\n");
+    //printf("!!!!!!!!!STR CMP PASSED\n");
     if (p_pfn) *p_pfn = kernel->pfn;
     if (p_num_args) *p_num_args = kernel->num_args;
     if (p_num_locals) *p_num_locals = kernel->num_locals;
@@ -138,8 +138,7 @@ void cleanup() {
 int main (int argc, char **argv) {  
   vx_tmc(1);
 
-  vx_print_str("Hello from vecadd\n");
-  printf("New cleared vecadd running\n");
+  //printf("\n\n\n\nReal Vecadd running\n");
 
   cl_platform_id platform_id;
   cl_device_id device_id;
@@ -149,18 +148,18 @@ int main (int argc, char **argv) {
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
 
-  printf("Got platform id: %x\n", platform_id);
+  //printf("Got platform id: %x\n", platform_id);
 
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
 
 
-  printf("Got platformID and deviceID\n");
+  //printf("Got platformID and deviceID\n");
 
   // Creating context.
   context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
 
 
-  printf("Got context\n");
+  //printf("Got context\n");
 
   // Memory buffers for each array
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, SIZE * sizeof(cl_int), NULL, &_err));
@@ -168,14 +167,14 @@ int main (int argc, char **argv) {
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, SIZE * sizeof(cl_int), NULL, &_err));
 
 
-  printf("Created buffers\n");
+  //printf("Created buffers\n");
 
   // Allocate memories for input arrays and output arrays.  
   A = (cl_int*)malloc(sizeof(cl_int)*SIZE);
   B = (cl_int*)malloc(sizeof(cl_int)*SIZE);
   C = (cl_int*)malloc(sizeof(cl_int)*SIZE);
 
-  printf("Allocated memory: A=%x\tB=%x\tC=%x\n", A, B, C);	
+  //printf("Allocated memory: A=%x\tB=%x\tC=%x\n", A, B, C);	
 	
   // Initialize values for array members.  
   for (i=0; i<SIZE; ++i) {
@@ -183,12 +182,12 @@ int main (int argc, char **argv) {
     B[i] = i*2+1;
   }
 
-  printf("About to call clCreateProgramWithBuiltInKernels\n");
+  //printf("About to call clCreateProgramWithBuiltInKernels\n");
 
   // Create program from kernel source
   program = CL_CHECK2(clCreateProgramWithBuiltInKernels(context, 1, &device_id, KERNEL_NAME, &_err));	
 
-  printf("Returned from clCreateProgramWithBuiltInKernels\n");
+  //printf("Returned from clCreateProgramWithBuiltInKernels\n");
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
