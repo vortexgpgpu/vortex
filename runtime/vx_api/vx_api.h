@@ -3,6 +3,9 @@
 
 #define VX_API_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef void (*func_t)(void *);
 
@@ -15,7 +18,9 @@ void vx_cl_spawnWarps (char * /* args */,
 					     long /* group_y */,
 					     long /* group_z */);
 
-
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

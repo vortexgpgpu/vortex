@@ -1,7 +1,7 @@
 
 COMP     = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-g++
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
-CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding
+CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostartfiles
 
 DMP  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
 CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
@@ -9,8 +9,9 @@ CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 # VX_STR  = ../../startup/vx_start.s
 
 
-NEWLIB  = ../../newlib/newlib.c ../../newlib/newlib_notimp.c ../../newlib/newlib.s
-VX_STR  =
+
+NEWLIB  = ../../newlib/newlib.c
+VX_STR  = ../../startup/vx_start.s
 VX_INT  = ../../intrinsics/vx_intrinsics.s
 VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c

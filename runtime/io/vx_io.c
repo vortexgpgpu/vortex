@@ -1,6 +1,10 @@
 
 #include "vx_io.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void vx_print_hex(unsigned f)
 {
 	// vx_print_str(hextoa[f]);
@@ -28,3 +32,7 @@ void vx_printf(char * c, unsigned f)
 	vx_print_hex(f);
 	vx_print_str("\n");
 }
+
+#ifdef __cplusplus
+}
+#endif

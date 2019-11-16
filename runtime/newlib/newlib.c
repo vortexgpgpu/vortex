@@ -18,6 +18,9 @@
 #define FILE_IO_WRITE 0x71000000
 #define FILE_IO_READ  0x72000000
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef void (*funct_t)(void);
 
@@ -257,3 +260,6 @@ void _link()
 
 
 
+#ifdef __cplusplus
+}
+#endif
