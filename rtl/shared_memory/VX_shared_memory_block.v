@@ -57,13 +57,13 @@ module VX_shared_memory_block
 		wire cena = 0;
 		wire cenb = !shm_write;
 
-		//wire[3:0][31:0] write_bit_mask;
+		wire[3:0][31:0] write_bit_mask;
 
 		//assign write_bit_mask[0] = (we == 2'b00) ? {32{1'b1}} : {32{1'b0}};
 		//assign write_bit_mask[1] = (we == 2'b01) ? {32{1'b1}} : {32{1'b0}};
 		//assign write_bit_mask[2] = (we == 2'b10) ? {32{1'b1}} : {32{1'b0}};
 		//assign write_bit_mask[3] = (we == 2'b11) ? {32{1'b1}} : {32{1'b0}};
-		integer curr_word;
+		genvar curr_word;
 		for (curr_word = 0; curr_word < SMB_WORDS_PER_READ; curr_word = curr_word + 1)
 		begin
 			assign write_bit_mask[curr_word] = (we == curr_word) ? 1 : {32{1'b0}};

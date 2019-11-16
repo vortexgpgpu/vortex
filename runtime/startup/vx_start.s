@@ -1,15 +1,42 @@
 
 
-.type _start, @function
-.global _start
+  .text
+  .global _start
+  .type   _start, @function
 _start:
+    # Initialize GP
     la a1, vx_set_sp
     li a0, 4
     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
     jal vx_set_sp
-    jal  main
-    li a0, 0
-    .word 0x0005006b    # tmc a0
+    li a0, 1
+    .word 0x0005006b    # tmc 4
+  # Initialize global pointer
+.option push
+.option norelax
+1:auipc gp, %pcrel_hi(__global_pointer$)
+  addi  gp, gp, %pcrel_lo(1b)
+.option pop
+ # call __cxx_global_var_init
+  # Clear the bss segment
+  la      a0, _edata
+  la      a2, _end
+  sub     a2, a2, a0
+  li      a1, 0
+  call    memset
+
+  la      a0, __libc_fini_array   # Register global termination functions
+  call    atexit                  #  to be called upon exit
+  call    __libc_init_array       # Run global initialization functions
+
+  # lw      a0, 0(sp)                  # a0 = argc
+  # addi    a1, sp, __SIZEOF_POINTER__ # a1 = argv
+  # li      a2, 0                      # a2 = envp = NULL
+      li a0, 4
+    .word 0x0005006b    # tmc 4
+  call    main
+  tail    exit
+  .size  _start, .-_start
 
 
 .type vx_set_sp, @function

@@ -3,6 +3,10 @@
 
 #define VX_INTRINSICS
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Spawns Warps
 void vx_wspawn (unsigned numWarps, unsigned PC_spawn);
 
@@ -38,6 +42,8 @@ void vx_resetStack(void);
 
 #define __endif vx_join();
 
-
+#ifdef __cplusplus
+}
+#endif
 
 #endif

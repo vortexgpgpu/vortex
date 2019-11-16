@@ -69,14 +69,13 @@ void vx_print_mat(unsigned * matPtr, int numRows, int numCols)
 	}
 }
 
-
 int main()
 {
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
 	// void * hellp = malloc(4);
-	vx_print_str("Dev Main\n");
+	vx_print_str("Confirm Dev Main\n");
 
 	vx_print_str("vx_spawnWarps\n");
 

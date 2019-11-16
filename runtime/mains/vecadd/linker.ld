@@ -10,6 +10,7 @@ OUTPUT_ARCH(riscv)
 ENTRY(_start)
 SECTIONS
 {
+  PROVIDE(__stack_top = 0x6ffff000);
   . = 0x70000000;
   .FileIO       :
   {

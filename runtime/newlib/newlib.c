@@ -214,7 +214,7 @@ void * _sbrk (int nbytes)
 }       /* _sbrk () */
 
 
-void _exit()
+void _exit(int val)
 {
 	//vx_print_str("Hello from exit\n");
 	vx_tmc(0);

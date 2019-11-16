@@ -1,10 +1,10 @@
 
-COMP     = /opt/riscv/bin/riscv32-unknown-elf-gcc
+COMP     = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-gcc
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostartfiles
 
-DMP  = /opt/riscv/bin/riscv32-unknown-elf-objdump
-CPY  = /opt/riscv/bin/riscv32-unknown-elf-objcopy
+DMP  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
+CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 
 
 VX_STR  = ../../startup/vx_start.s
