@@ -54,6 +54,10 @@ typedef struct {
 static int g_num_kernels = 0;
 static kernel_info_t g_kernels [MAX_KERNELS];
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, uint32_t num_locals, const uint8_t* arg_types, const uint32_t* local_sizes) {
   printf("******** _pocl_register_kernel\n");
   printf("Name to register: %s\n", name);
@@ -99,6 +103,10 @@ int _pocl_query_kernel(const char* name, const void** p_pfn, uint32_t* p_num_arg
   }
   return -1;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 int exitcode = 0;
 cl_context context = NULL;
