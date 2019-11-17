@@ -35,7 +35,7 @@ void vx_resetStack(void);
 
 
 #define __if(b) vx_split(b); \
-                if (b) \
+                if (b) 
 
 #define __else else
 

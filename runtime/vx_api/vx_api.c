@@ -40,23 +40,50 @@ void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void
 
 }
 
-void pocl_spawn(context_t * ctx, const void * pfn, void * arguments)
+
+uint8_t *              pocl_args;
+uint8_t *              pocl_ctx;
+vx_pocl_workgroup_func pocl_pfn;
+
+
+void pocl_spawn_real()
+{
+	vx_tmc(4);
+	int x = vx_threadID();
+	int y = vx_warpID();
+	(pocl_pfn)( pocl_args, pocl_ctx, x, y, 0);
+
+	if (y != 0)
+	{
+		vx_tmc(0);
+	}
+	vx_tmc(1);
+}
+
+
+void pocl_spawn(struct context_t * ctx, const void * pfn, void * arguments)
 {
 
-   vx_pocl_workgroup_func use_pfn = (vx_pocl_workgroup_func) pfn;
-   int z;
-   int y;
-   int x;
-	for (z = 0; z < ctx->num_groups[2]; ++z)
-	{
-		for (y = 0; y < ctx->num_groups[1]; ++y)
-		{
-			for (x = 0; x < ctx->num_groups[0]; ++x)
-			{
-				(use_pfn)((uint8_t *)arguments, (uint8_t *)ctx, x, y, z);
-			}
-		}
-	}
+   pocl_pfn  = (vx_pocl_workgroup_func) pfn;
+   pocl_ctx  = (uint8_t *) ctx;
+   pocl_args = (uint8_t *) arguments;
+
+
+   pocl_spawn_real();
+
+ //   int z;
+ //   int y;
+ //   int x;
+	// for (z = 0; z < ctx->num_groups[2]; ++z)
+	// {
+	// 	for (y = 0; y < ctx->num_groups[1]; ++y)
+	// 	{
+	// 		for (x = 0; x < ctx->num_groups[0]; ++x)
+	// 		{
+	// 			(use_pfn)((uint8_t *)arguments, (uint8_t *)ctx, x, y, z);
+	// 		}
+	// 	}
+	// }
 }
 
 #ifdef __cplusplus

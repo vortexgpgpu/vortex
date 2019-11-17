@@ -27,12 +27,7 @@ _start:
     jal vx_set_sp
     li a0, 1
     .word 0x0005006b    # tmc 1
-    # Initialize global pointer
-    .option push
-    .option norelax
-    1:auipc gp, %pcrel_hi(__global_pointer$)
-      addi  gp, gp, %pcrel_lo(1b)
-    .option pop
+    # Initialize global pointerp
      # call __cxx_global_var_init
       # Clear the bss segment
       la      a0, _edata
@@ -55,6 +50,12 @@ _start:
 vx_set_sp:
       li a0, 4
       .word 0x0005006b    # tmc 4
+      
+      .option push
+      .option norelax
+      1:auipc gp, %pcrel_hi(__global_pointer$)
+        addi  gp, gp, %pcrel_lo(1b)
+      .option po
 
       csrr a3, 0x21        # get wid
       slli a3, a3, 0x1a    # shift by wid

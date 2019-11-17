@@ -170,24 +170,25 @@ int main (int argc, char **argv) {
 
 
   // CTX initialization
-  context_t ctx;
-  memset(&ctx, 0, sizeof(context_t));
-  ctx.num_groups[0] = 2;
-  ctx.num_groups[1] = 1;
-  ctx.num_groups[2] = 1;
+  printf("ctx size: %d\n", sizeof(context_t));
+  context_t * ctx = (context_t *) malloc(sizeof(context_t));
+  memset(ctx, 0, sizeof(context_t));
+  ctx->num_groups[0] = 4;
+  ctx->num_groups[1] = 1;
+  ctx->num_groups[2] = 1;
 
-  ctx.global_offset[0] = 0;
-  ctx.global_offset[1] = 0;
-  ctx.global_offset[2] = 0;
+  ctx->global_offset[0] = 0;
+  ctx->global_offset[1] = 0;
+  ctx->global_offset[2] = 0;
 
-  ctx.local_size[0] = 2;
-  ctx.local_size[1] = 1;
-  ctx.local_size[2] = 1;
+  ctx->local_size[0] = 1;
+  ctx->local_size[1] = 1;
+  ctx->local_size[2] = 1;
 
-  ctx.printf_buffer          = NULL;
-  ctx.printf_buffer_position = 0;
-  ctx.printf_buffer_capacity = 0;
-  ctx.work_dim = 1;
+  ctx->printf_buffer          = NULL;
+  ctx->printf_buffer_position = 0;
+  ctx->printf_buffer_capacity = 0;
+  ctx->work_dim = 1;
 
   // Arguments initialization
   void **args = (void **)malloc (sizeof(void *) * (p_num_args + p_num_locals));
@@ -199,8 +200,9 @@ int main (int argc, char **argv) {
   printf("B address: %x\n", B);
   printf("C address: %x\n", C);
   printf("args address: %x\n", args);
+  printf("CTX address: %x\n", ctx);
 
-  pocl_spawn(&ctx, p_pfn, (void *) args);
+  pocl_spawn(ctx, p_pfn, (void *) args);
 
   // Testing
   for (i = 0; i < SIZE; ++i)

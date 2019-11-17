@@ -49,7 +49,7 @@ typedef void (*vx_pocl_workgroup_func) (uint8_t * /* args */,
 				     uint32_t /* group_y */,
 				     uint32_t /* group_z */);
 
-void pocl_spawn(context_t * ctx, const void * pfn, void * arguments);
+void pocl_spawn(struct context_t * ctx, const void * pfn, void * arguments);
 
 #ifdef __cplusplus
 }
