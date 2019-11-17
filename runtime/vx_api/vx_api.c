@@ -1,6 +1,7 @@
 
 #include "../intrinsics/vx_intrinsics.h"
 #include "vx_api.h"
+#include <inttypes.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,16 +40,25 @@ void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void
 
 }
 
+void pocl_spawn(context_t * ctx, const void * pfn, void * arguments)
+{
+
+   vx_pocl_workgroup_func use_pfn = (vx_pocl_workgroup_func) pfn;
+   int z;
+   int y;
+   int x;
+	for (z = 0; z < ctx->num_groups[2]; ++z)
+	{
+		for (y = 0; y < ctx->num_groups[1]; ++y)
+		{
+			for (x = 0; x < ctx->num_groups[0]; ++x)
+			{
+				(use_pfn)((uint8_t *)arguments, (uint8_t *)ctx, x, y, z);
+			}
+		}
+	}
+}
+
 #ifdef __cplusplus
 }
 #endif
-// void vx_cl_spawnWarps(char * args, char * pocl_context, long group_x, long group_y, long group_z)
-// {
-// 	if (group_z != 1)
-// 	{
-// 		vx_printf("ERROR: group_z should be set equal to 1");
-// 		return;
-// 	}
-
-// 	vx_spawnWarps(group_y, group_x, )
-// }

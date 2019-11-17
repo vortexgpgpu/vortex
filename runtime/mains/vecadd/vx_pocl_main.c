@@ -26,7 +26,7 @@
      if (_err == CL_SUCCESS)                                           \
        break;                                                          \
      printf("OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err);   \
-	 cleanup();			                                                     \
+   cleanup();                                                          \
      exit(-1);                                                         \
    } while (0)
 
@@ -36,7 +36,7 @@
      typeof(_expr) _ret = _expr;                                       \
      if (_err != CL_SUCCESS) {                                         \
        printf("OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
-	   cleanup();			                                                   \
+     cleanup();                                                        \
        exit(-1);                                                       \
      }                                                                 \
      _ret;                                                             \
@@ -64,8 +64,8 @@ int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, 
   //printf("PTR of name: %x\n", name);
   if (g_num_kernels == MAX_KERNELS)
   {
-  	//printf("ERROR: REACHED MAX KERNELS\n");
-    return -1;	
+    //printf("ERROR: REACHED MAX KERNELS\n");
+    return -1;  
   }
 
   //printf("Going to register at index: %d\n", g_num_kernels);
@@ -86,7 +86,7 @@ int _pocl_query_kernel(const char* name, const void** p_pfn, uint32_t* p_num_arg
   //printf("name: %s\n", name);
   //printf("g_num_kernels: %d\n", g_num_kernels);
   for (int i = 0; i < g_num_kernels; ++i) {
-  	//printf("Currently quering index %d\n", i);
+    //printf("Currently quering index %d\n", i);
     kernel_info_t* kernel = g_kernels + i;
     if (strcmp(kernel->name, name) != 0)
     {
@@ -174,8 +174,8 @@ int main (int argc, char **argv) {
   B = (cl_int*)malloc(sizeof(cl_int)*SIZE);
   C = (cl_int*)malloc(sizeof(cl_int)*SIZE);
 
-  //printf("Allocated memory: A=%x\tB=%x\tC=%x\n", A, B, C);	
-	
+  //printf("Allocated memory: A=%x\tB=%x\tC=%x\n", A, B, C);  
+  
   // Initialize values for array members.  
   for (i=0; i<SIZE; ++i) {
     A[i] = i*2+0;
@@ -185,7 +185,7 @@ int main (int argc, char **argv) {
   //printf("About to call clCreateProgramWithBuiltInKernels\n");
 
   // Create program from kernel source
-  program = CL_CHECK2(clCreateProgramWithBuiltInKernels(context, 1, &device_id, KERNEL_NAME, &_err));	
+  program = CL_CHECK2(clCreateProgramWithBuiltInKernels(context, 1, &device_id, KERNEL_NAME, &_err)); 
 
   //printf("Returned from clCreateProgramWithBuiltInKernels\n");
 
@@ -196,14 +196,14 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   // Set arguments for kernel
-  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
-  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));	
+  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj)); 
+  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj)); 
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));
 
-	// Copy lists to memory buffers
+  // Copy lists to memory buffers
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, SIZE * sizeof(float), A, 0, NULL, NULL));
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, SIZE * sizeof(float), B, 0, NULL, NULL));
 
@@ -229,7 +229,7 @@ int main (int argc, char **argv) {
     printf("Ok!\n");
   }
 
-  // Clean up		
+  // Clean up   
   cleanup();  
 
   return exitcode;
@@ -238,14 +238,14 @@ int main (int argc, char **argv) {
 
 // int main()
 // {
-// 	// Main is called with all threads active of warp 0
-// 	vx_tmc(1);
+//  // Main is called with all threads active of warp 0
+//  vx_tmc(1);
 
 
-// 	printf("printf: including pocl Main!\n");
+//  printf("printf: including pocl Main!\n");
 
 
-// 	return 0;
+//  return 0;
 // }
 
 
