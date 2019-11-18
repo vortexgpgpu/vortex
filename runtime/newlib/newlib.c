@@ -14,6 +14,7 @@
 #define READ   4
 #define WRITE  5
 #define FSTAT  6
+#define OPEN   7
 
 #define FILE_IO_WRITE 0x71000000
 #define FILE_IO_READ  0x72000000
@@ -30,12 +31,17 @@ void upload(char ** ptr, char * src, int size)
 {
 	char * drain = *ptr;
 
+
+
 	// *((int *) drain) = size;
-	char * size_ptr = (char *) size;
+	char * size_ptr = (char *) &size;
 	drain[0] = size_ptr[0];
 	drain[1] = size_ptr[1];
 	drain[2] = size_ptr[2];
 	drain[3] = size_ptr[3];
+
+	// vx_printf("size: ", (unsigned) size);
+	// vx_printf("drain_ptr: ", (unsigned) drain);
 
 	drain += 4;
 
@@ -45,6 +51,11 @@ void upload(char ** ptr, char * src, int size)
 		(*drain) = src[i];
 		drain += 1;
 	}
+
+	unsigned drain_val = (unsigned) drain;
+	drain_val += (drain_val%4);
+
+	drain = (char *) drain_val;
 
 	*ptr = drain;
 }
@@ -74,12 +85,17 @@ void download(char ** ptr, char * drain)
 		src += 1;
 	}
 
+	unsigned src_val = (unsigned) src;
+	src_val += (src_val%4);
+
+	src = (char *) src_val;
+
 	*ptr = src;
 }
 
 void _close()
 {
-	//vx_print_str("Hello from _close\n");
+	vx_print_str("Hello from _close\n");
 }
 
 int _fstat(int file, struct stat * st)
@@ -111,9 +127,8 @@ int _fstat(int file, struct stat * st)
 	// download((char **) &read_buffer, (char *) &value);
 	// st->st_blocks = value;
 
-	//vx_print_str("Hello from fstat\n");
-	st->st_mode = S_IFCHR;
-	// st->st_mode = 33279;
+	vx_print_str("Hello from fstat\n");
+	// // st->st_mode = 33279;
 
 	// vx_printf("st_mode: ", st->st_mode);
 	// vx_printf("st_dev: ", st->st_dev);
@@ -125,52 +140,54 @@ int _fstat(int file, struct stat * st)
 	// vx_printf("st_blksize: ", st->st_blksize);
 	// vx_printf("st_blocks: ", st->st_blocks);
 
+	st->st_mode = S_IFCHR;
+
 
 	return  0;
 }
 
 int _isatty (int file)
 {
-  //vx_print_str("Hello from _isatty\n");
+  vx_print_str("Hello from _isatty\n");
   return 1;
 }
 
 void _lseek()
 {
 
-	//vx_print_str("Hello from _lseek\n");
+	vx_print_str("Hello from _lseek\n");
 }
 
 void _read()
 {
 
-	//vx_print_str("Hello from _read\n");
+	vx_print_str("Hello from _read\n");
 }
 
 int _write (int file, char *buf, int nbytes)
 {
 
-	// char * write_buffer = (char *) FILE_IO_WRITE;
+	char * write_buffer = (char *) FILE_IO_WRITE;
 
-	// int cmd_id = WRITE;
+	int cmd_id = WRITE;
 
-	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	// upload((char **) &write_buffer, (char *) &file  , sizeof(int));
-	// upload((char **) &write_buffer, (char *)  buf  , nbytes);
+	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
+	upload((char **) &write_buffer, (char *)  buf  , nbytes);
 
 
-	// trap_to_simulator();
+	trap_to_simulator();
 
-	//vx_print_str("Hello from _write\n");
+	vx_print_str("Hello from _write\n");
 
-	int i;
+	// int i;
 
-	unsigned int volatile * const print_addr = (unsigned int *) 0x00010000;
+	// unsigned int volatile * const print_addr = (unsigned int *) 0x00010000;
 
-	for (i = 0; i < nbytes; i++)
-	{
-		(*print_addr) = buf[i];
-    }
+	// for (i = 0; i < nbytes; i++)
+	// {
+	// 	(*print_addr) = buf[i];
+ //    }
         
 	return nbytes;
 
@@ -219,18 +236,37 @@ void * _sbrk (int nbytes)
 
 void _exit(int val)
 {
-	//vx_print_str("Hello from exit\n");
+	vx_print_str("Hello from exit\n");
 	vx_tmc(0);
 }
 
-void _open()
+
+int _open(const char *name, int flags, int mode)
 {
-	//vx_print_str("ERROR: _open not yet implemented\n");
+	// vx_print_str("ERROR: _open not yet implemented\n");
+
+
+	// char * write_buffer = (char *) FILE_IO_WRITE;
+
+	// int cmd_id = OPEN;
+
+	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	// upload((char **) &write_buffer, (char *) &name, sizeof (char *));
+	// upload((char **) &write_buffer, (char *) &flags  , sizeof(int));
+	// upload((char **) &write_buffer, (char *) & mode  , nbytes);
+
+
+	// trap_to_simulator();
+
+	vx_print_str("Hello from _write\n");
+
+	return 0;
+
 }
 
 void _kill()
 {
-	//vx_print_str("ERROR: _kill not yet implemented\n");
+	vx_print_str("ERROR: _kill not yet implemented\n");
 }
 
 unsigned _getpid()
@@ -240,21 +276,21 @@ unsigned _getpid()
 
 void _unlink()
 {
-	//vx_print_str("ERROR: _unlink not yet implemented\n");
+	vx_print_str("ERROR: _unlink not yet implemented\n");
 }
 
 static int curr_time = 0;
 
 int _gettimeofday()
 {
-	//vx_print_str("ERROR: _gettimeofday not yet implemented\n");
+	vx_print_str("ERROR: _gettimeofday not yet implemented\n");
 	return curr_time++;
 }
 
 
 void _link()
 {
-	//vx_print_str("ERROR: _link not yet implemented\n");
+	vx_print_str("ERROR: _link not yet implemented\n");
 }
 
 

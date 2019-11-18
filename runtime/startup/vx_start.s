@@ -55,7 +55,7 @@ vx_set_sp:
       .option norelax
       1:auipc gp, %pcrel_hi(__global_pointer$)
         addi  gp, gp, %pcrel_lo(1b)
-      .option po
+      .option pop
 
       csrr a3, 0x21        # get wid
       slli a3, a3, 0x1a    # shift by wid

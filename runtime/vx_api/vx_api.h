@@ -4,6 +4,7 @@
 #define VX_API_
 
 #include <inttypes.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {

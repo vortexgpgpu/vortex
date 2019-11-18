@@ -41,6 +41,7 @@ void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void
 }
 
 
+unsigned               pocl_threads;
 uint8_t *              pocl_args;
 uint8_t *              pocl_ctx;
 vx_pocl_workgroup_func pocl_pfn;
@@ -48,9 +49,10 @@ vx_pocl_workgroup_func pocl_pfn;
 
 void pocl_spawn_real()
 {
-	vx_tmc(4);
+	vx_tmc(pocl_threads);
 	int x = vx_threadID();
 	int y = vx_warpID();
+
 	(pocl_pfn)( pocl_args, pocl_ctx, x, y, 0);
 
 	if (y != 0)
@@ -64,12 +66,23 @@ void pocl_spawn_real()
 void pocl_spawn(struct context_t * ctx, const void * pfn, void * arguments)
 {
 
-   pocl_pfn  = (vx_pocl_workgroup_func) pfn;
-   pocl_ctx  = (uint8_t *) ctx;
-   pocl_args = (uint8_t *) arguments;
+	if (ctx->num_groups[2] > 1)
+	{
+		printf("ERROR: pocl_spawn doesn't support Z dimension yet!\n");
+		return;
+	}
 
+	pocl_threads = ctx->num_groups[0];
+	pocl_pfn     = (vx_pocl_workgroup_func) pfn;
+	pocl_ctx     = (uint8_t *) ctx;
+	pocl_args    = (uint8_t *) arguments;
 
-   pocl_spawn_real();
+	if (ctx->num_groups[1] > 1)
+	{
+		vx_wspawn(ctx->num_groups[1], (unsigned) &pocl_spawn_real);
+	}
+
+	pocl_spawn_real();
 
  //   int z;
  //   int y;

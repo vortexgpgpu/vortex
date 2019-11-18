@@ -134,7 +134,16 @@ unsigned *C = NULL;
 int main (int argc, char **argv) {  
   vx_tmc(1);
 
-  printf("\n\n******** START Native Vecadd running ********\n\n");
+  printf("\n\n******** Fixing fileio START Native Vecadd running ********\n\n");
+
+   FILE *fp;
+   char buff[255];
+
+   fp = fopen("reading_data.txt", "r");
+   fscanf(fp, "%s", buff);
+   printf("1 : %s\n", buff );
+
+  exit(0);
 
   // Allocate memories for input arrays and output arrays.  
   A = (unsigned*)malloc(sizeof(unsigned)*SIZE);
