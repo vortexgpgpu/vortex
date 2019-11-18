@@ -1,8 +1,8 @@
 `include "VX_define.v"
 
 module VX_execute_unit (
-	// input wire               clk,
-	// Input
+	input wire               clk,
+	input wire               reset,
 		// Request
 	VX_exec_unit_req_inter   VX_exec_unit_req,
 
@@ -95,6 +95,13 @@ module VX_execute_unit (
 			end
 		endgenerate
 
+
+		// VX_inst_exec_wb_inter    VX_inst_exec_wb_temp();
+			// JAL Response
+		VX_jal_response_inter    VX_jal_rsp_temp();
+			// Branch Response
+		VX_branch_response_inter VX_branch_rsp_temp();
+
 		// Actual Writeback
 		assign VX_inst_exec_wb.rd          = VX_exec_unit_req.rd;
 		assign VX_inst_exec_wb.wb          = VX_exec_unit_req.wb;
@@ -104,16 +111,45 @@ module VX_execute_unit (
 
 		assign VX_inst_exec_wb.exec_wb_pc  = in_curr_PC;
 		// Jal rsp
-		assign VX_jal_rsp.jal           = in_jal;
-		assign VX_jal_rsp.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
-		assign VX_jal_rsp.jal_warp_num  = VX_exec_unit_req.warp_num;
+		assign VX_jal_rsp_temp.jal           = in_jal;
+		assign VX_jal_rsp_temp.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
+		assign VX_jal_rsp_temp.jal_warp_num  = VX_exec_unit_req.warp_num;
 
 		// Branch rsp
-		assign VX_branch_rsp.valid_branch    = (VX_exec_unit_req.branch_type != `NO_BRANCH) && (|VX_exec_unit_req.valid);
-		assign VX_branch_rsp.branch_dir      = temp_branch_dir;
-		assign VX_branch_rsp.branch_warp_num = VX_exec_unit_req.warp_num;
-		assign VX_branch_rsp.branch_dest     = $signed(VX_exec_unit_req.curr_PC) + ($signed(VX_exec_unit_req.itype_immed) << 1); // itype_immed = branch_offset
+		assign VX_branch_rsp_temp.valid_branch    = (VX_exec_unit_req.branch_type != `NO_BRANCH) && (|VX_exec_unit_req.valid);
+		assign VX_branch_rsp_temp.branch_dir      = temp_branch_dir;
+		assign VX_branch_rsp_temp.branch_warp_num = VX_exec_unit_req.warp_num;
+		assign VX_branch_rsp_temp.branch_dest     = $signed(VX_exec_unit_req.curr_PC) + ($signed(VX_exec_unit_req.itype_immed) << 1); // itype_immed = branch_offset
 
+
+		wire zero = 0;
+
+		// VX_generic_register #(.N(174)) exec_reg(
+		// 	.clk  (clk),
+		// 	.reset(reset),
+		// 	.stall(zero),
+		// 	.flush(zero),
+		// 	.in   ({VX_inst_exec_wb_temp.rd, VX_inst_exec_wb_temp.wb, VX_inst_exec_wb_temp.wb_valid, VX_inst_exec_wb_temp.wb_warp_num, VX_inst_exec_wb_temp.alu_result, VX_inst_exec_wb_temp.exec_wb_pc}),
+		// 	.out  ({VX_inst_exec_wb.rd     , VX_inst_exec_wb.wb     , VX_inst_exec_wb.wb_valid     , VX_inst_exec_wb.wb_warp_num     , VX_inst_exec_wb.alu_result     , VX_inst_exec_wb.exec_wb_pc     })
+		// 	);
+
+		VX_generic_register #(.N(36)) jal_reg(
+			.clk  (clk),
+			.reset(reset),
+			.stall(zero),
+			.flush(zero),
+			.in   ({VX_jal_rsp_temp.jal, VX_jal_rsp_temp.jal_dest, VX_jal_rsp_temp.jal_warp_num}),
+			.out  ({VX_jal_rsp.jal     , VX_jal_rsp.jal_dest     , VX_jal_rsp.jal_warp_num})
+			);
+
+		VX_generic_register #(.N(37)) branch_reg(
+			.clk  (clk),
+			.reset(reset),
+			.stall(zero),
+			.flush(zero),
+			.in   ({VX_branch_rsp_temp.valid_branch, VX_branch_rsp_temp.branch_dir, VX_branch_rsp_temp.branch_warp_num, VX_branch_rsp_temp.branch_dest}),
+			.out  ({VX_branch_rsp.valid_branch     , VX_branch_rsp.branch_dir     , VX_branch_rsp.branch_warp_num     , VX_branch_rsp.branch_dest     })
+			);
 
 		// always @(*) begin
 		// 	case(in_alu_op)

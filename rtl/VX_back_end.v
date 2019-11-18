@@ -86,7 +86,8 @@ VX_lsu load_store_unit(
 
 
 VX_execute_unit VX_execUnit(
-	// .clk             (clk),
+	.clk             (clk),
+	.reset           (reset),
 	.VX_exec_unit_req(VX_exec_unit_req),
 	.VX_inst_exec_wb (VX_inst_exec_wb),
 	.VX_jal_rsp      (VX_jal_rsp),
