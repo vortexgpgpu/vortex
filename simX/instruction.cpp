@@ -13,7 +13,8 @@
 #ifdef EMU_INSTRUMENTATION
 #include "include/qsim-harp.h"
 #endif
-
+#include <fcntl.h>
+ #include <sys/types.h>
 #include <sys/stat.h>
 
 using namespace Harp;
@@ -83,7 +84,7 @@ Word signExt(Word w, Size bit, Word mask) {
 void upload(unsigned * addr, char * src, int size, Warp & c)
 {
 
-  cerr << "WRITING FINAL: " << *src << " size: " << size << "\n";
+  // cerr << "WRITING FINAL: " << *src << " size: " << size << "\n";
 
   unsigned current_addr = *addr;
 
@@ -94,10 +95,12 @@ void upload(unsigned * addr, char * src, int size, Warp & c)
   for (int i = 0; i < size; i++)
   {
     unsigned value = src[i] & 0x000000FF;
-    cerr << "UPLOAD: (" << hex << current_addr << dec << ") = " << hex << ( value) << dec << "\n";
+    // cerr << "UPLOAD: (" << hex << current_addr << dec << ") = " << hex << ( value) << dec << "\n";
     c.core->mem.write(current_addr, value, c.supervisorMode, 1);
     current_addr += 1;
   }
+
+  current_addr += (current_addr % 4);
 
   *addr = current_addr;
 }
@@ -119,6 +122,8 @@ void download(unsigned * addr, char * drain, Warp & c)
     drain[i] = read_byte;
     current_addr += 1;
   }
+
+  current_addr += (current_addr % 4);
 
   *addr = current_addr;
 }
@@ -151,6 +156,7 @@ void downloadAlloc(unsigned * addr, char ** drain_ptr, int & size, Warp & c)
 #define READ   4
 #define WRITE  5
 #define FSTAT  6
+#define OPEN   7
 
 void trap_to_simulator(Warp & c)
 {
@@ -173,7 +179,7 @@ void trap_to_simulator(Warp & c)
     int command;
     download(&read_buffer, (char *) &command, c);
 
-    cerr << "Command: " << hex << command << dec << '\n';
+    // cerr << "Command: " << hex << command << dec << '\n';
 
     switch (command)
     {
@@ -197,7 +203,27 @@ void trap_to_simulator(Warp & c)
         case (READ):
         {
 
-            cerr << "trap_to_simulator: READ not supported yet\n";
+            // cerr << "trap_to_simulator: READ not supported yet\n";
+            int file;
+            unsigned ptr;
+            int len;
+
+            download(&read_buffer, (char *) &file    , c);
+            download(&read_buffer, (char *) &ptr     , c);
+            download(&read_buffer, (char *) &len     , c);
+
+            char * buff = (char *) malloc(len);
+
+            int ret = read(file, buff, len);
+
+            for (int i = 0; i < len; i++)
+            {
+              c.core->mem.write(ptr, buff[i], c.supervisorMode, 1);
+              ptr++;
+            }
+            // c.core->mem.write(ptr, 0, c.supervisorMode, 1);
+            free(buff);
+
         }
         break;
         case (WRITE):
@@ -211,7 +237,7 @@ void trap_to_simulator(Warp & c)
             char * buf;
             downloadAlloc(&read_buffer, &buf, size, c);
 
-            write(file, buf, size);
+            int e = write(file, buf, size);
             free(buf);
         }
         break;
@@ -224,18 +250,18 @@ void trap_to_simulator(Warp & c)
             struct stat st;
             fstat(file, &st);
 
-            // fprintf(stderr, "------------------------\n");
-            // fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
-            // fprintf(stderr, "st_mode: %x\n", st.st_mode);
-            // fprintf(stderr, "st_dev: %x\n", st.st_dev);
-            // fprintf(stderr, "st_ino: %x\n", st.st_ino);
-            // fprintf(stderr, "st_uid: %x\n", st.st_uid);
-            // fprintf(stderr, "st_gid: %x\n", st.st_gid);
-            // fprintf(stderr, "st_rdev: %x\n", st.st_rdev);
-            // fprintf(stderr, "st_size: %x\n", st.st_size);
-            // fprintf(stderr, "st_blksize: %x\n", st.st_blksize);
-            // fprintf(stderr, "st_blocks: %x\n", st.st_blocks);
-            // fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
+            fprintf(stderr, "------------------------\n");
+            fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
+            fprintf(stderr, "st_mode: %x\n", st.st_mode);
+            fprintf(stderr, "st_dev: %x\n", st.st_dev);
+            fprintf(stderr, "st_ino: %x\n", st.st_ino);
+            fprintf(stderr, "st_uid: %x\n", st.st_uid);
+            fprintf(stderr, "st_gid: %x\n", st.st_gid);
+            fprintf(stderr, "st_rdev: %x\n", st.st_rdev);
+            fprintf(stderr, "st_size: %x\n", st.st_size);
+            fprintf(stderr, "st_blksize: %x\n", st.st_blksize);
+            fprintf(stderr, "st_blocks: %x\n", st.st_blocks);
+            fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 
             upload(&write_buffer, (char *) &st.st_mode    , sizeof(st.st_mode), c);
             upload(&write_buffer, (char *) &st.st_dev     , sizeof(st.st_dev), c);
@@ -255,6 +281,46 @@ void trap_to_simulator(Warp & c)
                 unsigned data_read = c.core->mem.read(new_addr, c.supervisorMode); 
                 cerr << hex << new_addr << ": " << data_read << "\n";
             }
+        }
+        break;
+        case (OPEN):
+        {
+          // cerr << "$$$$$$$$$$$$$$$$$$$$$$$$$ OPEN FROM simX\n";
+          unsigned name_ptr;
+          unsigned flags;
+          unsigned mode;
+
+          download(&read_buffer, (char *) &name_ptr, c);
+          download(&read_buffer, (char *) &flags   , c);
+          download(&read_buffer, (char *) &mode    , c);
+
+          char buffer[255];
+          unsigned read_word;
+          char     read_byte;
+
+          int curr_ind = 0;
+
+          read_word = c.core->mem.read(name_ptr, c.supervisorMode);
+          read_byte = (char) (read_word & 0x000000FF);
+          while (read_byte != 0)
+          {
+            buffer[curr_ind] = read_byte;
+
+            name_ptr++;
+            curr_ind++;
+            read_word = c.core->mem.read(name_ptr, c.supervisorMode);
+            read_byte = (char) (read_word & 0x000000FF);
+          }
+          buffer[curr_ind] = 0; 
+
+
+          int fd = open(buffer, flags, mode);
+
+          // fprintf(stderr, "Name: --%s-- and fd: %d\n", buffer, fd);
+
+          upload(&write_buffer, (char *) &fd, sizeof(int), c);
+
+
         }
         break;
         default:

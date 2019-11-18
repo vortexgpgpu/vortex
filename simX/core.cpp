@@ -579,20 +579,27 @@ void Core::writeback()
         // cout << "WRITEBACK SERVICED EXE\n";
     }
 
-    if ((inst_in_lsu.rd > 0) && (inst_in_lsu.mem_stall_cycles == 0))
+    if (inst_in_lsu.is_sw)
     {
-        if (serviced_exe)
-        {
-            cout << "$$$$$$$$$$$$$$$$$$$$ Stalling LSU because EXE is being used\n";
-            inst_in_lsu.stalled = true;
-        }
-        else
-        {
-            serviced_mem = true;
-            CPY_TRACE(inst_in_wb, inst_in_lsu);
-            INIT_TRACE(inst_in_lsu);
+      INIT_TRACE(inst_in_lsu);
+    }
+    else
+    {
+      if ((inst_in_lsu.rd > 0) && (inst_in_lsu.mem_stall_cycles == 0))
+      {
+          if (serviced_exe)
+          {
+              cout << "$$$$$$$$$$$$$$$$$$$$ Stalling LSU because EXE is being used\n";
+              inst_in_lsu.stalled = true;
+          }
+          else
+          {
+              serviced_mem = true;
+              CPY_TRACE(inst_in_wb, inst_in_lsu);
+              INIT_TRACE(inst_in_lsu);
 
-        }
+          }
+      }
     }
 
     // if (!serviced_exe && !serviced_mem) INIT_TRACE(inst_in_wb);

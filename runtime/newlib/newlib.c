@@ -67,7 +67,7 @@ void download(char ** ptr, char * drain)
 	int size;
 
 	// size = *((int *) src);
-	char * size_ptr = (char *) size;
+	char * size_ptr = (char *) &size;
 	size_ptr[0] = src[0];
 	size_ptr[1] = src[1];
 	size_ptr[2] = src[2];
@@ -127,7 +127,7 @@ int _fstat(int file, struct stat * st)
 	// download((char **) &read_buffer, (char *) &value);
 	// st->st_blocks = value;
 
-	vx_print_str("Hello from fstat\n");
+	// vx_print_str("Hello from fstat\n");
 	// // st->st_mode = 33279;
 
 	// vx_printf("st_mode: ", st->st_mode);
@@ -158,10 +158,24 @@ void _lseek()
 	vx_print_str("Hello from _lseek\n");
 }
 
-void _read()
+int _read (int file, char *ptr, int len)
 {
 
-	vx_print_str("Hello from _read\n");
+	char * write_buffer = (char *) FILE_IO_WRITE;
+	char * read_buffer  = (char *) FILE_IO_READ;
+
+	int cmd_id = READ;
+
+	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
+	upload((char **) &write_buffer, (char *) &ptr   , sizeof(int));
+	upload((char **) &write_buffer, (char *) &len   , sizeof(int));
+
+	trap_to_simulator();
+
+
+  	return len;
+
 }
 
 int _write (int file, char *buf, int nbytes)
@@ -178,7 +192,7 @@ int _write (int file, char *buf, int nbytes)
 
 	trap_to_simulator();
 
-	vx_print_str("Hello from _write\n");
+	// vx_print_str("Hello from _write\n");
 
 	// int i;
 
@@ -243,24 +257,24 @@ void _exit(int val)
 
 int _open(const char *name, int flags, int mode)
 {
-	// vx_print_str("ERROR: _open not yet implemented\n");
+	char * write_buffer = (char *) FILE_IO_WRITE;
+	char * read_buffer = (char *) FILE_IO_READ;
+
+	int cmd_id = OPEN;
+
+	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	upload((char **) &write_buffer, (char *) &name  , sizeof (char *));
+	upload((char **) &write_buffer, (char *) &flags , sizeof(int));
+	upload((char **) &write_buffer, (char *) & mode , sizeof(int));
 
 
-	// char * write_buffer = (char *) FILE_IO_WRITE;
+	trap_to_simulator();
 
-	// int cmd_id = OPEN;
-
-	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	// upload((char **) &write_buffer, (char *) &name, sizeof (char *));
-	// upload((char **) &write_buffer, (char *) &flags  , sizeof(int));
-	// upload((char **) &write_buffer, (char *) & mode  , nbytes);
+	int fd;
+	download((char **) &read_buffer, (char *) &fd);
 
 
-	// trap_to_simulator();
-
-	vx_print_str("Hello from _write\n");
-
-	return 0;
+	return fd;
 
 }
 

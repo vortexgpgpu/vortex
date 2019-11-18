@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include <stdlib.h>
-#include <pthread.h>
+// #include <pthread.h>
 
 #include "include/debug.h"
 #include "include/types.h"
@@ -206,35 +206,35 @@ void MemoryUnit::tlbRm(Addr va) {
 }
 
 void *Harp::consoleInputThread(void* arg_vp) {
-  ConsoleMemDevice *arg = (ConsoleMemDevice *)arg_vp;
-  char c;
-  while (cin) {
-    c = cin.get();
-    pthread_mutex_lock(&arg->cBufLock);
-    arg->cBuf.push(c);
-    pthread_mutex_unlock(&arg->cBufLock);
-  }
-  cout << "Console input ended. Exiting.\n";
-  exit(4);
+  // ConsoleMemDevice *arg = (ConsoleMemDevice *)arg_vp;
+  // char c;
+  // while (cin) {
+  //   c = cin.get();
+  //   pthread_mutex_lock(&arg->cBufLock);
+  //   arg->cBuf.push(c);
+  //   pthread_mutex_unlock(&arg->cBufLock);
+  // }
+  // cout << "Console input ended. Exiting.\n";
+  // exit(4);
 }
 
-ConsoleMemDevice::ConsoleMemDevice(Size wS, std::ostream &o, Core &core,
-                                   bool batch) : 
-  wordSize(wS), output(o), core(core), cBuf()
-{
-  // Create a console input thread if we are running in interactive mode.
-  if (!batch) {
-    pthread_t *thread = new pthread_t;
-    pthread_create(thread, NULL, consoleInputThread, (void*)this);
-  }
-  pthread_mutex_init(&cBufLock, NULL);
-}
+// ConsoleMemDevice::ConsoleMemDevice(Size wS, std::ostream &o, Core &core,
+//                                    bool batch) : 
+//   wordSize(wS), output(o), core(core), cBuf()
+// {
+//   // Create a console input thread if we are running in interactive mode.
+//   if (!batch) {
+//     pthread_t *thread = new pthread_t;
+//     pthread_create(thread, NULL, consoleInputThread, (void*)this);
+//   }
+//   pthread_mutex_init(&cBufLock, NULL);
+// }
 
-void ConsoleMemDevice::poll() {
-  pthread_mutex_lock(&cBufLock);
-  if (!cBuf.empty()) core.interrupt(8);
-  pthread_mutex_unlock(&cBufLock);
-}
+// void ConsoleMemDevice::poll() {
+//   pthread_mutex_lock(&cBufLock);
+//   if (!cBuf.empty()) core.interrupt(8);
+//   pthread_mutex_unlock(&cBufLock);
+// }
 
 Word DiskControllerMemDevice::read(Addr a) {
   switch (a/8) {

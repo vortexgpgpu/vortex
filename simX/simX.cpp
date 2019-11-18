@@ -98,9 +98,9 @@ int emu_main(int argc, char **argv) {
     // old_ram.loadHexImpl(tests[t]);
     // MemDevice * memory = &old_ram;
 
-    ConsoleMemDevice console(arch.getWordSize(), cout, core, batch);
+    // ConsoleMemDevice console(arch.getWordSize(), cout, core, batch);
     mu.attach(old_ram,     0);
-    mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
+    // mu.attach(console, 1ll<<(arch.getWordSize()*8 - 1));
     // mu.attach(console, 0xf0000000);
 
     // core.w[0].pc = 0x8000007c; // If I want to start at a specific location
@@ -127,7 +127,7 @@ int emu_main(int argc, char **argv) {
     struct stat hello;
     fstat(0, &hello);
 
-    while (core.running()) { console.poll(); core.step(); }
+    while (core.running()) {core.step(); }
 
     if (showStats) core.printStats();
 

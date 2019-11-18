@@ -53,32 +53,32 @@ namespace Harp {
   };
 
   class Core;
-  class ConsoleMemDevice : public MemDevice {
-  public:
-    ConsoleMemDevice(Size wS, std::ostream &o, Core &core, bool batch = false);
-    ~ConsoleMemDevice() {} 
+  // class ConsoleMemDevice : public MemDevice {
+  // public:
+  //   ConsoleMemDevice(Size wS, std::ostream &o, Core &core, bool batch = false);
+  //   ~ConsoleMemDevice() {} 
 
-    //virtual Size wordSize() const { return wordSize; }
-    virtual Size size() const { return wordSize; }
-    virtual Word read(Addr) { pthread_mutex_lock(&cBufLock);
-                              char c = cBuf.front();
-                              cBuf.pop();
-                              pthread_mutex_unlock(&cBufLock);
-                              return Word(c); }
-    virtual void write(Addr a, Word w) { output << char(w); }
+  //   //virtual Size wordSize() const { return wordSize; }
+  //   virtual Size size() const { return wordSize; }
+  //   virtual Word read(Addr) { pthread_mutex_lock(&cBufLock);
+  //                             char c = cBuf.front();
+  //                             cBuf.pop();
+  //                             pthread_mutex_unlock(&cBufLock);
+  //                             return Word(c); }
+  //   virtual void write(Addr a, Word w) { output << char(w); }
 
-    void poll();
+  //   void poll();
 
-    friend void *Harp::consoleInputThread(void *);
+  //   friend void *Harp::consoleInputThread(void *);
 
-  private:
-    std::ostream &output;
-    Size wordSize;
-    Core &core;
+  // private:
+  //   std::ostream &output;
+  //   Size wordSize;
+  //   Core &core;
 
-    std::queue<char> cBuf;
-    pthread_mutex_t cBufLock;
-  };
+  //   std::queue<char> cBuf;
+  //   pthread_mutex_t cBufLock;
+  // };
 
   class DiskControllerMemDevice : public MemDevice {
   public:

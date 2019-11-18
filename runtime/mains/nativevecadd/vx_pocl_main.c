@@ -137,10 +137,11 @@ int main (int argc, char **argv) {
   printf("\n\n******** Fixing fileio START Native Vecadd running ********\n\n");
 
    FILE *fp;
-   char buff[255];
+   char buff[1024];
 
-   fp = fopen("reading_data.txt", "r");
-   fscanf(fp, "%s", buff);
+   fp = fopen("/home/fares/Desktop/Vortex/simX/reading_data.txt", "r");
+   // fscanf(fp, "%s %s %s %s", buff);
+   fgets(buff, 41, (FILE*)fp);
    printf("1 : %s\n", buff );
 
   exit(0);
