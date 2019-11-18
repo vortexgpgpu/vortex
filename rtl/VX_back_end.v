@@ -106,6 +106,8 @@ VX_csr_wrapper VX_csr_wrapper(
 	);
 
 VX_writeback VX_wb(
+	.clk               (clk),
+	.reset             (reset),
 	.VX_mem_wb         (VX_mem_wb),
 	.VX_inst_exec_wb   (VX_inst_exec_wb),
 	.VX_csr_wb         (VX_csr_wb),
