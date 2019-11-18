@@ -197,7 +197,20 @@ void trap_to_simulator(Warp & c)
         case (LSEEK):
         {
 
-            cerr << "trap_to_simulator: LSEEK not supported yet\n";
+            // cerr << "trap_to_simulator: LSEEK not supported yet\n";
+            int fd;
+            int offset;
+            int whence;
+
+            download(&read_buffer, (char *) &fd     , c);
+            download(&read_buffer, (char *) &offset , c);
+            download(&read_buffer, (char *) &whence , c);
+
+
+            int retval = lseek(fd, offset, whence);
+
+            upload(&write_buffer, (char *) &retval, sizeof(int), c);
+
         }
         break;
         case (READ):

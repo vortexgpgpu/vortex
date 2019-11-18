@@ -95,7 +95,7 @@ void download(char ** ptr, char * drain)
 
 void _close()
 {
-	vx_print_str("Hello from _close\n");
+	// vx_print_str("Hello from _close\n");
 }
 
 int _fstat(int file, struct stat * st)
@@ -152,11 +152,34 @@ int _isatty (int file)
   return 1;
 }
 
-void _lseek()
+int _lseek(int fd, int offset, int whence)
 {
+	// vx_print_str("Hello from _lseek\n");
+	char * write_buffer = (char *) FILE_IO_WRITE;
+	char * read_buffer  = (char *) FILE_IO_READ;
 
-	vx_print_str("Hello from _lseek\n");
+	int cmd_id = LSEEK;
+
+	upload((char **) &write_buffer, (char *) &cmd_id , sizeof(int));
+	upload((char **) &write_buffer, (char *) &fd     , sizeof(int));
+	upload((char **) &write_buffer, (char *) &offset , sizeof(int));
+	upload((char **) &write_buffer, (char *) &whence , sizeof(int));
+
+
+	trap_to_simulator();
+
+	int retval;
+
+	download((char **) &read_buffer, (char *) &retval);
+
+	return retval;
+
 }
+
+// void _lseek()
+// {
+
+// }
 
 int _read (int file, char *ptr, int len)
 {
@@ -250,7 +273,7 @@ void * _sbrk (int nbytes)
 
 void _exit(int val)
 {
-	vx_print_str("Hello from exit\n");
+	// vx_print_str("Hello from exit\n");
 	vx_tmc(0);
 }
 

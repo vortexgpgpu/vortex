@@ -136,13 +136,28 @@ int main (int argc, char **argv) {
 
   printf("\n\n******** Fixing fileio START Native Vecadd running ********\n\n");
 
-   FILE *fp;
-   char buff[1024];
 
-   fp = fopen("/home/fares/Desktop/Vortex/simX/reading_data.txt", "r");
-   // fscanf(fp, "%s %s %s %s", buff);
-   fgets(buff, 41, (FILE*)fp);
-   printf("1 : %s\n", buff );
+  FILE *f = fopen("/home/fares/Desktop/Vortex/simX/reading_data.txt", "r");
+  fseek(f, 0, SEEK_END);
+  int fsize = ftell(f);
+  fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
+
+  char *string = (char *) malloc(fsize + 1);
+  fread(string, 1, fsize, f);
+  fclose(f);
+
+  string[fsize] = 0;
+
+  printf("%s", string);
+
+
+   // FILE *fp;
+   // char buff[1024];
+
+   // fp = fopen("/home/fares/Desktop/Vortex/simX/reading_data.txt", "r");
+   // // fscanf(fp, "%s %s %s %s", buff);
+   // fgets(buff, 41, (FILE*)fp);
+   // printf("1 : %s\n", buff );
 
   exit(0);
 
