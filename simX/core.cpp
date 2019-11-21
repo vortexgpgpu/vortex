@@ -560,9 +560,9 @@ void Core::writeback()
 
     if (inst_in_wb.stall_warp)
     {
-        // stallWarp[inst_in_wb.wid] = false;
-        release_warp = true;
-        release_warp_num = inst_in_wb.wid;
+        stallWarp[inst_in_wb.wid] = false;
+        // release_warp = true;
+        // release_warp_num = inst_in_wb.wid;
     } 
 
 
