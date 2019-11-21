@@ -403,7 +403,8 @@ int main(int argc, char **argv)
   //  If that is not available, then create the program from source
   //  and store the binary for future use.
   std::cout << "Attempting to create program from binary..." << std::endl;
-  cl_program program = CreateProgramFromBinary(context, devices[1], "kernel.cl.bin");
+  //cl_program program = CreateProgramFromBinary(context, devices[1], "kernel.cl.bin");
+  cl_program program = clCreateProgramWithBuiltInKernels(context, 1, &devices[1], "sgemm", NULL);	
   if (program == NULL)
   {
       std::cout << "Binary not loaded, create from source..." << std::endl;

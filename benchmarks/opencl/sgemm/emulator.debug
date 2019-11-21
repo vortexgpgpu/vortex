@@ -2097,7 +2097,7 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 800006c0
-CUrrent CODE: cf197
+CUrrent CODE: d0197
 ********************************** Fetch *********************************
 valid: 1
 PC: 800006c0
@@ -2419,7 +2419,7 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 800006c0
-CUrrent CODE: cf197
+CUrrent CODE: d0197
 ********************************** Fetch *********************************
 valid: 1
 PC: 800006c0
@@ -2501,7 +2501,7 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 800006c0
-CUrrent CODE: cf197
+CUrrent CODE: d0197
 ********************************** Fetch *********************************
 valid: 1
 PC: 800006c0
@@ -3157,7 +3157,7 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 800006c0
-CUrrent CODE: cf197
+CUrrent CODE: d0197
 ********************************** Fetch *********************************
 valid: 1
 PC: 800006c0
@@ -9435,7 +9435,7 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 80000020
-CUrrent CODE: d1617
+CUrrent CODE: d2617
 ********************************** Fetch *********************************
 valid: 1
 PC: 80000020
@@ -9757,7 +9757,7 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 80000024
-CUrrent CODE: f5460613
+CUrrent CODE: f7460613
 ********************************** Fetch *********************************
 valid: 1
 PC: 80000024
@@ -10084,8 +10084,8 @@ stall_warp: 0
 wspawn: 0
 stalled: 0
 help: in PC: 80000030
-CUrrent CODE: 5b5800ef
-Next PC: 7ff80de4
+CUrrent CODE: 50c810ef
+Next PC: 7ff8153c
 ********************************** Fetch *********************************
 valid: 1
 PC: 80000030
@@ -10889,7 +10889,7 @@ mem_stall_cycles: 0
 stall_warp: 0
 wspawn: 0
 stalled: 0
-help: in PC: 7ff80de4
+help: in PC: 7ff8153c
 CUrrent CODE: ddccbbaa
-pc: 7ff80de4
+pc: 7ff8153c
 aERROR: Unsupported instruction: 
