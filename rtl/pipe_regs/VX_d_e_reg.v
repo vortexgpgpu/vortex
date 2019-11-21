@@ -18,7 +18,7 @@ module VX_d_e_reg (
 		wire flush = (in_branch_stall == `STALL);
 
 
-	VX_generic_register #(.N(240)) d_e_reg 
+	VX_generic_register #(.N(233 + `NW_M1 + 1 + `NT)) d_e_reg 
 	(
 		.clk  (clk),
 		.reset(reset),

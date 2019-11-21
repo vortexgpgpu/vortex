@@ -54,7 +54,7 @@ reg [SM_BANKS - 1:0][SM_LOG_WORDS_PER_READ-1:0] block_we;
 wire send_data;
 
 //reg[NB:0][1:0] req_num;
-reg[SM_BANKS - 1:0][$clog2(NUM_REQ) - 1:0] req_num; // not positive about this
+reg[SM_BANKS - 1:0][`CLOG2(NUM_REQ) - 1:0] req_num; // not positive about this
 
 wire [`NT_M1:0] orig_in_valid;
 
@@ -71,7 +71,7 @@ genvar f;
 
 
 //VX_priority_encoder_sm #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_encoder_sm(
-VX_priority_encoder_sm #(.NB(SM_BANKS - 1), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_encoder_sm(
+VX_priority_encoder_sm #(.NB(SM_BANKS - 1), .BITS_PER_BANK(BITS_PER_BANK), .NUM_REQ(NUM_REQ)) vx_priority_encoder_sm(
 	.clk(clk),
 	.reset(reset),
 	.in_valid(orig_in_valid),

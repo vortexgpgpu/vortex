@@ -12,8 +12,8 @@ COMP=--compiler gcc
 LIB=
 CF=-CFLAGS '-std=c++11 -fPIC -O3'
 
-LIGHTW=-Wno-UNOPTFLAT
-DEB=--trace --prof-cfuncs -DVL_DEBUG=1 
+LIGHTW=-Wno-UNOPTFLAT -Wno-WIDTH
+DEB=--trace -DVL_DEBUG=1 
 EXE=--exe $(LIB_OBJS)
 
 all: simX

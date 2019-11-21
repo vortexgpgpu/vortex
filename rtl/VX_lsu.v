@@ -45,7 +45,7 @@ module VX_lsu (
 
 	wire zero = 0;
 
-	VX_generic_register #(.N(308)) lsu_buffer(
+	VX_generic_register #(.N(45 + `NW_M1 + 1 + `NT*65)) lsu_buffer(
 		.clk  (clk),
 		.reset(reset),
 		.stall(out_delay),
