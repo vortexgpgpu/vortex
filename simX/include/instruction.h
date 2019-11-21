@@ -6,6 +6,7 @@
 
 #include <map>
 #include <iostream>
+#include <math.h>
 
 #include "types.h"
 #include "trace.h"
@@ -29,10 +30,13 @@ namespace Harp {
       TRAP     = 0x7f,
       FENCE    = 0x0f,
       PJ_INST  = 0x7b,
-      GPGPU    = 0x6b
+      GPGPU    = 0x6b,
+      VSET_ARITH = 0x57,
+      VL       = 0x7,
+      VS       = 0x27,
    };
 
-  enum InstType { N_TYPE, R_TYPE, I_TYPE, S_TYPE, B_TYPE, U_TYPE, J_TYPE};
+  enum InstType { N_TYPE, R_TYPE, I_TYPE, S_TYPE, B_TYPE, U_TYPE, J_TYPE, V_TYPE};
 
   // We build a table of instruction information out of this.
   struct InstTableEntry_t {
@@ -58,7 +62,10 @@ namespace Harp {
     {Opcode::TRAP,       {"TRAP"  , true , false, false, false, InstType::I_TYPE }},
     {Opcode::FENCE,      {"fence" , true , false, false, false, InstType::I_TYPE }},
     {Opcode::PJ_INST,    {"pred j", true , false, false, false, InstType::R_TYPE }},
-    {Opcode::GPGPU,      {"gpgpu" , false, false, false, false, InstType::R_TYPE }}
+    {Opcode::GPGPU,      {"gpgpu" , false, false, false, false, InstType::R_TYPE }},
+    {Opcode::VSET_ARITH, {"vsetvl" , false, false, false, false, InstType::V_TYPE }}, 
+    {Opcode::VL,         {"vl" , false, false, false, false, InstType::V_TYPE }}, 
+    {Opcode::VS,         {"vs" , false, false, false, false, InstType::V_TYPE }}  
   };
 
   static const Size MAX_REG_SOURCES(3);
@@ -94,6 +101,16 @@ namespace Harp {
     Word *setSrcImm  () { immsrcPresent = true; immsrc = 0xa5; return &immsrc;}
     void  setSrcImm  (Word srcImm) { immsrcPresent = true; immsrc = srcImm; }
     void  setImmRef  (Ref &r) { refLiteral = &r; }
+    void  setVsetImm (Word vset_imm) { if(vset_imm) vsetImm = true; else vsetImm = false; }
+    void  setVlsWidth (Word width) { vlsWidth = width; }
+    void  setVmop( Word mop) { vMop = mop; }
+    void  setVnf(Word nf) { vNf = nf; }
+    void  setVmask(Word mask) { vmask = mask; }
+    void  setVs3(Word vs) { vs3 = vs; }
+    void  setvlmul(Word lmul) { vlmul = pow(2, lmul); }
+    void  setvsew(Word sew) { vsew = pow(2, 3+sew); }
+    void  setvediv(Word ediv) { vediv = pow(2,ediv); }
+    void  setFunc6(Word func6) { this->func6 = func6; }
 
     /* Getters used by encoders. */
     Opcode getOpcode() const { return op; }
@@ -111,6 +128,16 @@ namespace Harp {
     Word getImm() const { return immsrc; }
     bool hasRefLiteral() const { return refLiteral != NULL; }
     Ref *getRefLiteral() const { return refLiteral; }
+    bool getVsetImm() const { return vsetImm; }
+    Word getVlsWidth() const { return vlsWidth; }
+    Word getVmop() const { return vMop; }
+    Word getvNf() const { return vNf; }
+    bool getVmask() const { return vmask; }
+    Word getVs3() const { return vs3; }
+    Word getvlmul() const { return vlmul; }
+    Word getvsew() const { return vsew; }
+    Word getvediv() const { return vediv; }
+
 
     /* Getters used as table lookup. */
     bool hasRelImm() const { return (*(instTable.find(op))).second.relAddress; }
@@ -128,6 +155,10 @@ namespace Harp {
     bool rdestPresent, pdestPresent;
     RegNum rdest, pdest;
     Ref *refLiteral;
+
+    //Vector
+    bool vsetImm, vmask;
+    Word vlsWidth, vMop, vNf, vs3, vlmul, vsew, vediv, func6;
 
   public:
     
