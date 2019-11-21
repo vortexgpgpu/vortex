@@ -1,16 +1,18 @@
 
-
 `define NT 4
 `define NT_M1 (`NT-1)
 
 // NW_M1 is actually log2(NW)
-`define NW_M1 (3-1)
+//`define NW_M1 (4-1)
+
 `define NW 8
+`define NW_M1 (`CLOG2(`NW))
+
 // Uncomment the below line if NW=1
 // `define ONLY
 
 // `define SYN 1
-`define ASIC 1
+//`define ASIC 1
 
 `define NUM_BARRIERS 4
 

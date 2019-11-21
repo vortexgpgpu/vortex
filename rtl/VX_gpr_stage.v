@@ -133,7 +133,7 @@ module VX_gpr_stage (
 		assign VX_lsu_req.base_address = (delayed_lsu_last_cycle) ? temp_base_address : real_base_address;
 
 
-		VX_generic_register #(.N(84)) lsu_reg(
+		VX_generic_register #(.N(77 + `NW_M1 + 65*(1 + `NT))) lsu_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_lsu),
@@ -142,7 +142,7 @@ module VX_gpr_stage (
 			.out  ({VX_lsu_req.valid     , VX_lsu_req.lsu_pc     ,VX_lsu_req.warp_num     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
 			);
 
-		VX_generic_register #(.N(231)) exec_unit_reg(
+		VX_generic_register #(.N(224 + `NW_M1 + 1 + 65*(`NT))) exec_unit_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_rest),
@@ -154,7 +154,7 @@ module VX_gpr_stage (
 		assign VX_exec_unit_req.a_reg_data = real_base_address;
 		assign VX_exec_unit_req.b_reg_data = real_store_data;
 
-		VX_generic_register #(.N(43)) gpu_inst_reg(
+		VX_generic_register #(.N(68 + `NW_M1 + 1 + 33*(`NT))) gpu_inst_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_rest),
@@ -166,7 +166,7 @@ module VX_gpr_stage (
 		assign VX_gpu_inst_req.a_reg_data = real_base_address;
 		assign VX_gpu_inst_req.rd2        = real_store_data;
 
-		VX_generic_register #(.N(60)) csr_reg(
+		VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_rest),
@@ -180,7 +180,8 @@ module VX_gpr_stage (
 		
 	`else 
 
-	VX_generic_register #(.N(340)) lsu_reg(
+    // 341 
+	VX_generic_register #(.N(77 + `NW_M1 + 1 + 65*(`NT))) lsu_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_lsu),
@@ -189,7 +190,7 @@ module VX_gpr_stage (
 		.out  ({VX_lsu_req.valid     , VX_lsu_req.lsu_pc     , VX_lsu_req.warp_num     , VX_lsu_req.store_data     , VX_lsu_req.base_address     , VX_lsu_req.offset     , VX_lsu_req.mem_read     , VX_lsu_req.mem_write     , VX_lsu_req.rd     , VX_lsu_req.wb     })
 		);
 
-	VX_generic_register #(.N(487)) exec_unit_reg(
+	VX_generic_register #(.N(224 + `NW_M1 + 1 + 65*(`NT))) exec_unit_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_rest),
@@ -198,7 +199,7 @@ module VX_gpr_stage (
 		.out  ({VX_exec_unit_req.valid     , VX_exec_unit_req.warp_num     , VX_exec_unit_req.curr_PC     , VX_exec_unit_req.PC_next     , VX_exec_unit_req.rd     , VX_exec_unit_req.wb     , VX_exec_unit_req.a_reg_data     , VX_exec_unit_req.b_reg_data     , VX_exec_unit_req.alu_op     , VX_exec_unit_req.rs1     , VX_exec_unit_req.rs2     , VX_exec_unit_req.rs2_src     , VX_exec_unit_req.itype_immed     , VX_exec_unit_req.upper_immed     , VX_exec_unit_req.branch_type     , VX_exec_unit_req.jalQual     , VX_exec_unit_req.jal     , VX_exec_unit_req.jal_offset     , VX_exec_unit_req.ebreak     , VX_exec_unit_req.wspawn     , VX_exec_unit_req.is_csr     , VX_exec_unit_req.csr_address     , VX_exec_unit_req.csr_immed     , VX_exec_unit_req.csr_mask     })
 		);
 
-	VX_generic_register #(.N(203)) gpu_inst_reg(
+	VX_generic_register #(.N(68 + `NW_M1 + 1 + 33*(`NT))) gpu_inst_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_rest),
@@ -207,7 +208,7 @@ module VX_gpr_stage (
 		.out  ({VX_gpu_inst_req.valid     , VX_gpu_inst_req.warp_num     , VX_gpu_inst_req.is_wspawn     , VX_gpu_inst_req.is_tmc     , VX_gpu_inst_req.is_split     , VX_gpu_inst_req.is_barrier     , VX_gpu_inst_req.pc_next     , VX_gpu_inst_req.a_reg_data     , VX_gpu_inst_req.rd2     })
 		);
 
-	VX_generic_register #(.N(60)) csr_reg(
+	VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_rest),

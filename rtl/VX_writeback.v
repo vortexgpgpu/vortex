@@ -63,7 +63,7 @@ module VX_writeback (
 
 		wire zero = 0;
 
-		VX_generic_register #(.N(174)) wb_register(
+		VX_generic_register #(.N(39 + `NW_M1 + 1 + `NT*33)) wb_register(
 			.clk  (clk),
 			.reset(reset),
 			.stall(zero),
