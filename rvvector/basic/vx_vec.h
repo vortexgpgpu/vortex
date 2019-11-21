@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-void vx_vec_test();
+void vx_vec_test(int *);
 
 
 #ifdef __cplusplus
