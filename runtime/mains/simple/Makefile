@@ -1,6 +1,6 @@
 
 COMP     = riscv32-unknown-elf-gcc
-CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
+CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../vortex_link.ld -ffreestanding -nostdlib
 
 DMP  = riscv32-unknown-elf-objdump
 CPY  = riscv32-unknown-elf-objcopy
