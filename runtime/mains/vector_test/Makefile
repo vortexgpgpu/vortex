@@ -1,7 +1,7 @@
 
 COMP     = /home/fares/dev/riscv-gnu-toolchain-vector/drops/bin/riscv32-unknown-elf-gcc
 
-CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostartfiles -nodefaultlibs -Wl,-Bstatic,-T,linker.ld -march=rv32imv -mabi=ilp32
+CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostartfiles -nodefaultlibs -Wl,-Bstatic,-T,../vortex_link.ld -march=rv32imv -mabi=ilp32
 
 DMP  = /home/fares/dev/riscv-gnu-toolchain-vector/drops/bin/riscv32-unknown-elf-objdump
 CPY  = /home/fares/dev/riscv-gnu-toolchain-vector/drops/bin/riscv32-unknown-elf-objcopy

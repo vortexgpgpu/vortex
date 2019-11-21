@@ -137,18 +137,18 @@ int main (int argc, char **argv) {
   printf("\n\n******** Fixing fileio START Native Vecadd running ********\n\n");
 
 
-  FILE *f = fopen("/home/fares/Desktop/Vortex/simX/reading_data.txt", "r");
-  fseek(f, 0, SEEK_END);
-  int fsize = ftell(f);
-  fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
+  // FILE *f = fopen("/home/fares/Desktop/Vortex/simX/reading_data.txt", "r");
+  // fseek(f, 0, SEEK_END);
+  // int fsize = ftell(f);
+  // fseek(f, 0, SEEK_SET);   same as rewind(f); 
 
-  char *string = (char *) malloc(fsize + 1);
-  fread(string, 1, fsize, f);
-  fclose(f);
+  // char *string = (char *) malloc(fsize + 1);
+  // fread(string, 1, fsize, f);
+  // fclose(f);
 
-  string[fsize] = 0;
+  // string[fsize] = 0;
 
-  printf("%s", string);
+  // printf("%s", string);
 
 
    // FILE *fp;
@@ -159,7 +159,7 @@ int main (int argc, char **argv) {
    // fgets(buff, 41, (FILE*)fp);
    // printf("1 : %s\n", buff );
 
-  exit(0);
+  // exit(0);
 
   // Allocate memories for input arrays and output arrays.  
   A = (unsigned*)malloc(sizeof(unsigned)*SIZE);
@@ -246,7 +246,7 @@ int main (int argc, char **argv) {
 
   if (i == SIZE)
   {
-    printf("Ok!\n");
+    printf("Ok pocl_spawn!\n");
   }
 
 
