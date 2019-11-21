@@ -22,14 +22,12 @@ VX_API  = $(VX_RT_PATH)/vx_api/vx_api.c
 
 VX_SRCS  = $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST)
 
-CXXFLAGS = -g -O0 -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/mains/nativevecadd/linker.ld -march=rv32im -mabi=ilp32 
+CXXFLAGS = -g -O0 -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/mains/vortex_link.ld -march=rv32im -mabi=ilp32 
 CXXFLAGS += -ffreestanding # program may not begin at main()
 CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
 CXXFLAGS += -Wl,--gc-sections # enable garbage collection of unused input sections
 
-LIBS = -lOpenCL 
-
-#$(NEWLIB_PATH)/libc.a $(NEWLIB_PATH)/libstdc++.a -static-libgcc -lgcc
+LIBS = -lOpenCL
 
 PROJECT=sgemm
 
