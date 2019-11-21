@@ -133,7 +133,7 @@ module VX_execute_unit (
 		// 	.out  ({VX_inst_exec_wb.rd     , VX_inst_exec_wb.wb     , VX_inst_exec_wb.wb_valid     , VX_inst_exec_wb.wb_warp_num     , VX_inst_exec_wb.alu_result     , VX_inst_exec_wb.exec_wb_pc     })
 		// 	);
 
-		VX_generic_register #(.N(36)) jal_reg(
+		VX_generic_register #(.N(33 + `NW_M1 + 1)) jal_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(zero),
@@ -142,7 +142,7 @@ module VX_execute_unit (
 			.out  ({VX_jal_rsp.jal     , VX_jal_rsp.jal_dest     , VX_jal_rsp.jal_warp_num})
 			);
 
-		VX_generic_register #(.N(37)) branch_reg(
+		VX_generic_register #(.N(34 + `NW_M1 + 1)) branch_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(zero),
