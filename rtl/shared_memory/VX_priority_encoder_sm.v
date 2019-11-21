@@ -3,7 +3,8 @@
 module VX_priority_encoder_sm
 	#(
 		parameter NB            = 4,
-		parameter BITS_PER_BANK = 3
+		parameter BITS_PER_BANK = 3,
+		parameter NUM_REQ       = 3
 	)
 	(
 	//INPUTS
@@ -19,7 +20,7 @@ module VX_priority_encoder_sm
 	output reg[NB:0][31:0] 		    out_data,
 
 	// To Processor
-	output wire[NB:0][1:0]		    req_num,
+	output wire[NB:0][`CLOG2(NUM_REQ) - 1:0]		    req_num,
 	output reg 			            stall,
 	output wire                     send_data // Finished all of the requests
 );
@@ -49,7 +50,7 @@ module VX_priority_encoder_sm
 	generate
 		for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) 
 		begin
-			wire[$clog2(`NT):0] num_valids;
+			wire[`CLOG2(`NT):0] num_valids;
 
 			VX_countones #(.N(`NT)) valids_counter (
 				.valids(bank_valids[curr_bank]),
@@ -64,7 +65,7 @@ module VX_priority_encoder_sm
 	assign stall     = (|more_than_one_valid);
 	assign send_data = (!stall) && (|in_valid); // change
 
-	wire[NB:0][1:0] internal_req_num;
+	wire[NB:0][(`CLOG2(NUM_REQ)) - 1:0] internal_req_num;
 	wire[NB:0]      internal_out_valid;
 
 
@@ -73,7 +74,7 @@ module VX_priority_encoder_sm
 	for (curr_bank_o = 0; curr_bank_o <= NB; curr_bank_o = curr_bank_o + 1) 
 	begin
 
-		VX_generic_priority_encoder #(.N(4)) vx_priority_encoder(
+		VX_generic_priority_encoder #(.N(NUM_REQ)) vx_priority_encoder(
 		    .valids(bank_valids[curr_bank_o]),
 		    .index(internal_req_num[curr_bank_o]),
 		    .found(internal_out_valid[curr_bank_o])
