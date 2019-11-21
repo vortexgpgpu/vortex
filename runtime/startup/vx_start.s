@@ -1,5 +1,3 @@
-
-
 # .section .init, "ax"
 # .global _start
 # _start:
@@ -74,5 +72,9 @@ vx_set_sp:
   RETURN:
       ret
 
-
+.section .data
+	.global __dso_handle
+	.weak __dso_handle
+__dso_handle:
+	.long	0
 
