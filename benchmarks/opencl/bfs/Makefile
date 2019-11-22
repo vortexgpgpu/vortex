@@ -37,7 +37,7 @@ lib$(PROJECT).a: kernel.cl
 	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
 
 $(PROJECT).elf: main.cc lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) -I$(POCL_RT_PATH)/include -L$(POCL_RT_PATH)/lib/static -L. $(VX_SRCS) main.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).elf
+	$(CXX) $(CXXFLAGS) -I$(POCL_RT_PATH)/include -L$(POCL_RT_PATH)/lib/static -L. $(VX_SRCS) main.cc timer.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).elf
 
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
