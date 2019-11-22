@@ -81,7 +81,7 @@ namespace Harp {
 
       bool sign(d < 0);
 
-      bool inf(isinf(d)), zero(d == 0.0);
+      bool inf(std::isinf(d)), zero(d == 0.0);
       int exp;
 
       if (!inf && !zero) exp = floor(log2(fabs(d)));

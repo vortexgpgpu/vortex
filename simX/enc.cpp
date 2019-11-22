@@ -53,6 +53,8 @@ WordDecoder::WordDecoder(const ArchDef &arch) {
     opcode_s = 7;
     reg_s    = 5;
     func3_s  = 3;
+    mop_s    = 3;
+    vmask_s  = 1;
 
     shift_opcode    = 0;
     shift_rd        = opcode_s;
@@ -63,6 +65,13 @@ WordDecoder::WordDecoder(const ArchDef &arch) {
     shift_j_u_immed = opcode_s + reg_s;
     shift_s_b_immed = opcode_s + reg_s + func3_s + reg_s + reg_s;
     shift_i_immed   = opcode_s + reg_s + func3_s + reg_s;
+    shift_vset_immed = opcode_s + reg_s + func3_s + reg_s;
+    shift_vmask      = opcode_s + reg_s + func3_s + reg_s + reg_s;
+    shift_vmop       = opcode_s + reg_s + func3_s + reg_s + reg_s + vmask_s;
+    shift_vnf        = opcode_s + reg_s + func3_s + reg_s + reg_s + vmask_s + mop_s;
+    shift_func6      = opcode_s + reg_s + func3_s + reg_s + reg_s + 1;
+    shift_vset      = opcode_s + reg_s + func3_s + reg_s + reg_s + 6;
+
 
     reg_mask     = 0x1f;
     func3_mask   = 0x7;
@@ -73,6 +82,8 @@ WordDecoder::WordDecoder(const ArchDef &arch) {
     b_immed_mask = 0x1fff;
     u_immed_mask = 0xfffff;
     j_immed_mask = 0xfffff;
+    v_immed_mask = 0x7ff;
+    func6_mask   = 0x3f;
 
 }
 
@@ -208,14 +219,91 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
 
       imeed  = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
 
-      inst.setSrcImm(signExt(imeed, 21, j_immed_mask));
+      inst.setSrcImm(signExt(imeed, 20, j_immed_mask));
       usedImm = true;
 
       trace_inst->valid_inst = true;
       trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
 
       break;
-   defualt:
+
+    case InstType::V_TYPE:
+              cout << "Entered here: instr type = vector" << op << endl;
+      switch(op) {
+        case Opcode::VSET_ARITH: //TODO: arithmetic ops
+          inst.setDestReg((code>>shift_rd)   & reg_mask);
+          inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+          func3 = (code>>shift_func3) & func3_mask;
+          inst.setFunc3 (func3);
+          cout << "Entered here: instr type = vector" << endl;
+
+          if(func3 == 7) {
+            cout << "Entered here: imm instr";
+
+            inst.setVsetImm(!(code>>shift_vset));
+
+            if(inst.getVsetImm()) {
+              Word immed = (code>>shift_rs2) & v_immed_mask;
+              D(3, "immed" << immed);
+              inst.setSrcImm(immed); //TODO
+              inst.setvlmul(immed & 0x3);
+              D(3, "lmul " << (immed & 0x3));
+              inst.setvediv((immed>>4) & 0x3);
+              D(3, "ediv " << ((immed>>4) & 0x3));
+              inst.setvsew((immed>>2) & 0x3);
+              D(3, "sew " << ((immed>>2) & 0x3));
+            }
+            else {
+              inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+              trace_inst->rs2        = ((code>>shift_rs2)   & reg_mask);
+            }
+            trace_inst->valid_inst = true;
+            trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
+            trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
+          } else {
+            inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+            inst.setVmask((code>>shift_vmask) & 0x1);
+            inst.setFunc6((code>>shift_func6) & func6_mask);
+
+            trace_inst->valid_inst = true;
+            trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
+            trace_inst->rs2        = ((code>>shift_rs2)   & reg_mask);
+            trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
+          }
+        break;
+        case Opcode::VL:
+          D(3, "vector load instr");
+          inst.setDestReg((code>>shift_rd)   & reg_mask);
+          inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+          inst.setVlsWidth((code>>shift_func3)  & func3_mask);
+          inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+          inst.setVmask((code>>shift_vmask));
+          inst.setVmop((code>>shift_vmop) && func3_mask);
+          inst.setVnf((code>>shift_vnf) && func3_mask);
+
+          trace_inst->valid_inst = true;
+          trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
+          trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
+          trace_inst->rs2        = ((code>>shift_rs2)   & reg_mask);
+
+        break;
+        case Opcode::VS:
+          inst.setVs3((code>>shift_rd)   & reg_mask);
+          inst.setSrcReg((code>>shift_rs1)   & reg_mask);
+          inst.setVlsWidth((code>>shift_func3)  & func3_mask);
+          inst.setSrcReg((code>>shift_rs2)   & reg_mask);
+          inst.setVmask((code>>shift_vmask));
+          inst.setVmop((code>>shift_vmop) && func3_mask);
+          inst.setVnf((code>>shift_vnf) && func3_mask);
+
+          trace_inst->valid_inst = true;
+          trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
+          trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
+          trace_inst->rs2        = ((code>>shift_rs2)   & reg_mask);
+        break;
+      }
+      break;
+   default:
       cout << "Unrecognized argument class in word decoder.\n";
       exit(1);
   }

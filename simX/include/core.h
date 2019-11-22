@@ -37,6 +37,8 @@ namespace Harp {
   public:
     Reg(): cpuId(0), regNum(0), val(0) {}
     Reg(Word c, Word n): cpuId(c), regNum(n), val(0) {}
+    Reg(Word c, Word n, T v): cpuId(c), regNum(n), val(v) {}
+
 
     Reg &operator=(T r) { if (regNum) {val = r; doWrite();} return *this; }
 
@@ -47,9 +49,10 @@ namespace Harp {
       val &= mask;
     }
 
+    T val;
   private:
     Word cpuId, regNum;
-    T val;
+//    T val;
 
 #ifdef EMU_INSTRUMENTATION
     /* Access size here is 8, representing the register size of 64-bit cores. */
@@ -84,6 +87,14 @@ namespace Harp {
     bool uni;
     std::vector<bool> tmask;
     Word pc;
+  };
+
+  struct vtype
+  {
+    int vill;
+    int vediv;
+    int vsew;
+    int vlmul;
   };
 
   class Warp;
@@ -171,6 +182,13 @@ namespace Harp {
 
     std::vector<Word> shadowReg;
     std::vector<bool> shadowPReg;
+
+    //Vector CSR
+    struct vtype vtype; //both of them are XLEN WIDE
+    int vl;    //both of them are XLEN WIDE
+    Word VLEN; //Total vector length
+
+    std::vector<std::vector<Reg<char*>>> vreg; // 32 vector registers
 
     bool interruptEnable, shadowInterruptEnable, supervisorMode, 
          shadowSupervisorMode, spawned;

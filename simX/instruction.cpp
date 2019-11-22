@@ -358,12 +358,14 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
   }
 
 
+  bool is_vec = false;
 
 
 
   Size nextActiveThreads = c.activeThreads;
   Size wordSz = c.core->a.getWordSize();
   Word nextPc = c.pc;
+  Word VLMAX;
 
   c.memAccesses.clear();
   
@@ -1085,6 +1087,918 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             cout << "ERROR: UNSUPPORTED GPGPU INSTRUCTION " << *this << "\n";
         }
         break;
+      case VSET_ARITH:
+        D(3,"VSET_ARITH");
+        is_vec = true;
+        switch(func3) {
+          case 0: // vector-vector
+
+          switch(func6)
+          {
+            case 0:
+            {
+              is_vec = true;
+              D(3, "Addition " << rsrc[0] << " " << rsrc[1] << " Dest:" << rdest);
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> mask  = c.vreg[0];
+
+              if (c.vtype.vsew == 8)
+              {
+                for (uint8_t i = 0; i < c.vl; i++)
+                {
+                  uint8_t *mask_ptr = (uint8_t*) mask[i].val;
+                  uint8_t value = (*mask_ptr & 0x1);
+                  if(vmask || (!vmask && value)){
+                    uint8_t * first_ptr  = (uint8_t *) vr1[i].val; 
+                    uint8_t * second_ptr = (uint8_t *) vr2[i].val;
+                    uint8_t result = *first_ptr + *second_ptr;
+                    cout << "Adding " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                }
+
+              } else if (c.vtype.vsew == 16)
+              {
+
+                for (uint16_t i = 0; i < c.vl; i++)
+                {
+                  uint16_t *mask_ptr = (uint16_t*) mask[i].val;
+                  uint16_t value = (*mask_ptr & 0x1);
+                  if(vmask || (!vmask && value)){
+                    uint16_t * first_ptr  = (uint16_t *) vr1[i].val; 
+                    uint16_t * second_ptr = (uint16_t *) vr2[i].val;
+                    uint16_t result = *first_ptr + *second_ptr;
+                    cout << "Adding " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                }
+              } else if (c.vtype.vsew == 32)
+              {
+                cout << "Doing 32 bit vector addition\n";
+                for (Word i = 0; i < c.vl; i++)
+                {
+                  int *mask_ptr = (int*) mask[i].val;
+                  int value = (*mask_ptr & 0x1);
+                  if(vmask || (!vmask && value)){
+                    int * first_ptr  = (int *) vr1[i].val; 
+                    int * second_ptr = (int *) vr2[i].val;
+                    int result = *first_ptr + *second_ptr;
+                    cout << "Adding " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    int * result_ptr = (int *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                }
+              }
+
+              D(3, "Vector Register state after addition:");
+              for(int i=0; i < c.vreg.size(); i++)
+                for(int j=0; j< c.vreg[0].size(); j++)
+                {
+                  if (c.vtype.vsew == 8)
+                  {
+                    uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
+                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                  } else if (c.vtype.vsew == 16)
+                  {
+                    uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
+                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                  } else if (c.vtype.vsew == 32)
+                  {
+                    uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
+                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                  }
+                }
+            }
+            break;
+            case 24: //vmseq
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(uint8_t i = 0; i < c.vl; i++){
+                  uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                  uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                  uint8_t result = (*first_ptr == *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(uint16_t i = 0; i < c.vl; i++){
+                  uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                  uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                  uint16_t result = (*first_ptr == *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(uint32_t i = 0; i < c.vl; i++){
+                  uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                  uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                  uint32_t result = (*first_ptr == *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+
+            }
+            break;
+            case 25: //vmsne
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(uint8_t i = 0; i < c.vl; i++){
+                  uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                  uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                  uint8_t result = (*first_ptr != *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(uint16_t i = 0; i < c.vl; i++){
+                  uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                  uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                  uint16_t result = (*first_ptr != *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(uint32_t i = 0; i < c.vl; i++){
+                  uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                  uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                  uint32_t result = (*first_ptr != *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+
+            }
+            break;
+            case 26: //vmsltu
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(uint8_t i = 0; i < c.vl; i++){
+                  uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                  uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                  uint8_t result = (*first_ptr < *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(uint16_t i = 0; i < c.vl; i++){
+                  uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                  uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                  uint16_t result = (*first_ptr < *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(uint32_t i = 0; i < c.vl; i++){
+                  uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                  uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                  uint32_t result = (*first_ptr < *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+
+            }
+            break;
+            case 27: //vmslt
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(int8_t i = 0; i < c.vl; i++){
+                  int8_t *first_ptr = (int8_t *)vr1[i].val;
+                  int8_t *second_ptr = (int8_t *)vr2[i].val;
+                  int8_t result = (*first_ptr < *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int8_t * result_ptr = (int8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(int16_t i = 0; i < c.vl; i++){
+                  int16_t *first_ptr = (int16_t *)vr1[i].val;
+                  int16_t *second_ptr = (int16_t *)vr2[i].val;
+                  int16_t result = (*first_ptr < *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int16_t * result_ptr = (int16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(int32_t i = 0; i < c.vl; i++){
+                  int32_t *first_ptr = (int32_t *)vr1[i].val;
+                  int32_t *second_ptr = (int32_t *)vr2[i].val;
+                  int32_t result = (*first_ptr < *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int32_t * result_ptr = (int32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+            }
+            break;
+            case 28: //vmsleu
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(uint8_t i = 0; i < c.vl; i++){
+                  uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                  uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                  uint8_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(uint16_t i = 0; i < c.vl; i++){
+                  uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                  uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                  uint16_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(uint32_t i = 0; i < c.vl; i++){
+                  uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                  uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                  uint32_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+            }
+            break;
+            case 29: //vmsle
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(int8_t i = 0; i < c.vl; i++){
+                  int8_t *first_ptr = (int8_t *)vr1[i].val;
+                  int8_t *second_ptr = (int8_t *)vr2[i].val;
+                  int8_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int8_t * result_ptr = (int8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(int16_t i = 0; i < c.vl; i++){
+                  int16_t *first_ptr = (int16_t *)vr1[i].val;
+                  int16_t *second_ptr = (int16_t *)vr2[i].val;
+                  int16_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int16_t * result_ptr = (int16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(int32_t i = 0; i < c.vl; i++){
+                  int32_t *first_ptr = (int32_t *)vr1[i].val;
+                  int32_t *second_ptr = (int32_t *)vr2[i].val;
+                  int32_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int32_t * result_ptr = (int32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+            }
+            break;
+            case 30: //vmsgtu
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(uint8_t i = 0; i < c.vl; i++){
+                  uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                  uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                  uint8_t result = (*first_ptr > *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(uint16_t i = 0; i < c.vl; i++){
+                  uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                  uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                  uint16_t result = (*first_ptr > *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(uint32_t i = 0; i < c.vl; i++){
+                  uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                  uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                  uint32_t result = (*first_ptr > *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+            }
+            break;
+            case 31: //vmsgt
+            {
+              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> vd  = c.vreg[rdest];
+              if(c.vtype.vsew == 8){
+                for(int8_t i = 0; i < c.vl; i++){
+                  int8_t *first_ptr = (int8_t *)vr1[i].val;
+                  int8_t *second_ptr = (int8_t *)vr2[i].val;
+                  int8_t result = (*first_ptr > *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int8_t * result_ptr = (int8_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 16) {
+                for(int16_t i = 0; i < c.vl; i++){
+                  int16_t *first_ptr = (int16_t *)vr1[i].val;
+                  int16_t *second_ptr = (int16_t *)vr2[i].val;
+                  int16_t result = (*first_ptr > *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int16_t * result_ptr = (int16_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+
+              } else if(c.vtype.vsew == 32) {
+                for(int32_t i = 0; i < c.vl; i++){
+                  int32_t *first_ptr = (int32_t *)vr1[i].val;
+                  int32_t *second_ptr = (int32_t *)vr2[i].val;
+                  int32_t result = (*first_ptr > *second_ptr) ? 1 : 0;
+                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                  int32_t * result_ptr = (int32_t *) vd[i].val;
+                  *result_ptr = result;
+                }
+              }
+            }
+            break;
+          }
+          break;
+          case 2:
+          {
+            switch(func6){
+              case 24: //vmandnot
+              {
+                D(3, "vmandnot");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = (first_value & !second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = (first_value & !second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = (first_value & !second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break;
+              case 25: //vmand
+              {
+                D(3, "vmand");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = (first_value & second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = (first_value & second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = (first_value & second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break;
+              case 26: //vmor
+              {
+                D(3, "vmor");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = (first_value | second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = (first_value | second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = (first_value | second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break;
+              case 27: //vmxor
+              {
+                D(3, "vmxor");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = (first_value ^ second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = (first_value ^ second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = (first_value ^ second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break;
+              case 28: //vmornot
+              {
+                D(3, "vmornot");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = (first_value | !second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = (first_value | !second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = (first_value | !second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break;
+              case 29: //vmnand
+              {
+                D(3, "vmnand");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = !(first_value & second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = !(first_value & second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = !(first_value & second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }   
+              break;
+              case 30: //vmnor
+              {
+                D(3, "vmnor");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = !(first_value | second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = !(first_value | second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = !(first_value | second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break; 
+              case 31: //vmxnor
+              {
+                D(3, "vmxnor");
+                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t first_value = (*first_ptr & 0x1);
+                    uint8_t second_value = (*second_ptr & 0x1);
+                    uint8_t result = !(first_value ^ second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 16) {
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t first_value = (*first_ptr & 0x1);
+                    uint16_t second_value = (*second_ptr & 0x1);
+                    uint16_t result = !(first_value ^ second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t first_value = (*first_ptr & 0x1);
+                    uint32_t second_value = (*second_ptr & 0x1);
+                    uint32_t result = !(first_value ^ second_value);
+                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+
+                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                }
+              }              
+              break;            
+            }
+          }
+          break;
+          case 7:
+          {
+            is_vec = true;
+            c.vtype.vill = 0; //TODO
+            c.vtype.vediv = vediv;
+            c.vtype.vsew = vsew;
+            c.vtype.vlmul = vlmul;
+            D(3, "lmul:" << vlmul << " sew:" << vsew << " ediv: " << vediv);
+
+            Word VLMAX = (vlmul * c.VLEN)/vsew;
+            if(reg[rsrc[0]] <= VLMAX){
+              c.vl = reg[rsrc[0]];
+            }
+            if(reg[rsrc[0]] >= (2*VLMAX)) {
+              c.vl = VLMAX;
+            }
+            reg[rdest] = c.vl;
+            D(3, "VL:" << reg[rdest]);
+
+            Word regNum(0);
+
+            for (int j = 0; j < 32; j++)
+            {
+              c.vreg.push_back(vector<Reg<char*>>());
+              for (int i = 0; i < (c.VLEN/vsew); ++i)
+              {
+                int * elem_ptr = (int *) malloc(vsew/8);
+                for (int f = 0; f < (vsew/32); f++) elem_ptr[f] =  0;
+                c.vreg[j].push_back(Reg<char*>(c.id, regNum++, (char *)  elem_ptr));
+              }
+            }
+          }
+          break;
+        }
+      break;
+      case VL:
+      {
+        is_vec = true;
+        D(3, "Executing vector load");
+        VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
+        D(3, "lmul: " << c.vtype.vlmul << " VLEN:" << c.VLEN << "sew: " << c.vtype.vsew);
+        D(3, "src: " << rsrc[0] << " " << reg[rsrc[0]]);
+        D(3, "dest" << rdest);
+        D(3, "width" << vlsWidth);
+        vector<Reg<char *>> vd  = c.vreg[rdest];
+
+        switch(vlsWidth) {
+          case 6: //load word and unit strided (not checking for unit stride)
+            for(Word i = 0; i < c.vl; i++) {
+              memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + i*c.vtype.vsew;  
+              data_read = c.core->mem.read(memAddr, c.supervisorMode);
+              D(3, "Data read " << data_read);
+              int * result_ptr = (int *) vd[i].val;
+              *result_ptr = data_read;
+
+              //trace_inst->is_lw = true;  
+              //trace_inst->mem_addresses[t] = memAddr;
+          }
+          for(Word i = c.vl; i < VLMAX; i++){
+            int * result_ptr = (int *) vd[i].val;
+            *result_ptr = 0;
+          }
+
+          D(3, "Vector Register state after addition:");
+            for(int i=0; i < c.vreg.size(); i++)
+              for(int j=0; j< c.vreg[0].size(); j++)
+              {
+                  if (c.vtype.vsew == 8)
+                  {
+                    uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
+                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                  } else if (c.vtype.vsew == 16)
+                  {
+                    uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
+                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                  } else if (c.vtype.vsew == 32)
+                  {
+                    uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
+                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                  }
+              }
+        break;
+        }
+      }
+      break;
+      case VS:
+        is_vec = true;
+        VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
+        for(Word i = 0; i < c.vl; i++) {
+          ++c.stores;
+          memAddr = reg[rsrc[0]] + i*c.vtype.vsew;
+          std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr << "\n";
+
+          
+          //trace_inst->is_sw = true;
+          //trace_inst->mem_addresses[t] = memAddr;
+
+          switch (vlsWidth)
+          {
+            case 6: //store word and unit strided (not checking for unit stride)
+            {
+              uint32_t * ptr_val = (uint32_t *) c.vreg[vs3][i].val;
+              c.core->mem.write(memAddr, *ptr_val, c.supervisorMode, 4);
+              D(3, "store: " << memAddr << " value:" << *ptr_val);
+            }
+            break;
+            default:
+              cout << "ERROR: UNSUPPORTED S INST\n";
+              exit(1);
+          }
+          c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
+        }
+      break;
       default:
         cout << "pc: " << hex << (c.pc-4) << "\n";
         cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;

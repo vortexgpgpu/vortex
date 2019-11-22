@@ -78,7 +78,9 @@ SRC = \
 ../../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v \
 ../../models/memory/cln28hpm/rf2_256x128_wm1/rf2_256x128_wm1.v \
 ../../models/memory/cln28hpm/rf2_256x19_wm0/rf2_256x19_wm0.v \
-../../models/memory/cln28hpm/rf2_32x128_wm1/rf2_32x128_wm1.v 
+../../models/memory/cln28hpm/rf2_32x128_wm1/rf2_32x128_wm1.v \
+../../models/memory/cln28hpm/rf2_32x19_wm0/rf2_32x19_wm0.v 
+
 # ../../models/memory/cln28hpc/rf2_32x128_wm1/rf2_32x128_wm1.v
 
 # vortex_dpi.h 
