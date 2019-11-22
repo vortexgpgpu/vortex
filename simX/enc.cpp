@@ -208,7 +208,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
 
       imeed  = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
 
-      inst.setSrcImm(signExt(imeed, 20, j_immed_mask));
+      inst.setSrcImm(signExt(imeed, 21, j_immed_mask));
       usedImm = true;
 
       trace_inst->valid_inst = true;

@@ -381,7 +381,15 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
 
       imeed  = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
 
-      inst.setSrcImm(signExt(imeed, 20, j_immed_mask));
+      // cout << "Immediate src: " << hex << imeed << "\n";
+      // cout << "bit 20 = " << bit_20 << '\n';
+
+      // if (bit_20 == 1)
+      // {
+      //   imeed = imeed * -1;
+      // }
+
+      inst.setSrcImm(signExt(imeed, 21, j_immed_mask));
       usedImm = true;
       break;
    defualt:
