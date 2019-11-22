@@ -11,8 +11,13 @@
 // `define ONLY
 
 // `define SYN 1
+<<<<<<< HEAD
 //`define ASIC 1
 //`define SYN_FUNC 1
+=======
+// `define ASIC 1
+// `define SYN_FUNC 1
+>>>>>>> d4f6a7e3b221ae64441558037b40b87dbf432798
 
 `define NUM_BARRIERS 4
 

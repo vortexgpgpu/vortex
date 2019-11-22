@@ -578,9 +578,15 @@ void Instruction::executeOn(Warp &c) {
         reg[rdest] = ((immsrc << 12) & 0xfffff000) + (c.pc - 4);
         break;
       case JAL_INST:
-        //std::cout << "JAL_INST\n";
+        std::cout << "JAL_INST\n";
         if (!pcSet) nextPc = (c.pc - 4) + immsrc;
-        if (!pcSet) {/*std::cout << "JAL... SETTING PC: " << nextPc << "\n"; */}
+
+        if (!pcSet)
+        {
+          std::cout << "JAL... immsrc: " << hex << immsrc << "\n";
+          std::cout << "JAL... pc base: " << hex << (c.pc - 4) << "\n";
+          std::cout << "JAL... SETTING PC: " << nextPc << "\n";
+        }
         if (rdest != 0)
         {
           reg[rdest] = c.pc;
