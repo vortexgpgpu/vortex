@@ -36,8 +36,8 @@ _start:
       la      a0, __libc_fini_array   # Register global termination functions
       call    atexit                  #  to be called upon exit
       call    __libc_init_array       # Run global initialization functions
-      li a0, 4
-      .word 0x0005006b    # tmc 4
+      # li a0, 4
+      # .word 0x0005006b    # tmc 4
       call    main
       tail    exit
       .size  _start, .-_start
