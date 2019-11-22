@@ -405,11 +405,11 @@ void Core::fetch()
     printTrace(&inst_in_fetch, "Fetch");
    
     // #ifdef PRINT_ACTIVE_THREADS
-    // for (unsigned j = 0; j < w[schedule_w].tmask.size(); ++j) {
-    //   if (w[schedule_w].activeThreads > j && w[schedule_w].tmask[j]) cout << " 1";
-    //   else cout << " 0";
-    //   if (j != w[schedule_w].tmask.size()-1 || schedule_w != w.size()-1) cout << ',';
-    // }
+    for (unsigned j = 0; j < w[schedule_w].tmask.size(); ++j) {
+      if (w[schedule_w].activeThreads > j && w[schedule_w].tmask[j]) cout << " 1";
+      else cout << " 0";
+      if (j != w[schedule_w].tmask.size()-1 || schedule_w != w.size()-1) cout << ',';
+    }
     // #endif
 
   
@@ -430,7 +430,7 @@ void Core::decode()
         INIT_TRACE(inst_in_fetch);
     }
 
-    printTrace(&inst_in_decode, "Decode");
+    //printTrace(&inst_in_decode, "Decode");
 }
 
 void Core::scheduler()
@@ -442,7 +442,7 @@ void Core::scheduler()
         INIT_TRACE(inst_in_decode);
     }
 
-    printTrace(&inst_in_scheduler, "scheduler");
+    //printTrace(&inst_in_scheduler, "scheduler");
 }
 
 void Core::load_store()
@@ -496,7 +496,7 @@ void Core::load_store()
 
     if (inst_in_lsu.mem_stall_cycles > 0) inst_in_lsu.mem_stall_cycles--;
 
-    printTrace(&inst_in_lsu, "LSU");
+    //printTrace(&inst_in_lsu, "LSU");
 }
 
 void Core::execute_unit()
@@ -548,7 +548,7 @@ void Core::execute_unit()
 
     // }
 
-    printTrace(&inst_in_exe, "execute_unit");
+    //printTrace(&inst_in_exe, "execute_unit");
     // INIT_TRACE(inst_in_exe);
 }
 
@@ -604,7 +604,7 @@ void Core::writeback()
 
     // if (!serviced_exe && !serviced_mem) INIT_TRACE(inst_in_wb);
 
-    printTrace(&inst_in_wb, "Writeback");
+    //printTrace(&inst_in_wb, "Writeback");
 
 }
 
@@ -712,12 +712,12 @@ void Warp::step(trace_inst_t * trace_inst) {
 
  
   // At Debug Level 3, print debug info after each instruction.
-  #ifdef USE_DEBUG
-    if (USE_DEBUG >= 3) {
+  // #ifdef USE_DEBUG
+    // if (USE_DEBUG >= 3) {
       D(3, "Register state:");
       for (unsigned i = 0; i < reg[0].size(); ++i) {
         D_RAW("  %r" << setfill(' ') << setw(2) << dec << i << ':');
-        for (unsigned j = 0; j < reg.size(); ++j) 
+        for (unsigned j = 0; j < (this->activeThreads); ++j) 
           D_RAW(' ' << setfill('0') << setw(8) << hex << reg[j][i] << setfill(' ') << ' ');
         D_RAW('(' << shadowReg[i] << ')' << endl);
       }
@@ -729,8 +729,8 @@ void Warp::step(trace_inst_t * trace_inst) {
       D_RAW(endl);
       D_RAW(endl);
       D_RAW(endl);
-    }
-  #endif
+    // }
+  // #endif
 
   // Clean up.
   delete inst;

@@ -63,14 +63,40 @@ module VX_writeback (
 
 		wire zero = 0;
 
+		wire[`NT-1:0][31:0] use_wb_data;
+
+		reg prev_is_mem;
+
+		always @(posedge clk, posedge reset) begin
+			if (reset)
+			begin
+				prev_is_mem = 0;
+			end begin
+				prev_is_mem = mem_wb && !no_slot_mem;
+			end
+		end
+
 		VX_generic_register #(.N(39 + `NW_M1 + 1 + `NT*33)) wb_register(
 			.clk  (clk),
 			.reset(reset),
 			.stall(zero),
 			.flush(zero),
 			.in   ({VX_writeback_tempp.write_data, VX_writeback_tempp.wb_valid, VX_writeback_tempp.rd, VX_writeback_tempp.wb, VX_writeback_tempp.wb_warp_num, VX_writeback_tempp.wb_pc}),
-			.out  ({VX_writeback_inter.write_data, VX_writeback_inter.wb_valid, VX_writeback_inter.rd, VX_writeback_inter.wb, VX_writeback_inter.wb_warp_num, VX_writeback_inter.wb_pc})
+			.out  ({use_wb_data                  , VX_writeback_inter.wb_valid, VX_writeback_inter.rd, VX_writeback_inter.wb, VX_writeback_inter.wb_warp_num, VX_writeback_inter.wb_pc})
 			);
+
+		`ifdef SYN
+			assign VX_writeback_inter.write_data = prev_is_mem ? VX_writeback_tempp.write_data : use_wb_data;
+		`else 
+			assign VX_writeback_inter.write_data = use_wb_data;
+		`endif
 
 
 endmodule // VX_writeback
+
+
+
+
+
+
+
