@@ -12,7 +12,7 @@
 
 // `define SYN 1
 // `define ASIC 1
-// `define SYN_FUNC 1
+`define SYN_FUNC 1
 
 `define NUM_BARRIERS 4
 
