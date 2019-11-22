@@ -41,6 +41,9 @@
       trace_inst.rs1                = -1; \
       trace_inst.rs2                = -1; \
       trace_inst.rd                 = -1; \
+      trace_inst.vs1                = -1; \
+      trace_inst.vs2                = -1; \
+      trace_inst.vd                 = -1; \
       trace_inst.is_lw              = false; \
       trace_inst.is_sw              = false; \
       trace_inst.mem_addresses      = new unsigned[a.getNThds()]; \
@@ -58,6 +61,9 @@
       drain.rs1                = source.rs1; \
       drain.rs2                = source.rs2; \
       drain.rd                 = source.rd; \
+      drain.vs1                = source.vs1; \
+      drain.vs2                = source.vs2; \
+      drain.vd                 = source.vd; \
       drain.is_lw              = source.is_lw; \
       drain.is_sw              = source.is_sw; \
       for (int tid = 0; tid < a.getNThds(); tid++) drain.mem_addresses[tid] = source.mem_addresses[tid]; \
@@ -118,6 +124,11 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
     {
         renameTable[i][j] = true;
     }
+  }
+
+  for(int i = 0; i < 32; i++)
+  {
+    vecRenameTable[i] = true;
   }
 
   cache_simulator = new Vcache_simX;
@@ -474,9 +485,19 @@ void Core::load_store()
                 scheduler_srcs_ready = scheduler_srcs_ready && renameTable[inst_in_scheduler.wid][inst_in_scheduler.rs2];
             }
 
+            if(inst_in_scheduler.vs1 > 0)
+            {
+              scheduler_srcs_ready = scheduler_srcs_ready && vecRenameTable[inst_in_scheduler.vs1];
+            }
+            if(inst_in_scheduler.vs2 > 0)
+            {
+              scheduler_srcs_ready = scheduler_srcs_ready && vecRenameTable[inst_in_scheduler.vs2];
+            }
+
             if (scheduler_srcs_ready)
             {
                 if (inst_in_scheduler.rd != -1) renameTable[inst_in_scheduler.wid][inst_in_scheduler.rd] = false;
+                if (inst_in_scheduler.rd != -1) vecRenameTable[inst_in_scheduler.vd] = false;
                 CPY_TRACE(inst_in_lsu, inst_in_scheduler);
                 INIT_TRACE(inst_in_scheduler);
             }
@@ -524,12 +545,24 @@ void Core::execute_unit()
             scheduler_srcs_ready = scheduler_srcs_ready && renameTable[inst_in_scheduler.wid][inst_in_scheduler.rs2];
             // cout << "Rename RS2: " << inst_in_scheduler.rs1 << " is " << renameTable[inst_in_scheduler.wid][inst_in_scheduler.rs2] << " wid: " << inst_in_scheduler.wid << '\n';
         }
+        
+        if(inst_in_scheduler.vs1 > 0)
+        {
+          scheduler_srcs_ready = scheduler_srcs_ready && vecRenameTable[inst_in_scheduler.vs1];
+        }
+        if(inst_in_scheduler.vs2 > 0)
+        {
+          scheduler_srcs_ready = scheduler_srcs_ready && vecRenameTable[inst_in_scheduler.vs2];
+        }
 
         if (scheduler_srcs_ready)
         {
             if (inst_in_scheduler.rd != -1) {
                 // cout << "rename setting rd: " << inst_in_scheduler.rd << " to not useabel wid: " << inst_in_scheduler.wid << '\n';
                 renameTable[inst_in_scheduler.wid][inst_in_scheduler.rd] = false;
+            }
+            if(inst_in_scheduler.vd != -1) {
+              vecRenameTable[inst_in_scheduler.vd] = false;
             }
             CPY_TRACE(inst_in_exe, inst_in_scheduler);
             INIT_TRACE(inst_in_scheduler);
@@ -557,6 +590,7 @@ void Core::writeback()
 
 
     if (inst_in_wb.rd > 0) renameTable[inst_in_wb.wid][inst_in_wb.rd] = true;
+    if (inst_in_wb.vd > 0) vecRenameTable[inst_in_wb.vd] = true;
 
     if (inst_in_wb.stall_warp)
     {
@@ -585,7 +619,7 @@ void Core::writeback()
     }
     else
     {
-      if ((inst_in_lsu.rd > 0) && (inst_in_lsu.mem_stall_cycles == 0))
+      if (((inst_in_lsu.rd > 0) || (inst_in_lsu.vd > 0)) && (inst_in_lsu.mem_stall_cycles == 0))
       {
           if (serviced_exe)
           {

@@ -3,6 +3,7 @@
 *******************************************************************************/
 #include <iostream>
 #include <stdlib.h>
+#include <math.h>
 
 #include "include/instruction.h"
 #include "include/obj.h"
@@ -1092,7 +1093,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         is_vec = true;
         switch(func3) {
           case 0: // vector-vector
-
+          trace_inst->vs1 = rsrc[0];
+          trace_inst->vs2 = rsrc[1];
+          trace_inst->vd  = rdest;
           switch(func6)
           {
             case 0:
@@ -1507,6 +1510,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           break;
           case 2:
           {
+            trace_inst->vs1 = rsrc[0];
+            trace_inst->vs2 = rsrc[1];
+            trace_inst->vd  = rdest;
             Word VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
 
             switch(func6){
@@ -2012,13 +2018,18 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             c.vtype.vediv = vediv;
             c.vtype.vsew = vsew;
             c.vtype.vlmul = vlmul;
-            D(3, "lmul:" << vlmul << " sew:" << vsew << " ediv: " << vediv);
 
             Word VLMAX = (vlmul * c.VLEN)/vsew;
+            D(3, "lmul:" << vlmul << " sew:" << vsew << " ediv: " << vediv << "rsrc" << reg[rsrc[0]] << "VLMAX" << VLMAX);
+
             if(reg[rsrc[0]] <= VLMAX){
               c.vl = reg[rsrc[0]];
             }
-            if(reg[rsrc[0]] >= (2*VLMAX)) {
+            else if(reg[rsrc[0]] < 2*VLMAX) {
+              c.vl = (int)ceil((reg[rsrc[0]]*1.0)/2.0);
+              cout << "Length:" << c.vl << ceil(reg[rsrc[0]]/2) << endl;
+            }
+            else if(reg[rsrc[0]] >= (2*VLMAX)) {
               c.vl = VLMAX;
             }
             reg[rdest] = c.vl;
@@ -2060,8 +2071,8 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               int * result_ptr = (int *) vd[i].val;
               *result_ptr = data_read;
 
-              //trace_inst->is_lw = true;  
-              //trace_inst->mem_addresses[t] = memAddr;
+              trace_inst->is_lw = true;  
+              trace_inst->mem_addresses[i] = memAddr;
           }
           /*for(Word i = c.vl; i < VLMAX; i++){
             int * result_ptr = (int *) vd[i].val;
@@ -2099,8 +2110,8 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr << "\n";
 
           
-          //trace_inst->is_sw = true;
-          //trace_inst->mem_addresses[t] = memAddr;
+          trace_inst->is_sw = true;
+          trace_inst->mem_addresses[i] = memAddr;
 
           switch (vlsWidth)
           {
