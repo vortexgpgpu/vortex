@@ -107,6 +107,7 @@ namespace Harp {
     VerilatedVcdC * m_trace;
 
     bool renameTable[32][32];
+    bool vecRenameTable[32];
     bool stallWarp[32];
     bool foundSchedule;
 

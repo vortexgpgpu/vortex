@@ -289,8 +289,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
 
           trace_inst->valid_inst = true;
           trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
-          trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
-          trace_inst->rs2        = ((code>>shift_rs2)   & reg_mask);
+          trace_inst->vd         = ((code>>shift_rd)    & reg_mask);
+          //trace_inst->vs2        = ((code>>shift_rs2)   & reg_mask);
 
         break;
         case Opcode::VS:
@@ -304,8 +304,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
 
           trace_inst->valid_inst = true;
           trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
-          trace_inst->rd         = ((code>>shift_rd)    & reg_mask);
-          trace_inst->rs2        = ((code>>shift_rs2)   & reg_mask);
+          //trace_inst->vd         = ((code>>shift_rd)    & reg_mask);
+          trace_inst->vs1        = ((code>>shift_rd)   & reg_mask); //vs3
         break;
       }
       break;

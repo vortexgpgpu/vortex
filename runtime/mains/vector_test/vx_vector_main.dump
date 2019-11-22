@@ -60,7 +60,7 @@ Disassembly of section .text:
 800000b0:	00008067          	ret
 
 800000b4 <vx_vec_test>:
-800000b4:	00200513          	li	a0,2
+800000b4:	00500513          	li	a0,5
 800000b8:	008572d7          	vsetvli	t0,a0,e32,m1,d1
 800000bc:	00a00513          	li	a0,10
 800000c0:	00a5a023          	sw	a0,0(a1)

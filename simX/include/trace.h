@@ -17,6 +17,11 @@ namespace Harp {
     int        rs2;
     int        rd;
 
+    //Encoder
+    int        vs1;
+    int        vs2;
+    int        vd;
+
     // Instruction execute
     bool       is_lw;
     bool       is_sw;
