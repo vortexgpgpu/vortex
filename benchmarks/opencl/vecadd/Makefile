@@ -3,6 +3,7 @@ RISCV_TOOL_PATH=$(wildcard ~/dev/riscv-gnu-toolchain/drops)
 
 POCL_CC_PATH=$(wildcard ~/dev/pocl/drops_riscv_cc)
 POCL_RT_PATH=$(wildcard ~/dev/pocl/drops_riscv_rt)
+POCL_RT0_PATH=$(wildcard ~/dev/pocl/drops_riscv_rt0)
 
 VX_RT_PATH=$(wildcard ../../../runtime)
 VX_SIMX_PATH=$(wildcard ../../../simX/obj_dir)
@@ -22,14 +23,16 @@ VX_API  = $(VX_RT_PATH)/vx_api/vx_api.c
 
 VX_SRCS  = $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST)
 
-CXXFLAGS = -g -O0 -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/mains/vortex_link.ld -march=rv32im -mabi=ilp32 
+VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/mains/vortex_link.ld
+
+CXXFLAGS = -g -O0 -march=rv32im -mabi=ilp32 
 CXXFLAGS += -ffreestanding # program may not begin at main()
 CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
 CXXFLAGS += -Wl,--gc-sections # enable garbage collection of unused input sections
 
 LIBS = -lOpenCL
 
-PROJECT=saxpy
+PROJECT=vecadd
 
 all: $(PROJECT).dump $(PROJECT).hex
 
@@ -37,7 +40,10 @@ lib$(PROJECT).a: kernel.cl
 	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
 
 $(PROJECT).elf: main.cc lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) -I$(POCL_RT_PATH)/include -L$(POCL_RT_PATH)/lib/static -L. $(VX_SRCS) main.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).elf
+	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) -I$(POCL_RT_PATH)/include -L$(POCL_RT_PATH)/lib/static -L. $(VX_SRCS) main.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).elf
+
+$(PROJECT).qemu: main.cc lib$(PROJECT).a
+	$(CXX) $(CXXFLAGS) -I$(POCL_RT0_PATH)/include -L$(POCL_RT0_PATH)/lib/static -L. main.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).qemu
 
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
@@ -45,8 +51,11 @@ $(PROJECT).hex: $(PROJECT).elf
 $(PROJECT).dump: $(PROJECT).elf
 	$(DMP) -D $(PROJECT).elf > $(PROJECT).dump
 
-run:
+run: $(PROJECT).hex
 	$(VX_SIMX_PATH)/Vcache_simX -E -a rv32i --core $(PROJECT).hex  -s -b 1> emulator.debug
+
+qemu: $(PROJECT).qemu
+	POCL_DEBUG=all $(RISCV_TOOL_PATH)/bin/qemu-riscv32 -d in_asm -D debug.log $(PROJECT).qemu
 
 clean:
 	rm -rf *.elf *.dump *.hex *.a *.pocl
