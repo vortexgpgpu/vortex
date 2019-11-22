@@ -304,9 +304,15 @@ module VX_d_cache
         //                                   0;
 
         wire[1:0]  byte_select                    = bank_addr[1:0];
+        wire[TAG_SIZE_END:TAG_SIZE_START]    cache_tag    = bank_addr[ADDR_TAG_END:ADDR_TAG_START];
+
+        `ifdef SYN_FUNC
+        wire[OFFSET_SIZE_END:OFFSET_SIZE_START] cache_offset = 0;
+        wire[IND_SIZE_END:IND_SIZE_START]    cache_index  = 0;
+        `else
         wire[OFFSET_SIZE_END:OFFSET_SIZE_START] cache_offset = bank_addr[ADDR_OFFSET_END:ADDR_OFFSET_START];
         wire[IND_SIZE_END:IND_SIZE_START]    cache_index  = bank_addr[ADDR_IND_END:ADDR_IND_START];
-        wire[TAG_SIZE_END:TAG_SIZE_START]    cache_tag    = bank_addr[ADDR_TAG_END:ADDR_TAG_START];
+        `endif
 
 
         wire       normal_valid_in = valid_per_bank[bank_id];
