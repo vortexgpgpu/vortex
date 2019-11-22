@@ -85,83 +85,87 @@ module VX_gpr (
 
 		wire[`NT_M1:0][31:0] to_write = (VX_writeback_inter.rd != 0) ? VX_writeback_inter.write_data : 0;
 
-		/* verilator lint_off PINCONNECTEMPTY */
-	   rf2_32x128_wm1 first_ram (
-	         .CENYA(),
-	         .AYA(),
-	         .CENYB(),
-	         .WENYB(),
-	         .AYB(),
-	         .QA(temp_a),
-	         .SOA(),
-	         .SOB(),
-	         .CLKA(clk),
-	         .CENA(cena_1),
-	         .AA(VX_gpr_read.rs1),
-	         .CLKB(clk),
-	         .CENB(cenb),
-	         .WENB(write_bit_mask),
-	         .AB(VX_writeback_inter.rd),
-	         .DB(to_write),
-	         .EMAA(3'b011),
-	         .EMASA(1'b0),
-	         .EMAB(3'b011),
-	         .TENA(1'b1),
-	         .TCENA(1'b0),
-	         .TAA(5'b0),
-	         .TENB(1'b1),
-	         .TCENB(1'b0),
-	         .TWENB(128'b0),
-	         .TAB(5'b0),
-	         .TDB(128'b0),
-	         .RET1N(1'b1),
-	         .SIA(2'b0),
-	         .SEA(1'b0),
-	         .DFTRAMBYP(1'b0),
-	         .SIB(2'b0),
-	         .SEB(1'b0),
-	         .COLLDISN(1'b1)
-	   );
-	   /* verilator lint_on PINCONNECTEMPTY */
+		genvar curr_base_thread;
+		for (curr_base_thread = 0; curr_base_thread < 'NT; curr_base_thread=curr_base_thread+4)
+		begin
+			/* verilator lint_off PINCONNECTEMPTY */
+		   rf2_32x128_wm1 first_ram (
+		         .CENYA(),
+		         .AYA(),
+		         .CENYB(),
+		         .WENYB(),
+		         .AYB(),
+		         .QA(temp_a[(curr_base_thread+3):(curr_base_thread)]),
+		         .SOA(),
+		         .SOB(),
+		         .CLKA(clk),
+		         .CENA(cena_1),
+		         .AA(VX_gpr_read.rs1[(curr_base_thread+3):(curr_base_thread)]),
+		         .CLKB(clk),
+		         .CENB(cenb),
+		         .WENB(write_bit_mask[(curr_base_thread+3):(curr_base_thread)]),
+		         .AB(VX_writeback_inter.rd[(curr_base_thread+3):(curr_base_thread)]),
+		         .DB(to_write[(curr_base_thread+3):(curr_base_thread)]),
+		         .EMAA(3'b011),
+		         .EMASA(1'b0),
+		         .EMAB(3'b011),
+		         .TENA(1'b1),
+		         .TCENA(1'b0),
+		         .TAA(5'b0),
+		         .TENB(1'b1),
+		         .TCENB(1'b0),
+		         .TWENB(128'b0),
+		         .TAB(5'b0),
+		         .TDB(128'b0),
+		         .RET1N(1'b1),
+		         .SIA(2'b0),
+		         .SEA(1'b0),
+		         .DFTRAMBYP(1'b0),
+		         .SIB(2'b0),
+		         .SEB(1'b0),
+		         .COLLDISN(1'b1)
+		   );
+		   /* verilator lint_on PINCONNECTEMPTY */
 
-	   /* verilator lint_off PINCONNECTEMPTY */
-	   rf2_32x128_wm1 second_ram (
-	         .CENYA(),
-	         .AYA(),
-	         .CENYB(),
-	         .WENYB(),
-	         .AYB(),
-	         .QA(temp_b),
-	         .SOA(),
-	         .SOB(),
-	         .CLKA(clk),
-	         .CENA(cena_2),
-	         .AA(VX_gpr_read.rs2),
-	         .CLKB(clk),
-	         .CENB(cenb),
-	         .WENB(write_bit_mask),
-	         .AB(VX_writeback_inter.rd),
-	         .DB(to_write),
-	         .EMAA(3'b011),
-	         .EMASA(1'b0),
-	         .EMAB(3'b011),
-	         .TENA(1'b1),
-	         .TCENA(1'b0),
-	         .TAA(5'b0),
-	         .TENB(1'b1),
-	         .TCENB(1'b0),
-	         .TWENB(128'b0),
-	         .TAB(5'b0),
-	         .TDB(128'b0),
-	         .RET1N(1'b1),
-	         .SIA(2'b0),
-	         .SEA(1'b0),
-	         .DFTRAMBYP(1'b0),
-	         .SIB(2'b0),
-	         .SEB(1'b0),
-	         .COLLDISN(1'b1)
-	   );
-	   /* verilator lint_on PINCONNECTEMPTY */
+		   /* verilator lint_off PINCONNECTEMPTY */
+		   rf2_32x128_wm1 second_ram (
+		         .CENYA(),
+		         .AYA(),
+		         .CENYB(),
+		         .WENYB(),
+		         .AYB(),
+		         .QA(temp_b[(curr_base_thread+3):(curr_base_thread)]),
+		         .SOA(),
+		         .SOB(),
+		         .CLKA(clk),
+		         .CENA(cena_2),
+		         .AA(VX_gpr_read.rs2[(curr_base_thread+3):(curr_base_thread)]),
+		         .CLKB(clk),
+		         .CENB(cenb),
+		         .WENB(write_bit_mask[(curr_base_thread+3):(curr_base_thread)]),
+		         .AB(VX_writeback_inter.rd[(curr_base_thread+3):(curr_base_thread)]),
+		         .DB(to_write[(curr_base_thread+3):(curr_base_thread)]),
+		         .EMAA(3'b011),
+		         .EMASA(1'b0),
+		         .EMAB(3'b011),
+		         .TENA(1'b1),
+		         .TCENA(1'b0),
+		         .TAA(5'b0),
+		         .TENB(1'b1),
+		         .TCENB(1'b0),
+		         .TWENB(128'b0),
+		         .TAB(5'b0),
+		         .TDB(128'b0),
+		         .RET1N(1'b1),
+		         .SIA(2'b0),
+		         .SEA(1'b0),
+		         .DFTRAMBYP(1'b0),
+		         .SIB(2'b0),
+		         .SEB(1'b0),
+		         .COLLDISN(1'b1)
+		   );
+		   /* verilator lint_on PINCONNECTEMPTY */
+		end
 
 	`endif
 

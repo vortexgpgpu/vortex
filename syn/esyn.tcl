@@ -37,7 +37,11 @@ uniquify
 define_name_rules verilog -remove_internal_net_bus -remove_port_bus
 change_names -rule verilog -hierarchy
 
+<<<<<<< HEAD
 report_qor 
+=======
+# report_qor 
+>>>>>>> d4f6a7e3b221ae64441558037b40b87dbf432798
 report_area
 report_hierarchy
 report_cell
