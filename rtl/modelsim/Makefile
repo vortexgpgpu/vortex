@@ -7,6 +7,7 @@ SRC = \
   vortex_dpi.cpp  \
   vortex_tb.v \
 ../VX_define.v \
+../VX_define_synth.v \
 ../interfaces/VX_branch_response_inter.v \
 ../interfaces/VX_csr_req_inter.v \
 ../interfaces/VX_csr_wb_inter.v \
