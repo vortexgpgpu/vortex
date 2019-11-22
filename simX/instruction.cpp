@@ -1507,6 +1507,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           break;
           case 2:
           {
+            Word VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
             switch(func6){
               case 24: //vmandnot
               {
@@ -1526,6 +1527,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    uint8_t *result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 16) {
                   for(uint16_t i = 0; i < c.vl; i++){
@@ -1539,6 +1544,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    uint16_t *result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 32) {
                   for(uint32_t i = 0; i < c.vl; i++){
@@ -1551,6 +1560,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    uint32_t *result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
                 }
               }              
@@ -1573,6 +1586,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    uint8_t *result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 16) {
                   for(uint16_t i = 0; i < c.vl; i++){
@@ -1586,6 +1603,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    uint16_t *result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 32) {
                   for(uint32_t i = 0; i < c.vl; i++){
@@ -1598,6 +1619,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    uint32_t *result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
                 }
               }              
@@ -1620,7 +1645,13 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    uint8_t *result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+
                 } else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
                   for(uint16_t i = 0; i < c.vl; i++){
                     uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                     uint16_t *second_ptr = (uint16_t *)vr2[i].val;
@@ -1629,11 +1660,16 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t result = (first_value | second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
 
                 } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
                   for(uint32_t i = 0; i < c.vl; i++){
                     uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                     uint32_t *second_ptr = (uint32_t *)vr2[i].val;
@@ -1642,8 +1678,13 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t result = (first_value | second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  cout << "VLMAX: " << VLMAX << endl;
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
                 }
               }              
@@ -1651,6 +1692,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 27: //vmxor
               {
                 D(3, "vmxor");
+                uint8_t *result_ptr;
                 vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
                 vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
                 vector<Reg<char *>> vd  = c.vreg[rdest];
@@ -1663,11 +1705,16 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t result = (first_value ^ second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
 
                 } else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
                   for(uint16_t i = 0; i < c.vl; i++){
                     uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                     uint16_t *second_ptr = (uint16_t *)vr2[i].val;
@@ -1676,11 +1723,16 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t result = (first_value ^ second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    uint16_t *result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
 
                 } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
                   for(uint32_t i = 0; i < c.vl; i++){
                     uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                     uint32_t *second_ptr = (uint32_t *)vr2[i].val;
@@ -1689,8 +1741,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t result = (first_value ^ second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    uint32_t *result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
                 }
               }              
@@ -1713,6 +1769,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    uint8_t *result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 16) {
                   for(uint16_t i = 0; i < c.vl; i++){
@@ -1726,6 +1786,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    uint16_t *result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 32) {
                   for(uint32_t i = 0; i < c.vl; i++){
@@ -1738,6 +1802,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    uint32_t *result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
                 }
               }              
@@ -1760,6 +1828,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    uint8_t *result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 16) {
                   for(uint16_t i = 0; i < c.vl; i++){
@@ -1772,6 +1844,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    uint16_t *result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
 
                 } else if(c.vtype.vsew == 32) {
@@ -1786,6 +1862,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    uint32_t *result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
                 }
               }   
               break;
@@ -1796,6 +1876,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
                 vector<Reg<char *>> vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
+                  uint8_t *result_ptr;
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
                     uint8_t *second_ptr = (uint8_t *)vr2[i].val;
@@ -1804,8 +1885,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t result = !(first_value | second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
 
                 } else if(c.vtype.vsew == 16) {
@@ -1820,8 +1905,13 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    uint16_t *result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
 
                 } else if(c.vtype.vsew == 32) {
+
                   for(uint32_t i = 0; i < c.vl; i++){
                     uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                     uint32_t *second_ptr = (uint32_t *)vr2[i].val;
@@ -1833,12 +1923,17 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
                   }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    uint32_t *result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
                 }
               }              
               break; 
               case 31: //vmxnor
               {
                 D(3, "vmxnor");
+                uint8_t *result_ptr;
                 vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
                 vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
                 vector<Reg<char *>> vd  = c.vreg[rdest];
@@ -1851,11 +1946,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t result = !(first_value ^ second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint8_t * result_ptr = (uint8_t *) vd[i].val;
+                    result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
-
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
                 } else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
                   for(uint16_t i = 0; i < c.vl; i++){
                     uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                     uint16_t *second_ptr = (uint16_t *)vr2[i].val;
@@ -1864,11 +1963,16 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t result = !(first_value ^ second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint16_t * result_ptr = (uint16_t *) vd[i].val;
+                    result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
 
                 } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
                   for(uint32_t i = 0; i < c.vl; i++){
                     uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                     uint32_t *second_ptr = (uint32_t *)vr2[i].val;
@@ -1877,8 +1981,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t result = !(first_value ^ second_value);
                     cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
 
-                    uint32_t * result_ptr = (uint32_t *) vd[i].val;
+                    result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
                   }
                 }
               }              
@@ -1944,10 +2052,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               //trace_inst->is_lw = true;  
               //trace_inst->mem_addresses[t] = memAddr;
           }
-          for(Word i = c.vl; i < VLMAX; i++){
+          /*for(Word i = c.vl; i < VLMAX; i++){
             int * result_ptr = (int *) vd[i].val;
             *result_ptr = 0;
-          }
+          }*/
 
           D(3, "Vector Register state after addition:");
             for(int i=0; i < c.vreg.size(); i++)
