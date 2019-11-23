@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
   char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
 
   try {
-    char *input_f = "../data/bfs/graph1MW_6.txt";
+    char *input_f = "graph4096.txt";
     printf("Reading File\n");
     // Read in Graph from a file
     fp = fopen(input_f, "r");
@@ -197,6 +197,8 @@ int main(int argc, char *argv[]) {
       printf("Error Reading graph file\n");
       return 0;
     }
+
+    printf("Reading File completed!\n");
 
     int source = 0;
 

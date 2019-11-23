@@ -131,6 +131,7 @@ void _clCmdParams(int argc, char* argv[]){
 //  devices have no relationship with context
 void _clInit()
 {
+		printf("_clInit()\n");
     int DEVICE_ID_INUSED = device_id_inused;
     cl_int resultCL;
     
@@ -225,15 +226,18 @@ void _clInit()
         throw(string("InitCL()::Creating Command Queue. (clCreateCommandQueue)"));
     //-----------------------------------------------
     //--cambine-5: Load CL file, build CL program object, create CL kernel object
-    std::string  source_str = FileToString(kernel_file);
+    /*std::string  source_str = FileToString(kernel_file);
     const char * source    = source_str.c_str();
-    size_t sourceSize[]    = { source_str.length() };
+    size_t sourceSize[]    = { source_str.length() };*/
 
-    oclHandles.program = clCreateProgramWithSource(oclHandles.context, 
+		oclHandles.program =
+      clCreateProgramWithBuiltInKernels(oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED], "BFS_1, BFS_2", &resultCL);
+
+    /*oclHandles.program = clCreateProgramWithSource(oclHandles.context, 
                                                     1, 
                                                     &source,
                                                     sourceSize,
-                                                    &resultCL);
+                                                    &resultCL);*/
 
     if ((resultCL != CL_SUCCESS) || (oclHandles.program == NULL))
         throw(string("InitCL()::Error: Loading Binary into cl_program. (clCreateProgramWithBinary)"));    
