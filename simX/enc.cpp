@@ -104,7 +104,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
   bool predicated = false;
   if (predicated) { inst.setPred((code>>(inst_s-p-1))&pMask); }
 
-  printf("CUrrent CODE: %x\n", code);
+  // printf("CUrrent CODE: %x\n", code);
+  D(3, "Curr Code: " << hex << code << dec);
 
   Opcode op = (Opcode)((code>>shift_opcode)&opcode_mask);
   // std::cout << "opcode: " << op << "\n";
@@ -234,17 +235,17 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
       break;
 
     case InstType::V_TYPE:
-              cout << "Entered here: instr type = vector" << op << endl;
+              D(3, "Entered here: instr type = vector" << op);
       switch(op) {
         case Opcode::VSET_ARITH: //TODO: arithmetic ops
           inst.setDestReg((code>>shift_rd)   & reg_mask);
           inst.setSrcReg((code>>shift_rs1)   & reg_mask);
           func3 = (code>>shift_func3) & func3_mask;
           inst.setFunc3 (func3);
-          cout << "Entered here: instr type = vector" << endl;
+          D(3, "Entered here: instr type = vector");
 
           if(func3 == 7) {
-            cout << "Entered here: imm instr";
+            D(3, "Entered here: imm instr");
 
             inst.setVsetImm(!(code>>shift_vset));
 
@@ -318,9 +319,9 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
     Ref *srcRef = refMap[idx-n/8];
 
     /* Create a new ref tied to this instruction. */
-    Ref *r = new SimpleRef(srcRef->name, *(Addr*)inst.setSrcImm(),
-                           inst.hasRelImm());
-    inst.setImmRef(*r);
+    // Ref *r = new SimpleRef(srcRef->name, *(Addr*)inst.setSrcImm(),
+    //                        inst.hasRelImm());
+    // inst.setImmRef(*r);
   }
 
   D(2, "Decoded 0x" << hex << code << " into: " << inst << '\n');
