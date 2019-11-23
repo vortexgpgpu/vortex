@@ -2040,6 +2040,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
             Word regNum(0);
 
+            c.vreg.clear();
             for (int j = 0; j < 32; j++)
             {
               c.vreg.push_back(vector<Reg<char*>>());
@@ -2083,9 +2084,11 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           }*/
 
           D(3, "Vector Register state after addition:");
-            for(int i=0; i < c.vreg.size(); i++)
-              for(int j=0; j< c.vreg[0].size(); j++)
+            for(int i=0; i < 32; i++)
+            {
+              for(int j=0; j< c.vl; j++)
               {
+                cout << "starting iter" << endl;
                   if (c.vtype.vsew == 8)
                   {
                     uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
@@ -2099,9 +2102,16 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
                     std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
                   }
+
+                  cout << "Finished iter" << endl;
               }
-        break;
+            }
+
+            cout << "Finished loop" << endl;
+            break;
         }
+        cout << "hhhhhhhhhhhhhhh" << endl;
+        break;
       }
       break;
       case VS:
@@ -2137,7 +2147,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;
         exit(1);
     }
+
+    cout << "outside case" << endl;
+
   }
+
+  std::cout << "finished instruction" << endl;
 
   D(3, "End instruction execute.");
 
