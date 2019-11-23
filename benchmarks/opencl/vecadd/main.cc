@@ -6,8 +6,8 @@
 #define MAX_KERNELS 1
 #define KERNEL_NAME "vecadd"
 #define KERNEL_FILE_NAME "vecadd.pocl"
-#define SIZE 64
-#define NUM_WORK_GROUPS 16
+#define SIZE 4
+#define NUM_WORK_GROUPS 2
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -59,6 +59,8 @@ void cleanup() {
 }
 
 int main (int argc, char **argv) {
+  printf("enter demo main\n");
+
   cl_platform_id platform_id;
   cl_device_id device_id;
   size_t binary_size;
