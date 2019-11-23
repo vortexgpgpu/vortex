@@ -237,8 +237,8 @@ static int head_end   = (int) 0x20000000;
 
 void * _sbrk (int nbytes)
 {
-	//vx_print_str("Hello from _sbrk\n");
-	//vx_printf("nbytes: ", nbytes);
+	vx_print_str("Hello from _sbrk\n");
+	vx_printf("nbytes: ", nbytes);
 
 	//if (nbytes < 0) //vx_print_str("nbytes less than zero\n");
 	// printf("nBytes: %d\n", nbytes);
@@ -248,19 +248,21 @@ void * _sbrk (int nbytes)
 		nbytes = nbytes * -1;
 	}
 
-	if (nbytes > 10240)
-	{
-		nbytes = 10240;
-	}
+	vx_printf("New nbytes: ", nbytes);
+
+	// if (nbytes > 10240)
+	// {
+	// 	nbytes = 10240;
+	// }
 
   // if (((unsigned) head_end) > ((unsigned) (heap_ptr + nbytes)))
 	if (true)
     {
 		int base  = heap_start;
 		heap_start  += nbytes;
-		////vx_print_str("_sbrk returning: ");
-		//vx_print_hex((unsigned) base);
-		////vx_print_str("\n");
+		vx_print_str("_sbrk returning: ");
+		vx_print_hex((unsigned) base);
+		vx_print_str("\n");
 		return (void *) base;
     }
 	else
@@ -303,7 +305,7 @@ int _open(const char *name, int flags, int mode)
 
 void _kill()
 {
-	vx_print_str("ERROR: _kill not yet implemented\n");
+	vx_tmc(0);
 }
 
 unsigned _getpid()
@@ -320,7 +322,7 @@ static int curr_time = 0;
 
 int _gettimeofday()
 {
-	vx_print_str("ERROR: _gettimeofday not yet implemented\n");
+	// vx_print_str("ERROR: _gettimeofday not yet implemented\n");
 	return curr_time++;
 }
 
