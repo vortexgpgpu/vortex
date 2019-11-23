@@ -674,7 +674,7 @@ Warp::Warp(Core *c, Word id) :
   core(c), pc(0x80000000), interruptEnable(true),
   supervisorMode(true), activeThreads(0), reg(0), pred(0),
   shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id),
-  spawned(false), steps(0), insts(0), loads(0), stores(0), VLEN(96)
+  spawned(false), steps(0), insts(0), loads(0), stores(0), VLEN(1024)
 {
   D(3, "Creating a new thread with PC: " << hex << this->pc << '\n');
   /* Build the register file. */
