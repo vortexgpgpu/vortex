@@ -5,7 +5,7 @@
 #define __DEBUG_H
 
 // #define USE_DEBUG 9
-#define USE_DEBUG 3
+// #define USE_DEBUG 3
 
 #ifdef USE_DEBUG
 #include <iostream>
@@ -21,10 +21,11 @@
 #define D_RAW(x) do { \
   std::cout << x; \
 } while (0)
+
 #else
 
 #define D(lvl, x) do {} while(0)
-
+#define D_RAW(x) do {} while(0)
 #endif
 
 #endif
