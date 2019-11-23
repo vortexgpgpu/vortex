@@ -1,0 +1,9 @@
+1. add benchmarks under (Vortex/benchmarks/..)
+  1.1 bfs     --> blas spmv approach
+  1.2 kmeans  // stage 2
+  1.3 saxpy   --> sample
+  1.4 sfilter // stage 2
+  1.5 sgemm   --> sample modify (float --> int)
+  1.6 vecadd  --> sample
+  
+
