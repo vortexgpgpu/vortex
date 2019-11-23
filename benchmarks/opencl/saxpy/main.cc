@@ -90,16 +90,13 @@ int main(int argc, char **argv) {
 
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
-  CL_CHECK(
-      clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
+  CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
 
   cl_context context;
-  context = CL_CHECK_ERR(
-      clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));
+  context = CL_CHECK_ERR(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));
 
   cl_command_queue queue;
-  queue = CL_CHECK_ERR(clCreateCommandQueue(context, device_id,
-                                            CL_QUEUE_PROFILING_ENABLE, &_err));
+  queue = CL_CHECK_ERR(clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &_err));
 
   cl_kernel kernel = 0;
   cl_mem memObjects[2] = {0, 0};
