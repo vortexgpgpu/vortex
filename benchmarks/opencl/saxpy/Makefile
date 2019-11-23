@@ -44,9 +44,6 @@ $(PROJECT).elf: main.cc lib$(PROJECT).a
 $(PROJECT).qemu: main.cc lib$(PROJECT).a
 	$(CXX) $(CXXFLAGS) main.cc $(QEMU_LIBS) -o $(PROJECT).qemu
 
-$(PROJECT).qemu: main.cc lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) -I$(POCL_RT0_PATH)/include -L$(POCL_RT0_PATH)/lib/static -L. main.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).qemu
-
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
 
@@ -64,9 +61,6 @@ gdb-s: $(PROJECT).qemu
 
 gdb-c: $(PROJECT).qemu
 	$(GDB) $(PROJECT).qemu
-
-qemu: $(PROJECT).qemu
-	POCL_DEBUG=all $(RISCV_TOOL_PATH)/bin/qemu-riscv32 -d in_asm -D debug.log $(PROJECT).qemu
 
 clean:
 	rm -rf *.elf *.dump *.hex *.a *.pocl *.qemu
