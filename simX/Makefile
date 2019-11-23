@@ -1,7 +1,7 @@
 ################################################################################
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
-CXXFLAGS ?= -std=c++11 -fPIC -O3 # -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
+CXXFLAGS ?= -std=c++11 -fPIC -O3 -g # -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
 
 LIB_OBJS=simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
 

@@ -1105,10 +1105,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             {
               is_vec = true;
               D(3, "Addition " << rsrc[0] << " " << rsrc[1] << " Dest:" << rdest);
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
-              vector<Reg<char *>> mask  = c.vreg[0];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
+              vector<Reg<char *>> & mask  = c.vreg[0];
 
               if (c.vtype.vsew == 8)
               {
@@ -1166,8 +1166,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 }
               }
 
-              D(3, "Vector Register state after addition:");
+              D(3, "Vector Register state after addition:" << flush);
               for(int i=0; i < c.vreg.size(); i++)
+              {
                 for(int j=0; j< c.vreg[0].size(); j++)
                 {
                   if (c.vtype.vsew == 8)
@@ -1184,13 +1185,16 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
                   }
                 }
+              }
+
+              D(3, "After vector register state after addition" << flush);
             }
             break;
             case 24: //vmseq
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1229,9 +1233,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 25: //vmsne
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1270,9 +1274,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 26: //vmsltu
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1311,9 +1315,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 27: //vmslt
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(int8_t i = 0; i < c.vl; i++){
                   int8_t *first_ptr = (int8_t *)vr1[i].val;
@@ -1351,9 +1355,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 28: //vmsleu
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1391,9 +1395,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 29: //vmsle
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(int8_t i = 0; i < c.vl; i++){
                   int8_t *first_ptr = (int8_t *)vr1[i].val;
@@ -1431,9 +1435,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 30: //vmsgtu
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1471,9 +1475,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 31: //vmsgt
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(int8_t i = 0; i < c.vl; i++){
                   int8_t *first_ptr = (int8_t *)vr1[i].val;
@@ -1522,9 +1526,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 24: //vmandnot
               {
                 D(3, "vmandnot");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1584,9 +1588,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 25: //vmand
               {
                 D(3, "vmand");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1645,9 +1649,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 26: //vmor
               {
                 D(3, "vmor");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1706,9 +1710,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 27: //vmxor
               {
                 D(3, "vmxor");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   uint8_t *result_ptr;
                   for(uint8_t i = 0; i < c.vl; i++){
@@ -1767,9 +1771,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 28: //vmornot
               {
                 D(3, "vmornot");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1825,9 +1829,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 29: //vmnand
               {
                 D(3, "vmnand");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1887,9 +1891,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 30: //vmnor
               {
                 D(3, "vmnor");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   uint8_t *result_ptr;
 
@@ -1951,9 +1955,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 D(3, "vmxnor");
                 uint8_t *result_ptr;
 
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -2053,6 +2057,11 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             }
           }
           break;
+          default:
+          {
+            cout << "default???\n" << flush;
+
+          }
         }
       break;
       case VL:
@@ -2064,63 +2073,73 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         D(3, "src: " << rsrc[0] << " " << reg[rsrc[0]]);
         D(3, "dest" << rdest);
         D(3, "width" << vlsWidth);
-        vector<Reg<char *>> vd  = c.vreg[rdest];
+        vector<Reg<char *>> & vd  = c.vreg[rdest];
 
-        switch(vlsWidth) {
-          case 6: //load word and unit strided (not checking for unit stride)
-            for(Word i = 0; i < c.vl; i++) {
-              memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + (i*c.vtype.vsew/8);  
-              data_read = c.core->mem.read(memAddr, c.supervisorMode);
-              D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
-              int * result_ptr = (int *) vd[i].val;
-              *result_ptr = data_read;
-
-              trace_inst->is_lw = true;  
-              trace_inst->mem_addresses[i] = memAddr;
-          }
-          /*for(Word i = c.vl; i < VLMAX; i++){
-            int * result_ptr = (int *) vd[i].val;
-            *result_ptr = 0;
-          }*/
-
-          D(3, "Vector Register state after addition:");
-            for(int i=0; i < 32; i++)
+        switch(vlsWidth)
+        {
+            case 6: //load word and unit strided (not checking for unit stride)
             {
-              for(int j=0; j< c.vl; j++)
-              {
-                cout << "starting iter" << endl;
-                  if (c.vtype.vsew == 8)
-                  {
-                    uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
-                  } else if (c.vtype.vsew == 16)
-                  {
-                    uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
-                  } else if (c.vtype.vsew == 32)
-                  {
-                    uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
-                  }
+                for(Word i = 0; i < c.vl; i++) {
+                  memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + (i*c.vtype.vsew/8);  
+                  data_read = c.core->mem.read(memAddr, c.supervisorMode);
+                  D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+                  int * result_ptr = (int *) vd[i].val;
+                  *result_ptr = data_read;
 
-                  cout << "Finished iter" << endl;
+                  trace_inst->is_lw = true;  
+                  trace_inst->mem_addresses[i] = memAddr;
               }
-            }
+              /*for(Word i = c.vl; i < VLMAX; i++){
+                int * result_ptr = (int *) vd[i].val;
+                *result_ptr = 0;
+              }*/
 
-            cout << "Finished loop" << endl;
+              D(3, "Vector Register state ----:");
+                // for(int i=0; i < 32; i++)
+                // {
+                //   for(int j=0; j< c.vl; j++)
+                //   {
+                //     cout << "starting iter" << endl;
+                //       if (c.vtype.vsew == 8)
+                //       {
+                //         uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
+                //         std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                //       } else if (c.vtype.vsew == 16)
+                //       {
+                //         uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
+                //         std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                //       } else if (c.vtype.vsew == 32)
+                //       {
+                //         uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
+                //         std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                //       }
+
+                //       cout << "Finished iter" << endl;
+                //   }
+                // }
+
+                cout << "Finished loop" << endl;
+            }
+            cout << "aaaaaaaaaaaaaaaaaaaaaa" << endl;
+            break;
+            default:
+            {
+              cout << "Serious default??\n" << flush;
+            }
             break;
         }
-        cout << "hhhhhhhhhhhhhhh" << endl;
         break;
       }
       break;
       case VS:
         is_vec = true;
         VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
-        for(Word i = 0; i < c.vl; i++) {
+        for(Word i = 0; i < c.vl; i++)
+        {
+          cout << "iter" << endl;
           ++c.stores;
           memAddr = reg[rsrc[0]] + (i*c.vtype.vsew/8);
-          std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr << "\n";
+          std::cout << "STORE MEM ADDRESS *** : " << std::hex << memAddr << "\n";
 
           
           trace_inst->is_sw = true;
@@ -2131,16 +2150,20 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             case 6: //store word and unit strided (not checking for unit stride)
             {
               uint32_t * ptr_val = (uint32_t *) c.vreg[vs3][i].val;
+              D(3, "value: " << flush << (*ptr_val) << flush);
               c.core->mem.write(memAddr, *ptr_val, c.supervisorMode, 4);
-              D(3, "store: " << memAddr << " value:" << *ptr_val);
+              D(3, "store: " << memAddr << " value:" << *ptr_val << flush);
             }
             break;
             default:
-              cout << "ERROR: UNSUPPORTED S INST\n";
+              cout << "ERROR: UNSUPPORTED S INST\n" << flush;
               exit(1);
           }
-          c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
+          cout << "Loop finished" << endl;
+          // c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
         }
+
+        cout << "After for loop" << endl;
       break;
       default:
         cout << "pc: " << hex << (c.pc-4) << "\n";
@@ -2148,13 +2171,14 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         exit(1);
     }
 
-    cout << "outside case" << endl;
+    // break;
+    cout << "outside case" << endl << flush;
 
   }
 
-  std::cout << "finished instruction" << endl;
+  std::cout << "finished instruction" << endl << flush;
 
-  D(3, "End instruction execute.");
+  D(3, "End instruction execute." << flush);
 
   c.activeThreads = nextActiveThreads;
 
