@@ -718,6 +718,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
         std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
+        std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr;
         trace_inst->is_sw = true;
         trace_inst->mem_addresses[t] = memAddr;
         // //std::cout << "FUNC3: " << func3 << "\n";
@@ -754,6 +755,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
       case B_INST:
         //std::cout << "B_INST\n";
         trace_inst->stall_warp = true;
+        cout << "func3:" << func3 << endl;
         switch (func3)
         {
           case 0:
@@ -766,6 +768,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 1:
             // BNE
+            cout << "rsrc0: " << reg[rsrc[0]] << " rsrc1 : " << reg[rsrc[1]] << endl;
             if (int(reg[rsrc[0]]) != int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -2065,9 +2068,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         switch(vlsWidth) {
           case 6: //load word and unit strided (not checking for unit stride)
             for(Word i = 0; i < c.vl; i++) {
-              memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + i*c.vtype.vsew;  
+              memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + (i*c.vtype.vsew/8);  
               data_read = c.core->mem.read(memAddr, c.supervisorMode);
-              D(3, "Data read " << data_read);
+              D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
               int * result_ptr = (int *) vd[i].val;
               *result_ptr = data_read;
 
@@ -2106,7 +2109,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
         for(Word i = 0; i < c.vl; i++) {
           ++c.stores;
-          memAddr = reg[rsrc[0]] + i*c.vtype.vsew;
+          memAddr = reg[rsrc[0]] + (i*c.vtype.vsew/8);
           std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr << "\n";
 
           

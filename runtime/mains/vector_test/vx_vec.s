@@ -1,22 +1,22 @@
-
-
-
 .type vx_vec_test, @function
 .global vx_vec_test
 vx_vec_test:
-	li a0, 2
-	vsetvli t0, a0, e32, m1
-	li  a0, 10
-	sw  a0, 0(a1)
-	sw  a0, 32(a1)
-	vlw.v   v1, (a1)
-	li a2, 1
-	sw a2, 0(a3)
-	li a2, 0
-	sw a2, 32(a3)
-	vlw.v v0, (a3)
-	vmor.mm v0, v0, v3
-	vadd.vv v1, v1, v1, v0.t
-	vsw.v  v1, (a1)
-	vlw.v  v5, (a1)
-	ret
+# vector-vector add routine of 32-bit integers
+# void vvaddint32(size_t n, const int*x, const int*y, int*z)
+# { for (size_t i=0; i<n; i++) { z[i]=x[i]+y[i]; } }
+#
+# a0 = n, a1 = x, a2 = y, a3 = z
+# Non-vector instructions are indented
+    vsetvli t0, a0, e32 # Set vector length based on 32-bit vectors
+ loop:
+    vlw.v v0, (a1)           # Get first vector
+      sub a0, a0, t0         # Decrement number done
+      slli t0, t0, 2         # Multiply number done by 4 bytes
+      add a1, a1, t0         # Bump pointer
+    vlw.v v1, (a2)           # Get second vector
+      add a2, a2, t0         # Bump pointer
+    vadd.vv v2, v0, v1        # Sum vectors
+    vsw.v v2, (a3)           # Store result
+      add a3, a3, t0         # Bump pointer
+      bnez a0, loop         # Loop back 
+    ret                    # Finished
