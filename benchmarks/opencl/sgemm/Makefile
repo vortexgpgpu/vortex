@@ -1,8 +1,7 @@
-
 RISCV_TOOL_PATH = $(wildcard ~/dev/riscv-gnu-toolchain/drops)
 POCL_CC_PATH = $(wildcard ~/dev/pocl/drops_riscv_cc)
-POCL_RT_PATH = $(wildcard ~/dev/pocl/drops_riscv_rt)
-POCL_RT0_PATH = $(wildcard ~/dev/pocl/drops_riscv_rt0)
+POCL_INC_PATH = $(wildcard ../include)
+POCL_LIB_PATH = $(wildcard ../lib)
 VX_RT_PATH = $(wildcard ../../../runtime)
 VX_SIMX_PATH = $(wildcard ../../../simX/obj_dir)
 
@@ -27,10 +26,10 @@ CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32
 CXXFLAGS += -ffreestanding # program may not begin at main()
 CXXFLAGS += -Wl,--gc-sections # enable garbage collection of unused input sections
 CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
-CXXFLAGS += -I$(POCL_RT_PATH)/include
+CXXFLAGS += -I$(POCL_INC_PATH)
 
-VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_RT_PATH)/lib/static/libOpenCL.a
-QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_RT0_PATH)/lib/static/libOpenCL.a
+VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
+QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/qemu/libOpenCL.a
 
 PROJECT=sgemm
 
@@ -44,9 +43,6 @@ $(PROJECT).elf: main.cc lib$(PROJECT).a
 
 $(PROJECT).qemu: main.cc lib$(PROJECT).a
 	$(CXX) $(CXXFLAGS) main.cc $(QEMU_LIBS) -o $(PROJECT).qemu
-
-$(PROJECT).qemu: main.cc lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) -I$(POCL_RT0_PATH)/include -L$(POCL_RT0_PATH)/lib/static -L. main.cc -Wl,--whole-archive -l$(PROJECT) -Wl,--no-whole-archive $(LIBS) -o $(PROJECT).qemu
 
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
@@ -65,9 +61,6 @@ gdb-s: $(PROJECT).qemu
 
 gdb-c: $(PROJECT).qemu
 	$(GDB) $(PROJECT).qemu
-
-qemu: $(PROJECT).qemu
-	POCL_DEBUG=all $(RISCV_TOOL_PATH)/bin/qemu-riscv32 -d in_asm -D debug.log $(PROJECT).qemu
 
 clean:
 	rm -rf *.elf *.dump *.hex *.a *.pocl *.qemu

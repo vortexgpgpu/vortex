@@ -5,7 +5,7 @@ int main()
 {
         vx_tmc(1);
 
-        int n = 5;
+        int n = 32;
         int *a = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
         int *b = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
         int *c = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};

@@ -82,6 +82,8 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 }
 
 int main(int argc, char **argv) {
+  printf("enter demo main\n");
+  
   cl_platform_id platform_id;
   cl_device_id device_id;
   size_t binary_size;
@@ -117,6 +119,7 @@ int main(int argc, char **argv) {
   } else {
     std::cout << "Read program from binary." << std::endl;
   }
+
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
