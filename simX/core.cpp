@@ -46,7 +46,7 @@
       trace_inst.vd                 = -1; \
       trace_inst.is_lw              = false; \
       trace_inst.is_sw              = false; \
-      trace_inst.mem_addresses      = new unsigned[a.getNThds()]; \
+      trace_inst.mem_addresses      = (unsigned *) malloc(32 * sizeof(unsigned)); \
       for (int tid = 0; tid < a.getNThds(); tid++) trace_inst.mem_addresses[tid] = 0xdeadbeef; \
       trace_inst.mem_stall_cycles   = 0; \
       trace_inst.fetch_stall_cycles = 0; \
@@ -163,6 +163,8 @@ void Core::step()
 {
     cout << "\n\n\n------------------------------------------------------\n";
 
+    D(3, "Started core::step" << flush);
+
     steps++;
     cout << "CYCLE: " << steps << '\n';
 
@@ -179,20 +181,30 @@ void Core::step()
     //     cout << regii << ": " << renameTable[0][regii] << '\n';
     // }
 
-    cout << '\n';
+    cout << '\n' << flush;
 
+    cout << "About to call writeback" << endl;
     this->writeback();
+    cout << "About to call load_store" << endl;
     this->load_store();
+    cout << "About to call execute_unit" << endl;
     this->execute_unit();
+    cout << "About to call scheduler" << endl;
     this->scheduler();
+    cout << "About to call decode" << endl;
     this->decode();
+    D(3, "About to call fetch" << flush);
     this->fetch();
+    D(3, "Finished fetch" << flush);
 
     if (release_warp)
     {
         release_warp = false;
         stallWarp[release_warp_num] = false;
     }
+
+    D(3, "released warp" << flush);
+    D(3, "Finished core::step" << flush);
 }
 
 void Core::getCacheDelays(trace_inst_t * trace_inst)
@@ -396,15 +408,19 @@ void Core::fetch()
           {
               D(3, "Core step stepping warp " << schedule_w << '[' << w[schedule_w].activeThreads << ']');
               w[schedule_w].step(&inst_in_fetch);
-              D(3, "Now " << w[schedule_w].activeThreads << " active threads in " << schedule_w);
+              D(3, "Now " << w[schedule_w].activeThreads << " active threads in " << schedule_w << flush);
             
               this->getCacheDelays(&inst_in_fetch);
+              D(3, "Got cache delays" << flush);
               if (inst_in_fetch.stall_warp)
               {
                 stallWarp[inst_in_fetch.wid] = true;
               }
+              D(3, "staled warps\n" << flush);
           }
+          D(3, "About to schedule warp\n" << flush);
           warpScheduler();
+          D(3, "Scheduled warp" << flush);
         }
     }
     else
@@ -413,21 +429,25 @@ void Core::fetch()
         if (inst_in_fetch.fetch_stall_cycles > 0) inst_in_fetch.fetch_stall_cycles--;
     }
 
+    D(3, "Printing trace" << flush);
     printTrace(&inst_in_fetch, "Fetch");
+    D(3, "printed trace" << flush);
    
     // #ifdef PRINT_ACTIVE_THREADS
+    D(3, "About to print active threads" << flush << "\n");
     for (unsigned j = 0; j < w[schedule_w].tmask.size(); ++j) {
       if (w[schedule_w].activeThreads > j && w[schedule_w].tmask[j]) cout << " 1";
       else cout << " 0";
       if (j != w[schedule_w].tmask.size()-1 || schedule_w != w.size()-1) cout << ',';
     }
+    D(3, "\nPrinted active threads" << flush);
     // #endif
 
   
 
-  #ifdef PRINT_ACTIVE_THREADS
+  // #ifdef PRINT_ACTIVE_THREADS
   cout << endl;
-  #endif
+  // #endif
 }
 
 void Core::decode()
@@ -522,7 +542,7 @@ void Core::load_store()
 
 void Core::execute_unit()
 {
-    // cout << "$$$$$$$$$$$$$$$$$$$ EXE START\n";
+    cout << "$$$$$$$$$$$$$$$$$$$ EXE START\n" << flush;
     bool do_nothing = false;
     // EXEC is always not busy
     if (inst_in_scheduler.is_lw || inst_in_scheduler.is_sw)
@@ -546,6 +566,7 @@ void Core::execute_unit()
             // cout << "Rename RS2: " << inst_in_scheduler.rs1 << " is " << renameTable[inst_in_scheduler.wid][inst_in_scheduler.rs2] << " wid: " << inst_in_scheduler.wid << '\n';
         }
         
+        cout << "About to check vs*\n" << flush;
         if(inst_in_scheduler.vs1 > 0)
         {
           scheduler_srcs_ready = scheduler_srcs_ready && vecRenameTable[inst_in_scheduler.vs1];
@@ -554,6 +575,7 @@ void Core::execute_unit()
         {
           scheduler_srcs_ready = scheduler_srcs_ready && vecRenameTable[inst_in_scheduler.vs2];
         }
+        cout << "Finished sources\n" << flush;
 
         if (scheduler_srcs_ready)
         {
@@ -561,11 +583,15 @@ void Core::execute_unit()
                 // cout << "rename setting rd: " << inst_in_scheduler.rd << " to not useabel wid: " << inst_in_scheduler.wid << '\n';
                 renameTable[inst_in_scheduler.wid][inst_in_scheduler.rd] = false;
             }
+
+            cout << "About to check vector wb: " << inst_in_scheduler.vd << "\n" << flush;
             if(inst_in_scheduler.vd != -1) {
               vecRenameTable[inst_in_scheduler.vd] = false;
             }
+            cout << "Finished wb checking" << "\n" << flush;
             CPY_TRACE(inst_in_exe, inst_in_scheduler);
             INIT_TRACE(inst_in_scheduler);
+            cout << "Finished trace copying and clearning" << "\n" << flush;
         }
         else
         {
@@ -583,6 +609,7 @@ void Core::execute_unit()
 
     //printTrace(&inst_in_exe, "execute_unit");
     // INIT_TRACE(inst_in_exe);
+    D(3, "EXECUTE END" << flush);
 }
 
 void Core::writeback()
