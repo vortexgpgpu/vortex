@@ -1,32 +1,29 @@
-
 #include "../../runtime/intrinsics/vx_intrinsics.h"
 #include "vx_vec.h"
 
 int main()
 {
-	vx_tmc(1);
-	// int * a = malloc(4);
-	// int * b = malloc(4);
-	// int * c = malloc(4);
+        vx_tmc(1);
+
+        printf("Hello\n");
+
+        int n = 64;
+        int *a = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
+        int *b = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
+        int *c = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
+
+        for(int i = 0; i < n; ++i)
+        {
+           a[i] = b[i] = c[i] = 1;
+        }
+
+        vx_vec_test(n, a, b, c);
+
+        for (int i = 0; i < n; ++i)
+        {
+        	printf("a[%d]=%d, b[%d]=%d, c[%d]=%d\n", i, a[i], i, b[i], i, c[i]);
+        }
 
 
-	int * a = malloc(4);
-	*a = 5;
-	printf("Value of a: %d\n", *a);
-
-	vx_vec_test(a);
-
-	printf("Value of a: %d\n", *a);
-
-
-	// for (int i = 0; i < 4; i++)
-	// {
-	// 	if (c[i] != (a[i] + b[i]))
-	// 	{
-	// 		printf("Fail\n");
-	// 		break;
-	// 	}
-	// }
-
-	vx_tmc(0);
+        vx_tmc(0);
 }
