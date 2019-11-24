@@ -1,11 +1,11 @@
 LIB_PATH = ../../runtime
 
-COMP     = /nethome/ekim79/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-gcc
+COMP     = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-gcc
 
 CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostartfiles -nodefaultlibs -Wl,-Bstatic,-T,$(LIB_PATH)/mains/vortex_link.ld -march=rv32imv -mabi=ilp32
 
-DMP  = /nethome/ekim79/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
-CPY  = /nethome/ekim79/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
+DMP  = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-objdump
+CPY  = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-objcopy
 
 # VX_STR  = ../../startup/vx_start.s
 
@@ -21,7 +21,7 @@ VX_VEC2  = vx_vec_saxpy.s       #float --> int
 VX_VEC3  = vx_vec_sgemm_float.s #float --> int
 VX_VEC4  = vx_vec_vsadd.s 
 VX_VEC5  = vx_vec_memcpy.s 
-LIBS    = /nethome/ekim79/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a /nethome/ekim79/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = /home/priya/dev/riscv_vec/riscv-gnu/riscv32-unknown-elf/lib/libc.a /home/priya/dev/riscv_vec/riscv-gnu/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_vec_benchmark
 
