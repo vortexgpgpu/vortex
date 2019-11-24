@@ -2016,6 +2016,64 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 }
               }              
               break; 
+              case 37: //vmul
+              {
+                D(3, "vmul");
+                uint8_t *result_ptr;
+
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t result =  (*first_ptr * *second_ptr);
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                } 
+                else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t result = (*first_ptr * *second_ptr);
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
+
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t result = (*first_ptr * *second_ptr);
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                }
+              }
+              break;
               case 45: //vmacc   
               {
                 D(3, "vmacc");
@@ -2074,6 +2132,129 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 }
               }
               break;        
+            }
+          }
+          break;
+          case 6: 
+          {
+            switch(func6)
+            {
+              case 0:
+              {
+                D(3, "vmadd.vx");
+                uint8_t *result_ptr;
+
+                //vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    //uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t result =  (reg[rsrc[0]] + *second_ptr);
+                    D(3,"Comparing " << reg[rsrc[0]] << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                } 
+                else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    //uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t result = (reg[rsrc[0]] + *second_ptr);
+                    D(3,"Comparing " << reg[rsrc[0]] << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
+
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    //uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t result = (reg[rsrc[0]] + *second_ptr);
+                    D(3,"Comparing " << reg[rsrc[0]] << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                }                
+              }
+              break;
+              case 37: //vmul.vx
+              {
+                D(3, "vmul.vx");
+                uint8_t *result_ptr;
+
+                //vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    //uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t result =  (reg[rsrc[0]] * *second_ptr);
+                    D(3,"Comparing " << reg[rsrc[0]] << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                } 
+                else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    //uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t result = (reg[rsrc[0]] * *second_ptr);
+                    D(3,"Comparing " << reg[rsrc[0]] << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
+
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    //uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t result = (reg[rsrc[0]] * *second_ptr);
+                    D(3,"Comparing " << reg[rsrc[0]] << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                }                
+              }
+              break;
             }
           }
           break;

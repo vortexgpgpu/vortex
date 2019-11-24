@@ -28,15 +28,21 @@
 #    ret
 
 # a0 n, rs1 a, a2 x, a3 y
+
+# a0 n, a1 a, a2 x, a3 y
 vx_vec_saxpy:
-    vsetvli a4, a0, e32, m8
+    vsetvli a4, a0, e32, m1
 saxpy:
     vlw.v v0, (a2)
     sub a0, a0, a4
     slli a4, a4, 2
     add a2, a2, a4
     vlw.v v1, (a3)
-    vmacc.vx v1, rs1, v0
+    vmul.vx v0, v0, a1
+#    vmul.vv v0, v0, v1
+#    li x1, 10
+#    vmul.vx v0, v0, x1
+    vadd.vv v1, v0, v1
     vsw.v v1, (a3)
     add a3, a3, a4
     bnez a0, saxpy
