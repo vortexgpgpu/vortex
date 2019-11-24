@@ -6,14 +6,17 @@
 int main()
 {
     vx_tmc(1);
+
     int n = 5;
+    int scalar = 10;
+
     int *a = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
     int *b = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
     int *c = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
 
     for (int i = 0; i < n; ++i) { a[i] = 1; b[i] = 2; c[i] = 5; }
 
-#if 1
+#if 0
 //---------------------------------------------------------------
 /* vvaddint32
  * # vector-vector add routine of 32-bit integers
@@ -43,7 +46,6 @@ int main()
 /* #  vector-scalar add
    # for (i=0; i<N; i++) { C[i] = A[i] + B; } // 32-bit ints */
     for (int i = 0; i < n; ++i) { a[i] = 1; b[i] = 1;}
-    int scalar = 10;
     printf("vsadd...scalar:%d\na[%d]: ", scalar, n);
     for(int i = 0; i < n; ++i) printf("%d \n", a[i]);
     printf("\nb: %d", scalar);
@@ -78,10 +80,12 @@ int main()
         if(a[i] != b[i]) 
         {
            printf("\n<memcpy> failed at <index: %d>! \n", i);
-           return;   
+           return 1;   
         }
     }
     printf("\nPASSED.......................... <memcpy> \n");
+#endif
+#if 1
 //---------------------------------------------------------------
 /* # void saxpy(size_t n, const float a, const float *x, float *y)
    # ==> convert to int!!
@@ -99,16 +103,22 @@ int main()
 
     vx_vec_saxpy(n, scalar, a, b);
 
+    printf("saxpy\na[%d]: ", n);
+    for(int i = 0; i < n; ++i) printf("%d \n", a[i]);
+    printf("\nb[%d]: ", n);
+    for(int i = 0; i < n; ++i) printf("%d \n", b[i]);
+
     for(int i = 0; i < n; ++i) 
     {
         if(b[i] != ((a[i] * scalar) + c[i])) 
         {
            printf("\n<saxpy> failed at <index: %d>! \n", i);
-           return;   
+           return 1;   
         }
     }
     printf("\nPASSED.......................... <saxpy> \n");
-
+#endif
+#if 0
 //---------------------------------------------------------------
 /* # void sgemm_nn(size_t n, size_t m, size_t k, const float*a,   // m * k matrix
 #          size_t lda, const float*b,   // k * n matrix 
