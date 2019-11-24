@@ -106,7 +106,7 @@ void Harp::reg_doWrite(Word cpuId, Word regNum) {
 #endif
 
 Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
-  a(a), iDec(d), mem(mem), steps(4)
+  a(a), iDec(d), mem(mem), steps(4), num_cycles(0), num_instructions(0)
 {
   release_warp = false;
   foundSchedule = true;
@@ -162,12 +162,13 @@ bool Core::interrupt(Word r0) {
 
 void Core::step()
 {
-    cout << "\n\n\n------------------------------------------------------\n";
+    D(3, "\n\n\n------------------------------------------------------");
 
     D(3, "Started core::step" << flush);
 
     steps++;
-    D(3, "CYCLE: " << steps);
+    this->num_cycles++;
+    D(3, "CYCLE: " << this->num_cycles);
 
     D(3, "Stalled Warps:");
     for (int widd = 0; widd < a.getNWarps(); widd++)
@@ -407,10 +408,12 @@ void Core::fetch()
           if (foundSchedule)
           {
               D(3, "Core step stepping warp " << schedule_w << '[' << w[schedule_w].activeThreads << ']');
+              this->num_instructions = this->num_instructions + w[schedule_w].activeThreads;
+              // this->num_instructions++;
               w[schedule_w].step(&inst_in_fetch);
               D(3, "Now " << w[schedule_w].activeThreads << " active threads in " << schedule_w << flush);
             
-              this->getCacheDelays(&inst_in_fetch);
+              // this->getCacheDelays(&inst_in_fetch);
               D(3, "Got cache delays" << flush);
               if (inst_in_fetch.stall_warp)
               {
@@ -444,7 +447,10 @@ void Core::fetch()
       {
         D(3, " 0");
       }
-      if (j != w[schedule_w].tmask.size()-1 || schedule_w != w.size()-1) cout << ',';
+      if (j != w[schedule_w].tmask.size()-1 || schedule_w != w.size()-1) 
+      {
+        D(3, ',');
+      }
     }
     D(3, "\nPrinted active threads" << flush);
     // #endif
@@ -600,7 +606,7 @@ void Core::execute_unit()
         }
         else
         {
-            cout << "&&&&&&&&&&&&&&&&&&&&&&&& EXECUTE SRCS NOT READY\n";
+            D(3, "&&&&&&&&&&&&&&&&&&&&&&&& EXECUTE SRCS NOT READY");
             inst_in_scheduler.stalled = true;
             // INIT_TRACE(inst_in_exe);
             do_nothing = true;
@@ -759,8 +765,9 @@ void Warp::step(trace_inst_t * trace_inst) {
   bool fetchMore;
 
   fetchMore = false;
-  unsigned fetchSize(wordSize - (pc+fetchPos)%wordSize);
-  fetchBuffer.resize(fetchPos + fetchSize);
+  // unsigned fetchSize(wordSize - (pc+fetchPos)%wordSize);
+  unsigned fetchSize = 4;
+  fetchBuffer.resize(fetchSize);
   Word fetched = core->mem.fetch(pc + fetchPos, supervisorMode);
   writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
   decPos = 0;

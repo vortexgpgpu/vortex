@@ -849,6 +849,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         {
           reg[rdest] = c.id;
           D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+        } else if (immsrc == 0x25)
+        {
+          reg[rdest] = c.core->num_instructions;
+        } else if (immsrc == 0x26)
+        {
+          reg[rdest] = c.core->num_cycles;
         }
         // switch (func3)
         // {
@@ -2225,7 +2231,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
     }
 
     // break;
-    cout << "outside case" << endl << flush;
+    // cout << "outside case" << endl << flush;
 
   }
 

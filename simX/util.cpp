@@ -52,7 +52,7 @@ Byte Harp::readByte(const vector<Byte> &b, Size &n) {
 }
 
 Word_u Harp::readWord(const vector<Byte> &b, Size &n, Size wordSize) {
-  if (b.size() - n < wordSize) throw OutOfBytes();
+  // if (b.size() - n < wordSize) throw OutOfBytes();
   Word_u w(0);
   n += wordSize;
   // std::cout << "wordSize: " << wordSize << "\n";

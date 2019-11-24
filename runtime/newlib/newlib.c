@@ -148,7 +148,7 @@ int _fstat(int file, struct stat * st)
 
 int _isatty (int file)
 {
-  vx_print_str("Hello from _isatty\n");
+  // vx_print_str("Hello from _isatty\n");
   return 1;
 }
 
@@ -237,8 +237,8 @@ static int head_end   = (int) 0x20000000;
 
 void * _sbrk (int nbytes)
 {
-	vx_print_str("Hello from _sbrk\n");
-	vx_printf("nbytes: ", nbytes);
+	// vx_print_str("Hello from _sbrk\n");
+	// vx_printf("nbytes: ", nbytes);
 
 	//if (nbytes < 0) //vx_print_str("nbytes less than zero\n");
 	// printf("nBytes: %d\n", nbytes);
@@ -248,7 +248,7 @@ void * _sbrk (int nbytes)
 		nbytes = nbytes * -1;
 	}
 
-	vx_printf("New nbytes: ", nbytes);
+	// vx_printf("New nbytes: ", nbytes);
 
 	// if (nbytes > 10240)
 	// {
@@ -260,9 +260,9 @@ void * _sbrk (int nbytes)
     {
 		int base  = heap_start;
 		heap_start  += nbytes;
-		vx_print_str("_sbrk returning: ");
-		vx_print_hex((unsigned) base);
-		vx_print_str("\n");
+		// vx_print_str("_sbrk returning: ");
+		// vx_print_hex((unsigned) base);
+		// vx_print_str("\n");
 		return (void *) base;
     }
 	else

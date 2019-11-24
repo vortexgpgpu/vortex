@@ -144,6 +144,8 @@ namespace Harp {
     Word interruptEntry;
 
     unsigned long steps;
+    unsigned long num_cycles;
+    unsigned long num_instructions;
     std::vector<Warp> w;
     std::map<Word, std::set<Warp *> > b; // Barriers
     int schedule_w;
