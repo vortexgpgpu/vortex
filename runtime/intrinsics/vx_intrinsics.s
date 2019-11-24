@@ -49,6 +49,19 @@ vx_threadID:
 	csrr a0, 0x20 # read thread IDs
 	ret
 	
+.type vx_getCycles, @function
+.global vx_getCycles
+vx_getCycles:
+    csrr a0, 0x26 # read thread IDs
+    ret
+    
+
+.type vx_getInst, @function
+.global vx_getInst
+vx_getInst:
+    csrr a0, 0x25 # read thread IDs
+    ret
+    
 
 .type vx_resetStack, @function
 .global vx_resetStack

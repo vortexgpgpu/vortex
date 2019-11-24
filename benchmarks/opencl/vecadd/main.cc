@@ -31,46 +31,6 @@
      _ret;                                                             \
    })
 
-typedef struct {
-  const char* name;
-  const void* pfn;
-  uint32_t num_args;
-  uint32_t num_locals;
-  const uint8_t* arg_types;
-  const uint32_t* local_sizes;
-} kernel_info_t;
-
-static int g_num_kernels = 0;
-static kernel_info_t g_kernels [MAX_KERNELS];
-
-int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, uint32_t num_locals, const uint8_t* arg_types, const uint32_t* local_sizes) {
-  if (g_num_kernels == MAX_KERNELS)
-    return -1;
-  kernel_info_t* kernel = g_kernels + g_num_kernels++;
-  kernel->name = name;
-  kernel->pfn = pfn;
-  kernel->num_args = num_args;
-  kernel->num_locals = num_locals;
-  kernel->arg_types = arg_types;
-  kernel->local_sizes = local_sizes;
-  return 0;
-}
-
-int _pocl_query_kernel(const char* name, const void** p_pfn, uint32_t* p_num_args, uint32_t* p_num_locals, const uint8_t** p_arg_types, const uint32_t** p_local_sizes) {
-  for (int i = 0; i < g_num_kernels; ++i) {
-    kernel_info_t* kernel = g_kernels + i;
-    if (strcmp(kernel->name, name) != 0)
-      continue;
-    if (p_pfn) *p_pfn = kernel->pfn;
-    if (p_num_args) *p_num_args = kernel->num_args;
-    if (p_num_locals) *p_num_locals = kernel->num_locals;
-    if (p_arg_types) *p_arg_types = kernel->arg_types;
-    if (p_local_sizes) *p_local_sizes = kernel->local_sizes;
-    return 0;
-  }
-  return -1;
-}
-
 int exitcode = 0;
 cl_context context = NULL;
 cl_command_queue commandQueue = NULL;
@@ -98,7 +58,9 @@ void cleanup() {
   if (C) free(C);
 }
 
-int main (int argc, char **argv) {  
+int main (int argc, char **argv) {
+  printf("enter demo main\n");
+
   cl_platform_id platform_id;
   cl_device_id device_id;
   size_t binary_size;

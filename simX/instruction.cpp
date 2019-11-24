@@ -45,9 +45,8 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
   //   else os << "#0x" << hex << inst.immsrc;
   // }
 
-  os << instTable[inst.op].opString;
+  D(3, instTable[inst.op].opString << ';\n');
 
-  os << ';';
   return os;
 }
 
@@ -353,7 +352,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
-    std::cout << "INTERRUPT SUPERVISOR\n";
+    D(3, "INTERRUPT SUPERVISOR\n");
     c.interrupt(3);
     return;
   }
@@ -717,8 +716,8 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         //std::cout << "S_INST\n";
         ++c.stores;
         memAddr = reg[rsrc[0]] + immsrc;
-        std::cout << "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n";
-        std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr;
+        D(3, "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n");
+        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
         trace_inst->is_sw = true;
         trace_inst->mem_addresses[t] = memAddr;
         // //std::cout << "FUNC3: " << func3 << "\n";
@@ -755,7 +754,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
       case B_INST:
         //std::cout << "B_INST\n";
         trace_inst->stall_warp = true;
-        cout << "func3:" << func3 << endl;
+        D(3,"func3:" << func3 << endl);
         switch (func3)
         {
           case 0:
@@ -768,7 +767,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 1:
             // BNE
-            cout << "rsrc0: " << reg[rsrc[0]] << " rsrc1 : " << reg[rsrc[1]] << endl;
+            D(3, "rsrc0: " << reg[rsrc[0]] << " rsrc1 : " << reg[rsrc[1]] << endl);
             if (int(reg[rsrc[0]]) != int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -829,7 +828,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         pcSet = true;
         break;
       case JALR_INST:
-        std::cout << "JALR_INST\n";
+        D(3, "JALR_INST\n");
         trace_inst->stall_warp = true;
         if (!pcSet) nextPc = reg[rsrc[0]] + immsrc;
         if (!pcSet) {/*std::cout << "JALR... SETTING PC: " << nextPc << "\n";*/ }
@@ -850,6 +849,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         {
           reg[rdest] = c.id;
           D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+        } else if (immsrc == 0x25)
+        {
+          reg[rdest] = c.core->num_instructions;
+        } else if (immsrc == 0x26)
+        {
+          reg[rdest] = c.core->num_cycles;
         }
         // switch (func3)
         // {
@@ -945,7 +950,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         {
           case 1:
             // WSPAWN
-            std::cout << "WSPAWN\n";
+            D(3, "WSPAWN\n");
             trace_inst->wspawn = true;
             if (sjOnce)
             {
@@ -993,15 +998,14 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             {
               sjOnce = false;
               if (checkUnanimous(pred, c.reg, c.tmask)) {
-                std::cout << "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n";
+                D(3, "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n");
                 DomStackEntry e(c.tmask);
                 e.uni = true;
                 c.domStack.push(e);
                 break;
               }
-              cout << "Split: Original TM: ";
-              for (auto y : c.tmask) cout << y << " ";
-              cout << "\n";
+              D(3, "Split: Original TM: ");
+              for (auto y : c.tmask) D(3, y << " ");
 
               DomStackEntry e(pred, c.reg, c.tmask, c.pc);
               c.domStack.push(c.tmask);
@@ -1012,12 +1016,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               }
 
 
-              cout << "Split: New TM\n";
-              for (auto y : c.tmask) cout << y << " ";
-              cout << "\n";
-              cout << "Split: Pushed TM PC: " << hex << e.pc << dec << "\n";
-              for (auto y : e.tmask) cout << y << " ";
-              cout << "\n";
+              D(3, "Split: New TM");
+              for (auto y : c.tmask) D(3, y << " ");
+              D(3, "Split: Pushed TM PC: " << hex << e.pc << dec << "\n");
+              for (auto y : e.tmask) D(3, y << " ");
             }
             break;
           }
@@ -1038,19 +1040,18 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               if (!c.domStack.top().fallThrough) {
                 if (!pcSet) {
                   nextPc = c.domStack.top().pc;
-                  cout << "join: NOT FALLTHROUGH PC: " << hex << nextPc << dec << '\n';
+                  D(3, "join: NOT FALLTHROUGH PC: " << hex << nextPc << dec);
                 }
                   pcSet = true;
               }
 
-              cout << "Join: Old TM: ";
-              for (auto y : c.tmask) cout << y << " ";
+              D(3, "Join: Old TM: ");
+              for (auto y : c.tmask) D(3, y << " ");
               cout << "\n";
               c.tmask = c.domStack.top().tmask;
 
-              cout << "Join: New TM: " << '\n';
-              for (auto y : c.tmask) cout << y << " ";
-              cout << "\n";
+              D(3, "Join: New TM: ");
+              for (auto y : c.tmask) D(3, y << " ");
 
               c.domStack.pop();
             }
@@ -1105,10 +1106,10 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             {
               is_vec = true;
               D(3, "Addition " << rsrc[0] << " " << rsrc[1] << " Dest:" << rdest);
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
-              vector<Reg<char *>> mask  = c.vreg[0];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
+              vector<Reg<char *>> & mask  = c.vreg[0];
 
               if (c.vtype.vsew == 8)
               {
@@ -1120,7 +1121,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t * first_ptr  = (uint8_t *) vr1[i].val; 
                     uint8_t * second_ptr = (uint8_t *) vr2[i].val;
                     uint8_t result = *first_ptr + *second_ptr;
-                    cout << "Adding " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Adding " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1139,7 +1140,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t * first_ptr  = (uint16_t *) vr1[i].val; 
                     uint16_t * second_ptr = (uint16_t *) vr2[i].val;
                     uint16_t result = *first_ptr + *second_ptr;
-                    cout << "Adding " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Adding " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1148,7 +1149,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 }
               } else if (c.vtype.vsew == 32)
               {
-                cout << "Doing 32 bit vector addition\n";
+                D(3, "Doing 32 bit vector addition");
                 for (Word i = 0; i < c.vl; i++)
                 {
                   int *mask_ptr = (int*) mask[i].val;
@@ -1157,7 +1158,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     int * first_ptr  = (int *) vr1[i].val; 
                     int * second_ptr = (int *) vr2[i].val;
                     int result = *first_ptr + *second_ptr;
-                    cout << "Adding " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Adding " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     int * result_ptr = (int *) vd[i].val;
                     *result_ptr = result;
@@ -1166,37 +1167,41 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 }
               }
 
-              D(3, "Vector Register state after addition:");
+              D(3, "Vector Register state after addition:" << flush);
               for(int i=0; i < c.vreg.size(); i++)
+              {
                 for(int j=0; j< c.vreg[0].size(); j++)
                 {
                   if (c.vtype.vsew == 8)
                   {
                     uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                    D(3, "reg[" << i << "][" << j << "] = " << *ptr_val);     
                   } else if (c.vtype.vsew == 16)
                   {
                     uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                    D(3, "reg[" << i << "][" << j << "] = " << *ptr_val);     
                   } else if (c.vtype.vsew == 32)
                   {
                     uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                    D(3, "reg[" << i << "][" << j << "] = " << *ptr_val);     
                   }
                 }
+              }
+
+              D(3, "After vector register state after addition" << flush);
             }
             break;
             case 24: //vmseq
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
                   uint8_t *second_ptr = (uint8_t *)vr2[i].val;
                   uint8_t result = (*first_ptr == *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint8_t * result_ptr = (uint8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1207,7 +1212,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                   uint16_t *second_ptr = (uint16_t *)vr2[i].val;
                   uint16_t result = (*first_ptr == *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint16_t * result_ptr = (uint16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1218,7 +1223,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                   uint32_t *second_ptr = (uint32_t *)vr2[i].val;
                   uint32_t result = (*first_ptr == *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint32_t * result_ptr = (uint32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1229,15 +1234,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 25: //vmsne
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
                   uint8_t *second_ptr = (uint8_t *)vr2[i].val;
                   uint8_t result = (*first_ptr != *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint8_t * result_ptr = (uint8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1248,7 +1253,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                   uint16_t *second_ptr = (uint16_t *)vr2[i].val;
                   uint16_t result = (*first_ptr != *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint16_t * result_ptr = (uint16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1259,7 +1264,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                   uint32_t *second_ptr = (uint32_t *)vr2[i].val;
                   uint32_t result = (*first_ptr != *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint32_t * result_ptr = (uint32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1270,15 +1275,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 26: //vmsltu
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
                   uint8_t *second_ptr = (uint8_t *)vr2[i].val;
                   uint8_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint8_t * result_ptr = (uint8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1289,7 +1294,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                   uint16_t *second_ptr = (uint16_t *)vr2[i].val;
                   uint16_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint16_t * result_ptr = (uint16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1300,7 +1305,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                   uint32_t *second_ptr = (uint32_t *)vr2[i].val;
                   uint32_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint32_t * result_ptr = (uint32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1311,15 +1316,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 27: //vmslt
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(int8_t i = 0; i < c.vl; i++){
                   int8_t *first_ptr = (int8_t *)vr1[i].val;
                   int8_t *second_ptr = (int8_t *)vr2[i].val;
                   int8_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int8_t * result_ptr = (int8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1330,7 +1335,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   int16_t *first_ptr = (int16_t *)vr1[i].val;
                   int16_t *second_ptr = (int16_t *)vr2[i].val;
                   int16_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int16_t * result_ptr = (int16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1341,7 +1346,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   int32_t *first_ptr = (int32_t *)vr1[i].val;
                   int32_t *second_ptr = (int32_t *)vr2[i].val;
                   int32_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int32_t * result_ptr = (int32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1351,15 +1356,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 28: //vmsleu
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
                   uint8_t *second_ptr = (uint8_t *)vr2[i].val;
                   uint8_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint8_t * result_ptr = (uint8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1370,7 +1375,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                   uint16_t *second_ptr = (uint16_t *)vr2[i].val;
                   uint16_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint16_t * result_ptr = (uint16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1381,7 +1386,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                   uint32_t *second_ptr = (uint32_t *)vr2[i].val;
                   uint32_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint32_t * result_ptr = (uint32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1391,15 +1396,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 29: //vmsle
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(int8_t i = 0; i < c.vl; i++){
                   int8_t *first_ptr = (int8_t *)vr1[i].val;
                   int8_t *second_ptr = (int8_t *)vr2[i].val;
                   int8_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int8_t * result_ptr = (int8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1410,7 +1415,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   int16_t *first_ptr = (int16_t *)vr1[i].val;
                   int16_t *second_ptr = (int16_t *)vr2[i].val;
                   int16_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int16_t * result_ptr = (int16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1421,7 +1426,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   int32_t *first_ptr = (int32_t *)vr1[i].val;
                   int32_t *second_ptr = (int32_t *)vr2[i].val;
                   int32_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int32_t * result_ptr = (int32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1431,15 +1436,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 30: //vmsgtu
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(uint8_t i = 0; i < c.vl; i++){
                   uint8_t *first_ptr = (uint8_t *)vr1[i].val;
                   uint8_t *second_ptr = (uint8_t *)vr2[i].val;
                   uint8_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint8_t * result_ptr = (uint8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1450,7 +1455,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint16_t *first_ptr = (uint16_t *)vr1[i].val;
                   uint16_t *second_ptr = (uint16_t *)vr2[i].val;
                   uint16_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint16_t * result_ptr = (uint16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1461,7 +1466,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   uint32_t *first_ptr = (uint32_t *)vr1[i].val;
                   uint32_t *second_ptr = (uint32_t *)vr2[i].val;
                   uint32_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   uint32_t * result_ptr = (uint32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1471,15 +1476,15 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             case 31: //vmsgt
             {
-              vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-              vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-              vector<Reg<char *>> vd  = c.vreg[rdest];
+              vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+              vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+              vector<Reg<char *>> & vd  = c.vreg[rdest];
               if(c.vtype.vsew == 8){
                 for(int8_t i = 0; i < c.vl; i++){
                   int8_t *first_ptr = (int8_t *)vr1[i].val;
                   int8_t *second_ptr = (int8_t *)vr2[i].val;
                   int8_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int8_t * result_ptr = (int8_t *) vd[i].val;
                   *result_ptr = result;
@@ -1490,7 +1495,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   int16_t *first_ptr = (int16_t *)vr1[i].val;
                   int16_t *second_ptr = (int16_t *)vr2[i].val;
                   int16_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int16_t * result_ptr = (int16_t *) vd[i].val;
                   *result_ptr = result;
@@ -1501,7 +1506,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                   int32_t *first_ptr = (int32_t *)vr1[i].val;
                   int32_t *second_ptr = (int32_t *)vr2[i].val;
                   int32_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-                  cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                  D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                   int32_t * result_ptr = (int32_t *) vd[i].val;
                   *result_ptr = result;
@@ -1522,9 +1527,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 24: //vmandnot
               {
                 D(3, "vmandnot");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1532,7 +1537,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = (first_value & !second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1550,7 +1555,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = (first_value & !second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1568,7 +1573,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = (first_value & !second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -1584,9 +1589,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 25: //vmand
               {
                 D(3, "vmand");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1594,7 +1599,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = (first_value & second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1611,7 +1616,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = (first_value & second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1629,7 +1634,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = (first_value & second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -1645,9 +1650,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 26: //vmor
               {
                 D(3, "vmor");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1655,7 +1660,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = (first_value | second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1673,7 +1678,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = (first_value | second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1690,12 +1695,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = (first_value | second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
                   }
-                  cout << "VLMAX: " << VLMAX << endl;
+                  D(3, "VLMAX: " << VLMAX);
                   for(Word i = c.vl; i < VLMAX; i++){
                     result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = 0;
@@ -1706,9 +1711,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 27: //vmxor
               {
                 D(3, "vmxor");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   uint8_t *result_ptr;
                   for(uint8_t i = 0; i < c.vl; i++){
@@ -1717,7 +1722,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = (first_value ^ second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
                     result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
                   }
@@ -1733,7 +1738,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = (first_value ^ second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1752,7 +1757,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = (first_value ^ second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -1767,9 +1772,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 28: //vmornot
               {
                 D(3, "vmornot");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1777,7 +1782,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = (first_value | !second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1793,7 +1798,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = (first_value | !second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1810,7 +1815,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = (first_value | !second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -1825,9 +1830,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 29: //vmnand
               {
                 D(3, "vmnand");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1835,7 +1840,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = !(first_value & second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint8_t * result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1852,7 +1857,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = !(first_value & second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1870,7 +1875,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = !(first_value & second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -1887,9 +1892,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               case 30: //vmnor
               {
                 D(3, "vmnor");
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   uint8_t *result_ptr;
 
@@ -1899,7 +1904,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = !(first_value | second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1915,7 +1920,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = !(first_value | second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint16_t * result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1933,7 +1938,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = !(first_value | second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     uint32_t * result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -1951,9 +1956,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 D(3, "vmxnor");
                 uint8_t *result_ptr;
 
-                vector<Reg<char *>> vr1 = c.vreg[rsrc[0]];
-                vector<Reg<char *>> vr2 = c.vreg[rsrc[1]];
-                vector<Reg<char *>> vd  = c.vreg[rdest];
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
                 if(c.vtype.vsew == 8){
                   for(uint8_t i = 0; i < c.vl; i++){
                     uint8_t *first_ptr = (uint8_t *)vr1[i].val;
@@ -1961,7 +1966,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint8_t first_value = (*first_ptr & 0x1);
                     uint8_t second_value = (*second_ptr & 0x1);
                     uint8_t result = !(first_value ^ second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint8_t *) vd[i].val;
                     *result_ptr = result;
@@ -1979,7 +1984,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint16_t first_value = (*first_ptr & 0x1);
                     uint16_t second_value = (*second_ptr & 0x1);
                     uint16_t result = !(first_value ^ second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint16_t *) vd[i].val;
                     *result_ptr = result;
@@ -1998,7 +2003,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                     uint32_t first_value = (*first_ptr & 0x1);
                     uint32_t second_value = (*second_ptr & 0x1);
                     uint32_t result = !(first_value ^ second_value);
-                    cout << "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result << '\n';
+                    D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
 
                     result_ptr = (uint32_t *) vd[i].val;
                     *result_ptr = result;
@@ -2010,7 +2015,65 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
                 }
               }              
-              break;            
+              break; 
+              case 45: //vmacc   
+              {
+                D(3, "vmacc");
+                uint8_t *result_ptr;
+
+                vector<Reg<char *>> & vr1 = c.vreg[rsrc[0]];
+                vector<Reg<char *>> & vr2 = c.vreg[rsrc[1]];
+                vector<Reg<char *>> & vd  = c.vreg[rdest];
+                if(c.vtype.vsew == 8){
+                  for(uint8_t i = 0; i < c.vl; i++){
+                    uint8_t *first_ptr = (uint8_t *)vr1[i].val;
+                    uint8_t *second_ptr = (uint8_t *)vr2[i].val;
+                    uint8_t result =  (*first_ptr * *second_ptr);
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr += result;
+                  }
+                  for(uint8_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint8_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                } 
+                else if(c.vtype.vsew == 16) {
+                  uint16_t *result_ptr;
+                  for(uint16_t i = 0; i < c.vl; i++){
+                    uint16_t *first_ptr = (uint16_t *)vr1[i].val;
+                    uint16_t *second_ptr = (uint16_t *)vr2[i].val;
+                    uint16_t result = (*first_ptr * *second_ptr);
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr += result;
+                  }
+                  for(uint16_t i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint16_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+
+                } else if(c.vtype.vsew == 32) {
+                  uint32_t *result_ptr;
+
+                  for(uint32_t i = 0; i < c.vl; i++){
+                    uint32_t *first_ptr = (uint32_t *)vr1[i].val;
+                    uint32_t *second_ptr = (uint32_t *)vr2[i].val;
+                    uint32_t result = (*first_ptr * *second_ptr);
+                    D(3,"Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
+
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr += result;
+                  }
+                  for(Word i = c.vl; i < VLMAX; i++){
+                    result_ptr = (uint32_t *) vd[i].val;
+                    *result_ptr = 0;
+                  }
+                }
+              }
+              break;        
             }
           }
           break;
@@ -2030,7 +2093,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             }
             else if(reg[rsrc[0]] < 2*VLMAX) {
               c.vl = (int)ceil((reg[rsrc[0]]*1.0)/2.0);
-              cout << "Length:" << c.vl << ceil(reg[rsrc[0]]/2) << endl;
+              D(3, "Length:" << c.vl << ceil(reg[rsrc[0]]/2));
             }
             else if(reg[rsrc[0]] >= (2*VLMAX)) {
               c.vl = VLMAX;
@@ -2040,6 +2103,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
             Word regNum(0);
 
+            c.vreg.clear();
             for (int j = 0; j < 32; j++)
             {
               c.vreg.push_back(vector<Reg<char*>>());
@@ -2052,6 +2116,11 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             }
           }
           break;
+          default:
+          {
+            cout << "default???\n" << flush;
+
+          }
         }
       break;
       case VL:
@@ -2063,54 +2132,73 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         D(3, "src: " << rsrc[0] << " " << reg[rsrc[0]]);
         D(3, "dest" << rdest);
         D(3, "width" << vlsWidth);
-        vector<Reg<char *>> vd  = c.vreg[rdest];
+        vector<Reg<char *>> & vd  = c.vreg[rdest];
 
-        switch(vlsWidth) {
-          case 6: //load word and unit strided (not checking for unit stride)
-            for(Word i = 0; i < c.vl; i++) {
-              memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + (i*c.vtype.vsew/8);  
-              data_read = c.core->mem.read(memAddr, c.supervisorMode);
-              D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
-              int * result_ptr = (int *) vd[i].val;
-              *result_ptr = data_read;
+        switch(vlsWidth)
+        {
+            case 6: //load word and unit strided (not checking for unit stride)
+            {
+                for(Word i = 0; i < c.vl; i++) {
+                  memAddr   = ((reg[rsrc[0]]) & 0xFFFFFFFC) + (i*c.vtype.vsew/8);  
+                  data_read = c.core->mem.read(memAddr, c.supervisorMode);
+                  D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+                  int * result_ptr = (int *) vd[i].val;
+                  *result_ptr = data_read;
 
-              trace_inst->is_lw = true;  
-              trace_inst->mem_addresses[i] = memAddr;
-          }
-          /*for(Word i = c.vl; i < VLMAX; i++){
-            int * result_ptr = (int *) vd[i].val;
-            *result_ptr = 0;
-          }*/
-
-          D(3, "Vector Register state after addition:");
-            for(int i=0; i < c.vreg.size(); i++)
-              for(int j=0; j< c.vreg[0].size(); j++)
-              {
-                  if (c.vtype.vsew == 8)
-                  {
-                    uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
-                  } else if (c.vtype.vsew == 16)
-                  {
-                    uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
-                  } else if (c.vtype.vsew == 32)
-                  {
-                    uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
-                    std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
-                  }
+                  trace_inst->is_lw = true;  
+                  trace_inst->mem_addresses[i] = memAddr;
               }
-        break;
+              /*for(Word i = c.vl; i < VLMAX; i++){
+                int * result_ptr = (int *) vd[i].val;
+                *result_ptr = 0;
+              }*/
+
+              D(3, "Vector Register state ----:");
+                // for(int i=0; i < 32; i++)
+                // {
+                //   for(int j=0; j< c.vl; j++)
+                //   {
+                //     cout << "starting iter" << endl;
+                //       if (c.vtype.vsew == 8)
+                //       {
+                //         uint8_t * ptr_val = (uint8_t *) c.vreg[i][j].val;
+                //         std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                //       } else if (c.vtype.vsew == 16)
+                //       {
+                //         uint16_t * ptr_val = (uint16_t *) c.vreg[i][j].val;
+                //         std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                //       } else if (c.vtype.vsew == 32)
+                //       {
+                //         uint32_t * ptr_val = (uint32_t *) c.vreg[i][j].val;
+                //         std::cout << "reg[" << i << "][" << j << "] = " << *ptr_val << std::endl;     
+                //       }
+
+                //       cout << "Finished iter" << endl;
+                //   }
+                // }
+
+                // cout << "Finished loop" << endl;
+            }
+            // cout << "aaaaaaaaaaaaaaaaaaaaaa" << endl;
+            break;
+            default:
+            {
+              cout << "Serious default??\n" << flush;
+            }
+            break;
         }
+        break;
       }
       break;
       case VS:
         is_vec = true;
         VLMAX = (c.vtype.vlmul * c.VLEN)/c.vtype.vsew;
-        for(Word i = 0; i < c.vl; i++) {
+        for(Word i = 0; i < c.vl; i++)
+        {
+          // cout << "iter" << endl;
           ++c.stores;
           memAddr = reg[rsrc[0]] + (i*c.vtype.vsew/8);
-          std::cout << "STORE MEM ADDRESS: " << std::hex << memAddr << "\n";
+          // std::cout << "STORE MEM ADDRESS *** : " << std::hex << memAddr << "\n";
 
           
           trace_inst->is_sw = true;
@@ -2121,25 +2209,35 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             case 6: //store word and unit strided (not checking for unit stride)
             {
               uint32_t * ptr_val = (uint32_t *) c.vreg[vs3][i].val;
+              D(3, "value: " << flush << (*ptr_val) << flush);
               c.core->mem.write(memAddr, *ptr_val, c.supervisorMode, 4);
-              D(3, "store: " << memAddr << " value:" << *ptr_val);
+              D(3, "store: " << memAddr << " value:" << *ptr_val << flush);
             }
             break;
             default:
-              cout << "ERROR: UNSUPPORTED S INST\n";
+              cout << "ERROR: UNSUPPORTED S INST\n" << flush;
               exit(1);
           }
-          c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
+          // cout << "Loop finished" << endl;
+          // c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
         }
+
+        // cout << "After for loop" << endl;
       break;
       default:
         cout << "pc: " << hex << (c.pc-4) << "\n";
         cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;
         exit(1);
     }
+
+    // break;
+    // cout << "outside case" << endl << flush;
+
   }
 
-  D(3, "End instruction execute.");
+  // std::cout << "finished instruction" << endl << flush;
+
+  D(3, "End instruction execute." << flush);
 
   c.activeThreads = nextActiveThreads;
 
@@ -2162,7 +2260,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
   if (pcSet)
   {
     c.pc = nextPc;
-    cout << "Next PC: " << hex << nextPc << dec << "\n";
+    D(3,"Next PC: " << hex << nextPc << dec);
   }
   
   if (nextActiveThreads > c.reg.size()) {

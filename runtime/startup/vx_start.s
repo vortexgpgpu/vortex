@@ -20,7 +20,7 @@ _start:
     # Initialize SP
     # la sp, __stack_top
     la a1, vx_set_sp
-    li a0, 4
+    li a0, 32
     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
     jal vx_set_sp
     li a0, 1
@@ -46,7 +46,7 @@ _start:
 .type vx_set_sp, @function
 .global vx_set_sp
 vx_set_sp:
-      li a0, 4
+      li a0, 32
       .word 0x0005006b    # tmc 4
       
       .option push

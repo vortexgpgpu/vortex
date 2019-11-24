@@ -19,4 +19,5 @@ vx_vec_test:
     vsw.v v2, (a3)           # Store result
       add a3, a3, t0         # Bump pointer
       bnez a0, loop         # Loop back 
+    vmacc.vv v1, v2, v2
     ret                    # Finished
