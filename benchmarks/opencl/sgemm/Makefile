@@ -63,4 +63,4 @@ gdb-c: $(PROJECT).qemu
 	$(GDB) $(PROJECT).qemu
 
 clean:
-	rm -rf *.elf *.dump *.hex *.a *.pocl *.qemu
+	rm -rf *.elf *.dump *.hex
