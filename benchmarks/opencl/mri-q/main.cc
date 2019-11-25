@@ -73,16 +73,18 @@ main (int argc, char *argv[]) {
 
   /* Read command line */
   params = pb_ReadParameters(&argc, argv);
-  /*if ((params->inpFiles[0] == NULL) || (params->inpFiles[1] != NULL))
-    {
-      fprintf(stderr, "Expecting one input filename\n");
-      exit(-1);
-    }*/
+  
   params->inpFiles = (char **)malloc(sizeof(char *) * 2);
   params->inpFiles[0] = (char *)malloc(100);
   params->inpFiles[1] = NULL;
   strncpy(params->inpFiles[0], "32_32_32_dataset.bin", 100);
-  
+
+  if ((params->inpFiles[0] == NULL) || (params->inpFiles[1] != NULL))
+    {
+      fprintf(stderr, "Expecting one input filename\n");
+      exit(-1);
+    }
+    
   /* Read in data */
   pb_SwitchToTimer(&timers, pb_TimerID_IO);
   inputData(params->inpFiles[0],
