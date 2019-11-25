@@ -313,7 +313,7 @@ int main(int argc, const char **argv)
 
     // Ethan - Kernel Addition
     cl_program program =
-      clCreateProgramWithBuiltInKernels(context, 1, &device_id, "sgemm", NULL);
+      clCreateProgramWithBuiltInKernels(context, 1, &device_id, "VectorHypot", NULL);
     if (program == NULL) {
         std::cerr << "Failed to write program binary" << std::endl;
         Cleanup(context, queue, program, kernel, memObjects);
@@ -323,9 +323,9 @@ int main(int argc, const char **argv)
     }
 
     // Create the kernel
-    ckKernel[0] = clCreateKernel(cpProgram, "VectorHypot", &ciErrNum);
+    ckKernel[0] = clCreateKernel(cl_Program, "VectorHypot", &ciErrNum);
     //oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
-    ckKernel[1] = clCreateKernel(cpProgram, "VectorHypot", &ciErrNum);
+    ckKernel[1] = clCreateKernel(cl_Program, "VectorHypot", &ciErrNum);
     //oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
     shrLog("clCreateKernel (ckKernel[2])...\n"); 
 
