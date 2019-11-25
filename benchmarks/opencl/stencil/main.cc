@@ -187,9 +187,9 @@ int main(int argc, char** argv) {
 	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
   //size_t grid[3] = {nx-2,ny-2,nz-2};
   size_t offset[3] = {1,1,1};
-  printf("block size in x/y/z = %d %d %d\n",block[0],block[1],block[2]);
   printf("grid size in x/y/z = %d %d %d\n",grid[0],grid[1],grid[2]);
-
+	printf("block size in x/y/z = %d %d %d\n",block[0],block[1],block[2]);
+  
   printf ("blocks = %d\n", (grid[0]/block[0])*(grid[1]/block[1])*(grid[2]*block[2]));
 
 	clStatus = clSetKernelArg(clKernel,0,sizeof(float),(void*)&c0);
@@ -204,10 +204,14 @@ int main(int argc, char** argv) {
 	//main execution
 	pb_SwitchToTimer(&timers, pb_TimerID_KERNEL);
 
+	printf("OK+0\n");
+
 	int t;
 	for(t=0;t<iteration;t++)
 	{
 		clStatus = clEnqueueNDRangeKernel(clCommandQueue,clKernel,3,NULL,grid,block,0,NULL,NULL);
+		printf("OK+0\n");
+		
     //printf("iteration %d\n",t)
 		CHECK_ERROR("clEnqueueNDRangeKernel")
     
@@ -217,6 +221,8 @@ int main(int argc, char** argv) {
     clStatus = clSetKernelArg(clKernel,2,sizeof(cl_mem),(void*)&d_A0);
     clStatus = clSetKernelArg(clKernel,3,sizeof(cl_mem),(void*)&d_Anext);
 	}
+
+  printf("OK+1\n");
 
   cl_mem d_temp = d_A0;
   d_A0 = d_Anext;
@@ -233,6 +239,8 @@ int main(int argc, char** argv) {
 	clStatus = clReleaseCommandQueue(clCommandQueue);
 	clStatus = clReleaseContext(clContext);
 	CHECK_ERROR("clReleaseContext")
+
+	printf("OK+2\n");
  
 	if (parameters->outFile) {
 		pb_SwitchToTimer(&timers, pb_TimerID_IO);
