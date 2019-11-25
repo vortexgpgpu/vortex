@@ -31,7 +31,7 @@ int main()
     for (int i = 0; i < (m * n); ++i) d1[i] = 0;
 
 
-#if 0
+#if 1
     printf("sgemm_nn\na[%d]:", m*k);
     for (int i = 0; i < m*k; ++i) {
         if(!(i % k)) printf("\n");
@@ -49,18 +49,18 @@ int main()
     int ldc = 4; //64;
     int vsize = 4;
 
-  for (int r = 0; r < k; r++) {
-       for (int c = 0; c < m; c++) {
-           for (int i = 0; i < n;) {
+  for (int r = 0; r < m; r++) {
+       for (int c = 0; c < n; c++) {
+           for (int i = 0; i < k;) {
 //               d1[r*k+i] += a1[r*k+c]*b1[i*n+c];
-                 vx_vec_sgemm_nn(i, c, r, a1, b1, c1, ldc, vsize);
+                 vx_vec_sgemm_nn(i, r, c, a1, b1, c1, ldc, vsize);
                  i = i + vsize;
            }
        }
     }
 //    vx_vec_sgemm_nn(n, a1, b1, c1);
 
-#if 1 
+#if 1
     printf("\n\nc[%d]:", m*n);
     for (int i = 0; i < m*n; ++i) {
         if (!(i % n)) printf("\n");
@@ -68,15 +68,17 @@ int main()
     }
 #endif
 
-   for (int r = 0; r < k; r++) {
-       for (int c = 0; c < m; c++) {
-           for (int i = 0; i < n; i++) {
-               d1[r*k+i] += a1[r*k+c]*b1[i*n+c];
+   for (int r = 0; r < m; r++) {
+       for (int c = 0; c < n; c++) {
+           for (int i = 0; i < k; i++) {
+               d1[c*ldc+i] += a1[c*ldc+r]*b1[i + (r*ldc)];
+               //printf("d[%d] += a[%d]*b[%d]\n", c*ldc+i, c*ldc+r , i + (r*ldc));
+               //printf("%d %d %d\n", d1[c*ldc+i] , a1[c*ldc+r] , b1[i + (r*ldc)]);
            }
        }
     }
 
-#if 0
+#if 1
    printf("\n\nc[%d]:\n", m*n);
    for(int i = 0; i < m; ++i) {
       for(int j = 0; j < n; ++j) {

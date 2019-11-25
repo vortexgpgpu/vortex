@@ -285,8 +285,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
           inst.setVlsWidth((code>>shift_func3)  & func3_mask);
           inst.setSrcReg((code>>shift_rs2)   & reg_mask);
           inst.setVmask((code>>shift_vmask));
-          inst.setVmop((code>>shift_vmop) && func3_mask);
-          inst.setVnf((code>>shift_vnf) && func3_mask);
+          inst.setVmop((code>>shift_vmop) & func3_mask);
+          inst.setVnf((code>>shift_vnf) & func3_mask);
 
           trace_inst->valid_inst = true;
           trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
@@ -300,8 +300,8 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
           inst.setVlsWidth((code>>shift_func3)  & func3_mask);
           inst.setSrcReg((code>>shift_rs2)   & reg_mask);
           inst.setVmask((code>>shift_vmask));
-          inst.setVmop((code>>shift_vmop) && func3_mask);
-          inst.setVnf((code>>shift_vnf) && func3_mask);
+          inst.setVmop((code>>shift_vmop) & func3_mask);
+          inst.setVnf((code>>shift_vnf) & func3_mask);
 
           trace_inst->valid_inst = true;
           trace_inst->rs1        = ((code>>shift_rs1)   & reg_mask);
