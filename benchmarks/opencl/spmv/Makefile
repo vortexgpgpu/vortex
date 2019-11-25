@@ -26,25 +26,29 @@ CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32
 CXXFLAGS += -ffreestanding # program may not begin at main()
 CXXFLAGS += -Wl,--gc-sections # enable garbage collection of unused input sections
 CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
-CXXFLAGS += -I$(POCL_INC_PATH)
+CXXFLAGS += -I$(POCL_INC_PATH) -I.
 
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/qemu/libOpenCL.a
 
-PROJECT = sgemm
+PROJECT = spmv
 
-SRCS = main.cc
+SRCS = main.cc parboil_opencl.c args.c gpu_info.c file.c convert_dataset.c mmio.c ocl.c
+#stub.cc
 
 all: $(PROJECT).dump $(PROJECT).hex
+
+#parboil_opencl.o : parboil_opencl.c
+#	$(CC) $(CXXFLAGS) -c $^ -o $@
 
 lib$(PROJECT).a: kernel.cl
 	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
 
 $(PROJECT).elf: $(SRCS) lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS)  $(SRCS) $(VX_LIBS) -o $(PROJECT).elf
+	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS) $(SRCS) $(VX_LIBS) -o $(PROJECT).elf
 
 $(PROJECT).qemu: $(SRCS) lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS)  $(SRCS) $(QEMU_LIBS) -o $(PROJECT).qemu
+	$(CXX) $(CXXFLAGS) $(SRCS) $(QEMU_LIBS) -o $(PROJECT).qemu
 
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
