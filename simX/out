@@ -1,0 +1,2 @@
+verilator --compiler gcc -cc cache_simX.v -I. -I../rtl/shared_memory -I../rtl/cache -I../rtl/interfaces -Isimulate -I../rtl --exe simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp  -CFLAGS '-std=c++11 -fPIC -O3' -Wno-UNOPTFLAT -Wno-WIDTH --trace -DVL_DEBUG=1 
+Makefile:26: recipe for target 'simX' failed

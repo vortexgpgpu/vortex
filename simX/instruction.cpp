@@ -2406,8 +2406,8 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         // cout << "After for loop" << endl;
       break;
       default:
-        cout << "pc: " << hex << (c.pc-4) << "\n";
-        cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;
+        D(3, "pc: " << hex << (c.pc-4));
+        D(3, "aERROR: Unsupported instruction: " << *this);
         exit(1);
     }
 
