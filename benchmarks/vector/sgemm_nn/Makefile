@@ -16,7 +16,7 @@ VX_IO   = $(LIB_PATH)/io/vx_io.s $(LIB_PATH)/io/vx_io.c
 VX_API  = $(LIB_PATH)/vx_api/vx_api.c
 VX_TEST = $(LIB_PATH)/tests/tests.c
 VX_FIO  = $(LIB_PATH)/fileio/fileio.s
-VX_VEC  = vx_vec_sgemm_nn.s       #float --> int
+VX_VEC  = test_asm.s #vx_vec_sgemm_nn_backup.s       #float --> int
 LIBS    = /nethome/ekim79/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a /nethome/ekim79/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_vec_sgemm_nn

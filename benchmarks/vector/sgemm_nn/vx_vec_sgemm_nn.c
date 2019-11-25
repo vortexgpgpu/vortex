@@ -16,9 +16,9 @@ int main()
 {
     vx_tmc(1);
 
-    int m = 3;
-    int k = 3;
-    int n = 3;
+    int m = 4;
+    int k = 4;
+    int n = 4;
 
     int* a1 = (int*)malloc(sizeof(int) * m * k);
     int* b1 = (int*)malloc(sizeof(int) * k * n);
@@ -31,7 +31,7 @@ int main()
     for (int i = 0; i < (m * n); ++i) d1[i] = 0;
 
 
-#if 1
+#if 0
     printf("sgemm_nn\na[%d]:", m*k);
     for (int i = 0; i < m*k; ++i) {
         if(!(i % k)) printf("\n");
@@ -44,11 +44,24 @@ int main()
     }
 #endif
 
-    vx_vec_sgemm_nn(n, m, k, a1, b1, c1);
+    int lda = 4;
+    int ldb = 4;
+    int ldc = 4; //64;
+    int vsize = 4;
+
+  for (int r = 0; r < k; r++) {
+       for (int c = 0; c < m; c++) {
+           for (int i = 0; i < n;) {
+//               d1[r*k+i] += a1[r*k+c]*b1[i*n+c];
+                 vx_vec_sgemm_nn(i, c, r, a1, b1, c1, ldc, vsize);
+                 i = i + vsize;
+           }
+       }
+    }
 //    vx_vec_sgemm_nn(n, a1, b1, c1);
 
 #if 1 
-    printf("\n\nc[%d]:\n", m*n);
+    printf("\n\nc[%d]:", m*n);
     for (int i = 0; i < m*n; ++i) {
         if (!(i % n)) printf("\n");
         printf("%d ", c1[i]);
@@ -63,11 +76,11 @@ int main()
        }
     }
 
-#if 1
+#if 0
    printf("\n\nc[%d]:\n", m*n);
    for(int i = 0; i < m; ++i) {
       for(int j = 0; j < n; ++j) {
-          printf("%d ", c1[i*m+j]);
+          printf("%d ", d1[i*m+j]);
       }
       printf("\n");
     }
