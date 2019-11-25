@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   printf("Original version by Li-Wen Chang <lchang20@illinois.edu> and "
          "Shengzhao Wu<wu14@illinois.edu>\n");
   printf("This version maintained by Chris Rodrigues  ***********\n");
-  // parameters = pb_ReadParameters(&argc, argv);
+  parameters = pb_ReadParameters(&argc, argv);
   parameters->inpFiles = (char **)malloc(sizeof(char *) * 3);
   parameters->inpFiles[0] = (char *)malloc(100);
   parameters->inpFiles[1] = (char *)malloc(100);

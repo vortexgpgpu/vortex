@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
 	printf("OpenCL accelerated 7 points stencil codes****\n");
 	printf("Author: Li-Wen Chang <lchang20@illinois.edu>\n");
 
-	//parameters = pb_ReadParameters(&argc, argv);
+	parameters = pb_ReadParameters(&argc, argv);
 
 	/*parameters->inpFiles = (char **)malloc(sizeof(char *) * 2);
   parameters->inpFiles[0] = (char *)malloc(100);
