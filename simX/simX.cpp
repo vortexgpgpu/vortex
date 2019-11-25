@@ -104,7 +104,7 @@ int emu_main(int argc, char **argv) {
     // mu.attach(console, 0xf0000000);
 
     // core.w[0].pc = 0x8000007c; // If I want to start at a specific location
-    std::cout << "ABOUT TO START\n";
+    // std::cout << "ABOUT TO START\n";
     // bool count_down = false;
     // int cycles_left;
     // while (!count_down || (count_down && (cycles_left == 0)))

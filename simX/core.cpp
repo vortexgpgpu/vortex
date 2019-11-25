@@ -413,7 +413,7 @@ void Core::fetch()
               w[schedule_w].step(&inst_in_fetch);
               D(3, "Now " << w[schedule_w].activeThreads << " active threads in " << schedule_w << flush);
             
-              // this->getCacheDelays(&inst_in_fetch);
+              this->getCacheDelays(&inst_in_fetch);
               D(3, "Got cache delays" << flush);
               if (inst_in_fetch.stall_warp)
               {
@@ -697,15 +697,15 @@ bool Core::running() const {
 }
 
 void Core::printStats() const {
-  unsigned long insts = 0;
-  for (unsigned i = 0; i < w.size(); ++i)
-    insts += w[i].insts;
+  // unsigned long insts = 0;
+  // for (unsigned i = 0; i < w.size(); ++i)
+  //   insts += w[i].insts;
 
-  cerr << "Total steps: " << steps << endl;
-  for (unsigned i = 0; i < w.size(); ++i) {
-    // cout << "=== Warp " << i << " ===" << endl;
-    w[i].printStats();
-  }
+  // cerr << "Total steps: " << steps << endl;
+  // for (unsigned i = 0; i < w.size(); ++i) {
+  //   // cout << "=== Warp " << i << " ===" << endl;
+  //   w[i].printStats();
+  // }
 }
 
 Warp::Warp(Core *c, Word id) : 
@@ -836,13 +836,13 @@ bool Warp::interrupt(Word r0) {
 }
 
 void Warp::printStats() const {
-  cout << "Steps : " << steps << endl
-       << "Insts : " << insts << endl
-       << "Loads : " << loads << endl
-       << "Stores: " << stores << endl;
+  // cout << "Steps : " << steps << endl
+  //      << "Insts : " << insts << endl
+  //      << "Loads : " << loads << endl
+  //      << "Stores: " << stores << endl;
 
   unsigned const grade = reg[0][28];
 
-  if (grade == 1) cout << "GRADE: PASSED\n";
-  else              cout << "GRADE: FAILED "  << (grade >> 1) << "\n";
+  // if (grade == 1) cout << "GRADE: PASSED\n";
+  // else              cout << "GRADE: FAILED "  << (grade >> 1) << "\n";
 }

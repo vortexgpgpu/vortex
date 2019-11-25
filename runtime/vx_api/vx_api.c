@@ -1,14 +1,15 @@
 
+#pragma once
+
 #include "../intrinsics/vx_intrinsics.h"
 #include "vx_api.h"
 #include <inttypes.h>
 
+#include "../config.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define TOTAL_WARPS 2
-#define TOTAL_THREADS 16
 
 func_t global_function_pointer;
 // void (func_t)(void *)
@@ -105,7 +106,7 @@ void pocl_spawn(struct context_t * ctx, const void * pfn, void * arguments)
 	{
 		pocl_threads = TOTAL_THREADS;
 		global_x     = ctx->num_groups[0] / TOTAL_THREADS;
-		printf("pocl_threads: %d\n", pocl_threads);
+		// printf("pocl_threads: %d\n", pocl_threads);
 		// printf("global_x: %d\n", global_x);
 	}
 	else
@@ -149,8 +150,17 @@ void pocl_spawn(struct context_t * ctx, const void * pfn, void * arguments)
 	unsigned end_inst   = vx_getInst();
 
 
-	printf("pocl_spawn: Total Cycles: %d\n", (end_cycles - starting_cycles));
-	printf("pocl_spawn: Total Inst  : %d\n", (end_inst   - starting_inst  ));
+	unsigned total_cycles = (unsigned) (end_cycles - starting_cycles);
+	// float total_inst   = (float) (end_inst   - starting_inst  );
+
+	// float ipc = total_inst/total_cycles;
+
+	printf("%d\n", total_cycles);
+
+	vx_tmc(0);
+
+	// printf("pocl_spawn: Total Cycles: %d\n", );
+	// printf("pocl_spawn: Total Inst  : %d\n", (end_inst   - starting_inst  ));
 
  //   int z;
  //   int y;
