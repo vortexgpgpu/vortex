@@ -31,7 +31,8 @@ CXXFLAGS += -I$(POCL_INC_PATH)
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/qemu/libOpenCL.a
 
-PROJECT=kmeans
+PROJECT = kmeans
+SRCS = main.cc read_input.c rmse.c cluster.c kmeans_clustering.c
 
 all: $(PROJECT).dump $(PROJECT).hex
 
@@ -50,11 +51,11 @@ read_input.o: read_input.c
 rmse.o: rmse.c
 	$(CC) $(CXXFLAGS) -c rmse.c
 
-$(PROJECT).elf: main.cc lib$(PROJECT).a read_input.o rmse.o cluster.o kmeans_clustering.o
-	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS) main.cc read_input.o rmse.o cluster.o kmeans_clustering.o $(VX_LIBS) -o $(PROJECT).elf
+$(PROJECT).elf: $(SRCS) lib$(PROJECT).a 
+	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS) $(SRCS) $(VX_LIBS) -o $(PROJECT).elf
 
-$(PROJECT).qemu: main.cc lib$(PROJECT).a read_input.o rmse.o cluster.o kmeans_clustering.o
-	$(CXX) $(CXXFLAGS) main.cc read_input.o rmse.o cluster.o kmeans_clustering.o $(QEMU_LIBS) -o $(PROJECT).qemu
+$(PROJECT).qemu: $(SRCS) lib$(PROJECT).a
+	$(CXX) $(CXXFLAGS) $(SRCS) $(QEMU_LIBS) -o $(PROJECT).qemu
 
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
@@ -75,4 +76,4 @@ gdb-c: $(PROJECT).qemu
 	$(GDB) $(PROJECT).qemu
 
 clean:
-	rm -rf *.o *.elf *.dump *.hex *.a *.pocl *.qemu
+	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug

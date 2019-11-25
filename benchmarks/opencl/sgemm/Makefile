@@ -31,18 +31,20 @@ CXXFLAGS += -I$(POCL_INC_PATH)
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/qemu/libOpenCL.a
 
-PROJECT=sgemm
+PROJECT = sgemm
+
+ SRCS = main.cc
 
 all: $(PROJECT).dump $(PROJECT).hex
 
 lib$(PROJECT).a: kernel.cl
 	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
 
-$(PROJECT).elf: main.cc lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS) main.cc $(VX_LIBS) -o $(PROJECT).elf
+$(PROJECT).elf: $(SRCS) lib$(PROJECT).a
+	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS)  $(SRCS) $(VX_LIBS) -o $(PROJECT).elf
 
-$(PROJECT).qemu: main.cc lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) main.cc $(QEMU_LIBS) -o $(PROJECT).qemu
+$(PROJECT).qemu: $(SRCS) lib$(PROJECT).a
+	$(CXX) $(CXXFLAGS)  $(SRCS) $(QEMU_LIBS) -o $(PROJECT).qemu
 
 $(PROJECT).hex: $(PROJECT).elf
 	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
@@ -63,4 +65,4 @@ gdb-c: $(PROJECT).qemu
 	$(GDB) $(PROJECT).qemu
 
 clean:
-	rm -rf *.elf *.dump *.hex
+	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug

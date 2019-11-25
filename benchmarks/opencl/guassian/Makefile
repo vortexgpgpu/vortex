@@ -31,9 +31,9 @@ CXXFLAGS += -I$(POCL_INC_PATH)
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/qemu/libOpenCL.a
 
-PROJECT = vecadd
+PROJECT = gaussian
 
-SRCS = main.cc
+SRCS = main.cc clutils.cpp utils.cpp
 
 all: $(PROJECT).dump $(PROJECT).hex
 
