@@ -292,28 +292,28 @@ int main(int argc, const char **argv)
     shrLog("oclLoadProgSource (%s)...\n", cSourceFile); 
 
     // Create the program object
-    cpProgram = clCreateProgramWithSource(cxGPUContext, 1, (const char **)&cSourceCL, &szKernelLength, &ciErrNum);
+    //cpProgram = clCreateProgramWithSource(cxGPUContext, 1, (const char **)&cSourceCL, &szKernelLength, &ciErrNum);
     //oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
     shrLog("clCreateProgramWithSource...\n"); 
-
+    cl_program program =
+      clCreateProgramWithBuiltInKernels(context, 1, &device_id, "VectorHypot", NULL);
     // Build the program for the target device
     clFinish(cqCommandQueue[0]);
     shrDeltaT(0);
-    ciErrNum = clBuildProgram(cpProgram, uiNumDevsUsed, &cdDevices[uiTargetDevice], "-cl-fast-relaxed-math", NULL, NULL);
+    ciErrNum = clBuildProgram(program, uiNumDevsUsed, &cdDevices[uiTargetDevice], "-cl-fast-relaxed-math", NULL, NULL);
     shrLog("clBuildProgram..."); 
     if (ciErrNum != CL_SUCCESS)
     {
         // write out standard error, Build Log and PTX, then cleanup and exit
         shrLogEx(LOGBOTH | ERRORMSG, (double)ciErrNum, STDERROR);
-        oclLogBuildInfo(cpProgram, oclGetFirstDev(cxGPUContext));
-        oclLogPtx(cpProgram, oclGetFirstDev(cxGPUContext), "VectorHypot.ptx");
+        oclLogBuildInfo(program, oclGetFirstDev(cxGPUContext));
+        oclLogPtx(program, oclGetFirstDev(cxGPUContext), "VectorHypot.ptx");
         Cleanup(EXIT_FAILURE);
     }
     dBuildTime = shrDeltaT(0);
 
     // Ethan - Kernel Addition
-    cl_program program =
-      clCreateProgramWithBuiltInKernels(context, 1, &device_id, "VectorHypot", NULL);
+
     if (program == NULL) {
         std::cerr << "Failed to write program binary" << std::endl;
         Cleanup(context, queue, program, kernel, memObjects);
@@ -323,9 +323,9 @@ int main(int argc, const char **argv)
     }
 
     // Create the kernel
-    ckKernel[0] = clCreateKernel(cl_Program, "VectorHypot", &ciErrNum);
+    ckKernel[0] = clCreateKernel(program, "VectorHypot", &ciErrNum);
     //oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
-    ckKernel[1] = clCreateKernel(cl_Program, "VectorHypot", &ciErrNum);
+    ckKernel[1] = clCreateKernel(program, "VectorHypot", &ciErrNum);
     //oclCheckErrorEX(ciErrNum, CL_SUCCESS, pCleanup);
     shrLog("clCreateKernel (ckKernel[2])...\n"); 
 
@@ -652,7 +652,7 @@ void Cleanup (int iExitCode)
     if(Golden)free(Golden);
     if(ckKernel[0])clReleaseKernel(ckKernel[0]);
     if(ckKernel[1])clReleaseKernel(ckKernel[1]);
-    if(cpProgram)clReleaseProgram(cpProgram);
+    if(program)clReleaseProgram(program);
     if(fSourceA)clEnqueueUnmapMemObject(cqCommandQueue[0], cmPinnedSrcA, (void*)fSourceA, 0, NULL, NULL);
     if(fSourceB)clEnqueueUnmapMemObject(cqCommandQueue[0], cmPinnedSrcB, (void*)fSourceB, 0, NULL, NULL);
     if(fResult)clEnqueueUnmapMemObject(cqCommandQueue[0], cmPinnedResult, (void*)fResult, 0, NULL, NULL);
