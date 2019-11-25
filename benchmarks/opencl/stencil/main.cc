@@ -93,8 +93,8 @@ int main(int argc, char** argv) {
 
 		nx = 64;
 		ny = 64;
-		nz = 4;
-		iteration = 2;
+		nz = 8;
+		iteration = 1;
 	
   cl_int clStatus;
   cl_context clContext;
@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
 	printf("OK+\n");
 
 	//only use 1D thread block
-  int tx = 256;
+  int tx = 128;
 	size_t block[3] = {tx,1,1};
 	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
   //size_t grid[3] = {nx-2,ny-2,nz-2};
@@ -211,7 +211,7 @@ int main(int argc, char** argv) {
 	{
 		clStatus = clEnqueueNDRangeKernel(clCommandQueue,clKernel,3,NULL,grid,block,0,NULL,NULL);
 		printf("OK+0\n");
-		
+
     //printf("iteration %d\n",t)
 		CHECK_ERROR("clEnqueueNDRangeKernel")
     
