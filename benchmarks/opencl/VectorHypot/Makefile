@@ -35,7 +35,7 @@ PROJECT=VectorHypot
 
 all: $(PROJECT).dump $(PROJECT).hex
 
-lib$(PROJECT).a: kernel.cl
+lib$(PROJECT).a: VectorHypot.cl
 	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
 
 $(PROJECT).elf: main.cc lib$(PROJECT).a
