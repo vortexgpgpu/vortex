@@ -7,7 +7,7 @@ int main()
 {
     vx_tmc(1);
 
-    int n = 5;
+    int n = 65536;
     int scalar = 10;
 
     int *a = (int*)malloc(sizeof(int) * n); //{1, 1, 1, 1, 1};
@@ -80,12 +80,6 @@ int main()
         if(a[i] != b[i]) 
         {
            printf("\n<memcpy> failed at <index: %d>! \n", i);
-<<<<<<< HEAD
-           return;   
-        }
-    }
-    printf("\nPASSED.......................... <memcpy> \n");
-=======
            return 1;   
         }
     }
@@ -100,7 +94,7 @@ int main()
    #   size_t i;
    #   for (i=0; i<n; i++) y[i] = a * x[i] + y[i];
    # } */
-    for (int i = 0; i < n; ++i) { a[i] = 1; b[i] = 2; c[i] = 2;}
+    for (int i = 0; i < n; ++i) { a[i] = 4; b[i] = 2; c[i] = 2;}
 
     printf("saxpy\na[%d]: ", n);
     for(int i = 0; i < n; ++i) printf("%d \n", a[i]);
@@ -119,11 +113,6 @@ int main()
         if(b[i] != ((a[i] * scalar) + c[i])) 
         {
            printf("\n<saxpy> failed at <index: %d>! \n", i);
-           return;   
-        }
-    }
-    printf("\nPASSED.......................... <saxpy> \n");
-
            return 1;   
         }
     }
