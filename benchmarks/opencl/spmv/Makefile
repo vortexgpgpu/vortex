@@ -34,12 +34,8 @@ QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LI
 PROJECT = spmv
 
 SRCS = main.cc parboil_opencl.c args.c gpu_info.c file.c convert_dataset.c mmio.c ocl.c
-#stub.cc
 
 all: $(PROJECT).dump $(PROJECT).hex
-
-#parboil_opencl.o : parboil_opencl.c
-#	$(CC) $(CXXFLAGS) -c $^ -o $@
 
 lib$(PROJECT).a: kernel.cl
 	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
