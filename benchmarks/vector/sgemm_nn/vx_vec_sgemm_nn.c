@@ -53,8 +53,6 @@ int main()
        for (int i = 0; i < w; i=+4) {
            for (int m = 0; m < d; m++) {
                  vx_vec_sgemm_nn(i, m, n, a1, b1, c1, ldc, vsize);
-                //d1[i+n*ldc] += a1[m+n*ldc]*b1[m*ldc+i];
-                 vx_vec_sgemm_nn(i, r, c, a1, b1, c1, ldc, vsize);
                  i = i + vsize;
            }
        }
@@ -77,10 +75,10 @@ int main()
     }
 
 #if 1
-   printf("\n\nc[%d]:\n", m*n);
-   for(int i = 0; i < m; ++i) {
-      for(int j = 0; j < n; ++j) {
-          printf("%d ", d1[i*m+j]);
+   printf("\n\nc[%d]:\n", w*d);
+   for(int i = 0; i < w; ++i) {
+      for(int j = 0; j < d; ++j) {
+          printf("%d ", d1[i*w+j]);
       }
       printf("\n");
     }
