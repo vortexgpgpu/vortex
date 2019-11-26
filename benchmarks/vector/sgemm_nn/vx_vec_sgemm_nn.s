@@ -10,33 +10,33 @@
 #           }
 #       }
 #    } 
-# a0 = i, a1 = m, a2 = n,  a3 = a, a4 = b, a5 = c, a6 = ldc, a7 = vsize
-#
+# a3 = a, a4 = b, a5 = c
+# a0 = i, a1 = m, a2 = n
+# a6 = ldc
 vx_vec_sgemm_nn:
-    vsetvli t0, a7, e32 # <--- vsize 
-    mul x11, a6, a2  # n*ldc
-    add x12, x11, a1  # i + (n*ldc)
-    slli x12, x12, 2 
-    add a3, x12, a3  # a[i+ n*ldc]
-    lw x13, (a3)
+    vsetvli t0, a7, e32
+     mul t1, a6, a2  # n*ldc
+     add t2, t1, a1  # i + (n*ldc)
+     slli t2, t2, 2
+     add a3, t2, a3  # a[i+ n*ldc]
+     lw t3, (a3)
 
-    mul x14, a1, a6  # m*ldc
-    add x15, a0, x14  # i + m*ldc
-    slli x15, x15, 2
-    add a4, x15, a4  # b[i + m*ldc]
-    vlw.v v0, (a4)
-    vmul.vx v2, v1, x13
-##   lw x6, (a4)
-##   lw x10, (a4)  # b
-##   mul x11, x3, x10
+     mul t4, a1, a6  # m*ldc
+     add t5, a0, t4  # i + m*ldc
+     slli t5, t5, 2
+     add a4, t5, a4  # b[i + m*ldc]
+ #   lw x6, (a4)
 
-    mul x6, a2, a6  # n*ldc
-    add x7, a0, x6  # i + n*ldc
-    add a5, x7, a5  # c[i + m*ldc]
-    vlw.v v3, (a5) # c
-    vadd.vv v3, v3, v2
-    vsw.v v3, (a5)
-##   lw x12, (a5)
-##   add x12, x12, x11
-##   sw x12, (a5)    
+     vlw.v v0, (a4)
+     vmul.vx v1, v0, t3
+ 
+     mul t6, a2, a6  # n*ldc
+     add t0, a0, t6  # i + n*ldc
+     slli t0, t0, 2
+     add a5, t0, a5  # c[i + m*ldc]
+
+     vlw.v v2, (a5) #c
+     vadd.vv v2, v2, v1
+     vsw.v v2, (a5)
+
     ret

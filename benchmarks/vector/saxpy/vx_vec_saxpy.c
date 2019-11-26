@@ -16,7 +16,7 @@ int main()
 {
     vx_tmc(1);
 
-    int n = 4; //#define NUM_DATA 65536
+    int n = 64; //#define NUM_DATA 65536
 
     int *a = (int*)malloc(sizeof(int) * n); 
     int *b = (int*)malloc(sizeof(int) * n); 
@@ -39,9 +39,18 @@ int main()
 //    for(int i = 0; i < n; ++i) printf("%d \n", b[i]);
 #endif
 
+    int startCycles = vx_getCycles();
+    int startInst = vx_getInst();
     vx_vec_saxpy(n, factor, a, b);
+    int endCycles = vx_getCycles();
+    int endInst = vx_getInst();
 
-#if 1
+    int totalInst = (endInst - startInst);
+    int totalCycles = (endCycles - startCycles);
+
+    printf("\nCycles = %d, Instructions = %d", totalCycles, totalInst);
+
+#if 0
     printf("\nsaxpy\na[%d]: ", n);
     for(int i = 0; i < n; ++i) printf("%d ", a[i]);
     printf("\n\nb[%d]: ", n);

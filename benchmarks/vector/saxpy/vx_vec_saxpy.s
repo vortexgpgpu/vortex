@@ -10,8 +10,8 @@
 #     a2      a
 #     a3      b
 vx_vec_saxpy:
-    vsetvli a4, a0, e32
 loop:
+    vsetvli a4, a0, e32
     vlw.v v0, (a2)
     sub a0, a0, a4
     slli a4, a4, 2

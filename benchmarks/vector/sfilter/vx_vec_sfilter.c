@@ -35,12 +35,21 @@ int main()
         c[i] = 0;
     }
 
-    int N = 32;
+    int N = 4;
+    int startCycles = vx_getCycles();
+    int startInst = vx_getInst();
     for(int y = 1; y < (NUM_DATA-1); y++){
         for(int x = 1; x < (NUM_DATA-1); x = x+N) {
             vx_vec_sfilter(a, b, ldc, m, x, y, N);
         }
     }
+    int endCycles = vx_getCycles();
+    int endInst = vx_getInst();
+
+    int totalInst = (endInst - startInst);
+    int totalCycles = (endCycles - startCycles);
+
+    printf("\nCycles = %d, Instructions = %d", totalCycles, totalInst);
     
 
     for(int y = 1; y < (NUM_DATA-1); ++y) 
