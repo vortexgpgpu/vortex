@@ -15,4 +15,4 @@ Vortex currently supported RISC-V RV32I ISA
 
 /SimX contains a cycle-approximate simulator for Vortex.
 
-/rtl is verilog for the processor. Currently supports RV32IM and passes all tests.
+/rtl constains Vortex processor hardware description.
