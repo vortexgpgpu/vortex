@@ -3,13 +3,16 @@
 
 # Vortex RISC-V GPGPU
 
-Vortex currently supported RV32IM.
+Vortex currently supported RISC-V RV32I ISA
 
-./Kernel is a demo of exposing the warps and threads to a program. (Stable)
+/benchmarks containts test benchmarks
 
+/docs contains documentation.
 
-./emulator is an emulator for RV32IM with warp and thread support. (Stable)
+/runtime contains the runtime software support for Vortex.
 
+/emulator contains a software emulator for Vortex.
 
-./rtl is verilog for the processor. Currently supports RV32IM and passes all tests.
+/SimX contains a cycle-approximate simulator for Vortex.
 
+/rtl is verilog for the processor. Currently supports RV32IM and passes all tests.
