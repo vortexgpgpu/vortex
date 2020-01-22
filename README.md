@@ -70,7 +70,7 @@ Build LLVM for RiscV
     $ export LLVM_RISCV_PATH=$PWD/../drops_riscv
     $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_SHARED_LIBS=True -DLLVM_USE_SPLIT_DWARF=True -DCMAKE_INSTALL_PREFIX=$LLVM_RISCV_PATH -DLLVM_OPTIMIZED_TABLEGEN=True -DLLVM_BUILD_TESTS=True -DDEFAULT_SYSROOT=$RISC_GNU_TOOLS_PATH/riscv32-unknown-elf -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" -DLLVM_TARGETS_TO_BUILD="RISCV" ..
     $ cmake --build . --target install
-    $ cp -rf $LLVM_PATH $RISC_GNU_TOOLS_PATH
+    $ cp -rf $LLVM_RISCV_PATH $RISC_GNU_TOOLS_PATH
 
 Build pocl for RISCV
 
