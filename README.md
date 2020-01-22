@@ -64,7 +64,7 @@ Build LLVM for RiscV
 
     $ git clone -b release_90 https://github.com/llvm-mirror/llvm.git llvm
     $ git clone -b release_90 https://github.com/llvm-mirror/clang.git llvm/tools/clang
-    $ cd llvm_riscv
+    $ cd llvm
     $ mkdir build
     $ cd build
     $ export LLVM_RISCV_PATH=$PWD/../drops_riscv
