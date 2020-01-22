@@ -56,3 +56,30 @@ Run SGEMM OpenCL Benchmark
     $ cd Vortex/benchmarks/opencl/sgemm
     $ make
     $ make run
+
+Basic Instructions to build the OpenCL Compiler for Vortex
+----------------------------------------------------------
+
+Build LLVM for RiscV
+
+    $ git clone -b release_90 https://github.com/llvm-mirror/llvm.git llvm
+    $ git clone -b release_90 https://github.com/llvm-mirror/clang.git llvm/tools/clang
+    $ cd llvm_riscv
+    $ mkdir build
+    $ cd build
+    $ export LLVM_RISCV_PATH=$PWD/../drops_riscv
+    $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_SHARED_LIBS=True -DLLVM_USE_SPLIT_DWARF=True -DCMAKE_INSTALL_PREFIX=$LLVM_RISCV_PATH -DLLVM_OPTIMIZED_TABLEGEN=True -DLLVM_BUILD_TESTS=True -DDEFAULT_SYSROOT=$RISC_GNU_TOOLS_PATH/riscv32-unknown-elf -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" -DLLVM_TARGETS_TO_BUILD="RISCV" ..
+    $ cmake --build . --target install
+    $ cp -rf $LLVM_PATH $RISC_GNU_TOOLS_PATH
+
+Build pocl for RISCV
+
+    $ git clone https://github.com/pocl/pocl.git
+    $ cd pocl
+    $ mkdir build
+    $ cd build 
+    $ export POCL_CC_PATH=$PWD/../drops_riscv_cc
+    $ export POCL_RT_PATH=$PWD/../drops_riscv_rt
+    $ cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$POCL_CC_PATH -DCMAKE_BUILD_TYPE=Debug -DWITH_LLVM_CONFIG=$RISC_GNU_TOOLS_PATH/bin/llvm-config -DLLC_HOST_CPU= -DNEWLIB_BSP=ON -DNEWLIB_DEVICE_ADDRESS_BIT=32 -DBUILD_TESTS=OFF -DPOCL_DEBUG_MESSAGES=ON ..
+    $ cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$POCL_RT_PATH -DCMAKE_BUILD_TYPE=Debug -DOCS_AVAILABLE=OFF -DBUILD_SHARED_LIBS=OFF -DNEWLIB_BSP=ON -DNEWLIB_DEVICE_ADDRESS_BIT=32 -DBUILD_TESTS=OFF -DHOST_DEVICE_BUILD_HASH=basic-riscv32-unknown-elf -DCMAKE_TOOLCHAIN_FILE=../RISCV_newlib.cmake -DENABLE_TRACING=OFF -DENABLE_ICD=OFF -DPOCL_DEBUG_MESSAGES=ON ..
+    $ cmake --build . --target install
