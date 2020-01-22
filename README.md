@@ -46,12 +46,12 @@ Install Vortex
     $ sudo apt-get install verilator
     $ git clone https://github.gatech.edu/casl/Vortex.git
 
-# Build SimX
+Build SimX
 
     $ cd Vortex/simx
     $ make
 
-# Run SGEMM OpenCL Benchmark
+Run SGEMM OpenCL Benchmark
 
     $ cd Vortex/benchmarks/opencl/sgemm
     $ make
