@@ -13,7 +13,7 @@ VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
 VX_TEST = ../../tests/tests.c
 VX_FIO  = ../../fileio/fileio.s
-LIBS    = ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_simple_main
 
