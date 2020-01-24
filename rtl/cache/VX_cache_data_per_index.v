@@ -59,6 +59,7 @@ module VX_cache_data_per_index
     localparam SEND_MEM_REQ  = 1; // Write back this block into memory
     localparam RECIV_MEM_RSP = 2;
 
+	 generate
     if(CACHE_WAYS != 1) begin
         VX_generic_priority_encoder #(.N(CACHE_WAYS)) valid_index
         (
@@ -79,6 +80,7 @@ module VX_cache_data_per_index
       assign invalid_found = (valid_use_per_way == 1'b0) ? 1 : 0;
       assign invalid_index = 0;
     end
+	 endgenerate
 
 
 
@@ -105,6 +107,7 @@ module VX_cache_data_per_index
 
 
     genvar ways;
+	 generate
 	  for(ways=0; ways < CACHE_WAYS; ways = ways + 1) begin : each_way
 
 
@@ -144,6 +147,7 @@ module VX_cache_data_per_index
 	        .dirty_use (dirty_use_per_way[ways])
 	    );
 	  end
+	  endgenerate
 
     // always @(posedge clk or posedge rst) begin
     //   if (rst) begin

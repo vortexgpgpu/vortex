@@ -14,10 +14,11 @@ module VX_gpgpu_inst (
 
 	wire[`NT_M1:0] tmc_new_mask;
 	genvar curr_t;
-	for (curr_t = 0; curr_t < `NT; curr_t=curr_t+1)
-	begin
+	generate
+	for (curr_t = 0; curr_t < `NT; curr_t=curr_t+1) begin : tmc_new_mask_init
 		assign tmc_new_mask[curr_t] = curr_t < VX_gpu_inst_req.a_reg_data[0];
 	end
+	endgenerate
 
 	wire valid_inst = (|curr_valids);
 
@@ -33,10 +34,11 @@ module VX_gpgpu_inst (
 	wire[31:0] wspawn_pc = VX_gpu_inst_req.rd2;
 	wire[`NW-1:0] wspawn_new_active;
 	genvar curr_w;
-	for (curr_w = 0; curr_w < `NW; curr_w=curr_w+1)
-	begin
+	generate
+	for (curr_w = 0; curr_w < `NW; curr_w=curr_w+1) begin : wspawn_new_active_init
 		assign wspawn_new_active[curr_w] = curr_w < VX_gpu_inst_req.a_reg_data[0];
 	end
+	endgenerate
 
 
 	assign VX_warp_ctl.is_barrier = VX_gpu_inst_req.is_barrier && valid_inst;
@@ -54,12 +56,14 @@ module VX_gpgpu_inst (
 
 	// VX_gpu_inst_req.pc
 	genvar curr_s_t;
-	for (curr_s_t = 0; curr_s_t < `NT; curr_s_t=curr_s_t+1) begin
+	generate
+	for (curr_s_t = 0; curr_s_t < `NT; curr_s_t=curr_s_t+1) begin : masks_init
 		wire curr_bool = (VX_gpu_inst_req.a_reg_data[curr_s_t] == 32'b1);
 
 		assign split_new_use_mask[curr_s_t]   = curr_valids[curr_s_t] & (curr_bool);
 		assign split_new_later_mask[curr_s_t] = curr_valids[curr_s_t] & (!curr_bool);
 	end
+	endgenerate
 
 	wire[$clog2(`NT):0] num_valids;
 

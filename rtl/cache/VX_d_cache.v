@@ -161,8 +161,8 @@ module VX_d_cache
     reg[NUM_REQ-1:0] debug_hit_per_bank_mask[CACHE_BANKS-1:0];
 
     genvar bid;
-    for (bid = 0; bid < CACHE_BANKS; bid=bid+1)
-    begin
+	 generate
+    for (bid = 0; bid < CACHE_BANKS; bid=bid+1) begin : chooose_threads
       wire[NUM_REQ-1:0]        use_threads_track_banks = thread_track_banks[bid];
       wire[LOG_NUM_REQ-1:0] use_thread_index        = index_per_bank[bid];
       wire                  use_write_final_data    = hit_per_bank[bid];
@@ -177,6 +177,7 @@ module VX_d_cache
         assign debug_hit_per_bank_mask[bid]   = {NUM_REQ{hit_per_bank[bid]}};
         assign threads_serviced_per_bank[bid] = use_mask_per_bank[bid] & debug_hit_per_bank_mask[bid];
     end
+	 endgenerate
 
     integer test_bid;
     always @(*) begin
@@ -207,10 +208,11 @@ module VX_d_cache
 
 
     genvar tid;
-    for (tid = 0; tid < NUM_REQ; tid =tid+1)
-    begin
+	 generate
+    for (tid = 0; tid < NUM_REQ; tid =tid+1) begin : new_final_data_read_Qual_setup
       assign new_final_data_read_Qual[tid] = threads_serviced_Qual[tid] ? new_final_data_read[tid] : final_data_read[tid];
     end
+	 endgenerate
 
 
     assign detect_bank_miss = (valid_per_bank & ~hit_per_bank);
@@ -293,8 +295,7 @@ module VX_d_cache
 
   genvar bank_id;
   generate
-    for (bank_id = 0; bank_id < CACHE_BANKS; bank_id = bank_id + 1)
-      begin
+    for (bank_id = 0; bank_id < CACHE_BANKS; bank_id = bank_id + 1) begin : cache_banks
         wire[31:0] bank_addr    = (state == SEND_MEM_REQ)  ? miss_addr  :
                                   (state == RECIV_MEM_RSP) ? miss_addr   :
                                   i_p_addr[send_index_to_bank[bank_id]];

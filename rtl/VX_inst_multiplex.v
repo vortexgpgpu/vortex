@@ -22,11 +22,13 @@ module VX_inst_multiplex (
 	// wire is_gpu = 0;
 
 	genvar currT;
-	for (currT = 0; currT < `NT; currT = currT + 1) begin
+	generate
+	for (currT = 0; currT < `NT; currT = currT + 1) begin : mask_init
 		assign is_mem_mask[currT] = is_mem;
 		assign is_gpu_mask[currT] = is_gpu;
 		assign is_csr_mask[currT] = is_csr;
 	end
+	endgenerate
 
 	// LSU Unit
 	assign VX_lsu_req.valid        = VX_bckE_req.valid & is_mem_mask;

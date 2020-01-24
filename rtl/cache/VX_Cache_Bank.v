@@ -201,7 +201,8 @@ module VX_Cache_Bank
     wire[NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
     wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
     genvar g; 
-    for (g = 0; g < NUM_WORDS_PER_BLOCK; g = g + 1) begin
+	 generate
+    for (g = 0; g < NUM_WORDS_PER_BLOCK; g = g + 1) begin : write_enables
         wire normal_write = (read_or_write  && ((access && (block_offset == g))) && !miss);
 
         assign we[g]      = (write_from_mem)     ? 4'b1111  : 
@@ -215,6 +216,7 @@ module VX_Cache_Bank
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : use_write_data;
         assign way_to_update = evicted_way;
     end
+	 endgenerate
 
 
     VX_cache_data_per_index #(

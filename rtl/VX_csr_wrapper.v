@@ -11,15 +11,16 @@ module VX_csr_wrapper (
 	wire[`NT_M1:0][31:0] thread_ids;
 	wire[`NT_M1:0][31:0] warp_ids;
 
-	genvar cur_t;
-	for (cur_t = 0; cur_t < `NT; cur_t = cur_t + 1) begin
+	genvar cur_t, cur_tw;
+	generate
+	for (cur_t = 0; cur_t < `NT; cur_t = cur_t + 1) begin : thread_ids_init
 		assign thread_ids[cur_t] = cur_t;
 	end
 
-	genvar cur_tw;
-	for (cur_tw = 0; cur_tw < `NT; cur_tw = cur_tw + 1) begin
+	for (cur_tw = 0; cur_tw < `NT; cur_tw = cur_tw + 1) begin : warp_ids_init
 		assign warp_ids[cur_tw] = {{(31-`NW_M1){1'b0}}, VX_csr_req.warp_num};
 	end
+	endgenerate
 
 
 	assign VX_csr_wb.valid    = VX_csr_req.valid;

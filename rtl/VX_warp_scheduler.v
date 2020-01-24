@@ -251,7 +251,8 @@ module VX_warp_scheduler (
 
 
 	genvar curr_warp;
-	for (curr_warp = 0; curr_warp < `NW; curr_warp = curr_warp + 1) begin
+	generate
+	for (curr_warp = 0; curr_warp < `NW; curr_warp = curr_warp + 1) begin : stacks
 		wire correct_warp_s = (curr_warp == split_warp_num);
 		wire correct_warp_j = (curr_warp == join_warp_num);
 
@@ -267,6 +268,7 @@ module VX_warp_scheduler (
 			.q2   (q2)
 			);
 	end
+	endgenerate
 
 	// wire should_stall = stall || (jal && (warp_to_schedule == jal_warp_num)) || (branch_dir && (warp_to_schedule == branch_warp_num));
 

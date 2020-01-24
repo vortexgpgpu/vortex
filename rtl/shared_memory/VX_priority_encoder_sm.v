@@ -48,8 +48,7 @@ module VX_priority_encoder_sm
 
 	genvar curr_bank;
 	generate
-		for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) 
-		begin
+		for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) begin : countones_blocks
 			wire[`CLOG2(`NT):0] num_valids;
 
 			VX_countones #(.N(`NT)) valids_counter (
@@ -71,8 +70,8 @@ module VX_priority_encoder_sm
 
 	// There's one or less valid per bank
 	genvar curr_bank_o;
-	for (curr_bank_o = 0; curr_bank_o <= NB; curr_bank_o = curr_bank_o + 1) 
-	begin
+	generate
+	for (curr_bank_o = 0; curr_bank_o <= NB; curr_bank_o = curr_bank_o + 1) begin : encoders
 
 		VX_generic_priority_encoder #(.N(NUM_REQ)) vx_priority_encoder(
 		    .valids(bank_valids[curr_bank_o]),
@@ -82,6 +81,7 @@ module VX_priority_encoder_sm
 		assign out_address[curr_bank_o] = internal_out_valid[curr_bank_o] ? in_address[internal_req_num[curr_bank_o]] : 0;
 		assign out_data[curr_bank_o]    = internal_out_valid[curr_bank_o] ? in_data[internal_req_num[curr_bank_o]] : 0;
 	end
+	endgenerate
 
 	integer curr_b;
 	always @(*) begin

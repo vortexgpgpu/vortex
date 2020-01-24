@@ -49,8 +49,9 @@ module VX_warp (
 
 		genvar out_cur_th;
 		generate
-			for (out_cur_th = 0; out_cur_th < `NT; out_cur_th = out_cur_th+1)
+			for (out_cur_th = 0; out_cur_th < `NT; out_cur_th = out_cur_th+1) begin : out_valid_assign
 				assign out_valid[out_cur_th] = in_change_mask ? in_thread_mask[out_cur_th] : stall ? 1'b0  : valid[out_cur_th];
+			end
 		endgenerate
 
 

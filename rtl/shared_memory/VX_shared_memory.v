@@ -61,7 +61,7 @@ wire [`NT_M1:0] orig_in_valid;
 
 genvar f;
 	generate
-		for(f = 0; f < `NT; f = f+1) begin
+		for(f = 0; f < `NT; f = f+1) begin : orig_in_valid_setup
 			assign orig_in_valid[f] = in_valid[f];
 		end
 
@@ -92,7 +92,7 @@ genvar j;
 integer i;
 generate
 //for(j=0; j<= NB; j=j+1) begin : sm_mem_block
-for(j=0; j<= SM_BANKS - 1; j=j+1) begin
+for(j=0; j<= SM_BANKS - 1; j=j+1) begin : shared_mem_blocks
 
 	wire shm_write = (mem_write != `NO_MEM_WRITE) && temp_in_valid[j];
 

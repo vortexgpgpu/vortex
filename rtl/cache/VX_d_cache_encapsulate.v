@@ -65,27 +65,25 @@ module VX_d_cache_encapsulate (
     wire[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata_inter;
 
 
-    genvar curr_thraed;
-    for (curr_thraed = 0; curr_thraed < `NT; curr_thraed = curr_thraed + 1) begin
+    genvar curr_thraed, curr_bank, curr_word;
+	 generate
+    for (curr_thraed = 0; curr_thraed < `NT; curr_thraed = curr_thraed + 1) begin : threads
     	assign i_p_valid_inter[curr_thraed]                = i_p_valid[curr_thraed];
     	assign i_p_addr_inter[curr_thraed]                 = i_p_addr[curr_thraed];
     	assign i_p_writedata_inter[curr_thraed]            = i_p_writedata[curr_thraed];
     	assign o_p_readdata[curr_thraed]       = o_p_readdata_inter[curr_thraed];
     	assign o_p_readdata_valid[curr_thraed] = o_p_readdata_valid_inter[curr_thraed];
     end
-
-
-    genvar curr_bank;
-    genvar curr_word;
-    for (curr_bank = 0; curr_bank < NUMBER_BANKS; curr_bank = curr_bank + 1) begin
-
-    	for (curr_word = 0; curr_word < `NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
+	 
+    for (curr_bank = 0; curr_bank < NUMBER_BANKS; curr_bank = curr_bank + 1) begin : banks
+    	for (curr_word = 0; curr_word < `NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin : words
 
     		assign o_m_writedata[curr_bank][curr_word] = o_m_writedata_inter[curr_bank][curr_word];
     		assign i_m_readdata_inter[curr_bank][curr_word]        = i_m_readdata[curr_bank][curr_word];
 
     	end
     end
+	 endgenerate
 
 VX_d_cache dcache(
 	.clk                (clk),

@@ -9,9 +9,10 @@ module VX_lsu_addr_gen (
 
 
 	genvar index;
-	for (index = 0; index < `NT; index = index + 1)
-	begin
+	generate
+	for (index = 0; index < `NT; index = index + 1) begin : addresses
 		assign address[index] = base_address[index] + offset;
 	end
+	endgenerate
 
 endmodule

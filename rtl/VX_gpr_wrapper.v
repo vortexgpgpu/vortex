@@ -17,9 +17,11 @@ module VX_gpr_wrapper (
 
 	wire[`NT_M1:0][31:0] jal_data;
 	genvar index;
-	for (index = 0; index <= `NT_M1; index = index + 1) begin
+	generate 
+	for (index = 0; index <= `NT_M1; index = index + 1) begin : jal_data_assign
 		assign jal_data[index] = VX_gpr_jal.curr_PC;
 	end
+	endgenerate
 
 
 	`ifndef ASIC
@@ -47,7 +49,7 @@ module VX_gpr_wrapper (
 	genvar warp_index;
 	generate
 		
-		for (warp_index = 0; warp_index < `NW; warp_index = warp_index + 1) begin
+		for (warp_index = 0; warp_index < `NW; warp_index = warp_index + 1) begin : warp_gprs
 
 			wire valid_write_request = warp_index == VX_writeback_inter.wb_warp_num;
 			VX_gpr vx_gpr(

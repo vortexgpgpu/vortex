@@ -123,8 +123,9 @@ VX_dram_req_rsp_inter #(
 	end
 	*/
 
-for (curr_bank = 0; curr_bank < `DCACHE_BANKS; curr_bank = curr_bank + 1) begin
-	for (curr_word = 0; curr_word < `DCACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
+generate
+for (curr_bank = 0; curr_bank < `DCACHE_BANKS; curr_bank = curr_bank + 1) begin : dcache_setup
+	for (curr_word = 0; curr_word < `DCACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin : dcache_banks_setup
 
 	assign o_m_writedata_d[curr_bank][curr_word]                     = VX_dram_req_rsp.o_m_writedata[curr_bank][curr_word];
 	assign VX_dram_req_rsp.i_m_readdata[curr_bank][curr_word]        = i_m_readdata_d[curr_bank][curr_word]; // fixed
@@ -133,12 +134,13 @@ for (curr_bank = 0; curr_bank < `DCACHE_BANKS; curr_bank = curr_bank + 1) begin
 end
 
 
-for (curr_bank = 0; curr_bank < `ICACHE_BANKS; curr_bank = curr_bank + 1) begin
-	for (curr_word = 0; curr_word < `ICACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin
+for (curr_bank = 0; curr_bank < `ICACHE_BANKS; curr_bank = curr_bank + 1) begin : icache_setup
+	for (curr_word = 0; curr_word < `ICACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin : icache_banks_setup
 		assign o_m_writedata_i[curr_bank][curr_word]                     = VX_dram_req_rsp_icache.o_m_writedata[curr_bank][curr_word];
 		assign VX_dram_req_rsp_icache.i_m_readdata[curr_bank][curr_word] = i_m_readdata_i[curr_bank][curr_word]; // fixed
 	end
 end
+endgenerate
 
 
 /////////////////////////////////////////////////////////////////////////

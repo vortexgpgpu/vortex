@@ -56,13 +56,15 @@ module VX_lsu (
 
 
 	genvar index;
-	for (index = 0; index <= `NT_M1; index = index + 1) begin
+	generate
+	for (index = 0; index <= `NT_M1; index = index + 1) begin : dcache_reqs
 		assign VX_dcache_req.out_cache_driver_in_address[index]   = use_address[index];
 		assign VX_dcache_req.out_cache_driver_in_data[index]      = use_store_data[index];
 		assign VX_dcache_req.out_cache_driver_in_valid[index]     = (use_valid[index]);
 
 		assign VX_mem_wb.loaded_data[index]                       = VX_dcache_rsp.in_cache_driver_out_data[index];
 	end
+	endgenerate
 
 		assign VX_dcache_req.out_cache_driver_in_mem_read  = use_mem_read;
 		assign VX_dcache_req.out_cache_driver_in_mem_write = use_mem_write;

@@ -43,20 +43,19 @@ module VX_execute_unit (
 		wire[`NT_M1:0][31:0]  alu_result;
 		genvar index_out_reg;
 		generate
-			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1)
-				begin
-					VX_alu vx_alu(
-						// .in_reg_data   (in_reg_data[1:0]),
-						.in_1          (in_a_reg_data[index_out_reg]),
-						.in_2          (in_b_reg_data[index_out_reg]),
-						.in_rs2_src    (in_rs2_src),
-						.in_itype_immed(in_itype_immed),
-						.in_upper_immed(in_upper_immed),
-						.in_alu_op     (in_alu_op),
-						.in_curr_PC    (in_curr_PC),
-						.out_alu_result(alu_result[index_out_reg])
-					);
-				end
+			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1) begin : alu_defs
+				VX_alu vx_alu(
+					// .in_reg_data   (in_reg_data[1:0]),
+					.in_1          (in_a_reg_data[index_out_reg]),
+					.in_2          (in_b_reg_data[index_out_reg]),
+					.in_rs2_src    (in_rs2_src),
+					.in_itype_immed(in_itype_immed),
+					.in_upper_immed(in_upper_immed),
+					.in_alu_op     (in_alu_op),
+					.in_curr_PC    (in_curr_PC),
+					.out_alu_result(alu_result[index_out_reg])
+				);
+			end
 		endgenerate
 
 
@@ -89,8 +88,7 @@ module VX_execute_unit (
 		wire[`NT_M1:0][31:0] duplicate_PC_data;
 		genvar i;
 		generate
-			for (i = 0; i < `NT; i=i+1)
-			begin
+			for (i = 0; i < `NT; i=i+1) begin : pc_data_setup
 				assign duplicate_PC_data[i] = VX_exec_unit_req.PC_next;
 			end
 		endgenerate
