@@ -72,7 +72,7 @@ Build LLVM for RiscV
 
 Build pocl for RISCV
 
-    $ git clone https://github.com/pocl/pocl.git
+    $ git clone https://github.gatech.edu/casl/pocl.git
     $ cd pocl
     $ mkdir build
     $ cd build 
