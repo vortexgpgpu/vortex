@@ -20,8 +20,10 @@ module VX_alu(
 		wire[63:0] ALU_in1_mult;
 		wire[63:0] ALU_in2_mult;
 		wire[31:0] upper_immed;
-		wire[31:0] div_result;
-		wire[31:0] rem_result;
+		wire[31:0] unsigned_div_result;
+		wire[31:0] unsigned_rem_result;
+		wire[31:0] signed_div_result;
+		wire[31:0] signed_rem_result;
 
 
 		assign which_in2  = in_rs2_src == `RS2_IMMED;
@@ -33,6 +35,37 @@ module VX_alu(
 
 		assign upper_immed = {in_upper_immed, {12{1'b0}}};
 
+		VX_divide #(
+			.WIDTHN(32),
+			.WIDTHD(32),
+			.SPEED("HIGHEST"),
+			.PIPELINE(0)
+		) unsigned_div (
+			.clk(0),
+			.aclr(0),
+			.clken(1), // TODO this could be disabled on inactive instructions
+			.numer(ALU_in1),
+			.denom(ALU_in2),
+			.quotient(unsigned_div_result),
+			.remainder(unsigned_rem_result)
+		);
+
+		VX_divide #(
+			.WIDTHN(32),
+			.WIDTHD(32),
+			.NREP("SIGNED"),
+			.DREP("SIGNED"),
+			.SPEED("HIGHEST"),
+			.PIPELINE(0)
+		) signed_div (
+			.clk(0),
+			.aclr(0),
+			.clken(1), // TODO this could be disabled on inactive instructions
+			.numer(ALU_in1),
+			.denom(ALU_in2),
+			.quotient(signed_div_result),
+			.remainder(signed_rem_result)
+		);
 
 
 		//always @(posedge `MUL) begin
@@ -42,7 +75,7 @@ module VX_alu(
 
 
 		wire[63:0] alu_in1_signed = {{32{ALU_in1[31]}}, ALU_in1};
-		wire[63:0] alu_in2_signed = {{32{ALU_in2[31]}}, ALU_in2};	
+		wire[63:0] alu_in2_signed = {{32{ALU_in2[31]}}, ALU_in2};
 		assign ALU_in1_mult = (in_alu_op == `MULHU || in_alu_op == `DIVU || in_alu_op == `REMU) ? {32'b0, ALU_in1} : alu_in1_signed;
 		assign ALU_in2_mult = (in_alu_op == `MULHU || in_alu_op == `MULHSU || in_alu_op == `DIVU || in_alu_op == `REMU) ? {32'b0, ALU_in2} : alu_in2_signed;
 		wire[63:0] mult_result = ALU_in1_mult * ALU_in2_mult;
@@ -57,26 +90,26 @@ module VX_alu(
 				`SLT:        out_alu_result = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
 				`SLTU:       out_alu_result = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
 				`XOR:        out_alu_result = ALU_in1 ^ ALU_in2;
-				`SRL:        out_alu_result = ALU_in1 >> ALU_in2[4:0];						
+				`SRL:        out_alu_result = ALU_in1 >> ALU_in2[4:0];
 				`SRA:        out_alu_result = $signed(ALU_in1)  >>> ALU_in2[4:0];
-				`OR:         out_alu_result = ALU_in1 | ALU_in2;	
-				`AND:        out_alu_result = ALU_in2 & ALU_in1;	
+				`OR:         out_alu_result = ALU_in1 | ALU_in2;
+				`AND:        out_alu_result = ALU_in2 & ALU_in1;
 				`SUBU:       out_alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
 				`LUI_ALU:    out_alu_result = upper_immed;
 				`AUIPC_ALU:  out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
-				`MUL:        out_alu_result = mult_result[31:0];  
+				`MUL:        out_alu_result = mult_result[31:0];
 				`MULH:       out_alu_result = mult_result[63:32];
 				`MULHSU:     out_alu_result = mult_result[63:32];
 				`MULHU:      out_alu_result = mult_result[63:32];
-				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : $signed($signed(ALU_in1) / $signed(ALU_in2));
-				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : ALU_in1 / ALU_in2;
-				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : $signed($signed(ALU_in1) % $signed(ALU_in2));
-				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : ALU_in1 % ALU_in2;
+				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
+				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
+				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
+				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
 				default: out_alu_result = 32'h0;
 			endcase // in_alu_op
 		end
 
-	`else 
+	`else
 		wire which_in2;
 
 		wire[31:0] ALU_in1;
@@ -116,10 +149,10 @@ module VX_alu(
 				`SLT:        out_alu_result = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
 				`SLTU:       out_alu_result = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
 				`XOR:        out_alu_result = ALU_in1 ^ ALU_in2;
-				`SRL:        out_alu_result = ALU_in1 >> ALU_in2[4:0];						
+				`SRL:        out_alu_result = ALU_in1 >> ALU_in2[4:0];
 				`SRA:        out_alu_result = $signed(ALU_in1)  >>> ALU_in2[4:0];
-				`OR:         out_alu_result = ALU_in1 | ALU_in2;	
-				`AND:        out_alu_result = ALU_in2 & ALU_in1;	
+				`OR:         out_alu_result = ALU_in1 | ALU_in2;
+				`AND:        out_alu_result = ALU_in2 & ALU_in1;
 				`SUBU:       out_alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
 				`LUI_ALU:    out_alu_result = upper_immed;
 				`AUIPC_ALU:  out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
@@ -133,7 +166,7 @@ module VX_alu(
 				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : ALU_in1 % ALU_in2;
 				default: out_alu_result = 32'h0;
 			endcase // in_alu_op
-		end		
+		end
 	`endif
 
-endmodule // VX_alu
+endmodule
