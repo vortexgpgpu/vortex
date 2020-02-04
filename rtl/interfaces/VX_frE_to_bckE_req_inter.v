@@ -1,5 +1,5 @@
 
-`include "../VX_define.v"
+`include "VX_define.v"
 
 `ifndef VX_FrE_to_BE_INTER
 

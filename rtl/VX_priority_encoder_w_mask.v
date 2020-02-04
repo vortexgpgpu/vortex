@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "VX_define.v"
 module VX_priority_encoder_w_mask
   #(
   	parameter N = 10

@@ -20,8 +20,8 @@ module VX_warp (
 );
 
 		reg[31:0] real_PC;
-		var[31:0] temp_PC;
-		var[31:0] use_PC;
+		logic [31:0] temp_PC;
+		logic [31:0] use_PC;
 		reg[`NT_M1:0] valid;
 
 		reg[`NT_M1:0] valid_zero;

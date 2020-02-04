@@ -1,7 +1,7 @@
 
 `include "VX_define.v"
 
-// `define NUM_WORDS_PER_BLOCK 4
+`define NUM_WORDS_PER_BLOCK 4
 
 module VX_d_cache_encapsulate (
 		clk,

@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "VX_define.v"
 
 module VX_generic_priority_encoder
   #(
