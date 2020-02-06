@@ -23,10 +23,14 @@ module byte_enabled_simple_dual_port_ram
 	// end
 
 	integer ini;
-	always@(posedge clk, posedge reset) begin
+	always @(posedge clk, posedge reset) begin
+		// TODO Clearing ram not currently supported on FPGA.
 		if (reset) begin
+`ifdef ASIC
 			for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] <= 0;
-		end else if(we) begin
+`endif
+		end 
+		else if(we) begin
 			integer thread_ind;
 			for (thread_ind = 0; thread_ind <= `NT_M1; thread_ind = thread_ind + 1) begin
 				if(be[thread_ind]) GPR[waddr][thread_ind][0] <= wdata[thread_ind][7:0];
