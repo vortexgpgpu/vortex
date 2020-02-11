@@ -33,13 +33,15 @@ module VX_shared_memory_block
 
 		//wire need_to_write = (|we);
 		integer curr_ind;
-		always @(posedge clk, posedge reset) begin
-			if (reset) begin
-				//for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
+		initial begin
 				for (curr_ind = 0; curr_ind < SMB_HEIGHT; curr_ind = curr_ind + 1)
 				begin
 					shared_memory[curr_ind] = 0;
 				end
+		end
+		always @(posedge clk, posedge reset) begin
+			if (reset) begin
+				//for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
 			end else if(shm_write) begin
 				shared_memory[addr][we][31:0] = wdata[we][31:0]; // - Ethan's addition
 				//if (we == 2'b00) shared_memory[addr][0][31:0] <= wdata[0][31:0];
