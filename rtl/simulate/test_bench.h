@@ -401,13 +401,13 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     // std::cout << "Something: " <<  result << '\n';
 
-    // uint32_t status;
-    // ram.getWord(0, &status);
+    uint32_t status;
+    ram.getWord(0, &status);
 
     this->print_stats();
 
 
 
-    // return (status == 1);
-    return (1 == 1);
+    return (status == 1);
+    // return (1 == 1);
 }

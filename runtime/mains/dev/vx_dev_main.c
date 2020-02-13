@@ -106,7 +106,7 @@ int main()
 	vx_print_mat(z, arguments.numRows, arguments.numColums);
 
 
-	return 1;
+	return 0;
 }
 
 
