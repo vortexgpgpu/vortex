@@ -6,6 +6,7 @@ module VX_back_end (
 	input wire schedule_delay,
 
 	output wire               out_mem_delay,
+	output wire               out_exec_delay,
 	output wire               gpr_stage_delay,
 	VX_jal_response_inter     VX_jal_rsp,
 	VX_branch_response_inter  VX_branch_rsp,
@@ -32,7 +33,7 @@ assign VX_writeback_inter.wb_warp_num  = VX_writeback_temp.wb_warp_num;
 
 
 VX_mw_wb_inter           VX_mw_wb();
-wire no_slot_mem;
+wire no_slot_mem, no_slot_exec;
 
 
 VX_mem_req_inter  VX_exe_mem_req();
@@ -69,6 +70,7 @@ VX_gpr_stage VX_gpr_stage(
 	.VX_csr_req      (VX_csr_req),
 	// End new
 	.memory_delay      (out_mem_delay),
+	.exec_delay        (out_exec_delay),
 	.gpr_stage_delay   (gpr_stage_delay)
 	);
 
@@ -91,7 +93,9 @@ VX_execute_unit VX_execUnit(
 	.VX_exec_unit_req(VX_exec_unit_req),
 	.VX_inst_exec_wb (VX_inst_exec_wb),
 	.VX_jal_rsp      (VX_jal_rsp),
-	.VX_branch_rsp   (VX_branch_rsp)
+	.VX_branch_rsp   (VX_branch_rsp),
+	.out_delay       (out_exec_delay),
+	.no_slot_exec    (no_slot_exec)
 	);
 
 
@@ -113,7 +117,8 @@ VX_writeback VX_wb(
 	.VX_csr_wb         (VX_csr_wb),
 
 	.VX_writeback_inter(VX_writeback_temp),
-	.no_slot_mem       (no_slot_mem)
+	.no_slot_mem       (no_slot_mem),
+	.no_slot_exec      (no_slot_exec)
 	);
 
 endmodule
