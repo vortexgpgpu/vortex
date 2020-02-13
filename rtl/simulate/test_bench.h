@@ -100,7 +100,7 @@ Vortex::~Vortex()
 
 void Vortex::ProcessFile(void)
 {
-    loadHexImpl("../../kernel/vortex_test.hex", &this->ram);
+    loadHexImpl(this->instruction_file_name.c_str(), &this->ram);
 }
 
 void Vortex::print_stats(bool cycle_test)
@@ -206,12 +206,12 @@ bool Vortex::dbus_driver()
 
     // printf("****************************\n");
 
-    vortex->i_m_ready = 0;
+    vortex->i_m_ready_d = 0;
     for (int i = 0; i < CACHE_NUM_BANKS; i++)
     {
         for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
         {
-            vortex->i_m_readdata[i][j] = 0;
+            vortex->i_m_readdata_d[i][j] = 0;
         }
     }
 
@@ -220,7 +220,7 @@ bool Vortex::dbus_driver()
     {
         this->refill = false;
 
-        vortex->i_m_ready = 1;
+        vortex->i_m_ready_d = 1;
         for (int curr_e = 0; curr_e < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); curr_e++)
         {
             unsigned new_addr = this->refill_addr + (4*curr_e);
@@ -234,23 +234,23 @@ bool Vortex::dbus_driver()
             unsigned value;
             ram.getWord(new_addr, &value);
 
-            // printf("-------- (%x) i_m_readdata[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
-            vortex->i_m_readdata[bank_num][offset_num] = value;
+            // printf("-------- (%x) i_m_readdata_d[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
+            vortex->i_m_readdata_d[bank_num][offset_num] = value;
 
         }
     }
     else
     {
-        if (vortex->o_m_valid)
+        if (vortex->o_m_valid_d)
         {
-            // printf("Valid o_m_valid\n");
-            if (vortex->o_m_read_or_write)
+            // printf("Valid o_m_valid_d\n");
+            if (vortex->o_m_read_or_write_d)
             {
                 // printf("Valid write\n");
 
                 for (int curr_e = 0; curr_e < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); curr_e++)
                 {
-                    unsigned new_addr = vortex->o_m_evict_addr + (4*curr_e);
+                    unsigned new_addr = vortex->o_m_evict_addr_d + (4*curr_e);
 
 
                     unsigned addr_without_byte = new_addr >> 2;
@@ -259,19 +259,19 @@ bool Vortex::dbus_driver()
                     unsigned offset_num        = addr_wihtout_bank & 0x3;
 
 
-                    unsigned new_value         = vortex->o_m_writedata[bank_num][offset_num];
+                    unsigned new_value         = vortex->o_m_writedata_d[bank_num][offset_num];
 
                     ram.writeWord( new_addr, &new_value);
 
                     // printf("+++++++ (%x) writeback[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, new_value);
-                    // printf("+++++++ (%x) i_m_readdata[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
+                    // printf("+++++++ (%x) i_m_readdata_d[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
                 }
                 
             }
 
             // Respond next cycle
             this->refill = true;
-            this->refill_addr = vortex->o_m_read_addr;
+            this->refill_addr = vortex->o_m_read_addr_d;
         }
     }
 

@@ -1,10 +1,12 @@
 
-COMP     = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-gcc
+TOOLPATH ?= ~/dev/riscv-gnu-toolchain/drops/bin
+
+COMP     = $(TOOLPATH)/riscv32-unknown-elf-gcc
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../vortex_link.ld -ffreestanding -nostartfiles
 
-DMP  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
-CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
+DMP  = $(TOOLPATH)/riscv32-unknown-elf-objdump
+CPY  = $(TOOLPATH)/riscv32-unknown-elf-objcopy
 
 
 VX_STR  = ../../startup/vx_start.s

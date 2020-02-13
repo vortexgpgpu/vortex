@@ -83,7 +83,16 @@ int main(int argc, char **argv)
 
 	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
 	Vortex v;
-	char testing[] = "../../kernel/vortex_test.hex";
+	const char *testing;
+
+	if (argc >= 2) {
+	    testing = argv[1];
+	} else {
+	    testing = "../../kernel/vortex_test.hex";
+	}
+
+std::cerr << testing << std::endl;
+
 
 	bool curr = v.simulate(testing);
 	if ( curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
