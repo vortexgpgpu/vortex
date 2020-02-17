@@ -144,14 +144,22 @@ int main(int argc, char** argv) {
 
   try {
     switch (findMode(argc - 1, argv + 1)) {
-      case HARPTOOL_MODE_ASM:    cout << "ASM not supported\n";
-      case HARPTOOL_MODE_DISASM: cout << "DISASM not supported\n";
-      case HARPTOOL_MODE_EMU:    return emu_main   (argc - 2, argv + 2);
-      case HARPTOOL_MODE_LD:     cout << "LD not supported\n";
-      case HARPTOOL_MODE_HELP:
-      default:
-        cout << "Usage:\n" << Help::mainHelp;
-        return 0;
+    case HARPTOOL_MODE_ASM:    
+      cout << "ASM not supported\n";
+      return -1;
+    case HARPTOOL_MODE_DISASM: 
+      cout << "DISASM not supported\n";
+      return -1;
+    case HARPTOOL_MODE_EMU:    
+      return emu_main(argc - 2, argv + 2);
+    case HARPTOOL_MODE_LD:     
+      cout << "LD not supported\n";
+      return -1;
+    case HARPTOOL_MODE_HELP:
+      [[fallthrough]]
+    default:
+      cout << "Usage:\n" << Help::mainHelp;
+      return 0;
     }
   } catch (BadArg ba) {
     cout << "Unrecognized argument \"" << ba.arg << "\".\n";

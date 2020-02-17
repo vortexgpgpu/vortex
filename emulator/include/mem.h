@@ -359,7 +359,7 @@ namespace Harp {
       char* content = new char[size];
       int x = fread(content, 1, size, fp);
 
-      if (!x) { std::cout << "COULD NOT READ FILE\n"; exit(1);}
+      if (!x) { std::cout << "COULD NOT READ FILE\n"; std::abort();}
 
       int offset = 0;
       char* line = content;

@@ -164,7 +164,7 @@ namespace Harp {
     
 
   };
-};
+}
 
 #endif
 

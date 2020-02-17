@@ -20,7 +20,7 @@ Harp::OSDomain::OSDomain(ArchDef &archref, string imgFile) :
 {
   if (osDomain != NULL) {
     cout << "Error: OSDomain is a singleton.";
-    exit(1);
+    std::abort();
   }
   osDomain = this;
 

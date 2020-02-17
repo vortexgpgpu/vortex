@@ -35,9 +35,9 @@ namespace Harp {
 
   template <typename T> class Reg {
   public:
-    Reg(): cpuId(0), regNum(0), val(0) {}
-    Reg(Word c, Word n): cpuId(c), regNum(n), val(0) {}
-    Reg(Word c, Word n, T v): cpuId(c), regNum(n), val(v) {}
+    Reg(): val(0), cpuId(0), regNum(0) {}
+    Reg(Word c, Word n): val(0), cpuId(c), regNum(n) {}
+    Reg(Word c, Word n, T v): val(v), cpuId(c), regNum(n) {}
 
 
     Reg &operator=(T r) { if (regNum) {val = r; doWrite();} return *this; }
@@ -83,10 +83,10 @@ namespace Harp {
     DomStackEntry(const std::vector<bool> &tmask):
       tmask(tmask), fallThrough(true), uni(false) {}
 
-    bool fallThrough;
-    bool uni;
-    std::vector<bool> tmask;
+    std::vector<bool> tmask;   
     Word pc;
+    bool fallThrough;
+    bool uni;    
   };
 
   struct vtype
@@ -193,13 +193,14 @@ namespace Harp {
 
     std::vector<std::vector<Reg<char*>>> vreg; // 32 vector registers
 
-    bool interruptEnable, shadowInterruptEnable, supervisorMode, 
-         shadowSupervisorMode, spawned;
+    bool interruptEnable, shadowInterruptEnable;
+    bool supervisorMode, shadowSupervisorMode;
+    bool spawned;
 
     unsigned long steps, insts, loads, stores;
     
     friend class Instruction;
   };
-};
+}
 
 #endif
