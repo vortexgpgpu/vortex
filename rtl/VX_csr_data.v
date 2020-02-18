@@ -57,7 +57,12 @@ module VX_csr_data (
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
 			for (curr_e = 0; curr_e < 1024; curr_e=curr_e+1) begin
+`ifdef VERILATOR
+				// - Verilator does not support delayed assignment in loops.
+				csr[curr_e] = 0;
+`else
 				csr[curr_e] <= 0;
+`endif
 			end
 			cycle   <= 0;
 			instret <= 0;
@@ -74,9 +79,9 @@ module VX_csr_data (
 
 
     	assign out_read_csr_data = read_cycle ? cycle[31:0] :
-    									read_cycleh ? cycle[63:32] : 
+    									read_cycleh ? cycle[63:32] :
     											read_instret ? instret[31:0] :
-    													read_instreth ? instret[63:32] : 
+    													read_instreth ? instret[63:32] :
     															{{20{1'b0}}, csr[in_read_csr_address]};
 
-endmodule
+endmodule : VX_csr_data
