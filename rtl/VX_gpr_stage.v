@@ -167,7 +167,7 @@ module VX_gpr_stage (
 		assign VX_gpu_inst_req.a_reg_data = real_base_address;
 		assign VX_gpu_inst_req.rd2        = real_store_data;
 
-		VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
+		VX_generic_register #(.N(`NW_M1  + 1 + `NT + 58)) csr_reg(
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_gpr_csr),
@@ -209,13 +209,13 @@ module VX_gpr_stage (
 		.out  ({VX_gpu_inst_req.valid     , VX_gpu_inst_req.warp_num     , VX_gpu_inst_req.is_wspawn     , VX_gpu_inst_req.is_tmc     , VX_gpu_inst_req.is_split     , VX_gpu_inst_req.is_barrier     , VX_gpu_inst_req.pc_next     , VX_gpu_inst_req.a_reg_data     , VX_gpu_inst_req.rd2     })
 		);
 
-	VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
+	VX_generic_register #(.N(`NW_M1  + 1 + `NT + 58)) csr_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_gpr_csr),
 		.flush(flush_rest),
-		.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
-		.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
+		.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.alu_op, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
+		.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.alu_op     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
 		);
 
 	`endif
