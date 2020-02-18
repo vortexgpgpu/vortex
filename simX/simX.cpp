@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
       cout << "LD not supported\n";
       return -1;
     case HARPTOOL_MODE_HELP:
-      [[fallthrough]]
+      [[fallthrough]];
     default:
       cout << "Usage:\n" << Help::mainHelp;
       return 0;
