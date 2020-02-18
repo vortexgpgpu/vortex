@@ -44,6 +44,26 @@ module Vortex
 	);
 
 
+reg[31:0] icache_banks               = `ICACHE_BANKS;
+reg[31:0] icache_num_words_per_block = `ICACHE_NUM_WORDS_PER_BLOCK;
+
+
+reg[31:0] dcache_banks               = `DCACHE_BANKS;
+reg[31:0] dcache_num_words_per_block = `DCACHE_NUM_WORDS_PER_BLOCK;
+
+reg[31:0] number_threads             = `NT;
+reg[31:0] number_warps               = `NW;
+
+always @(posedge clk) begin
+	icache_banks               <= icache_banks;
+	icache_num_words_per_block <= icache_num_words_per_block;
+
+	dcache_banks               <= dcache_banks;
+	dcache_num_words_per_block <= dcache_num_words_per_block;
+
+	number_threads             <= number_threads;
+	number_warps               <= number_warps;
+end
 
 wire memory_delay;
 wire gpr_stage_delay;
