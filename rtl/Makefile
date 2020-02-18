@@ -33,7 +33,7 @@ VERILATOR:
 
 VERILATORnoWarnings:
 	echo "#define VCD_OFF" > simulate/tb_debug.h
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)  $(WNO)
+	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)  $(WNO) $(DEB)
 
 compdebug:
 	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
