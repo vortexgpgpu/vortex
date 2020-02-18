@@ -16,6 +16,80 @@ module VX_alu(
 
 		localparam div_pipeline_len = 3;
 
+		wire[31:0] unsigned_div_result;
+        wire[31:0] unsigned_rem_result;
+        wire[31:0] signed_div_result;
+        wire[31:0] signed_rem_result;
+
+        VX_divide #(
+            .WIDTHN(32),
+            .WIDTHD(32),
+            .SPEED("HIGHEST"),
+            .PIPELINE(div_pipeline_len)
+        ) unsigned_div (
+            .clock(clk),
+            .aclr(0),
+            .clken(1), // TODO this could be disabled on inactive instructions
+            .numer(ALU_in1),
+            .denom(ALU_in2),
+            .quotient(unsigned_div_result),
+            .remainder(unsigned_rem_result)
+        );
+
+        VX_divide #(
+            .WIDTHN(32),
+            .WIDTHD(32),
+            .NREP("SIGNED"),
+            .DREP("SIGNED"),
+            .SPEED("HIGHEST"),
+            .PIPELINE(div_pipeline_len)
+        ) signed_div (
+            .clock(clk),
+            .aclr(0),
+            .clken(1), // TODO this could be disabled on inactive instructions
+            .numer(ALU_in1),
+            .denom(ALU_in2),
+            .quotient(signed_div_result),
+            .remainder(signed_rem_result)
+        );
+
+        reg [15:0] curr_inst_delay;
+		reg [15:0] inst_delay;
+		reg inst_was_stalling;
+
+        wire inst_delay_stall = inst_was_stalling ? inst_delay != 0 : curr_inst_delay != 0;
+		assign out_alu_stall = inst_delay_stall;
+
+		always @(*) begin
+            case(in_alu_op)
+                `DIV,
+                `DIVU,
+                `REM,
+                `REMU: curr_inst_delay = div_pipeline_len;
+                default: curr_inst_delay = 0;
+            endcase // in_alu_op
+        end
+
+        always @(posedge clk or posedge reset) begin
+            if (reset) begin
+                inst_delay <= 0;
+                inst_was_stalling <= 0;
+            end
+            else if (inst_delay_stall) begin
+                if (inst_was_stalling) begin
+                    if (inst_delay > 0)
+                        inst_delay <= inst_delay - 1;
+                end
+                else begin
+                    inst_was_stalling <= 1;
+                    inst_delay <= curr_inst_delay - 1;
+                end
+            end
+            else begin
+                inst_was_stalling <= 0;
+            end
+        end
+
 		`ifdef SYN_FUNC
 		wire which_in2;
 
@@ -24,15 +98,6 @@ module VX_alu(
 		wire[63:0] ALU_in1_mult;
 		wire[63:0] ALU_in2_mult;
 		wire[31:0] upper_immed;
-		wire[31:0] unsigned_div_result;
-		wire[31:0] unsigned_rem_result;
-		wire[31:0] signed_div_result;
-		wire[31:0] signed_rem_result;
-
-		reg [15:0] inst_delay;
-		reg [15:0] inst_delay_count;
-
-		assign out_alu_stall = inst_delay != 0 || inst_delay_count != 0;
 
 		assign which_in2  = in_rs2_src == `RS2_IMMED;
 
@@ -40,39 +105,6 @@ module VX_alu(
 		assign ALU_in2 = which_in2 ? in_itype_immed : in_2;
 
 		assign upper_immed = {in_upper_immed, {12{1'b0}}};
-
-		VX_divide #(
-			.WIDTHN(32),
-			.WIDTHD(32),
-			.SPEED("HIGHEST"),
-			.PIPELINE(div_pipeline_len)
-		) unsigned_div (
-			.clock(clk),
-			.aclr(0),
-			.clken(1), // TODO this could be disabled on inactive instructions
-			.numer(ALU_in1),
-			.denom(ALU_in2),
-			.quotient(unsigned_div_result),
-			.remainder(unsigned_rem_result)
-		);
-
-		VX_divide #(
-			.WIDTHN(32),
-			.WIDTHD(32),
-			.NREP("SIGNED"),
-			.DREP("SIGNED"),
-			.SPEED("HIGHEST"),
-			.PIPELINE(div_pipeline_len)
-		) signed_div (
-			.clock(clk),
-			.aclr(0),
-			.clken(1), // TODO this could be disabled on inactive instructions
-			.numer(ALU_in1),
-			.denom(ALU_in2),
-			.quotient(signed_div_result),
-			.remainder(signed_rem_result)
-		);
-
 
 		//always @(posedge `MUL) begin
 
@@ -114,25 +146,6 @@ module VX_alu(
 				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
 				default: out_alu_result = 32'h0;
 			endcase // in_alu_op
-		end
-
-		always @(*) begin
-			case(in_alu_op)
-				`DIV,
-				`DIVU,
-				`REM,
-				`REMU: inst_delay = div_pipeline_len;
-				default: inst_delay = 0;
-			endcase // in_alu_op
-		end
-
-		always @(posedge clk or posedge reset) begin
-			if (reset)
-				inst_delay_count <= 0;
-			else if (inst_delay_count > 0)
-				inst_delay_count <= inst_delay_count - 1;
-			else if (inst_delay != 0)
-				inst_delay_count <= inst_delay - 1;
 		end
 
 	`else
@@ -186,10 +199,11 @@ module VX_alu(
 				`MULH:       out_alu_result = mult_signed_result[63:32];
 				`MULHSU:     out_alu_result = mult_signed_un_result[63:32];
 				`MULHU:      out_alu_result = mult_unsigned_result[63:32];
-				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : $signed($signed(ALU_in1) / $signed(ALU_in2));
-				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : ALU_in1 / ALU_in2;
-				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : $signed($signed(ALU_in1) % $signed(ALU_in2));
-				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : ALU_in1 % ALU_in2;
+				// TODO profitable to roll these exceptional cases into inst_delay to avoid pipeline when possible?
+				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
+				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
+				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
+				`REMU:       out_alu_result = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
 				default: out_alu_result = 32'h0;
 			endcase // in_alu_op
 		end
