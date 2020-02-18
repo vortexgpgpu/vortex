@@ -111,6 +111,14 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   release_warp = false;
   foundSchedule = true;
   schedule_w = 0;
+
+  memset(&inst_in_fetch, 0, sizeof(inst_in_fetch));
+  memset(&inst_in_decode, 0, sizeof(inst_in_decode));
+  memset(&inst_in_scheduler, 0, sizeof(inst_in_scheduler));
+  memset(&inst_in_exe, 0, sizeof(inst_in_exe));
+  memset(&inst_in_lsu, 0, sizeof(inst_in_lsu));
+  memset(&inst_in_wb, 0, sizeof(inst_in_wb));
+
   INIT_TRACE(inst_in_fetch);
   INIT_TRACE(inst_in_decode);
   INIT_TRACE(inst_in_scheduler);
@@ -158,6 +166,7 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
 
 bool Core::interrupt(Word r0) {
   w[0].interrupt(r0);
+  return false;
 }
 
 void Core::step()
@@ -214,8 +223,8 @@ void Core::getCacheDelays(trace_inst_t * trace_inst)
     if (trace_inst->valid_inst)
     {
 
-        bool     in_dcache_in_valid[a.getNThds()];
-        unsigned in_dcache_in_address[a.getNThds()];
+        std::vector<bool> in_dcache_in_valid(a.getNThds());
+        std::vector<unsigned> in_dcache_in_address(a.getNThds());
 
         unsigned in_dcache_mem_read;
         unsigned in_dcache_mem_write;
@@ -709,10 +718,26 @@ void Core::printStats() const {
 }
 
 Warp::Warp(Core *c, Word id) : 
-  core(c), pc(0x80000000), interruptEnable(true),
-  supervisorMode(true), activeThreads(0), reg(0), pred(0),
-  shadowReg(core->a.getNRegs()), shadowPReg(core->a.getNPRegs()), id(id),
-  spawned(false), steps(0), insts(0), loads(0), stores(0), VLEN(1024)
+  core(c), 
+  pc(0x80000000), 
+  shadowPc(0),
+  id(id), 
+  activeThreads(0), 
+  shadowActiveThreads(0),
+  reg(0), 
+  pred(0),
+  shadowReg(core->a.getNRegs()), 
+  shadowPReg(core->a.getNPRegs()),   
+  VLEN(1024),
+  interruptEnable(true),
+  shadowInterruptEnable(false),
+  supervisorMode(true),  
+  shadowSupervisorMode(false),
+  spawned(false), 
+  steps(0), 
+  insts(0), 
+  loads(0), 
+  stores(0)  
 {
   D(3, "Creating a new thread with PC: " << hex << this->pc << '\n');
   /* Build the register file. */

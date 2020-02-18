@@ -46,8 +46,10 @@ class Vortex
         VVortex * vortex;
 
         unsigned start_pc;
-        bool     refill;
-        unsigned refill_addr;
+        bool     refill_d;
+        unsigned refill_addr_d;
+        bool     refill_i;
+        unsigned refill_addr_i;
         long int curr_cycle;
         bool stop;
         bool unit_test;
@@ -154,38 +156,66 @@ void Vortex::print_stats(bool cycle_test)
 bool Vortex::ibus_driver()
 {
     
-    ////////////////////// IBUS //////////////////////
-    unsigned new_PC;
-    bool stop = false;
-    uint32_t curr_inst = 0;
+    vortex->i_m_ready_i = false;
 
-    curr_inst = 0xdeadbeef;
-
-    new_PC                             = vortex->icache_request_pc_address;
-    ram.getWord(new_PC, &curr_inst);
-    vortex->icache_response_instruction   = curr_inst;
-
-    // std::cout << std::hex << "IReq: " << vortex->icache_request_pc_address << "\tResp: " << curr_inst << "\n";
-
-    // printf("\n\n---------------------------------------------\n(%x) Inst: %x\n", new_PC, curr_inst);
-    // printf("\n");
-    ////////////////////// IBUS //////////////////////
-
-
-    ////////////////////// STATS //////////////////////
-
-
-    if (((((unsigned int)curr_inst) != 0) && (((unsigned int)curr_inst) != 0xffffffff)))
     {
-        ++stats_dynamic_inst;
-        stop = false;
-    } else
-    {
-        // printf("Ibus requesting stop: %x\n", curr_inst);
-        stop = true;
+
+        // int dcache_num_words_per_block
+
+        if (refill_i)
+        {
+            refill_i            = false;
+            vortex->i_m_ready_i = true;
+
+            for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__icache_banks; curr_bank++)
+            {
+                for (int curr_word = 0; curr_word < vortex->Vortex__DOT__icache_num_words_per_block; curr_word++)
+                {
+                    unsigned curr_index = (curr_word * vortex->Vortex__DOT__icache_banks) + curr_bank;
+                    unsigned curr_addr  = refill_addr_i + (4*curr_index);
+
+                    unsigned curr_value;
+                    ram.getWord(curr_addr, &curr_value);
+
+                    vortex->i_m_readdata_i[curr_bank][curr_word] = curr_value;
+
+                }
+            }
+        }
+        else
+        {
+            if (vortex->o_m_valid_i)
+            {
+
+                if (vortex->o_m_read_or_write_i)
+                {
+                    // fprintf(stderr, "++++++++++++++++++++++++++++++++\n");
+                    unsigned base_addr = vortex->o_m_evict_addr_i;
+
+                    for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__icache_banks; curr_bank++)
+                    {
+                        for (int curr_word = 0; curr_word < vortex->Vortex__DOT__icache_num_words_per_block; curr_word++)
+                        {
+                            unsigned curr_index = (curr_word * vortex->Vortex__DOT__icache_banks) + curr_bank;
+                            unsigned curr_addr  = base_addr + (4*curr_index);
+
+                            unsigned curr_value = vortex->o_m_writedata_i[curr_bank][curr_word];
+
+                            ram.writeWord( curr_addr, &curr_value);
+                        }
+                    }
+                }
+
+                // Respond next cycle
+                refill_i      = true;
+                refill_addr_i = vortex->o_m_read_addr_i;
+            }
+        }
+
     }
 
-    return stop;
+
+    return false;
 
 }
 
@@ -197,6 +227,7 @@ void Vortex::io_handler()
 
         char c = (char) data_write;
         std::cerr << c;
+        // std::cout << c;
     }
 }
 
@@ -204,75 +235,62 @@ void Vortex::io_handler()
 bool Vortex::dbus_driver()
 {
 
-    // printf("****************************\n");
+    vortex->i_m_ready_d = false;
 
-    vortex->i_m_ready_d = 0;
-    for (int i = 0; i < CACHE_NUM_BANKS; i++)
     {
-        for (int j = 0; j < CACHE_WORDS_PER_BLOCK; j++)
+
+        // int dcache_num_words_per_block
+
+        if (refill_d)
         {
-            vortex->i_m_readdata_d[i][j] = 0;
-        }
-    }
+            refill_d            = false;
+            vortex->i_m_ready_d = true;
 
-
-    if (this->refill)
-    {
-        this->refill = false;
-
-        vortex->i_m_ready_d = 1;
-        for (int curr_e = 0; curr_e < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); curr_e++)
-        {
-            unsigned new_addr = this->refill_addr + (4*curr_e);
-
-
-            unsigned addr_without_byte = new_addr >> 2;
-            unsigned bank_num          = addr_without_byte & 0x7;
-            unsigned addr_wihtout_bank = addr_without_byte >> 3;
-            unsigned offset_num        = addr_wihtout_bank & 0x3;
-
-            unsigned value;
-            ram.getWord(new_addr, &value);
-
-            // printf("-------- (%x) i_m_readdata_d[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
-            vortex->i_m_readdata_d[bank_num][offset_num] = value;
-
-        }
-    }
-    else
-    {
-        if (vortex->o_m_valid_d)
-        {
-            // printf("Valid o_m_valid_d\n");
-            if (vortex->o_m_read_or_write_d)
+            for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__dcache_banks; curr_bank++)
             {
-                // printf("Valid write\n");
-
-                for (int curr_e = 0; curr_e < (CACHE_NUM_BANKS*CACHE_WORDS_PER_BLOCK); curr_e++)
+                for (int curr_word = 0; curr_word < vortex->Vortex__DOT__dcache_num_words_per_block; curr_word++)
                 {
-                    unsigned new_addr = vortex->o_m_evict_addr_d + (4*curr_e);
+                    unsigned curr_index = (curr_word * vortex->Vortex__DOT__dcache_banks) + curr_bank;
+                    unsigned curr_addr  = refill_addr_d + (4*curr_index);
 
+                    unsigned curr_value;
+                    ram.getWord(curr_addr, &curr_value);
 
-                    unsigned addr_without_byte = new_addr >> 2;
-                    unsigned bank_num          = addr_without_byte & 0x7;
-                    unsigned addr_wihtout_bank = addr_without_byte >> 3;
-                    unsigned offset_num        = addr_wihtout_bank & 0x3;
+                    vortex->i_m_readdata_d[curr_bank][curr_word] = curr_value;
 
-
-                    unsigned new_value         = vortex->o_m_writedata_d[bank_num][offset_num];
-
-                    ram.writeWord( new_addr, &new_value);
-
-                    // printf("+++++++ (%x) writeback[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, new_value);
-                    // printf("+++++++ (%x) i_m_readdata_d[%d][%d] (%d) = %d\n", new_addr, bank_num, offset_num, curr_e, value);
                 }
-                
             }
-
-            // Respond next cycle
-            this->refill = true;
-            this->refill_addr = vortex->o_m_read_addr_d;
         }
+        else
+        {
+            if (vortex->o_m_valid_d)
+            {
+
+                if (vortex->o_m_read_or_write_d)
+                {
+                    // fprintf(stderr, "++++++++++++++++++++++++++++++++\n");
+                    unsigned base_addr = vortex->o_m_evict_addr_d;
+
+                    for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__dcache_banks; curr_bank++)
+                    {
+                        for (int curr_word = 0; curr_word < vortex->Vortex__DOT__dcache_num_words_per_block; curr_word++)
+                        {
+                            unsigned curr_index = (curr_word * vortex->Vortex__DOT__dcache_banks) + curr_bank;
+                            unsigned curr_addr  = base_addr + (4*curr_index);
+
+                            unsigned curr_value = vortex->o_m_writedata_d[curr_bank][curr_word];
+
+                            ram.writeWord( curr_addr, &curr_value);
+                        }
+                    }
+                }
+
+                // Respond next cycle
+                refill_d      = true;
+                refill_addr_d = vortex->o_m_read_addr_d;
+            }
+        }
+
     }
 
 
@@ -397,7 +415,9 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
 
-    // int status = (unsigned int) vortex->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__0__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[28][0] & 0xf;
+    int status = (unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb & 0xf;
+
+    // std::cout << "Last wb: " << std::hex << ((unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb) << "\n";
 
     // std::cout << "Something: " <<  result << '\n';
 
@@ -408,6 +428,6 @@ bool Vortex::simulate(std::string file_to_simulate)
 
 
 
-    // return (status == 1);
-    return (1 == 1);
+    return (status == 1);
+    // return (1 == 1);
 }

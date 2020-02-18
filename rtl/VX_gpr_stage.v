@@ -8,6 +8,7 @@ module VX_gpr_stage (
 
 	input  wire                memory_delay,
 	input  wire  			   exec_delay,
+	input  wire                stall_gpr_csr,
 	output wire                gpr_stage_delay,
 
 	// inputs
@@ -97,7 +98,9 @@ module VX_gpr_stage (
 	wire stall_exec  = exec_delay;
 	wire flush_exec  = schedule_delay && !stall_exec;
 
-	assign gpr_stage_delay = stall_lsu || stall_exec;
+	wire stall_csr = stall_gpr_csr && VX_bckE_req.is_csr && (|VX_bckE_req.valid);
+
+	assign gpr_stage_delay = stall_lsu || stall_exec || stall_csr;
 
 	`ifdef ASIC
 		wire delayed_lsu_last_cycle;
@@ -173,10 +176,10 @@ module VX_gpr_stage (
 		VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
 			.clk  (clk),
 			.reset(reset),
-			.stall(stall_rest),
+			.stall(stall_gpr_csr),
 			.flush(flush_rest),
-			.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
-			.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
+			.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.alu_op, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
+			.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.alu_op     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
 			);
 
 
@@ -215,7 +218,7 @@ module VX_gpr_stage (
 	VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
 		.clk  (clk),
 		.reset(reset),
-		.stall(stall_rest),
+		.stall(stall_gpr_csr),
 		.flush(flush_rest),
 		.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
 		.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })

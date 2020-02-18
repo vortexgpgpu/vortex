@@ -64,7 +64,7 @@ namespace Harp {
       DEBUGMSG("Set to " << d);
     }
 
-    Float(double d, Size n): sz(n), d(d) { DEBUGMSG("Float(double, size)"); }
+    Float(double d, Size n): d(d), sz(n) { DEBUGMSG("Float(double, size)"); }
 
     operator Word_u() {
       DEBUGMSG("Float -> Word_u: " << d);
@@ -120,4 +120,4 @@ namespace Harp {
     double d;
     Size sz;
   };
-};
+}

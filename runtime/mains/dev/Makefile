@@ -1,4 +1,6 @@
 
+# To set a custom TOOLPATH, call make like this:
+# TOOLPATH=../../../../riscv-gnu-toolchain/drops/bin make ...
 TOOLPATH ?= ~/dev/riscv-gnu-toolchain/drops/bin
 
 COMP     = $(TOOLPATH)/riscv32-unknown-elf-gcc

@@ -50,7 +50,10 @@ namespace Harp {
   public:
     WordDecoder(const ArchDef &);    
     virtual Instruction *decode(const std::vector<Byte> &v, Size &n, trace_inst_t * trace_inst);
-    virtual Instruction *decode(const std::vector<Byte> &v, Size &n) {printf("Not implemented\n");}
+    virtual Instruction *decode(const std::vector<Byte> &v, Size &n) {
+      printf("Not implemented\n");
+      return nullptr;
+    }
 
   private:
     Size n, o, r, p, i1, i2, i3;
@@ -72,6 +75,6 @@ namespace Harp {
 
   };
 
-};
+}
 
 #endif

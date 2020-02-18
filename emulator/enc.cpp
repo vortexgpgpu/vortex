@@ -24,7 +24,7 @@ ByteDecoder::ByteDecoder(const ArchDef &ad) {
 
 static void decodeError(string msg) {
   cout << "Instruction decoder error: " << msg << '\n';
-  exit(1);
+  std::abort();
 }
 
 void Encoder::encodeChunk(DataChunk &dest, const TextChunk &src) {
@@ -386,7 +386,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx) {
       break;
    defualt:
       cout << "Unrecognized argument class in word decoder.\n";
-      exit(1);
+      std::abort();
   }
 
   if (haveRefs && usedImm && refMap.find(idx-n/8) != refMap.end()) {

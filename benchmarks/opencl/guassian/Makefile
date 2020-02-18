@@ -1,9 +1,9 @@
-RISCV_TOOL_PATH = $(wildcard ~/dev/riscv-gnu-toolchain/drops)
-POCL_CC_PATH = $(wildcard ~/dev/pocl/drops_riscv_cc)
-POCL_INC_PATH = $(wildcard ../include)
-POCL_LIB_PATH = $(wildcard ../lib)
-VX_RT_PATH = $(wildcard ../../../runtime)
-VX_SIMX_PATH = $(wildcard ../../../simX/obj_dir)
+RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
+POCL_CC_PATH ?= $(wildcard ../../../../pocl/drops_riscv_cc)
+POCL_INC_PATH ?= $(wildcard ../include)
+POCL_LIB_PATH ?= $(wildcard ../lib)
+VX_RT_PATH ?= $(wildcard ../../../runtime)
+VX_SIMX_PATH ?= $(wildcard ../../../simX/obj_dir)
 
 CC  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
 CXX = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-g++

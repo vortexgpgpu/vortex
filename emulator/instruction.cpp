@@ -284,7 +284,7 @@ void Instruction::executeOn(Warp &c) {
               break;
             default:
               cout << "unsupported MUL/DIV instr\n";
-              exit(1);
+              std::abort();
           }
         }
         else
@@ -351,7 +351,7 @@ void Instruction::executeOn(Warp &c) {
               break;
             default:
               cout << "ERROR: UNSUPPORTED R INST\n";
-              exit(1);
+              std::abort();
           }
         }
         break;
@@ -388,7 +388,7 @@ void Instruction::executeOn(Warp &c) {
             break;
           default:
             cout << "ERROR: UNSUPPORTED L INST\n";
-            exit(1);
+            std::abort();
           c.memAccesses.push_back(Warp::MemAccess(false, memAddr));
         }
         break;
@@ -475,7 +475,7 @@ void Instruction::executeOn(Warp &c) {
             break;
           default:
             cout << "ERROR: UNSUPPORTED L INST\n";
-            exit(1);
+            std::abort();
         }
         break;
       case S_INST:
@@ -507,7 +507,7 @@ void Instruction::executeOn(Warp &c) {
             break;
           default:
             cout << "ERROR: UNSUPPORTED S INST\n";
-            exit(1);
+            std::abort();
         }
         c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
 #ifdef EMU_INSTRUMENTATION
@@ -855,7 +855,7 @@ void Instruction::executeOn(Warp &c) {
       default:
         cout << "pc: " << hex << (c.pc) << "\n";
         cout << "aERROR: Unsupported instruction: " << *this << "\n" << flush;
-        exit(1);
+        std::abort();
     }
   }
 

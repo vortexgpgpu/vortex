@@ -12,7 +12,7 @@
 
 // `define SYN 1
 // `define ASIC 1
-`define SYN_FUNC 1
+// `define SYN_FUNC 1
 
 `define NUM_BARRIERS 4
 
@@ -128,14 +128,16 @@
 
 // `define PARAM
 
+//  oooooo
+
 //Cache configurations
 //Cache configurations
  //Bytes
-`define ICACHE_SIZE  1024
+`define ICACHE_SIZE  4096
 `define ICACHE_WAYS  2
 //Bytes
-`define ICACHE_BLOCK 16
-`define ICACHE_BANKS 1
+`define ICACHE_BLOCK 64
+`define ICACHE_BANKS 4
 `define ICACHE_LOG_NUM_BANKS `CLOG2(`ICACHE_BANKS)
 
 `define ICACHE_NUM_WORDS_PER_BLOCK (`ICACHE_BLOCK / (`ICACHE_BANKS * 4))
