@@ -25,7 +25,7 @@ RamMemDevice::RamMemDevice(const char *filename, Size wordSize) :
 
   if (!input) {
     cout << "Error reading file \"" << filename << "\" into RamMemDevice.\n";
-    exit(1);
+    std::abort();
   }
 
   do { contents.push_back(input.get()); } while (input);
@@ -38,7 +38,7 @@ RamMemDevice::RamMemDevice(Size size, Size wordSize) :
 
 void RomMemDevice::write(Addr, Word) {
   cout << "Attempt to write to ROM.\n";
-  exit(1);
+  std::abort();
 }
 
 Word RamMemDevice::read(Addr addr) {
@@ -215,7 +215,7 @@ Word DiskControllerMemDevice::read(Addr a) {
     case 5: return status;
     default:
       cout << "Attempt to read invalid disk controller register.\n";
-      exit(1);
+      std::abort();
   }
 }
 

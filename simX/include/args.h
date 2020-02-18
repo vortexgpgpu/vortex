@@ -56,6 +56,6 @@ namespace HarpTools {
     bool &x;
   };
   
-};
+}
 
 #endif
