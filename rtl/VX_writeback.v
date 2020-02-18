@@ -14,7 +14,8 @@ module VX_writeback (
 
 		// Actual WB to GPR
 		VX_wb_inter              VX_writeback_inter,
-		output wire              no_slot_mem
+		output wire              no_slot_mem,
+		output wire              no_slot_csr
 	);
 
 
@@ -26,6 +27,7 @@ module VX_writeback (
 
 
 		assign no_slot_mem = mem_wb && (exec_wb || csr_wb);
+		assign no_slot_csr = csr_wb && (exec_wb);
 
 		assign VX_writeback_tempp.write_data  = exec_wb ? VX_inst_exec_wb.alu_result :
 		                                        csr_wb  ? VX_csr_wb.csr_result       :
@@ -84,6 +86,13 @@ module VX_writeback (
 			.in   ({VX_writeback_tempp.write_data, VX_writeback_tempp.wb_valid, VX_writeback_tempp.rd, VX_writeback_tempp.wb, VX_writeback_tempp.wb_warp_num, VX_writeback_tempp.wb_pc}),
 			.out  ({use_wb_data                  , VX_writeback_inter.wb_valid, VX_writeback_inter.rd, VX_writeback_inter.wb, VX_writeback_inter.wb_warp_num, VX_writeback_inter.wb_pc})
 			);
+
+		reg[31:0] last_data_wb;
+		always @(posedge clk) begin
+			if ((|VX_writeback_inter.wb_valid) && (VX_writeback_inter.wb != 0) && (VX_writeback_inter.rd == 28)) begin
+				last_data_wb <= use_wb_data[0];
+			end
+		end
 
 		`ifdef SYN
 			assign VX_writeback_inter.write_data = prev_is_mem ? VX_writeback_tempp.write_data : use_wb_data;

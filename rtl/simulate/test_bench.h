@@ -415,12 +415,14 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
 
-    // int status = (unsigned int) vortex->Vortex__DOT__vx_front_end__DOT__vx_decode__DOT__vx_grp_wrapper__DOT__genblk2__BRA__0__KET____DOT__vx_gpr__DOT__first_ram__DOT__GPR[28][0] & 0xf;
+    int status = (unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb & 0xf;
+
+    // std::cout << "Last wb: " << std::hex << ((unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb) << "\n";
 
     // std::cout << "Something: " <<  result << '\n';
 
-    uint32_t status;
-    ram.getWord(0, &status);
+    // uint32_t status;
+    // ram.getWord(0, &status);
 
     this->print_stats();
 
