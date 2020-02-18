@@ -227,7 +227,7 @@ void Vortex::io_handler()
 
         char c = (char) data_write;
         std::cerr << c;
-        std::cout << c;
+        // std::cout << c;
     }
 }
 
