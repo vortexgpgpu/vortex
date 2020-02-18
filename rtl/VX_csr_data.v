@@ -57,7 +57,7 @@ module VX_csr_data (
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
 			for (curr_e = 0; curr_e < 1024; curr_e=curr_e+1) begin
-				assign csr[curr_e] = 0;
+				csr[curr_e] <= 0;
 			end
 			cycle   <= 0;
 			instret <= 0;

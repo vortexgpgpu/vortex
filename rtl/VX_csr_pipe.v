@@ -1,3 +1,4 @@
+`include "VX_define.v"
 
 module VX_csr_pipe (
 	input wire clk,    // Clock

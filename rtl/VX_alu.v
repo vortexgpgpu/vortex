@@ -28,8 +28,8 @@ module VX_alu(
             .PIPELINE(div_pipeline_len)
         ) unsigned_div (
             .clock(clk),
-            .aclr(0),
-            .clken(1), // TODO this could be disabled on inactive instructions
+            .aclr(1'b0),
+            .clken(1'b1), // TODO this could be disabled on inactive instructions
             .numer(ALU_in1),
             .denom(ALU_in2),
             .quotient(unsigned_div_result),
@@ -45,8 +45,8 @@ module VX_alu(
             .PIPELINE(div_pipeline_len)
         ) signed_div (
             .clock(clk),
-            .aclr(0),
-            .clken(1), // TODO this could be disabled on inactive instructions
+            .aclr(1'b0),
+            .clken(1'b1), // TODO this could be disabled on inactive instructions
             .numer(ALU_in1),
             .denom(ALU_in2),
             .quotient(signed_div_result),

@@ -49,7 +49,7 @@ module VX_divide
                 .numer(numer),
                 .denom(denom),
                 .quotient(quotient),
-                .remainder(remainder)
+                .remain(remainder)
             );
 
         end
