@@ -32,8 +32,9 @@ smart: smart.log
 STAMP = echo done >
 
 $(PROJECT).syn.rpt: syn.chg $(SOURCE_FILES) 
-	$(QUARTUS_ROOT)/quartus/bin/quartus_syn $(PROJECT) $(SYN_ARGS)
 	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t make_pins_virtual.tcl
+	$(QUARTUS_ROOT)/quartus/bin/quartus_syn $(PROJECT) $(SYN_ARGS)
+	# $(QUARTUS_ROOT)/quartus/bin/quartus_sh -t make_pins_virtual.tcl
 	$(STAMP) fit.chg
 
 $(PROJECT).fit.rpt: fit.chg $(PROJECT).syn.rpt
