@@ -11,7 +11,7 @@ interface VX_csr_req_inter ();
 	wire[`NW_M1:0] warp_num;
 	wire[4:0]      rd;
 	wire[1:0]      wb;
-
+	wire[4:0]      alu_op;
 	wire           is_csr;
 	wire[11:0]     csr_address;
 	wire           csr_immed;

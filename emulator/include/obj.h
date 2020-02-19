@@ -40,7 +40,7 @@ namespace Harp {
       Ref(name, rel), addr(addr) { }
     virtual void bind(Addr addr, Addr base = 0) {
       std::cout << "Attempted to bind a SimpleRef.\n";
-      exit(1);
+      std::abort();
     } 
     virtual Addr getAddr() const { return this->addr; }
     Byte *getAddrPtr() { return (Byte*)&addr; }
@@ -86,7 +86,7 @@ namespace Harp {
 //       std::cout << "Attempt to bind a " << bits << "-bit "
 //                 << (relative?"":"non-") << "relative symbol to an address"
 //                                            " it cannot reach.\n";
-//       exit(1);
+//       std::abort();
 //     }
 
 //     virtual Addr getAddr() const {

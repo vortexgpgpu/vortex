@@ -11,6 +11,6 @@ namespace HarpTools {
     ASM_T_PREG,        ASM_T_REG,         ASM_T_REG_RA,    ASM_T_REG_SP,
     ASM_T_REG_FP,      ASM_T_LIT,         ASM_T_SYM,       ASM_T_PEXP
   };
-};
+}
 
 #endif
