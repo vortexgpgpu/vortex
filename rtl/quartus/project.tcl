@@ -108,8 +108,8 @@ set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 
 
-set where [file dirname [info script]]
-source [file join $where make_pins_virtual.tcl]
+# set where [file dirname [info script]]
+# source [file join $where make_pins_virtual.tcl]
 
 project_close
 
