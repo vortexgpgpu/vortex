@@ -33,6 +33,7 @@ STAMP = echo done >
 
 $(PROJECT).syn.rpt: syn.chg $(SOURCE_FILES) 
 	$(QUARTUS_ROOT)/quartus/bin/quartus_syn $(PROJECT) $(SYN_ARGS)
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t make_pins_virtual.tcl
 	$(STAMP) fit.chg
 
 $(PROJECT).fit.rpt: fit.chg $(PROJECT).syn.rpt
@@ -45,6 +46,7 @@ $(PROJECT).asm.rpt: asm.chg $(PROJECT).fit.rpt
 
 $(PROJECT).sta.rpt: sta.chg $(PROJECT).fit.rpt
 	$(QUARTUS_ROOT)/quartus/bin/quartus_sta $(PROJECT)  $(STA_ARGS) 
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sta -t VX_timing.tcl
 
 smart.log: $(PROJECT_FILES)
 	$(QUARTUS_ROOT)/quartus/bin/quartus_sh --determine_smart_action $(PROJECT) > smart.log
@@ -69,4 +71,4 @@ program: $(PROJECT).sof
 	quartus_pgm --no_banner --mode=jtag -o "P;$(PROJECT).sof"
 	
 clean:
-	rm -rf *.rpt *.chg *.qsf *.qpf smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db output_files tmp-clearbox
+	rm -rf *.rpt *.chg *.qsf *.qpf smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db output_files tmp-clearbox bin/

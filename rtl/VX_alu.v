@@ -14,9 +14,9 @@ module VX_alu(
 	output reg        out_alu_stall
 	);
 
-		localparam div_pipeline_len = 3;
+	localparam div_pipeline_len = 10;
 
-		wire[31:0] unsigned_div_result;
+	wire[31:0] unsigned_div_result;
         wire[31:0] unsigned_rem_result;
         wire[31:0] signed_div_result;
         wire[31:0] signed_rem_result;

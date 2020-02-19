@@ -107,6 +107,10 @@ set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 
+
+set where [file dirname [info script]]
+source [file join $where make_pins_virtual.tcl]
+
 project_close
 
 # set_global_assignment -name VERILOG_FILE $opts(src)
