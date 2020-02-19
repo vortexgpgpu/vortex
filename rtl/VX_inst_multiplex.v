@@ -84,6 +84,7 @@ module VX_inst_multiplex (
 	assign VX_csr_req.warp_num        = VX_bckE_req.warp_num;
 	assign VX_csr_req.rd              = VX_bckE_req.rd;
 	assign VX_csr_req.wb              = VX_bckE_req.wb;
+	assign VX_csr_req.alu_op          = VX_bckE_req.alu_op;
 	assign VX_csr_req.is_csr          = VX_bckE_req.is_csr;
 	assign VX_csr_req.csr_address     = VX_bckE_req.csr_address;
 	assign VX_csr_req.csr_immed       = VX_bckE_req.csr_immed;

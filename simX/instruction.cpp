@@ -264,16 +264,16 @@ void trap_to_simulator(Warp & c)
             fstat(file, &st);
 
             fprintf(stderr, "------------------------\n");
-            fprintf(stderr, "Size of struct: %x\n", sizeof(struct stat));
+            fprintf(stderr, "Size of struct: %ld\n", sizeof(struct stat));
             fprintf(stderr, "st_mode: %x\n", st.st_mode);
-            fprintf(stderr, "st_dev: %x\n", st.st_dev);
-            fprintf(stderr, "st_ino: %x\n", st.st_ino);
+            fprintf(stderr, "st_dev: %ld\n", st.st_dev);
+            fprintf(stderr, "st_ino: %ld\n", st.st_ino);
             fprintf(stderr, "st_uid: %x\n", st.st_uid);
             fprintf(stderr, "st_gid: %x\n", st.st_gid);
-            fprintf(stderr, "st_rdev: %x\n", st.st_rdev);
-            fprintf(stderr, "st_size: %x\n", st.st_size);
-            fprintf(stderr, "st_blksize: %x\n", st.st_blksize);
-            fprintf(stderr, "st_blocks: %x\n", st.st_blocks);
+            fprintf(stderr, "st_rdev: %ld\n", st.st_rdev);
+            fprintf(stderr, "st_size: %ld\n", st.st_size);
+            fprintf(stderr, "st_blksize: %ld\n", st.st_blksize);
+            fprintf(stderr, "st_blocks: %ld\n", st.st_blocks);
             fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 
             upload(&write_buffer, (char *) &st.st_mode    , sizeof(st.st_mode), c);
@@ -517,7 +517,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             default:
               cout << "unsupported MUL/DIV instr\n";
-              exit(1);
+              std::abort();
           }
         }
         else
@@ -584,7 +584,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             default:
               cout << "ERROR: UNSUPPORTED R INST\n";
-              exit(1);
+              std::abort();
           }
         }
         break;
@@ -622,7 +622,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           default:
             cout << "ERROR: UNSUPPORTED L INST\n";
-            exit(1);
+            std::abort();
           c.memAccesses.push_back(Warp::MemAccess(false, memAddr));
         }
         break;
@@ -709,7 +709,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           default:
             cout << "ERROR: UNSUPPORTED L INST\n";
-            exit(1);
+            std::abort();
         }
         break;
       case S_INST:
@@ -743,7 +743,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           default:
             cout << "ERROR: UNSUPPORTED S INST\n";
-            exit(1);
+            std::abort();
         }
         c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
 #ifdef EMU_INSTRUMENTATION
@@ -2397,7 +2397,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
             default:
               cout << "ERROR: UNSUPPORTED S INST\n" << flush;
-              exit(1);
+              std::abort();
           }
           // cout << "Loop finished" << endl;
           // c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
@@ -2408,7 +2408,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
       default:
         D(3, "pc: " << hex << (c.pc-4));
         D(3, "aERROR: Unsupported instruction: " << *this);
-        exit(1);
+        std::abort();
     }
 
     // break;

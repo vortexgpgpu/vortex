@@ -99,9 +99,10 @@ namespace Harp {
       Byte *file;
       Size blocks;
     };
-    std::vector <Disk> disks;
+    
+    Size wordSize, blockSize;
     Core &core;
-    Size wordSize, blockSize;;
+    std::vector <Disk> disks;   
   };
 
   class MemoryUnit {
@@ -136,7 +137,7 @@ namespace Harp {
   private:
     class ADecoder {
     public:
-      ADecoder() : zeroChild(NULL), oneChild(NULL), range(0) {}
+      ADecoder() : zeroChild(NULL), oneChild(NULL), range(0), md(nullptr) {}
       ADecoder(MemDevice &md, Size range) : 
         zeroChild(NULL), oneChild(NULL), range(range), md(&md) {}
       Byte *getPtr(Addr a, Size sz, Size wordSize);
@@ -145,24 +146,24 @@ namespace Harp {
       void map(Addr a, MemDevice &md, Size range, Size bit);
     private:
       MemDevice &doLookup(Addr a, Size &bit);
-      ADecoder *zeroChild, *oneChild;
-      MemDevice *md;
+      ADecoder *zeroChild, *oneChild;      
       Size range;
+      MemDevice *md;      
     };
-
-    ADecoder ad;
 
     struct TLBEntry {
       TLBEntry() {}
       TLBEntry(Word pfn, Word flags): pfn(pfn), flags(flags) {}
-      Word flags;
       Word pfn;
+      Word flags;      
     };
 
-    std::map<Addr, TLBEntry> tlb;
-    TLBEntry tlbLookup(Addr vAddr, Word flagMask);
-
     Size pageSize, addrBytes;
+    
+    ADecoder ad;
+
+    std::map<Addr, TLBEntry> tlb;
+    TLBEntry tlbLookup(Addr vAddr, Word flagMask);    
 
     bool disableVm;
   };
@@ -402,7 +403,7 @@ namespace Harp {
       char* content = new char[size];
       int x = fread(content, 1, size, fp);
 
-      if (!x) { std::cout << "COULD NOT READ FILE\n"; exit(1);}
+      if (!x) { std::cout << "COULD NOT READ FILE\n"; std::abort();}
 
       int offset = 0;
       char* line = content;
@@ -455,7 +456,7 @@ namespace Harp {
 
 
 
-};
+}
 
 
 #endif

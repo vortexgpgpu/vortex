@@ -19,6 +19,6 @@ namespace Harp {
   Word_u readWord(const std::vector<Byte> &b, Size &n, Size wordSize);
   void writeByte(std::vector<Byte> &p, Size &n, Byte b);
   void writeWord(std::vector<Byte> &p, Size &n, Size wordSize, Word w);
-};
+}
 
 #endif

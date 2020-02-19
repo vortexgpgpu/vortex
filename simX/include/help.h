@@ -32,6 +32,6 @@ namespace HarpTools {
       *disasmHelp = "HARP Disassembler command line arguments:\n"
                      "  -a, --arch <arch string> Architecture string.\n"
                      "  -o, --output <filename>  Output filename.\n";
-  };
-};
+  }
+}
 #endif

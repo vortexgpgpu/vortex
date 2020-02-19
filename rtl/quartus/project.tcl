@@ -70,6 +70,7 @@ set_global_assignment -name VERILOG_FILE ../shared_memory/VX_shared_memory_block
 set_global_assignment -name VERILOG_FILE ../shared_memory/VX_shared_memory.v
 set_global_assignment -name VERILOG_FILE ../shared_memory/VX_priority_encoder_sm.v
 set_global_assignment -name VERILOG_FILE ../shared_memory/VX_bank_valids.v
+set_global_assignment -name VERILOG_FILE ../compat/VX_divide.v
 set_global_assignment -name VERILOG_FILE ../VX_alu.v
 set_global_assignment -name VERILOG_FILE ../VX_back_end.v
 set_global_assignment -name VERILOG_FILE ../VX_context.v
@@ -105,6 +106,10 @@ set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+
+
+# set where [file dirname [info script]]
+# source [file join $where make_pins_virtual.tcl]
 
 project_close
 

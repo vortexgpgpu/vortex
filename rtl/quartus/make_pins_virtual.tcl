@@ -2,10 +2,12 @@ load_package flow
 
 package require cmdline
 
+project_open Vortex
+
 proc make_all_pins_virtual { args } {
 
     remove_all_instance_assignments -name VIRTUAL_PIN
-    execute_module -tool map
+    # execute_module -tool map
     set name_ids [get_names -filter * -node_type pin]
 
     foreach_in_collection name_id $name_ids {

@@ -111,6 +111,6 @@ namespace Harp {
     RegNum nRegs, nPRegs;
     char encChar;
   };
-};
+}
 
 #endif
