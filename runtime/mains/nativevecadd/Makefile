@@ -1,11 +1,11 @@
 
-COMP     = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-g++
+COMP     = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-g++
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostartfiles
 CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostartfiles -nodefaultlibs -Wl,-Bstatic,-T,../vortex_link.ld -march=rv32im -mabi=ilp32
 
-DMP  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
-CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
+DMP  = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
+CPY  = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 
 # VX_STR  = ../../startup/vx_start.s
 
@@ -18,7 +18,7 @@ VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
 VX_TEST = ../../tests/tests.c
 VX_FIO  = ../../fileio/fileio.s
-LIBS    = -Wl,--whole-archive ./libs/libvecadd.a -Wl,--no-whole-archive ./libs/libOpenCL.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = -Wl,--whole-archive ./libs/libvecadd.a -Wl,--no-whole-archive ./libs/libOpenCL.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_pocl_main
 

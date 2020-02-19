@@ -6,6 +6,7 @@ module VX_scheduler (
 	input wire                clk,
 	input wire                reset,
 	input wire                memory_delay,
+	input wire 				  exec_delay,
 	input wire                gpr_stage_delay,
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,
@@ -27,7 +28,11 @@ module VX_scheduler (
 	wire is_store = (VX_bckE_req.mem_write != `NO_MEM_WRITE);
 	wire is_load  = (VX_bckE_req.mem_read  != `NO_MEM_READ);
 
+	// classify our next instruction.
 	wire is_mem   = is_store || is_load;
+	wire is_gpu = (VX_bckE_req.is_wspawn || VX_bckE_req.is_tmc || VX_bckE_req.is_barrier || VX_bckE_req.is_split);
+	wire is_csr = VX_bckE_req.is_csr;
+	wire is_exec = !is_mem && !is_gpu && !is_csr;
 
 
 	wire rs1_pass        = ((valid_wb && (VX_writeback_inter.rd == VX_bckE_req.rs1)));
@@ -44,8 +49,10 @@ module VX_scheduler (
 
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual ;
 
-
-	assign schedule_delay = ((rename_valid) && (|VX_bckE_req.valid)) || (memory_delay && (is_mem)) || (gpr_stage_delay && is_mem);
+	assign schedule_delay = ((rename_valid) && (|VX_bckE_req.valid))
+		|| (memory_delay && is_mem)
+		|| (gpr_stage_delay && (is_mem || is_exec))
+		|| (exec_delay && is_exec);
 
 	integer i;
 	integer w;

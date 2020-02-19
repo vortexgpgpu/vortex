@@ -3,8 +3,8 @@
 
 #define NW 8
 
-// #define CACHE_NUM_BANKS 8
-// #define CACHE_WORDS_PER_BLOCK 4
+#define CACHE_NUM_BANKS 8
+#define CACHE_WORDS_PER_BLOCK 4
 
 #define R_INST 51
 #define L_INST 3

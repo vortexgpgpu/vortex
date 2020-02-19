@@ -119,7 +119,8 @@ module VX_decode(
 		assign is_auipc     = (curr_opcode == `AUIPC_INST);
 		assign is_csr       = (curr_opcode == `SYS_INST) && (func3 != 0);
 		assign is_csr_immed = (is_csr) && (func3[2] == 1);
-		assign is_e_inst    = (curr_opcode == `SYS_INST) && (func3 == 0);
+		// assign is_e_inst    = (curr_opcode == `SYS_INST) && (func3 == 0);
+		assign is_e_inst    = in_instruction == 32'h00000073;
 
 		assign is_gpgpu     = (curr_opcode == `GPGPU_INST);
 

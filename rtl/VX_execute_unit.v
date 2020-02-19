@@ -12,7 +12,10 @@ module VX_execute_unit (
 		// JAL Response
 	VX_jal_response_inter    VX_jal_rsp,
 		// Branch Response
-	VX_branch_response_inter VX_branch_rsp
+	VX_branch_response_inter VX_branch_rsp,
+
+	input wire no_slot_exec,
+	output wire out_delay
 );
 
 
@@ -41,10 +44,13 @@ module VX_execute_unit (
 
 
 		wire[`NT_M1:0][31:0]  alu_result;
+		wire[`NT_M1:0]  alu_stall;
 		genvar index_out_reg;
 		generate
 			for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1) begin : alu_defs
 				VX_alu vx_alu(
+					.clk(clk),
+					.reset(reset),
 					// .in_reg_data   (in_reg_data[1:0]),
 					.in_1          (in_a_reg_data[index_out_reg]),
 					.in_2          (in_b_reg_data[index_out_reg]),
@@ -53,10 +59,16 @@ module VX_execute_unit (
 					.in_upper_immed(in_upper_immed),
 					.in_alu_op     (in_alu_op),
 					.in_curr_PC    (in_curr_PC),
-					.out_alu_result(alu_result[index_out_reg])
+					.out_alu_result(alu_result[index_out_reg]),
+					.out_alu_stall(alu_stall[index_out_reg])
 				);
 			end
 		endgenerate
+
+		wire internal_stall;
+		assign internal_stall = |alu_stall;
+
+		assign out_delay = no_slot_exec || internal_stall;
 
 
 		wire [$clog2(`NT)-1:0] jal_branch_use_index;
@@ -103,7 +115,7 @@ module VX_execute_unit (
 		// Actual Writeback
 		assign VX_inst_exec_wb.rd          = VX_exec_unit_req.rd;
 		assign VX_inst_exec_wb.wb          = VX_exec_unit_req.wb;
-		assign VX_inst_exec_wb.wb_valid    = VX_exec_unit_req.valid;
+		assign VX_inst_exec_wb.wb_valid    = VX_exec_unit_req.valid && !internal_stall;
 		assign VX_inst_exec_wb.wb_warp_num = VX_exec_unit_req.warp_num;
 		assign VX_inst_exec_wb.alu_result  = VX_exec_unit_req.jal ? duplicate_PC_data : alu_result;
 
@@ -163,4 +175,4 @@ module VX_execute_unit (
 		// assign out_is_csr        = VX_exec_unit_req.is_csr;
 		// assign out_csr_address   = VX_exec_unit_req.csr_address;
 
-endmodule
+endmodule : VX_execute_unit

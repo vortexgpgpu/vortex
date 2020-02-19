@@ -20,6 +20,6 @@ namespace Harp {
 
   enum MemFlags {RD_USR = 1, WR_USR = 2,  EX_USR = 4, 
                  RD_SUP = 8, WR_SUP = 16, EX_SUP = 32};
-};
+}
 
 #endif

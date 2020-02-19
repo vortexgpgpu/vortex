@@ -7,6 +7,8 @@ module VX_gpr_stage (
 	input wire                 schedule_delay,
 
 	input  wire                memory_delay,
+	input  wire  			   exec_delay,
+	input  wire                stall_gpr_csr,
 	output wire                gpr_stage_delay,
 
 	// inputs
@@ -93,7 +95,12 @@ module VX_gpr_stage (
 	wire stall_lsu  = memory_delay;
 	wire flush_lsu  = schedule_delay && !stall_lsu;
 
-	assign gpr_stage_delay = stall_lsu;
+	wire stall_exec  = exec_delay;
+	wire flush_exec  = schedule_delay && !stall_exec;
+
+	wire stall_csr = stall_gpr_csr && VX_bckE_req.is_csr && (|VX_bckE_req.valid);
+
+	assign gpr_stage_delay = stall_lsu || stall_exec || stall_csr;
 
 	`ifdef ASIC
 		wire delayed_lsu_last_cycle;
@@ -145,8 +152,8 @@ module VX_gpr_stage (
 		VX_generic_register #(.N(224 + `NW_M1 + 1 + (`NT))) exec_unit_reg(
 			.clk  (clk),
 			.reset(reset),
-			.stall(stall_rest),
-			.flush(flush_rest),
+			.stall(stall_exec),
+			.flush(flush_exec),
 			.in   ({VX_exec_unit_req_temp.valid, VX_exec_unit_req_temp.warp_num, VX_exec_unit_req_temp.curr_PC, VX_exec_unit_req_temp.PC_next, VX_exec_unit_req_temp.rd, VX_exec_unit_req_temp.wb, VX_exec_unit_req_temp.alu_op, VX_exec_unit_req_temp.rs1, VX_exec_unit_req_temp.rs2, VX_exec_unit_req_temp.rs2_src, VX_exec_unit_req_temp.itype_immed, VX_exec_unit_req_temp.upper_immed, VX_exec_unit_req_temp.branch_type, VX_exec_unit_req_temp.jalQual, VX_exec_unit_req_temp.jal, VX_exec_unit_req_temp.jal_offset, VX_exec_unit_req_temp.ebreak, VX_exec_unit_req_temp.wspawn, VX_exec_unit_req_temp.is_csr, VX_exec_unit_req_temp.csr_address, VX_exec_unit_req_temp.csr_immed, VX_exec_unit_req_temp.csr_mask}),
 			.out  ({VX_exec_unit_req.valid     , VX_exec_unit_req.warp_num     , VX_exec_unit_req.curr_PC     , VX_exec_unit_req.PC_next     , VX_exec_unit_req.rd     , VX_exec_unit_req.wb     , VX_exec_unit_req.alu_op     , VX_exec_unit_req.rs1     , VX_exec_unit_req.rs2     , VX_exec_unit_req.rs2_src     , VX_exec_unit_req.itype_immed     , VX_exec_unit_req.upper_immed     , VX_exec_unit_req.branch_type     , VX_exec_unit_req.jalQual     , VX_exec_unit_req.jal     , VX_exec_unit_req.jal_offset     , VX_exec_unit_req.ebreak     , VX_exec_unit_req.wspawn     , VX_exec_unit_req.is_csr     , VX_exec_unit_req.csr_address     , VX_exec_unit_req.csr_immed     , VX_exec_unit_req.csr_mask     })
 			);
@@ -166,13 +173,13 @@ module VX_gpr_stage (
 		assign VX_gpu_inst_req.a_reg_data = real_base_address;
 		assign VX_gpu_inst_req.rd2        = real_store_data;
 
-		VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
+		VX_generic_register #(.N(`NW_M1  + 1 + `NT + 58)) csr_reg(
 			.clk  (clk),
 			.reset(reset),
-			.stall(stall_rest),
+			.stall(stall_gpr_csr),
 			.flush(flush_rest),
-			.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
-			.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
+			.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.alu_op, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
+			.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.alu_op     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
 			);
 
 
@@ -193,8 +200,8 @@ module VX_gpr_stage (
 	VX_generic_register #(.N(224 + `NW_M1 + 1 + 65*(`NT))) exec_unit_reg(
 		.clk  (clk),
 		.reset(reset),
-		.stall(stall_rest),
-		.flush(flush_rest),
+		.stall(stall_exec),
+		.flush(flush_exec),
 		.in   ({VX_exec_unit_req_temp.valid, VX_exec_unit_req_temp.warp_num, VX_exec_unit_req_temp.curr_PC, VX_exec_unit_req_temp.PC_next, VX_exec_unit_req_temp.rd, VX_exec_unit_req_temp.wb, VX_exec_unit_req_temp.a_reg_data, VX_exec_unit_req_temp.b_reg_data, VX_exec_unit_req_temp.alu_op, VX_exec_unit_req_temp.rs1, VX_exec_unit_req_temp.rs2, VX_exec_unit_req_temp.rs2_src, VX_exec_unit_req_temp.itype_immed, VX_exec_unit_req_temp.upper_immed, VX_exec_unit_req_temp.branch_type, VX_exec_unit_req_temp.jalQual, VX_exec_unit_req_temp.jal, VX_exec_unit_req_temp.jal_offset, VX_exec_unit_req_temp.ebreak, VX_exec_unit_req_temp.wspawn, VX_exec_unit_req_temp.is_csr, VX_exec_unit_req_temp.csr_address, VX_exec_unit_req_temp.csr_immed, VX_exec_unit_req_temp.csr_mask}),
 		.out  ({VX_exec_unit_req.valid     , VX_exec_unit_req.warp_num     , VX_exec_unit_req.curr_PC     , VX_exec_unit_req.PC_next     , VX_exec_unit_req.rd     , VX_exec_unit_req.wb     , VX_exec_unit_req.a_reg_data     , VX_exec_unit_req.b_reg_data     , VX_exec_unit_req.alu_op     , VX_exec_unit_req.rs1     , VX_exec_unit_req.rs2     , VX_exec_unit_req.rs2_src     , VX_exec_unit_req.itype_immed     , VX_exec_unit_req.upper_immed     , VX_exec_unit_req.branch_type     , VX_exec_unit_req.jalQual     , VX_exec_unit_req.jal     , VX_exec_unit_req.jal_offset     , VX_exec_unit_req.ebreak     , VX_exec_unit_req.wspawn     , VX_exec_unit_req.is_csr     , VX_exec_unit_req.csr_address     , VX_exec_unit_req.csr_immed     , VX_exec_unit_req.csr_mask     })
 		);
@@ -208,15 +215,15 @@ module VX_gpr_stage (
 		.out  ({VX_gpu_inst_req.valid     , VX_gpu_inst_req.warp_num     , VX_gpu_inst_req.is_wspawn     , VX_gpu_inst_req.is_tmc     , VX_gpu_inst_req.is_split     , VX_gpu_inst_req.is_barrier     , VX_gpu_inst_req.pc_next     , VX_gpu_inst_req.a_reg_data     , VX_gpu_inst_req.rd2     })
 		);
 
-	VX_generic_register #(.N(`NW_M1  + 1 + `NT + 53)) csr_reg(
+	VX_generic_register #(.N(`NW_M1  + 1 + `NT + 58)) csr_reg(
 		.clk  (clk),
 		.reset(reset),
-		.stall(stall_rest),
+		.stall(stall_gpr_csr),
 		.flush(flush_rest),
-		.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
-		.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
+		.in   ({VX_csr_req_temp.valid, VX_csr_req_temp.warp_num, VX_csr_req_temp.rd, VX_csr_req_temp.wb, VX_csr_req_temp.alu_op, VX_csr_req_temp.is_csr, VX_csr_req_temp.csr_address, VX_csr_req_temp.csr_immed, VX_csr_req_temp.csr_mask}),
+		.out  ({VX_csr_req.valid     , VX_csr_req.warp_num     , VX_csr_req.rd     , VX_csr_req.wb     , VX_csr_req.alu_op     , VX_csr_req.is_csr     , VX_csr_req.csr_address     , VX_csr_req.csr_immed     , VX_csr_req.csr_mask     })
 		);
 
 	`endif
 
-endmodule
+endmodule : VX_gpr_stage

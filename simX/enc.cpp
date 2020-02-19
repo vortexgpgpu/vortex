@@ -22,14 +22,12 @@ using namespace Harp;
 //   wordSize = ad.getWordSize();
 // }
 
-static void decodeError(string msg) {
+/*static void decodeError(string msg) {
   cout << "Instruction decoder error: " << msg << '\n';
-  exit(1);
-}
+  std::abort();
+}*/
 
-
-
-static unsigned ceilLog2(RegNum x) {
+/*static unsigned ceilLog2(RegNum x) {
   unsigned z = 0;
   bool nonZeroInnerValues(false);
 
@@ -44,8 +42,7 @@ static unsigned ceilLog2(RegNum x) {
   if (nonZeroInnerValues) z++;
 
   return z;
-}
-
+}*/
 
 WordDecoder::WordDecoder(const ArchDef &arch) {
 
@@ -236,7 +233,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
 
     case InstType::V_TYPE:
               D(3, "Entered here: instr type = vector" << op);
-      switch(op) {
+      switch (op) {
         case Opcode::VSET_ARITH: //TODO: arithmetic ops
           inst.setDestReg((code>>shift_rd)   & reg_mask);
           inst.setSrcReg((code>>shift_rs1)   & reg_mask);
@@ -308,11 +305,14 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
           //trace_inst->vd         = ((code>>shift_rd)    & reg_mask);
           trace_inst->vs1        = ((code>>shift_rd)   & reg_mask); //vs3
         break;
+      default:
+        cout << "Inavlid opcode.\n";
+        std::abort();
       }
       break;
-   default:
+    default:
       cout << "Unrecognized argument class in word decoder.\n";
-      exit(1);
+      std::abort();
   }
 
   if (haveRefs && usedImm && refMap.find(idx-n/8) != refMap.end()) {

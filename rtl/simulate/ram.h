@@ -167,11 +167,12 @@ uint32_t hToI(char *c, uint32_t size) {
 
 
 
-void loadHexImpl(char * path,RAM* mem) {
+void loadHexImpl(const char *path, RAM* mem) {
     mem->clear();
-    FILE *fp = fopen(&path[0], "r");
+    FILE *fp = fopen(path, "r");
     if(fp == 0){
         printf("Path not found %s\n", path);
+        return;
         // std::cout << path << " not found" << std::endl;
     }
     //Preload 0x0 <-> 0x80000000 jumps
