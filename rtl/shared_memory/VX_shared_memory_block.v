@@ -28,31 +28,34 @@ module VX_shared_memory_block
 
 	`ifndef SYN
 
-		//reg[3:0][31:0] shared_memory[127:0];
-		reg[SMB_WORDS_PER_READ-1:0][31:0] shared_memory[SMB_HEIGHT-1:0];
+		reg[SMB_WORDS_PER_READ-1:0][3:0][7:0] shared_memory[SMB_HEIGHT-1:0];
 
 		//wire need_to_write = (|we);
 		integer curr_ind;
-		initial begin
-				for (curr_ind = 0; curr_ind < SMB_HEIGHT; curr_ind = curr_ind + 1)
-				begin
-					shared_memory[curr_ind] = 0;
-				end
-		end
+		// initial begin
+		// 		for (curr_ind = 0; curr_ind < SMB_HEIGHT; curr_ind = curr_ind + 1)
+		// 		begin
+		// 			shared_memory[curr_ind] = 0;
+		// 		end
+		// end
 		always @(posedge clk, posedge reset) begin
 			if (reset) begin
 				//for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
 			end else if(shm_write) begin
-				shared_memory[addr][we][31:0] = wdata[we][31:0]; // - Ethan's addition
-				//if (we == 2'b00) shared_memory[addr][0][31:0] <= wdata[0][31:0];
-				//if (we == 2'b01) shared_memory[addr][1][31:0] <= wdata[1][31:0];
-				//if (we == 2'b10) shared_memory[addr][2][31:0] <= wdata[2][31:0];
-				//if (we == 2'b11) shared_memory[addr][3][31:0] <= wdata[3][31:0];
+				if (we == 2'b00) shared_memory[reg_addr][0] <= wdata[0];
+				if (we == 2'b01) shared_memory[reg_addr][1] <= wdata[1];
+				if (we == 2'b10) shared_memory[reg_addr][2] <= wdata[2];
+				if (we == 2'b11) shared_memory[reg_addr][3] <= wdata[3];
 			end
 		end
 
+              	wire [$clog2(SMB_HEIGHT) - 1:0]reg_addr;
+		assign reg_addr = addr;
+		// always @(posedge clk)
+ 		// 	reg_addr <= addr;
 
-		assign data_out = shm_write ? 0 : shared_memory[addr];
+
+		assign data_out = shm_write ? 0 : shared_memory[reg_addr];
 
 	`else
 
