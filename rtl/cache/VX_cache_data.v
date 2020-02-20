@@ -79,10 +79,10 @@ module VX_cache_data
         always @(posedge clk, posedge rst) begin : update_all
           if (rst) begin
             for (ini_ind = 0; ini_ind < NUM_IND; ini_ind=ini_ind+1) begin
-                data[ini_ind]  <= 0;
-                tag[ini_ind]   <= 0;
+                //data[ini_ind]  <= 0;
+                //tag[ini_ind]   <= 0;
                 valid[ini_ind] <= 0;
-                dirty[ini_ind] <= 0;
+                //dirty[ini_ind] <= 0;
             end
           end else begin
               if (update_dirty) dirty[addr] <= dirt_new; // WRite Port
