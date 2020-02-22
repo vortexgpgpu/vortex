@@ -179,21 +179,6 @@ module VX_alu(
 
 		assign upper_immed = {in_upper_immed, {12{1'b0}}};
 
-
-
-		// always @(*) begin
-		// 	$display("EXECUTE CURR_PC: %h",in_curr_PC);
-		// end
-
-		/* verilator lint_off UNUSED */
-		wire[63:0] mult_unsigned_result  = ALU_in1 * ALU_in2;
-		wire[63:0] mult_signed_result    = $signed(ALU_in1) * $signed(ALU_in2);
-
-		wire[63:0] alu_in1_signed = {{32{ALU_in1[31]}}, ALU_in1};
-
-		wire[63:0] mult_signed_un_result = alu_in1_signed * ALU_in2;
-		/* verilator lint_on UNUSED */
-
 		always @(in_alu_op or ALU_in1 or ALU_in2) begin
 			case(in_alu_op)
 				`ADD:        out_alu_result = $signed(ALU_in1) + $signed(ALU_in2);
@@ -209,11 +194,11 @@ module VX_alu(
 				`SUBU:       out_alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
 				`LUI_ALU:    out_alu_result = upper_immed;
 				`AUIPC_ALU:  out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
-				`MUL:        begin out_alu_result = mult_signed_result[31:0]; end
-				`MULH:       out_alu_result = mult_signed_result[63:32];
-				`MULHSU:     out_alu_result = mult_signed_un_result[63:32];
-				`MULHU:      out_alu_result = mult_unsigned_result[63:32];
 				// TODO profitable to roll these exceptional cases into inst_delay to avoid pipeline when possible?
+				`MUL:        out_alu_result = mul_result[31:0];
+				`MULH:       out_alu_result = mul_result[63:32];
+				`MULHSU:     out_alu_result = mul_result[63:32];
+				`MULHU:      out_alu_result = mul_result[63:32];
 				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
 				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
 				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
