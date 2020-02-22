@@ -14,12 +14,16 @@ module VX_alu(
 	output reg        out_alu_stall
 	);
 
-	localparam div_pipeline_len = 10;
+		localparam div_pipeline_len = 10;
+		localparam mul_pipeline_len = 3;
 
-	wire[31:0] unsigned_div_result;
+		wire[31:0] unsigned_div_result;
         wire[31:0] unsigned_rem_result;
         wire[31:0] signed_div_result;
         wire[31:0] signed_rem_result;
+
+		wire[63:0] mul_data_a, mul_data_b;
+		wire[63:0] mul_result;
 
         VX_divide #(
             .WIDTHN(32),
@@ -53,6 +57,28 @@ module VX_alu(
             .remainder(signed_rem_result)
         );
 
+		VX_mult #(
+			.WIDTHA(64),
+			.WIDTHB(64),
+			.WIDTHP(64),
+			.SPEED("HIGHEST"),
+			.PIPELINE(mul_pipeline_len)
+		) multiplier (
+			.clock(clk),
+            .aclr(1'b0),
+            .clken(1'b1), // TODO this could be disabled on inactive instructions
+			.dataa(mul_data_a),
+			.datab(mul_data_b),
+			.result(mul_result)
+		);
+
+		// MUL, MULH (signed*signed), MULHSU (signed*unsigned), MULHU (unsigned*unsigned)
+		wire[63:0] alu_in1_signed = {{32{ALU_in1[31]}}, ALU_in1};
+		wire[63:0] alu_in2_signed = {{32{ALU_in2[31]}}, ALU_in2};
+		assign mul_data_a = (in_alu_op == `MULHU) ? {32'b0, ALU_in1} : alu_in1_signed;
+		assign mul_data_b = (in_alu_op == `MULHU || in_alu_op == `MULHSU) ? {32'b0, ALU_in2} : alu_in2_signed;
+
+
         reg [15:0] curr_inst_delay;
 		reg [15:0] inst_delay;
 		reg inst_was_stalling;
@@ -66,6 +92,10 @@ module VX_alu(
                 `DIVU,
                 `REM,
                 `REMU: curr_inst_delay = div_pipeline_len;
+				`MUL,
+				`MULH,
+				`MULHSU,
+				`MULHU: curr_inst_delay = mul_pipeline_len;
                 default: curr_inst_delay = 0;
             endcase // in_alu_op
         end
@@ -95,8 +125,6 @@ module VX_alu(
 
 		wire[31:0] ALU_in1;
 		wire[31:0] ALU_in2;
-		wire[63:0] ALU_in1_mult;
-		wire[63:0] ALU_in2_mult;
 		wire[31:0] upper_immed;
 
 		assign which_in2  = in_rs2_src == `RS2_IMMED;
@@ -105,20 +133,6 @@ module VX_alu(
 		assign ALU_in2 = which_in2 ? in_itype_immed : in_2;
 
 		assign upper_immed = {in_upper_immed, {12{1'b0}}};
-
-		//always @(posedge `MUL) begin
-
-
-		/* verilator lint_off UNUSED */
-
-
-		wire[63:0] alu_in1_signed = {{32{ALU_in1[31]}}, ALU_in1};
-		wire[63:0] alu_in2_signed = {{32{ALU_in2[31]}}, ALU_in2};
-		assign ALU_in1_mult = (in_alu_op == `MULHU || in_alu_op == `DIVU || in_alu_op == `REMU) ? {32'b0, ALU_in1} : alu_in1_signed;
-		assign ALU_in2_mult = (in_alu_op == `MULHU || in_alu_op == `MULHSU || in_alu_op == `DIVU || in_alu_op == `REMU) ? {32'b0, ALU_in2} : alu_in2_signed;
-		wire[63:0] mult_result = ALU_in1_mult * ALU_in2_mult;
-
-		/* verilator lint_on UNUSED */
 
 		always @(in_alu_op or ALU_in1 or ALU_in2) begin
 			case(in_alu_op)
@@ -135,11 +149,11 @@ module VX_alu(
 				`SUBU:       out_alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
 				`LUI_ALU:    out_alu_result = upper_immed;
 				`AUIPC_ALU:  out_alu_result = $signed(in_curr_PC) + $signed(upper_immed);
-				`MUL:        out_alu_result = mult_result[31:0];
-				`MULH:       out_alu_result = mult_result[63:32];
-				`MULHSU:     out_alu_result = mult_result[63:32];
-				`MULHU:      out_alu_result = mult_result[63:32];
 				// TODO profitable to roll these exceptional cases into inst_delay to avoid pipeline when possible?
+				`MUL:        out_alu_result = mul_result[31:0];
+				`MULH:       out_alu_result = mul_result[63:32];
+				`MULHSU:     out_alu_result = mul_result[63:32];
+				`MULHU:      out_alu_result = mul_result[63:32];
 				`DIV:        out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
 				`DIVU:       out_alu_result = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
 				`REM:        out_alu_result = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;

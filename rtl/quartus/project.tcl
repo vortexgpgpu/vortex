@@ -71,6 +71,7 @@ set_global_assignment -name VERILOG_FILE ../shared_memory/VX_shared_memory.v
 set_global_assignment -name VERILOG_FILE ../shared_memory/VX_priority_encoder_sm.v
 set_global_assignment -name VERILOG_FILE ../shared_memory/VX_bank_valids.v
 set_global_assignment -name VERILOG_FILE ../compat/VX_divide.v
+set_global_assignment -name VERILOG_FILE ../compat/VX_mult.v
 set_global_assignment -name VERILOG_FILE ../VX_alu.v
 set_global_assignment -name VERILOG_FILE ../VX_back_end.v
 set_global_assignment -name VERILOG_FILE ../VX_context.v
