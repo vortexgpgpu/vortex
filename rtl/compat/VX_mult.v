@@ -5,7 +5,8 @@ module VX_mult
         parameter WIDTHP=1,
         parameter REP="UNSIGNED",
         parameter SPEED="MIXED", // "MIXED" or "HIGHEST"
-        parameter PIPELINE=0
+        parameter PIPELINE=0,
+        parameter FORCE_LE="NO"
     )
     (
         input clock, aclr, clken,
@@ -30,21 +31,41 @@ module VX_mult
 
             localparam lpm_speed=SPEED == "HIGHEST" ? 10:5;
 
-            lpm_mult#(
-                .LPM_WIDTHA(WIDTHA),
-                .LPM_WIDTHB(WIDTHB),
-                .LPM_WIDTHP(WIDTHP),
-                .LPM_REPRESENTATION(REP),
-                .LPM_PIPELINE(PIPELINE),
-                .MAXIMIZE_SPEED(lpm_speed)
-            ) quartus_mult(
-                .clock(clock),
-                .aclr(aclr),
-                .clken(clken),
-                .dataa(dataa),
-                .datab(datab),
-                .result(result)
-            );
+            if (FORCE_LE == "YES") begin
+                lpm_mult#(
+                    .LPM_WIDTHA(WIDTHA),
+                    .LPM_WIDTHB(WIDTHB),
+                    .LPM_WIDTHP(WIDTHP),
+                    .LPM_REPRESENTATION(REP),
+                    .LPM_PIPELINE(PIPELINE),
+                    .DSP_BLOCK_BALANCING("LOGIC ELEMENTS"),
+                    .MAXIMIZE_SPEED(lpm_speed)
+                ) quartus_mult(
+                    .clock(clock),
+                    .aclr(aclr),
+                    .clken(clken),
+                    .dataa(dataa),
+                    .datab(datab),
+                    .result(result)
+                );
+            end
+            else begin
+                lpm_mult#(
+                    .LPM_WIDTHA(WIDTHA),
+                    .LPM_WIDTHB(WIDTHB),
+                    .LPM_WIDTHP(WIDTHP),
+                    .LPM_REPRESENTATION(REP),
+                    .LPM_PIPELINE(PIPELINE),
+                    .MAXIMIZE_SPEED(lpm_speed)
+                ) quartus_mult(
+                    .clock(clock),
+                    .aclr(aclr),
+                    .clken(clken),
+                    .dataa(dataa),
+                    .datab(datab),
+                    .result(result)
+                );
+            end
 
         end
         else begin
@@ -92,13 +113,13 @@ module VX_mult
             /* * * * * * * * * * * * * * * * * * * * * * */
 
             if (REP == "SIGNED") begin
-                assign result = $signed($signed(dataa_pipe_end) * $signed(datab_pipe_end));
+                assign result = $signed($signed(dataa_pipe_end)*$signed(datab_pipe_end));
             end
             else begin
-                assign result = dataa_pipe_end * datab_pipe_end;
+                assign result = dataa_pipe_end*datab_pipe_end;
             end
 
         end
     endgenerate
 
-endmodule : VX_mult
+endmodule: VX_mult
