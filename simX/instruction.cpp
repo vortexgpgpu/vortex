@@ -841,91 +841,91 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
       case SYS_INST:
         //std::cout << "SYS_INST\n";
         temp = reg[rsrc[0]];
-        if (immsrc == 0x20) // ThreadID
-        {
-          reg[rdest] = t;
-          D(2, "CSR Reading tid " << hex << immsrc << dec << " and returning " << reg[rdest]);
-        } else if (immsrc == 0x21) // WarpID
-        {
-          reg[rdest] = c.id;
-          D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
-        } else if (immsrc == 0x25)
-        {
-          reg[rdest] = c.core->num_instructions;
-        } else if (immsrc == 0x26)
-        {
-          reg[rdest] = c.core->num_cycles;
-        }
-        // switch (func3)
+        // if (immsrc == 0x20) // ThreadID
         // {
-        //   case 1:
-        //     // printf("Case 1\n");
-        //     if (rdest != 0)
-        //     {
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //     c.csr[immsrc & 0x00000FFF] = temp;
-            
-        //     break;
-        //   case 2:
-        //     // printf("Case 2\n");
-        //     if (rdest != 0)
-        //     {
-        //       // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //     // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
-        //     c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
-            
-        //     break;
-        //   case 3:
-        //     // printf("Case 3\n");
-        //     if (rdest != 0)
-        //     {              
-        //       reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
-            
-        //     break;
-        //   case 5:
-        //     // printf("Case 5\n");
-        //     if (rdest != 0)
-        //     {
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = rsrc[0];
-            
-        //     break;
-        //   case 6:
-        //     // printf("Case 6\n");
-        //     if (rdest != 0)
-        //     {              
-        //       reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
-            
-        //     break;
-        //   case 7:
-        //     // printf("Case 7\n");
-        //     if (rdest != 0)
-        //     {              
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
-            
-        //     break;
-        //   case 0:
-        //   if (immsrc < 2)
-        //   {
-        //     //std::cout << "INTERRUPT ECALL/EBREAK\n";
-        //     nextActiveThreads = 0;
-        //     c.spawned = false;
-        //     // c.interrupt(0);
-        //   }
-        //     break;
-        //   default:
-        //     break;
+        //   reg[rdest] = t;
+        //   D(2, "CSR Reading tid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+        // } else if (immsrc == 0x21) // WarpID
+        // {
+        //   reg[rdest] = c.id;
+        //   D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+        // } else if (immsrc == 0x25)
+        // {
+        //   reg[rdest] = c.core->num_instructions;
+        // } else if (immsrc == 0x26)
+        // {
+        //   reg[rdest] = c.core->num_cycles;
         // }
+        switch (func3)
+        {
+          case 1:
+            // printf("Case 1\n");
+            if (rdest != 0)
+            {
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
+            }
+            c.csr[immsrc & 0x00000FFF] = temp;
+            
+            break;
+          case 2:
+            // printf("Case 2\n");
+            if (rdest != 0)
+            {
+              // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
+            }
+            // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
+            c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
+            
+            break;
+          case 3:
+            // printf("Case 3\n");
+            if (rdest != 0)
+            {              
+              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            }
+              c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
+            
+            break;
+          case 5:
+            // printf("Case 5\n");
+            if (rdest != 0)
+            {
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
+            }
+              c.csr[immsrc & 0x00000FFF] = rsrc[0];
+            
+            break;
+          case 6:
+            // printf("Case 6\n");
+            if (rdest != 0)
+            {              
+              reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+            }
+              c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
+            
+            break;
+          case 7:
+            // printf("Case 7\n");
+            if (rdest != 0)
+            {              
+              reg[rdest] = c.csr[immsrc & 0x00000FFF];
+            }
+              c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
+            
+            break;
+          case 0:
+          if (immsrc < 2)
+          {
+            //std::cout << "INTERRUPT ECALL/EBREAK\n";
+            nextActiveThreads = 0;
+            c.spawned = false;
+            // c.interrupt(0);
+          }
+            break;
+          default:
+            break;
+        }
         break;
       case TRAP:
         //std::cout << "INTERRUPT TRAP\n";
