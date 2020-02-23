@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "../VX_define.v"
 
 // `define NUM_WORDS_PER_BLOCK 4
 
