@@ -17,8 +17,8 @@ VM_TRACE = 1
 VM_CLASSES_FAST += \
 	Vcache_simX \
 	Vcache_simX_VX_dram_req_rsp_inter__N4_NB4 \
-	Vcache_simX_VX_dram_req_rsp_inter__N1_NB4 \
 	Vcache_simX_VX_dcache_request_inter \
+	Vcache_simX_VX_Cache_Bank__pi9 \
 	Vcache_simX_VX_Cache_Bank__pi8 \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization

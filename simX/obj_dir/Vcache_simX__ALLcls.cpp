@@ -2,6 +2,6 @@
 #define VL_INCLUDE_OPT include
 #include "Vcache_simX.cpp"
 #include "Vcache_simX_VX_dram_req_rsp_inter__N4_NB4.cpp"
-#include "Vcache_simX_VX_dram_req_rsp_inter__N1_NB4.cpp"
 #include "Vcache_simX_VX_dcache_request_inter.cpp"
+#include "Vcache_simX_VX_Cache_Bank__pi9.cpp"
 #include "Vcache_simX_VX_Cache_Bank__pi8.cpp"

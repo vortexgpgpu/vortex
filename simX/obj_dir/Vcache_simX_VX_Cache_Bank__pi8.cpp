@@ -33,74 +33,35 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__1\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp1,127,0,4);
+    VL_SIGW(__Vtemp2,127,0,4);
     VL_SIGW(__Vtemp3,127,0,4);
     VL_SIGW(__Vtemp4,127,0,4);
     VL_SIGW(__Vtemp5,127,0,4);
     VL_SIGW(__Vtemp6,127,0,4);
     VL_SIGW(__Vtemp7,127,0,4);
-    VL_SIGW(__Vtemp8,127,0,4);
-    VL_SIGW(__Vtemp9,127,0,4);
     // Body
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
     this->__PVT__way_to_update = vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__global_way_to_evict;
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp1[0U] = 0U;
+    __Vtemp1[1U] = 0U;
+    __Vtemp1[2U] = 0U;
+    __Vtemp1[3U] = 0U;
+    __Vtemp2[0U] = 0U;
+    __Vtemp2[1U] = 0U;
+    __Vtemp2[2U] = 0U;
+    __Vtemp2[3U] = 0U;
     __Vtemp3[0U] = 0U;
     __Vtemp3[1U] = 0U;
     __Vtemp3[2U] = 0U;
@@ -121,24 +82,16 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
     __Vtemp7[1U] = 0U;
     __Vtemp7[2U] = 0U;
     __Vtemp7[3U] = 0U;
-    __Vtemp8[0U] = 0U;
-    __Vtemp8[1U] = 0U;
-    __Vtemp8[2U] = 0U;
-    __Vtemp8[3U] = 0U;
-    __Vtemp9[0U] = 0U;
-    __Vtemp9[1U] = 0U;
-    __Vtemp9[2U] = 0U;
-    __Vtemp9[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp3[
+					   & (__Vtemp1[
 					      (3U & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 					      << 8U))
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp4[
+					       & (__Vtemp2[
 						  (3U 
 						   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 						  << 0x10U))
@@ -147,25 +100,104 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp5[
+						   & (__Vtemp3[
 						      (3U 
 						       & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 						      << 0x18U))
-					        : __Vtemp6[
+					        : __Vtemp4[
 					       (3U 
 						& (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))])))
 				    : ((1U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp7[
+					       & (__Vtemp5[
 						  (3U 
 						   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 						  << 0x10U))
-					    : __Vtemp8[
+					    : __Vtemp6[
 					   (3U & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))])
-				        : __Vtemp9[
+				        : __Vtemp7[
 				       (3U & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[1U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[2U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[3U]
+				    : this->__PVT__use_write_data);
     // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
     this->__PVT__data_structures__DOT__invalid_index = 0U;
     this->__PVT__data_structures__DOT__invalid_found = 0U;
@@ -194,38 +226,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[1U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[2U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[3U]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -242,6 +242,17 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -336,29 +347,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -379,6 +430,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -388,16 +502,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__5(Vcache_simX__Syms* __restrict vlSymsp) {
@@ -451,26 +555,40 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
+		   | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[0U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
@@ -479,6 +597,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((4U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
@@ -487,6 +608,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((8U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
@@ -495,12 +619,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[1U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
@@ -509,6 +639,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
@@ -517,6 +650,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
@@ -525,12 +661,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[2U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
@@ -539,6 +681,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
@@ -547,6 +692,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
@@ -555,12 +703,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[3U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
@@ -569,6 +723,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
@@ -577,6 +734,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
@@ -585,6 +745,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYS at ../rtl/cache/VX_cache_data.v:79
@@ -593,28 +756,44 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
+					 >> 0x10U)))) 
+		   | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
+		      >> 1U)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & 
 					 (this->__PVT__data_structures__DOT__we_per_way 
 					  >> 0x10U)))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[4U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
@@ -623,6 +802,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
@@ -631,6 +813,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
@@ -639,12 +824,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[5U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
@@ -653,6 +844,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
@@ -661,6 +855,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
@@ -669,12 +866,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[6U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
@@ -683,6 +886,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
@@ -691,6 +897,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
@@ -699,12 +908,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[7U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
@@ -712,6 +927,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 8U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
@@ -719,6 +937,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x10U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
@@ -726,6 +947,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x18U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -764,7 +988,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -901,82 +1125,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -1014,7 +1238,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -1052,7 +1276,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -1091,7 +1315,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -1228,82 +1452,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -1341,7 +1565,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -1379,68 +1603,8 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32;
-    }
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__invalid_index = 0U;
-    this->__PVT__data_structures__DOT__invalid_found = 0U;
-    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
-		  >> 1U)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 1U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
-    }
-    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 0U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
     }
 }
 
@@ -1448,25 +1612,34 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__9\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp75,127,0,4);
+    VL_SIGW(__Vtemp76,127,0,4);
     VL_SIGW(__Vtemp77,127,0,4);
     VL_SIGW(__Vtemp78,127,0,4);
     VL_SIGW(__Vtemp79,127,0,4);
     VL_SIGW(__Vtemp80,127,0,4);
     VL_SIGW(__Vtemp81,127,0,4);
-    VL_SIGW(__Vtemp82,127,0,4);
-    VL_SIGW(__Vtemp83,127,0,4);
     // Body
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp75[0U] = 0U;
+    __Vtemp75[1U] = 0U;
+    __Vtemp75[2U] = 0U;
+    __Vtemp75[3U] = 0U;
+    __Vtemp76[0U] = 0U;
+    __Vtemp76[1U] = 0U;
+    __Vtemp76[2U] = 0U;
+    __Vtemp76[3U] = 0U;
     __Vtemp77[0U] = 0U;
     __Vtemp77[1U] = 0U;
     __Vtemp77[2U] = 0U;
@@ -1487,24 +1660,16 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     __Vtemp81[1U] = 0U;
     __Vtemp81[2U] = 0U;
     __Vtemp81[3U] = 0U;
-    __Vtemp82[0U] = 0U;
-    __Vtemp82[1U] = 0U;
-    __Vtemp82[2U] = 0U;
-    __Vtemp82[3U] = 0U;
-    __Vtemp83[0U] = 0U;
-    __Vtemp83[1U] = 0U;
-    __Vtemp83[2U] = 0U;
-    __Vtemp83[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp77[
+					   & (__Vtemp75[
 					      (3U & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 					      << 8U))
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp78[
+					       & (__Vtemp76[
 						  (3U 
 						   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 						  << 0x10U))
@@ -1513,25 +1678,116 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp79[
+						   & (__Vtemp77[
 						      (3U 
 						       & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 						      << 0x18U))
-					        : __Vtemp80[
+					        : __Vtemp78[
 					       (3U 
 						& (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))])))
 				    : ((1U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp81[
+					       & (__Vtemp79[
 						  (3U 
 						   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))] 
 						  << 0x10U))
-					    : __Vtemp82[
+					    : __Vtemp80[
 					   (3U & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))])
-				        : __Vtemp83[
+				        : __Vtemp81[
 				       (3U & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[1U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[2U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[3U]
+				    : this->__PVT__use_write_data);
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__invalid_index = 0U;
+    this->__PVT__data_structures__DOT__invalid_found = 0U;
+    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
+		  >> 1U)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 1U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
+    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 0U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
     this->__PVT__data_structures__DOT__hit_per_way 
 	= ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way)) 
 	   | (1U & (((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
@@ -1548,38 +1804,6 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[1U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[2U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[3U]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -1596,6 +1820,17 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -1690,29 +1925,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -1733,6 +2008,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -1742,90 +2080,41 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_structure__2(Vcache_simX__Syms* __restrict vlSymsp) {
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_structure__2\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp85,127,0,4);
+    VL_SIGW(__Vtemp86,127,0,4);
     VL_SIGW(__Vtemp87,127,0,4);
     VL_SIGW(__Vtemp88,127,0,4);
     VL_SIGW(__Vtemp89,127,0,4);
     VL_SIGW(__Vtemp90,127,0,4);
     VL_SIGW(__Vtemp91,127,0,4);
-    VL_SIGW(__Vtemp92,127,0,4);
-    VL_SIGW(__Vtemp93,127,0,4);
     // Body
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
     this->__PVT__way_to_update = vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__global_way_to_evict;
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp85[0U] = 0U;
+    __Vtemp85[1U] = 0U;
+    __Vtemp85[2U] = 0U;
+    __Vtemp85[3U] = 0U;
+    __Vtemp86[0U] = 0U;
+    __Vtemp86[1U] = 0U;
+    __Vtemp86[2U] = 0U;
+    __Vtemp86[3U] = 0U;
     __Vtemp87[0U] = 0U;
     __Vtemp87[1U] = 0U;
     __Vtemp87[2U] = 0U;
@@ -1846,18 +2135,10 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
     __Vtemp91[1U] = 0U;
     __Vtemp91[2U] = 0U;
     __Vtemp91[3U] = 0U;
-    __Vtemp92[0U] = 0U;
-    __Vtemp92[1U] = 0U;
-    __Vtemp92[2U] = 0U;
-    __Vtemp92[3U] = 0U;
-    __Vtemp93[0U] = 0U;
-    __Vtemp93[1U] = 0U;
-    __Vtemp93[2U] = 0U;
-    __Vtemp93[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp87[
+					   & (__Vtemp85[
 					      (3U & 
 					       ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						>> 2U))] 
@@ -1865,7 +2146,7 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp88[
+					       & (__Vtemp86[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 2U))] 
@@ -1875,12 +2156,12 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp89[
+						   & (__Vtemp87[
 						      (3U 
 						       & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 							  >> 2U))] 
 						      << 0x18U))
-					        : __Vtemp90[
+					        : __Vtemp88[
 					       (3U 
 						& ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						   >> 2U))])))
@@ -1888,17 +2169,96 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp91[
+					       & (__Vtemp89[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 2U))] 
 						  << 0x10U))
-					    : __Vtemp92[
+					    : __Vtemp90[
 					   (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						  >> 2U))])
-				        : __Vtemp93[
+				        : __Vtemp91[
 				       (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 					      >> 2U))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[4U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[5U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[6U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[7U]
+				    : this->__PVT__use_write_data);
     // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
     this->__PVT__data_structures__DOT__invalid_index = 0U;
     this->__PVT__data_structures__DOT__invalid_found = 0U;
@@ -1927,38 +2287,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[4U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[5U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[6U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[7U]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -1975,6 +2303,17 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -2069,29 +2408,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -2112,6 +2491,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -2121,16 +2563,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_structure__6(Vcache_simX__Syms* __restrict vlSymsp) {
@@ -2184,26 +2616,40 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
+		   | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[0U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
@@ -2212,6 +2658,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((4U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
@@ -2220,6 +2669,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((8U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
@@ -2228,12 +2680,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[1U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
@@ -2242,6 +2700,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
@@ -2250,6 +2711,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
@@ -2258,12 +2722,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[2U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
@@ -2272,6 +2742,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
@@ -2280,6 +2753,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
@@ -2288,12 +2764,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[3U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
@@ -2302,6 +2784,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
@@ -2310,6 +2795,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
@@ -2318,6 +2806,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYS at ../rtl/cache/VX_cache_data.v:79
@@ -2326,28 +2817,44 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
+					 >> 0x10U)))) 
+		   | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
+		      >> 1U)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & 
 					 (this->__PVT__data_structures__DOT__we_per_way 
 					  >> 0x10U)))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[4U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
@@ -2356,6 +2863,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
@@ -2364,6 +2874,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
@@ -2372,12 +2885,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[5U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
@@ -2386,6 +2905,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
@@ -2394,6 +2916,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
@@ -2402,12 +2927,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[6U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
@@ -2416,6 +2947,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
@@ -2424,6 +2958,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
@@ -2432,12 +2969,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[7U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
@@ -2445,6 +2988,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 8U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
@@ -2452,6 +2998,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x10U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
@@ -2459,6 +3008,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x18U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -2497,7 +3049,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -2634,82 +3186,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -2747,7 +3299,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -2785,7 +3337,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -2824,7 +3376,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -2961,82 +3513,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -3074,7 +3626,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -3112,68 +3664,8 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32;
-    }
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__invalid_index = 0U;
-    this->__PVT__data_structures__DOT__invalid_found = 0U;
-    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
-		  >> 1U)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 1U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
-    }
-    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 0U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
     }
 }
 
@@ -3181,25 +3673,34 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_structure__10\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp159,127,0,4);
+    VL_SIGW(__Vtemp160,127,0,4);
     VL_SIGW(__Vtemp161,127,0,4);
     VL_SIGW(__Vtemp162,127,0,4);
     VL_SIGW(__Vtemp163,127,0,4);
     VL_SIGW(__Vtemp164,127,0,4);
     VL_SIGW(__Vtemp165,127,0,4);
-    VL_SIGW(__Vtemp166,127,0,4);
-    VL_SIGW(__Vtemp167,127,0,4);
     // Body
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp159[0U] = 0U;
+    __Vtemp159[1U] = 0U;
+    __Vtemp159[2U] = 0U;
+    __Vtemp159[3U] = 0U;
+    __Vtemp160[0U] = 0U;
+    __Vtemp160[1U] = 0U;
+    __Vtemp160[2U] = 0U;
+    __Vtemp160[3U] = 0U;
     __Vtemp161[0U] = 0U;
     __Vtemp161[1U] = 0U;
     __Vtemp161[2U] = 0U;
@@ -3220,18 +3721,10 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     __Vtemp165[1U] = 0U;
     __Vtemp165[2U] = 0U;
     __Vtemp165[3U] = 0U;
-    __Vtemp166[0U] = 0U;
-    __Vtemp166[1U] = 0U;
-    __Vtemp166[2U] = 0U;
-    __Vtemp166[3U] = 0U;
-    __Vtemp167[0U] = 0U;
-    __Vtemp167[1U] = 0U;
-    __Vtemp167[2U] = 0U;
-    __Vtemp167[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp161[
+					   & (__Vtemp159[
 					      (3U & 
 					       ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						>> 2U))] 
@@ -3239,7 +3732,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp162[
+					       & (__Vtemp160[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 2U))] 
@@ -3249,12 +3742,12 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp163[
+						   & (__Vtemp161[
 						      (3U 
 						       & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 							  >> 2U))] 
 						      << 0x18U))
-					        : __Vtemp164[
+					        : __Vtemp162[
 					       (3U 
 						& ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						   >> 2U))])))
@@ -3262,17 +3755,108 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp165[
+					       & (__Vtemp163[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 2U))] 
 						  << 0x10U))
-					    : __Vtemp166[
+					    : __Vtemp164[
 					   (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						  >> 2U))])
-				        : __Vtemp167[
+				        : __Vtemp165[
 				       (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 					      >> 2U))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[4U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[5U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[6U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[7U]
+				    : this->__PVT__use_write_data);
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__invalid_index = 0U;
+    this->__PVT__data_structures__DOT__invalid_found = 0U;
+    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
+		  >> 1U)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 1U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
+    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 0U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
     this->__PVT__data_structures__DOT__hit_per_way 
 	= ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way)) 
 	   | (1U & (((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
@@ -3289,38 +3873,6 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[4U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[5U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[6U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[7U]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -3337,6 +3889,17 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -3431,29 +3994,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -3474,6 +4077,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -3483,90 +4149,41 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_structure__3(Vcache_simX__Syms* __restrict vlSymsp) {
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_structure__3\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp169,127,0,4);
+    VL_SIGW(__Vtemp170,127,0,4);
     VL_SIGW(__Vtemp171,127,0,4);
     VL_SIGW(__Vtemp172,127,0,4);
     VL_SIGW(__Vtemp173,127,0,4);
     VL_SIGW(__Vtemp174,127,0,4);
     VL_SIGW(__Vtemp175,127,0,4);
-    VL_SIGW(__Vtemp176,127,0,4);
-    VL_SIGW(__Vtemp177,127,0,4);
     // Body
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
     this->__PVT__way_to_update = vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__global_way_to_evict;
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp169[0U] = 0U;
+    __Vtemp169[1U] = 0U;
+    __Vtemp169[2U] = 0U;
+    __Vtemp169[3U] = 0U;
+    __Vtemp170[0U] = 0U;
+    __Vtemp170[1U] = 0U;
+    __Vtemp170[2U] = 0U;
+    __Vtemp170[3U] = 0U;
     __Vtemp171[0U] = 0U;
     __Vtemp171[1U] = 0U;
     __Vtemp171[2U] = 0U;
@@ -3587,18 +4204,10 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
     __Vtemp175[1U] = 0U;
     __Vtemp175[2U] = 0U;
     __Vtemp175[3U] = 0U;
-    __Vtemp176[0U] = 0U;
-    __Vtemp176[1U] = 0U;
-    __Vtemp176[2U] = 0U;
-    __Vtemp176[3U] = 0U;
-    __Vtemp177[0U] = 0U;
-    __Vtemp177[1U] = 0U;
-    __Vtemp177[2U] = 0U;
-    __Vtemp177[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp171[
+					   & (__Vtemp169[
 					      (3U & 
 					       ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						>> 4U))] 
@@ -3606,7 +4215,7 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp172[
+					       & (__Vtemp170[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 4U))] 
@@ -3616,12 +4225,12 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp173[
+						   & (__Vtemp171[
 						      (3U 
 						       & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 							  >> 4U))] 
 						      << 0x18U))
-					        : __Vtemp174[
+					        : __Vtemp172[
 					       (3U 
 						& ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						   >> 4U))])))
@@ -3629,17 +4238,96 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp175[
+					       & (__Vtemp173[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 4U))] 
 						  << 0x10U))
-					    : __Vtemp176[
+					    : __Vtemp174[
 					   (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						  >> 4U))])
-				        : __Vtemp177[
+				        : __Vtemp175[
 				       (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 					      >> 4U))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[8U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[9U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xaU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xbU]
+				    : this->__PVT__use_write_data);
     // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
     this->__PVT__data_structures__DOT__invalid_index = 0U;
     this->__PVT__data_structures__DOT__invalid_found = 0U;
@@ -3668,38 +4356,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[8U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[9U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xaU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xbU]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -3716,6 +4372,17 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -3810,29 +4477,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -3853,6 +4560,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -3862,16 +4632,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_structure__7(Vcache_simX__Syms* __restrict vlSymsp) {
@@ -3925,26 +4685,40 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
+		   | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[0U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
@@ -3953,6 +4727,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((4U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
@@ -3961,6 +4738,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((8U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
@@ -3969,12 +4749,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[1U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
@@ -3983,6 +4769,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
@@ -3991,6 +4780,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
@@ -3999,12 +4791,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[2U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
@@ -4013,6 +4811,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
@@ -4021,6 +4822,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
@@ -4029,12 +4833,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[3U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
@@ -4043,6 +4853,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
@@ -4051,6 +4864,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
@@ -4059,6 +4875,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYS at ../rtl/cache/VX_cache_data.v:79
@@ -4067,28 +4886,44 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
+					 >> 0x10U)))) 
+		   | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
+		      >> 1U)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & 
 					 (this->__PVT__data_structures__DOT__we_per_way 
 					  >> 0x10U)))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[4U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
@@ -4097,6 +4932,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
@@ -4105,6 +4943,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
@@ -4113,12 +4954,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[5U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
@@ -4127,6 +4974,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
@@ -4135,6 +4985,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
@@ -4143,12 +4996,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[6U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
@@ -4157,6 +5016,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
@@ -4165,6 +5027,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
@@ -4173,12 +5038,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[7U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
@@ -4186,6 +5057,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 8U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
@@ -4193,6 +5067,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x10U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
@@ -4200,6 +5077,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x18U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -4238,7 +5118,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -4375,82 +5255,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -4488,7 +5368,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -4526,7 +5406,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -4565,7 +5445,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -4702,82 +5582,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -4815,7 +5695,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -4853,68 +5733,8 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32;
-    }
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__invalid_index = 0U;
-    this->__PVT__data_structures__DOT__invalid_found = 0U;
-    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
-		  >> 1U)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 1U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
-    }
-    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 0U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
     }
 }
 
@@ -4922,25 +5742,34 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_structure__11\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp243,127,0,4);
+    VL_SIGW(__Vtemp244,127,0,4);
     VL_SIGW(__Vtemp245,127,0,4);
     VL_SIGW(__Vtemp246,127,0,4);
     VL_SIGW(__Vtemp247,127,0,4);
     VL_SIGW(__Vtemp248,127,0,4);
     VL_SIGW(__Vtemp249,127,0,4);
-    VL_SIGW(__Vtemp250,127,0,4);
-    VL_SIGW(__Vtemp251,127,0,4);
     // Body
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp243[0U] = 0U;
+    __Vtemp243[1U] = 0U;
+    __Vtemp243[2U] = 0U;
+    __Vtemp243[3U] = 0U;
+    __Vtemp244[0U] = 0U;
+    __Vtemp244[1U] = 0U;
+    __Vtemp244[2U] = 0U;
+    __Vtemp244[3U] = 0U;
     __Vtemp245[0U] = 0U;
     __Vtemp245[1U] = 0U;
     __Vtemp245[2U] = 0U;
@@ -4961,18 +5790,10 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     __Vtemp249[1U] = 0U;
     __Vtemp249[2U] = 0U;
     __Vtemp249[3U] = 0U;
-    __Vtemp250[0U] = 0U;
-    __Vtemp250[1U] = 0U;
-    __Vtemp250[2U] = 0U;
-    __Vtemp250[3U] = 0U;
-    __Vtemp251[0U] = 0U;
-    __Vtemp251[1U] = 0U;
-    __Vtemp251[2U] = 0U;
-    __Vtemp251[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp245[
+					   & (__Vtemp243[
 					      (3U & 
 					       ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						>> 4U))] 
@@ -4980,7 +5801,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp246[
+					       & (__Vtemp244[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 4U))] 
@@ -4990,12 +5811,12 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp247[
+						   & (__Vtemp245[
 						      (3U 
 						       & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 							  >> 4U))] 
 						      << 0x18U))
-					        : __Vtemp248[
+					        : __Vtemp246[
 					       (3U 
 						& ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						   >> 4U))])))
@@ -5003,17 +5824,108 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp249[
+					       & (__Vtemp247[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 4U))] 
 						  << 0x10U))
-					    : __Vtemp250[
+					    : __Vtemp248[
 					   (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						  >> 4U))])
-				        : __Vtemp251[
+				        : __Vtemp249[
 				       (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 					      >> 4U))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[8U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[9U]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xaU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xbU]
+				    : this->__PVT__use_write_data);
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__invalid_index = 0U;
+    this->__PVT__data_structures__DOT__invalid_found = 0U;
+    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
+		  >> 1U)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 1U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
+    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 0U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
     this->__PVT__data_structures__DOT__hit_per_way 
 	= ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way)) 
 	   | (1U & (((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
@@ -5030,38 +5942,6 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[8U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[9U]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xaU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xbU]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -5078,6 +5958,17 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -5172,29 +6063,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -5215,6 +6146,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -5224,90 +6218,41 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_structure__4(Vcache_simX__Syms* __restrict vlSymsp) {
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_structure__4\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp253,127,0,4);
+    VL_SIGW(__Vtemp254,127,0,4);
     VL_SIGW(__Vtemp255,127,0,4);
     VL_SIGW(__Vtemp256,127,0,4);
     VL_SIGW(__Vtemp257,127,0,4);
     VL_SIGW(__Vtemp258,127,0,4);
     VL_SIGW(__Vtemp259,127,0,4);
-    VL_SIGW(__Vtemp260,127,0,4);
-    VL_SIGW(__Vtemp261,127,0,4);
     // Body
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
     this->__PVT__way_to_update = vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__global_way_to_evict;
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp253[0U] = 0U;
+    __Vtemp253[1U] = 0U;
+    __Vtemp253[2U] = 0U;
+    __Vtemp253[3U] = 0U;
+    __Vtemp254[0U] = 0U;
+    __Vtemp254[1U] = 0U;
+    __Vtemp254[2U] = 0U;
+    __Vtemp254[3U] = 0U;
     __Vtemp255[0U] = 0U;
     __Vtemp255[1U] = 0U;
     __Vtemp255[2U] = 0U;
@@ -5328,18 +6273,10 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
     __Vtemp259[1U] = 0U;
     __Vtemp259[2U] = 0U;
     __Vtemp259[3U] = 0U;
-    __Vtemp260[0U] = 0U;
-    __Vtemp260[1U] = 0U;
-    __Vtemp260[2U] = 0U;
-    __Vtemp260[3U] = 0U;
-    __Vtemp261[0U] = 0U;
-    __Vtemp261[1U] = 0U;
-    __Vtemp261[2U] = 0U;
-    __Vtemp261[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp255[
+					   & (__Vtemp253[
 					      (3U & 
 					       ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						>> 6U))] 
@@ -5347,7 +6284,7 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp256[
+					       & (__Vtemp254[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 6U))] 
@@ -5357,12 +6294,12 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp257[
+						   & (__Vtemp255[
 						      (3U 
 						       & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 							  >> 6U))] 
 						      << 0x18U))
-					        : __Vtemp258[
+					        : __Vtemp256[
 					       (3U 
 						& ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						   >> 6U))])))
@@ -5370,17 +6307,96 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp259[
+					       & (__Vtemp257[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 6U))] 
 						  << 0x10U))
-					    : __Vtemp260[
+					    : __Vtemp258[
 					   (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						  >> 6U))])
-				        : __Vtemp261[
+				        : __Vtemp259[
 				       (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 					      >> 6U))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xcU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xdU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xeU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xfU]
+				    : this->__PVT__use_write_data);
     // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
     this->__PVT__data_structures__DOT__invalid_index = 0U;
     this->__PVT__data_structures__DOT__invalid_found = 0U;
@@ -5409,38 +6425,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xcU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xdU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xeU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xfU]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -5457,6 +6441,17 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -5551,29 +6546,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -5594,6 +6629,69 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -5603,16 +6701,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_settle__TOP__cache_simX__DOT__dmem_control
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_structure__8(Vcache_simX__Syms* __restrict vlSymsp) {
@@ -5666,26 +6754,40 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
+		   | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((1U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[0U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
@@ -5694,6 +6796,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((4U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
@@ -5702,6 +6807,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((8U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
@@ -5710,12 +6818,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[1U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
@@ -5724,6 +6838,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
@@ -5732,6 +6849,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
@@ -5740,12 +6860,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[2U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
@@ -5754,6 +6880,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
@@ -5762,6 +6891,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
@@ -5770,12 +6902,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[3U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
@@ -5784,6 +6922,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
@@ -5792,6 +6933,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
@@ -5800,6 +6944,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYS at ../rtl/cache/VX_cache_data.v:79
@@ -5808,28 +6955,44 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0 = 1U;
     } else {
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__f = 4U;
-	if (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty) {
+	if ((1U & (((~ (IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use)) 
+		    & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
+					 >> 0x10U)))) 
+		   | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
+		      >> 1U)))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
 		= (1U & ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))
 			  ? 0U : (0U != (0xffffU & 
 					 (this->__PVT__data_structures__DOT__we_per_way 
 					  >> 0x10U)))));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
 		= (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
 				>> 0xbU));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((2U & (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way))) {
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 = 1U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[4U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = 0U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
@@ -5838,6 +7001,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = 8U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
@@ -5846,6 +7012,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = 0x10U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
@@ -5854,12 +7023,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = 0x18U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x100000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[5U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = 0x20U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x200000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
@@ -5868,6 +7043,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = 0x28U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x400000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
@@ -5876,6 +7054,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = 0x30U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x800000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
@@ -5884,12 +7065,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = 0x38U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x1000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[6U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = 0x40U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x2000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
@@ -5898,6 +7085,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 8U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = 0x48U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x4000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
@@ -5906,6 +7096,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 					  >> 0x10U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = 0x50U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x8000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
@@ -5914,12 +7107,18 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 				       >> 0x18U)));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = 0x58U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x10000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
 		= (0xffU & this->__PVT__data_structures__DOT__data_write_per_way[7U]);
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = 0x60U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x20000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
@@ -5927,6 +7126,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 8U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = 0x68U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x40000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
@@ -5934,6 +7136,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x10U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = 0x70U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
 	if ((0x80000000U & this->__PVT__data_structures__DOT__we_per_way)) {
 	    this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
@@ -5941,6 +7146,9 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 			    >> 0x18U));
 	    this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 1U;
 	    this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = 0x78U;
+	    this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 
+		= (0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			    >> 6U));
 	}
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -5979,7 +7187,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -6116,82 +7324,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -6229,7 +7437,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0) {
@@ -6267,7 +7475,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:85
@@ -6306,7 +7514,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:82
@@ -6443,82 +7651,82 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46);
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47) {
 	VL_ASSIGNSEL_WIII(8,(IData)(this->__Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47), 
 			  this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-			  [0U], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
+			  [this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47], this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47);
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:84
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -6556,7 +7764,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[0U] = 1U;
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32] = 1U;
     }
     // ALWAYSPOST at ../rtl/cache/VX_cache_data.v:83
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0) {
@@ -6594,68 +7802,8 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_sequent__TOP__cache_simX__DO
 	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0x1fU] = 0U;
     }
     if (this->__Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32) {
-	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[0U] 
+	this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[this->__Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32] 
 	    = this->__Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32;
-    }
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-	   [0U]);
-    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
-	   [0U]);
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
-			     [0U])));
-    this->__PVT__data_structures__DOT__dirty_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][0U];
-    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][1U];
-    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][2U];
-    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
-	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
-	[0U][3U];
-    this->__PVT__data_structures__DOT__valid_use_per_way 
-	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
-	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
-	      [0U] << 1U));
-    this->__PVT__data_structures__DOT__tag_use_per_way 
-	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
-	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
-			      [0U])) << 0x15U));
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__invalid_index = 0U;
-    this->__PVT__data_structures__DOT__invalid_found = 0U;
-    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
-		  >> 1U)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 1U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
-    }
-    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
-	this->__PVT__data_structures__DOT__invalid_index = 0U;
-	this->__PVT__data_structures__DOT__invalid_found = 1U;
     }
 }
 
@@ -6663,25 +7811,34 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     VL_DEBUG_IF(VL_DBG_MSGF("+            Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_structure__12\n"); );
     Vcache_simX* __restrict vlTOPp VL_ATTR_UNUSED = vlSymsp->TOPp;
     // Variables
+    VL_SIGW(__Vtemp327,127,0,4);
+    VL_SIGW(__Vtemp328,127,0,4);
     VL_SIGW(__Vtemp329,127,0,4);
     VL_SIGW(__Vtemp330,127,0,4);
     VL_SIGW(__Vtemp331,127,0,4);
     VL_SIGW(__Vtemp332,127,0,4);
     VL_SIGW(__Vtemp333,127,0,4);
-    VL_SIGW(__Vtemp334,127,0,4);
-    VL_SIGW(__Vtemp335,127,0,4);
     // Body
     this->__PVT__write_from_mem = ((2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 				   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in));
     this->__PVT__access = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state)) 
 			   & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in));
-    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-				      ? 2U : ((2U == 
-					       (3U 
-						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-					       ? 4U
-					       : 8U)));
+    this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))];
+    this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))];
+    __Vtemp327[0U] = 0U;
+    __Vtemp327[1U] = 0U;
+    __Vtemp327[2U] = 0U;
+    __Vtemp327[3U] = 0U;
+    __Vtemp328[0U] = 0U;
+    __Vtemp328[1U] = 0U;
+    __Vtemp328[2U] = 0U;
+    __Vtemp328[3U] = 0U;
     __Vtemp329[0U] = 0U;
     __Vtemp329[1U] = 0U;
     __Vtemp329[2U] = 0U;
@@ -6702,18 +7859,10 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
     __Vtemp333[1U] = 0U;
     __Vtemp333[2U] = 0U;
     __Vtemp333[3U] = 0U;
-    __Vtemp334[0U] = 0U;
-    __Vtemp334[1U] = 0U;
-    __Vtemp334[2U] = 0U;
-    __Vtemp334[3U] = 0U;
-    __Vtemp335[0U] = 0U;
-    __Vtemp335[1U] = 0U;
-    __Vtemp335[2U] = 0U;
-    __Vtemp335[3U] = 0U;
     this->__PVT__use_write_data = ((0U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write))
 				    ? ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 				        ? (0xff00U 
-					   & (__Vtemp329[
+					   & (__Vtemp327[
 					      (3U & 
 					       ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						>> 6U))] 
@@ -6721,7 +7870,7 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				        : ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 					    ? (0xff0000U 
-					       & (__Vtemp330[
+					       & (__Vtemp328[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 6U))] 
@@ -6731,12 +7880,12 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						(3U 
 						 & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 					        ? (0xff000000U 
-						   & (__Vtemp331[
+						   & (__Vtemp329[
 						      (3U 
 						       & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 							  >> 6U))] 
 						      << 0x18U))
-					        : __Vtemp332[
+					        : __Vtemp330[
 					       (3U 
 						& ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						   >> 6U))])))
@@ -6744,17 +7893,108 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				        ? ((2U == (3U 
 						   & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
 					    ? (0xffff0000U 
-					       & (__Vtemp333[
+					       & (__Vtemp331[
 						  (3U 
 						   & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						      >> 6U))] 
 						  << 0x10U))
-					    : __Vtemp334[
+					    : __Vtemp332[
 					   (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 						  >> 6U))])
-				        : __Vtemp335[
+				        : __Vtemp333[
 				       (3U & ((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__index_per_bank) 
 					      >> 6U))]));
+    this->__PVT__sb_mask = ((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+			     ? 1U : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+				      ? 2U : ((2U == 
+					       (3U 
+						& vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+					       ? 4U
+					       : 8U)));
+    this->__PVT__data_structures__DOT__data_use_per_way[0U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[1U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[2U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[3U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__data_use_per_way[4U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][0U];
+    this->__PVT__data_structures__DOT__data_use_per_way[5U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][1U];
+    this->__PVT__data_structures__DOT__data_use_per_way[6U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][2U];
+    this->__PVT__data_structures__DOT__data_use_per_way[7U] 
+	= this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data
+	[(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		   >> 6U))][3U];
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid
+	   [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+		      >> 6U))]);
+    this->__PVT__data_structures__DOT__valid_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)) 
+	   | (this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid
+	      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+			 >> 6U))] << 1U));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x3ffffe00000) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | (IData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag
+			     [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+					>> 6U))])));
+    this->__PVT__data_structures__DOT__tag_use_per_way 
+	= ((VL_ULL(0x1fffff) & this->__PVT__data_structures__DOT__tag_use_per_way) 
+	   | ((QData)((IData)(this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag
+			      [(0x1fU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+					 >> 6U))])) 
+	      << 0x15U));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((2U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | (IData)(this->data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use));
+    this->__PVT__data_structures__DOT__dirty_use_per_way 
+	= ((1U & (IData)(this->__PVT__data_structures__DOT__dirty_use_per_way)) 
+	   | ((IData)(this->data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use) 
+	      << 1U));
+    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xcU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xdU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xeU]
+				    : this->__PVT__use_write_data);
+    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
+				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xfU]
+				    : this->__PVT__use_write_data);
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__invalid_index = 0U;
+    this->__PVT__data_structures__DOT__invalid_found = 0U;
+    if ((1U & (~ ((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
+		  >> 1U)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 1U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
+    if ((1U & (~ (IData)(this->__PVT__data_structures__DOT__valid_use_per_way)))) {
+	this->__PVT__data_structures__DOT__invalid_index = 0U;
+	this->__PVT__data_structures__DOT__invalid_found = 1U;
+    }
     this->__PVT__data_structures__DOT__hit_per_way 
 	= ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way)) 
 	   | (1U & (((IData)(this->__PVT__data_structures__DOT__valid_use_per_way) 
@@ -6771,38 +8011,6 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 				 == (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
 						  >> 0xbU))))
 		      ? 1U : 0U) << 1U)));
-    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 4U));
-    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 8U));
-    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
-		       | (((IData)(this->__PVT__write_from_mem)
-			    ? 0xfU : 0U) << 0xcU));
-    this->__PVT__data_write[0U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xcU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[1U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xdU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[2U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xeU]
-				    : this->__PVT__use_write_data);
-    this->__PVT__data_write[3U] = ((IData)(this->__PVT__write_from_mem)
-				    ? vlSymsp->TOP__cache_simX__DOT__VX_dram_req_rsp.i_m_readdata[0xfU]
-				    : this->__PVT__use_write_data);
-    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
-    this->__PVT__data_structures__DOT__way_index = 0U;
-    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
-    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 1U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
-    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
-	this->__PVT__data_structures__DOT__way_index = 0U;
-	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
-    }
     this->__PVT__data_structures__DOT__data_write_per_way[0U] 
 	= this->__PVT__data_write[0U];
     this->__PVT__data_structures__DOT__data_write_per_way[1U] 
@@ -6819,6 +8027,17 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	= this->__PVT__data_write[2U];
     this->__PVT__data_structures__DOT__data_write_per_way[7U] 
 	= this->__PVT__data_write[3U];
+    // ALWAYS at ../rtl/VX_generic_priority_encoder.v:17
+    this->__PVT__data_structures__DOT__way_index = 0U;
+    this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 0U;
+    if ((2U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 1U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
+    if ((1U & (IData)(this->__PVT__data_structures__DOT__hit_per_way))) {
+	this->__PVT__data_structures__DOT__way_index = 0U;
+	this->__PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = 1U;
+    }
     this->__PVT__data_structures__DOT__way_use_Qual 
 	= ((0U != (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__state))
 	    ? (IData)(this->__PVT__way_to_update) : (IData)(this->__PVT__data_structures__DOT__way_index));
@@ -6913,29 +8132,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 					  : 0U));
     this->__PVT__data_unQual = (((0U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr)) 
 				 | (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_read)))
-				 ? this->__Vcellout__data_structures__data_use[0U]
-				 : ((1U == (3U & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-				     ? (this->__Vcellout__data_structures__data_use[0U] 
-					>> 8U) : ((2U 
-						   == 
-						   (3U 
-						    & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
-						   ? 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x10U)
-						   : 
-						  (this->__Vcellout__data_structures__data_use[0U] 
-						   >> 0x18U))));
+				 ? this->__Vcellout__data_structures__data_use[
+				(3U & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+				       >> 4U))] : (
+						   (1U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 
+						   (this->__Vcellout__data_structures__data_use[
+						    (3U 
+						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+							>> 4U))] 
+						    >> 8U)
+						    : 
+						   ((2U 
+						     == 
+						     (3U 
+						      & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						     ? 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x10U)
+						     : 
+						    (this->__Vcellout__data_structures__data_use[
+						     (3U 
+						      & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+							 >> 4U))] 
+						     >> 0x18U))));
+    this->__PVT__miss = (((this->__PVT__tag_use != 
+			   (0x1fffffU & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+					 >> 0xbU))) 
+			  & (IData)(this->__PVT__valid_use)) 
+			 & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in));
     this->__PVT__genblk1__BRA__0__KET____DOT__normal_write 
 	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
-	    & (IData)(this->__PVT__access)) & (~ ((
-						   (this->__PVT__tag_use 
-						    != 
-						    (0x1fffffU 
-						     & (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
-							>> 0xbU))) 
-						   & (IData)(this->__PVT__valid_use)) 
-						  & (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in))));
+	    & ((IData)(this->__PVT__access) & (0U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__1__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (1U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__2__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (2U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
+    this->__PVT__genblk1__BRA__3__KET____DOT__normal_write 
+	= (((IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__read_or_write) 
+	    & ((IData)(this->__PVT__access) & (3U == 
+					       (3U 
+						& (vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr 
+						   >> 4U))))) 
+	   & (~ (IData)(this->__PVT__miss)));
     this->__PVT__we = ((0xfff0U & (IData)(this->__PVT__we)) 
 		       | ((IData)(this->__PVT__write_from_mem)
 			   ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__0__KET____DOT__normal_write) 
@@ -6956,6 +8215,69 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 						   ? 3U
 						   : 0xcU)
 						  : 0U)))));
+    this->__PVT__we = ((0xff0fU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__1__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 4U));
+    this->__PVT__we = ((0xf0ffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__2__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 8U));
+    this->__PVT__we = ((0xfffU & (IData)(this->__PVT__we)) 
+		       | (((IData)(this->__PVT__write_from_mem)
+			    ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+				       & (2U == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+				       ? 0xfU : (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						  & (0U 
+						     == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						  ? (IData)(this->__PVT__sb_mask)
+						  : 
+						 (((IData)(this->__PVT__genblk1__BRA__3__KET____DOT__normal_write) 
+						   & (1U 
+						      == (IData)(vlTOPp->cache_simX__DOT__dmem_controller__DOT__cache_driver_in_mem_write)))
+						   ? 
+						  ((0U 
+						    == 
+						    (3U 
+						     & vlTOPp->cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_addr))
+						    ? 3U
+						    : 0xcU)
+						   : 0U)))) 
+			  << 0xcU));
     this->__PVT__data_structures__DOT__we_per_way = 
 	((0xffff0000U & this->__PVT__data_structures__DOT__we_per_way) 
 	 | (0xffffU & ((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
@@ -6965,16 +8287,6 @@ VL_INLINE_OPT void Vcache_simX_VX_Cache_Bank__pi8::_combo__TOP__cache_simX__DOT_
 	 | (0xffff0000U & (((IData)(this->__PVT__data_structures__DOT__way_use_Qual)
 			     ? (IData)(this->__PVT__we)
 			     : 0U) << 0x10U)));
-    this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & this->__PVT__data_structures__DOT__we_per_way))) 
-		 | (IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way)));
-    this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty 
-	= (1U & (((~ this->__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty
-		   [0U]) & (0U != (0xffffU & (this->__PVT__data_structures__DOT__we_per_way 
-					      >> 0x10U)))) 
-		 | ((IData)(this->__PVT__data_structures__DOT__write_from_mem_per_way) 
-		    >> 1U)));
 }
 
 void Vcache_simX_VX_Cache_Bank__pi8::_ctor_var_reset() {
@@ -7003,6 +8315,7 @@ void Vcache_simX_VX_Cache_Bank__pi8::_ctor_var_reset() {
     __PVT__valid_use = VL_RAND_RESET_I(1);
     __PVT__access = VL_RAND_RESET_I(1);
     __PVT__write_from_mem = VL_RAND_RESET_I(1);
+    __PVT__miss = VL_RAND_RESET_I(1);
     __PVT__way_to_update = VL_RAND_RESET_I(1);
     __PVT__data_unQual = VL_RAND_RESET_I(32);
     __PVT__use_write_data = VL_RAND_RESET_I(32);
@@ -7011,6 +8324,9 @@ void Vcache_simX_VX_Cache_Bank__pi8::_ctor_var_reset() {
     VL_RAND_RESET_W(128,__PVT__data_write);
     VL_RAND_RESET_W(128,__Vcellout__data_structures__data_use);
     __PVT__genblk1__BRA__0__KET____DOT__normal_write = VL_RAND_RESET_I(1);
+    __PVT__genblk1__BRA__1__KET____DOT__normal_write = VL_RAND_RESET_I(1);
+    __PVT__genblk1__BRA__2__KET____DOT__normal_write = VL_RAND_RESET_I(1);
+    __PVT__genblk1__BRA__3__KET____DOT__normal_write = VL_RAND_RESET_I(1);
     __PVT__data_structures__DOT__tag_use_per_way = VL_RAND_RESET_Q(42);
     VL_RAND_RESET_W(256,__PVT__data_structures__DOT__data_use_per_way);
     __PVT__data_structures__DOT__valid_use_per_way = VL_RAND_RESET_I(2);
@@ -7023,8 +8339,9 @@ void Vcache_simX_VX_Cache_Bank__pi8::_ctor_var_reset() {
     __PVT__data_structures__DOT__way_index = VL_RAND_RESET_I(1);
     __PVT__data_structures__DOT__invalid_index = VL_RAND_RESET_I(1);
     __PVT__data_structures__DOT__way_use_Qual = VL_RAND_RESET_I(1);
+    data_structures__DOT__each_way__BRA__0__KET____DOT____Vcellout__data_structures__dirty_use = VL_RAND_RESET_I(1);
+    data_structures__DOT__each_way__BRA__1__KET____DOT____Vcellout__data_structures__dirty_use = VL_RAND_RESET_I(1);
     __PVT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found = VL_RAND_RESET_I(1);
-    __PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty = VL_RAND_RESET_I(1);
     { int __Vi0=0; for (; __Vi0<32; ++__Vi0) {
 	    VL_RAND_RESET_W(128,__PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data[__Vi0]);
     }}
@@ -7039,7 +8356,6 @@ void Vcache_simX_VX_Cache_Bank__pi8::_ctor_var_reset() {
     }}
     __PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__f = VL_RAND_RESET_I(32);
     __PVT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__ini_ind = VL_RAND_RESET_I(32);
-    __PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty = VL_RAND_RESET_I(1);
     { int __Vi0=0; for (; __Vi0<32; ++__Vi0) {
 	    VL_RAND_RESET_W(128,__PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data[__Vi0]);
     }}
@@ -7055,110 +8371,148 @@ void Vcache_simX_VX_Cache_Bank__pi8::_ctor_var_reset() {
     __PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__f = VL_RAND_RESET_I(32);
     __PVT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__ini_ind = VL_RAND_RESET_I(32);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v0 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = VL_RAND_RESET_I(5);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = VL_RAND_RESET_I(1);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = VL_RAND_RESET_I(5);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = VL_RAND_RESET_I(21);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 = VL_RAND_RESET_I(5);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(1);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v0 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = VL_RAND_RESET_I(5);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = VL_RAND_RESET_I(1);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = VL_RAND_RESET_I(5);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = VL_RAND_RESET_I(21);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 = VL_RAND_RESET_I(5);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v32 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v33 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v34 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v35 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v36 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v37 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v38 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v39 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v40 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v41 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v42 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v43 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v44 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v45 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v46 = VL_RAND_RESET_I(1);
+    __Vdlyvdim0__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(5);
     __Vdlyvlsb__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(7);
     __Vdlyvval__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(8);
     __Vdlyvset__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data__v47 = VL_RAND_RESET_I(1);

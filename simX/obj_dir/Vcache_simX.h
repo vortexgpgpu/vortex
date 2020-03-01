@@ -11,10 +11,10 @@
 #include "verilated.h"
 
 class Vcache_simX__Syms;
-class Vcache_simX_VX_dram_req_rsp_inter__N1_NB4;
-class Vcache_simX_VX_dcache_request_inter;
 class Vcache_simX_VX_dram_req_rsp_inter__N4_NB4;
+class Vcache_simX_VX_dcache_request_inter;
 class Vcache_simX_VX_Cache_Bank__pi8;
+class Vcache_simX_VX_Cache_Bank__pi9;
 class VerilatedVcd;
 
 //----------
@@ -24,13 +24,17 @@ VL_MODULE(Vcache_simX) {
     // CELLS
     // Public to allow access to /*verilator_public*/ items;
     // otherwise the application code can consider these internals.
-    Vcache_simX_VX_dram_req_rsp_inter__N1_NB4*	__PVT__cache_simX__DOT__VX_dram_req_rsp_icache;
+    Vcache_simX_VX_dram_req_rsp_inter__N4_NB4*	__PVT__cache_simX__DOT__VX_dram_req_rsp_icache;
     Vcache_simX_VX_dcache_request_inter*	__PVT__cache_simX__DOT__VX_dcache_req;
     Vcache_simX_VX_dram_req_rsp_inter__N4_NB4*	__PVT__cache_simX__DOT__VX_dram_req_rsp;
     Vcache_simX_VX_Cache_Bank__pi8*	__PVT__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_structure;
     Vcache_simX_VX_Cache_Bank__pi8*	__PVT__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_structure;
     Vcache_simX_VX_Cache_Bank__pi8*	__PVT__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_structure;
     Vcache_simX_VX_Cache_Bank__pi8*	__PVT__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9*	__PVT__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9*	__PVT__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__1__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9*	__PVT__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__2__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9*	__PVT__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__3__KET____DOT__bank_structure;
     
     // PORTS
     // The application code writes and reads these signals to
@@ -101,37 +105,27 @@ VL_MODULE(Vcache_simX) {
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__global_way_to_evict,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__valid_per_bank,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__threads_serviced_per_bank,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__hit_per_bank,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__eviction_wb_old,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__index_per_bank,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__use_mask_per_bank,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__valid_per_bank,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__threads_serviced_per_bank,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__hit_per_bank,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__eviction_wb,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__eviction_wb_old,3,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__state,3,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__new_state,3,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__use_valid,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__stored_valid,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__new_stored_valid,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__detect_bank_miss,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__miss_bank_index,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__threads_serviced_Qual,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__detect_bank_miss,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__miss_bank_index,1,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__miss_found,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__update_global_way_to_evict,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__use_valid_in,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__valid_use,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__access,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__write_from_mem,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__way_to_update,0,0);
-    VL_SIG16(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__we,15,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__valid_use_per_way,1,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__dirty_use_per_way,1,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__hit_per_way,1,0);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__we_per_way,31,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__write_from_mem_per_way,1,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__invalid_found,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__way_index,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__invalid_index,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__way_use_Qual,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__genblk1__DOT__way_indexing__DOT__found,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__update_dirty,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__update_dirty,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__1__KET____DOT__use_valid_in,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__2__KET____DOT__use_valid_in,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__3__KET____DOT__use_valid_in,0,0);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__temp_out_data,127,0,4);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__block_wdata,511,0,16);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__block_rdata,511,0,16);
@@ -162,33 +156,21 @@ VL_MODULE(Vcache_simX) {
     VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__final_data_read,31,0);
     VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__new_final_data_read,31,0);
     VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__new_final_data_read_Qual,31,0);
+    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__readdata_per_bank,127,0,4);
+    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__eviction_addr_per_bank,127,0,4);
     VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__miss_addr,31,0);
     VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__init_b,31,0);
     VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_addr,31,0);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__tag_use,22,0);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_unQual,31,0);
-    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_write,127,0,4);
-    VL_SIG64(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__tag_use_per_way,45,0);
-    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__data_use_per_way,255,0,8);
-    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__data_write_per_way,255,0,8);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__f,31,0);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__ini_ind,31,0);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__f,31,0);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__ini_ind,31,0);
+    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__1__KET____DOT__bank_addr,31,0);
+    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__2__KET____DOT__bank_addr,31,0);
+    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__3__KET____DOT__bank_addr,31,0);
+    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__get_miss_index__DOT__i,31,0);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__genblk2__BRA__0__KET____DOT__vx_shared_memory_block__DOT__shared_memory[128],127,0,4);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__genblk2__BRA__1__KET____DOT__vx_shared_memory_block__DOT__shared_memory[128],127,0,4);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__genblk2__BRA__2__KET____DOT__vx_shared_memory_block__DOT__shared_memory[128],127,0,4);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__genblk2__BRA__3__KET____DOT__vx_shared_memory_block__DOT__shared_memory[128],127,0,4);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__dcache__DOT__debug_hit_per_bank_mask[4],3,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__debug_hit_per_bank_mask[1],0,0);
-    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__data[32],127,0,4);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__tag[32],22,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__valid[32],0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__0__KET____DOT__data_structures__DOT__dirty[32],0,0);
-    VL_SIGW(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__data[32],127,0,4);
-    VL_SIG(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__tag[32],22,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__valid[32],0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure__DOT__data_structures__DOT__each_way__BRA__1__KET____DOT__data_structures__DOT__dirty[32],0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__debug_hit_per_bank_mask[4],0,0);
     
     // LOCAL VARIABLES
     // Internals; generally not touched by application code
@@ -219,6 +201,9 @@ VL_MODULE(Vcache_simX) {
     static VL_ST_SIG8(__Vtable9_cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk1__BRA__3__KET____DOT____Vcellout__choose_thread__index[16],1,0);
     static VL_ST_SIG8(__Vtable9_cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk1__BRA__3__KET____DOT____Vcellout__choose_thread__found[16],0,0);
     static VL_ST_SIG(__Vtable9_cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk1__BRA__3__KET____DOT__choose_thread__DOT__i[16],31,0);
+    static VL_ST_SIG8(__Vtable10_cache_simX__DOT__dmem_controller__DOT__icache__DOT__miss_bank_index[16],1,0);
+    static VL_ST_SIG8(__Vtable10_cache_simX__DOT__dmem_controller__DOT__icache__DOT__miss_found[16],0,0);
+    static VL_ST_SIG(__Vtable10_cache_simX__DOT__dmem_controller__DOT__icache__DOT__get_miss_index__DOT__i[16],31,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT____Vlvbound1,6,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT____Vlvbound2,6,0);
     VL_SIG16(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__vx_priority_encoder_sm__DOT____Vcellout__vx_bank_valid__bank_valids,15,0);
@@ -239,9 +224,15 @@ VL_MODULE(Vcache_simX) {
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk1__BRA__2__KET____DOT____Vcellout__choose_thread__index,1,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk1__BRA__3__KET____DOT____Vcellout__choose_thread__found,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk1__BRA__3__KET____DOT____Vcellout__choose_thread__index,1,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT____Vcellout__multip_banks__thread_track_banks,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT____Vcellout__multip_banks__thread_track_banks,3,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__0__KET____DOT____Vcellout__choose_thread__found,0,0);
     VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__0__KET____DOT____Vcellout__choose_thread__index,0,0);
-    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__multip_banks__DOT____Vlvbound1,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__1__KET____DOT____Vcellout__choose_thread__found,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__1__KET____DOT____Vcellout__choose_thread__index,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__2__KET____DOT____Vcellout__choose_thread__found,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__2__KET____DOT____Vcellout__choose_thread__index,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__3__KET____DOT____Vcellout__choose_thread__found,0,0);
+    VL_SIG8(cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk1__BRA__3__KET____DOT____Vcellout__choose_thread__index,0,0);
     VL_SIG8(__Vtableidx1,3,0);
     VL_SIG8(__Vtableidx2,3,0);
     VL_SIG8(__Vtableidx3,3,0);
@@ -251,10 +242,12 @@ VL_MODULE(Vcache_simX) {
     VL_SIG8(__Vtableidx7,3,0);
     VL_SIG8(__Vtableidx8,3,0);
     VL_SIG8(__Vtableidx9,3,0);
+    VL_SIG8(__Vtableidx10,3,0);
     VL_SIG8(__Vclklast__TOP__clk,0,0);
     VL_SIG8(__Vclklast__TOP__reset,0,0);
     VL_SIG(__Vchglast__TOP__cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT__block_addr,27,0);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT____Vcellout__dcache__o_m_writedata,511,0,16);
+    VL_SIGW(cache_simX__DOT__dmem_controller__DOT____Vcellout__icache__o_m_writedata,511,0,16);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT____Vcellout__vx_priority_encoder_sm__out_data,127,0,4);
     VL_SIGW(cache_simX__DOT__dmem_controller__DOT__shared_memory__DOT____Vcellout__vx_priority_encoder_sm__out_address,127,0,4);
     VL_SIG(__Vm_traceActivity,31,0);

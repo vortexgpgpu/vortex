@@ -11,8 +11,8 @@
 // INCLUDE MODULE CLASSES
 #include "Vcache_simX.h"
 #include "Vcache_simX_VX_dram_req_rsp_inter__N4_NB4.h"
-#include "Vcache_simX_VX_dram_req_rsp_inter__N1_NB4.h"
 #include "Vcache_simX_VX_dcache_request_inter.h"
+#include "Vcache_simX_VX_Cache_Bank__pi9.h"
 #include "Vcache_simX_VX_Cache_Bank__pi8.h"
 
 // SYMS CLASS
@@ -28,11 +28,15 @@ class Vcache_simX__Syms : public VerilatedSyms {
     Vcache_simX*                   TOPp;
     Vcache_simX_VX_dcache_request_inter TOP__cache_simX__DOT__VX_dcache_req;
     Vcache_simX_VX_dram_req_rsp_inter__N4_NB4 TOP__cache_simX__DOT__VX_dram_req_rsp;
-    Vcache_simX_VX_dram_req_rsp_inter__N1_NB4 TOP__cache_simX__DOT__VX_dram_req_rsp_icache;
+    Vcache_simX_VX_dram_req_rsp_inter__N4_NB4 TOP__cache_simX__DOT__VX_dram_req_rsp_icache;
     Vcache_simX_VX_Cache_Bank__pi8 TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__0__KET____DOT__bank_structure;
     Vcache_simX_VX_Cache_Bank__pi8 TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__1__KET____DOT__bank_structure;
     Vcache_simX_VX_Cache_Bank__pi8 TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__2__KET____DOT__bank_structure;
     Vcache_simX_VX_Cache_Bank__pi8 TOP__cache_simX__DOT__dmem_controller__DOT__dcache__DOT__genblk3__BRA__3__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9 TOP__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__0__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9 TOP__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__1__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9 TOP__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__2__KET____DOT__bank_structure;
+    Vcache_simX_VX_Cache_Bank__pi9 TOP__cache_simX__DOT__dmem_controller__DOT__icache__DOT__genblk3__BRA__3__KET____DOT__bank_structure;
     
     // CREATORS
     Vcache_simX__Syms(Vcache_simX* topp, const char* namep);

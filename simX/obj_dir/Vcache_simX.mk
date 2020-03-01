@@ -12,9 +12,9 @@ PERL = perl
 # Path to Verilator kit (from $VERILATOR_ROOT)
 VERILATOR_ROOT = /usr/share/verilator
 # SystemC include directory with systemc.h (from $SYSTEMC_INCLUDE)
-SYSTEMC_INCLUDE ?= 
+SYSTEMC_INCLUDE ?= /opt/systemc/include
 # SystemC library directory with libsystemc.a (from $SYSTEMC_LIBDIR)
-SYSTEMC_LIBDIR ?= 
+SYSTEMC_LIBDIR ?= /opt/systemc/lib
 
 ### Switches...
 # SystemC output mode?  0/1 (from --sc)
@@ -33,7 +33,7 @@ VM_PREFIX = Vcache_simX
 VM_MODPREFIX = Vcache_simX
 # User CFLAGS (from -CFLAGS on Verilator command line)
 VM_USER_CFLAGS = \
-	-std=c++11 -fPIC -O3 \
+	-std=c++11 -fPIC -O3 -Wall -Wextra -pedantic \
 
 # User LDLIBS (from -LDFLAGS on Verilator command line)
 VM_USER_LDLIBS = \
