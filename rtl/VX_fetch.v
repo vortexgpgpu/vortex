@@ -7,26 +7,39 @@ module VX_fetch (
 	VX_wstall_inter          VX_wstall,
 	VX_join_inter            VX_join,
 	input  wire              schedule_delay,
-	VX_icache_response_inter icache_response,
-	VX_icache_request_inter  icache_request,
+	input  wire              icache_stage_delay,
 
 	output wire              out_ebreak,
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
-	VX_inst_meta_inter       fe_inst_meta_fd,
+	VX_inst_meta_inter       fe_inst_meta_fi,
 	VX_warp_ctl_inter        VX_warp_ctl
 );
-
-		// Locals
-		wire pipe_stall;
-
-
-		assign pipe_stall = schedule_delay || icache_response.delay;
 
 		wire[`NT_M1:0] thread_mask;
 		wire[`NW_M1:0] warp_num;
 		wire[31:0]     warp_pc;
 		wire           scheduled_warp;
+
+
+		// Only reason this is there is because there is a hidden assumption that decode is exactly after fetch
+		reg stall_might_be_branch;
+		always @(posedge clk) begin
+			if (reset) begin
+				stall_might_be_branch <= 0;
+			end else if (stall_might_be_branch == 1'b1) begin
+				stall_might_be_branch <= 0;
+			end else if (scheduled_warp == 1'b1) begin
+				stall_might_be_branch <= 1'b1;
+			end
+		end
+
+		// Locals
+		wire pipe_stall;
+
+
+		assign pipe_stall = schedule_delay || icache_stage_delay || stall_might_be_branch;
+
 		VX_warp_scheduler warp_scheduler(
 			.clk              (clk),
 			.reset            (reset),
@@ -82,22 +95,11 @@ module VX_fetch (
 			.out_ebreak       (out_ebreak),
 			.scheduled_warp   (scheduled_warp)
 			);
-	
-		// always @(*) begin
-		// 	$display("Inside verilog instr: %h, pc: %h", icache_response.instruction, warp_pc);
-		// end
 
-		assign icache_request.pc_address 						= warp_pc;
-		assign icache_request.out_cache_driver_in_valid 		= !schedule_delay && scheduled_warp;
-		assign icache_request.out_cache_driver_in_mem_read		= `LW_MEM_READ;
-		assign icache_request.out_cache_driver_in_mem_write		= `NO_MEM_WRITE;
-	  	assign icache_request.out_cache_driver_in_data			= 32'b0;
+		assign fe_inst_meta_fi.warp_num  = warp_num;
+		assign fe_inst_meta_fi.valid     = thread_mask;
 
-		assign fe_inst_meta_fd.warp_num  = warp_num;
-		assign fe_inst_meta_fd.valid     = thread_mask;
-
-		assign fe_inst_meta_fd.instruction = (thread_mask == 0) ? 32'b0 : icache_response.instruction;
-		assign fe_inst_meta_fd.inst_pc     = warp_pc;
+		assign fe_inst_meta_fi.inst_pc     = warp_pc;
 
 
 endmodule

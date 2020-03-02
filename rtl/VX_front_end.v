@@ -20,12 +20,15 @@ module VX_front_end (
 );
 
 
-VX_inst_meta_inter        fe_inst_meta_fd();
+VX_inst_meta_inter        fe_inst_meta_fi();
+VX_inst_meta_inter        fe_inst_meta_fi2();
+VX_inst_meta_inter        fe_inst_meta_id();
 
 VX_frE_to_bckE_req_inter VX_frE_to_bckE_req();
 VX_inst_meta_inter       fd_inst_meta_de();
 
 wire total_freeze = schedule_delay;
+wire icache_stage_delay;
 
 /* verilator lint_off UNUSED */
 // wire real_fetch_ebreak;
@@ -47,20 +50,38 @@ VX_fetch vx_fetch(
 		.VX_join            (VX_join),
 		.schedule_delay     (schedule_delay),
 		.VX_jal_rsp         (VX_jal_rsp),
-		.icache_response    (icache_response_fe),
 		.VX_warp_ctl        (VX_warp_ctl),
-
-		.icache_request     (icache_request_fe),
+		.icache_stage_delay (icache_stage_delay),
 		.VX_branch_rsp      (VX_branch_rsp),
 		.out_ebreak         (vortex_ebreak), // fetch_ebreak
-		.fe_inst_meta_fd    (fe_inst_meta_fd)
+		.fe_inst_meta_fi    (fe_inst_meta_fi)
 	);
 
-VX_f_d_reg vx_f_d_reg(
+wire freeze_fi_reg = total_freeze || icache_stage_delay;
+VX_f_d_reg vx_f_i_reg(
+		.clk            (clk),
+		.reset          (reset),
+		.in_freeze      (freeze_fi_reg),
+		.fe_inst_meta_fd(fe_inst_meta_fi),
+		.fd_inst_meta_de(fe_inst_meta_fi2)
+	);
+
+VX_icache_stage VX_icache_stage(
+	.clk               (clk),
+	.reset             (reset),
+	.icache_stage_delay(icache_stage_delay),
+	.fe_inst_meta_fi   (fe_inst_meta_fi2),
+	.fe_inst_meta_id   (fe_inst_meta_id),
+	.icache_response   (icache_response_fe),
+	.icache_request    (icache_request_fe)
+	);
+
+
+VX_f_d_reg vx_i_d_reg(
 		.clk            (clk),
 		.reset          (reset),
 		.in_freeze      (total_freeze),
-		.fe_inst_meta_fd(fe_inst_meta_fd),
+		.fe_inst_meta_fd(fe_inst_meta_id),
 		.fd_inst_meta_de(fd_inst_meta_de)
 	);
 

@@ -67,13 +67,18 @@ int main(int argc, char **argv)
     for (std::string s : tests) {
         Vortex v;
 
+        std::cerr << DEFAULT << "\n---------------------------------------\n";
+
         std::cerr << s << std::endl;
 
         bool curr = v.simulate(s);
         if ( curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
         if (!curr) std::cerr << RED   << "Test Failed: " << s << std::endl;
+        std::cerr << DEFAULT;
         passed = passed && curr;
     }
+
+    std::cerr << DEFAULT << "\n***************************************\n";
 
     if( passed) std::cerr << DEFAULT << "PASSED ALL TESTS\n";
 	if(!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
@@ -82,15 +87,15 @@ int main(int argc, char **argv)
 
 	#else
 
-	char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
+	char testing[] = "../../emulator/riscv_tests/rv32ui-p-auipc.hex";
 	Vortex v;
-	const char *testing;
+	// const char *testing;
 
-	if (argc >= 2) {
-	    testing = argv[1];
-	} else {
-	    testing = "../../kernel/vortex_test.hex";
-	}
+	// if (argc >= 2) {
+	//     testing = argv[1];
+	// } else {
+	//     testing = "../../kernel/vortex_test.hex";
+	// }
 
     std::cerr << testing << std::endl;
 
