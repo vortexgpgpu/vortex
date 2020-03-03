@@ -4,21 +4,21 @@
 module VX_cache_wb_sel_merge (
 
 	// Per Bank WB
-    input  wire [`NUMBER_BANKS-1:0][`NUMBER_REQUESTS-1:0] per_bank_wb_tid,
-    input  wire [`NUMBER_BANKS-1:0][4:0]                  per_bank_wb_rd,
-    input  wire [`NUMBER_BANKS-1:0][1:0]                  per_bank_wb_wb,
-    input  wire [`NUMBER_BANKS-1:0][`NW_M1:0]             per_bank_wb_warp_num,
-    input  wire [`NUMBER_BANKS-1:0][31:0]                 per_bank_wb_data,
-    output wire [`NUMBER_BANKS-1:0]                       per_bank_wb_pop,
+    input  wire [`NUMBER_BANKS-1:0][`vx_clog2(`NUMBER_REQUESTS)-1:0] per_bank_wb_tid,
+    input  wire [`NUMBER_BANKS-1:0][4:0]                             per_bank_wb_rd,
+    input  wire [`NUMBER_BANKS-1:0][1:0]                             per_bank_wb_wb,
+    input  wire [`NUMBER_BANKS-1:0][`NW_M1:0]                        per_bank_wb_warp_num,
+    input  wire [`NUMBER_BANKS-1:0][31:0]                            per_bank_wb_data,
+    output wire [`NUMBER_BANKS-1:0]                                  per_bank_wb_pop,
 
 
     // Core Writeback
-    input  wire                              core_no_wb_slot,
-    output reg  [`NUMBER_REQUESTS-1:0]       core_wb_valid,
-    output reg  [`NUMBER_REQUESTS-1:0][31:0] core_wb_readdata
-    output wire [4:0]                        core_wb_req_rd,
-    output wire [1:0]                        core_wb_req_wb,
-    output wire [`NW_M1:0]                   core_wb_warp_num,
+    input  wire                                                      core_no_wb_slot,
+    output reg  [`NUMBER_REQUESTS-1:0]                               core_wb_valid,
+    output reg  [`NUMBER_REQUESTS-1:0][31:0]                         core_wb_readdata
+    output wire [4:0]                                                core_wb_req_rd,
+    output wire [1:0]                                                core_wb_req_wb,
+    output wire [`NW_M1:0]                                           core_wb_warp_num,
 	
 );
 
