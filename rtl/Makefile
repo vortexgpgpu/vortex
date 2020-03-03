@@ -1,9 +1,7 @@
 all: RUNFILE
 
-# /rf2_256x128_wm1/
-BaseMEM=../models/memory/cln28hpm
 
-INCLUDE=-I. -Ishared_memory -Icache -I$(BaseMEM)/rf2_128x128_wm1/ -I$(BaseMEM)/rf2_256x128_wm1/ -I$(BaseMEM)/rf2_256x19_wm0/ -I$(BaseMEM)/rf2_32x128_wm1/ -Iinterfaces/ -Ipipe_regs/ -Icompat/ -Isimulate
+INCLUDE=-I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterfaces/ -Ipipe_regs/ -Icompat/ -Isimulate
 
 FILE=Vortex.v
 
