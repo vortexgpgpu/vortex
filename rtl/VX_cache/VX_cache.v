@@ -16,6 +16,7 @@ module VX_cache (
     input wire [4:0]                         core_req_rd,
     input wire [1:0]                         core_req_wb,
     input wire [`NW_M1:0]                    core_req_warp_num,
+    output wire                              delay_req,
 
     // Core Writeback
     input  wire                              core_no_wb_slot,
@@ -30,6 +31,7 @@ module VX_cache (
     input  wire                              dram_fill_rsp,
     input  wire [31:0]                       dram_fill_rsp_addr,
     input  wire [`BANK_LINE_SIZE_RNG][31:0]  dram_fill_rsp_data,
+    output wire                              dram_fill_accept,
 
     // Dram request
     output wire                              dram_req,
@@ -53,11 +55,19 @@ module VX_cache (
     wire                                                      dfqq_full;
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_fill_req;
     wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_dram_fill_req_addr;
+    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_fill_accept;
 
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_queue_pop;
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_req;
     wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_dram_wb_req_addr;
     wire[`NUMBER_BANKS-1]:0[`BANK_LINE_SIZE_RNG][31:0]        per_bank_dram_wb_req_data;
+
+    wire[`NUMBER_BANKS-1:0]                                   per_bank_reqq_full;
+
+    assign delay_req = (|per_bank_reqq_full);
+
+
+    assign dram_fill_accept = (`NUMBER_BANKS == 1) ? dram_fill_accept[0] : dram_fill_accept[dram_fill_addr[`BANK_SELECT_ADDR_RNG]];
 
     VX_cache_dram_req_arb VX_cache_dram_req_arb(
         .clk                        (clk),
@@ -122,6 +132,7 @@ module VX_cache (
             wire                                   curr_bank_dram_fill_rsp;
             wire [31:0]                            curr_bank_dram_fill_rsp_addr;
             wire [`BANK_LINE_SIZE_RNG][31:0]       curr_bank_dram_fill_rsp_data;
+            wire                                   curr_bank_dram_fill_accept;
 
             wire                                   curr_bank_dfqq_full;
             wire                                   curr_bank_dram_fill_req;
@@ -132,15 +143,18 @@ module VX_cache (
             wire[31:0]                             curr_bank_dram_wb_req_addr;
             wire[`BANK_LINE_SIZE_RNG][31:0]        curr_bank_dram_wb_req_data;
 
+            wire                                   curr_bank_reqq_full;
+
             // Core Req
-            assign curr_bank_valids     = per_bank_valids[curr_bank];
-            assign curr_bank_addr       = core_req_addr;
-            assign curr_bank_writedata  = core_req_writedata;
-            assign curr_bank_rd         = core_req_rd;
-            assign curr_bank_wb         = core_req_wb;
-            assign curr_bank_warp_num   = core_req_warp_num;
-            assign curr_bank_mem_read   = core_req_mem_read;
-            assign curr_bank_mem_write  = core_req_mem_write;
+            assign curr_bank_valids              = per_bank_valids[curr_bank];
+            assign curr_bank_addr                = core_req_addr;
+            assign curr_bank_writedata           = core_req_writedata;
+            assign curr_bank_rd                  = core_req_rd;
+            assign curr_bank_wb                  = core_req_wb;
+            assign curr_bank_warp_num            = core_req_warp_num;
+            assign curr_bank_mem_read            = core_req_mem_read;
+            assign curr_bank_mem_write           = core_req_mem_write;
+            assign per_bank_reqq_full[curr_bank] = curr_bank_reqq_full;
 
             // Core WB
             assign curr_bank_wb_pop                = per_bank_wb_pop[curr_bank];
@@ -156,9 +170,10 @@ module VX_cache (
             assign per_bank_dram_fill_req_addr[curr_bank] = curr_bank_dram_fill_req_addr;
 
             // Dram fill response
-            assign curr_bank_dram_fill_rsp      = (`NUMBER_BANKS == 1) || (dram_fill_addr[`BANK_SELECT_ADDR_RNG] == curr_bank);
-            assign curr_bank_dram_fill_rsp_addr = dram_fill_rsp_addr;
-            assign curr_bank_dram_fill_rsp_data = dram_fill_rsp_data;
+            assign curr_bank_dram_fill_rsp              = (`NUMBER_BANKS == 1) || (dram_fill_addr[`BANK_SELECT_ADDR_RNG] == curr_bank);
+            assign curr_bank_dram_fill_rsp_addr         = dram_fill_rsp_addr;
+            assign curr_bank_dram_fill_rsp_data         = dram_fill_rsp_data;
+            assign per_bank_dram_fill_accept[curr_bank] = curr_bank_dram_fill_accept;
 
             // Dram writeback request
             assign curr_bank_dram_wb_queue_pop          = per_bank_dram_wb_queue_pop[curr_bank];
@@ -171,6 +186,7 @@ module VX_cache (
                 .clk                     (clk),
                 .reset                   (reset),
                 // Core req
+                .delay_req               (delay_req),
                 .bank_valids             (curr_bank_valids),
                 .bank_addr               (curr_bank_addr),
                 .bank_writedata          (curr_bank_writedata),
@@ -179,6 +195,7 @@ module VX_cache (
                 .bank_warp_num           (curr_bank_warp_num),
                 .bank_mem_read           (curr_bank_mem_read),
                 .bank_mem_write          (curr_bank_mem_write),
+                .reqq_full               (curr_bank_reqq_full),
 
                 // Output core wb
                 .bank_wb_pop             (curr_bank_wb_pop),
@@ -197,6 +214,7 @@ module VX_cache (
                 .dram_fill_rsp           (curr_bank_dram_fill_rsp),
                 .dram_fill_addr          (curr_bank_dram_fill_rsp_addr),
                 .dram_fill_rsp_data      (curr_bank_dram_fill_rsp_data),
+                .dram_fill_accept        (curr_bank_dram_fill_accept),
 
                 // Dram writeback
                 .dram_wb_queue_pop       (curr_bank_dram_wb_queue_pop),

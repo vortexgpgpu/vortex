@@ -10,16 +10,16 @@
 	`define CACHE_SIZE_BYTES 1024
 	// Size of line inside a bank in bytes
 	`define BANK_LINE_SIZE_BYTES 16
-	// Number of banks
+	// Number of banks {1, 2, 4, 8,...}
 	`define NUMBER_BANKS 8
 	// Size of a word in bytes
 	`define WORD_SIZE_BYTES 4
-	// Number of Word requests per cycle
+	// Number of Word requests per cycle {1, 2, 4, 8, ...}
 	`define NUMBER_REQUESTS `NT
 	// Number of cycles to complete stage 2 (read from memory)
 	`define STAGE_2_CYCLES 1
 
-// Queues feeding into banks Knobs
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
 	// Core Request Queue Size
 	`define REQQ_SIZE `NT*`NW
@@ -28,11 +28,11 @@
 	// Dram Fill Rsp Queue Size
 	`define DFPQ_SIZE 2
 
-// Queues for writebacks Knobs
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	`define CWBQ_SIZE `REQQ_SIZE
 	// Dram Writeback Queue Size
-	`define DWBQ_SIZE 2
+	`define DWBQ_SIZE 4
 	// Dram Fill Req Queue Size
 	`define DFQQ_SIZE `REQQ_SIZE
 
@@ -41,6 +41,10 @@
 
 // ========================================= Configurable Knobs =========================================
 
+//                         data       tid                    rd  wb     warp_num   read  write
+`define MRVQ_METADATA_SIZE (32 + `vx_clog2(`NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1) + 3 + 3)
+
+`define REQ_INST_META_SIZE (5 + 2 + (`NW_M1+1) + 3 + 3 + `vx_clog2(`NUMBER_REQUESTS))
 
 `define vx_clog2_h(value, x) (value == (1 << x)) ? (x)
 
