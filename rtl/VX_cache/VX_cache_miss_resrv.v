@@ -36,22 +36,19 @@ module VX_cache_miss_resrv (
 );
 
 	// Size of metadata = 32 + `vx_clog2(`NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1)
-	reg[`MRVQ_METADATA_SIZE-1:0] metadata_table[`MRVQ_SIZE-1:0];
-	reg[`MRVQ_SIZE-1:0][31:0]    addr_table;
-	reg[`MRVQ_SIZE-1:0]          valid_table;
-	reg[`MRVQ_SIZE-1:0]          ready_table;
+	reg[`MRVQ_METADATA_SIZE-1:0]   metadata_table[`MRVQ_SIZE-1:0];
+	reg[`MRVQ_SIZE-1:0][31:0]      addr_table;
+	reg[`MRVQ_SIZE-1:0]            valid_table;
+	reg[`MRVQ_SIZE-1:0]            ready_table;
+	reg[`vx_clog2(`MRVQ_SIZE)-1:0] head_ptr;
+	reg[`vx_clog2(`MRVQ_SIZE)-1:0] tail_ptr;
 
 
-	assign miss_resrv_full = !(&valid_table);
+	assign miss_resrv_full = (tail_ptr+1) == head_ptr;
 
 
-	wire                            enqueue_possible;
-	wire[`vx_clog2(`MRVQ_SIZE)-1:0] enqueue_index;
-	VX_generic_priority_encoder #(.N(`MRVQ_SIZE)) enqueue_picker(
-		.valids(~valid_table),
-		.index (enqueue_index),
-		.found (enqueue_possible)
-		);
+	wire                            enqueue_possible = !miss_resrv_full;
+	wire[`vx_clog2(`MRVQ_SIZE)-1:0] enqueue_index    = tail_ptr;
 
 	reg[`MRVQ_SIZE-1:0] make_ready;
 	genvar curr_e;
@@ -62,14 +59,9 @@ module VX_cache_miss_resrv (
 		end
 	endgenerate
 
-	wire                            dequeue_possible;
-	wire[`vx_clog2(`MRVQ_SIZE)-1:0] dequeue_index;
-	wire[`MRVQ_SIZE-1:0]            dequeue_valid = valid_table & ready_table;
-	VX_generic_priority_encoder #(.N(`MRVQ_SIZE)) dequeue_picker(
-		.valids(dequeue_valid),
-		.index (dequeue_index),
-		.found (dequeue_possible)
-		);
+
+	wire                            dequeue_possible = valid_table[head_ptr] && ready_table[head_ptr];
+	wire[`vx_clog2(`MRVQ_SIZE)-1:0] dequeue_index    = head_ptr;
 
 	assign miss_resrv_valid_st0 = dequeue_possible;
 	assign miss_resrv_addr_st0  = addr_table[dequeue_index];
@@ -89,6 +81,7 @@ module VX_cache_miss_resrv (
 				ready_table[enqueue_index]    <= 0;
 				addr_table[enqueue_index]     <= miss_add_addr;
 				metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_rd, miss_add_wb, miss_add_warp_num, miss_add_mem_read, miss_add_mem_write};
+				tail_ptr                      <= tail_ptr + 1;
 			end
 
 			if (update_ready) begin
@@ -100,6 +93,7 @@ module VX_cache_miss_resrv (
 				ready_table[dequeue_index]    <= 0;
 				addr_table[dequeue_index]     <= 0;
 				metadata_table[dequeue_index] <= 0;
+				head_ptr                      <= head_ptr + 1;
 			end
 
 		end
