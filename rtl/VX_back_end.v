@@ -16,8 +16,8 @@ module VX_back_end (
 
 	VX_warp_ctl_inter         VX_warp_ctl,
 
-	VX_dcache_response_inter  VX_dcache_rsp,
-	VX_dcache_request_inter   VX_dcache_req
+	VX_gpu_dcache_res_inter   VX_dcache_rsp,
+	VX_gpu_dcache_req_inter   VX_dcache_req
 
 );
 

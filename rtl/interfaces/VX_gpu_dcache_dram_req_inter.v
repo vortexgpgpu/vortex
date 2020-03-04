@@ -1,0 +1,25 @@
+
+
+`include "../VX_cache/VX_cache_config.v"
+
+`ifndef VX_GPU_DRAM_DCACHE_REQ
+
+`define VX_GPU_DRAM_DCACHE_REQ
+
+interface VX_gpu_dcache_dram_req_inter ();
+
+	// DRAM Request
+    wire                              dram_req;
+    wire                              dram_req_write;
+    wire                              dram_req_read;
+    wire [31:0]                       dram_req_addr;
+    wire [31:0]                       dram_req_size;
+    wire [`BANK_LINE_SIZE_RNG][31:0]  dram_req_data;
+
+    // DRAM Cache can't accept response
+    wire                              dram_fill_accept;
+
+endinterface
+
+
+`endif
