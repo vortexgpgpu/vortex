@@ -63,6 +63,7 @@ module VX_cache_dram_req_arb (
 	assign dram_req_write = dwb_valid;
 	assign dram_req_read  = dfqq_req && !dwb_valid;
 	assign dram_req_addr  = dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : dfqq_req_addr;
+	assign dram_req_size  = `BANK_LINE_SIZE_BYTES;
 	assign dram_req_data  = dwb_valid ? per_bank_dram_wb_req_data[dwb_bank] : 0;
 
 endmodule

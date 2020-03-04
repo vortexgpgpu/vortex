@@ -16,8 +16,8 @@
 	`define WORD_SIZE_BYTES 4
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
 	`define NUMBER_REQUESTS `NT
-	// Number of cycles to complete stage 2 (read from memory)
-	`define STAGE_2_CYCLES 1
+	// Number of cycles to complete stage 1 (read from memory)
+	`define STAGE_1_CYCLES 2
 
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
@@ -94,7 +94,7 @@
 `define OFFSET_SIZE_END 1
 `define OFFSET_ADDR_START 0
 `define OFFSET_ADDR_END 1
-`define OFFSET_ADDR_RNG `OFFSET_ADDR_START:`OFFSET_ADDR_END
+`define OFFSET_ADDR_RNG `OFFSET_ADDR_END:`OFFSET_ADDR_START
 `define OFFSET_SIZE_RNG `OFFSET_SIZE_END:0
 
 `define WORD_SELECT_NUM_BITS `vx_clog2(`BANK_LINE_SIZE_WORDS)

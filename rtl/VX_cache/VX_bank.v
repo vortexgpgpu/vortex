@@ -43,7 +43,7 @@ module VX_bank (
 );
 
 
-	wire                            dfpq_pop; // Use this
+	wire                            dfpq_pop;
 	wire                            dfpq_empty;
 	wire                            dfpq_full;
 	wire[31:0]                      dfpq_addr_st0;
@@ -63,7 +63,7 @@ module VX_bank (
 		);
 
 
-	wire                                  reqq_pop; // Use this
+	wire                                  reqq_pop;
 	wire                                  reqq_push;
 	wire                                  reqq_empty;
 	wire                                  reqq_req_st0;
@@ -107,7 +107,7 @@ module VX_bank (
 		.reqq_full             (reqq_full)
 		);
 
-	wire                                  mrvq_pop; // Use this
+	wire                                  mrvq_pop;
 	wire                                  mrvq_full;
 	wire                                  mrvq_valid_st0;
 	wire[`vx_clog2(`NUMBER_REQUESTS)-1:0] mrvq_tid_st0;
@@ -136,7 +136,7 @@ module VX_bank (
 
 		// Broadcast
 		.is_fill_st1             (is_fill_st1),
-		.fill_addr_st1           (addr_st1),
+		.fill_addr_st1           (addr_st1[0]),
 
 		// Dequeue
 		.miss_resrv_pop          (mrvq_pop),
@@ -170,12 +170,12 @@ module VX_bank (
 	wire [`BANK_LINE_SIZE_RNG][31:0]      qual_writedata_st0;
 	wire [`REQ_INST_META_SIZE-1:0]        qual_inst_meta_st0;
 
-	wire                                  is_fill_st1;
-	wire                                  valid_st1;
-	wire [31:0]                           addr_st1;
-	wire [31:0]                           writeword_st1;
-	wire [`BANK_LINE_SIZE_RNG][31:0]      writedata_st1;
-	wire [`REQ_INST_META_SIZE-1:0]        inst_meta_st1;
+	wire                                  valid_st1[`STAGE_1_CYCLES-1:0];
+	wire [31:0]                           addr_st1[`STAGE_1_CYCLES-1:0];
+	wire [31:0]                           writeword_st1[`STAGE_1_CYCLES-1:0];
+	wire [`REQ_INST_META_SIZE-1:0]        inst_meta_st1[`STAGE_1_CYCLES-1:0];
+	wire                                  is_fill_st1[`STAGE_1_CYCLES-1:0];
+	wire [`BANK_LINE_SIZE_RNG][31:0]      writedata_st1[`STAGE_1_CYCLES-1:0];
 
 	assign qual_is_fill_st0 = dfpq_pop;
 	assign qual_valid_st0   = dfpq_pop || mrvq_pop || reqq_pop;
@@ -195,14 +195,60 @@ module VX_bank (
 								reqq_pop ? {reqq_rd_st0, reqq_wb_st0, reqq_warp_num_st0, reqq_mem_read_st0, reqq_mem_write_st0, reqq_tid_st0} :
 								0;
 
-	VX_generic_register #(.N(1)) s0_1 (
-		.clk  (clk),
-		.reset(reset),
-		.stall(stall_st1),
-		.flush(0),
-		.in   ({qual_is_fill_st0, qual_valid_st0, qual_addr_st0, qual_writeword_st0, qual_writedata_st0, qual_inst_meta_st0}),
-		.out  ({is_fill_st1     , valid_st1     , addr_st1     , writeword_st1     , writedata_st1     , inst_meta_st1     })
+	VX_generic_register #(.N( 1 +  32 + 32 + `REQ_INST_META_SIZE + (`BANK_LINE_SIZE_RNG*32) + 1)) s0_1_c0 (
+	.clk  (clk),
+	.reset(reset),
+	.stall(stall_st1),
+	.flush(0),
+	.in   ({qual_valid_st0, qual_addr_st0, qual_writeword_st0, qual_inst_meta_st0, qual_is_fill_st0, qual_writedata_st0}),
+	.out  ({valid_st1[0]  , addr_st1[0]  , writeword_st1[0]  , inst_meta_st1[0]  , is_fill_st1[0]  , writedata_st1[0]})
+	);
+
+	genvar curr_stage;
+	generate
+		for (curr_stage = 1; curr_stage < `STAGE_1_CYCLES; curr_stage = curr_stage + 1) begin
+			VX_generic_register #(.N( 1 +  32 + 32 + `REQ_INST_META_SIZE + (`BANK_LINE_SIZE_RNG*32) + 1)) s0_1_cc (
+			.clk  (clk),
+			.reset(reset),
+			.stall(stall_st1),
+			.flush(is_fill_st1),
+			.in   ({valid_st1[curr_stage-1], addr_st1[curr_stage-1], writeword_st1[curr_stage-1], inst_meta_st1[curr_stage-1], is_fill_st1[curr_stage-1]  , writedata_st1[curr_stage-1]}),
+			.out  ({valid_st1[curr_stage]  , addr_st1[curr_stage]  , writeword_st1[curr_stage]  , inst_meta_st1[curr_stage]  , is_fill_st1[curr_stage]    , writedata_st1[curr_stage]  })
+			);
+		end
+	endgenerate
+
+
+	wire[31:0]                      readword_st1e;
+	wire[`BANK_LINE_SIZE_RNG][31:0] readdata_st1e;
+	wire                            miss_st1e;
+
+	VX_tag_data_access VX_tag_data_access(
+		.clk           (clk),
+		.reset         (reset),
+		.valid_st10    (valid_st10),
+
+		// Read start
+		.readaddr_st10 (addr_st1[0]),
+
+		// Write stuff
+		.writeaddr_st1e(addr_st1[`STAGE_1_CYCLES-1]),
+		.writeword_st1e(writeword_st1[`STAGE_1_CYCLES-1]),
+		.mem_write_st1e(mem_write_st1e), // TODO
+
+
+		// Fill info
+		.is_fill_st1e  (is_fill_st1[`STAGE_1_CYCLES-1]),
+		.filldata_st1e (writedata_st1[`STAGE_1_CYCLES-1]),
+
+		// Read stuff + result
+		.mem_read_st1e (mem_read_st1e),  // TODO
+		.readword_st1e (readword_st1e),
+		.readdata_st1e (readdata_st1e),
+		.miss_st1e     (miss_st1e),
 		);
+
+
 
 endmodule
 
