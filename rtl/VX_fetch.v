@@ -22,12 +22,15 @@ module VX_fetch (
 		wire           scheduled_warp;
 
 
+		wire pipe_stall;
+
+
 		// Only reason this is there is because there is a hidden assumption that decode is exactly after fetch
 		reg stall_might_be_branch;
 		always @(posedge clk) begin
 			if (reset) begin
 				stall_might_be_branch <= 0;
-			end else if (stall_might_be_branch == 1'b1) begin
+			end else if ((stall_might_be_branch == 1'b1) && !icache_stage_delay && !schedule_delay) begin
 				stall_might_be_branch <= 0;
 			end else if (scheduled_warp == 1'b1) begin
 				stall_might_be_branch <= 1'b1;
@@ -35,7 +38,6 @@ module VX_fetch (
 		end
 
 		// Locals
-		wire pipe_stall;
 
 
 		assign pipe_stall = schedule_delay || icache_stage_delay || stall_might_be_branch;
@@ -97,7 +99,7 @@ module VX_fetch (
 			);
 
 		assign fe_inst_meta_fi.warp_num  = warp_num;
-		assign fe_inst_meta_fi.valid     = thread_mask;
+		assign fe_inst_meta_fi.valid     = thread_mask && {`NT{!stall_might_be_branch}};
 
 		assign fe_inst_meta_fi.inst_pc     = warp_pc;
 

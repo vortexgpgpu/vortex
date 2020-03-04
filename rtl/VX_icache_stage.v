@@ -25,7 +25,7 @@ module VX_icache_stage (
 		assign fe_inst_meta_id.instruction = (!valid_inst || icache_response.delay) ? 32'b0 : icache_response.instruction;
 		assign fe_inst_meta_id.inst_pc     = fe_inst_meta_fi.inst_pc;
 		assign fe_inst_meta_id.warp_num    = fe_inst_meta_fi.warp_num;
-		assign fe_inst_meta_id.valid       = fe_inst_meta_fi.valid;
+		assign fe_inst_meta_id.valid       = fe_inst_meta_fi.valid & {`NT{!icache_stage_delay}};
 
 
 endmodule
