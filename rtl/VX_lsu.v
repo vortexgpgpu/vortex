@@ -11,14 +11,12 @@ module VX_lsu (
 		// Write back to GPR
 		VX_inst_mem_wb_inter     VX_mem_wb,
 
-		VX_dcache_response_inter VX_dcache_rsp,
-		VX_dcache_request_inter  VX_dcache_req,
+		VX_gpu_dcache_res_inter  VX_dcache_rsp,
+		VX_gpu_dcache_req_inter  VX_dcache_req,
 		output wire              out_delay
 	);
 
-	// VX_inst_mem_wb_inter VX_mem_wb_temp();
 
-	assign out_delay = VX_dcache_rsp.delay || no_slot_mem;
 
 
 	// Generate Addresses
@@ -55,27 +53,33 @@ module VX_lsu (
 		);
 
 
-	genvar index;
-	generate
-	for (index = 0; index <= `NT_M1; index = index + 1) begin : dcache_reqs
-		assign VX_dcache_req.out_cache_driver_in_address[index]   = use_address[index];
-		assign VX_dcache_req.out_cache_driver_in_data[index]      = use_store_data[index];
-		assign VX_dcache_req.out_cache_driver_in_valid[index]     = (use_valid[index]);
+	// Core Request
+	assign VX_dcache_req.core_req_valid      = use_valid;
+	assign VX_dcache_req.core_req_addr       = use_address;
+	assign VX_dcache_req.core_req_writedata  = use_store_data;
+	assign VX_dcache_req.core_req_mem_read   = use_mem_read;
+	assign VX_dcache_req.core_req_mem_write  = use_mem_write;
+	assign VX_dcache_req.core_req_rd         = use_rd;
+	assign VX_dcache_req.core_req_wb         = use_wb;
+	assign VX_dcache_req.core_req_warp_num   = use_warp_num;
 
-		assign VX_mem_wb.loaded_data[index]                       = VX_dcache_rsp.in_cache_driver_out_data[index];
-	end
-	endgenerate
-
-		assign VX_dcache_req.out_cache_driver_in_mem_read  = use_mem_read;
-		assign VX_dcache_req.out_cache_driver_in_mem_write = use_mem_write;
+	// Cache can't accept request
+	assign out_delay = VX_dcache_rsp.delay_req;
 
 
-		assign VX_mem_wb.rd          = use_rd;
-		assign VX_mem_wb.wb          = use_wb & {!VX_dcache_rsp.delay, !VX_dcache_rsp.delay};
-		assign VX_mem_wb.wb_valid    = use_valid;
-		assign VX_mem_wb.wb_warp_num = use_warp_num;
 
-		assign VX_mem_wb.mem_wb_pc   = use_pc;
+	// Core Response
+	assign VX_mem_wb.rd          = VX_dcache_rsp.core_wb_req_rd;
+	assign VX_mem_wb.wb          = VX_dcache_rsp.core_wb_req_wb;
+	assign VX_mem_wb.wb_valid    = VX_dcache_rsp.core_wb_valid;
+	assign VX_mem_wb.wb_warp_num = VX_dcache_rsp.core_wb_warp_num;
+	assign VX_mem_wb.loaded_data = VX_dcache_rsp.core_wb_readdata;
+	assign VX_mem_wb.mem_wb_pc   = 32'hdeadbeff;
+
+	// Core can't accept response
+	assign VX_dcache_req.core_no_wb_slot     = no_slot_mem;
+
+
 
 		// integer curr_t;
 		// always @(negedge clk) begin
