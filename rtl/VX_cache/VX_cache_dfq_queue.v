@@ -33,7 +33,7 @@ module VX_cache_dfq_queue
 
 	wire push_qual = dfqq_push && !dfqq_full;
 	wire pop_qual  = dfqq_pop  && use_empty && !out_empty && !dfqq_empty;
-	VX_generic_queue #(.DATAW(`NUMBER_BANKS * (1+32)), .SIZE(`dFQQ_SIZE)) dfqq_queue(
+	VX_generic_queue #(.DATAW(`NUMBER_BANKS * (1+32)), .SIZE(`DFQQ_SIZE)) dfqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
@@ -62,7 +62,7 @@ module VX_cache_dfq_queue
 
 	assign updated_bank_dram_fill_req = qual_bank_dram_fill_req & (~(1 << qual_request_index));
 
-	always @(posedge clk or reset) begin
+	always @(posedge clk) begin
 		if (reset) begin
 			use_per_bank_dram_fill_req      <= 0;
 			use_per_bank_dram_fill_req_addr <= 0;

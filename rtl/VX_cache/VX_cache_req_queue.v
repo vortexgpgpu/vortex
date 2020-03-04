@@ -69,11 +69,11 @@ module VX_cache_req_queue (
 
 	wire push_qual = reqq_push && !reqq_full;
 	wire pop_qual  = reqq_pop  && use_empty && !out_empty && !reqq_empty;
-	VX_generic_queue #(.DATAW(`NUMBER_REQUESTS * (1+32+32+5+2+(`NW_M1+1)+3+3)), .SIZE(`REQQ_SIZE)) reqq_queue(
+	VX_generic_queue #(.DATAW( (`NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(`REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
-		.in_data ({bank_valids, bank_addr, bank_writedata, bank_rd, bank_wb, bank_warp_num, bank_mem_read, bank_mem_write}),
+		.in_data ({bank_valids   , bank_addr   , bank_writedata   , bank_rd   , bank_wb   , bank_warp_num   , bank_mem_read   , bank_mem_write}),
 		.pop     (pop_qual),
 		.out_data({out_per_valids, out_per_addr, out_per_writedata, out_per_rd, out_per_wb, out_per_warp_num, out_per_mem_read, out_per_mem_write}),
 		.empty   (reqq_empty),
@@ -82,7 +82,7 @@ module VX_cache_req_queue (
 
 
 
-	assign qual_valids     = use_empty ? out_per_valids    : use_per_valids; 
+	assign qual_valids     = use_empty ? out_per_valids    : out_empty ? 0 : use_per_valids; 
 	assign qual_addr       = use_empty ? out_per_addr      : use_per_addr;
 	assign qual_writedata  = use_empty ? out_per_writedata : use_per_writedata;
 	assign qual_rd         = use_empty ? out_per_rd        : use_per_rd;
@@ -105,13 +105,13 @@ module VX_cache_req_queue (
 	assign reqq_req_writedata_st0  = qual_writedata[qual_request_index];
 	assign reqq_req_rd_st0         = qual_rd;
 	assign reqq_req_wb_st0         = qual_wb;
-	assign reqq_req_warp_num_st0   = qual_warp_num
+	assign reqq_req_warp_num_st0   = qual_warp_num;
 	assign reqq_req_mem_read_st0   = qual_mem_read;
 	assign reqq_req_mem_write_st0  = qual_mem_write;
 
 	assign updated_valids = qual_valids & (~(1 << qual_request_index));
 
-	always @(posedge clk or reset) begin
+	always @(posedge clk) begin
 		if (reset) begin
  			use_per_valids    <= 0;
 			use_per_addr      <= 0;
@@ -131,6 +131,8 @@ module VX_cache_req_queue (
 				use_per_warp_num  <= qual_warp_num;
 				use_per_mem_read  <= qual_mem_read;  
 				use_per_mem_write <= qual_mem_write;
+			end else if (reqq_pop) begin
+				use_per_valids[qual_request_index] <= updated_valids;
 			end
 		end
 	end

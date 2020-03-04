@@ -3,7 +3,7 @@
 module VX_generic_queue
 	#(
 		parameter DATAW = 4,
-		parameter SIZE  = 16
+		parameter SIZE  = 277
 	)
 	(
 	input  wire            clk,
@@ -18,7 +18,7 @@ module VX_generic_queue
 );
 
 
-	reg[SIZE-1:0]         data[DATAW-1:0];
+	reg[DATAW-1:0]        data[SIZE-1:0];
 	reg[$clog2(SIZE)-1:0] head;
 	reg[$clog2(SIZE)-1:0] tail;
 
@@ -26,19 +26,21 @@ module VX_generic_queue
 	assign full  = head == (tail+1);
 
 	integer i;
-	always @(posedge clk or reset) begin
+	always @(posedge clk) begin
 		if (reset) begin
 			head <= 0;
 			tail <= 0;
-			for (i = 0; i < SIZE; i=i+1) data[i] <= DATAW'0;
+			for (i = 0; i < SIZE; i=i+1) begin
+				data[i] <= {DATAW{1'0}};
+			end
 		end else begin
 			if (push && !full) begin
 				data[tail] <= in_data;
-				tail        = tail+1;
+				tail       <= tail+1;
 			end
 
 			if (pop) begin
-				head = head + 1;
+				head <= head + 1;
 			end
 
 		end

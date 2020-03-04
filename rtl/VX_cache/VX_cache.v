@@ -45,6 +45,7 @@ module VX_cache (
 
     wire [`NUMBER_BANKS-1:0][`NUMBER_REQUESTS-1:0]            per_bank_valids;
     wire [`NUMBER_BANKS-1:0]                                  per_bank_wb_pop;
+    wire [`NUMBER_BANKS-1:0]                                  per_bank_wb_valid;
     wire [`NUMBER_BANKS-1:0][`vx_clog2(`NUMBER_REQUESTS)-1:0] per_bank_wb_tid;
     wire [`NUMBER_BANKS-1:0][4:0]                             per_bank_wb_rd;
     wire [`NUMBER_BANKS-1:0][1:0]                             per_bank_wb_wb;
@@ -60,14 +61,14 @@ module VX_cache (
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_queue_pop;
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_req;
     wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_dram_wb_req_addr;
-    wire[`NUMBER_BANKS-1]:0[`BANK_LINE_SIZE_RNG][31:0]        per_bank_dram_wb_req_data;
+    wire[`NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_dram_wb_req_data;
 
     wire[`NUMBER_BANKS-1:0]                                   per_bank_reqq_full;
 
     assign delay_req = (|per_bank_reqq_full);
 
 
-    assign dram_fill_accept = (`NUMBER_BANKS == 1) ? dram_fill_accept[0] : dram_fill_accept[dram_fill_addr[`BANK_SELECT_ADDR_RNG]];
+    assign dram_fill_accept = (`NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
 
     VX_cache_dram_req_arb VX_cache_dram_req_arb(
         .clk                        (clk),
@@ -88,7 +89,7 @@ module VX_cache (
         );
 
 
-    VX_cache_core_req_bank_sel VX_cache_core_req_bank_sel(
+    VX_cache_core_req_bank_sel VX_cache_core_req_bank_sell(
         .core_req_valid (core_req_valid),
         .core_req_addr  (core_req_addr),
         .per_bank_valids(per_bank_valids)
@@ -96,6 +97,7 @@ module VX_cache (
 
 
     VX_cache_wb_sel_merge VX_cache_core_req_bank_sel(
+        .per_bank_wb_valid   (per_bank_wb_valid),
         .per_bank_wb_tid     (per_bank_wb_tid),
         .per_bank_wb_rd      (per_bank_wb_rd),
         .per_bank_wb_wb      (per_bank_wb_wb),
@@ -103,6 +105,7 @@ module VX_cache (
         .per_bank_wb_data    (per_bank_wb_data),
         .per_bank_wb_pop     (per_bank_wb_pop),
 
+        .core_no_wb_slot     (core_no_wb_slot),
         .core_wb_valid       (core_wb_valid),
         .core_wb_req_rd      (core_wb_req_rd),
         .core_wb_req_wb      (core_wb_req_wb),
@@ -110,8 +113,8 @@ module VX_cache (
         .core_wb_readdata    (core_wb_readdata)
         );
 
+    genvar curr_bank;
     generate
-        integer curr_bank;
         for (curr_bank = 0; curr_bank < `NUMBER_BANKS; curr_bank=curr_bank+1) begin
             wire [`NUMBER_REQUESTS-1:0]            curr_bank_valids;
             wire [`NUMBER_REQUESTS-1:0][31:0]      curr_bank_addr;
@@ -123,6 +126,7 @@ module VX_cache (
             wire [2:0]                             curr_bank_mem_write;
 
             wire                                   curr_bank_wb_pop;
+            wire                                   curr_bank_wb_valid;
             wire [`vx_clog2(`NUMBER_REQUESTS)-1:0] curr_bank_wb_tid;
             wire [4:0]                             curr_bank_wb_rd;
             wire [1:0]                             curr_bank_wb_wb;
@@ -158,6 +162,7 @@ module VX_cache (
 
             // Core WB
             assign curr_bank_wb_pop                = per_bank_wb_pop[curr_bank];
+            assign per_bank_wb_valid   [curr_bank] = curr_bank_wb_valid;
             assign per_bank_wb_tid     [curr_bank] = curr_bank_wb_tid;
             assign per_bank_wb_rd      [curr_bank] = curr_bank_wb_rd;
             assign per_bank_wb_wb      [curr_bank] = curr_bank_wb_wb;
@@ -170,7 +175,7 @@ module VX_cache (
             assign per_bank_dram_fill_req_addr[curr_bank] = curr_bank_dram_fill_req_addr;
 
             // Dram fill response
-            assign curr_bank_dram_fill_rsp              = (`NUMBER_BANKS == 1) || (dram_fill_addr[`BANK_SELECT_ADDR_RNG] == curr_bank);
+            assign curr_bank_dram_fill_rsp              = (`NUMBER_BANKS == 1) || (dram_fill_rsp && (curr_bank_dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG] == curr_bank));
             assign curr_bank_dram_fill_rsp_addr         = dram_fill_rsp_addr;
             assign curr_bank_dram_fill_rsp_data         = dram_fill_rsp_data;
             assign per_bank_dram_fill_accept[curr_bank] = curr_bank_dram_fill_accept;
@@ -199,6 +204,7 @@ module VX_cache (
 
                 // Output core wb
                 .bank_wb_pop             (curr_bank_wb_pop),
+                .bank_wb_valid           (curr_bank_wb_valid),
                 .bank_wb_tid             (curr_bank_wb_tid),
                 .bank_wb_rd              (curr_bank_wb_rd),
                 .bank_wb_wb              (curr_bank_wb_wb),

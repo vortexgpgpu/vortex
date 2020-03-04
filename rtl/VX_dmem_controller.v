@@ -66,8 +66,8 @@ module VX_dmem_controller (
 		.clk       (clk),
 		.reset     (reset),
 		.in_valid  (sm_driver_in_valid),
-		.in_address(cache_driver_in_address),
-		.in_data   (cache_driver_in_data),
+		.in_address(VX_dcache_req.core_req_addr),
+		.in_data   (VX_dcache_req.core_req_writedata),
 		.mem_read  (sm_driver_in_mem_read),
 		.mem_write (sm_driver_in_mem_write),
 		.out_valid (cache_driver_out_valid),
@@ -117,7 +117,7 @@ module VX_dmem_controller (
 		.dram_req_read     (VX_gpu_dcache_dram_req.dram_req_read),
 		.dram_req_addr     (VX_gpu_dcache_dram_req.dram_req_addr),
 		.dram_req_size     (VX_gpu_dcache_dram_req.dram_req_size),
-		.dram_req_data     (VX_gpu_dcache_dram_req.dram_req_data),
+		.dram_req_data     (VX_gpu_dcache_dram_req.dram_req_data)
 		);
 
 

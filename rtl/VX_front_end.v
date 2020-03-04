@@ -58,6 +58,10 @@ VX_fetch vx_fetch(
 	);
 
 wire freeze_fi_reg = total_freeze || icache_stage_delay;
+
+
+
+
 VX_f_d_reg vx_f_i_reg(
 		.clk            (clk),
 		.reset          (reset),
@@ -77,7 +81,7 @@ VX_icache_stage VX_icache_stage(
 	);
 
 
-VX_f_d_reg vx_i_d_reg(
+VX_i_d_reg vx_i_d_reg(
 		.clk            (clk),
 		.reset          (reset),
 		.in_freeze      (total_freeze),
