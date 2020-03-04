@@ -5,7 +5,9 @@ module VX_dmem_controller (
 	input wire               clk,
 	input wire               reset,
 	// MEM-RAM
-	VX_dram_req_rsp_inter    VX_dram_req_rsp,
+	VX_gpu_dcache_dram_req_inter VX_gpu_dcache_dram_req,
+	VX_gpu_dcache_dram_res_inter VX_gpu_dcache_dram_res,
+
 	VX_dram_req_rsp_inter    VX_dram_req_rsp_icache,
 	// MEM-Processor
 	VX_icache_request_inter  VX_icache_req,
@@ -102,20 +104,20 @@ module VX_dmem_controller (
 		.core_wb_readdata  (VX_dcache_rsp.core_wb_readdata),
 
 		// DRAM response
-		.dram_fill_rsp     (dram_fill_rsp),
-		.dram_fill_rsp_addr(dram_fill_rsp_addr),
-		.dram_fill_rsp_data(dram_fill_rsp_data),
+		.dram_fill_rsp     (VX_gpu_dcache_dram_res.dram_fill_rsp),
+		.dram_fill_rsp_addr(VX_gpu_dcache_dram_res.dram_fill_rsp_addr),
+		.dram_fill_rsp_data(VX_gpu_dcache_dram_res.dram_fill_rsp_data),
 
 		// DRAM accept response
-		.dram_fill_accept  (dram_fill_accept),
+		.dram_fill_accept  (VX_gpu_dcache_dram_req.dram_fill_accept),
 
 		// DRAM Req
-		.dram_req          (dram_req),
-		.dram_req_write    (dram_req_write),
-		.dram_req_read     (dram_req_read),
-		.dram_req_addr     (dram_req_addr),
-		.dram_req_size     (dram_req_size),
-		.dram_req_data     (dram_req_data),
+		.dram_req          (VX_gpu_dcache_dram_req.dram_req),
+		.dram_req_write    (VX_gpu_dcache_dram_req.dram_req_write),
+		.dram_req_read     (VX_gpu_dcache_dram_req.dram_req_read),
+		.dram_req_addr     (VX_gpu_dcache_dram_req.dram_req_addr),
+		.dram_req_size     (VX_gpu_dcache_dram_req.dram_req_size),
+		.dram_req_data     (VX_gpu_dcache_dram_req.dram_req_data),
 		);
 
 
