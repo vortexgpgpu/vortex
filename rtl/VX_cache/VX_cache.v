@@ -1,5 +1,7 @@
 `include "VX_cache_config.v"
 
+`include "VX_cache_config.v"
+
 
 module VX_cache (
 	input wire clk,
