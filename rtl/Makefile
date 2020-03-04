@@ -9,7 +9,7 @@ EXE=--exe ./simulate/test_bench.cpp
 
 COMP=--compiler gcc
 
-WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT
+WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
 # WNO=
 
 # LIGHTW=

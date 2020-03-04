@@ -1,6 +1,9 @@
 `include "./VX_define_synth.v"
+// `include "./VX_cache/VX_cache_config.v"
 
+// `ifndef VX_DEFINE
 
+// `define VX_DEFINE
 
 `define NT_M1 (`NT-1)
 
@@ -267,3 +270,7 @@
 `define SHARED_MEMORY_BLOCK_OFFSET_ED (`SHARED_MEMORY_BLOCK_OFFSET_ST +`SHARED_MEMORY_LOG_WORDS_PER_READ-1)
 `define SHARED_MEMORY_INDEX_OFFSET_ST  (`SHARED_MEMORY_BLOCK_OFFSET_ED + 1)
 `define SHARED_MEMORY_INDEX_OFFSET_ED  (`SHARED_MEMORY_INDEX_OFFSET_ST + $clog2(`SHARED_MEMORY_HEIGHT)-1)
+
+
+
+// `endif

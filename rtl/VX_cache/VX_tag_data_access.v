@@ -54,7 +54,7 @@ module VX_tag_data_access (
 		.read_valid  (qual_read_valid_st1),
 		.read_dirty  (qual_read_dirty_st1),
 		.read_tag    (qual_read_tag_st1),
-		.read_data   (qual_read_data_st1)
+		.read_data   (qual_read_data_st1),
 
 		.write_enable(use_write_enable),
 		.write_fill  (writefill_st1e),
@@ -62,7 +62,7 @@ module VX_tag_data_access (
 		.write_data  (use_write_data)
 		);
 
-	VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`BANK_LINE_SIZE_RNG*32) )) s0_1_c0 (
+	VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`BANK_LINE_SIZE_WORDS*32) )) s0_1_c0 (
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall),
@@ -74,12 +74,12 @@ module VX_tag_data_access (
 	genvar curr_stage;
 	generate
 		for (curr_stage = 1; curr_stage < `STAGE_1_CYCLES; curr_stage = curr_stage + 1) begin
-			VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`BANK_LINE_SIZE_RNG*32) )) s0_1_cc (
+			VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`BANK_LINE_SIZE_WORDS*32) )) s0_1_cc (
 				.clk  (clk),
 				.reset(reset),
 				.stall(stall),
 				.flush(0),
-				.in   ({read_valid_st1c[curr_stage-1] , read_dirty_st1c[curr_stage-1] , read_tag_st1c[curr_stage-1] , read_data_st1c[curr_stage-1]})
+				.in   ({read_valid_st1c[curr_stage-1] , read_dirty_st1c[curr_stage-1] , read_tag_st1c[curr_stage-1] , read_data_st1c[curr_stage-1]}),
 				.out  ({read_valid_st1c[curr_stage]   , read_dirty_st1c[curr_stage]   , read_tag_st1c[curr_stage]   , read_data_st1c[curr_stage]  })
 			);
 		end
@@ -120,14 +120,14 @@ module VX_tag_data_access (
     wire[31:0] lw_data     = (data_unQual);
 
 
-    wire[31:0] sw_data     = writedata_st1e;
+    wire[31:0] sw_data     = writeword_st1e;
 
-    wire[31:0] sb_data     = b1 ? {{16{1'b0}}, writedata_st1e[7:0], { 8{1'b0}}} :
-                             b2 ? {{ 8{1'b0}}, writedata_st1e[7:0], {16{1'b0}}} :
-                             b3 ? {{ 0{1'b0}}, writedata_st1e[7:0], {24{1'b0}}} :
-                             writedata_st1e;
+    wire[31:0] sb_data     = b1 ? {{16{1'b0}}, writeword_st1e[7:0], { 8{1'b0}}} :
+                             b2 ? {{ 8{1'b0}}, writeword_st1e[7:0], {16{1'b0}}} :
+                             b3 ? {{ 0{1'b0}}, writeword_st1e[7:0], {24{1'b0}}} :
+                             writeword_st1e;
 
-    wire[31:0] sh_data     = b2 ? {writedata_st1e[15:0], {16{1'b0}}} : writedata_st1e;
+    wire[31:0] sh_data     = b2 ? {writeword_st1e[15:0], {16{1'b0}}} : writeword_st1e;
 
 
 
@@ -158,7 +158,7 @@ module VX_tag_data_access (
     wire[`BANK_LINE_SIZE_RNG][31:0] data_write;
 	genvar g; 
 	generate
-		for (g = 0; g < NUM_WORDS_PER_BLOCK; g = g + 1) begin : write_enables
+		for (g = 0; g < `BANK_LINE_SIZE_WORDS; g = g + 1) begin : write_enables
 		    wire normal_write = (block_offset == g) && should_write;
 
 		    assign we[g]      = (force_write)     ? 4'b1111  : 
@@ -177,7 +177,7 @@ module VX_tag_data_access (
 ///////////////////////
 
 	assign readword_st1e       = data_Qual;
-	assign miss_st1e           = valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e)
+	assign miss_st1e           = (valid_req_st1e && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e));
 	assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
 	assign readdata_st1e       = use_read_data_st1e;
 	assign readtag_st1e        = use_read_tag_st1e;

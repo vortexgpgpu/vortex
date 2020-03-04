@@ -1,20 +1,17 @@
 
-
 module VX_generic_register 
-	#(
-		parameter N = 1
-	)
+	#( parameter N = 1)
 	(
-		input          clk,
-		input          reset,
-		input          stall,
-		input          flush,
-		input[N-1:0]   in,
-		output [N-1:0] out
+		input wire           clk,
+		input wire           reset,
+		input wire           stall,
+		input wire           flush,
+		input wire[(N-1):0]  in,
+		output wire[(N-1):0] out
 	);
 
 
-	reg[N-1:0] value;
+	reg[(N-1):0] value;
 
 
 

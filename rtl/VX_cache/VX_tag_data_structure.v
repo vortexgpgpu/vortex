@@ -15,19 +15,20 @@ module VX_tag_data_structure (
 	
 );
 
-    reg[`BANK_LINE_SIZE_RNG:0][3:0][7:0]   data [`BANK_LINE_COUNT-1:0];
+    reg[`BANK_LINE_SIZE_RNG][3:0][7:0]     data [`BANK_LINE_COUNT-1:0];
     reg[`TAG_SELECT_SIZE_RNG]              tag  [`BANK_LINE_COUNT-1:0];
     reg                                    valid[`BANK_LINE_COUNT-1:0];
     reg                                    dirty[`BANK_LINE_COUNT-1:0];
 
 
-    assign read_valid <= valid[read_addr[`LINE_SELECT_ADDR_RNG]];
-    assign read_dirty <= dirty[read_addr[`LINE_SELECT_ADDR_RNG]];
-    assign read_tag   <= tag  [read_addr[`LINE_SELECT_ADDR_RNG]];
-    assign read_data  <= data [read_addr[`LINE_SELECT_ADDR_RNG]];
+    assign read_valid = valid[read_addr[`LINE_SELECT_ADDR_RNG]];
+    assign read_dirty = dirty[read_addr[`LINE_SELECT_ADDR_RNG]];
+    assign read_tag   = tag  [read_addr[`LINE_SELECT_ADDR_RNG]];
+    assign read_data  = data [read_addr[`LINE_SELECT_ADDR_RNG]];
 
     wire   going_to_write = (|write_enable);
 
+    integer f;
     always @(posedge clk) begin
     	if (going_to_write) begin
     		valid[write_addr[`LINE_SELECT_ADDR_RNG]]     <= 1;
@@ -40,10 +41,10 @@ module VX_tag_data_structure (
     	end
 
 		for (f = 0; f < `BANK_LINE_SIZE_WORDS; f = f + 1) begin
-			if (write_enable[f][0]) data[addr[`LINE_SELECT_ADDR_RNG]][f][0] <= data_write[f][7 :0 ];
-			if (write_enable[f][1]) data[addr[`LINE_SELECT_ADDR_RNG]][f][1] <= data_write[f][15:8 ];
-			if (write_enable[f][2]) data[addr[`LINE_SELECT_ADDR_RNG]][f][2] <= data_write[f][23:16];
-			if (write_enable[f][3]) data[addr[`LINE_SELECT_ADDR_RNG]][f][3] <= data_write[f][31:24];
+			if (write_enable[f][0]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][0] <= write_data[f][7 :0 ];
+			if (write_enable[f][1]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][1] <= write_data[f][15:8 ];
+			if (write_enable[f][2]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][2] <= write_data[f][23:16];
+			if (write_enable[f][3]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][3] <= write_data[f][31:24];
 		end
 
     end

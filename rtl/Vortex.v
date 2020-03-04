@@ -1,6 +1,6 @@
 
-`include "VX_define.v"
-
+// `include "VX_define.v"
+`include "./VX_cache/VX_cache_config.v"
 
 module Vortex
     /*#(
@@ -51,14 +51,12 @@ module Vortex
 
 reg[31:0] icache_banks               = `ICACHE_BANKS;
 reg[31:0] icache_num_words_per_block = `ICACHE_NUM_WORDS_PER_BLOCK;
-
+reg[31:0] number_threads             = `NT;
+reg[31:0] number_warps               = `NW;
 
 always @(posedge clk) begin
 	icache_banks               <= icache_banks;
 	icache_num_words_per_block <= icache_num_words_per_block;
-
-	dcache_banks               <= dcache_banks;
-	dcache_num_words_per_block <= dcache_num_words_per_block;
 
 	number_threads             <= number_threads;
 	number_warps               <= number_warps;
@@ -133,7 +131,6 @@ for (curr_bank = 0; curr_bank < `ICACHE_BANKS; curr_bank = curr_bank + 1) begin 
 		assign VX_dram_req_rsp_icache.i_m_readdata[curr_bank][curr_word] = i_m_readdata_i[curr_bank][curr_word]; // fixed
 	end
 end
-endgenerate
 
 
 /////////////////////////////////////////////////////////////////////////

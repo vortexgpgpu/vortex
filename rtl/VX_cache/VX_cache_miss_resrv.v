@@ -69,7 +69,7 @@ module VX_cache_miss_resrv (
 
 	wire update_ready = (|make_ready);
 	integer i;
-	always @(posedge clk or reset) begin
+	always @(posedge clk) begin
 		if (reset) begin
 			for (i = 0; i < `MRVQ_SIZE; i=i+1) metadata_table[i] <= 0;
 			valid_table <= 0;
@@ -85,7 +85,7 @@ module VX_cache_miss_resrv (
 			end
 
 			if (update_ready) begin
-				ready_table = ready_table | make_ready;
+				ready_table <= ready_table | make_ready;
 			end
 
 			if (miss_resrv_pop && dequeue_possible) begin

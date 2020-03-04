@@ -98,9 +98,9 @@ module VX_fetch (
 			.scheduled_warp   (scheduled_warp)
 			);
 
-		assign fe_inst_meta_fi.warp_num  = warp_num;
-		assign fe_inst_meta_fi.valid     = thread_mask && {`NT{!stall_might_be_branch}};
-
+		assign fe_inst_meta_fi.warp_num    = warp_num;
+		assign fe_inst_meta_fi.valid       = thread_mask && {`NT{!stall_might_be_branch}};
+		assign fe_inst_meta_fi.instruction = 32'h0;
 		assign fe_inst_meta_fi.inst_pc     = warp_pc;
 
 
