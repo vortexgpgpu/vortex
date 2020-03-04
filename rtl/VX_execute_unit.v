@@ -115,7 +115,7 @@ module VX_execute_unit (
 		// Actual Writeback
 		assign VX_inst_exec_wb.rd          = VX_exec_unit_req.rd;
 		assign VX_inst_exec_wb.wb          = VX_exec_unit_req.wb;
-		assign VX_inst_exec_wb.wb_valid    = VX_exec_unit_req.valid && !internal_stall;
+		assign VX_inst_exec_wb.wb_valid    = VX_exec_unit_req.valid & {`NT{!internal_stall}};
 		assign VX_inst_exec_wb.wb_warp_num = VX_exec_unit_req.warp_num;
 		assign VX_inst_exec_wb.alu_result  = VX_exec_unit_req.jal ? duplicate_PC_data : alu_result;
 

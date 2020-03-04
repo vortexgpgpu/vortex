@@ -50,9 +50,9 @@ module VX_scheduler (
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual || rd_rename_qual;
 
 	assign schedule_delay = ((rename_valid) && (|VX_bckE_req.valid))
-		|| (memory_delay && is_mem)
-		|| (gpr_stage_delay && (is_mem || is_exec))
-		|| (exec_delay && is_exec);
+							|| (memory_delay && is_mem)
+							|| (gpr_stage_delay && (is_mem || is_exec))
+							|| (exec_delay && is_exec);
 
 	integer i;
 	integer w;
