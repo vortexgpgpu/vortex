@@ -16,6 +16,10 @@ interface VX_gpu_dcache_dram_req_inter ();
     wire [31:0]                       dram_req_size;
     wire [`BANK_LINE_SIZE_RNG][31:0]  dram_req_data;
 
+    // Snoop
+    wire                              dram_because_of_snp;
+    wire                              dram_snp_full;
+
     // DRAM Cache can't accept response
     wire                              dram_fill_accept;
 
