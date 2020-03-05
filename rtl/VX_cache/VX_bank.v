@@ -361,8 +361,21 @@ module VX_bank (
 	wire                             dwbq_empty;
 	wire                             dwbq_full;
 
+
+	wire invalidate_fill;
+	wire possible_fill = valid_st2 && miss_st2;
+	VX_fill_invalidator VX_fill_invalidator(
+		.clk               (clk),
+		.reset             (reset),
+		.possible_fill     (possible_fill),
+		.success_fill      (is_fill_st2),
+		.fill_addr         (addr_st2),
+		
+		.invalidate_fill   (invalidate_fill)
+		);
+
 	// Enqueu in dram_fill_req
-	assign dram_fill_req       = valid_st2 && miss_st2;
+	assign dram_fill_req       = valid_st2 && miss_st2 && !invalidate_fill;
 	assign dram_fill_req_addr  = addr_st2;
 
 	assign dram_wb_req = !dwbq_empty;
