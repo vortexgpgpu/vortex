@@ -1,3 +1,5 @@
+`include "VX_cache_config.v"
+
 module VX_tag_data_structure (
 	input  wire                            clk,
 	input  wire                            reset,
