@@ -38,7 +38,15 @@ module VX_cache (
     output wire                              dram_req_read,
     output wire [31:0]                       dram_req_addr,
     output wire [31:0]                       dram_req_size,
-    output wire [`BANK_LINE_SIZE_RNG][31:0]  dram_req_data
+    output wire [`BANK_LINE_SIZE_RNG][31:0]  dram_req_data,
+    output wire                              dram_req_because_of_wb,
+    output wire                              dram_snp_full,
+
+
+    // Snoop Req
+    input wire                               snp_req,
+    input wire[31:0]                         snp_req_addr
+
 );
 
 
@@ -59,6 +67,7 @@ module VX_cache (
 
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_queue_pop;
     wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_req;
+    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_because_of_snp;
     wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_dram_wb_req_addr;
     wire[`NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_dram_wb_req_data;
 
@@ -77,6 +86,7 @@ module VX_cache (
         .per_bank_dram_fill_req_addr(per_bank_dram_fill_req_addr),
         .per_bank_dram_wb_queue_pop (per_bank_dram_wb_queue_pop),
         .per_bank_dram_wb_req       (per_bank_dram_wb_req),
+        .per_bank_dram_because_of_snp(per_bank_dram_because_of_snp),
         .per_bank_dram_wb_req_addr  (per_bank_dram_wb_req_addr),
         .per_bank_dram_wb_req_data  (per_bank_dram_wb_req_data),
         .dram_req                   (dram_req),
@@ -84,7 +94,8 @@ module VX_cache (
         .dram_req_read              (dram_req_read),
         .dram_req_addr              (dram_req_addr),
         .dram_req_size              (dram_req_size),
-        .dram_req_data              (dram_req_data)
+        .dram_req_data              (dram_req_data),
+        .dram_req_because_of_wb     (dram_req_because_of_wb)
         );
 
 
@@ -139,12 +150,17 @@ module VX_cache (
 
             wire                                   curr_bank_dfqq_full;
             wire                                   curr_bank_dram_fill_req;
+            wire                                   curr_bank_dram_because_of_snp;
+            wire                                   curr_bank_dram_snp_full;
             wire[31:0]                             curr_bank_dram_fill_req_addr;
 
             wire                                   curr_bank_dram_wb_queue_pop;
             wire                                   curr_bank_dram_wb_req;
             wire[31:0]                             curr_bank_dram_wb_req_addr;
             wire[`BANK_LINE_SIZE_RNG][31:0]        curr_bank_dram_wb_req_data;
+
+            wire                                   curr_bank_snp_req;
+            wire[31:0]                             curr_bank_snp_req_addr;
 
             wire                                   curr_bank_reqq_full;
 
@@ -180,10 +196,15 @@ module VX_cache (
             assign per_bank_dram_fill_accept[curr_bank] = curr_bank_dram_fill_accept;
 
             // Dram writeback request
-            assign curr_bank_dram_wb_queue_pop          = per_bank_dram_wb_queue_pop[curr_bank];
-            assign per_bank_dram_wb_req[curr_bank]      = curr_bank_dram_wb_req;
-            assign per_bank_dram_wb_req_addr[curr_bank] = curr_bank_dram_wb_req_addr;
-            assign per_bank_dram_wb_req_data[curr_bank] = curr_bank_dram_wb_req_data;
+            assign curr_bank_dram_wb_queue_pop             = per_bank_dram_wb_queue_pop[curr_bank];
+            assign per_bank_dram_wb_req[curr_bank]         = curr_bank_dram_wb_req;
+            assign per_bank_dram_because_of_snp[curr_bank] = curr_bank_dram_because_of_snp;
+            assign per_bank_dram_wb_req_addr[curr_bank]    = curr_bank_dram_wb_req_addr;
+            assign per_bank_dram_wb_req_data[curr_bank]    = curr_bank_dram_wb_req_data;
+
+            // Snoop Request
+            assign curr_bank_snp_req      = snp_req && (snp_req_addr[`BANK_SELECT_ADDR_RNG] == curr_bank);
+            assign curr_bank_snp_req_addr = snp_req_addr;
 
 
             VX_bank bank (
@@ -225,7 +246,13 @@ module VX_cache (
                 .dram_wb_queue_pop       (curr_bank_dram_wb_queue_pop),
                 .dram_wb_req             (curr_bank_dram_wb_req),
                 .dram_wb_req_addr        (curr_bank_dram_wb_req_addr),
-                .dram_wb_req_data        (curr_bank_dram_wb_req_data)
+                .dram_wb_req_data        (curr_bank_dram_wb_req_data),
+                .dram_because_of_snp     (curr_bank_dram_because_of_snp),
+                .dram_snp_full           (curr_bank_dram_snp_full),
+
+                // Snoop Request
+                .snp_req                 (curr_bank_snp_req),
+                .snp_req_addr            (curr_bank_snp_req_addr)
                 );
 
         end
