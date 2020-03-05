@@ -117,7 +117,15 @@ module VX_dmem_controller (
 		.dram_req_read     (VX_gpu_dcache_dram_req.dram_req_read),
 		.dram_req_addr     (VX_gpu_dcache_dram_req.dram_req_addr),
 		.dram_req_size     (VX_gpu_dcache_dram_req.dram_req_size),
-		.dram_req_data     (VX_gpu_dcache_dram_req.dram_req_data)
+		.dram_req_data     (VX_gpu_dcache_dram_req.dram_req_data),
+
+		// Snoop Response
+		.dram_req_because_of_wb(VX_gpu_dcache_dram_req.dram_because_of_snp),
+		.dram_snp_full         (VX_gpu_dcache_dram_req.dram_snp_full),
+
+		// Snoop Request
+		.snp_req               (0),
+		.snp_req_addr          (0)
 		);
 
 

@@ -29,6 +29,8 @@
 	`define MRVQ_SIZE `REQQ_SIZE
 	// Dram Fill Rsp Queue Size
 	`define DFPQ_SIZE 2
+  // Snoop Req Queue
+  `define SNRQ_SIZE 8
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
@@ -37,6 +39,7 @@
 	`define DWBQ_SIZE 4
 	// Dram Fill Req Queue Size
 	`define DFQQ_SIZE `REQQ_SIZE
+
   // Fill Invalidator Active {Comment out define statement to invalidate}
   `define FILL_INVALIDATOR_ACTIVE 1
   // Fill Invalidator Size {Fill invalidator must be active}

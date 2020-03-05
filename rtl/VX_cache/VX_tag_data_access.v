@@ -4,7 +4,7 @@ module VX_tag_data_access (
 	input  wire                            clk,
 	input  wire                            reset,
 	input  wire                            stall,
-
+	input  wire                            is_snp_st1e,
 	// Initial Reading
 	input  wire[31:0]                      readaddr_st10, 
 
@@ -49,6 +49,7 @@ module VX_tag_data_access (
 
 
 	wire fill_sent;
+	wire invalidate_line;
 	VX_tag_data_structure VX_tag_data_structure(
 		.clk         (clk),
 		.reset       (reset),
@@ -59,6 +60,7 @@ module VX_tag_data_access (
 		.read_tag    (qual_read_tag_st1),
 		.read_data   (qual_read_data_st1),
 
+		.invalidate  (invalidate_line),
 		.write_enable(use_write_enable),
 		.write_fill  (writefill_st1e),
 		.write_addr  (writeaddr_st1e),
@@ -191,12 +193,13 @@ module VX_tag_data_access (
 ///////////////////////
 
 	assign readword_st1e       = data_Qual;
-	assign miss_st1e           = (valid_req_st1e && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e));
+	assign miss_st1e           = ((valid_req_st1e || is_snp_st1e) && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e));
 	assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
 	assign readdata_st1e       = use_read_data_st1e;
 	assign readtag_st1e        = use_read_tag_st1e;
 	assign fill_sent           = miss_st1e;
 	assign fill_saw_dirty_st1e = force_write && dirty_st1e;
+	assign invalidate_line     = is_snp_st1e && !miss_st1e;
 
 endmodule
 
