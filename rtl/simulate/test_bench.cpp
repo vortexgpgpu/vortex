@@ -87,7 +87,9 @@ int main(int argc, char **argv)
 
 	#else
 
-	char testing[] = "../../emulator/riscv_tests/rv32ui-p-auipc.hex";
+	// char testing[] = "../../runtime/mains/simple/vx_simple_main.hex";
+	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-lw.hex";
+	char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
 	Vortex v;
 	// const char *testing;
 

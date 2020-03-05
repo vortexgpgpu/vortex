@@ -24,7 +24,7 @@ module VX_cache_wb_sel_merge (
 );
 
 	reg [`NUMBER_BANKS-1:0] per_bank_wb_pop_unqual;
-	assign per_bank_wb_pop = per_bank_wb_pop_unqual & {`NUMBER_BANKS{core_no_wb_slot}};
+	assign per_bank_wb_pop = per_bank_wb_pop_unqual & {`NUMBER_BANKS{~core_no_wb_slot}};
 
 	wire[`NUMBER_BANKS-1:0] bank_wants_wb;
 	genvar curr_bank;
@@ -51,8 +51,10 @@ module VX_cache_wb_sel_merge (
 	genvar this_bank;
 	generate
 		always @(*) begin
+			assign core_wb_valid    = 0;
+			assign core_wb_readdata = 0;
 			for (this_bank = 0; this_bank < `NUMBER_BANKS; this_bank = this_bank + 1) begin
-				if (found_bank && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
+				if (found_bank && (per_bank_wb_valid[this_bank]) && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
 					assign core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
 					assign core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
 					assign per_bank_wb_pop_unqual[this_bank]            = 1;
