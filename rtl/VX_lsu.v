@@ -1,6 +1,4 @@
-
 `include "VX_define.v"
-
 
 module VX_lsu (
 		input wire               clk,
@@ -16,9 +14,6 @@ module VX_lsu (
 		output wire              out_delay
 	);
 
-
-
-
 	// Generate Addresses
 	wire[`NT_M1:0][31:0] address;
 	VX_lsu_addr_gen VX_lsu_addr_gen
@@ -28,7 +23,6 @@ module VX_lsu (
 		.address     (address)
 	);
 
-
 	wire[`NT_M1:0][31:0] use_address;
 	wire[`NT_M1:0][31:0] use_store_data;
 	wire[`NT_M1:0]       use_valid;
@@ -37,9 +31,7 @@ module VX_lsu (
 	wire[4:0]            use_rd;
 	wire[`NW_M1:0]       use_warp_num;
 	wire[1:0]            use_wb;
-	wire[31:0]           use_pc;
-
-	
+	wire[31:0]           use_pc;	
 
 	wire zero = 0;
 
@@ -66,8 +58,6 @@ module VX_lsu (
 	// Cache can't accept request
 	assign out_delay = VX_dcache_rsp.delay_req;
 
-
-
 	// Core Response
 	assign VX_mem_wb.rd          = VX_dcache_rsp.core_wb_req_rd;
 	assign VX_mem_wb.wb          = VX_dcache_rsp.core_wb_req_wb;
@@ -79,21 +69,19 @@ module VX_lsu (
 	// Core can't accept response
 	assign VX_dcache_req.core_no_wb_slot     = no_slot_mem;
 
+	// integer curr_t;
+	// always @(negedge clk) begin
+	// 	for (int curr_t = 0; curr_t < `NT; curr_t=curr_t+1)
+	// 	if ((VX_dcache_req.out_cache_driver_in_valid[curr_t]) && !out_delay) begin
+	// 		if (VX_dcache_req.out_cache_driver_in_mem_read != `NO_MEM_READ) begin
+	// 			$display("Reading addr: %x val: %x", address[0], VX_mem_wb.loaded_data[0]);
+	// 		end
 
-
-		// integer curr_t;
-		// always @(negedge clk) begin
-		// 	for (int curr_t = 0; curr_t < `NT; curr_t=curr_t+1)
-		// 	if ((VX_dcache_req.out_cache_driver_in_valid[curr_t]) && !out_delay) begin
-		// 		if (VX_dcache_req.out_cache_driver_in_mem_read != `NO_MEM_READ) begin
-		// 			$display("Reading addr: %x val: %x", address[0], VX_mem_wb.loaded_data[0]);
-		// 		end
-
-		// 		if (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE) begin
-		// 			$display("Writing addr: %x val: %x", address[0], VX_dcache_req.out_cache_driver_in_data[0]);
-		// 		end
-		// 	end
-		// end
+	// 		if (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE) begin
+	// 			$display("Writing addr: %x val: %x", address[0], VX_dcache_req.out_cache_driver_in_data[0]);
+	// 		end
+	// 	end
+	// end
 
 	// wire zero_temp = 0;
 	// VX_generic_register #(.N(142)) register_wb_data 

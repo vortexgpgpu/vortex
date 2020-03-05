@@ -1,6 +1,5 @@
 `include "VX_cache_config.v"
 
-
 module VX_cache_wb_sel_merge (
 
 	// Per Bank WB
@@ -48,18 +47,18 @@ module VX_cache_wb_sel_merge (
 	assign core_wb_req_wb   = per_bank_wb_wb      [main_bank_index];
 	assign core_wb_warp_num = per_bank_wb_warp_num[main_bank_index];
 
-	genvar this_bank;
+	integer this_bank;
 	generate
 		always @(*) begin
-			assign core_wb_valid    = 0;
-			assign core_wb_readdata = 0;
+			core_wb_valid    = 0;
+			core_wb_readdata = 0;
 			for (this_bank = 0; this_bank < `NUMBER_BANKS; this_bank = this_bank + 1) begin
 				if (found_bank && (per_bank_wb_valid[this_bank]) && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
-					assign core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
-					assign core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
-					assign per_bank_wb_pop_unqual[this_bank]            = 1;
+					core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
+					core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
+					per_bank_wb_pop_unqual[this_bank]            = 1;
 				end else begin
-					assign per_bank_wb_pop_unqual[this_bank]            = 0;
+					per_bank_wb_pop_unqual[this_bank]            = 0;
 				end
 			end
 		end

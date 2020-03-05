@@ -1,5 +1,3 @@
-
-
 `include "VX_define.v"
 
 module VX_cache_data_per_index

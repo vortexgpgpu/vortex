@@ -1,5 +1,4 @@
 
-
 module VX_generic_queue
 	#(
 		parameter DATAW = 4,
@@ -17,7 +16,6 @@ module VX_generic_queue
 	output wire            full
 );
 
-
 	reg[DATAW-1:0]        data[SIZE-1:0];
 	reg[$clog2(SIZE)-1:0] head;
 	reg[$clog2(SIZE)-1:0] tail;
@@ -31,7 +29,7 @@ module VX_generic_queue
 			head <= 0;
 			tail <= 0;
 			for (i = 0; i < SIZE; i=i+1) begin
-				data[i] <= {DATAW{1'0}};
+				data[i] <= 0;
 			end
 		end else begin
 			if (push && !full) begin

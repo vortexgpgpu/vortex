@@ -18,7 +18,6 @@ module VX_back_end (
 
 	VX_gpu_dcache_res_inter   VX_dcache_rsp,
 	VX_gpu_dcache_req_inter   VX_dcache_req
-
 );
 
 
@@ -30,7 +29,6 @@ assign VX_writeback_inter.wb_valid     = VX_writeback_temp.wb_valid;
 assign VX_writeback_inter.wb_warp_num  = VX_writeback_temp.wb_warp_num;
 
 // assign VX_writeback_inter(VX_writeback_temp);
-
 
 VX_mw_wb_inter           VX_mw_wb();
 wire                     no_slot_mem;

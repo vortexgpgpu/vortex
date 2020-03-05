@@ -1,7 +1,6 @@
 
 `include "VX_define.v"
 
-
 module byte_enabled_simple_dual_port_ram
 (
 	input we, clk,

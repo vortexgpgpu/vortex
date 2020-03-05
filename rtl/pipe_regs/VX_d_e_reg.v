@@ -1,5 +1,3 @@
-
-
 `include "../VX_define.v"
 
 module VX_d_e_reg (

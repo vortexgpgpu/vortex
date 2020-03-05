@@ -1,6 +1,5 @@
 `include "VX_cache_config.v"
 
-
 module VX_cache_dram_req_arb (
 	input  wire clk,
 	input  wire reset,
@@ -27,12 +26,13 @@ module VX_cache_dram_req_arb (
 	
 );
 
-
 	wire dfqq_req;
 	wire[31:0] dfqq_req_addr;
 	wire dfqq_empty;
+	wire dwb_valid;
 	wire dfqq_pop  = !dwb_valid && dfqq_req; // If no dwb, and dfqq has valids, then pop
 	wire dfqq_push = (|per_bank_dram_fill_req);
+
 	VX_cache_dfq_queue VX_cache_dfq_queue(
 		.clk                        (clk),
 		.reset                      (reset),
@@ -46,8 +46,6 @@ module VX_cache_dram_req_arb (
 		.dfqq_full                  (dfqq_full)
 		);
 
-
-	wire                              dwb_valid;
 	wire[`vx_clog2(`NUMBER_BANKS)-1:0] dwb_bank;
 	VX_generic_priority_encoder #(.N(`NUMBER_BANKS)) VX_sel_dwb(
 		.valids(per_bank_dram_wb_req),

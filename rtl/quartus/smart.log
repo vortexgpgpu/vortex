@@ -1,4 +1,3 @@
-Info (292036): Thank you for using the Quartus Prime software 30-day evaluation. You have 0 days remaining (until Sep 11, 2019) to use the Quartus Prime software with compilation and simulation support.
 Info: *******************************************************************
 Info: Running Quartus Prime Shell
     Info: Version 18.0.0 Build 219 04/25/2018 SJ Pro Edition
@@ -15,13 +14,13 @@ Info: Running Quartus Prime Shell
     Info: the sole purpose of programming logic devices manufactured by
     Info: Intel and sold by Intel or its authorized distributors.  Please
     Info: refer to the applicable agreement for further details.
-    Info: Processing started: Wed Sep 11 00:18:22 2019
-Info: Command: quartus_sh --determine_smart_action VX_gpr_syn
-Info: Quartus(args): VX_gpr_syn
+    Info: Processing started: Thu Mar  5 06:08:03 2020
+Info: Command: quartus_sh --determine_smart_action Vortex
+Info: Quartus(args): Vortex
 Info: SMART_ACTION = SOURCE
 Info (23030): Evaluation of Tcl script /tools/reconfig/intel/18.0/quartus/common/tcl/internal/qsh_smart.tcl was successful
 Info: Quartus Prime Shell was successful. 0 errors, 0 warnings
-    Info: Peak virtual memory: 687 megabytes
-    Info: Processing ended: Wed Sep 11 00:18:22 2019
-    Info: Elapsed time: 00:00:00
-    Info: Total CPU time (on all processors): 00:00:00
+    Info: Peak virtual memory: 689 megabytes
+    Info: Processing ended: Thu Mar  5 06:08:04 2020
+    Info: Elapsed time: 00:00:01
+    Info: Total CPU time (on all processors): 00:00:01
