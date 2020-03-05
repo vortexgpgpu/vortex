@@ -1,12 +1,10 @@
+`ifndef VX_CACHE_CONFIG
+`define VX_CACHE_CONFIG
 
 `include "../VX_define.v"
 
-
-`ifndef VX_CACHE_CONFIG
-
-`define VX_CACHE_CONFIG
-
 // ========================================= Configurable Knobs =========================================
+
 // General Cache Knobs
 	// Size of cache in bytes
 	`define CACHE_SIZE_BYTES 1024

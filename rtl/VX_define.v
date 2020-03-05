@@ -1,9 +1,7 @@
+`ifndef VX_DEFINE
+`define VX_DEFINE
+
 `include "./VX_define_synth.v"
-// `include "./VX_cache/VX_cache_config.v"
-
-// `ifndef VX_DEFINE
-
-// `define VX_DEFINE
 
 `define NT_M1 (`NT-1)
 
@@ -91,8 +89,6 @@
 `define REM 5'd22
 `define REMU 5'd23
 
-
-
 // WRITEBACK
 `define WB_ALU 2'h1
 `define WB_MEM 2'h2
@@ -127,7 +123,6 @@
    (x <= 512) ? 9 : \
    (x <= 1024) ? 10 : \
    -199
-
 
 // `define PARAM
 
@@ -244,8 +239,6 @@
 `define DCACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`DCACHE_BLOCK-1))
 `define ICACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`ICACHE_BLOCK-1))
 
-
-
 ///////
 
 //`define SHARED_MEMORY_SIZE 4096
@@ -271,6 +264,4 @@
 `define SHARED_MEMORY_INDEX_OFFSET_ST  (`SHARED_MEMORY_BLOCK_OFFSET_ED + 1)
 `define SHARED_MEMORY_INDEX_OFFSET_ED  (`SHARED_MEMORY_INDEX_OFFSET_ST + $clog2(`SHARED_MEMORY_HEIGHT)-1)
 
-
-
-// `endif
+`endif

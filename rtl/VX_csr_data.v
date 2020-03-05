@@ -17,7 +17,6 @@ module VX_csr_data (
 
 );
 
-
 	// wire[`NT_M1:0][31:0] thread_ids;
 	// wire[`NT_M1:0][31:0] warp_ids;
 

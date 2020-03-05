@@ -1,6 +1,5 @@
-
-// `include "VX_define.v"
-`include "./VX_cache/VX_cache_config.v"
+`include "VX_define.v"
+`include "VX_cache_config.v"
 
 module Vortex
     /*#(
@@ -49,60 +48,56 @@ module Vortex
 	);
 
 
-reg[31:0] icache_banks               = `ICACHE_BANKS;
-reg[31:0] icache_num_words_per_block = `ICACHE_NUM_WORDS_PER_BLOCK;
-reg[31:0] number_threads             = `NT;
-reg[31:0] number_warps               = `NW;
+	reg[31:0] icache_banks               = `ICACHE_BANKS;
+	reg[31:0] icache_num_words_per_block = `ICACHE_NUM_WORDS_PER_BLOCK;
+	reg[31:0] number_threads             = `NT;
+	reg[31:0] number_warps               = `NW;
 
-always @(posedge clk) begin
-	icache_banks               <= icache_banks;
-	icache_num_words_per_block <= icache_num_words_per_block;
+	always @(posedge clk) begin
+		icache_banks               <= icache_banks;
+		icache_num_words_per_block <= icache_num_words_per_block;
 
-	number_threads             <= number_threads;
-	number_warps               <= number_warps;
-end
-
-wire memory_delay;
-wire exec_delay;
-wire gpr_stage_delay;
-wire schedule_delay;
-
-
-// Dcache Interface
-VX_gpu_dcache_res_inter  VX_dcache_rsp();
-VX_gpu_dcache_req_inter  VX_dcache_req();
-
-VX_gpu_dcache_dram_req_inter VX_gpu_dcache_dram_req();
-VX_gpu_dcache_dram_res_inter VX_gpu_dcache_dram_res();
-
-
-assign VX_gpu_dcache_dram_res.dram_fill_rsp      = dram_fill_rsp;
-assign VX_gpu_dcache_dram_res.dram_fill_rsp_addr = dram_fill_rsp_addr;
-
-assign dram_req          = VX_gpu_dcache_dram_req.dram_req;
-assign dram_req_write    = VX_gpu_dcache_dram_req.dram_req_write;
-assign dram_req_read     = VX_gpu_dcache_dram_req.dram_req_read;
-assign dram_req_addr     = VX_gpu_dcache_dram_req.dram_req_addr;
-assign dram_req_size     = VX_gpu_dcache_dram_req.dram_req_size;
-assign dram_expected_lat = `SIMULATED_DRAM_LATENCY_CYCLES;
-assign dram_fill_accept  = VX_gpu_dcache_dram_req.dram_fill_accept;
-
-genvar wordy;
-generate
-	for (wordy = 0; wordy < `BANK_LINE_SIZE_WORDS; wordy=wordy+1) begin
-		assign VX_gpu_dcache_dram_res.dram_fill_rsp_data[wordy] = dram_fill_rsp_data[wordy];
-		assign dram_req_data[wordy]                             = VX_gpu_dcache_dram_req.dram_req_data[wordy];
+		number_threads             <= number_threads;
+		number_warps               <= number_warps;
 	end
-endgenerate
+
+	wire memory_delay;
+	wire exec_delay;
+	wire gpr_stage_delay;
+	wire schedule_delay;
 
 
+	// Dcache Interface
+	VX_gpu_dcache_res_inter  VX_dcache_rsp();
+	VX_gpu_dcache_req_inter  VX_dcache_req();
 
-wire temp_io_valid      = (!memory_delay) && (|VX_dcache_req.core_req_valid) && (VX_dcache_req.core_req_mem_write != `NO_MEM_WRITE) && (VX_dcache_req.core_req_addr[0] == 32'h00010000);
-wire[31:0] temp_io_data = VX_dcache_req.core_req_valid[0];
-assign io_valid         = temp_io_valid;
-assign io_data          = temp_io_data;
+	VX_gpu_dcache_dram_req_inter VX_gpu_dcache_dram_req();
+	VX_gpu_dcache_dram_res_inter VX_gpu_dcache_dram_res();
 
 
+	assign VX_gpu_dcache_dram_res.dram_fill_rsp      = dram_fill_rsp;
+	assign VX_gpu_dcache_dram_res.dram_fill_rsp_addr = dram_fill_rsp_addr;
+
+	assign dram_req          = VX_gpu_dcache_dram_req.dram_req;
+	assign dram_req_write    = VX_gpu_dcache_dram_req.dram_req_write;
+	assign dram_req_read     = VX_gpu_dcache_dram_req.dram_req_read;
+	assign dram_req_addr     = VX_gpu_dcache_dram_req.dram_req_addr;
+	assign dram_req_size     = VX_gpu_dcache_dram_req.dram_req_size;
+	assign dram_expected_lat = `SIMULATED_DRAM_LATENCY_CYCLES;
+	assign dram_fill_accept  = VX_gpu_dcache_dram_req.dram_fill_accept;
+
+	genvar wordy;
+	generate
+		for (wordy = 0; wordy < `BANK_LINE_SIZE_WORDS; wordy=wordy+1) begin
+			assign VX_gpu_dcache_dram_res.dram_fill_rsp_data[wordy] = dram_fill_rsp_data[wordy];
+			assign dram_req_data[wordy]                             = VX_gpu_dcache_dram_req.dram_req_data[wordy];
+		end
+	endgenerate
+
+	wire temp_io_valid      = (!memory_delay) && (|VX_dcache_req.core_req_valid) && (VX_dcache_req.core_req_mem_write != `NO_MEM_WRITE) && (VX_dcache_req.core_req_addr[0] == 32'h00010000);
+	wire[31:0] temp_io_data = VX_dcache_req.core_req_valid[0];
+	assign io_valid         = temp_io_valid;
+	assign io_data          = temp_io_data;
 
 
 	VX_icache_response_inter icache_response_fe();
@@ -113,8 +108,6 @@ assign io_data          = temp_io_data;
 
 	//assign icache_response_fe.instruction = icache_response_instruction;
 	assign icache_request_pc_address      = icache_request_fe.pc_address;
-
-
 
 	assign o_m_valid_i                      = VX_dram_req_rsp_icache.o_m_valid;
 	assign o_m_read_addr_i                  = VX_dram_req_rsp_icache.o_m_read_addr;
@@ -132,10 +125,7 @@ for (curr_bank = 0; curr_bank < `ICACHE_BANKS; curr_bank = curr_bank + 1) begin 
 	end
 end
 
-
 /////////////////////////////////////////////////////////////////////////
-
-
 
 // Front-end to Back-end
 VX_frE_to_bckE_req_inter      VX_bckE_req(); // New instruction request to EXE/MEM
@@ -204,6 +194,7 @@ VX_dmem_controller VX_dmem_controller(
 	.VX_dcache_req            (VX_dcache_req),
 	.VX_dcache_rsp            (VX_dcache_rsp)
 	);
+
 // VX_csr_handler vx_csr_handler(
 // 		.clk                  (clk),
 // 		.in_decode_csr_address(decode_csr_address),
@@ -212,9 +203,6 @@ VX_dmem_controller VX_dmem_controller(
 
 // 		.out_decode_csr_data  (csr_decode_csr_data)
 // 	);
-
-
-
 
 endmodule // Vortex
 

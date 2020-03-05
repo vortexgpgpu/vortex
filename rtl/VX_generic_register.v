@@ -10,10 +10,7 @@ module VX_generic_register
 		output wire[(N-1):0] out
 	);
 
-
 	reg[(N-1):0] value;
-
-
 
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
@@ -24,7 +21,6 @@ module VX_generic_register
 			value <= in;
 		end
 	end
-
 
 	assign out = value;
 

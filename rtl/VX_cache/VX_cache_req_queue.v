@@ -1,4 +1,3 @@
-
 `include "VX_cache_config.v"
 
 module VX_cache_req_queue (

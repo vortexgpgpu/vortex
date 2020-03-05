@@ -176,14 +176,14 @@ module VX_bank (
 	integer st1_cycle;
 
 	always @(*) begin
-		assign dfpq_hazard_st0 = 0;
-		assign mrvq_hazard_st0 = 0;
-		assign reqq_hazard_st0 = 0;
+		dfpq_hazard_st0 = 0;
+		mrvq_hazard_st0 = 0;
+		reqq_hazard_st0 = 0;
 		for (st1_cycle = 0; st1_cycle < `STAGE_1_CYCLES; st1_cycle = st1_cycle + 1) begin
 			if (valid_st1[st1_cycle] && going_to_write_st1[st1_cycle]) begin
-				if (dfpq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) assign dfpq_hazard_st0 = 1;
-				if (mrvq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) assign mrvq_hazard_st0 = 1;
-				if (reqq_req_addr_st0[31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) assign reqq_hazard_st0 = 1;
+				if (dfpq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) dfpq_hazard_st0 = 1;
+				if (mrvq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) mrvq_hazard_st0 = 1;
+				if (reqq_req_addr_st0[31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) reqq_hazard_st0 = 1;
 			end
 		end
 	end

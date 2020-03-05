@@ -3,8 +3,6 @@
 //        Also make sure all possible output states are transmitted back to the bank correctly
 
 `include "VX_define.v"
-// `include "VX_cache_data.v"
-
 
 module VX_Cache_Bank
     #(

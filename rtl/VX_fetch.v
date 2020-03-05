@@ -1,4 +1,3 @@
-
 `include "VX_define.v"
 
 module VX_fetch (

@@ -1,4 +1,3 @@
-
 `include "VX_define.v"
 
 module VX_dmem_controller (
@@ -16,22 +15,18 @@ module VX_dmem_controller (
 	VX_gpu_dcache_res_inter  VX_dcache_rsp
 );
 
-
 	wire to_shm = VX_dcache_req.core_req_addr[0][31:24] == 8'hFF;
 
 	wire[`NT_M1:0]       cache_driver_in_valid  = VX_dcache_req.core_req_valid & {`NT{~to_shm}};
-
 
 	wire[`NT_M1:0]       sm_driver_in_valid     = VX_dcache_req.core_req_valid & {`NT{to_shm}};
 	wire[2:0]            sm_driver_in_mem_read  = !(|sm_driver_in_valid) ? `NO_MEM_READ   : VX_dcache_req.core_req_mem_read;
 	wire[2:0]            sm_driver_in_mem_write = !(|sm_driver_in_valid) ? `NO_MEM_WRITE  : VX_dcache_req.core_req_mem_write;
 
-
 	wire[`NT_M1:0][31:0] cache_driver_out_data;
 	wire[`NT_M1:0][31:0] sm_driver_out_data;
 	wire[`NT_M1:0]       cache_driver_out_valid; // Not used for now
 	wire                 sm_delay;
-
 
 	// I_Cache Signals
 
@@ -169,7 +164,7 @@ module VX_dmem_controller (
 	// 	);
 
 
-VX_d_cache#(
+VX_d_cache #(
 		.CACHE_SIZE          (`ICACHE_SIZE),
 		.CACHE_WAYS          (`ICACHE_WAYS),
 		.CACHE_BLOCK         (`ICACHE_BLOCK),
