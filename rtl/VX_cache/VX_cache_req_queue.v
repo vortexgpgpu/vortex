@@ -69,7 +69,7 @@ module VX_cache_req_queue (
 	wire push_qual = reqq_push && !reqq_full;
 	wire pop_qual  = reqq_pop  && use_empty && !out_empty && !reqq_empty;
 
-	VX_generic_queue #(.DATAW( (`NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(`REQQ_SIZE)) reqq_queue(
+	VX_generic_queue_ll #(.DATAW( (`NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(`REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
