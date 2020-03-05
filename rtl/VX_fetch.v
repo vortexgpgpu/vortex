@@ -8,6 +8,8 @@ module VX_fetch (
 	VX_join_inter            VX_join,
 	input  wire              schedule_delay,
 	input  wire              icache_stage_delay,
+	input  wire[`NW_M1:0]    icache_stage_wid,
+	input  wire[`NT-1:0]     icache_stage_valids,
 
 	output wire              out_ebreak,
 	VX_jal_response_inter    VX_jal_rsp,
@@ -40,7 +42,7 @@ module VX_fetch (
 		// Locals
 
 
-		assign pipe_stall = schedule_delay || icache_stage_delay || stall_might_be_branch;
+		assign pipe_stall = schedule_delay || icache_stage_delay || (stall_might_be_branch && (icache_stage_wid == warp_num)) ;
 
 		VX_warp_scheduler warp_scheduler(
 			.clk              (clk),

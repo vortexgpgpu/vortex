@@ -11,7 +11,8 @@ module VX_tag_data_structure (
 	input  wire[`BANK_LINE_SIZE_RNG][3:0]  write_enable,
 	input  wire                            write_fill,
 	input  wire[31:0]                      write_addr,
-	input  wire[`BANK_LINE_SIZE_RNG][31:0] write_data
+	input  wire[`BANK_LINE_SIZE_RNG][31:0] write_data,
+    input  wire                            fill_sent
 	
 );
 
@@ -38,7 +39,9 @@ module VX_tag_data_structure (
     		end else begin
     			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 1;
     		end
-    	end
+    	end else if (fill_sent) begin
+            dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+        end
 
 		for (f = 0; f < `BANK_LINE_SIZE_WORDS; f = f + 1) begin
 			if (write_enable[f][0]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][0] <= write_data[f][7 :0 ];

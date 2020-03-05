@@ -39,7 +39,7 @@ module VX_generic_queue
 				tail       <= tail+1;
 			end
 
-			if (pop) begin
+			if (pop && !empty) begin
 				head <= head + 1;
 			end
 

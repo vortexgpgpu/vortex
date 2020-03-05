@@ -28,6 +28,14 @@ double sc_time_stamp()
   return time_stamp / 1000.0; 
 }
 
+typedef struct
+{
+    int cycles_left;
+    int data_length;
+    unsigned base_addr;
+    unsigned * data;
+} dram_req_t;
+
 class Vortex
 {
     public:
@@ -69,6 +77,7 @@ class Vortex
         int debug_end_wait;
         int debug_debugAddr;
         double stats_sim_time;
+        std::vector<dram_req_t> dram_req_vec;
         #ifdef VCD_OUTPUT
         VerilatedVcdC   *m_trace;
         #endif
@@ -235,64 +244,76 @@ void Vortex::io_handler()
 bool Vortex::dbus_driver()
 {
 
-    vortex->i_m_ready_d = false;
-
+    // Iterate through each element, and get pop index
+    int dequeue_index  = -1;
+    bool dequeue_valid = false;
+    for (int i = 0; i < this->dram_req_vec.size(); i++)
     {
-
-        // int dcache_num_words_per_block
-
-        if (refill_d)
+        if (this->dram_req_vec[i].cycles_left > 0)
         {
-            refill_d            = false;
-            vortex->i_m_ready_d = true;
-
-            for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__dcache_banks; curr_bank++)
-            {
-                for (int curr_word = 0; curr_word < vortex->Vortex__DOT__dcache_num_words_per_block; curr_word++)
-                {
-                    unsigned curr_index = (curr_word * vortex->Vortex__DOT__dcache_banks) + curr_bank;
-                    unsigned curr_addr  = refill_addr_d + (4*curr_index);
-
-                    unsigned curr_value;
-                    ram.getWord(curr_addr, &curr_value);
-
-                    vortex->i_m_readdata_d[curr_bank][curr_word] = curr_value;
-
-                }
-            }
-        }
-        else
-        {
-            if (vortex->o_m_valid_d)
-            {
-
-                if (vortex->o_m_read_or_write_d)
-                {
-                    // fprintf(stderr, "++++++++++++++++++++++++++++++++\n");
-                    unsigned base_addr = vortex->o_m_evict_addr_d;
-
-                    for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__dcache_banks; curr_bank++)
-                    {
-                        for (int curr_word = 0; curr_word < vortex->Vortex__DOT__dcache_num_words_per_block; curr_word++)
-                        {
-                            unsigned curr_index = (curr_word * vortex->Vortex__DOT__dcache_banks) + curr_bank;
-                            unsigned curr_addr  = base_addr + (4*curr_index);
-
-                            unsigned curr_value = vortex->o_m_writedata_d[curr_bank][curr_word];
-
-                            ram.writeWord( curr_addr, &curr_value);
-                        }
-                    }
-                }
-
-                // Respond next cycle
-                refill_d      = true;
-                refill_addr_d = vortex->o_m_read_addr_d;
-            }
+            this->dram_req_vec[i].cycles_left -= 1;   
         }
 
+        if ((this->dram_req_vec[i].cycles_left == 0) && (!dequeue_valid))
+        {
+            dequeue_index = i;
+            dequeue_valid = true;
+        }
     }
 
+
+    if (vortex->dram_req)
+    {
+        if (vortex->dram_req_read)
+        {
+            // Need to add an element
+            dram_req_t dram_req;
+            dram_req.cycles_left = vortex->dram_expected_lat;
+            dram_req.data_length = vortex->dram_req_size / 4;
+            dram_req.base_addr   = vortex->dram_req_addr;
+            dram_req.data        = (unsigned *) malloc(dram_req.data_length * sizeof(unsigned));
+
+            for (int i = 0; i < dram_req.data_length; i++)
+            {
+                unsigned curr_addr = dram_req.base_addr + (i*4);
+                unsigned data_rd;
+                ram.getWord(curr_addr, &data_rd);
+                dram_req.data[i] = data_rd;
+            }
+            this->dram_req_vec.push_back(dram_req);
+        }
+
+        if (vortex->dram_req_write)
+        {
+            unsigned base_addr   = vortex->dram_req_addr;
+            unsigned data_length = vortex->dram_req_size / 4;
+
+            for (int i = 0; i < data_length; i++)
+            {
+                unsigned curr_addr = base_addr + (i*4);
+                unsigned data_wr   = vortex->dram_req_data[i];
+                ram.writeWord(curr_addr, &data_wr);
+            }
+        }
+    }
+
+    if (vortex->dram_fill_accept && dequeue_valid)
+    {
+        vortex->dram_fill_rsp      = 1;
+        vortex->dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
+        for (int i = 0; i < this->dram_req_vec[dequeue_index].data_length; i++)
+        {
+            vortex->dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
+        }
+        free(this->dram_req_vec[dequeue_index].data);
+
+        this->dram_req_vec.erase(this->dram_req_vec.begin() + dequeue_index);
+    }
+    else
+    {
+        vortex->dram_fill_rsp      = 0;
+        vortex->dram_fill_rsp_addr = 0;
+    }
 
     return false;
 }

@@ -37,6 +37,9 @@ wire icache_stage_delay;
 wire vortex_ebreak;
 wire terminate_sim;
 
+wire[`NW_M1:0] icache_stage_wid;
+wire[`NT-1:0]  icache_stage_valids;
+
 assign fetch_ebreak = vortex_ebreak || terminate_sim;
 
 
@@ -46,6 +49,8 @@ VX_join_inter            VX_join();
 VX_fetch vx_fetch(
 		.clk                (clk),
 		.reset              (reset),
+		.icache_stage_wid   (icache_stage_wid),
+		.icache_stage_valids(icache_stage_valids),
 		.VX_wstall          (VX_wstall),
 		.VX_join            (VX_join),
 		.schedule_delay     (schedule_delay),
@@ -74,6 +79,8 @@ VX_icache_stage VX_icache_stage(
 	.clk               (clk),
 	.reset             (reset),
 	.icache_stage_delay(icache_stage_delay),
+	.icache_stage_valids(icache_stage_valids),
+	.icache_stage_wid  (icache_stage_wid),
 	.fe_inst_meta_fi   (fe_inst_meta_fi2),
 	.fe_inst_meta_id   (fe_inst_meta_id),
 	.icache_response   (icache_response_fe),
