@@ -1,4 +1,6 @@
 
+`include "VX_cache_config.v"
+
 module VX_cache_core_req_bank_sel (
 	input  wire [`NUMBER_REQUESTS-1:0]                       core_req_valid,
 	input  wire [`NUMBER_REQUESTS-1:0][31:0]                 core_req_addr,

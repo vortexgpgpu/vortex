@@ -1,4 +1,3 @@
-
 `include "VX_cache_config.v"
 
 module VX_fill_invalidator (
@@ -30,19 +29,19 @@ module VX_fill_invalidator (
 
 		integer curr_fill;
 		always @(*) begin
-			assign invalidate_fill = 0;
-			assign success_found   = 0;
-			assign success_index   = 0;
+			invalidate_fill = 0;
+			success_found   = 0;
+			success_index   = 0;
 			for (curr_fill = 0; curr_fill < `FILL_INVALIDAOR_SIZE; curr_fill=curr_fill+1) begin
 
 				if (fill_addr[31:`LINE_SELECT_ADDR_START] == fills_address[curr_fill][31:`LINE_SELECT_ADDR_START]) begin
 					if (possible_fill && fills_active[curr_fill]) begin
-						assign invalidate_fill = 1;
+						invalidate_fill = 1;
 					end
 
 					if (success_fill) begin
-						assign success_found = 1;
-						assign success_index = curr_fill;
+						success_found = 1;
+						success_index = curr_fill;
 					end
 				end
 			end
