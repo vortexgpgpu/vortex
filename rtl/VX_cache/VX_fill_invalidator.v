@@ -69,7 +69,7 @@ module VX_fill_invalidator
 
 
 		reg                                         success_found;
-		reg[(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0] success_index;
+		reg[(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
 
 		integer curr_fill;
 		always @(*) begin
@@ -85,7 +85,7 @@ module VX_fill_invalidator
 
 					if (success_fill) begin
 						success_found = 1;
-						success_index = curr_fill;
+						success_index = curr_fill[(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0];
 					end
 				end
 			end

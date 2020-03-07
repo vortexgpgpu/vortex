@@ -53,12 +53,13 @@ module VX_cache_miss_resrv
 	input wire                                   miss_add,
 	input wire[31:0]                             miss_add_addr,
 	input wire[31:0]                             miss_add_data,
-	input wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  miss_add_tid,
+	input wire[`vx_clog2(NUMBER_REQUESTS)-1:0]   miss_add_tid,
 	input wire[4:0]                              miss_add_rd,
 	input wire[1:0]                              miss_add_wb,
 	input wire[`NW_M1:0]                         miss_add_warp_num,
 	input wire[2:0]                              miss_add_mem_read,
 	input wire[2:0]                              miss_add_mem_write,
+	input wire[31:0]                             miss_add_pc,
 	output wire                                  miss_resrv_full,
 
 	// Broadcast Fill
@@ -75,17 +76,19 @@ module VX_cache_miss_resrv
 	output wire[1:0]                             miss_resrv_wb_st0,
 	output wire[`NW_M1:0]                        miss_resrv_warp_num_st0,
 	output wire[2:0]                             miss_resrv_mem_read_st0,
+	output wire[31:0]                            miss_resrv_pc_st0,
 	output wire[2:0]                             miss_resrv_mem_write_st0
 	
 );
 
 		// Size of metadata = 32 + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1)
 		reg[`MRVQ_METADATA_SIZE-1:0]   metadata_table[MRVQ_SIZE-1:0];
-		reg[MRVQ_SIZE-1:0][31:0]      addr_table;
-		reg[MRVQ_SIZE-1:0]            valid_table;
-		reg[MRVQ_SIZE-1:0]            ready_table;
-		reg[`vx_clog2(MRVQ_SIZE)-1:0] head_ptr;
-		reg[`vx_clog2(MRVQ_SIZE)-1:0] tail_ptr;
+		reg[MRVQ_SIZE-1:0][31:0]       addr_table;
+		reg[MRVQ_SIZE-1:0][31:0]       pc_table;
+		reg[MRVQ_SIZE-1:0]             valid_table;
+		reg[MRVQ_SIZE-1:0]             ready_table;
+		reg[`vx_clog2(MRVQ_SIZE)-1:0]  head_ptr;
+		reg[`vx_clog2(MRVQ_SIZE)-1:0]  tail_ptr;
 
 
 		assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
@@ -108,7 +111,7 @@ module VX_cache_miss_resrv
 		wire[`vx_clog2(MRVQ_SIZE)-1:0] dequeue_index    = head_ptr;
 
 		assign miss_resrv_valid_st0 = (MRVQ_SIZE != 2) && dequeue_possible;
-
+		assign miss_resrv_pc_st0    = pc_table[dequeue_index];
 		assign miss_resrv_addr_st0  = addr_table[dequeue_index];
 		assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_rd_st0, miss_resrv_wb_st0, miss_resrv_warp_num_st0, miss_resrv_mem_read_st0, miss_resrv_mem_write_st0} = metadata_table[dequeue_index];
 
@@ -120,10 +123,12 @@ module VX_cache_miss_resrv
 				valid_table <= 0;
 				ready_table <= 0;
 				addr_table  <= 0;
+				pc_table    <= 0;
 			end else begin
 				if (miss_add && enqueue_possible && (MRVQ_SIZE != 2)) begin
 					valid_table[enqueue_index]    <= 1;
 					ready_table[enqueue_index]    <= 0;
+					pc_table[enqueue_index]       <= miss_add_pc;
 					addr_table[enqueue_index]     <= miss_add_addr;
 					metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_rd, miss_add_wb, miss_add_warp_num, miss_add_mem_read, miss_add_mem_write};
 					tail_ptr                      <= tail_ptr + 1;
@@ -138,6 +143,7 @@ module VX_cache_miss_resrv
 					ready_table[dequeue_index]    <= 0;
 					addr_table[dequeue_index]     <= 0;
 					metadata_table[dequeue_index] <= 0;
+					pc_table[dequeue_index]       <= 0;
 					head_ptr                      <= head_ptr + 1;
 				end
 

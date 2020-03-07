@@ -54,6 +54,7 @@ module VX_lsu (
 	assign VX_dcache_req.core_req_rd         = use_rd;
 	assign VX_dcache_req.core_req_wb         = use_wb;
 	assign VX_dcache_req.core_req_warp_num   = use_warp_num;
+	assign VX_dcache_req.core_req_pc         = use_pc;
 
 	// Cache can't accept request
 	assign out_delay = VX_dcache_rsp.delay_req;
@@ -64,7 +65,7 @@ module VX_lsu (
 	assign VX_mem_wb.wb_valid    = VX_dcache_rsp.core_wb_valid;
 	assign VX_mem_wb.wb_warp_num = VX_dcache_rsp.core_wb_warp_num;
 	assign VX_mem_wb.loaded_data = VX_dcache_rsp.core_wb_readdata;
-	assign VX_mem_wb.mem_wb_pc   = 32'hdeadbeff;
+	assign VX_mem_wb.mem_wb_pc   = VX_dcache_rsp.core_wb_pc[0];
 
 	// Core can't accept response
 	assign VX_dcache_req.core_no_wb_slot     = no_slot_mem;
