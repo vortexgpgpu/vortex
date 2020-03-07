@@ -21,6 +21,7 @@ interface VX_gpu_dcache_req_inter
     wire [4:0]                         core_req_rd;
     wire [1:0]                         core_req_wb;
     wire [`NW_M1:0]                    core_req_warp_num;
+    wire [31:0]                        core_req_pc;
 
     // Can't WB
     wire                              core_no_wb_slot;

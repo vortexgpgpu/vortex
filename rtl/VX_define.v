@@ -230,7 +230,7 @@
    `define DSTAGE_1_CYCLES 2
 
    // Bank Number of words in a line
-   `define DBANK_LINE_SIZE_WORDS (`DBANK_LINE_SIZE_BYTES / `DNUMBER_BANKS)
+   `define DBANK_LINE_SIZE_WORDS (`DBANK_LINE_SIZE_BYTES / `DWORD_SIZE_BYTES)
    `define DBANK_LINE_SIZE_RNG `DBANK_LINE_SIZE_WORDS-1:0
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 

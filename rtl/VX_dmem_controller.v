@@ -54,9 +54,9 @@ module VX_dmem_controller (
 	  .SM_BLOCK_OFFSET_END    (`SHARED_MEMORY_BLOCK_OFFSET_ED),
 	  .SM_INDEX_START         (`SHARED_MEMORY_INDEX_OFFSET_ST),
 	  .SM_INDEX_END           (`SHARED_MEMORY_INDEX_OFFSET_ED),
-	  .SM_HEIGHT 				      (`SHARED_MEMORY_HEIGHT),
+	  .SM_HEIGHT 			  (`SHARED_MEMORY_HEIGHT),
 	  .NUM_REQ                (`SHARED_MEMORY_NUM_REQ),
-	  .BITS_PER_BANK 			    (`SHARED_MEMORY_BITS_PER_BANK) 
+	  .BITS_PER_BANK 		  (`SHARED_MEMORY_BITS_PER_BANK) 
 		)
 		shared_memory
 		(
@@ -73,6 +73,12 @@ module VX_dmem_controller (
 		);
 
 
+    wire                                                    Dllvq_pop;
+    wire[`DNUMBER_REQUESTS-1:0]                             Dllvq_valid;
+    wire[`DNUMBER_REQUESTS-1:0][31:0]                       Dllvq_res_addr;
+    wire[`DNUMBER_REQUESTS-1:0][`DBANK_LINE_SIZE_RNG][31:0] Dllvq_res_data;
+
+    assign Dllvq_pop = 0;
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`DCACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`DBANK_LINE_SIZE_BYTES),
@@ -105,6 +111,7 @@ module VX_dmem_controller (
 		.core_req_rd       (VX_dcache_req.core_req_rd),
 		.core_req_wb       (VX_dcache_req.core_req_wb),
 		.core_req_warp_num (VX_dcache_req.core_req_warp_num),
+		.core_req_pc       (VX_dcache_req.core_req_pc),
 
 		// Delay Core Req
 		.delay_req         (VX_dcache_rsp.delay_req),
@@ -118,6 +125,7 @@ module VX_dmem_controller (
 		.core_wb_req_wb    (VX_dcache_rsp.core_wb_req_wb),
 		.core_wb_warp_num  (VX_dcache_rsp.core_wb_warp_num),
 		.core_wb_readdata  (VX_dcache_rsp.core_wb_readdata),
+		.core_wb_pc        (VX_dcache_rsp.core_wb_pc),
 
 		// DRAM response
 		.dram_fill_rsp     (VX_gpu_dcache_dram_res.dram_fill_rsp),
@@ -141,56 +149,14 @@ module VX_dmem_controller (
 
 		// Snoop Request
 		.snp_req               (0),
-		.snp_req_addr          (0)
+		.snp_req_addr          (0),
+
+		// LLVQ stuff
+		.llvq_pop              (Dllvq_pop),
+		.llvq_valid            (Dllvq_valid),
+		.llvq_res_addr         (Dllvq_res_addr),
+		.llvq_res_data         (Dllvq_res_data)
 		);
-
-
-
-	// VX_d_cache#(
- //          .CACHE_SIZE          (`DCACHE_SIZE),
- //          .CACHE_WAYS          (`DCACHE_WAYS),
- //          .CACHE_BLOCK         (`DCACHE_BLOCK),
- //          .CACHE_BANKS         (`DCACHE_BANKS),
- //          .LOG_NUM_BANKS       (`DCACHE_LOG_NUM_BANKS),
- //          .NUM_REQ             (`DCACHE_NUM_REQ),
- //          .LOG_NUM_REQ         (`DCACHE_LOG_NUM_REQ),
- //          .NUM_IND			   (`DCACHE_NUM_IND),
- //          .CACHE_WAY_INDEX     (`DCACHE_WAY_INDEX),
- //          .NUM_WORDS_PER_BLOCK (`DCACHE_NUM_WORDS_PER_BLOCK),
- //          .OFFSET_SIZE_START   (`DCACHE_OFFSET_ST),
- //          .OFFSET_SIZE_END     (`DCACHE_OFFSET_ED),
- //          .TAG_SIZE_START      (`DCACHE_TAG_SIZE_START),
- //          .TAG_SIZE_END        (`DCACHE_TAG_SIZE_END),
- //          .IND_SIZE_START      (`DCACHE_IND_SIZE_START),
- //          .IND_SIZE_END        (`DCACHE_IND_SIZE_END),
- //          .ADDR_TAG_START      (`DCACHE_ADDR_TAG_START),
- //          .ADDR_TAG_END        (`DCACHE_ADDR_TAG_END),
- //          .ADDR_OFFSET_START   (`DCACHE_ADDR_OFFSET_ST),
- //          .ADDR_OFFSET_END     (`DCACHE_ADDR_OFFSET_ED),
- //          .ADDR_IND_START      (`DCACHE_IND_ST),
- //          .ADDR_IND_END        (`DCACHE_IND_ED),
- //          .MEM_ADDR_REQ_MASK   (`DCACHE_MEM_REQ_ADDR_MASK)
- //    )
-	//  dcache
-	// (
-	// 	.clk                (clk),
-	// 	.rst                (reset),
-	// 	.i_p_valid          (cache_driver_in_valid),
-	// 	.i_p_addr           (cache_driver_in_address),
-	// 	.i_p_writedata      (cache_driver_in_data),
-	// 	.i_p_read_or_write  (read_or_write),
-	// 	.i_p_mem_read       (cache_driver_in_mem_read),
-	// 	.i_p_mem_write      (cache_driver_in_mem_write),
-	// 	.o_p_readdata       (cache_driver_out_data),
-	// 	.o_p_delay          (cache_delay),
-	// 	.o_m_evict_addr     (VX_dram_req_rsp.o_m_evict_addr),
-	// 	.o_m_read_addr      (VX_dram_req_rsp.o_m_read_addr),
-	// 	.o_m_valid          (VX_dram_req_rsp.o_m_valid),
-	// 	.o_m_writedata      (VX_dram_req_rsp.o_m_writedata),
-	// 	.o_m_read_or_write  (VX_dram_req_rsp.o_m_read_or_write),
-	// 	.i_m_readdata       (VX_dram_req_rsp.i_m_readdata),
-	// 	.i_m_ready          (VX_dram_req_rsp.i_m_ready)
-	// 	);
 
 
 VX_d_cache #(
