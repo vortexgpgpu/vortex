@@ -5,6 +5,9 @@ module VX_back_end (
 	input wire reset, 
 	input wire schedule_delay,
 
+	VX_gpu_dcache_res_inter  VX_dcache_rsp,
+	VX_gpu_dcache_req_inter  VX_dcache_req,
+
 	output wire               out_mem_delay,
 	output wire               out_exec_delay,
 	output wire               gpr_stage_delay,
@@ -14,10 +17,7 @@ module VX_back_end (
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,
 
-	VX_warp_ctl_inter         VX_warp_ctl,
-
-	VX_gpu_dcache_res_inter   VX_dcache_rsp,
-	VX_gpu_dcache_req_inter   VX_dcache_req
+	VX_warp_ctl_inter         VX_warp_ctl
 );
 
 

@@ -3,57 +3,11 @@
 
 `include "../VX_define.v"
 
-// ========================================= Configurable Knobs =========================================
-
-// General Cache Knobs
-	// Size of cache in bytes
-	`define CACHE_SIZE_BYTES 1024
-	// Size of line inside a bank in bytes
-	`define BANK_LINE_SIZE_BYTES 16
-	// Number of banks {1, 2, 4, 8,...}
-	`define NUMBER_BANKS 8
-	// Size of a word in bytes
-	`define WORD_SIZE_BYTES 4
-	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	`define NUMBER_REQUESTS `NT
-	// Number of cycles to complete stage 1 (read from memory)
-	`define STAGE_1_CYCLES 2
-
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
-	// Core Request Queue Size
-	`define REQQ_SIZE `NT*`NW
-	// Miss Reserv Queue Knob
-	`define MRVQ_SIZE `REQQ_SIZE
-	// Dram Fill Rsp Queue Size
-	`define DFPQ_SIZE 2
-  // Snoop Req Queue
-  `define SNRQ_SIZE 8
-
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
-	// Core Writeback Queue Size
-	`define CWBQ_SIZE `REQQ_SIZE
-	// Dram Writeback Queue Size
-	`define DWBQ_SIZE 4
-	// Dram Fill Req Queue Size
-	`define DFQQ_SIZE `REQQ_SIZE
-	// Lower Level Cache Hit Queue Size
-	`define LLVQ_SIZE 16
-
-  // Fill Invalidator Active {Comment out define statement to invalidate}
-  `define FILL_INVALIDATOR_ACTIVE 1
-  // Fill Invalidator Size {Fill invalidator must be active}
-  `define FILL_INVALIDAOR_SIZE 16
-
-// Dram knobs
-	`define SIMULATED_DRAM_LATENCY_CYCLES 10
-
-// ========================================= Configurable Knobs =========================================
 
 //                         data       tid                    rd  wb     warp_num   read  write
-`define MRVQ_METADATA_SIZE (32 + $clog2(`NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1) + 3 + 3)
+`define MRVQ_METADATA_SIZE (32 + $clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1) + 3 + 3)
 
-`define REQ_INST_META_SIZE (5 + 2 + (`NW_M1+1) + 3 + 3 + $clog2(`NUMBER_REQUESTS))
+`define REQ_INST_META_SIZE (5 + 2 + (`NW_M1+1) + 3 + 3 + $clog2(NUMBER_REQUESTS))
 
 `define vx_clog2(value) $clog2(value)
 // `define vx_clog2_h(value, x) (value == (1 << x)) ? (x)
@@ -93,11 +47,11 @@
 //                           0
 
 
-`define BANK_SIZE_BYTES `CACHE_SIZE_BYTES/`NUMBER_BANKS
+`define BANK_SIZE_BYTES CACHE_SIZE_BYTES/NUMBER_BANKS
 
 
-`define BANK_LINE_COUNT (`BANK_SIZE_BYTES/`BANK_LINE_SIZE_BYTES)
-`define BANK_LINE_SIZE_WORDS (`BANK_LINE_SIZE_BYTES / `WORD_SIZE_BYTES)
+`define BANK_LINE_COUNT (`BANK_SIZE_BYTES/BANK_LINE_SIZE_BYTES)
+`define BANK_LINE_SIZE_WORDS (BANK_LINE_SIZE_BYTES / NUMBER_BANKS)
 `define BANK_LINE_SIZE_RNG `BANK_LINE_SIZE_WORDS-1:0
 
 // Offset is fixed
@@ -115,7 +69,7 @@
 `define WORD_SELECT_ADDR_RNG `WORD_SELECT_ADDR_END:`WORD_SELECT_ADDR_START
 `define WORD_SELECT_SIZE_RNG `WORD_SELECT_SIZE_END-1:0
 
-`define BANK_SELECT_NUM_BITS $clog2(`NUMBER_BANKS)
+`define BANK_SELECT_NUM_BITS $clog2(NUMBER_BANKS)
 `define BANK_SELECT_SIZE_END `BANK_SELECT_NUM_BITS
 `define BANK_SELECT_ADDR_START 1+`WORD_SELECT_ADDR_END
 `define BANK_SELECT_ADDR_END `BANK_SELECT_SIZE_END+`BANK_SELECT_ADDR_START

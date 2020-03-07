@@ -1,14 +1,58 @@
 `include "VX_cache_config.v"
 
-module VX_cache_req_queue (
+module VX_cache_req_queue
+	#(
+	// Size of cache in bytes
+	parameter CACHE_SIZE_BYTES              = 1024, 
+	// Size of line inside a bank in bytes
+	parameter BANK_LINE_SIZE_BYTES          = 16, 
+	// Number of banks {1, 2, 4, 8,...}
+	parameter NUMBER_BANKS                  = 8, 
+	// Size of a word in bytes
+	parameter WORD_SIZE_BYTES               = 4, 
+	// Number of Word requests per cycle {1, 2, 4, 8, ...}
+	parameter NUMBER_REQUESTS               = 2, 
+	// Number of cycles to complete stage 1 (read from memory)
+	parameter STAGE_1_CYCLES                = 2, 
+
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+	// Core Request Queue Size
+	parameter REQQ_SIZE                     = 8, 
+	// Miss Reserv Queue Knob
+	parameter MRVQ_SIZE                     = 8, 
+	// Dram Fill Rsp Queue Size
+	parameter DFPQ_SIZE                     = 2, 
+	// Snoop Req Queue
+	parameter SNRQ_SIZE                     = 8, 
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Core Writeback Queue Size
+	parameter CWBQ_SIZE                     = 8, 
+	// Dram Writeback Queue Size
+	parameter DWBQ_SIZE                     = 4, 
+	// Dram Fill Req Queue Size
+	parameter DFQQ_SIZE                     = 8, 
+	// Lower Level Cache Hit Queue Size
+	parameter LLVQ_SIZE                     = 16, 
+
+ 	// Fill Invalidator Size {Fill invalidator must be active}
+ 	parameter FILL_INVALIDAOR_SIZE          = 16, 
+
+// Dram knobs
+	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
+
+
+	)
+	(
 	input  wire                             clk,
 	input  wire                             reset,
 
 	// Enqueue Data
 	input  wire                             reqq_push,
- 	input wire [`NUMBER_REQUESTS-1:0]       bank_valids,
-	input wire [`NUMBER_REQUESTS-1:0][31:0] bank_addr,
-	input wire [`NUMBER_REQUESTS-1:0][31:0] bank_writedata,
+ 	input wire [NUMBER_REQUESTS-1:0]       bank_valids,
+	input wire [NUMBER_REQUESTS-1:0][31:0] bank_addr,
+	input wire [NUMBER_REQUESTS-1:0][31:0] bank_writedata,
 	input wire [4:0]                        bank_rd,
 	input wire [1:0]                        bank_wb,
 	input wire [`NW_M1:0]                   bank_warp_num,
@@ -18,7 +62,7 @@ module VX_cache_req_queue (
 	// Dequeue Data
 	input  wire                                   reqq_pop,
     output wire                                   reqq_req_st0,
-    output wire [`vx_clog2(`NUMBER_REQUESTS)-1:0] reqq_req_tid_st0,
+    output wire [`vx_clog2(NUMBER_REQUESTS)-1:0] reqq_req_tid_st0,
 	output wire [31:0]                            reqq_req_addr_st0,
 	output wire [31:0]                            reqq_req_writedata_st0,
 	output wire [4:0]                             reqq_req_rd_st0,
@@ -32,9 +76,9 @@ module VX_cache_req_queue (
 	output wire                                   reqq_full
 );
 
- 	wire [`NUMBER_REQUESTS-1:0]       out_per_valids;
-	wire [`NUMBER_REQUESTS-1:0][31:0] out_per_addr;
-	wire [`NUMBER_REQUESTS-1:0][31:0] out_per_writedata;
+ 	wire [NUMBER_REQUESTS-1:0]       out_per_valids;
+	wire [NUMBER_REQUESTS-1:0][31:0] out_per_addr;
+	wire [NUMBER_REQUESTS-1:0][31:0] out_per_writedata;
 	wire [4:0]                        out_per_rd;
 	wire [1:0]                        out_per_wb;
 	wire [`NW_M1:0]                   out_per_warp_num;
@@ -42,9 +86,9 @@ module VX_cache_req_queue (
 	wire [2:0]                        out_per_mem_write;
 
 
- 	reg [`NUMBER_REQUESTS-1:0]       use_per_valids;
-	reg [`NUMBER_REQUESTS-1:0][31:0] use_per_addr;
-	reg [`NUMBER_REQUESTS-1:0][31:0] use_per_writedata;
+ 	reg [NUMBER_REQUESTS-1:0]       use_per_valids;
+	reg [NUMBER_REQUESTS-1:0][31:0] use_per_addr;
+	reg [NUMBER_REQUESTS-1:0][31:0] use_per_writedata;
 	reg [4:0]                        use_per_rd;
 	reg [1:0]                        use_per_wb;
 	reg [`NW_M1:0]                   use_per_warp_num;
@@ -52,16 +96,16 @@ module VX_cache_req_queue (
 	reg [2:0]                        use_per_mem_write;
 
 
- 	wire [`NUMBER_REQUESTS-1:0]       qual_valids;
-	wire [`NUMBER_REQUESTS-1:0][31:0] qual_addr;
-	wire [`NUMBER_REQUESTS-1:0][31:0] qual_writedata;
+ 	wire [NUMBER_REQUESTS-1:0]       qual_valids;
+	wire [NUMBER_REQUESTS-1:0][31:0] qual_addr;
+	wire [NUMBER_REQUESTS-1:0][31:0] qual_writedata;
 	wire [4:0]                        qual_rd;
 	wire [1:0]                        qual_wb;
 	wire [`NW_M1:0]                   qual_warp_num;
 	wire [2:0]                        qual_mem_read;  
 	wire [2:0]                        qual_mem_write;
 
-    wire[`NUMBER_REQUESTS-1:0]        updated_valids;
+    wire[NUMBER_REQUESTS-1:0]        updated_valids;
 
     wire o_empty;
 
@@ -71,7 +115,7 @@ module VX_cache_req_queue (
 	wire push_qual = reqq_push && !reqq_full;
 	wire pop_qual  = reqq_pop  && use_empty && !out_empty;
 
-	VX_generic_queue_ll #(.DATAW( (`NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(`REQQ_SIZE)) reqq_queue(
+	VX_generic_queue_ll #(.DATAW( (NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
@@ -83,7 +127,7 @@ module VX_cache_req_queue (
 		);
 
 
-	wire[`NUMBER_REQUESTS-1:0] real_out_per_valids = out_per_valids & {`NUMBER_REQUESTS{~out_empty}};
+	wire[NUMBER_REQUESTS-1:0] real_out_per_valids = out_per_valids & {NUMBER_REQUESTS{~out_empty}};
 
 	assign qual_valids     = use_empty ? real_out_per_valids : out_empty ? 0 : use_per_valids; 
 	assign qual_addr       = use_empty ? out_per_addr        : use_per_addr;
@@ -94,9 +138,9 @@ module VX_cache_req_queue (
 	assign qual_mem_read   = use_empty ? out_per_mem_read    : use_per_mem_read;
 	assign qual_mem_write  = use_empty ? out_per_mem_write   : use_per_mem_write;
 
-	wire[`vx_clog2(`NUMBER_REQUESTS)-1:0] qual_request_index;
+	wire[`vx_clog2(NUMBER_REQUESTS)-1:0] qual_request_index;
 	wire                                  qual_has_request;
-	VX_generic_priority_encoder #(.N(`NUMBER_REQUESTS)) VX_sel_bank(
+	VX_generic_priority_encoder #(.N(NUMBER_REQUESTS)) VX_sel_bank(
 		.valids(qual_valids),
 		.index (qual_request_index),
 		.found (qual_has_request)

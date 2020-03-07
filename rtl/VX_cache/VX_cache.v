@@ -1,13 +1,57 @@
 `include "VX_cache_config.v"
 
-module VX_cache (
+module VX_cache
+    #(
+    // Size of cache in bytes
+    parameter CACHE_SIZE_BYTES              = 1024, 
+    // Size of line inside a bank in bytes
+    parameter BANK_LINE_SIZE_BYTES          = 16, 
+    // Number of banks {1, 2, 4, 8,...}
+    parameter NUMBER_BANKS                  = 8, 
+    // Size of a word in bytes
+    parameter WORD_SIZE_BYTES               = 4, 
+    // Number of Word requests per cycle {1, 2, 4, 8, ...}
+    parameter NUMBER_REQUESTS               = 2, 
+    // Number of cycles to complete stage 1 (read from memory)
+    parameter STAGE_1_CYCLES                = 2, 
+
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+    // Core Request Queue Size
+    parameter REQQ_SIZE                     = 8, 
+    // Miss Reserv Queue Knob
+    parameter MRVQ_SIZE                     = 8, 
+    // Dram Fill Rsp Queue Size
+    parameter DFPQ_SIZE                     = 2, 
+    // Snoop Req Queue
+    parameter SNRQ_SIZE                     = 8, 
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+    // Core Writeback Queue Size
+    parameter CWBQ_SIZE                     = 8, 
+    // Dram Writeback Queue Size
+    parameter DWBQ_SIZE                     = 4, 
+    // Dram Fill Req Queue Size
+    parameter DFQQ_SIZE                     = 8, 
+    // Lower Level Cache Hit Queue Size
+    parameter LLVQ_SIZE                     = 16, 
+
+    // Fill Invalidator Size {Fill invalidator must be active}
+    parameter FILL_INVALIDAOR_SIZE          = 16, 
+
+// Dram knobs
+    parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
+
+
+    )
+    (
 	input wire clk,
 	input wire reset,
 
     // Req Info
-    input wire [`NUMBER_REQUESTS-1:0]        core_req_valid,
-    input wire [`NUMBER_REQUESTS-1:0][31:0]  core_req_addr,
-    input wire [`NUMBER_REQUESTS-1:0][31:0]  core_req_writedata,
+    input wire [NUMBER_REQUESTS-1:0]        core_req_valid,
+    input wire [NUMBER_REQUESTS-1:0][31:0]  core_req_addr,
+    input wire [NUMBER_REQUESTS-1:0][31:0]  core_req_writedata,
     input wire[2:0]                          core_req_mem_read,
     input wire[2:0]                          core_req_mem_write,
 
@@ -19,11 +63,11 @@ module VX_cache (
 
     // Core Writeback
     input  wire                              core_no_wb_slot,
-    output wire [`NUMBER_REQUESTS-1:0]       core_wb_valid,
+    output wire [NUMBER_REQUESTS-1:0]       core_wb_valid,
     output wire [4:0]                        core_wb_req_rd,
     output wire [1:0]                        core_wb_req_wb,
     output wire [`NW_M1:0]                   core_wb_warp_num,
-    output wire [`NUMBER_REQUESTS-1:0][31:0] core_wb_readdata,
+    output wire [NUMBER_REQUESTS-1:0][31:0] core_wb_readdata,
 
 
     // Dram Fill Response
@@ -49,50 +93,69 @@ module VX_cache (
 
     // Lower Level Cache 
     input  wire                             llvq_pop,
-    output wire[`NUMBER_REQUESTS-1:0]       llvq_valid,
-    output wire[`NUMBER_REQUESTS-1:0][31:0] llvq_res_addr,
-    output wire[`NUMBER_REQUESTS-1:0][`BANK_LINE_SIZE_RNG][31:0] llvq_res_data
+    output wire[NUMBER_REQUESTS-1:0]       llvq_valid,
+    output wire[NUMBER_REQUESTS-1:0][31:0] llvq_res_addr,
+    output wire[NUMBER_REQUESTS-1:0][`BANK_LINE_SIZE_RNG][31:0] llvq_res_data
 
 );
 
 
-    wire [`NUMBER_BANKS-1:0][`NUMBER_REQUESTS-1:0]            per_bank_valids;
-    wire [`NUMBER_BANKS-1:0]                                  per_bank_wb_pop;
-    wire [`NUMBER_BANKS-1:0]                                  per_bank_wb_valid;
-    wire [`NUMBER_BANKS-1:0][`vx_clog2(`NUMBER_REQUESTS)-1:0] per_bank_wb_tid;
-    wire [`NUMBER_BANKS-1:0][4:0]                             per_bank_wb_rd;
-    wire [`NUMBER_BANKS-1:0][1:0]                             per_bank_wb_wb;
-    wire [`NUMBER_BANKS-1:0][`NW_M1:0]                        per_bank_wb_warp_num;
-    wire [`NUMBER_BANKS-1:0][31:0]                            per_bank_wb_data;
+    wire [NUMBER_BANKS-1:0][NUMBER_REQUESTS-1:0]            per_bank_valids;
+    wire [NUMBER_BANKS-1:0]                                  per_bank_wb_pop;
+    wire [NUMBER_BANKS-1:0]                                  per_bank_wb_valid;
+    wire [NUMBER_BANKS-1:0][`vx_clog2(NUMBER_REQUESTS)-1:0] per_bank_wb_tid;
+    wire [NUMBER_BANKS-1:0][4:0]                             per_bank_wb_rd;
+    wire [NUMBER_BANKS-1:0][1:0]                             per_bank_wb_wb;
+    wire [NUMBER_BANKS-1:0][`NW_M1:0]                        per_bank_wb_warp_num;
+    wire [NUMBER_BANKS-1:0][31:0]                            per_bank_wb_data;
 
 
     wire                                                      dfqq_full;
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_fill_req;
-    wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_dram_fill_req_addr;
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_fill_accept;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_dram_fill_req;
+    wire[NUMBER_BANKS-1:0][31:0]                             per_bank_dram_fill_req_addr;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_dram_fill_accept;
 
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_queue_pop;
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_wb_req;
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_dram_because_of_snp;
-    wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_dram_wb_req_addr;
-    wire[`NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_dram_wb_req_data;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_dram_wb_queue_pop;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_dram_wb_req;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_dram_because_of_snp;
+    wire[NUMBER_BANKS-1:0][31:0]                             per_bank_dram_wb_req_addr;
+    wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_dram_wb_req_data;
 
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_reqq_full;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_reqq_full;
 
 
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_llvq_pop;
-    wire[`NUMBER_BANKS-1:0]                                   per_bank_llvq_valid;
-    wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_llvq_res_addr;
-    wire[`NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_llvq_res_data;
-    wire [`NUMBER_BANKS-1:0][`vx_clog2(`NUMBER_REQUESTS)-1:0] per_bank_llvq_res_tid;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_llvq_pop;
+    wire[NUMBER_BANKS-1:0]                                   per_bank_llvq_valid;
+    wire[NUMBER_BANKS-1:0][31:0]                             per_bank_llvq_res_addr;
+    wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_llvq_res_data;
+    wire [NUMBER_BANKS-1:0][`vx_clog2(NUMBER_REQUESTS)-1:0] per_bank_llvq_res_tid;
 
     assign delay_req = (|per_bank_reqq_full);
 
 
-    assign dram_fill_accept = (`NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
+    assign dram_fill_accept = (NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
 
 
-    VX_dcache_llv_resp_bank_sel VX_dcache_llv_resp_bank_sel(
+    VX_dcache_llv_resp_bank_sel #(
+        .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
+        .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
+        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
+        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+        .REQQ_SIZE                    (REQQ_SIZE),
+        .MRVQ_SIZE                    (MRVQ_SIZE),
+        .DFPQ_SIZE                    (DFPQ_SIZE),
+        .SNRQ_SIZE                    (SNRQ_SIZE),
+        .CWBQ_SIZE                    (CWBQ_SIZE),
+        .DWBQ_SIZE                    (DWBQ_SIZE),
+        .DFQQ_SIZE                    (DFQQ_SIZE),
+        .LLVQ_SIZE                    (LLVQ_SIZE),
+        .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+        .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
+        )
+        VX_dcache_llv_resp_bank_sel
+        (
         .per_bank_llvq_pop     (per_bank_llvq_pop),
         .per_bank_llvq_valid   (per_bank_llvq_valid),
         .per_bank_llvq_res_addr(per_bank_llvq_res_addr),
@@ -104,7 +167,26 @@ module VX_cache (
         .llvq_res_data         (llvq_res_data)
         );
 
-    VX_cache_dram_req_arb VX_cache_dram_req_arb(
+    VX_cache_dram_req_arb  #(
+        .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
+        .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
+        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
+        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+        .REQQ_SIZE                    (REQQ_SIZE),
+        .MRVQ_SIZE                    (MRVQ_SIZE),
+        .DFPQ_SIZE                    (DFPQ_SIZE),
+        .SNRQ_SIZE                    (SNRQ_SIZE),
+        .CWBQ_SIZE                    (CWBQ_SIZE),
+        .DWBQ_SIZE                    (DWBQ_SIZE),
+        .DFQQ_SIZE                    (DFQQ_SIZE),
+        .LLVQ_SIZE                    (LLVQ_SIZE),
+        .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+        .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
+        )
+        VX_cache_dram_req_arb
+        (
         .clk                        (clk),
         .reset                      (reset),
         .dfqq_full                  (dfqq_full),
@@ -125,14 +207,52 @@ module VX_cache (
         );
 
 
-    VX_cache_core_req_bank_sel VX_cache_core_req_bank_sell(
+    VX_cache_core_req_bank_sel  #(
+        .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
+        .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
+        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
+        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+        .REQQ_SIZE                    (REQQ_SIZE),
+        .MRVQ_SIZE                    (MRVQ_SIZE),
+        .DFPQ_SIZE                    (DFPQ_SIZE),
+        .SNRQ_SIZE                    (SNRQ_SIZE),
+        .CWBQ_SIZE                    (CWBQ_SIZE),
+        .DWBQ_SIZE                    (DWBQ_SIZE),
+        .DFQQ_SIZE                    (DFQQ_SIZE),
+        .LLVQ_SIZE                    (LLVQ_SIZE),
+        .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+        .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
+        )
+        VX_cache_core_req_bank_sell
+        (
         .core_req_valid (core_req_valid),
         .core_req_addr  (core_req_addr),
         .per_bank_valids(per_bank_valids)
         );
 
 
-    VX_cache_wb_sel_merge VX_cache_core_req_bank_sel(
+    VX_cache_wb_sel_merge  #(
+        .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
+        .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
+        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
+        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+        .REQQ_SIZE                    (REQQ_SIZE),
+        .MRVQ_SIZE                    (MRVQ_SIZE),
+        .DFPQ_SIZE                    (DFPQ_SIZE),
+        .SNRQ_SIZE                    (SNRQ_SIZE),
+        .CWBQ_SIZE                    (CWBQ_SIZE),
+        .DWBQ_SIZE                    (DWBQ_SIZE),
+        .DFQQ_SIZE                    (DFQQ_SIZE),
+        .LLVQ_SIZE                    (LLVQ_SIZE),
+        .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+        .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
+        ) 
+        VX_cache_core_req_bank_sel
+        (
         .per_bank_wb_valid   (per_bank_wb_valid),
         .per_bank_wb_tid     (per_bank_wb_tid),
         .per_bank_wb_rd      (per_bank_wb_rd),
@@ -151,10 +271,10 @@ module VX_cache (
 
     genvar curr_bank;
     generate
-        for (curr_bank = 0; curr_bank < `NUMBER_BANKS; curr_bank=curr_bank+1) begin
-            wire [`NUMBER_REQUESTS-1:0]            curr_bank_valids;
-            wire [`NUMBER_REQUESTS-1:0][31:0]      curr_bank_addr;
-            wire [`NUMBER_REQUESTS-1:0][31:0]      curr_bank_writedata;
+        for (curr_bank = 0; curr_bank < NUMBER_BANKS; curr_bank=curr_bank+1) begin
+            wire [NUMBER_REQUESTS-1:0]            curr_bank_valids;
+            wire [NUMBER_REQUESTS-1:0][31:0]      curr_bank_addr;
+            wire [NUMBER_REQUESTS-1:0][31:0]      curr_bank_writedata;
             wire [4:0]                             curr_bank_rd;
             wire [1:0]                             curr_bank_wb;
             wire [`NW_M1:0]                        curr_bank_warp_num;
@@ -163,7 +283,7 @@ module VX_cache (
 
             wire                                   curr_bank_wb_pop;
             wire                                   curr_bank_wb_valid;
-            wire [`vx_clog2(`NUMBER_REQUESTS)-1:0] curr_bank_wb_tid;
+            wire [`vx_clog2(NUMBER_REQUESTS)-1:0] curr_bank_wb_tid;
             wire [4:0]                             curr_bank_wb_rd;
             wire [1:0]                             curr_bank_wb_wb;
             wire [`NW_M1:0]                        curr_bank_wb_warp_num;
@@ -195,7 +315,7 @@ module VX_cache (
             wire                                   curr_bank_llvq_valid;
             wire[31:0]                             curr_bank_llvq_res_addr;
             wire[`BANK_LINE_SIZE_RNG][31:0]        curr_bank_llvq_res_data;
-            wire[`vx_clog2(`NUMBER_REQUESTS)-1:0]  curr_bank_llvq_res_tid;
+            wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  curr_bank_llvq_res_tid;
             
 
             // Core Req
@@ -224,7 +344,7 @@ module VX_cache (
             assign per_bank_dram_fill_req_addr[curr_bank] = curr_bank_dram_fill_req_addr;
 
             // Dram fill response
-            assign curr_bank_dram_fill_rsp              = (`NUMBER_BANKS == 1) || (dram_fill_rsp && (curr_bank_dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG] == curr_bank));
+            assign curr_bank_dram_fill_rsp              = (NUMBER_BANKS == 1) || (dram_fill_rsp && (curr_bank_dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG] == curr_bank));
             assign curr_bank_dram_fill_rsp_addr         = dram_fill_rsp_addr;
             assign curr_bank_dram_fill_rsp_data         = dram_fill_rsp_data;
             assign per_bank_dram_fill_accept[curr_bank] = curr_bank_dram_fill_accept;
@@ -248,7 +368,26 @@ module VX_cache (
             assign per_bank_llvq_res_addr[curr_bank] = curr_bank_llvq_res_addr;
             assign per_bank_llvq_res_tid[curr_bank]  = curr_bank_llvq_res_tid;
             
-            VX_bank bank (
+            VX_bank #(
+            .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
+            .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
+            .NUMBER_BANKS                 (NUMBER_BANKS),
+            .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
+            .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+            .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+            .REQQ_SIZE                    (REQQ_SIZE),
+            .MRVQ_SIZE                    (MRVQ_SIZE),
+            .DFPQ_SIZE                    (DFPQ_SIZE),
+            .SNRQ_SIZE                    (SNRQ_SIZE),
+            .CWBQ_SIZE                    (CWBQ_SIZE),
+            .DWBQ_SIZE                    (DWBQ_SIZE),
+            .DFQQ_SIZE                    (DFQQ_SIZE),
+            .LLVQ_SIZE                    (LLVQ_SIZE),
+            .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+            .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
+            )
+            bank
+            (
                 .clk                     (clk),
                 .reset                   (reset),
                 // Core req
