@@ -37,6 +37,8 @@
 	`define DWBQ_SIZE 4
 	// Dram Fill Req Queue Size
 	`define DFQQ_SIZE `REQQ_SIZE
+	// Lower Level Cache Hit Queue Size
+	`define LLVQ_SIZE 16
 
   // Fill Invalidator Active {Comment out define statement to invalidate}
   `define FILL_INVALIDATOR_ACTIVE 1
