@@ -92,8 +92,10 @@ module VX_generic_queue_ll
                     end
                 end
 
-                bypass_r <= writing && (empty_r || (1 == size_r && reading));
-                curr_r <= in_data;
+                if (!(!reading && bypass_r)) begin
+                    bypass_r <= writing && (empty_r || (1 == size_r && reading));
+                    curr_r <= in_data;
+                end
                 head_r <= data[reading ? rd_next_ptr_r : rd_ptr_r];
             end
         end

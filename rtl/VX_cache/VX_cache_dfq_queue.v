@@ -28,22 +28,24 @@ module VX_cache_dfq_queue
 
     wire[`NUMBER_BANKS-1:0]       updated_bank_dram_fill_req;
 
+
+    wire o_empty;
+
 	wire use_empty = !(|use_per_bank_dram_fill_req);
-	wire out_empty = !(|out_per_bank_dram_fill_req);
+	wire out_empty = !(|out_per_bank_dram_fill_req) || o_empty;
 
 	wire push_qual = dfqq_push && !dfqq_full;
-	wire pop_qual  = dfqq_pop  && use_empty && !out_empty && !dfqq_empty;
-	VX_generic_queue #(.DATAW(`NUMBER_BANKS * (1+32)), .SIZE(`DFQQ_SIZE)) dfqq_queue(
+	wire pop_qual  = dfqq_pop  && use_empty && !out_empty;
+	VX_generic_queue_ll #(.DATAW(`NUMBER_BANKS * (1+32)), .SIZE(`DFQQ_SIZE)) dfqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
 		.in_data ({per_bank_dram_fill_req, per_bank_dram_fill_req_addr}),
 		.pop     (pop_qual),
 		.out_data({out_per_bank_dram_fill_req, out_per_bank_dram_fill_req_addr}),
-		.empty   (dfqq_empty),
+		.empty   (o_empty),
 		.full    (dfqq_full)
 		);
-
 
 
 	assign qual_bank_dram_fill_req      = use_empty ? out_per_bank_dram_fill_req      : use_per_bank_dram_fill_req; 
@@ -57,6 +59,7 @@ module VX_cache_dfq_queue
 		.found (qual_has_request)
 		);
 
+	assign dfqq_empty    = !qual_has_request;
 	assign dfqq_req      = qual_bank_dram_fill_req     [qual_request_index];
 	assign dfqq_req_addr = qual_bank_dram_fill_req_addr[qual_request_index];
 

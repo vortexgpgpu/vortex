@@ -105,11 +105,11 @@ module VX_tag_data_access (
 	wire[`OFFSET_SIZE_RNG]      byte_select  = writeaddr_st1e[`OFFSET_ADDR_RNG];
 	wire[`WORD_SELECT_SIZE_RNG] block_offset = writeaddr_st1e[`WORD_SELECT_ADDR_RNG];
 
-    wire lw  = (mem_read_st1e == `LW_MEM_READ);
-    wire lb  = (mem_read_st1e == `LB_MEM_READ);
-    wire lh  = (mem_read_st1e == `LH_MEM_READ);
-    wire lhu = (mem_read_st1e == `LHU_MEM_READ);
-    wire lbu = (mem_read_st1e == `LBU_MEM_READ);
+    wire lw  = valid_req_st1e && (mem_read_st1e == `LW_MEM_READ);
+    wire lb  = valid_req_st1e && (mem_read_st1e == `LB_MEM_READ);
+    wire lh  = valid_req_st1e && (mem_read_st1e == `LH_MEM_READ);
+    wire lhu = valid_req_st1e && (mem_read_st1e == `LHU_MEM_READ);
+    wire lbu = valid_req_st1e && (mem_read_st1e == `LBU_MEM_READ);
 
     wire b0 = (byte_select == 0);
     wire b1 = (byte_select == 1);
@@ -160,9 +160,9 @@ module VX_tag_data_access (
 
 /////////////////////// STORE LOGIC ///////////////////
 
-    wire sw  = (mem_write_st1e == `SW_MEM_WRITE);
-    wire sb  = (mem_write_st1e == `SB_MEM_WRITE);
-    wire sh =  (mem_write_st1e == `SH_MEM_WRITE);
+    wire sw  = valid_req_st1e && (mem_write_st1e == `SW_MEM_WRITE);
+    wire sb  = valid_req_st1e && (mem_write_st1e == `SB_MEM_WRITE);
+    wire sh  = valid_req_st1e && (mem_write_st1e == `SH_MEM_WRITE);
 
     wire[3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
