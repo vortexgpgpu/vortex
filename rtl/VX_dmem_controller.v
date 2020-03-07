@@ -3,16 +3,18 @@
 module VX_dmem_controller (
 	input wire               clk,
 	input wire               reset,
-	// MEM-RAM
+	// Dcache
 	VX_gpu_dcache_dram_req_inter VX_gpu_dcache_dram_req,
 	VX_gpu_dcache_dram_res_inter VX_gpu_dcache_dram_res,
+
+	VX_gpu_dcache_res_inter  VX_dcache_rsp,
+	VX_gpu_dcache_req_inter  VX_dcache_req,
+
 
 	VX_dram_req_rsp_inter    VX_dram_req_rsp_icache,
 	// MEM-Processor
 	VX_icache_request_inter  VX_icache_req,
-	VX_icache_response_inter VX_icache_rsp,
-	VX_gpu_dcache_req_inter  VX_dcache_req,
-	VX_gpu_dcache_res_inter  VX_dcache_rsp
+	VX_icache_response_inter VX_icache_rsp
 );
 
 	wire to_shm = VX_dcache_req.core_req_addr[0][31:24] == 8'hFF;
@@ -42,7 +44,7 @@ module VX_dmem_controller (
 
 	VX_shared_memory #(
 		.SM_SIZE                (`SHARED_MEMORY_SIZE),
-	  .SM_BANKS 				      (`SHARED_MEMORY_BANKS),
+	  .SM_BANKS 				(`SHARED_MEMORY_BANKS),
 	  .SM_BYTES_PER_READ      (`SHARED_MEMORY_BYTES_PER_READ),
 	  .SM_WORDS_PER_READ      (`SHARED_MEMORY_WORDS_PER_READ),
 	  .SM_LOG_WORDS_PER_READ  (`SHARED_MEMORY_LOG_WORDS_PER_READ),
@@ -71,7 +73,26 @@ module VX_dmem_controller (
 		);
 
 
-	VX_cache gpu_dcache(
+	VX_cache #(
+		.CACHE_SIZE_BYTES             (`DCACHE_SIZE_BYTES),
+		.BANK_LINE_SIZE_BYTES         (`DBANK_LINE_SIZE_BYTES),
+		.NUMBER_BANKS                 (`DNUMBER_BANKS),
+		.WORD_SIZE_BYTES              (`DWORD_SIZE_BYTES),
+		.NUMBER_REQUESTS              (`DNUMBER_REQUESTS),
+		.STAGE_1_CYCLES               (`DSTAGE_1_CYCLES),
+		.REQQ_SIZE                    (`DREQQ_SIZE),
+		.MRVQ_SIZE                    (`DMRVQ_SIZE),
+		.DFPQ_SIZE                    (`DDFPQ_SIZE),
+		.SNRQ_SIZE                    (`DSNRQ_SIZE),
+		.CWBQ_SIZE                    (`DCWBQ_SIZE),
+		.DWBQ_SIZE                    (`DDWBQ_SIZE),
+		.DFQQ_SIZE                    (`DDFQQ_SIZE),
+		.LLVQ_SIZE                    (`DLLVQ_SIZE),
+		.FILL_INVALIDAOR_SIZE         (`DFILL_INVALIDAOR_SIZE),
+		.SIMULATED_DRAM_LATENCY_CYCLES(`DSIMULATED_DRAM_LATENCY_CYCLES)
+		)
+		gpu_dcache
+		(
 		.clk               (clk),
 		.reset             (reset),
 

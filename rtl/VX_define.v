@@ -181,62 +181,6 @@
 `define ICACHE_TAG_SIZE_END	  (32-(`ICACHE_IND_ED+1)-1)
 `define ICACHE_ADDR_TAG_START  (`ICACHE_IND_ED+1)
 `define ICACHE_ADDR_TAG_END    31
-
-//Cache configurations
-//Bytes
-`define DCACHE_SIZE  4096
-`define DCACHE_WAYS  2
-
-//Bytes
-`define DCACHE_BLOCK 64
-`define DCACHE_BANKS 4
-`define DCACHE_LOG_NUM_BANKS $clog2(`DCACHE_BANKS)
-`define DCACHE_NUM_WORDS_PER_BLOCK (`DCACHE_BLOCK / (`DCACHE_BANKS * 4))
-`define DCACHE_NUM_REQ    `NT
-`define DCACHE_LOG_NUM_REQ $clog2(`DCACHE_NUM_REQ)
-
-//set this to 1 if CACHE_WAYS is 1
-`define DCACHE_WAY_INDEX $clog2(`DCACHE_WAYS)
-//`define DCACHE_WAY_INDEX 1
-`define DCACHE_BLOCK_PER_BANK  (`DCACHE_BLOCK / `DCACHE_BANKS)
-
-// Offset
-`define DCACHE_OFFSET_NB ($clog2(`DCACHE_NUM_WORDS_PER_BLOCK))
-
-`define DCACHE_ADDR_OFFSET_ST  (2+$clog2(`DCACHE_BANKS))
-`define DCACHE_ADDR_OFFSET_ED  (`DCACHE_ADDR_OFFSET_ST+(`DCACHE_OFFSET_NB)-1)
-
-
-`define DCACHE_ADDR_OFFSET_RNG `DCACHE_ADDR_OFFSET_ED:`DCACHE_ADDR_OFFSET_ST
-`define DCACHE_OFFSET_SIZE_RNG ($clog2(`DCACHE_NUM_WORDS_PER_BLOCK)-1):0
-`define DCACHE_OFFSET_ST 0
-`define DCACHE_OFFSET_ED ($clog2(`DCACHE_NUM_WORDS_PER_BLOCK)-1)
-
-// Index
-// `define DCACHE_NUM_IND (`DCACHE_SIZE / (`DCACHE_WAYS * `DCACHE_BLOCK_PER_BANK))
-`define DCACHE_NUM_IND (`DCACHE_SIZE / (`DCACHE_WAYS * `DCACHE_BLOCK))
-`define DCACHE_IND_NB ($clog2(`DCACHE_NUM_IND))
-
-`define DCACHE_IND_ST  (`DCACHE_ADDR_OFFSET_ED+1)
-`define DCACHE_IND_ED  (`DCACHE_IND_ST+`DCACHE_IND_NB-1)
-
-`define DCACHE_ADDR_IND_RNG `DCACHE_IND_ED:`DCACHE_IND_ST
-`define DCACHE_IND_SIZE_RNG `DCACHE_IND_NB-1:0
-
-`define DCACHE_IND_SIZE_START 0
-`define DCACHE_IND_SIZE_END   `DCACHE_IND_NB-1
-
-
-// Tag
-`define DCACHE_ADDR_TAG_RNG 31:(`DCACHE_IND_ED+1)
-`define DCACHE_TAG_SIZE_RNG (32-(`DCACHE_IND_ED+1)-1):0
-`define DCACHE_TAG_SIZE_START 0
-`define DCACHE_TAG_SIZE_END	  (32-(`DCACHE_IND_ED+1)-1)
-`define DCACHE_ADDR_TAG_START  (`DCACHE_IND_ED+1)
-`define DCACHE_ADDR_TAG_END    31
-
-// Mask
-`define DCACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`DCACHE_BLOCK-1))
 `define ICACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`ICACHE_BLOCK-1))
 
 ///////
@@ -263,5 +207,64 @@
 `define SHARED_MEMORY_BLOCK_OFFSET_ED (`SHARED_MEMORY_BLOCK_OFFSET_ST +`SHARED_MEMORY_LOG_WORDS_PER_READ-1)
 `define SHARED_MEMORY_INDEX_OFFSET_ST  (`SHARED_MEMORY_BLOCK_OFFSET_ED + 1)
 `define SHARED_MEMORY_INDEX_OFFSET_ED  (`SHARED_MEMORY_INDEX_OFFSET_ST + $clog2(`SHARED_MEMORY_HEIGHT)-1)
+
+
+
+
+
+
+// ========================================= Dcache Configurable Knobs =========================================
+
+// General Cache Knobs
+   // Size of cache in bytes
+   `define DCACHE_SIZE_BYTES 1024
+   // Size of line inside a bank in bytes
+   `define DBANK_LINE_SIZE_BYTES 16
+   // Number of banks {1, 2, 4, 8,...}
+   `define DNUMBER_BANKS 8
+   // Size of a word in bytes
+   `define DWORD_SIZE_BYTES 4
+   // Number of Word requests per cycle {1, 2, 4, 8, ...}
+   `define DNUMBER_REQUESTS `NT
+   // Number of cycles to complete stage 1 (read from memory)
+   `define DSTAGE_1_CYCLES 2
+
+   // Bank Number of words in a line
+   `define DBANK_LINE_SIZE_WORDS (`DBANK_LINE_SIZE_BYTES / `DNUMBER_BANKS)
+   `define DBANK_LINE_SIZE_RNG `DBANK_LINE_SIZE_WORDS-1:0
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+   // Core Request Queue Size
+   `define DREQQ_SIZE `NT*`NW
+   // Miss Reserv Queue Knob
+   `define DMRVQ_SIZE `DREQQ_SIZE
+   // Dram Fill Rsp Queue Size
+   `define DDFPQ_SIZE 2
+   // Snoop Req Queue
+   `define DSNRQ_SIZE 8
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+   // Core Writeback Queue Size
+   `define DCWBQ_SIZE `DREQQ_SIZE
+   // Dram Writeback Queue Size
+   `define DDWBQ_SIZE 4
+   // Dram Fill Req Queue Size
+   `define DDFQQ_SIZE `DREQQ_SIZE
+   // Lower Level Cache Hit Queue Size
+   `define DLLVQ_SIZE 0
+
+  // Fill Invalidator Size {Fill invalidator must be active}
+  `define DFILL_INVALIDAOR_SIZE 16
+
+// Dram knobs
+   `define DSIMULATED_DRAM_LATENCY_CYCLES 10
+
+// ========================================= Dcache Configurable Knobs =========================================
+
+
+
+
+
+
 
 `endif

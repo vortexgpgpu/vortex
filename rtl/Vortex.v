@@ -2,13 +2,6 @@
 `include "VX_cache_config.v"
 
 module Vortex
-    /*#(
-      parameter CACHE_SIZE     = 4096, // Bytes
-      parameter CACHE_WAYS     = 2,
-      parameter CACHE_BLOCK    = 128, // Bytes
-      parameter CACHE_BANKS    = 8,
-      parameter NUM_WORDS_PER_BLOCK = 4
-    )*/
 	(
 	input  wire           clk,
 	input  wire           reset,
@@ -24,14 +17,14 @@ module Vortex
     output wire                              dram_req_read,
     output wire [31:0]                       dram_req_addr,
     output wire [31:0]                       dram_req_size,
-    output wire [31:0]                       dram_req_data[`BANK_LINE_SIZE_RNG],
+    output wire [31:0]                       dram_req_data[`DBANK_LINE_SIZE_RNG],
     output wire [31:0]                       dram_expected_lat,
 
 	// DRAM Dcache Res
 	output wire                              dram_fill_accept,
     input  wire                              dram_fill_rsp,
     input  wire [31:0]                       dram_fill_rsp_addr,
-    input  wire [31:0]                       dram_fill_rsp_data[`BANK_LINE_SIZE_RNG],
+    input  wire [31:0]                       dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
 
     // Req I Mem
@@ -68,11 +61,11 @@ module Vortex
 
 
 	// Dcache Interface
-	VX_gpu_dcache_res_inter  VX_dcache_rsp();
-	VX_gpu_dcache_req_inter  VX_dcache_req();
+	VX_gpu_dcache_res_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_rsp();
+	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_req();
 
-	VX_gpu_dcache_dram_req_inter VX_gpu_dcache_dram_req();
-	VX_gpu_dcache_dram_res_inter VX_gpu_dcache_dram_res();
+	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_dcache_dram_req();
+	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_dcache_dram_res();
 
 
 	assign VX_gpu_dcache_dram_res.dram_fill_rsp      = dram_fill_rsp;
@@ -83,12 +76,12 @@ module Vortex
 	assign dram_req_read     = VX_gpu_dcache_dram_req.dram_req_read;
 	assign dram_req_addr     = VX_gpu_dcache_dram_req.dram_req_addr;
 	assign dram_req_size     = VX_gpu_dcache_dram_req.dram_req_size;
-	assign dram_expected_lat = `SIMULATED_DRAM_LATENCY_CYCLES;
+	assign dram_expected_lat = `DSIMULATED_DRAM_LATENCY_CYCLES;
 	assign dram_fill_accept  = VX_gpu_dcache_dram_req.dram_fill_accept;
 
 	genvar wordy;
 	generate
-		for (wordy = 0; wordy < `BANK_LINE_SIZE_WORDS; wordy=wordy+1) begin
+		for (wordy = 0; wordy < `DBANK_LINE_SIZE_WORDS; wordy=wordy+1) begin
 			assign VX_gpu_dcache_dram_res.dram_fill_rsp_data[wordy] = dram_fill_rsp_data[wordy];
 			assign dram_req_data[wordy]                             = VX_gpu_dcache_dram_req.dram_req_data[wordy];
 		end
