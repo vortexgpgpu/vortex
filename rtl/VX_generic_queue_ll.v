@@ -75,6 +75,12 @@ module VX_generic_queue_ll
                 end
             end
         end    
+
+		always @(posedge clk) begin
+			if (writing) begin 
+				data[wr_ctr_r] <= in_data;
+			end
+		end
    
         always @(posedge clk) begin
             if (reset) begin
@@ -92,15 +98,13 @@ module VX_generic_queue_ll
                     end
                 end
 
-                if (!(!reading && bypass_r)) begin
-                    bypass_r <= writing && (empty_r || (1 == size_r && reading));
-                    curr_r <= in_data;
-                end
+                bypass_r <= writing && (empty_r || (1 == size_r) && reading);
+                curr_r <= in_data;
                 head_r <= data[reading ? rd_next_ptr_r : rd_ptr_r];
             end
         end
-        
-        assign out_data = bypass_r ? curr_r : head_r;
+
+		assign out_data = bypass_r ? curr_r : head_r;
         assign empty = empty_r;
         assign full = full_r;
     end
