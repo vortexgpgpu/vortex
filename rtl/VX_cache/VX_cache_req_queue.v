@@ -63,25 +63,27 @@ module VX_cache_req_queue (
 
     wire[`NUMBER_REQUESTS-1:0]        updated_valids;
 
+    wire o_empty;
+
 	wire use_empty = !(|use_per_valids);
-	wire out_empty = !(|out_per_valids);
+	wire out_empty = !(|out_per_valids) || o_empty;
 
 	wire push_qual = reqq_push && !reqq_full;
-	wire pop_qual  = reqq_pop  && use_empty && !out_empty && !reqq_empty;
+	wire pop_qual  = reqq_pop  && use_empty && !out_empty;
 
-	VX_generic_queue #(.DATAW( (`NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(`REQQ_SIZE)) reqq_queue(
+	VX_generic_queue_ll #(.DATAW( (`NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 ), .SIZE(`REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
 		.in_data ({bank_valids   , bank_addr   , bank_writedata   , bank_rd   , bank_wb   , bank_warp_num   , bank_mem_read   , bank_mem_write}),
 		.pop     (pop_qual),
 		.out_data({out_per_valids, out_per_addr, out_per_writedata, out_per_rd, out_per_wb, out_per_warp_num, out_per_mem_read, out_per_mem_write}),
-		.empty   (reqq_empty),
+		.empty   (o_empty),
 		.full    (reqq_full)
 		);
 
 
-	wire[`NUMBER_REQUESTS-1:0] real_out_per_valids = out_per_valids & {`NUMBER_REQUESTS{~reqq_empty}};
+	wire[`NUMBER_REQUESTS-1:0] real_out_per_valids = out_per_valids & {`NUMBER_REQUESTS{~out_empty}};
 
 	assign qual_valids     = use_empty ? real_out_per_valids : out_empty ? 0 : use_per_valids; 
 	assign qual_addr       = use_empty ? out_per_addr        : use_per_addr;
@@ -100,6 +102,7 @@ module VX_cache_req_queue (
 		.found (qual_has_request)
 		);
 
+	assign reqq_empty              = !qual_has_request;
 	assign reqq_req_st0            = qual_has_request;
     assign reqq_req_tid_st0        = qual_request_index;
 	assign reqq_req_addr_st0       = qual_addr     [qual_request_index];
@@ -132,9 +135,10 @@ module VX_cache_req_queue (
 				use_per_warp_num  <= qual_warp_num;
 				use_per_mem_read  <= qual_mem_read;  
 				use_per_mem_write <= qual_mem_write;
-			end else if (reqq_pop) begin
-				use_per_valids[qual_request_index] <= updated_valids;
-			end
+			end 
+			// else if (reqq_pop) begin
+			// 	use_per_valids[qual_request_index] <= updated_valids;
+			// end
 		end
 	end
 
