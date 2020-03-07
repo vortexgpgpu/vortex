@@ -46,5 +46,8 @@ debug: compdebug
 w: VERILATORnoWarnings
 	$(MAKECPP)
 
+run: w
+	(cd obj_dir && ./VVortex)
+
 clean:
 	rm obj_dir/*
