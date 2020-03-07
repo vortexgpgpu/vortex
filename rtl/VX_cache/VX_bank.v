@@ -46,7 +46,14 @@ module VX_bank (
 
 	// Snp Request
 	input  wire                                   snp_req,
-	input  wire[31:0]                             snp_req_addr
+	input  wire[31:0]                             snp_req_addr,
+
+	// Lower Level Cache Response
+	input  wire                                   llvq_pop,
+	output wire                                   llvq_valid,
+	output wire[31:0]                             llvq_res_addr,
+	output wire[`BANK_LINE_SIZE_RNG][31:0]        llvq_res_data,
+	output wire[`vx_clog2(`NUMBER_REQUESTS)-1:0]  llvq_res_tid
 );
 
 
@@ -437,6 +444,28 @@ module VX_bank (
 		.empty   (dwbq_empty),
 		.full    (dwbq_full)
 		);
+
+
+	// Lower Cache Hit
+	wire                                  llvq_empty;
+	wire                                  llvq_full;
+	wire                                  llvq_push  = valid_st2 && !miss_st2;
+	wire[`BANK_LINE_SIZE_RNG][31:0]  llvq_push_data  = readdata_st2;
+	wire                                  llvq_addr  = addr_st2;
+	wire[`vx_clog2(`NUMBER_REQUESTS)-1:0] llvq_tid   = miss_add_tid; 
+
+	assign                               llvq_valid = !llvq_empty;
+
+	VX_generic_queue_ll #(.DATAW(`vx_clog2(`NUMBER_REQUESTS) + 32 + (`BANK_LINE_SIZE_WORDS * 32)), .SIZE(`LLVQ_SIZE)) llv_queue(
+	.clk     (clk),
+	.reset   (reset),
+	.push    (llvq_push),
+	.in_data ({llvq_tid    , llvq_addr    , llvq_push_data}),
+	.pop     (llvq_pop),
+	.out_data({llvq_res_tid, llvq_res_addr, llvq_res_data}),
+	.empty   (llvq_empty),
+	.full    (llvq_full)
+	);
 
 
 	assign stall_bank_pipe = (cwbq_push && cwbq_full) || (dwbq_push && dwbq_full) || (miss_add && mrvq_full) || (dram_fill_req && dram_fill_req_queue_full);

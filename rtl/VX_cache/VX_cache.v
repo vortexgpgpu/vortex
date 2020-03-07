@@ -45,7 +45,13 @@ module VX_cache (
 
     // Snoop Req
     input wire                               snp_req,
-    input wire[31:0]                         snp_req_addr
+    input wire[31:0]                         snp_req_addr,
+
+    // Lower Level Cache 
+    input  wire                             llvq_pop,
+    output wire[`NUMBER_REQUESTS-1:0]       llvq_valid,
+    output wire[`NUMBER_REQUESTS-1:0][31:0] llvq_res_addr,
+    output wire[`NUMBER_REQUESTS-1:0][`BANK_LINE_SIZE_RNG][31:0] llvq_res_data
 
 );
 
@@ -73,10 +79,30 @@ module VX_cache (
 
     wire[`NUMBER_BANKS-1:0]                                   per_bank_reqq_full;
 
+
+    wire[`NUMBER_BANKS-1:0]                                   per_bank_llvq_pop;
+    wire[`NUMBER_BANKS-1:0]                                   per_bank_llvq_valid;
+    wire[`NUMBER_BANKS-1:0][31:0]                             per_bank_llvq_res_addr;
+    wire[`NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_llvq_res_data;
+    wire [`NUMBER_BANKS-1:0][`vx_clog2(`NUMBER_REQUESTS)-1:0] per_bank_llvq_res_tid;
+
     assign delay_req = (|per_bank_reqq_full);
 
 
     assign dram_fill_accept = (`NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
+
+
+    VX_dcache_llv_resp_bank_sel VX_dcache_llv_resp_bank_sel(
+        .per_bank_llvq_pop     (per_bank_llvq_pop),
+        .per_bank_llvq_valid   (per_bank_llvq_valid),
+        .per_bank_llvq_res_addr(per_bank_llvq_res_addr),
+        .per_bank_llvq_res_data(per_bank_llvq_res_data),
+        .per_bank_llvq_res_tid (per_bank_llvq_res_tid),
+        .llvq_pop              (llvq_pop),
+        .llvq_valid            (llvq_valid),
+        .llvq_res_addr         (llvq_res_addr),
+        .llvq_res_data         (llvq_res_data)
+        );
 
     VX_cache_dram_req_arb VX_cache_dram_req_arb(
         .clk                        (clk),
@@ -164,6 +190,14 @@ module VX_cache (
 
             wire                                   curr_bank_reqq_full;
 
+
+            wire                                   curr_bank_llvq_pop;
+            wire                                   curr_bank_llvq_valid;
+            wire[31:0]                             curr_bank_llvq_res_addr;
+            wire[`BANK_LINE_SIZE_RNG][31:0]        curr_bank_llvq_res_data;
+            wire[`vx_clog2(`NUMBER_REQUESTS)-1:0]  curr_bank_llvq_res_tid;
+            
+
             // Core Req
             assign curr_bank_valids              = per_bank_valids[curr_bank];
             assign curr_bank_addr                = core_req_addr;
@@ -207,6 +241,13 @@ module VX_cache (
             assign curr_bank_snp_req_addr = snp_req_addr;
 
 
+             // LLVQ
+            assign curr_bank_llvq_pop                = per_bank_llvq_pop[curr_bank];
+            assign per_bank_llvq_valid[curr_bank]    = curr_bank_llvq_valid;
+            assign per_bank_llvq_res_data[curr_bank] = curr_bank_llvq_res_data;
+            assign per_bank_llvq_res_addr[curr_bank] = curr_bank_llvq_res_addr;
+            assign per_bank_llvq_res_tid[curr_bank]  = curr_bank_llvq_res_tid;
+            
             VX_bank bank (
                 .clk                     (clk),
                 .reset                   (reset),
@@ -252,7 +293,13 @@ module VX_cache (
 
                 // Snoop Request
                 .snp_req                 (curr_bank_snp_req),
-                .snp_req_addr            (curr_bank_snp_req_addr)
+                .snp_req_addr            (curr_bank_snp_req_addr),
+
+                .llvq_pop                (curr_bank_llvq_pop),
+                .llvq_valid              (curr_bank_llvq_valid),
+                .llvq_res_addr           (curr_bank_llvq_res_addr),
+                .llvq_res_data           (curr_bank_llvq_res_data),
+                .llvq_res_tid            (curr_bank_llvq_res_tid)
                 );
 
         end
