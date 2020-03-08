@@ -25,45 +25,45 @@ module VX_dmem_controller (
 
 	wire[`NT_M1:0]       cache_driver_in_valid  = VX_dcache_req.core_req_valid & {`NT{~to_shm}};
 
-	wire[`NT_M1:0]       sm_driver_in_valid     = VX_dcache_req.core_req_valid & {`NT{to_shm}};
-	wire[2:0]            sm_driver_in_mem_read  = !(|sm_driver_in_valid) ? `NO_MEM_READ   : VX_dcache_req.core_req_mem_read;
-	wire[2:0]            sm_driver_in_mem_write = !(|sm_driver_in_valid) ? `NO_MEM_WRITE  : VX_dcache_req.core_req_mem_write;
+	// wire[`NT_M1:0]       sm_driver_in_valid     = VX_dcache_req.core_req_valid & {`NT{to_shm}};
+	// wire[2:0]            sm_driver_in_mem_read  = !(|sm_driver_in_valid) ? `NO_MEM_READ   : VX_dcache_req.core_req_mem_read;
+	// wire[2:0]            sm_driver_in_mem_write = !(|sm_driver_in_valid) ? `NO_MEM_WRITE  : VX_dcache_req.core_req_mem_write;
 
-	wire[`NT_M1:0][31:0] cache_driver_out_data;
-	wire[`NT_M1:0][31:0] sm_driver_out_data;
-	wire[`NT_M1:0]       cache_driver_out_valid; // Not used for now
-	wire                 sm_delay;
+	// wire[`NT_M1:0][31:0] cache_driver_out_data;
+	// wire[`NT_M1:0][31:0] sm_driver_out_data;
+	// wire[`NT_M1:0]       cache_driver_out_valid; // Not used for now
+	// wire                 sm_delay;
 
 
-	VX_shared_memory #(
-		.SM_SIZE                (`SHARED_MEMORY_SIZE),
-	  .SM_BANKS 				(`SHARED_MEMORY_BANKS),
-	  .SM_BYTES_PER_READ      (`SHARED_MEMORY_BYTES_PER_READ),
-	  .SM_WORDS_PER_READ      (`SHARED_MEMORY_WORDS_PER_READ),
-	  .SM_LOG_WORDS_PER_READ  (`SHARED_MEMORY_LOG_WORDS_PER_READ),
-	  .SM_BANK_OFFSET_START   (`SHARED_MEMORY_BANK_OFFSET_ST),
-	  .SM_BANK_OFFSET_END     (`SHARED_MEMORY_BANK_OFFSET_ED),
-	  .SM_BLOCK_OFFSET_START  (`SHARED_MEMORY_BLOCK_OFFSET_ST),
-	  .SM_BLOCK_OFFSET_END    (`SHARED_MEMORY_BLOCK_OFFSET_ED),
-	  .SM_INDEX_START         (`SHARED_MEMORY_INDEX_OFFSET_ST),
-	  .SM_INDEX_END           (`SHARED_MEMORY_INDEX_OFFSET_ED),
-	  .SM_HEIGHT 			  (`SHARED_MEMORY_HEIGHT),
-	  .NUM_REQ                (`SHARED_MEMORY_NUM_REQ),
-	  .BITS_PER_BANK 		  (`SHARED_MEMORY_BITS_PER_BANK) 
-		)
-		shared_memory
-		(
-		.clk       (clk),
-		.reset     (reset),
-		.in_valid  (sm_driver_in_valid),
-		.in_address(VX_dcache_req.core_req_addr),
-		.in_data   (VX_dcache_req.core_req_writedata),
-		.mem_read  (sm_driver_in_mem_read),
-		.mem_write (sm_driver_in_mem_write),
-		.out_valid (cache_driver_out_valid),
-		.out_data  (sm_driver_out_data),
-		.stall     (sm_delay)
-		);
+	// VX_shared_memory #(
+	// 	.SM_SIZE                (`SHARED_MEMORY_SIZE),
+	//   .SM_BANKS 				(`SHARED_MEMORY_BANKS),
+	//   .SM_BYTES_PER_READ      (`SHARED_MEMORY_BYTES_PER_READ),
+	//   .SM_WORDS_PER_READ      (`SHARED_MEMORY_WORDS_PER_READ),
+	//   .SM_LOG_WORDS_PER_READ  (`SHARED_MEMORY_LOG_WORDS_PER_READ),
+	//   .SM_BANK_OFFSET_START   (`SHARED_MEMORY_BANK_OFFSET_ST),
+	//   .SM_BANK_OFFSET_END     (`SHARED_MEMORY_BANK_OFFSET_ED),
+	//   .SM_BLOCK_OFFSET_START  (`SHARED_MEMORY_BLOCK_OFFSET_ST),
+	//   .SM_BLOCK_OFFSET_END    (`SHARED_MEMORY_BLOCK_OFFSET_ED),
+	//   .SM_INDEX_START         (`SHARED_MEMORY_INDEX_OFFSET_ST),
+	//   .SM_INDEX_END           (`SHARED_MEMORY_INDEX_OFFSET_ED),
+	//   .SM_HEIGHT 			  (`SHARED_MEMORY_HEIGHT),
+	//   .NUM_REQ                (`SHARED_MEMORY_NUM_REQ),
+	//   .BITS_PER_BANK 		  (`SHARED_MEMORY_BITS_PER_BANK) 
+	// 	)
+	// 	shared_memory
+	// 	(
+	// 	.clk       (clk),
+	// 	.reset     (reset),
+	// 	.in_valid  (sm_driver_in_valid),
+	// 	.in_address(VX_dcache_req.core_req_addr),
+	// 	.in_data   (VX_dcache_req.core_req_writedata),
+	// 	.mem_read  (sm_driver_in_mem_read),
+	// 	.mem_write (sm_driver_in_mem_write),
+	// 	.out_valid (cache_driver_out_valid),
+	// 	.out_data  (sm_driver_out_data),
+	// 	.stall     (sm_delay)
+	// 	);
 
 
     wire                                                    Dllvq_pop;
