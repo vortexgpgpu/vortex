@@ -14,6 +14,8 @@ module VX_tag_data_access
 	parameter NUMBER_REQUESTS               = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
+    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
+    parameter FUNC_ID                       = 0,
 
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
@@ -101,6 +103,7 @@ module VX_tag_data_access
         .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
         .NUMBER_REQUESTS              (NUMBER_REQUESTS),
         .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+        .FUNC_ID                      (FUNC_ID),
         .REQQ_SIZE                    (REQQ_SIZE),
         .MRVQ_SIZE                    (MRVQ_SIZE),
         .DFPQ_SIZE                    (DFPQ_SIZE),
@@ -155,9 +158,9 @@ module VX_tag_data_access
 	endgenerate
 
 
-	assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-2];
-	assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-2];
-	assign use_read_tag_st1e   = read_tag_st1c  [STAGE_1_CYCLES-2];
+	assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-2] || (FUNC_ID == `SFUNC_ID); // If shared memory, always valid
+	assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-2] && (FUNC_ID == `DFUNC_ID); // Dirty only applies in Dcache
+	assign use_read_tag_st1e   = (FUNC_ID == `SFUNC_ID) ? writeaddr_st1e[`TAG_SELECT_ADDR_RNG] : read_tag_st1c  [STAGE_1_CYCLES-2]; // Tag is always the same in SM
 
 	genvar curr_w;
 	for (curr_w = 0; curr_w < `BANK_LINE_SIZE_WORDS; curr_w = curr_w+1) assign use_read_data_st1e[curr_w][31:0]  = read_data_st1c[STAGE_1_CYCLES-2][curr_w][31:0];

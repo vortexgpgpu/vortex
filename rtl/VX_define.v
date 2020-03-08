@@ -228,6 +228,8 @@
    `define DNUMBER_REQUESTS `NT
    // Number of cycles to complete stage 1 (read from memory)
    `define DSTAGE_1_CYCLES 2
+   // Function ID
+   `define DFUNC_ID 0
 
    // Bank Number of words in a line
    `define DBANK_LINE_SIZE_WORDS (`DBANK_LINE_SIZE_BYTES / `DWORD_SIZE_BYTES)
@@ -277,6 +279,8 @@
    `define INUMBER_REQUESTS 1
    // Number of cycles to complete stage 1 (read from memory)
    `define ISTAGE_1_CYCLES 2
+   // Function ID
+   `define IFUNC_ID 1
 
    // Bank Number of words in a line
    `define IBANK_LINE_SIZE_WORDS (`IBANK_LINE_SIZE_BYTES / `IWORD_SIZE_BYTES)
@@ -286,7 +290,7 @@
    // Core Request Queue Size
    `define IREQQ_SIZE `NW
    // Miss Reserv Queue Knob
-   `define IMRVQ_SIZE `DREQQ_SIZE
+   `define IMRVQ_SIZE `IREQQ_SIZE
    // Dram Fill Rsp Queue Size
    `define IDFPQ_SIZE 2
    // Snoop Req Queue
@@ -294,11 +298,11 @@
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
    // Core Writeback Queue Size
-   `define ICWBQ_SIZE `DREQQ_SIZE
+   `define ICWBQ_SIZE `IREQQ_SIZE
    // Dram Writeback Queue Size
-   `define IDWBQ_SIZE 4
+   `define IDWBQ_SIZE 0
    // Dram Fill Req Queue Size
-   `define IDFQQ_SIZE `DREQQ_SIZE
+   `define IDFQQ_SIZE `IREQQ_SIZE
    // Lower Level Cache Hit Queue Size
    `define ILLVQ_SIZE 0
 
@@ -310,7 +314,55 @@
 
 // ========================================= Icache Configurable Knobs =========================================
 
+// ========================================= Icache Configurable Knobs =========================================
 
+// General Cache Knobs
+   // Size of cache in bytes
+   `define SCACHE_SIZE_BYTES 1024
+   // Size of line inside a bank in bytes
+   `define SBANK_LINE_SIZE_BYTES 16
+   // Number of banks {1, 2, 4, 8,...}
+   `define SNUMBER_BANKS 8
+   // Size of a word in bytes
+   `define SWORD_SIZE_BYTES 4
+   // Number of Word requests per cycle {1, 2, 4, 8, ...}
+   `define SNUMBER_REQUESTS 1
+   // Number of cycles to complete stage 1 (read from memory)
+   `define SSTAGE_1_CYCLES 2
+   // Function ID
+   `define SFUNC_ID 2
+
+   // Bank Number of words in a line
+   `define SBANK_LINE_SIZE_WORDS (`SBANK_LINE_SIZE_BYTES / `SWORD_SIZE_BYTES)
+   `define SBANK_LINE_SIZE_RNG `SBANK_LINE_SIZE_WORDS-1:0
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+   // Core Request Queue Size
+   `define SREQQ_SIZE `NW
+   // Miss Reserv Queue Knob
+   `define SMRVQ_SIZE `SREQQ_SIZE
+   // Dram Fill Rsp Queue Size
+   `define SDFPQ_SIZE 0
+   // Snoop Req Queue
+   `define SSNRQ_SIZE 0
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+   // Core Writeback Queue Size
+   `define SCWBQ_SIZE `SREQQ_SIZE
+   // Dram Writeback Queue Size
+   `define SDWBQ_SIZE 0
+   // Dram Fill Req Queue Size
+   `define SDFQQ_SIZE 0
+   // Lower Level Cache Hit Queue Size
+   `define SLLVQ_SIZE 0
+
+  // Fill Invalidator Size {Fill invalidator must be active}
+  `define SFILL_INVALIDAOR_SIZE 16
+
+// Dram knobs
+   `define SSIMULATED_DRAM_LATENCY_CYCLES 10
+
+// ========================================= Icache Configurable Knobs =========================================
 
 
 `endif
