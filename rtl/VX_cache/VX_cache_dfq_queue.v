@@ -91,7 +91,7 @@ module VX_cache_dfq_queue
 		);
 
 
-	assign qual_bank_dram_fill_req      = use_empty ? out_per_bank_dram_fill_req      : use_per_bank_dram_fill_req; 
+	assign qual_bank_dram_fill_req      = use_empty ? (out_per_bank_dram_fill_req & {NUMBER_BANKS{!o_empty}}) : (use_per_bank_dram_fill_req & {NUMBER_BANKS{!use_empty}}); 
 	assign qual_bank_dram_fill_req_addr = use_empty ? out_per_bank_dram_fill_req_addr : use_per_bank_dram_fill_req_addr;
 
 	wire[`vx_clog2(NUMBER_BANKS)-1:0] qual_request_index;

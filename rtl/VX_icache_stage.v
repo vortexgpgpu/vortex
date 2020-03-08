@@ -30,7 +30,7 @@ module VX_icache_stage (
 		assign fe_inst_meta_id.valid       = fe_inst_meta_fi.valid & {`NT{!icache_stage_delay}};
 
 		assign icache_stage_wid            = fe_inst_meta_fi.warp_num;
-		assign icache_stage_valids         = fe_inst_meta_fi.valid;
+		assign icache_stage_valids         = fe_inst_meta_fi.valid & {`NT{!icache_stage_delay}};
 
 
 endmodule

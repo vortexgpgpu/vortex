@@ -115,7 +115,7 @@
 `define TAG_SELECT_SIZE_RNG `TAG_SELECT_SIZE_END-1:0
 
 
-`define BASE_ADDR_MASK (~((1<<`WORD_SELECT_ADDR_END)-1))
+`define BASE_ADDR_MASK (~((1<<(`WORD_SELECT_ADDR_END+1))-1))
 
 
 `endif

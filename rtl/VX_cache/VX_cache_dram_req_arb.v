@@ -101,7 +101,7 @@ module VX_cache_dram_req_arb
 		);
 
 
-	assign per_bank_dram_wb_queue_pop = per_bank_dram_wb_req & (~(1 << dwb_bank));
+	assign per_bank_dram_wb_queue_pop = per_bank_dram_wb_req & ((1 << dwb_bank));
 
 
 	assign dram_req               = dwb_valid || dfqq_req;
