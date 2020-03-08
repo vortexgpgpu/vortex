@@ -27,6 +27,7 @@ assign VX_writeback_inter.rd           = VX_writeback_temp.rd;
 assign VX_writeback_inter.write_data   = VX_writeback_temp.write_data;
 assign VX_writeback_inter.wb_valid     = VX_writeback_temp.wb_valid;
 assign VX_writeback_inter.wb_warp_num  = VX_writeback_temp.wb_warp_num;
+assign VX_writeback_inter.wb_pc        = VX_writeback_temp.wb_pc;
 
 // assign VX_writeback_inter(VX_writeback_temp);
 

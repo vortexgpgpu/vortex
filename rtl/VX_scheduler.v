@@ -9,11 +9,14 @@ module VX_scheduler (
 	VX_frE_to_bckE_req_inter  VX_bckE_req,
 	VX_wb_inter               VX_writeback_inter,
 
-	output wire schedule_delay
+	output wire schedule_delay,
+	output wire is_empty
 	
 );
 
+	reg[31:0] count_valid;
 
+	assign is_empty = count_valid == 0;
 
 	reg[31:0][`NT-1:0] rename_table[`NW-1:0];
 
@@ -67,6 +70,10 @@ module VX_scheduler (
 		end else begin
 			if (valid_wb                 ) rename_table[VX_writeback_inter.wb_warp_num][VX_writeback_inter.rd] <= rename_table[VX_writeback_inter.wb_warp_num][VX_writeback_inter.rd] & (~VX_writeback_inter.wb_valid);
 			if (!schedule_delay && wb_inc) rename_table[VX_bckE_req.warp_num          ][VX_bckE_req.rd       ] <= VX_bckE_req.valid;
+		
+			if (valid_wb && ((rename_table[VX_writeback_inter.wb_warp_num][VX_writeback_inter.rd] & (~VX_writeback_inter.wb_valid)) == 0)) count_valid = count_valid - 1;
+			if (!schedule_delay && wb_inc) count_valid = count_valid + 1;
+
 		end
 	end
 

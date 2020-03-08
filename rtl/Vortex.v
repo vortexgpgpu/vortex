@@ -40,6 +40,11 @@ module Vortex
     output wire        out_ebreak
 	);
 
+	wire scheduler_empty;
+	wire out_ebreak_unqual;
+
+	assign out_ebreak = out_ebreak_unqual && (scheduler_empty && 1);
+
 
 	reg[31:0] icache_banks               = `ICACHE_BANKS;
 	reg[31:0] icache_num_words_per_block = `ICACHE_NUM_WORDS_PER_BLOCK;
@@ -63,6 +68,7 @@ module Vortex
 	// Dcache Interface
 	VX_gpu_dcache_res_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_rsp();
 	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_req();
+	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_req_qual();
 
 	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_dcache_dram_req();
 	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_dcache_dram_res();
@@ -88,9 +94,20 @@ module Vortex
 	endgenerate
 
 	wire temp_io_valid      = (!memory_delay) && (|VX_dcache_req.core_req_valid) && (VX_dcache_req.core_req_mem_write != `NO_MEM_WRITE) && (VX_dcache_req.core_req_addr[0] == 32'h00010000);
-	wire[31:0] temp_io_data = VX_dcache_req.core_req_valid[0];
+	wire[31:0] temp_io_data = VX_dcache_req.core_req_writedata[0];
 	assign io_valid         = temp_io_valid;
 	assign io_data          = temp_io_data;
+
+	assign VX_dcache_req_qual.core_req_valid        = VX_dcache_req.core_req_valid & {`NT{~io_valid}};
+	assign VX_dcache_req_qual.core_req_addr         = VX_dcache_req.core_req_addr;
+	assign VX_dcache_req_qual.core_req_writedata    = VX_dcache_req.core_req_writedata;
+	assign VX_dcache_req_qual.core_req_mem_read     = VX_dcache_req.core_req_mem_read;
+	assign VX_dcache_req_qual.core_req_mem_write    = VX_dcache_req.core_req_mem_write;
+	assign VX_dcache_req_qual.core_req_rd           = VX_dcache_req.core_req_rd;
+	assign VX_dcache_req_qual.core_req_wb           = VX_dcache_req.core_req_wb;
+	assign VX_dcache_req_qual.core_req_warp_num     = VX_dcache_req.core_req_warp_num;
+	assign VX_dcache_req_qual.core_req_pc           = VX_dcache_req.core_req_pc;
+	assign VX_dcache_req_qual.core_no_wb_slot       = VX_dcache_req.core_no_wb_slot;
 
 
 	VX_icache_response_inter icache_response_fe();
@@ -145,7 +162,7 @@ VX_front_end vx_front_end(
 	.icache_request_fe   (icache_request_fe),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
-	.fetch_ebreak        (out_ebreak)
+	.fetch_ebreak        (out_ebreak_unqual)
 	);
 
 VX_scheduler schedule(
@@ -156,7 +173,8 @@ VX_scheduler schedule(
 	.gpr_stage_delay   (gpr_stage_delay),
 	.VX_bckE_req       (VX_bckE_req),
 	.VX_writeback_inter(VX_writeback_inter),
-	.schedule_delay    (schedule_delay)
+	.schedule_delay    (schedule_delay),
+	.is_empty          (scheduler_empty)
 	);
 
 VX_back_end vx_back_end(
@@ -184,7 +202,7 @@ VX_dmem_controller VX_dmem_controller(
 	.VX_dram_req_rsp_icache   (VX_dram_req_rsp_icache),
 	.VX_icache_req            (icache_request_fe),
 	.VX_icache_rsp            (icache_response_fe),
-	.VX_dcache_req            (VX_dcache_req),
+	.VX_dcache_req            (VX_dcache_req_qual),
 	.VX_dcache_rsp            (VX_dcache_rsp)
 	);
 

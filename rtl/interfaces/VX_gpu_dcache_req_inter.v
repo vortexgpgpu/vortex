@@ -24,7 +24,7 @@ interface VX_gpu_dcache_req_inter
     wire [31:0]                        core_req_pc;
 
     // Can't WB
-    wire                              core_no_wb_slot;
+    wire                               core_no_wb_slot;
 
 endinterface
 

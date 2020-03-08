@@ -95,7 +95,7 @@ module VX_cache_miss_resrv
 
 
 		wire                            enqueue_possible = !miss_resrv_full;
-		wire[`vx_clog2(MRVQ_SIZE)-1:0] enqueue_index    = tail_ptr;
+		wire[`vx_clog2(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
 
 		reg[MRVQ_SIZE-1:0] make_ready;
 		genvar curr_e;

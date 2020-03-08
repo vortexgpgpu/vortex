@@ -98,13 +98,11 @@ module VX_fill_invalidator
 		wire                                          enqueue_found;
 
 		VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(
-			.valids(fills_active),
+			.valids(~fills_active),
 			.index (enqueue_index),
 			.found (enqueue_found)
 			);
 
-
-		reg[FILL_INVALIDAOR_SIZE-1:0] new_valids;
 
 
 
@@ -113,7 +111,7 @@ module VX_fill_invalidator
 				fills_active  <= 0;
 				fills_address <= 0;
 			end else begin
-				if (enqueue_found && !invalidate_fill) begin
+				if (possible_fill && !invalidate_fill) begin
 					fills_active[enqueue_index]  <= 1;
 					fills_address[enqueue_index] <= fill_addr;
 				end

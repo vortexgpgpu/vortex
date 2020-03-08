@@ -254,7 +254,7 @@ module VX_cache
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
         ) 
-        VX_cache_core_req_bank_sel
+        VX_cache_core_wb_sel_merge
         (
         .per_bank_wb_valid   (per_bank_wb_valid),
         .per_bank_wb_tid     (per_bank_wb_tid),

@@ -294,11 +294,22 @@ module VX_bank
 		);
 
 	wire stall_bank_pipe;
+	reg  is_fill_in_pipe; 
 
+	genvar p_stage;
+	always @(*) begin
+		assign is_fill_in_pipe = 0;
+		for (p_stage = 0; p_stage < STAGE_1_CYCLES; p_stage=p_stage+1) begin
+			if (is_fill_st1[p_stage]) assign is_fill_in_pipe = 1;
+		end
+		
+		if (is_fill_st2) assign is_fill_in_pipe = 1;
+	end
+		
 
 	assign dfpq_pop =              !dfpq_empty    && !stall_bank_pipe && !dfpq_hazard_st0;
 	assign mrvq_pop = !dfpq_pop && mrvq_valid_st0 && !stall_bank_pipe && !mrvq_hazard_st0;
-	assign reqq_pop = !mrvq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !reqq_hazard_st0;
+	assign reqq_pop = !mrvq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !(reqq_hazard_st0 || (mrvq_valid_st0 && mrvq_hazard_st0)) && !is_fill_in_pipe;
 	assign snrq_pop = !reqq_pop && snrq_valid_st0 && !stall_bank_pipe && !snrq_hazard_st0;
 
 
@@ -495,14 +506,15 @@ module VX_bank
 
 
 	// Enqueue to miss reserv if it's a valid miss
-	assign miss_add       = valid_st2 && miss_st2;
+	assign miss_add       = valid_st2 && miss_st2 && !stall_bank_pipe && !mrvq_full && !(dirty_st2 && dwbq_full);
+	assign miss_add_pc    = pc_st2;
 	assign miss_add_addr  = addr_st2;
 	assign miss_add_data  = writeword_st2;
 	assign {miss_add_rd, miss_add_wb, miss_add_warp_num, miss_add_mem_read, miss_add_mem_write, miss_add_tid} = inst_meta_st2;
 
 
 	// Enqueue to CWB Queue
-	wire                                   cwbq_push      = (valid_st2 && !miss_st2);
+	wire                                   cwbq_push      = (valid_st2 && !miss_st2) && !cwbq_full & !llvq_full;
 	wire [31:0]                            cwbq_data      = readword_st2;
 	wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  cwbq_tid       = miss_add_tid;
 	wire [4:0]                             cwbq_rd        = miss_add_rd;
@@ -527,8 +539,8 @@ module VX_bank
 		);
 
 	// Enqueue to DWB Queue
-	wire                             dwbq_push     = (valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2;
-	wire[31:0]                       dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]};
+	wire                             dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && !dwbq_full && !(!fill_saw_dirty_st2 && mrvq_full);
+	wire[31:0]                       dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]} & `BASE_ADDR_MASK;
 	wire[`BANK_LINE_SIZE_RNG][31:0]  dwbq_req_data = readdata_st2;
 	wire                             dwbq_empty;
 	wire                             dwbq_full;
@@ -536,6 +548,7 @@ module VX_bank
 
 	wire invalidate_fill;
 	wire possible_fill = valid_st2 && miss_st2;
+	wire[31:0] fill_invalidator_addr = addr_st2 & `BASE_ADDR_MASK;
 	VX_fill_invalidator  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
@@ -560,16 +573,16 @@ module VX_bank
 		.reset             (reset),
 		.possible_fill     (possible_fill),
 		.success_fill      (is_fill_st2),
-		.fill_addr         (addr_st2),
+		.fill_addr         (fill_invalidator_addr),
 
 		.invalidate_fill   (invalidate_fill)
 		);
 
 	// Enqueu in dram_fill_req
-	assign dram_fill_req       = valid_st2 && miss_st2 && !invalidate_fill;
+	assign dram_fill_req       = valid_st2 && miss_st2 && !invalidate_fill && !dram_fill_req_queue_full;
 	assign dram_because_of_snp = is_snp_st2 && valid_st2 && miss_st2;
 	assign dram_snp_full       = snrq_full && snp_req;
-	assign dram_fill_req_addr  = addr_st2;
+	assign dram_fill_req_addr  = addr_st2 & `BASE_ADDR_MASK;
 
 	assign dram_wb_req = !dwbq_empty;
 	VX_generic_queue_ll #(.DATAW( 32 + (`BANK_LINE_SIZE_WORDS * 32)), .SIZE(DWBQ_SIZE)) dwb_queue(
@@ -589,7 +602,7 @@ module VX_bank
 	// Lower Cache Hit
 	wire                                  llvq_empty;
 	wire                                  llvq_full;
-	wire                                  llvq_push  = valid_st2 && !miss_st2;
+	wire                                  llvq_push  = valid_st2 && !miss_st2 && !llvq_full && !cwbq_full;
 	wire[`BANK_LINE_SIZE_RNG][31:0]  llvq_push_data  = readdata_st2;
 	wire[31:0]                            llvq_addr  = addr_st2;
 	wire[`vx_clog2(NUMBER_REQUESTS)-1:0] llvq_tid   = miss_add_tid; 
@@ -608,7 +621,7 @@ module VX_bank
 	);
 
 
-	assign stall_bank_pipe = (cwbq_push && cwbq_full) || (dwbq_push && dwbq_full) || (miss_add && mrvq_full) || (dram_fill_req && dram_fill_req_queue_full);
+	assign stall_bank_pipe = (cwbq_push && cwbq_full) || (llvq_push && llvq_full) || (dwbq_push && dwbq_full) || (miss_add && mrvq_full) || (dram_fill_req && dram_fill_req_queue_full);
 
 endmodule
 

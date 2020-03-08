@@ -54,7 +54,10 @@ module VX_warp_scheduler (
 	output wire[`NW_M1:0] warp_num,
 	output wire[31:0]     warp_pc,
 	output wire           out_ebreak,
-	output wire           scheduled_warp
+	output wire           scheduled_warp,
+
+	input  wire[`NW_M1:0]    icache_stage_wid,
+	input  wire[`NT-1:0]     icache_stage_valids
 
 );
 
@@ -76,8 +79,10 @@ module VX_warp_scheduler (
 	reg[`NW-1:0] warp_active;
 	reg[`NW-1:0] warp_stalled;
 
-	reg[`NW-1:0] visible_active;
-	wire[`NW-1:0] use_active;
+	reg [`NW-1:0]  visible_active;
+	wire[`NW-1:0]  use_active;
+
+	reg [`NW-1:0]  warp_lock;
 
 	wire wstall_this_cycle;
 
@@ -188,7 +193,7 @@ module VX_warp_scheduler (
 
 			// Refilling active warps
 			if (update_visible_active) begin
-				visible_active <= warp_active & (~warp_stalled) & (~total_barrier_stall);
+				visible_active <= warp_active & (~warp_stalled) & (~total_barrier_stall) & ~warp_lock;
 			end
 
 			// Don't change state if stall
@@ -208,6 +213,15 @@ module VX_warp_scheduler (
 				if (branch_dir) warp_pcs[branch_warp_num]     <= branch_dest;
 				warp_stalled[branch_warp_num] <= 0;
 			end
+
+			// Lock/Release
+			if (scheduled_warp && !stall) begin
+				warp_lock[warp_num] <= 1'b1;
+			end
+			if (|icache_stage_valids && !stall) begin
+				warp_lock[icache_stage_wid] <= 1'b0;
+			end
+
 		end
 	end
 
@@ -294,7 +308,7 @@ module VX_warp_scheduler (
 	assign new_pc = warp_pc + 4;
 
 
-	assign use_active = (count_visible_active < 1) ? (warp_active & (~warp_stalled) & (~total_barrier_stall)) : visible_active;
+	assign use_active = (count_visible_active < 1) ? (warp_active & (~warp_stalled) & (~total_barrier_stall) & (~warp_lock)) : visible_active;
 
 	// Choosing a warp to schedule
 	VX_priority_encoder choose_schedule(
