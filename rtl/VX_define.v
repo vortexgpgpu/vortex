@@ -262,7 +262,53 @@
 // ========================================= Dcache Configurable Knobs =========================================
 
 
+// ========================================= Icache Configurable Knobs =========================================
 
+// General Cache Knobs
+   // Size of cache in bytes
+   `define ICACHE_SIZE_BYTES 1024
+   // Size of line inside a bank in bytes
+   `define IBANK_LINE_SIZE_BYTES 16
+   // Number of banks {1, 2, 4, 8,...}
+   `define INUMBER_BANKS 8
+   // Size of a word in bytes
+   `define IWORD_SIZE_BYTES 4
+   // Number of Word requests per cycle {1, 2, 4, 8, ...}
+   `define INUMBER_REQUESTS 1
+   // Number of cycles to complete stage 1 (read from memory)
+   `define ISTAGE_1_CYCLES 2
+
+   // Bank Number of words in a line
+   `define IBANK_LINE_SIZE_WORDS (`IBANK_LINE_SIZE_BYTES / `IWORD_SIZE_BYTES)
+   `define IBANK_LINE_SIZE_RNG `IBANK_LINE_SIZE_WORDS-1:0
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+   // Core Request Queue Size
+   `define IREQQ_SIZE `NW
+   // Miss Reserv Queue Knob
+   `define IMRVQ_SIZE `DREQQ_SIZE
+   // Dram Fill Rsp Queue Size
+   `define IDFPQ_SIZE 2
+   // Snoop Req Queue
+   `define ISNRQ_SIZE 8
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+   // Core Writeback Queue Size
+   `define ICWBQ_SIZE `DREQQ_SIZE
+   // Dram Writeback Queue Size
+   `define IDWBQ_SIZE 4
+   // Dram Fill Req Queue Size
+   `define IDFQQ_SIZE `DREQQ_SIZE
+   // Lower Level Cache Hit Queue Size
+   `define ILLVQ_SIZE 0
+
+  // Fill Invalidator Size {Fill invalidator must be active}
+  `define IFILL_INVALIDAOR_SIZE 16
+
+// Dram knobs
+   `define ISIMULATED_DRAM_LATENCY_CYCLES 10
+
+// ========================================= Icache Configurable Knobs =========================================
 
 
 
