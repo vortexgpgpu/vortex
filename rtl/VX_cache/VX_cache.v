@@ -14,6 +14,8 @@ module VX_cache
     parameter NUMBER_REQUESTS               = 2, 
     // Number of cycles to complete stage 1 (read from memory)
     parameter STAGE_1_CYCLES                = 2, 
+    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
+    parameter FUNC_ID                       = 0,
 
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
@@ -384,6 +386,7 @@ module VX_cache
             .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
             .NUMBER_REQUESTS              (NUMBER_REQUESTS),
             .STAGE_1_CYCLES               (STAGE_1_CYCLES),
+            .FUNC_ID                      (FUNC_ID),
             .REQQ_SIZE                    (REQQ_SIZE),
             .MRVQ_SIZE                    (MRVQ_SIZE),
             .DFPQ_SIZE                    (DFPQ_SIZE),

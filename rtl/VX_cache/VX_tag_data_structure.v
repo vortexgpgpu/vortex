@@ -14,7 +14,9 @@ module VX_tag_data_structure
     parameter NUMBER_REQUESTS               = 2, 
     // Number of cycles to complete stage 1 (read from memory)
     parameter STAGE_1_CYCLES                = 2, 
-
+    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
+    parameter FUNC_ID                       = 0,
+    
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
     // Core Request Queue Size
