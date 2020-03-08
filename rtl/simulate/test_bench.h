@@ -78,6 +78,7 @@ class Vortex
         int debug_debugAddr;
         double stats_sim_time;
         std::vector<dram_req_t> dram_req_vec;
+        std::vector<dram_req_t> I_dram_req_vec;
         #ifdef VCD_OUTPUT
         VerilatedVcdC   *m_trace;
         #endif
@@ -165,64 +166,83 @@ void Vortex::print_stats(bool cycle_test)
 bool Vortex::ibus_driver()
 {
     
-    vortex->i_m_ready_i = false;
-
+    // Iterate through each element, and get pop index
+    int dequeue_index  = -1;
+    bool dequeue_valid = false;
+    for (int i = 0; i < this->I_dram_req_vec.size(); i++)
     {
-
-        // int dcache_num_words_per_block
-
-        if (refill_i)
+        if (this->I_dram_req_vec[i].cycles_left > 0)
         {
-            refill_i            = false;
-            vortex->i_m_ready_i = true;
-
-            for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__icache_banks; curr_bank++)
-            {
-                for (int curr_word = 0; curr_word < vortex->Vortex__DOT__icache_num_words_per_block; curr_word++)
-                {
-                    unsigned curr_index = (curr_word * vortex->Vortex__DOT__icache_banks) + curr_bank;
-                    unsigned curr_addr  = refill_addr_i + (4*curr_index);
-
-                    unsigned curr_value;
-                    ram.getWord(curr_addr, &curr_value);
-
-                    vortex->i_m_readdata_i[curr_bank][curr_word] = curr_value;
-
-                }
-            }
-        }
-        else
-        {
-            if (vortex->o_m_valid_i)
-            {
-
-                if (vortex->o_m_read_or_write_i)
-                {
-                    // fprintf(stderr, "++++++++++++++++++++++++++++++++\n");
-                    unsigned base_addr = vortex->o_m_evict_addr_i;
-
-                    for (int curr_bank = 0; curr_bank < vortex->Vortex__DOT__icache_banks; curr_bank++)
-                    {
-                        for (int curr_word = 0; curr_word < vortex->Vortex__DOT__icache_num_words_per_block; curr_word++)
-                        {
-                            unsigned curr_index = (curr_word * vortex->Vortex__DOT__icache_banks) + curr_bank;
-                            unsigned curr_addr  = base_addr + (4*curr_index);
-
-                            unsigned curr_value = vortex->o_m_writedata_i[curr_bank][curr_word];
-
-                            ram.writeWord( curr_addr, &curr_value);
-                        }
-                    }
-                }
-
-                // Respond next cycle
-                refill_i      = true;
-                refill_addr_i = vortex->o_m_read_addr_i;
-            }
+            this->I_dram_req_vec[i].cycles_left -= 1;   
         }
 
+        if ((this->I_dram_req_vec[i].cycles_left == 0) && (!dequeue_valid))
+        {
+            dequeue_index = i;
+            dequeue_valid = true;
+        }
     }
 
+
+    if (vortex->I_dram_req)
+    {
+        // std::cout << "Icache Dram Request received!\n";
+        if (vortex->I_dram_req_read)
+        {
+            // std::cout << "Icache Dram Request is read!\n";
+            // Need to add an element
+            dram_req_t dram_req;
+            dram_req.cycles_left = vortex->I_dram_expected_lat;
+            dram_req.data_length = vortex->I_dram_req_size / 4;
+            dram_req.base_addr   = vortex->I_dram_req_addr;
+            dram_req.data        = (unsigned *) malloc(dram_req.data_length * sizeof(unsigned));
+
+            for (int i = 0; i < dram_req.data_length; i++)
+            {
+                unsigned curr_addr = dram_req.base_addr + (i*4);
+                unsigned data_rd;
+                ram.getWord(curr_addr, &data_rd);
+                dram_req.data[i] = data_rd;
+            }
+            // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
+            this->I_dram_req_vec.push_back(dram_req);
+        }
+
+        if (vortex->I_dram_req_write)
+        {
+            unsigned base_addr   = vortex->I_dram_req_addr;
+            unsigned data_length = vortex->I_dram_req_size / 4;
+
+            for (int i = 0; i < data_length; i++)
+            {
+                unsigned curr_addr = base_addr + (i*4);
+                unsigned data_wr   = vortex->I_dram_req_data[i];
+                ram.writeWord(curr_addr, &data_wr);
+            }
+        }
+    }
+
+    if (vortex->I_dram_fill_accept && dequeue_valid)
+    {
+        // std::cout << "Icache Dram Response Sending...!\n";
+
+        vortex->I_dram_fill_rsp      = 1;
+        vortex->I_dram_fill_rsp_addr = this->I_dram_req_vec[dequeue_index].base_addr;
+        // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->I_dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
+
+        for (int i = 0; i < this->I_dram_req_vec[dequeue_index].data_length; i++)
+        {
+            vortex->I_dram_fill_rsp_data[i] = this->I_dram_req_vec[dequeue_index].data[i];
+        }
+        free(this->I_dram_req_vec[dequeue_index].data);
+
+        this->I_dram_req_vec.erase(this->I_dram_req_vec.begin() + dequeue_index);
+    }
+    else
+    {
+        vortex->I_dram_fill_rsp      = 0;
+        vortex->I_dram_fill_rsp_addr = 0;
+    }
 
     return false;
 
@@ -230,13 +250,16 @@ bool Vortex::ibus_driver()
 
 void Vortex::io_handler()
 {
+    // std::cout << "Checking\n";
     if (vortex->io_valid)
     {
         uint32_t data_write = (uint32_t) vortex->io_data;
-
+        // std::cout << "IO VALID!\n";
         char c = (char) data_write;
         std::cerr << c;
         // std::cout << c;
+
+        std::cout << std::flush;
     }
 }
 
@@ -280,6 +303,7 @@ bool Vortex::dbus_driver()
                 ram.getWord(curr_addr, &data_rd);
                 dram_req.data[i] = data_rd;
             }
+            // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
             this->dram_req_vec.push_back(dram_req);
         }
 
@@ -301,6 +325,8 @@ bool Vortex::dbus_driver()
     {
         vortex->dram_fill_rsp      = 1;
         vortex->dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
+        // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
+
         for (int i = 0; i < this->dram_req_vec[dequeue_index].data_length; i++)
         {
             vortex->dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];

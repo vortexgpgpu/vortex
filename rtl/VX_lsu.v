@@ -56,6 +56,10 @@ module VX_lsu (
 	assign VX_dcache_req.core_req_warp_num   = use_warp_num;
 	assign VX_dcache_req.core_req_pc         = use_pc;
 
+	// Core can't accept response
+	assign VX_dcache_req.core_no_wb_slot     = no_slot_mem;
+	
+
 	// Cache can't accept request
 	assign out_delay = VX_dcache_rsp.delay_req;
 
@@ -67,33 +71,8 @@ module VX_lsu (
 	assign VX_mem_wb.loaded_data = VX_dcache_rsp.core_wb_readdata;
 	assign VX_mem_wb.mem_wb_pc   = VX_dcache_rsp.core_wb_pc[0];
 
-	// Core can't accept response
-	assign VX_dcache_req.core_no_wb_slot     = no_slot_mem;
 
-	// integer curr_t;
-	// always @(negedge clk) begin
-	// 	for (int curr_t = 0; curr_t < `NT; curr_t=curr_t+1)
-	// 	if ((VX_dcache_req.out_cache_driver_in_valid[curr_t]) && !out_delay) begin
-	// 		if (VX_dcache_req.out_cache_driver_in_mem_read != `NO_MEM_READ) begin
-	// 			$display("Reading addr: %x val: %x", address[0], VX_mem_wb.loaded_data[0]);
-	// 		end
 
-	// 		if (VX_dcache_req.out_cache_driver_in_mem_write != `NO_MEM_WRITE) begin
-	// 			$display("Writing addr: %x val: %x", address[0], VX_dcache_req.out_cache_driver_in_data[0]);
-	// 		end
-	// 	end
-	// end
-
-	// wire zero_temp = 0;
-	// VX_generic_register #(.N(142)) register_wb_data 
-	// (
-	// 	.clk  (clk),
-	// 	.reset(reset),
-	// 	.stall(zero_temp),
-	// 	.flush(out_delay),
-	// 	.in   ({VX_mem_wb_temp.loaded_data, VX_mem_wb_temp.rd, VX_mem_wb_temp.wb, VX_mem_wb_temp.wb_valid, VX_mem_wb_temp.wb_warp_num}),
-	// 	.out  ({VX_mem_wb.loaded_data     , VX_mem_wb.rd     , VX_mem_wb.wb     , VX_mem_wb.wb_valid     , VX_mem_wb.wb_warp_num     })
-	// );
 
 
 endmodule // Memory

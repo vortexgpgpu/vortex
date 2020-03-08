@@ -8,8 +8,8 @@ module VX_front_end (
 
 	VX_warp_ctl_inter         VX_warp_ctl,
 
-	VX_icache_response_inter icache_response_fe,
-	VX_icache_request_inter  icache_request_fe,
+	VX_gpu_dcache_res_inter  VX_icache_rsp,
+	VX_gpu_dcache_req_inter  VX_icache_req,
 
 	VX_jal_response_inter    VX_jal_rsp,
 	VX_branch_response_inter VX_branch_rsp,
@@ -76,15 +76,16 @@ VX_f_d_reg vx_f_i_reg(
 	);
 
 VX_icache_stage VX_icache_stage(
-	.clk               (clk),
-	.reset             (reset),
-	.icache_stage_delay(icache_stage_delay),
+	.clk                (clk),
+	.reset              (reset),
+	.total_freeze       (total_freeze),
+	.icache_stage_delay (icache_stage_delay),
 	.icache_stage_valids(icache_stage_valids),
-	.icache_stage_wid  (icache_stage_wid),
-	.fe_inst_meta_fi   (fe_inst_meta_fi2),
-	.fe_inst_meta_id   (fe_inst_meta_id),
-	.icache_response   (icache_response_fe),
-	.icache_request    (icache_request_fe)
+	.icache_stage_wid   (icache_stage_wid),
+	.fe_inst_meta_fi    (fe_inst_meta_fi2),
+	.fe_inst_meta_id    (fe_inst_meta_id),
+	.VX_icache_rsp      (VX_icache_rsp),
+	.VX_icache_req      (VX_icache_req)
 	);
 
 

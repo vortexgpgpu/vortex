@@ -27,16 +27,22 @@ module Vortex
     input  wire [31:0]                       dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
 
-    // Req I Mem
-    output reg [31:0]  o_m_read_addr_i,
-    output reg [31:0]  o_m_evict_addr_i,
-    output reg         o_m_valid_i,
-    output reg [31:0]  o_m_writedata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0],
-    output reg         o_m_read_or_write_i,
+	// DRAM Icache Req
+    output wire                              I_dram_req,
+    output wire                              I_dram_req_write,
+    output wire                              I_dram_req_read,
+    output wire [31:0]                       I_dram_req_addr,
+    output wire [31:0]                       I_dram_req_size,
+    output wire [31:0]                       I_dram_req_data[`DBANK_LINE_SIZE_RNG],
+    output wire [31:0]                       I_dram_expected_lat,
 
-    // Rsp I Mem
-    input  wire [31:0] i_m_readdata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0],
-    input  wire        i_m_ready_i,
+	// DRAM Icache Res
+	output wire                              I_dram_fill_accept,
+    input  wire                              I_dram_fill_rsp,
+    input  wire [31:0]                       I_dram_fill_rsp_addr,
+    input  wire [31:0]                       I_dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
+
+
     output wire        out_ebreak
 	);
 
@@ -45,19 +51,6 @@ module Vortex
 
 	assign out_ebreak = out_ebreak_unqual && (scheduler_empty && 1);
 
-
-	reg[31:0] icache_banks               = `ICACHE_BANKS;
-	reg[31:0] icache_num_words_per_block = `ICACHE_NUM_WORDS_PER_BLOCK;
-	reg[31:0] number_threads             = `NT;
-	reg[31:0] number_warps               = `NW;
-
-	always @(posedge clk) begin
-		icache_banks               <= icache_banks;
-		icache_num_words_per_block <= icache_num_words_per_block;
-
-		number_threads             <= number_threads;
-		number_warps               <= number_warps;
-	end
 
 	wire memory_delay;
 	wire exec_delay;
@@ -110,30 +103,32 @@ module Vortex
 	assign VX_dcache_req_qual.core_no_wb_slot       = VX_dcache_req.core_no_wb_slot;
 
 
-	VX_icache_response_inter icache_response_fe();
-	VX_icache_request_inter  icache_request_fe();
-	VX_dram_req_rsp_inter #(
-		.NUMBER_BANKS(`ICACHE_BANKS),
-		.NUM_WORDS_PER_BLOCK(`ICACHE_NUM_WORDS_PER_BLOCK))    VX_dram_req_rsp_icache();
+	VX_gpu_dcache_res_inter #(.NUMBER_REQUESTS(`INUMBER_REQUESTS))  VX_icache_rsp();
+	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`INUMBER_REQUESTS))  VX_icache_req();
 
-	//assign icache_response_fe.instruction = icache_response_instruction;
-	assign icache_request_pc_address      = icache_request_fe.pc_address;
-
-	assign o_m_valid_i                      = VX_dram_req_rsp_icache.o_m_valid;
-	assign o_m_read_addr_i                  = VX_dram_req_rsp_icache.o_m_read_addr;
-	assign o_m_evict_addr_i                 = VX_dram_req_rsp_icache.o_m_evict_addr;
-	assign o_m_read_or_write_i              = VX_dram_req_rsp_icache.o_m_read_or_write;
-	assign VX_dram_req_rsp_icache.i_m_ready = i_m_ready_i;
-	genvar curr_bank;
-	genvar curr_word;
+	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_SIZE_WORDS(`IBANK_LINE_SIZE_WORDS)) VX_gpu_icache_dram_req();
+	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_SIZE_WORDS(`IBANK_LINE_SIZE_WORDS)) VX_gpu_icache_dram_res();
 
 
-for (curr_bank = 0; curr_bank < `ICACHE_BANKS; curr_bank = curr_bank + 1) begin : icache_setup
-	for (curr_word = 0; curr_word < `ICACHE_NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin : icache_banks_setup
-		assign o_m_writedata_i[curr_bank][curr_word]                     = VX_dram_req_rsp_icache.o_m_writedata[curr_bank][curr_word];
-		assign VX_dram_req_rsp_icache.i_m_readdata[curr_bank][curr_word] = i_m_readdata_i[curr_bank][curr_word]; // fixed
-	end
-end
+	assign VX_gpu_icache_dram_res.dram_fill_rsp      = I_dram_fill_rsp;
+	assign VX_gpu_icache_dram_res.dram_fill_rsp_addr = I_dram_fill_rsp_addr;
+
+	assign I_dram_req          = VX_gpu_icache_dram_req.dram_req;
+	assign I_dram_req_write    = VX_gpu_icache_dram_req.dram_req_write;
+	assign I_dram_req_read     = VX_gpu_icache_dram_req.dram_req_read;
+	assign I_dram_req_addr     = VX_gpu_icache_dram_req.dram_req_addr;
+	assign I_dram_req_size     = VX_gpu_icache_dram_req.dram_req_size;
+	assign I_dram_expected_lat = `ISIMULATED_DRAM_LATENCY_CYCLES;
+	assign I_dram_fill_accept  = VX_gpu_icache_dram_req.dram_fill_accept;
+
+	genvar iwordy;
+	generate
+		for (iwordy = 0; iwordy < `IBANK_LINE_SIZE_WORDS; iwordy=iwordy+1) begin
+			assign VX_gpu_icache_dram_res.dram_fill_rsp_data[iwordy] = I_dram_fill_rsp_data[iwordy];
+			assign I_dram_req_data[iwordy]                           = VX_gpu_icache_dram_req.dram_req_data[iwordy];
+		end
+	endgenerate
+
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -158,8 +153,8 @@ VX_front_end vx_front_end(
 	.VX_warp_ctl         (VX_warp_ctl),
 	.VX_bckE_req         (VX_bckE_req),
 	.schedule_delay      (schedule_delay),
-	.icache_response_fe  (icache_response_fe),
-	.icache_request_fe   (icache_request_fe),
+	.VX_icache_rsp       (VX_icache_rsp),
+	.VX_icache_req       (VX_icache_req),
 	.VX_jal_rsp          (VX_jal_rsp),
 	.VX_branch_rsp       (VX_branch_rsp),
 	.fetch_ebreak        (out_ebreak_unqual)
@@ -197,11 +192,20 @@ VX_back_end vx_back_end(
 VX_dmem_controller VX_dmem_controller(
 	.clk                      (clk),
 	.reset                    (reset),
+
+	// Dram <-> Dcache
 	.VX_gpu_dcache_dram_req   (VX_gpu_dcache_dram_req),
 	.VX_gpu_dcache_dram_res   (VX_gpu_dcache_dram_res),
-	.VX_dram_req_rsp_icache   (VX_dram_req_rsp_icache),
-	.VX_icache_req            (icache_request_fe),
-	.VX_icache_rsp            (icache_response_fe),
+
+	// Dram <-> Icache
+	.VX_gpu_icache_dram_req   (VX_gpu_icache_dram_req),
+	.VX_gpu_icache_dram_res   (VX_gpu_icache_dram_res),
+
+	// Core <-> Icache
+	.VX_icache_req            (VX_icache_req),
+	.VX_icache_rsp            (VX_icache_rsp),
+
+	// Core <-> Dcache
 	.VX_dcache_req            (VX_dcache_req_qual),
 	.VX_dcache_rsp            (VX_dcache_rsp)
 	);
