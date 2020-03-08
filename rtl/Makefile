@@ -3,9 +3,11 @@ all: RUNFILE
 
 INCLUDE=-I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterfaces/ -Ipipe_regs/ -Icompat/ -Isimulate
 
-FILE=Vortex.v
+SINGLE_CORE=Vortex.v
+MULTI_CORE=Vortex_SOC.v
 
 EXE=--exe ./simulate/test_bench.cpp
+MULTI_EXE=--exe ./simulate/multi_test_bench.cpp
 
 COMP=--compiler gcc
 
@@ -24,18 +26,24 @@ DEB=--trace --prof-cfuncs -DVL_DEBUG=1
 
 MAKECPP=(cd obj_dir && make -j -f VVortex.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
 
+MAKEMULTICPP=(cd obj_dir && make -j -f VVortex_SOC.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+
 # -LDFLAGS '-lsystemc'
 VERILATOR:
 	echo "#define VCD_OFF" > simulate/tb_debug.h
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW)
+	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW)
 
 VERILATORnoWarnings:
 	echo "#define VCD_OFF" > simulate/tb_debug.h
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF)  $(WNO) $(DEB)
+	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) $(CF)  $(WNO) $(DEB)
+
+VERILATORMULTInoWarnings:
+	echo "#define VCD_OFF" > simulate/tb_debug.h
+	verilator $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) $(CF)  $(WNO) $(DEB)
 
 compdebug:
 	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
-	verilator_bin_dbg $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
+	verilator_bin_dbg $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
 
 RUNFILE: VERILATOR
 	$(MAKECPP)
@@ -45,6 +53,9 @@ debug: compdebug
 
 w: VERILATORnoWarnings
 	$(MAKECPP)
+
+multicore: VERILATORMULTInoWarnings
+	$(MAKEMULTICPP)
 
 run: w
 	(cd obj_dir && ./VVortex)
