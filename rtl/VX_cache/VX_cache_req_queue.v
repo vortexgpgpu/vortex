@@ -52,12 +52,12 @@ module VX_cache_req_queue
 	input  wire                             reqq_push,
  	input wire [NUMBER_REQUESTS-1:0]       bank_valids,
 	input wire [NUMBER_REQUESTS-1:0][31:0] bank_addr,
-	input wire [NUMBER_REQUESTS-1:0][31:0] bank_writedata,
+	input wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] bank_writedata,
 	input wire [4:0]                        bank_rd,
-	input wire [1:0]                        bank_wb,
+	input wire [NUMBER_REQUESTS-1:0][1:0]   bank_wb,
 	input wire [`NW_M1:0]                   bank_warp_num,
-	input wire [2:0]                        bank_mem_read,  
-	input wire [2:0]                        bank_mem_write,
+	input wire [NUMBER_REQUESTS-1:0][2:0]   bank_mem_read,  
+	input wire [NUMBER_REQUESTS-1:0][2:0]   bank_mem_write,
 	input wire [31:0]                       bank_pc,
 
 	// Dequeue Data
@@ -65,7 +65,7 @@ module VX_cache_req_queue
     output wire                                   reqq_req_st0,
     output wire [`vx_clog2(NUMBER_REQUESTS)-1:0] reqq_req_tid_st0,
 	output wire [31:0]                            reqq_req_addr_st0,
-	output wire [31:0]                            reqq_req_writedata_st0,
+	output wire [`WORD_SIZE_RNG]                  reqq_req_writedata_st0,
 	output wire [4:0]                             reqq_req_rd_st0,
 	output wire [1:0]                             reqq_req_wb_st0,
 	output wire [`NW_M1:0]                        reqq_req_warp_num_st0,
@@ -80,34 +80,34 @@ module VX_cache_req_queue
 
  	wire [NUMBER_REQUESTS-1:0]       out_per_valids;
 	wire [NUMBER_REQUESTS-1:0][31:0] out_per_addr;
-	wire [NUMBER_REQUESTS-1:0][31:0] out_per_writedata;
+	wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] out_per_writedata;
 	wire [4:0]                        out_per_rd;
-	wire [1:0]                        out_per_wb;
+	wire [NUMBER_REQUESTS-1:0][1:0]   out_per_wb;
 	wire [`NW_M1:0]                   out_per_warp_num;
-	wire [2:0]                        out_per_mem_read;  
-	wire [2:0]                        out_per_mem_write;
+	wire [NUMBER_REQUESTS-1:0][2:0]   out_per_mem_read;  
+	wire [NUMBER_REQUESTS-1:0][2:0]   out_per_mem_write;
 	wire [31:0]                       out_per_pc;
 
 
  	reg [NUMBER_REQUESTS-1:0]       use_per_valids;
 	reg [NUMBER_REQUESTS-1:0][31:0] use_per_addr;
-	reg [NUMBER_REQUESTS-1:0][31:0] use_per_writedata;
+	reg [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] use_per_writedata;
 	reg [4:0]                        use_per_rd;
-	reg [1:0]                        use_per_wb;
+	reg [NUMBER_REQUESTS-1:0][1:0]   use_per_wb;
 	reg [31:0]                       use_per_pc;
 	reg [`NW_M1:0]                   use_per_warp_num;
-	reg [2:0]                        use_per_mem_read;  
-	reg [2:0]                        use_per_mem_write;
+	reg [NUMBER_REQUESTS-1:0][2:0]   use_per_mem_read;  
+	reg [NUMBER_REQUESTS-1:0][2:0]   use_per_mem_write;
 
 
  	wire [NUMBER_REQUESTS-1:0]       qual_valids;
 	wire [NUMBER_REQUESTS-1:0][31:0] qual_addr;
-	wire [NUMBER_REQUESTS-1:0][31:0] qual_writedata;
+	wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] qual_writedata;
 	wire [4:0]                        qual_rd;
-	wire [1:0]                        qual_wb;
+	wire [NUMBER_REQUESTS-1:0][1:0]   qual_wb;
 	wire [`NW_M1:0]                   qual_warp_num;
-	wire [2:0]                        qual_mem_read;  
-	wire [2:0]                        qual_mem_write;
+	wire [NUMBER_REQUESTS-1:0][2:0]   qual_mem_read;  
+	wire [NUMBER_REQUESTS-1:0][2:0]   qual_mem_write;
 	wire [31:0]                       qual_pc;
 
     wire[NUMBER_REQUESTS-1:0]        updated_valids;
@@ -120,7 +120,7 @@ module VX_cache_req_queue
 	wire push_qual = reqq_push && !reqq_full;
 	wire pop_qual  = reqq_pop  && use_empty && !out_empty;
 
-	VX_generic_queue_ll #(.DATAW( (NUMBER_REQUESTS * (1+32+32)) + 5 + 2 + (`NW_M1+1) + 3 + 3 + 32 ), .SIZE(REQQ_SIZE)) reqq_queue(
+	VX_generic_queue_ll #(.DATAW( (NUMBER_REQUESTS * (1+32+`WORD_SIZE)) + 5 + (NUMBER_REQUESTS*2) + (`NW_M1+1) + (NUMBER_REQUESTS * (3 + 3)) + 32 ), .SIZE(REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
@@ -158,10 +158,10 @@ module VX_cache_req_queue
 	assign reqq_req_addr_st0       = qual_addr     [qual_request_index];
 	assign reqq_req_writedata_st0  = qual_writedata[qual_request_index];
 	assign reqq_req_rd_st0         = qual_rd;
-	assign reqq_req_wb_st0         = qual_wb;
+	assign reqq_req_wb_st0         = qual_wb[qual_request_index];
 	assign reqq_req_warp_num_st0   = qual_warp_num;
-	assign reqq_req_mem_read_st0   = qual_mem_read;
-	assign reqq_req_mem_write_st0  = qual_mem_write;
+	assign reqq_req_mem_read_st0   = qual_mem_read [qual_request_index];
+	assign reqq_req_mem_write_st0  = qual_mem_write[qual_request_index];
 	assign reqq_req_pc_st0         = qual_pc;
 
 	assign updated_valids = qual_valids & (~(1 << qual_request_index));

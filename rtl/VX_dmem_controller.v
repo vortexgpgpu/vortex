@@ -22,12 +22,12 @@ module VX_dmem_controller (
 );
 
 
-	VX_gpu_dcache_res_inter      VX_dcache_rsp_smem();
-	VX_gpu_dcache_req_inter      VX_dcache_req_smem();
+	VX_gpu_dcache_res_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_rsp_smem();
+	VX_gpu_dcache_req_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_req_smem();
 
 
-	VX_gpu_dcache_res_inter      VX_dcache_rsp_dcache();
-	VX_gpu_dcache_req_inter      VX_dcache_req_dcache();
+	VX_gpu_dcache_res_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_rsp_dcache();
+	VX_gpu_dcache_req_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_req_dcache();
 
 
 	wire to_shm          = VX_dcache_req.core_req_addr[0][31:24] == 8'hFF;
@@ -71,19 +71,11 @@ module VX_dmem_controller (
 
 
 
-
-
-    wire                                                    Sllvq_pop;
-    wire[`DNUMBER_REQUESTS-1:0]                             Sllvq_valid;
-    wire[`DNUMBER_REQUESTS-1:0][31:0]                       Sllvq_res_addr;
-    wire[`DNUMBER_REQUESTS-1:0][`DBANK_LINE_SIZE_RNG][31:0] Sllvq_res_data;
-
-	VX_gpu_dcache_dram_req_inter VX_gpu_smem_dram_req();
-	VX_gpu_dcache_dram_res_inter VX_gpu_smem_dram_res();
+	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_smem_dram_req();
+	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_smem_dram_res();
 
 
 
-    assign Sllvq_pop = 0;
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`SCACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`SBANK_LINE_SIZE_BYTES),
@@ -132,6 +124,7 @@ module VX_dmem_controller (
 		.core_wb_warp_num  (VX_dcache_rsp_smem.core_wb_warp_num),
 		.core_wb_readdata  (VX_dcache_rsp_smem.core_wb_readdata),
 		.core_wb_pc        (VX_dcache_rsp_smem.core_wb_pc),
+		.core_wb_address   (),
 
 		// DRAM response
 		.dram_fill_rsp     (VX_gpu_smem_dram_res.dram_fill_rsp),
@@ -155,23 +148,9 @@ module VX_dmem_controller (
 
 		// Snoop Request
 		.snp_req               (0),
-		.snp_req_addr          (0),
-
-		// LLVQ stuff
-		.llvq_pop              (Sllvq_pop),
-		.llvq_valid            (Sllvq_valid),
-		.llvq_res_addr         (Sllvq_res_addr),
-		.llvq_res_data         (Sllvq_res_data)
+		.snp_req_addr          (0)
 		);
 
-
-    wire                                                    Dllvq_pop;
-    wire[`DNUMBER_REQUESTS-1:0]                             Dllvq_valid;
-    wire[`DNUMBER_REQUESTS-1:0][31:0]                       Dllvq_res_addr;
-    wire[`DNUMBER_REQUESTS-1:0][`DBANK_LINE_SIZE_RNG][31:0] Dllvq_res_data;
-
-
-    assign Dllvq_pop = 0;
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`DCACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`DBANK_LINE_SIZE_BYTES),
@@ -220,6 +199,7 @@ module VX_dmem_controller (
 		.core_wb_warp_num  (VX_dcache_rsp_dcache.core_wb_warp_num),
 		.core_wb_readdata  (VX_dcache_rsp_dcache.core_wb_readdata),
 		.core_wb_pc        (VX_dcache_rsp_dcache.core_wb_pc),
+		.core_wb_address   (),
 
 		// DRAM response
 		.dram_fill_rsp     (VX_gpu_dcache_dram_res.dram_fill_rsp),
@@ -243,22 +223,11 @@ module VX_dmem_controller (
 
 		// Snoop Request
 		.snp_req               (0),
-		.snp_req_addr          (0),
-
-		// LLVQ stuff
-		.llvq_pop              (Dllvq_pop),
-		.llvq_valid            (Dllvq_valid),
-		.llvq_res_addr         (Dllvq_res_addr),
-		.llvq_res_data         (Dllvq_res_data)
+		.snp_req_addr          (0)
 		);
 
 
 
-    wire                                                    Illvq_pop;
-    wire[`DNUMBER_REQUESTS-1:0]                             Illvq_valid;
-    wire[`DNUMBER_REQUESTS-1:0][31:0]                       Illvq_res_addr;
-    wire[`DNUMBER_REQUESTS-1:0][`DBANK_LINE_SIZE_RNG][31:0] Illvq_res_data;
-    assign Illvq_pop = 0;
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`ICACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`IBANK_LINE_SIZE_BYTES),
@@ -307,6 +276,7 @@ module VX_dmem_controller (
 		.core_wb_warp_num  (VX_icache_rsp.core_wb_warp_num),
 		.core_wb_readdata  (VX_icache_rsp.core_wb_readdata),
 		.core_wb_pc        (VX_icache_rsp.core_wb_pc),
+		.core_wb_address   (),
 
 		// DRAM response
 		.dram_fill_rsp     (VX_gpu_icache_dram_res.dram_fill_rsp),
@@ -330,13 +300,7 @@ module VX_dmem_controller (
 
 		// Snoop Request
 		.snp_req               (0),
-		.snp_req_addr          (0),
-
-		// LLVQ stuff
-		.llvq_pop              (Illvq_pop),
-		.llvq_valid            (Illvq_valid),
-		.llvq_res_addr         (Illvq_res_addr),
-		.llvq_res_data         (Illvq_res_data)
+		.snp_req_addr          (0)
 		);
 
 

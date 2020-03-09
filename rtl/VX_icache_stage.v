@@ -25,7 +25,7 @@ module VX_icache_stage (
 		assign VX_icache_req.core_req_mem_read   = `LW_MEM_READ;
 		assign VX_icache_req.core_req_mem_write  = `NO_MEM_WRITE;
 		assign VX_icache_req.core_req_rd         = 5'b0;
-		assign VX_icache_req.core_req_wb         = 2'b0;
+		assign VX_icache_req.core_req_wb         = {1{2'b1}};
 		assign VX_icache_req.core_req_warp_num   = fe_inst_meta_fi.warp_num;
 		assign VX_icache_req.core_req_pc         = fe_inst_meta_fi.inst_pc;
 
@@ -33,7 +33,10 @@ module VX_icache_stage (
 		assign fe_inst_meta_id.instruction = VX_icache_rsp.core_wb_readdata[0][31:0];
 		assign fe_inst_meta_id.inst_pc     = VX_icache_rsp.core_wb_pc[0];
 		assign fe_inst_meta_id.warp_num    = VX_icache_rsp.core_wb_warp_num;
+		
+		/* verilator lint_off WIDTH */
 		assign fe_inst_meta_id.valid       = VX_icache_rsp.core_wb_valid ? threads_active[VX_icache_rsp.core_wb_warp_num] : 0;
+		/* verilator lint_off WIDTH */
 
 		assign icache_stage_wid            = fe_inst_meta_id.warp_num;
 		assign icache_stage_valids         = fe_inst_meta_id.valid & {`NT{!icache_stage_delay}};
@@ -50,7 +53,9 @@ module VX_icache_stage (
 				for (curr_w = 0; curr_w < `NW; curr_w=curr_w+1) threads_active[curr_w] <= 0;
 			end else begin
 				if (valid_inst && !icache_stage_delay) begin
+					/* verilator lint_off WIDTH */
 					threads_active[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;
+					/* verilator lint_on WIDTH */
 				end
 			end
 		end

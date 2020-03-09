@@ -61,6 +61,7 @@ module VX_warp_scheduler (
 
 );
 
+	/* verilator lint_off WIDTH */
 	wire update_use_wspawn;
 
 	wire update_visible_active;
@@ -334,6 +335,6 @@ module VX_warp_scheduler (
 	wire ebreak = (warp_active == 0);
 	assign out_ebreak = ebreak;
 
-
+	/* verilator lint_on WIDTH */
 
 endmodule

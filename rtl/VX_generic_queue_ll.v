@@ -16,6 +16,8 @@ module VX_generic_queue_ll
 	output wire            full
 );
 
+    /* verilator lint_off WIDTH */
+
     if (SIZE == 0) begin
         assign empty    = 1;
         assign out_data = 0;
@@ -117,6 +119,6 @@ module VX_generic_queue_ll
 
     end
 
-
+    /* verilator lint_on WIDTH */
     
 endmodule

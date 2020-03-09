@@ -1,6 +1,10 @@
 `include "VX_define.v"
 
-module VX_csr_pipe (
+module VX_csr_pipe
+	#(
+		parameter CORE_ID = 0
+	)
+	(
 	input wire clk,    // Clock
 	input wire reset,
 	input wire no_slot_csr,
@@ -56,7 +60,7 @@ module VX_csr_pipe (
 
 	wire zero = 0;
 
-	VX_generic_register #(.N(`NT + `NW_M1 + 1 + 5 + 2 + 5 + 12 + 64)) csr_reg_s2 (
+	VX_generic_register #(.N(32 + 32 + 12 + 1 + 2 + 5 + (`NW_M1+1) + `NT)) csr_reg_s2 (
 		.clk  (clk),
 		.reset(reset),
 		.stall(no_slot_csr),
@@ -70,6 +74,7 @@ module VX_csr_pipe (
 
 	wire[`NT_M1:0][31:0] thread_ids;
 	wire[`NT_M1:0][31:0] warp_ids;
+	wire[`NT_M1:0][31:0] warp_idz;
 	wire[`NT_M1:0][31:0] csr_vec_read_data_s2;
 
 	genvar cur_t;
@@ -80,7 +85,10 @@ module VX_csr_pipe (
 	genvar cur_tw;
 	for (cur_tw = 0; cur_tw < `NT; cur_tw = cur_tw + 1) begin
 		assign warp_ids[cur_tw] = {{(31-`NW_M1){1'b0}}, warp_num_s2};
+		assign warp_idz[cur_tw] = (warp_num_s2 + (CORE_ID*`NW));
 	end
+
+
 
 	genvar cur_v;
 	for (cur_v = 0; cur_v < `NT; cur_v = cur_v + 1) begin
@@ -89,9 +97,11 @@ module VX_csr_pipe (
 
 	wire thread_select        = csr_address_s2 == 12'h20;
 	wire warp_select          = csr_address_s2 == 12'h21;
+	wire warp_id_select       = csr_address_s2 == 12'h22;
 
-	assign final_csr_data     = thread_select ? thread_ids :
-								warp_select   ? warp_ids   :
+	assign final_csr_data     = thread_select  ? thread_ids :
+								warp_select    ? warp_ids   :
+								warp_id_select ? warp_idz   :
 							    csr_vec_read_data_s2;
 
 

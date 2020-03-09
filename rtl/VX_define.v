@@ -124,102 +124,17 @@
    (x <= 1024) ? 10 : \
    -199
 
-// `define PARAM
 
-//  oooooo
-
-//Cache configurations
-//Cache configurations
- //Bytes
-`define ICACHE_SIZE  4096
-`define ICACHE_WAYS  2
-//Bytes
-`define ICACHE_BLOCK 64
-`define ICACHE_BANKS 4
-`define ICACHE_LOG_NUM_BANKS `CLOG2(`ICACHE_BANKS)
-
-`define ICACHE_NUM_WORDS_PER_BLOCK (`ICACHE_BLOCK / (`ICACHE_BANKS * 4))
-`define ICACHE_NUM_REQ    1
-`define ICACHE_LOG_NUM_REQ `CLOG2(`ICACHE_NUM_REQ)
-
- //set this to 1 if CACHE_WAYS is 1
-`define ICACHE_WAY_INDEX `CLOG2(`ICACHE_WAYS)
-//`define ICACHE_WAY_INDEX 1
-`define ICACHE_BLOCK_PER_BANK  (`ICACHE_BLOCK / `ICACHE_BANKS)
-
-// Offset
-`define ICACHE_OFFSET_NB (`CLOG2(`ICACHE_NUM_WORDS_PER_BLOCK))
-
-`define ICACHE_ADDR_OFFSET_ST  (2+$clog2(`ICACHE_BANKS))
-`define ICACHE_ADDR_OFFSET_ED  (`ICACHE_ADDR_OFFSET_ST+(`ICACHE_OFFSET_NB)-1)
-
-
-`define ICACHE_ADDR_OFFSET_RNG `ICACHE_ADDR_OFFSET_ED:`ICACHE_ADDR_OFFSET_ST
-`define ICACHE_OFFSET_SIZE_RNG (`CLOG2(`ICACHE_NUM_WORDS_PER_BLOCK)-1):0
-`define ICACHE_OFFSET_ST 0
-`define ICACHE_OFFSET_ED ($clog2(`ICACHE_NUM_WORDS_PER_BLOCK)-1)
-
-// Index
-// `define ICACHE_NUM_IND (`ICACHE_SIZE / (`ICACHE_WAYS * `ICACHE_BLOCK_PER_BANK))
-`define ICACHE_NUM_IND (`ICACHE_SIZE / (`ICACHE_WAYS * `ICACHE_BLOCK))
-`define ICACHE_IND_NB ($clog2(`ICACHE_NUM_IND))
-
-`define ICACHE_IND_ST  (`ICACHE_ADDR_OFFSET_ED+1)
-`define ICACHE_IND_ED  (`ICACHE_IND_ST+`ICACHE_IND_NB-1)
-
-`define ICACHE_ADDR_IND_RNG `ICACHE_IND_ED:`ICACHE_IND_ST
-`define ICACHE_IND_SIZE_RNG `ICACHE_IND_NB-1:0
-
-`define ICACHE_IND_SIZE_START 0
-`define ICACHE_IND_SIZE_END   `ICACHE_IND_NB-1
-
-
-// Tag
-`define ICACHE_ADDR_TAG_RNG 31:(`ICACHE_IND_ED+1)
-`define ICACHE_TAG_SIZE_RNG (32-(`ICACHE_IND_ED+1)-1):0
-`define ICACHE_TAG_SIZE_START 0
-`define ICACHE_TAG_SIZE_END	  (32-(`ICACHE_IND_ED+1)-1)
-`define ICACHE_ADDR_TAG_START  (`ICACHE_IND_ED+1)
-`define ICACHE_ADDR_TAG_END    31
-`define ICACHE_MEM_REQ_ADDR_MASK (32'hffffffff - (`ICACHE_BLOCK-1))
-
-///////
-
-//`define SHARED_MEMORY_SIZE 4096
-`define SHARED_MEMORY_SIZE 8192
-`define SHARED_MEMORY_BANKS 4
-//`define SHARED_MEMORY_BYTES_PER_READ 16
-//`define SHARED_MEMORY_HEIGHT ((`SHARED_MEMORY_SIZE) / (`SHARED_MEMORY_BANKS * `SHARED_MEMORY_BYTES_PER_READ))
-
-//`define SHARED_MEMORY_SIZE 16384
-//`define SHARED_MEMORY_BANKS 8
-`define SHARED_MEMORY_BYTES_PER_READ 16
-//`define SHARED_MEMORY_BITS_PER_BANK 3
-`define SHARED_MEMORY_BITS_PER_BANK `CLOG2(`SHARED_MEMORY_BANKS)
-`define SHARED_MEMORY_NUM_REQ    `NT
-`define SHARED_MEMORY_WORDS_PER_READ (`SHARED_MEMORY_BYTES_PER_READ / 4)
-`define SHARED_MEMORY_LOG_WORDS_PER_READ $clog2(`SHARED_MEMORY_WORDS_PER_READ)
-`define SHARED_MEMORY_HEIGHT ((`SHARED_MEMORY_SIZE) / (`SHARED_MEMORY_BANKS * `SHARED_MEMORY_BYTES_PER_READ))
-
-`define SHARED_MEMORY_BANK_OFFSET_ST  (2)
-`define SHARED_MEMORY_BANK_OFFSET_ED  (2+$clog2(`SHARED_MEMORY_BANKS)-1)
-`define SHARED_MEMORY_BLOCK_OFFSET_ST (`SHARED_MEMORY_BANK_OFFSET_ED + 1)
-`define SHARED_MEMORY_BLOCK_OFFSET_ED (`SHARED_MEMORY_BLOCK_OFFSET_ST +`SHARED_MEMORY_LOG_WORDS_PER_READ-1)
-`define SHARED_MEMORY_INDEX_OFFSET_ST  (`SHARED_MEMORY_BLOCK_OFFSET_ED + 1)
-`define SHARED_MEMORY_INDEX_OFFSET_ED  (`SHARED_MEMORY_INDEX_OFFSET_ST + $clog2(`SHARED_MEMORY_HEIGHT)-1)
-
-
-
-
-
-
+`define NUMBER_CORES 2
+// `define SINGLE_CORE_BENCH 0
+`define GLOBAL_BLOCK_SIZE_BYTES 16
 // ========================================= Dcache Configurable Knobs =========================================
 
 // General Cache Knobs
    // Size of cache in bytes
    `define DCACHE_SIZE_BYTES 1024
    // Size of line inside a bank in bytes
-   `define DBANK_LINE_SIZE_BYTES 16
+   `define DBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    // Number of banks {1, 2, 4, 8,...}
    `define DNUMBER_BANKS 8
    // Size of a word in bytes
@@ -270,7 +185,7 @@
    // Size of cache in bytes
    `define ICACHE_SIZE_BYTES 1024
    // Size of line inside a bank in bytes
-   `define IBANK_LINE_SIZE_BYTES 16
+   `define IBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    // Number of banks {1, 2, 4, 8,...}
    `define INUMBER_BANKS 8
    // Size of a word in bytes
@@ -314,19 +229,19 @@
 
 // ========================================= Icache Configurable Knobs =========================================
 
-// ========================================= Icache Configurable Knobs =========================================
+// ========================================= SM Configurable Knobs =========================================
 
 // General Cache Knobs
    // Size of cache in bytes
    `define SCACHE_SIZE_BYTES 1024
    // Size of line inside a bank in bytes
-   `define SBANK_LINE_SIZE_BYTES 16
+   `define SBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    // Number of banks {1, 2, 4, 8,...}
    `define SNUMBER_BANKS 8
    // Size of a word in bytes
    `define SWORD_SIZE_BYTES 4
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-   `define SNUMBER_REQUESTS 1
+   `define SNUMBER_REQUESTS `NT
    // Number of cycles to complete stage 1 (read from memory)
    `define SSTAGE_1_CYCLES 2
    // Function ID
@@ -362,7 +277,59 @@
 // Dram knobs
    `define SSIMULATED_DRAM_LATENCY_CYCLES 10
 
-// ========================================= Icache Configurable Knobs =========================================
+// ========================================= SM Configurable Knobs =========================================
+
+
+
+// ========================================= L2cache Configurable Knobs =========================================
+
+// General Cache Knobs
+   // Size of cache in bytes
+   `define LLCACHE_SIZE_BYTES 1024
+   // Size of line inside a bank in bytes
+   `define LLBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+   // Number of banks {1, 2, 4, 8,...}
+   `define LLNUMBER_BANKS 8
+   // Size of a word in bytes
+   `define LLWORD_SIZE_BYTES (`LLBANK_LINE_SIZE_BYTES)
+   // Number of Word requests per cycle {1, 2, 4, 8, ...}
+   `define LLNUMBER_REQUESTS (2*`NUMBER_CORES)
+   // Number of cycles to complete stage 1 (read from memory)
+   `define LLSTAGE_1_CYCLES 2
+   // Function ID
+   `define LLFUNC_ID 3
+
+   // Bank Number of words in a line
+   `define LLBANK_LINE_SIZE_WORDS (`LLBANK_LINE_SIZE_BYTES / `LLWORD_SIZE_BYTES)
+   `define LLBANK_LINE_SIZE_RNG `LLBANK_LINE_SIZE_WORDS-1:0
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+   // Core Request Queue Size
+   `define LLREQQ_SIZE (`NT*`NW*`NUMBER_CORES)
+   // Miss Reserv Queue Knob
+   `define LLMRVQ_SIZE `LLREQQ_SIZE
+   // Dram Fill Rsp Queue Size
+   `define LLDFPQ_SIZE 2
+   // Snoop Req Queue
+   `define LLSNRQ_SIZE 8
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+   // Core Writeback Queue Size
+   `define LLCWBQ_SIZE `LLREQQ_SIZE
+   // Dram Writeback Queue Size
+   `define LLDWBQ_SIZE 4
+   // Dram Fill Req Queue Size
+   `define LLDFQQ_SIZE `LLREQQ_SIZE
+   // Lower Level Cache Hit Queue Size
+   `define LLLLVQ_SIZE 0
+
+  // Fill Invalidator Size {Fill invalidator must be active}
+  `define LLFILL_INVALIDAOR_SIZE 16
+
+// Dram knobs
+   `define LLSIMULATED_DRAM_LATENCY_CYCLES 10
+
+// ========================================= L2cache Configurable Knobs =========================================
 
 
 `endif

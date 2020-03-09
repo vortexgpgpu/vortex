@@ -52,7 +52,7 @@ module VX_cache_miss_resrv
 	// Miss enqueue
 	input wire                                   miss_add,
 	input wire[31:0]                             miss_add_addr,
-	input wire[31:0]                             miss_add_data,
+	input wire[`WORD_SIZE_RNG]                   miss_add_data,
 	input wire[`vx_clog2(NUMBER_REQUESTS)-1:0]   miss_add_tid,
 	input wire[4:0]                              miss_add_rd,
 	input wire[1:0]                              miss_add_wb,
@@ -70,7 +70,7 @@ module VX_cache_miss_resrv
 	input  wire                                  miss_resrv_pop,
 	output wire                                  miss_resrv_valid_st0,
 	output wire[31:0]                            miss_resrv_addr_st0,
-	output wire[31:0]                            miss_resrv_data_st0,
+	output wire[`WORD_SIZE_RNG]                  miss_resrv_data_st0,
 	output wire[`vx_clog2(NUMBER_REQUESTS)-1:0] miss_resrv_tid_st0,
 	output wire[4:0]                             miss_resrv_rd_st0,
 	output wire[1:0]                             miss_resrv_wb_st0,

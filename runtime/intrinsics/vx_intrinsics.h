@@ -31,6 +31,8 @@ unsigned vx_threadID(void);
 // Get hardware warp ID
 unsigned vx_warpID(void);
 
+unsigned vx_warpNum(void);
+
 // Get Number cycles/Inst
 unsigned vx_getCycles(void);
 unsigned vx_getInst(void);

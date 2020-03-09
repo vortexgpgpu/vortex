@@ -2,48 +2,92 @@
 `include "VX_cache_config.v"
 
 module Vortex
+	#(
+		parameter CORE_ID = 0
+	)
 	(
-	input  wire           clk,
-	input  wire           reset,
-	input  wire[31:0] icache_response_instruction,
-	output wire[31:0] icache_request_pc_address,
-	// IO
-	output wire        io_valid,
-	output wire[31:0]  io_data,
 
-	// DRAM Dcache Req
-    output wire                              dram_req,
-    output wire                              dram_req_write,
-    output wire                              dram_req_read,
-    output wire [31:0]                       dram_req_addr,
-    output wire [31:0]                       dram_req_size,
-    output wire [31:0]                       dram_req_data[`DBANK_LINE_SIZE_RNG],
-    output wire [31:0]                       dram_expected_lat,
+		`ifdef SINGLE_CORE_BENCH
+			input  wire           clk,
+			input  wire           reset,
+			// IO
+			output wire        io_valid,
+			output wire[31:0]  io_data,
 
-	// DRAM Dcache Res
-	output wire                              dram_fill_accept,
-    input  wire                              dram_fill_rsp,
-    input  wire [31:0]                       dram_fill_rsp_addr,
-    input  wire [31:0]                       dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
+			// DRAM Dcache Req
+		    output wire                              dram_req,
+		    output wire                              dram_req_write,
+		    output wire                              dram_req_read,
+		    output wire [31:0]                       dram_req_addr,
+		    output wire [31:0]                       dram_req_size,
+		    output wire [31:0]                       dram_req_data[`DBANK_LINE_SIZE_RNG],
+		    output wire [31:0]                       dram_expected_lat,
 
-
-	// DRAM Icache Req
-    output wire                              I_dram_req,
-    output wire                              I_dram_req_write,
-    output wire                              I_dram_req_read,
-    output wire [31:0]                       I_dram_req_addr,
-    output wire [31:0]                       I_dram_req_size,
-    output wire [31:0]                       I_dram_req_data[`DBANK_LINE_SIZE_RNG],
-    output wire [31:0]                       I_dram_expected_lat,
-
-	// DRAM Icache Res
-	output wire                              I_dram_fill_accept,
-    input  wire                              I_dram_fill_rsp,
-    input  wire [31:0]                       I_dram_fill_rsp_addr,
-    input  wire [31:0]                       I_dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
+			// DRAM Dcache Res
+			output wire                              dram_fill_accept,
+		    input  wire                              dram_fill_rsp,
+		    input  wire [31:0]                       dram_fill_rsp_addr,
+		    input  wire [31:0]                       dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
 
-    output wire        out_ebreak
+			// DRAM Icache Req
+		    output wire                              I_dram_req,
+		    output wire                              I_dram_req_write,
+		    output wire                              I_dram_req_read,
+		    output wire [31:0]                       I_dram_req_addr,
+		    output wire [31:0]                       I_dram_req_size,
+		    output wire [31:0]                       I_dram_req_data[`IBANK_LINE_SIZE_RNG],
+		    output wire [31:0]                       I_dram_expected_lat,
+
+			// DRAM Icache Res
+			output wire                              I_dram_fill_accept,
+		    input  wire                              I_dram_fill_rsp,
+		    input  wire [31:0]                       I_dram_fill_rsp_addr,
+		    input  wire [31:0]                       I_dram_fill_rsp_data[`IBANK_LINE_SIZE_RNG],
+
+
+		    output wire        out_ebreak
+		 `else 
+			input  wire           clk,
+			input  wire           reset,
+			// IO
+			output wire        io_valid,
+			output wire[31:0]  io_data,
+
+			// DRAM Dcache Req
+		    output wire                              dram_req,
+		    output wire                              dram_req_write,
+		    output wire                              dram_req_read,
+		    output wire [31:0]                       dram_req_addr,
+		    output wire [31:0]                       dram_req_size,
+		    output wire [`DBANK_LINE_SIZE_RNG][31:0] dram_req_data,
+		    output wire [31:0]                       dram_expected_lat,
+
+			// DRAM Dcache Res
+			output wire                              dram_fill_accept,
+		    input  wire                              dram_fill_rsp,
+		    input  wire [31:0]                       dram_fill_rsp_addr,
+		    input  wire [`DBANK_LINE_SIZE_RNG][31:0] dram_fill_rsp_data,
+
+
+			// DRAM Icache Req
+		    output wire                              I_dram_req,
+		    output wire                              I_dram_req_write,
+		    output wire                              I_dram_req_read,
+		    output wire [31:0]                       I_dram_req_addr,
+		    output wire [31:0]                       I_dram_req_size,
+		    output wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_req_data,
+		    output wire [31:0]                       I_dram_expected_lat,
+
+			// DRAM Icache Res
+			output wire                              I_dram_fill_accept,
+		    input  wire                              I_dram_fill_rsp,
+		    input  wire [31:0]                       I_dram_fill_rsp_addr,
+		    input  wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_fill_rsp_data,
+
+
+		    output wire        out_ebreak
+		`endif
 	);
 
 	wire scheduler_empty;
@@ -86,7 +130,7 @@ module Vortex
 		end
 	endgenerate
 
-	wire temp_io_valid      = (!memory_delay) && (|VX_dcache_req.core_req_valid) && (VX_dcache_req.core_req_mem_write != `NO_MEM_WRITE) && (VX_dcache_req.core_req_addr[0] == 32'h00010000);
+	wire temp_io_valid      = (!memory_delay) && (|VX_dcache_req.core_req_valid) && (VX_dcache_req.core_req_mem_write[0] != `NO_MEM_WRITE) && (VX_dcache_req.core_req_addr[0] == 32'h00010000);
 	wire[31:0] temp_io_data = VX_dcache_req.core_req_writedata[0];
 	assign io_valid         = temp_io_valid;
 	assign io_data          = temp_io_data;
@@ -172,7 +216,7 @@ VX_scheduler schedule(
 	.is_empty          (scheduler_empty)
 	);
 
-VX_back_end vx_back_end(
+VX_back_end #(.CORE_ID(CORE_ID)) vx_back_end(
 	.clk                 (clk),
 	.reset               (reset),
 	.schedule_delay      (schedule_delay),

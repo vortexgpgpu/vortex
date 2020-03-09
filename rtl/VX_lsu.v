@@ -49,10 +49,10 @@ module VX_lsu (
 	assign VX_dcache_req.core_req_valid      = use_valid;
 	assign VX_dcache_req.core_req_addr       = use_address;
 	assign VX_dcache_req.core_req_writedata  = use_store_data;
-	assign VX_dcache_req.core_req_mem_read   = use_mem_read;
-	assign VX_dcache_req.core_req_mem_write  = use_mem_write;
+	assign VX_dcache_req.core_req_mem_read   = {`NT{use_mem_read}};
+	assign VX_dcache_req.core_req_mem_write  = {`NT{use_mem_write}};
 	assign VX_dcache_req.core_req_rd         = use_rd;
-	assign VX_dcache_req.core_req_wb         = use_wb;
+	assign VX_dcache_req.core_req_wb         = {`NT{use_wb}};
 	assign VX_dcache_req.core_req_warp_num   = use_warp_num;
 	assign VX_dcache_req.core_req_pc         = use_pc;
 

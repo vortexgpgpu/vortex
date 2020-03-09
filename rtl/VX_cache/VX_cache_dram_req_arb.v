@@ -58,7 +58,7 @@ module VX_cache_dram_req_arb
     output wire[NUMBER_BANKS-1:0]                            per_bank_dram_wb_queue_pop,
     input  wire[NUMBER_BANKS-1:0]                            per_bank_dram_wb_req,
     input  wire[NUMBER_BANKS-1:0][31:0]                      per_bank_dram_wb_req_addr,
-    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0] per_bank_dram_wb_req_data,
+    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] per_bank_dram_wb_req_data,
     input  wire[NUMBER_BANKS-1:0]                            per_bank_dram_because_of_snp,
 
     // real Dram request
@@ -67,7 +67,7 @@ module VX_cache_dram_req_arb
     output wire                                             dram_req_read,
     output wire [31:0]                                      dram_req_addr,
     output wire [31:0]                                      dram_req_size,
-    output wire [`BANK_LINE_SIZE_RNG][31:0]                 dram_req_data,
+    output wire [`IBANK_LINE_SIZE_RNG][31:0]                dram_req_data,
     output wire                                             dram_req_because_of_wb
 	
 );
@@ -109,7 +109,7 @@ module VX_cache_dram_req_arb
 	assign dram_req_read          = dfqq_req && !dwb_valid;
 	assign dram_req_addr          = (dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : dfqq_req_addr) & `BASE_ADDR_MASK;
 	assign dram_req_size          = BANK_LINE_SIZE_BYTES;
-	assign dram_req_data          = dwb_valid ? per_bank_dram_wb_req_data[dwb_bank] : 0;
+	assign {dram_req_data}        = dwb_valid ? {per_bank_dram_wb_req_data[dwb_bank] }: 0;
 	assign dram_req_because_of_wb = dwb_valid ? per_bank_dram_because_of_snp[dwb_bank] : 0;
 
 endmodule
