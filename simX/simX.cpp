@@ -55,8 +55,10 @@ HarpToolMode findMode(int argc, char** argv) {
 }
 
 int emu_main(int argc, char **argv) {
-  string archString("rv32i"), imgFileName("a.dsfsdout.bin");
+  string archString("rv32i");
+  string imgFileName("a.dsfsdout.bin");
   bool showHelp, showStats, basicMachine, batch;
+  bool cpu_mode(false);
 
   /* Read the command line arguments. */
   CommandLineArgFlag          fh("-h", "--help", "", showHelp);
@@ -65,15 +67,17 @@ int emu_main(int argc, char **argv) {
   CommandLineArgFlag          fs("-s", "--stats", "", showStats);
   CommandLineArgFlag          fb("-b", "--basic", "", basicMachine);
   CommandLineArgFlag          fi("-i", "--batch", "", batch);
+  CommandLineArgFlag          fx("-x", "--cpu", "", cpu_mode);
   
   CommandLineArg::readArgs(argc, argv);
+  
   if (showHelp) {
     cout << Help::emuHelp;
     return 0;
   }
 
   /* Instantiate a Core, RAM, and console output. */
-  ArchDef arch(archString);
+  ArchDef arch(archString, cpu_mode);
 
   Decoder *dec;
 

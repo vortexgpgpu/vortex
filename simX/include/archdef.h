@@ -16,7 +16,8 @@ namespace Harp {
   public:
     struct Undefined {};
 
-    ArchDef(const std::string &s) {
+    ArchDef(const std::string &s, bool cpu_mode = false) 
+      : cpu_mode_(cpu_mode) {
       std::istringstream iss(s.c_str());
             
       wordSize = 4;
@@ -98,6 +99,10 @@ namespace Harp {
     ThdNum getNWarps() const {
       if (extent < EXT_WARPS) throw Undefined(); else return nWarps;
     }
+
+    bool is_cpu_mode() const {
+      return cpu_mode_;
+    }
     
   private:
     enum Extent { 
@@ -110,6 +115,7 @@ namespace Harp {
     ThdNum nThds, nWarps;
     RegNum nRegs, nPRegs;
     char encChar;
+    bool cpu_mode_;
   };
 }
 

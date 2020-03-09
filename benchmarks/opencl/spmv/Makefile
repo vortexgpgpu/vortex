@@ -29,7 +29,7 @@ CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
 CXXFLAGS += -I$(POCL_INC_PATH) -I.
 
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
-QEMU_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/qemu/libOpenCL.a
+QEMU_LIBS = $(VX_RT_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 
 PROJECT = spmv
 

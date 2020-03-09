@@ -31,6 +31,28 @@
      _ret;                                                             \
    })
 
+/*#include <cstdint>
+#ifdef __cplusplus
+extern "C" {
+#endif
+int _pocl_register_kernel(const char* name, const void* pfn, uint32_t num_args, uint32_t num_locals, const uint8_t* arg_types, const uint32_t* local_sizes);
+void _pocl_kernel_vecadd_workgroup(uint8_t* args, uint8_t*, uint32_t, uint32_t, uint32_t);
+#ifdef __cplusplus
+}
+#endif
+
+namespace {
+class auto_register_kernel_t {
+public:
+  auto_register_kernel_t() {
+    static uint8_t arg_types[] = {1, 1, 1};
+    static uint32_t local_sizes[] = {};
+    _pocl_register_kernel("vecadd", (void*)_pocl_kernel_vecadd_workgroup, 3, 0, arg_types, local_sizes);
+  }
+};
+static auto_register_kernel_t __x__;
+}*/
+
 int exitcode = 0;
 cl_context context = NULL;
 cl_command_queue commandQueue = NULL;
