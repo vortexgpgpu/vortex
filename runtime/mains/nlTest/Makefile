@@ -27,3 +27,6 @@ HEX: ELF
 
 ELF: 
 	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST) $(VX_MAIN) /opt/riscv/riscv32-unknown-elf/lib/libc.a /opt/riscv/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc -o vx_nl_main.elf
+
+clean:
+	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug

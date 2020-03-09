@@ -36,3 +36,6 @@ HEX: ELF
 
 ELF: 
 	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_VEC) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST) $(VX_MAIN).c $(LIBS) -Iinclude  -o $(VX_MAIN).elf
+
+clean:
+	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug

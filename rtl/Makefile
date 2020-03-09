@@ -49,4 +49,4 @@ w: VERILATORnoWarnings
 	$(MAKECPP)
 
 clean:
-	rm obj_dir/*
+	rm -rf obj_dir
