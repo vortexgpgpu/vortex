@@ -1,6 +1,10 @@
 `include "VX_define.v"
 
-module VX_back_end (
+module VX_back_end
+	#(
+		parameter CORE_ID = 0
+	)
+	(
 	input wire clk, 
 	input wire reset, 
 	input wire schedule_delay,
@@ -112,7 +116,7 @@ VX_gpgpu_inst VX_gpgpu_inst(
 // 	.VX_csr_wb (VX_csr_wb)
 // 	);
 
-VX_csr_pipe VX_csr_pipe(
+VX_csr_pipe #(.CORE_ID(CORE_ID)) VX_csr_pipe(
 	.clk         (clk),
 	.reset       (reset),
 	.no_slot_csr (no_slot_csr),

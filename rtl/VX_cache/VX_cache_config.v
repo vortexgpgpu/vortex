@@ -4,12 +4,17 @@
 `include "../VX_define.v"
 
 
-//                         data       tid                    rd  wb     warp_num   read  write
-`define MRVQ_METADATA_SIZE (32 + $clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1) + 3 + 3)
+//                         data           tid                    rd  wb     warp_num   read  write
 
-`define REQ_INST_META_SIZE (5 + 2 + (`NW_M1+1) + 3 + 3 + $clog2(NUMBER_REQUESTS))
 
-`define vx_clog2(value) $clog2(value)
+`define vx_clog2(value) ((value == 1) ? 1 : $clog2(value))
+
+
+`define MRVQ_METADATA_SIZE (`WORD_SIZE + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1) + 3 + 3)
+
+//                          5 + 2 + 4          + 3 + 3 + 1
+`define REQ_INST_META_SIZE (5 + 2 + (`NW_M1+1) + 3 + 3 + `vx_clog2(NUMBER_REQUESTS))
+
 // `define vx_clog2_h(value, x) (value == (1 << x)) ? (x)
 
 // `define vx_clog2(value)   (value == 0 ) ? 0 : \
@@ -46,6 +51,9 @@
 //                           `vx_clog2_h(value, 31) : \
 //                           0
 
+`define WORD_SIZE (8*WORD_SIZE_BYTES)
+`define WORD_SIZE_RNG (`WORD_SIZE)-1:0
+
 // 128
 `define BANK_SIZE_BYTES CACHE_SIZE_BYTES/NUMBER_BANKS
 
@@ -65,7 +73,7 @@
 `define OFFSET_SIZE_RNG `OFFSET_SIZE_END:0
 
 // 2
-`define WORD_SELECT_NUM_BITS ($clog2(`BANK_LINE_SIZE_WORDS))
+`define WORD_SELECT_NUM_BITS (`vx_clog2(`BANK_LINE_SIZE_WORDS))
 // 2
 `define WORD_SELECT_SIZE_END (`WORD_SELECT_NUM_BITS)
 // 2
@@ -77,7 +85,7 @@
 `define WORD_SELECT_SIZE_RNG `WORD_SELECT_SIZE_END-1:0
 
 // 3
-`define BANK_SELECT_NUM_BITS ($clog2(NUMBER_BANKS))
+`define BANK_SELECT_NUM_BITS (`vx_clog2(NUMBER_BANKS))
 // 3
 `define BANK_SELECT_SIZE_END (`BANK_SELECT_NUM_BITS)
 // 4
@@ -90,7 +98,7 @@
 `define BANK_SELECT_SIZE_RNG `BANK_SELECT_SIZE_END-1:0
 
 // 3
-`define LINE_SELECT_NUM_BITS ($clog2(`BANK_LINE_COUNT))
+`define LINE_SELECT_NUM_BITS (`vx_clog2(`BANK_LINE_COUNT))
 // 3
 `define LINE_SELECT_SIZE_END (`LINE_SELECT_NUM_BITS)
 // 7

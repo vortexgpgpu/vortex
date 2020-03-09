@@ -14,6 +14,7 @@ module VX_scheduler (
 	
 );
 
+	/* verilator lint_off WIDTH */
 	reg[31:0] count_valid;
 
 	assign is_empty = count_valid == 0;
@@ -77,5 +78,6 @@ module VX_scheduler (
 		end
 	end
 
+	/* verilator lint_on WIDTH */
 
 endmodule

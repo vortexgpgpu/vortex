@@ -17,6 +17,8 @@ module VX_csr_data (
 
 );
 
+	/* verilator lint_off WIDTH */
+
 	// wire[`NT_M1:0][31:0] thread_ids;
 	// wire[`NT_M1:0][31:0] warp_ids;
 
@@ -83,4 +85,5 @@ module VX_csr_data (
     													read_instreth ? instret[63:32] :
     															{{20{1'b0}}, csr[in_read_csr_address]};
 
+    /* verilator lint_on WIDTH */
 endmodule : VX_csr_data

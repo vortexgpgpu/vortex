@@ -13,8 +13,8 @@ interface VX_gpu_dcache_dram_res_inter
 	)
 	();
 	// DRAM Rsponse
-    wire                              dram_fill_rsp;
-    wire [31:0]                       dram_fill_rsp_addr;
+    wire                                   dram_fill_rsp;
+    wire [31:0]                            dram_fill_rsp_addr;
     wire [BANK_LINE_SIZE_WORDS-1:0][31:0]  dram_fill_rsp_data;
 
 endinterface

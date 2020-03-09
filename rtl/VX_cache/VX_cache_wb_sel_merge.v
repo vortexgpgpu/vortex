@@ -14,6 +14,8 @@ module VX_cache_wb_sel_merge
 	parameter NUMBER_REQUESTS               = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
+    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
+    parameter FUNC_ID                       = 0,
 
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
@@ -52,19 +54,21 @@ module VX_cache_wb_sel_merge
     input  wire [NUMBER_BANKS-1:0][4:0]                             per_bank_wb_rd,
     input  wire [NUMBER_BANKS-1:0][1:0]                             per_bank_wb_wb,
     input  wire [NUMBER_BANKS-1:0][`NW_M1:0]                        per_bank_wb_warp_num,
-    input  wire [NUMBER_BANKS-1:0][31:0]                            per_bank_wb_data,
+    input  wire [NUMBER_BANKS-1:0][`WORD_SIZE_RNG]                  per_bank_wb_data,
     input  wire [NUMBER_BANKS-1:0][31:0]                            per_bank_wb_pc,
+    input  wire [NUMBER_BANKS-1:0][31:0]                            per_bank_wb_address,
     output wire [NUMBER_BANKS-1:0]                                  per_bank_wb_pop,
 
 
     // Core Writeback
     input  wire                                                      core_no_wb_slot,
     output reg  [NUMBER_REQUESTS-1:0]                                core_wb_valid,
-    output reg  [NUMBER_REQUESTS-1:0][31:0]                          core_wb_readdata,
+    output reg  [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG]                core_wb_readdata,
     output reg  [NUMBER_REQUESTS-1:0][31:0]                          core_wb_pc,
     output wire [4:0]                                                core_wb_req_rd,
     output wire [1:0]                                                core_wb_req_wb,
-    output wire [`NW_M1:0]                                           core_wb_warp_num
+    output wire [`NW_M1:0]                                           core_wb_warp_num,
+    output reg  [NUMBER_REQUESTS-1:0][31:0]                          core_wb_address
 	
 );
 
@@ -99,11 +103,13 @@ module VX_cache_wb_sel_merge
 			core_wb_valid    = 0;
 			core_wb_readdata = 0;
 			core_wb_pc       = 0;
+			core_wb_address  = 0;
 			for (this_bank = 0; this_bank < NUMBER_BANKS; this_bank = this_bank + 1) begin
-				if (found_bank && (per_bank_wb_valid[this_bank]) && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
+				if (((FUNC_ID == `LLFUNC_ID) && found_bank && per_bank_wb_valid[this_bank]) || (found_bank && (per_bank_wb_valid[this_bank]) && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index]))) begin
 					core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
 					core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
 					core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
+					core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
 					per_bank_wb_pop_unqual[this_bank]            = 1;
 				end else begin
 					per_bank_wb_pop_unqual[this_bank]            = 0;

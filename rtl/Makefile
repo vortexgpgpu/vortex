@@ -45,6 +45,10 @@ compdebug:
 	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
 	verilator_bin_dbg $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
 
+compdebugmulti:
+	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
+	verilator_bin_dbg $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
+
 RUNFILE: VERILATOR
 	$(MAKECPP)
 
@@ -55,6 +59,9 @@ w: VERILATORnoWarnings
 	$(MAKECPP)
 
 multicore: VERILATORMULTInoWarnings
+	$(MAKEMULTICPP)
+
+dmulticore: compdebugmulti
 	$(MAKEMULTICPP)
 
 run: w

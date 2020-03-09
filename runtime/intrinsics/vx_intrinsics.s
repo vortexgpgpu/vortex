@@ -41,7 +41,11 @@ vx_join:
 vx_warpID:
 	csrr a0, 0x21 # read warp IDs
 	ret
-
+.type vx_warpNum, @function
+.global vx_warpNum
+vx_warpNum:
+    csrr a0, 0x22 # read warp IDs
+    ret
 
 .type vx_threadID, @function
 .global vx_threadID
