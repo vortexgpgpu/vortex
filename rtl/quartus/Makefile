@@ -32,26 +32,27 @@ smart: smart.log
 STAMP = echo done >
 
 $(PROJECT).syn.rpt: smart.log syn.chg $(SOURCE_FILES) 
-	quartus_syn $(PROJECT) $(SYN_ARGS)
+	$(QUARTUS_ROOT)/quartus/bin/quartus_syn $(PROJECT) $(SYN_ARGS)
 	$(STAMP) fit.chg
 
 $(PROJECT).fit.rpt: smart.log fit.chg $(PROJECT).syn.rpt
-	quartus_fit $(PROJECT) $(FIT_ARGS)
+	$(QUARTUS_ROOT)/quartus/bin/quartus_fit $(PROJECT) $(FIT_ARGS)
 	$(STAMP) asm.chg
 	$(STAMP) sta.chg
 
 $(PROJECT).asm.rpt: smart.log asm.chg $(PROJECT).fit.rpt
-	quartus_asm $(PROJECT) $(ASM_ARGS)
+	$(QUARTUS_ROOT)/quartus/bin/quartus_asm $(PROJECT) $(ASM_ARGS)
 
 $(PROJECT).sta.rpt: smart.log sta.chg $(PROJECT).fit.rpt
-	quartus_sta $(PROJECT)  $(STA_ARGS) 
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sta $(PROJECT)  $(STA_ARGS)
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sta -t VX_timing.tcl
 
 smart.log: $(PROJECT_FILES)
-	quartus_sh --determine_smart_action $(PROJECT) > smart.log
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sh --determine_smart_action $(PROJECT) > smart.log
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc vortex.sdc -inc "..;../interfaces;../pipe_regs;../cache;../VX_cache;../shared_memory;../compat"
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc vortex.sdc -inc "..;../interfaces;../pipe_regs;../cache;../VX_cache;../shared_memory;../compat"
 	
 syn.chg:
 	$(STAMP) syn.chg
@@ -66,7 +67,7 @@ asm.chg:
 	$(STAMP) asm.chg
 
 program: $(PROJECT).sof
-	quartus_pgm --no_banner --mode=jtag -o "P;$(PROJECT).sof"
+	$(QUARTUS_ROOT)/quartus/bin/quartus_pgm --no_banner --mode=jtag -o "P;$(PROJECT).sof"
 	
 clean:
 	rm -rf bin *.rpt *.chg *.qsf *.qpf smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

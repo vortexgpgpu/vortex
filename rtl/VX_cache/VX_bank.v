@@ -296,17 +296,19 @@ module VX_bank
 		);
 
 	wire stall_bank_pipe;
-	reg  is_fill_in_pipe; 
+	reg  is_fill_in_pipe;
 
-	genvar p_stage;
+	reg[16:0] p_stage;
 	always @(*) begin
-		assign is_fill_in_pipe = 0;
+		is_fill_in_pipe = 0;
 		for (p_stage = 0; p_stage < STAGE_1_CYCLES; p_stage=p_stage+1) begin
-			if (is_fill_st1[p_stage]) assign is_fill_in_pipe = 1;
+			if (is_fill_st1[p_stage]) is_fill_in_pipe = 1;
 		end
-		
-		if (is_fill_st2) assign is_fill_in_pipe = 1;
+
+		if (is_fill_st2) is_fill_in_pipe = 1;
 	end
+
+//	assign is_fill_in_pipe = (|is_fill_st1) || is_fill_st2;
 		
 
 	assign dfpq_pop =              !dfpq_empty    && !stall_bank_pipe && !dfpq_hazard_st0;
@@ -630,7 +632,7 @@ module VX_bank
 
 	assign stall_bank_pipe = (is_snp_st2 && valid_st2 && ffsq_full) || ((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full);
 
-endmodule
+endmodule : VX_bank
 
 
 

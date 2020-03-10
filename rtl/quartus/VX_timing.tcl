@@ -10,7 +10,7 @@ update_timing_netlist
 foreach_in_collection op [get_available_operating_conditions] {
   set_operating_conditions $op
 
-  report_timing -setup -npaths 20 -detail full_path -multi_corner \
+  report_timing -setup -npaths 150 -detail full_path -multi_corner -pairs_only -nworst 8 \
     -file "bin/timing_paths_$op.html" \
     -panel_name "Critical paths for $op"
 
