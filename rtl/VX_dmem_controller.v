@@ -92,6 +92,7 @@ module VX_dmem_controller (
 		.DWBQ_SIZE                    (`SDWBQ_SIZE),
 		.DFQQ_SIZE                    (`SDFQQ_SIZE),
 		.LLVQ_SIZE                    (`SLLVQ_SIZE),
+		.FFSQ_SIZE                    (`SFFSQ_SIZE),
 		.FILL_INVALIDAOR_SIZE         (`SFILL_INVALIDAOR_SIZE),
 		.SIMULATED_DRAM_LATENCY_CYCLES(`SSIMULATED_DRAM_LATENCY_CYCLES)
 		)
@@ -167,6 +168,7 @@ module VX_dmem_controller (
 		.DWBQ_SIZE                    (`DDWBQ_SIZE),
 		.DFQQ_SIZE                    (`DDFQQ_SIZE),
 		.LLVQ_SIZE                    (`DLLVQ_SIZE),
+		.FFSQ_SIZE                    (`DFFSQ_SIZE),
 		.FILL_INVALIDAOR_SIZE         (`DFILL_INVALIDAOR_SIZE),
 		.SIMULATED_DRAM_LATENCY_CYCLES(`DSIMULATED_DRAM_LATENCY_CYCLES)
 		)
@@ -244,6 +246,7 @@ module VX_dmem_controller (
 		.DWBQ_SIZE                    (`IDWBQ_SIZE),
 		.DFQQ_SIZE                    (`IDFQQ_SIZE),
 		.LLVQ_SIZE                    (`ILLVQ_SIZE),
+		.FFSQ_SIZE                    (`IFFSQ_SIZE),
 		.FILL_INVALIDAOR_SIZE         (`IFILL_INVALIDAOR_SIZE),
 		.SIMULATED_DRAM_LATENCY_CYCLES(`ISIMULATED_DRAM_LATENCY_CYCLES)
 		)
