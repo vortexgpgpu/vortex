@@ -19,7 +19,7 @@ LIGHTW=-Wno-UNOPTFLAT
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
 LIB=
 
-CF=-CFLAGS '-std=c++11 -O3'
+CF=-CFLAGS '-std=c++11 -fms-extensions'
 
 DEB=--trace --prof-cfuncs -DVL_DEBUG=1 
 
