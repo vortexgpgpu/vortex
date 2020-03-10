@@ -110,7 +110,7 @@ module VX_cache_req_queue
 	wire [NUMBER_REQUESTS-1:0][2:0]   qual_mem_write;
 	wire [31:0]                       qual_pc;
 
-    wire[NUMBER_REQUESTS-1:0]        updated_valids;
+    reg [NUMBER_REQUESTS-1:0]        updated_valids;
 
     wire o_empty;
 
@@ -118,7 +118,7 @@ module VX_cache_req_queue
 	wire out_empty = !(|out_per_valids) || o_empty;
 
 	wire push_qual = reqq_push && !reqq_full;
-	wire pop_qual  = reqq_pop  && use_empty && !out_empty;
+	wire pop_qual  = !out_empty && use_empty;
 
 	VX_generic_queue_ll #(.DATAW( (NUMBER_REQUESTS * (1+32+`WORD_SIZE)) + 5 + (NUMBER_REQUESTS*2) + (`NW_M1+1) + (NUMBER_REQUESTS * (3 + 3)) + 32 ), .SIZE(REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
@@ -134,15 +134,15 @@ module VX_cache_req_queue
 
 	wire[NUMBER_REQUESTS-1:0] real_out_per_valids = out_per_valids & {NUMBER_REQUESTS{~out_empty}};
 
-	assign qual_valids     = use_empty ? real_out_per_valids : out_empty ? 0 : use_per_valids; 
-	assign qual_addr       = use_empty ? out_per_addr        : use_per_addr;
-	assign qual_writedata  = use_empty ? out_per_writedata   : use_per_writedata;
-	assign qual_rd         = use_empty ? out_per_rd          : use_per_rd;
-	assign qual_wb         = use_empty ? out_per_wb          : use_per_wb;
-	assign qual_warp_num   = use_empty ? out_per_warp_num    : use_per_warp_num;
-	assign qual_mem_read   = use_empty ? out_per_mem_read    : use_per_mem_read;
-	assign qual_mem_write  = use_empty ? out_per_mem_write   : use_per_mem_write;
-	assign qual_pc         = use_empty ? out_per_pc          : use_per_pc;
+	assign qual_valids     = use_per_valids; 
+	assign qual_addr       = use_per_addr;
+	assign qual_writedata  = use_per_writedata;
+	assign qual_rd         = use_per_rd;
+	assign qual_wb         = use_per_wb;
+	assign qual_warp_num   = use_per_warp_num;
+	assign qual_mem_read   = use_per_mem_read;
+	assign qual_mem_write  = use_per_mem_write;
+	assign qual_pc         = use_per_pc;
 
 	wire[`vx_clog2(NUMBER_REQUESTS)-1:0] qual_request_index;
 	wire                                  qual_has_request;
@@ -164,7 +164,14 @@ module VX_cache_req_queue
 	assign reqq_req_mem_write_st0  = qual_mem_write[qual_request_index];
 	assign reqq_req_pc_st0         = qual_pc;
 
-	assign updated_valids = qual_valids & (~(1 << qual_request_index));
+
+	always @(*) begin
+		assign updated_valids = qual_valids;
+		if (qual_has_request) begin
+			assign updated_valids[qual_request_index] = 0;
+		end
+	end
+
 
 	always @(posedge clk) begin
 		if (reset) begin
@@ -178,17 +185,19 @@ module VX_cache_req_queue
 			use_per_mem_write <= 0;
 			use_per_pc        <= 0;
 		end else begin
-			if (reqq_pop && qual_has_request) begin
-				use_per_valids    <= updated_valids;
-				use_per_addr      <= qual_addr;
-				use_per_writedata <= qual_writedata;
-				use_per_rd        <= qual_rd;
-				use_per_wb        <= qual_wb;
-				use_per_warp_num  <= qual_warp_num;
-				use_per_mem_read  <= qual_mem_read;  
-				use_per_mem_write <= qual_mem_write;
-				use_per_pc        <= qual_pc;
-			end 
+			if (pop_qual) begin
+				use_per_valids    <= real_out_per_valids;
+				use_per_addr      <= out_per_addr;
+				use_per_writedata <= out_per_writedata;
+				use_per_rd        <= out_per_rd;
+				use_per_wb        <= out_per_wb;
+				use_per_warp_num  <= out_per_warp_num;
+				use_per_mem_read  <= out_per_mem_read;  
+				use_per_mem_write <= out_per_mem_write;
+				use_per_pc        <= out_per_pc;
+			end else if (reqq_pop) begin
+				use_per_valids[qual_request_index] <= 0;
+			end
 			// else if (reqq_pop) begin
 			// 	use_per_valids[qual_request_index] <= updated_valids;
 			// end

@@ -7,10 +7,12 @@ module VX_dmem_controller (
 	// Dram <-> Dcache
 	VX_gpu_dcache_dram_req_inter VX_gpu_dcache_dram_req,
 	VX_gpu_dcache_dram_res_inter VX_gpu_dcache_dram_res,
+	VX_gpu_snp_req_rsp           VX_gpu_dcache_snp_req,
 
 	// Dram <-> Icache
 	VX_gpu_dcache_dram_req_inter VX_gpu_icache_dram_req,
 	VX_gpu_dcache_dram_res_inter VX_gpu_icache_dram_res,
+	VX_gpu_snp_req_rsp           VX_gpu_icache_snp_req,
 
 	// Core <-> Dcache
 	VX_gpu_dcache_res_inter  VX_dcache_rsp,
@@ -149,7 +151,12 @@ module VX_dmem_controller (
 
 		// Snoop Request
 		.snp_req               (0),
-		.snp_req_addr          (0)
+		.snp_req_addr          (0),
+
+		// Snoop Forward
+		.snp_fwd               (),
+		.snp_fwd_addr          (),
+		.snp_fwd_delay         (0)
 		);
 
 	VX_cache #(
@@ -224,8 +231,15 @@ module VX_dmem_controller (
 		.dram_snp_full         (VX_gpu_dcache_dram_req.dram_snp_full),
 
 		// Snoop Request
-		.snp_req               (0),
-		.snp_req_addr          (0)
+		.snp_req               (VX_gpu_dcache_snp_req.snp_req),
+		.snp_req_addr          (VX_gpu_dcache_snp_req.snp_req_addr),
+		.snp_req_delay         (VX_gpu_dcache_snp_req.snp_delay),
+
+
+		// Snoop Forward
+		.snp_fwd               (),
+		.snp_fwd_addr          (),
+		.snp_fwd_delay         (0)
 		);
 
 
@@ -301,9 +315,16 @@ module VX_dmem_controller (
 		.dram_req_because_of_wb(VX_gpu_icache_dram_req.dram_because_of_snp),
 		.dram_snp_full         (VX_gpu_icache_dram_req.dram_snp_full),
 
+
 		// Snoop Request
-		.snp_req               (0),
-		.snp_req_addr          (0)
+		.snp_req               (VX_gpu_icache_snp_req.snp_req),
+		.snp_req_addr          (VX_gpu_icache_snp_req.snp_req_addr),
+		.snp_req_delay         (VX_gpu_icache_snp_req.snp_delay),
+
+		// Snoop Forward
+		.snp_fwd               (),
+		.snp_fwd_addr          (),
+		.snp_fwd_delay         (0)
 		);
 
 

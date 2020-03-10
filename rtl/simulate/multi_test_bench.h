@@ -209,15 +209,15 @@ bool Vortex::dbus_driver()
     }
 
 
-    if (vortex->dram_req)
+    if (vortex->out_dram_req)
     {
-        if (vortex->dram_req_read)
+        if (vortex->out_dram_req_read)
         {
             // Need to add an element
             dram_req_t dram_req;
-            dram_req.cycles_left = vortex->dram_expected_lat;
-            dram_req.data_length = vortex->dram_req_size / 4;
-            dram_req.base_addr   = vortex->dram_req_addr;
+            dram_req.cycles_left = vortex->out_dram_expected_lat;
+            dram_req.data_length = vortex->out_dram_req_size / 4;
+            dram_req.base_addr   = vortex->out_dram_req_addr;
             dram_req.data        = (unsigned *) malloc(dram_req.data_length * sizeof(unsigned));
 
             for (int i = 0; i < dram_req.data_length; i++)
@@ -231,29 +231,29 @@ bool Vortex::dbus_driver()
             this->dram_req_vec.push_back(dram_req);
         }
 
-        if (vortex->dram_req_write)
+        if (vortex->out_dram_req_write)
         {
-            unsigned base_addr   = vortex->dram_req_addr;
-            unsigned data_length = vortex->dram_req_size / 4;
+            unsigned base_addr   = vortex->out_dram_req_addr;
+            unsigned data_length = vortex->out_dram_req_size / 4;
 
             for (int i = 0; i < data_length; i++)
             {
                 unsigned curr_addr = base_addr + (i*4);
-                unsigned data_wr   = vortex->dram_req_data[i];
+                unsigned data_wr   = vortex->out_dram_req_data[i];
                 ram.writeWord(curr_addr, &data_wr);
             }
         }
     }
 
-    if (vortex->dram_fill_accept && dequeue_valid)
+    if (vortex->out_dram_fill_accept && dequeue_valid)
     {
-        vortex->dram_fill_rsp      = 1;
-        vortex->dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
+        vortex->out_dram_fill_rsp      = 1;
+        vortex->out_dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
         // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
 
         for (int i = 0; i < this->dram_req_vec[dequeue_index].data_length; i++)
         {
-            vortex->dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
+            vortex->out_dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
         }
         free(this->dram_req_vec[dequeue_index].data);
 
@@ -261,8 +261,8 @@ bool Vortex::dbus_driver()
     }
     else
     {
-        vortex->dram_fill_rsp      = 0;
-        vortex->dram_fill_rsp_addr = 0;
+        vortex->out_dram_fill_rsp      = 0;
+        vortex->out_dram_fill_rsp_addr = 0;
     }
 
     return false;
