@@ -37,6 +37,8 @@ module VX_cache
     parameter DFQQ_SIZE                     = 8, 
     // Lower Level Cache Hit Queue Size
     parameter LLVQ_SIZE                     = 16, 
+    // Fill Forward SNP Queue
+    parameter FFSQ_SIZE                     = 8,
 
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 16, 
@@ -343,6 +345,7 @@ module VX_cache
             .DWBQ_SIZE                    (DWBQ_SIZE),
             .DFQQ_SIZE                    (DFQQ_SIZE),
             .LLVQ_SIZE                    (LLVQ_SIZE),
+            .FFSQ_SIZE                    (FFSQ_SIZE),
             .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
             .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
             )

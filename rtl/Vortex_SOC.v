@@ -216,6 +216,7 @@ module Vortex_SOC (
         .DWBQ_SIZE                    (`LLDWBQ_SIZE),
         .DFQQ_SIZE                    (`LLDFQQ_SIZE),
         .LLVQ_SIZE                    (`LLLLVQ_SIZE),
+        .FFSQ_SIZE                    (`LLFFSQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (`LLFILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(`LLSIMULATED_DRAM_LATENCY_CYCLES)
         )

@@ -125,7 +125,11 @@
    -199
 
 
-`define NUMBER_CORES 2
+
+`define NUMBER_CORES_PER_CLUSTERS (2)
+`define NUMBER_CLUSTERS (1)
+`define NUMBER_CORES (`NUMBER_CORES_PER_CLUSTERS*`NUMBER_CLUSTERS)
+
 // `define SINGLE_CORE_BENCH 0
 `define GLOBAL_BLOCK_SIZE_BYTES 16
 // ========================================= Dcache Configurable Knobs =========================================
@@ -169,6 +173,8 @@
    `define DDFQQ_SIZE `DREQQ_SIZE
    // Lower Level Cache Hit Queue Size
    `define DLLVQ_SIZE 0
+   // Fill Forward SNP Queue
+   `define DFFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `define DFILL_INVALIDAOR_SIZE 16
@@ -220,6 +226,8 @@
    `define IDFQQ_SIZE `IREQQ_SIZE
    // Lower Level Cache Hit Queue Size
    `define ILLVQ_SIZE 0
+   // Fill Forward SNP Queue
+   `define IFFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `define IFILL_INVALIDAOR_SIZE 16
@@ -270,6 +278,8 @@
    `define SDFQQ_SIZE 0
    // Lower Level Cache Hit Queue Size
    `define SLLVQ_SIZE 0
+   // Fill Forward SNP Queue
+   `define SFFSQ_SIZE 0
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `define SFILL_INVALIDAOR_SIZE 16
@@ -293,7 +303,7 @@
    // Size of a word in bytes
    `define LLWORD_SIZE_BYTES (`LLBANK_LINE_SIZE_BYTES)
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-   `define LLNUMBER_REQUESTS (2*`NUMBER_CORES)
+   `define LLNUMBER_REQUESTS (2*`NUMBER_CORES_PER_CLUSTERS)
    // Number of cycles to complete stage 1 (read from memory)
    `define LLSTAGE_1_CYCLES 2
    // Function ID
@@ -305,7 +315,7 @@
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
    // Core Request Queue Size
-   `define LLREQQ_SIZE (`NT*`NW*`NUMBER_CORES)
+   `define LLREQQ_SIZE (`NT*`NW*`NUMBER_CORES_PER_CLUSTERS)
    // Miss Reserv Queue Knob
    `define LLMRVQ_SIZE `LLREQQ_SIZE
    // Dram Fill Rsp Queue Size
@@ -322,6 +332,8 @@
    `define LLDFQQ_SIZE `LLREQQ_SIZE
    // Lower Level Cache Hit Queue Size
    `define LLLLVQ_SIZE 0
+   // Fill Forward SNP Queue
+   `define LLFFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `define LLFILL_INVALIDAOR_SIZE 16
@@ -330,6 +342,59 @@
    `define LLSIMULATED_DRAM_LATENCY_CYCLES 10
 
 // ========================================= L2cache Configurable Knobs =========================================
+
+
+// ========================================= L3cache Configurable Knobs =========================================
+
+// General Cache Knobs
+   // Size of cache in bytes
+   `define L3CACHE_SIZE_BYTES 1024
+   // Size of line inside a bank in bytes
+   `define L3BANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+   // Number of banks {1, 2, 4, 8,...}
+   `define L3NUMBER_BANKS 8
+   // Size of a word in bytes
+   `define L3WORD_SIZE_BYTES (`LLBANK_LINE_SIZE_BYTES)
+   // Number of Word requests per cycle {1, 2, 4, 8, ...}
+   `define L3NUMBER_REQUESTS (2*`NUMBER_CLUSTERS)
+   // Number of cycles to complete stage 1 (read from memory)
+   `define L3STAGE_1_CYCLES 2
+   // Function ID
+   `define L3FUNC_ID 3
+
+   // Bank Number of words in a line
+   `define L3BANK_LINE_SIZE_WORDS (`LLBANK_LINE_SIZE_BYTES / `LLWORD_SIZE_BYTES)
+   `define L3BANK_LINE_SIZE_RNG `LLBANK_LINE_SIZE_WORDS-1:0
+// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
+
+   // Core Request Queue Size
+   `define L3REQQ_SIZE (`NT*`NW*`NUMBER_CLUSTERS)
+   // Miss Reserv Queue Knob
+   `define L3MRVQ_SIZE `LLREQQ_SIZE
+   // Dram Fill Rsp Queue Size
+   `define L3DFPQ_SIZE 2
+   // Snoop Req Queue
+   `define L3SNRQ_SIZE 8
+
+// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+   // Core Writeback Queue Size
+   `define L3CWBQ_SIZE `LLREQQ_SIZE
+   // Dram Writeback Queue Size
+   `define L3DWBQ_SIZE 4
+   // Dram Fill Req Queue Size
+   `define L3DFQQ_SIZE `LLREQQ_SIZE
+   // Lower Level Cache Hit Queue Size
+   `define L3LLVQ_SIZE 0
+   // Fill Forward SNP Queue
+   `define L3FFSQ_SIZE 8
+
+  // Fill Invalidator Size {Fill invalidator must be active}
+  `define L3FILL_INVALIDAOR_SIZE 16
+
+// Dram knobs
+   `define L3SIMULATED_DRAM_LATENCY_CYCLES 10
+
+// ========================================= L3cache Configurable Knobs =========================================
 
 
 `endif
