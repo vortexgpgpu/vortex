@@ -166,9 +166,9 @@ module VX_cache_req_queue
 
 
 	always @(*) begin
-		assign updated_valids = qual_valids;
+		updated_valids = qual_valids;
 		if (qual_has_request) begin
-			assign updated_valids[qual_request_index] = 0;
+			updated_valids[qual_request_index] = 0;
 		end
 	end
 

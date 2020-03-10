@@ -30,7 +30,7 @@ module VX_snp_fwd_arb
 	assign snp_fwd_addr  = per_bank_snp_fwd_addr[fsq_bank];
 
 	always @(*) begin
-		assign per_bank_snp_fwd_pop = 0;
+		per_bank_snp_fwd_pop = 0;
 		if (fsq_valid) begin
 			per_bank_snp_fwd_pop[fsq_bank] = 1;
 		end

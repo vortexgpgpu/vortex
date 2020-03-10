@@ -24,7 +24,8 @@ module VX_generic_queue_ll
         assign full     = 0;
     end else begin
 
-        reg[DATAW-1:0]          data[SIZE-1:0], curr_r, head_r;
+        (* syn_ramstyle = "mlab" *) reg[DATAW-1:0]          data[SIZE-1:0];
+        reg[DATAW-1:0]          curr_r, head_r;
         reg[$clog2(SIZE+1)-1:0] size_r;
         reg[$clog2(SIZE)-1:0]   wr_ctr_r;
         reg[$clog2(SIZE)-1:0]   rd_ptr_r, rd_next_ptr_r;
