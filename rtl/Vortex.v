@@ -45,6 +45,15 @@ module Vortex
 		    input  wire [31:0]                       I_dram_fill_rsp_addr,
 		    input  wire [31:0]                       I_dram_fill_rsp_data[`IBANK_LINE_SIZE_RNG],
 
+		    input  wire                              snp_req,
+		    input  wire [31:0]                       snp_req_addr,
+		    output wire                              snp_req_delay,
+
+		    input  wire                              I_snp_req,
+		    input  wire [31:0]                       I_snp_req_addr,
+		    output wire                              I_snp_req_delay,
+
+
 
 		    output wire        out_ebreak
 		 `else 
@@ -84,6 +93,15 @@ module Vortex
 		    input  wire                              I_dram_fill_rsp,
 		    input  wire [31:0]                       I_dram_fill_rsp_addr,
 		    input  wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_fill_rsp_data,
+
+
+		    input  wire                              snp_req,
+		    input  wire [31:0]                       snp_req_addr,
+		    output wire                              snp_req_delay,
+
+		    input  wire                              I_snp_req,
+		    input  wire [31:0]                       I_snp_req_addr,
+		    output wire                              I_snp_req_delay,
 
 
 		    output wire        out_ebreak
@@ -191,6 +209,17 @@ VX_jal_response_inter         VX_jal_rsp();         // Jump resolution to Fetch
 VX_warp_ctl_inter        VX_warp_ctl();
 
 
+VX_gpu_snp_req_rsp           VX_gpu_icache_snp_req();
+VX_gpu_snp_req_rsp           VX_gpu_dcache_snp_req();
+
+assign VX_gpu_icache_snp_req.snp_req      = I_snp_req;
+assign VX_gpu_icache_snp_req.snp_req_addr = I_snp_req_addr;
+assign I_snp_req_delay                    = VX_gpu_icache_snp_req.snp_delay;
+
+assign VX_gpu_dcache_snp_req.snp_req      = snp_req;
+assign VX_gpu_dcache_snp_req.snp_req_addr = snp_req_addr;
+assign snp_req_delay                      = VX_gpu_dcache_snp_req.snp_delay;
+
 VX_front_end vx_front_end(
 	.clk                 (clk),
 	.reset               (reset),
@@ -240,10 +269,12 @@ VX_dmem_controller VX_dmem_controller(
 	// Dram <-> Dcache
 	.VX_gpu_dcache_dram_req   (VX_gpu_dcache_dram_req),
 	.VX_gpu_dcache_dram_res   (VX_gpu_dcache_dram_res),
+	.VX_gpu_dcache_snp_req    (VX_gpu_dcache_snp_req),
 
 	// Dram <-> Icache
 	.VX_gpu_icache_dram_req   (VX_gpu_icache_dram_req),
 	.VX_gpu_icache_dram_res   (VX_gpu_icache_dram_res),
+	.VX_gpu_icache_snp_req    (VX_gpu_icache_snp_req),
 
 	// Core <-> Icache
 	.VX_icache_req            (VX_icache_req),

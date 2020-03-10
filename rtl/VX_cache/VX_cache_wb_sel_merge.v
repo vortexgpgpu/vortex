@@ -75,20 +75,20 @@ module VX_cache_wb_sel_merge
 	reg [NUMBER_BANKS-1:0] per_bank_wb_pop_unqual;
 	assign per_bank_wb_pop = per_bank_wb_pop_unqual & {NUMBER_BANKS{~core_no_wb_slot}};
 
-	wire[NUMBER_BANKS-1:0] bank_wants_wb;
-	genvar curr_bank;
-	generate
-		for (curr_bank = 0; curr_bank < NUMBER_BANKS; curr_bank=curr_bank+1) begin
-			assign bank_wants_wb[curr_bank] = (|per_bank_wb_valid[curr_bank]);
-		end
-	endgenerate
+	// wire[NUMBER_BANKS-1:0] bank_wants_wb;
+	// genvar curr_bank;
+	// generate
+	// 	for (curr_bank = 0; curr_bank < NUMBER_BANKS; curr_bank=curr_bank+1) begin
+	// 		assign bank_wants_wb[curr_bank] = (|per_bank_wb_valid[curr_bank]);
+	// 	end
+	// endgenerate
 
 
 	wire [(`vx_clog2(NUMBER_BANKS))-1:0] main_bank_index;
 	wire                                  found_bank;
 
 	VX_generic_priority_encoder #(.N(NUMBER_BANKS)) VX_sel_bank(
-		.valids(bank_wants_wb),
+		.valids(per_bank_wb_valid),
 		.index (main_bank_index),
 		.found (found_bank)
 		);
@@ -105,7 +105,7 @@ module VX_cache_wb_sel_merge
 			core_wb_pc       = 0;
 			core_wb_address  = 0;
 			for (this_bank = 0; this_bank < NUMBER_BANKS; this_bank = this_bank + 1) begin
-				if (((FUNC_ID == `LLFUNC_ID) && found_bank && per_bank_wb_valid[this_bank]) || (found_bank && (per_bank_wb_valid[this_bank]) && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index]))) begin
+				if (((FUNC_ID == `LLFUNC_ID) && found_bank && per_bank_wb_valid[this_bank] && ((this_bank == main_bank_index) || (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index]))) || ((FUNC_ID != `LLFUNC_ID) && ((this_bank == main_bank_index) || (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index])) && found_bank && (per_bank_wb_valid[this_bank]) && (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) && (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index]))) begin
 					core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
 					core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
 					core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];

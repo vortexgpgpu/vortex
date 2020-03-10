@@ -98,9 +98,11 @@ module VX_bank
 	// Snp Request
 	input  wire                                   snp_req,
 	input  wire[31:0]                             snp_req_addr,
+	output wire                                   snrq_full,
 
 	output wire                                   snp_fwd,
-	output wire[31:0]                             snp_fwd_addr
+	output wire[31:0]                             snp_fwd_addr,
+	input  wire                                   snp_fwd_pop
 );
 
 
@@ -108,7 +110,6 @@ module VX_bank
 
 	wire       snrq_pop;
 	wire       snrq_empty;
-	wire       snrq_full;
 
 	wire       snrq_valid_st0;
 	wire[31:0] snrq_addr_st0;
@@ -516,7 +517,7 @@ module VX_bank
 
 
 	// Enqueue to miss reserv if it's a valid miss
-	assign miss_add       = valid_st2 && miss_st2 && !mrvq_full && !(((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full));
+	assign miss_add       = valid_st2 && miss_st2 && !mrvq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full));
 	assign miss_add_pc    = pc_st2;
 	assign miss_add_addr  = addr_st2;
 	assign miss_add_data  = writeword_st2;
@@ -524,7 +525,7 @@ module VX_bank
 
 
 	// Enqueue to CWB Queue
-	wire                                   cwbq_push      = (valid_st2 && !miss_st2) && !cwbq_full && !((FUNC_ID == `LLFUNC_ID) && (miss_add_wb == 0)) && !( (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	wire                                   cwbq_push      = (valid_st2 && !miss_st2) && !cwbq_full && !((FUNC_ID == `LLFUNC_ID) && (miss_add_wb == 0)) && !((is_snp_st2 && valid_st2 && ffsq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
 	wire [`WORD_SIZE_RNG]                  cwbq_data      = readword_st2;
 	wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  cwbq_tid       = miss_add_tid;
 	wire [4:0]                             cwbq_rd        = miss_add_rd;
@@ -549,7 +550,7 @@ module VX_bank
 		);
 
 	// Enqueue to DWB Queue
-	wire                             dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && !dwbq_full && !(((valid_st2 && !miss_st2) && cwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	wire                             dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && !dwbq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
 	wire[31:0]                       dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]} & `BASE_ADDR_MASK;
 	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0]  dwbq_req_data = readdata_st2;
 	wire                             dwbq_empty;
@@ -609,11 +610,25 @@ module VX_bank
 		);
 
 	wire snp_fwd_push;
-	wire snp_fwd_pop;
+	wire ffsq_full;
+	wire ffsq_empty;
+
+	assign snp_fwd_push = is_snp_st2 && valid_st2 && !ffsq_full && !(((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	assign snp_fwd      = !ffsq_empty;
+	VX_generic_queue_ll #(.DATAW(32), .SIZE(FFSQ_SIZE)) ffs_queue(
+		.clk     (clk),
+		.reset   (reset),
+		.push    (snp_fwd_push),
+		.in_data ({addr_st2}),
+		.pop     (snp_fwd_pop),
+		.out_data({snp_fwd_addr}),
+		.empty   (ffsq_empty),
+		.full    (ffsq_full)
+		);
 
 
 
-	assign stall_bank_pipe = ((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full);
+	assign stall_bank_pipe = (is_snp_st2 && valid_st2 && ffsq_full) || ((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full);
 
 endmodule
 
