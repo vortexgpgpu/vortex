@@ -1,5 +1,5 @@
 PROJECT = Vortex
-TOP_LEVEL_ENTITY = Vortex
+TOP_LEVEL_ENTITY = Vortex_SOC
 SRC_FILE = ../Vortex.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
@@ -16,7 +16,7 @@ ASM_ARGS =
 STA_ARGS = --do_report_timing
 
 # Build targets
-all: $(PROJECT).sta.rpt
+all: $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 
 syn: $(PROJECT).syn.rpt
 
@@ -25,6 +25,8 @@ fit: $(PROJECT).fit.rpt
 asm: $(PROJECT).asm.rpt
 
 sta: $(PROJECT).sta.rpt
+
+pow: $(PROJECT).pow.rpt
 
 smart: smart.log
 
@@ -47,6 +49,9 @@ $(PROJECT).sta.rpt: smart.log sta.chg $(PROJECT).fit.rpt
 	$(QUARTUS_ROOT)/quartus/bin/quartus_sta $(PROJECT)  $(STA_ARGS)
 	$(QUARTUS_ROOT)/quartus/bin/quartus_sta -t VX_timing.tcl
 
+$(PROJECT).pow.rpt: smart.log pow.chg $(PROJECT).fit.rpt
+	$(QUARTUS_ROOT)/quartus/bin/quartus_pow $(PROJECT)
+
 smart.log: $(PROJECT_FILES)
 	$(QUARTUS_ROOT)/quartus/bin/quartus_sh --determine_smart_action $(PROJECT) > smart.log
 
@@ -65,6 +70,9 @@ sta.chg:
 
 asm.chg:
 	$(STAMP) asm.chg
+
+pow.chg:
+	$(STAMP) pow.chg
 
 program: $(PROJECT).sof
 	$(QUARTUS_ROOT)/quartus/bin/quartus_pgm --no_banner --mode=jtag -o "P;$(PROJECT).sof"
