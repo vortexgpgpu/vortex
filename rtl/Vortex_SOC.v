@@ -3,7 +3,6 @@
 
 module Vortex_SOC (
 
-`ifdef L3C
     input  wire           clk,
     input  wire           reset,
     // IO
@@ -33,36 +32,6 @@ module Vortex_SOC (
 
 
     output wire        out_ebreak
-
-`else
-
-    input  wire           clk,
-    input  wire           reset,
-    // IO
-    output wire                              io_valid[`NUMBER_CORES-1:0],
-    output wire[31:0]                        io_data [`NUMBER_CORES-1:0],
-
-    output wire[31:0]                        number_cores,
-
-    // DRAM Dcache Req
-    output wire                              dram_req,
-    output wire                              dram_req_write,
-    output wire                              dram_req_read,
-    output wire [31:0]                       dram_req_addr,
-    output wire [31:0]                       dram_req_size,
-    output wire [31:0]                       dram_req_data[`DBANK_LINE_SIZE_RNG],
-    output wire [31:0]                       dram_expected_lat,
-
-    // DRAM Dcache Res
-    output wire                              dram_fill_accept,
-    input  wire                              dram_fill_rsp,
-    input  wire [31:0]                       dram_fill_rsp_addr,
-    input  wire [31:0]                       dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
-
-
-    output wire        out_ebreak
-
-`endif
 	);
 
 `ifdef L3C
@@ -634,8 +603,8 @@ module Vortex_SOC (
     genvar llb_index;
     generate
         for (llb_index = 0; llb_index < `DBANK_LINE_SIZE_WORDS; llb_index=llb_index+1) begin
-            assign dram_req_data          [llb_index] = dram_req_data_port[llb_index];
-            assign dram_fill_rsp_data_port[llb_index] = dram_fill_rsp_data[llb_index];
+            assign out_dram_req_data          [llb_index] = dram_req_data_port[llb_index];
+            assign dram_fill_rsp_data_port[llb_index] = out_dram_fill_rsp_data[llb_index];
         end
     endgenerate
 
@@ -746,19 +715,19 @@ module Vortex_SOC (
         .core_wb_pc        (),
 
         // L2 Cache DRAM Fill response
-        .dram_fill_rsp     (dram_fill_rsp),
-        .dram_fill_rsp_addr(dram_fill_rsp_addr),
+        .dram_fill_rsp     (out_dram_fill_rsp),
+        .dram_fill_rsp_addr(out_dram_fill_rsp_addr),
         .dram_fill_rsp_data({dram_fill_rsp_data_port}),
 
         // L2 Cache can't accept Fill Response
-        .dram_fill_accept  (dram_fill_accept),
+        .dram_fill_accept  (out_dram_fill_accept),
 
         // L2 Cache DRAM Fill Request
-        .dram_req          (dram_req),
-        .dram_req_write    (dram_req_write),
-        .dram_req_read     (dram_req_read),
-        .dram_req_addr     (dram_req_addr),
-        .dram_req_size     (dram_req_size),
+        .dram_req          (out_dram_req),
+        .dram_req_write    (out_dram_req_write),
+        .dram_req_read     (out_dram_req_read),
+        .dram_req_addr     (out_dram_req_addr),
+        .dram_req_size     (out_dram_req_size),
         .dram_req_data     ({dram_req_data_port}),
 
         // Snoop Response
@@ -766,8 +735,8 @@ module Vortex_SOC (
         .dram_snp_full         (dram_snp_full),
 
         // Snoop Request
-        .snp_req               (0),
-        .snp_req_addr          (0)
+        .snp_req               (l3c_snp_req),
+        .snp_req_addr          (l3c_snp_req_addr)
         );
 
 
