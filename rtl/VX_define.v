@@ -127,7 +127,7 @@
 
 
 `define NUMBER_CORES_PER_CLUSTER 2
-`define NUMBER_CLUSTERS 2
+`define NUMBER_CLUSTERS 1
 `define NUMBER_CORES (`NUMBER_CORES_PER_CLUSTER*`NUMBER_CLUSTERS)
 
 // `define SINGLE_CORE_BENCH 0
@@ -251,7 +251,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define SNUMBER_REQUESTS `NT
    // Number of cycles to complete stage 1 (read from memory)
-   `define SSTAGE_1_CYCLES 4
+   `define SSTAGE_1_CYCLES 2
    // Function ID
    `define SFUNC_ID 2
 
@@ -305,7 +305,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define LLNUMBER_REQUESTS (2*`NUMBER_CORES_PER_CLUSTER)
    // Number of cycles to complete stage 1 (read from memory)
-   `define LLSTAGE_1_CYCLES 4
+   `define LLSTAGE_1_CYCLES 2
    // Function ID
    `define LLFUNC_ID 3
 
@@ -345,7 +345,7 @@
 
 
 // ========================================= L3cache Configurable Knobs =========================================
-
+// `define L3C 1
 // General Cache Knobs
    // Size of cache in bytes
    `define L3CACHE_SIZE_BYTES 1024
