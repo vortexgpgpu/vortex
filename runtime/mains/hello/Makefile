@@ -1,20 +1,22 @@
 
-COMP     = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-gcc
+RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
+
+COMP     = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../vortex_link.ld
 
-DMP  = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
-CPY  = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
+DMP  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
+CPY  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
 
 
-NEWLIB  = ../../newlib/newlib.c ../../newlib/newlib_notimp.c ../../newlib/newlib.s
+NEWLIB  = ../../newlib/newlib.c
 VX_STR  = 
 VX_INT  = ../../intrinsics/vx_intrinsics.s
-VX_IO   = 
+VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = 
 VX_TEST = 
 VX_FIO  = 
-LIBS    = ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libc.a $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = hello
 

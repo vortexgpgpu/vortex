@@ -1,14 +1,12 @@
 
-# To set a custom TOOLPATH, call make like this:
-# TOOLPATH=../../../../riscv-gnu-toolchain/drops/bin make ...
-TOOLPATH ?= ~/dev/riscv-gnu-toolchain/drops/bin
+RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
 
-COMP     = $(TOOLPATH)/riscv32-unknown-elf-gcc
+COMP = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../vortex_link.ld -ffreestanding -nostartfiles
 
-DMP  = $(TOOLPATH)/riscv32-unknown-elf-objdump
-CPY  = $(TOOLPATH)/riscv32-unknown-elf-objcopy
+DMP  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
+CPY  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
 
 
 VX_STR  = ../../startup/vx_start.s

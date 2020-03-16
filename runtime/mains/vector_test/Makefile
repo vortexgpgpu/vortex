@@ -1,12 +1,12 @@
 
-COMP     = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-gcc
+RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
+
+COMP = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
 
 CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostartfiles -nodefaultlibs -Wl,-Bstatic,-T,../vortex_link.ld -march=rv32imv -mabi=ilp32
 
-#DMP  = /home/fares/dev/riscv-gnu-toolchain-vector/drops/bin/riscv32-unknown-elf-objdump
-#CPY  = /home/fares/dev/riscv-gnu-toolchain-vector/drops/bin/riscv32-unknown-elf-objcopy
-DMP  = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-objdump
-CPY  = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-objcopy
+DMP  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
+CPY  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
 
 
 # VX_STR  = ../../startup/vx_start.s
@@ -21,8 +21,7 @@ VX_API  = ../../vx_api/vx_api.c
 VX_TEST = ../../tests/tests.c
 VX_FIO  = ../../fileio/fileio.s
 VX_VEC  = vx_vec.s
-#LIBS    = /home/fares/dev/riscv-gnu-toolchain-vector/drops/riscv32-unknown-elf/lib/libc.a /home/fares/dev/riscv-gnu-toolchain-vector/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
-LIBS    = /home/priya/dev/riscv_vec/riscv-gnu/riscv32-unknown-elf/lib/libc.a /home/priya/dev/riscv_vec/riscv-gnu/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libc.a $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_vector_main
 
