@@ -1,6 +1,8 @@
 
 #pragma once  
 
+#include <vx_driver.h>
+
 struct ihex_t {
   static constexpr int MAX_LINE_SIZE = 524;
   static constexpr int MAX_DATA_SIZE = 255;
@@ -13,3 +15,5 @@ struct ihex_t {
 };
 
 int parse_ihex_line(char* line, ihex_t* out);
+
+int upload_program(vx_device_h device, const char* filename);

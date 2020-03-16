@@ -48,11 +48,11 @@ $(PROJECT): vx_driver.o
 $(PROJECT_ASE): vx_driver.o
 	$(CC) $(DRV_CFLAGS) -DUSE_ASE $^ $(DRV_LDFLAGS) $(ASE_LIBS) -o $@
 
-test: test.o $(PROJECT)
-	$(CXX) $(CXXFLAGS) test.o $(LDFLAGS) -lvxdrv -o $@
+test: test.o utils.o $(PROJECT)
+	$(CXX) $(CXXFLAGS) test.o utils.o $(LDFLAGS) -lvxdrv -o $@
 
-test_ase: test.o $(PROJECT_ASE)
-	$(CXX) $(CXXFLAGS) -DUSE_ASE test.o $(LDFLAGS) -lvxdrv_ase -o $@
+test_ase: test.o utils.o $(PROJECT_ASE)
+	$(CXX) $(CXXFLAGS) -DUSE_ASE test.o utils.o $(LDFLAGS) -lvxdrv_ase -o $@
 
 vx_driver.o: vx_driver.c 
 	$(CC) $(DRV_CFLAGS) -c $^ -o $@

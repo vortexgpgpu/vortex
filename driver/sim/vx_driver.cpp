@@ -87,7 +87,7 @@ public:
 
     ~vx_device() {
         mutex_.lock();
-        is_done_ = false;
+        is_done_ = true;
         mutex_.unlock();
         
         thread_.join();
@@ -171,6 +171,8 @@ private:
                 std::cout << "Device ready..." << std::endl;
             }
         }
+
+        std::cout << "Device shutdown..." << std::endl;
     }
 
     static void __thread_proc__(vx_device* device) {
