@@ -1,11 +1,11 @@
 
-CXXFLAGS += -O2 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../sw
 
 LDFLAGS += -L./obj_dir
 
-DRV_CFLAGS += -O2 -g -Wall -Wextra -pedantic -Wfatal-errors
+DRV_CFLAGS += -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 DRV_CFLAGS += -I../../sw
 

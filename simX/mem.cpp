@@ -340,7 +340,7 @@ void RAM::loadHexImpl(std::string path) {
           uint32_t new_addr = init_addr+off;
           ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
         }
-      }     
+      }
 
       fseek(fp, 0, SEEK_END);
       uint32_t size = ftell(fp);

@@ -52,6 +52,18 @@ static int upload_program(vx_device_h device, const char* filename, uint32_t tra
 
   // get buffer address
   auto buf_ptr = (uint8_t*)vs_buf_ptr(buffer);
+
+  //
+  // copy initialization routine
+  //
+
+  ((uint32_t*)buf_ptr)[0] = 0xf1401073;
+  ((uint32_t*)buf_ptr)[1] = 0xf1401073;      
+  ((uint32_t*)buf_ptr)[2] = 0x30101073;
+  ((uint32_t*)buf_ptr)[3] = 0x800000b7;
+  ((uint32_t*)buf_ptr)[4] = 0x000080e7;
+
+  vx_copy_to_fpga(buffer, 0, 5 * 4, 0);
   
   //
   // copy hex program
