@@ -126,17 +126,14 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   INIT_TRACE(inst_in_lsu);
   INIT_TRACE(inst_in_wb);
 
-  for (int i = 0; i < 32; i++)
-  {
+  for (int i = 0; i < 32; i++) {
     stallWarp[i] = false;
-    for (int j = 0; j < 32; j++)
-    {
+    for (int j = 0; j < 32; j++) {
         renameTable[i][j] = true;
     }
   }
 
-  for(int i = 0; i < 32; i++)
-  {
+  for(int i = 0; i < 32; i++) {
     vecRenameTable[i] = true;
   }
 
@@ -157,8 +154,9 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   cache_simulator->reset = 0;
   cache_simulator->clk   = 0;
 
-  for (unsigned i = 0; i < a.getNWarps(); ++i)
+  for (unsigned i = 0; i < a.getNWarps(); ++i) {
     w.push_back(Warp(this, i));
+  }
 
   w[0].activeThreads = 1;
   w[0].spawned = true;
@@ -634,8 +632,6 @@ void Core::execute_unit()
 
 void Core::writeback()
 {
-
-
     if (inst_in_wb.rd > 0) renameTable[inst_in_wb.wid][inst_in_wb.rd] = true;
     if (inst_in_wb.vd > 0) vecRenameTable[inst_in_wb.vd] = true;
 
