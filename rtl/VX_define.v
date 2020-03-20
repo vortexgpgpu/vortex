@@ -141,7 +141,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define DNUMBER_REQUESTS `NT
    // Number of cycles to complete stage 1 (read from memory)
-   `define DSTAGE_1_CYCLES 4
+   `define DSTAGE_1_CYCLES 2
    // Function ID
    `define DFUNC_ID 0
 
@@ -192,7 +192,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define INUMBER_REQUESTS 1
    // Number of cycles to complete stage 1 (read from memory)
-   `define ISTAGE_1_CYCLES 4
+   `define ISTAGE_1_CYCLES 2
    // Function ID
    `define IFUNC_ID 1
 
