@@ -4,3 +4,5 @@
 ./rtl/modelsim/*.vcd
 *.vcd
 .*
+*.pyc
+__pycache__

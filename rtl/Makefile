@@ -9,7 +9,7 @@ MULTI_CORE=Vortex_SOC.v
 EXE=--exe ./simulate/test_bench.cpp
 MULTI_EXE=--exe ./simulate/multi_test_bench.cpp
 
-COMP=--compiler gcc
+COMP=--compiler gcc --language 1800-2009
 
 WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
 # WNO=

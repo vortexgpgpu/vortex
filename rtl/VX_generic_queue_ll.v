@@ -1,3 +1,4 @@
+`include "VX_define_synth.v"
 
 module VX_generic_queue_ll
 	#(
@@ -24,7 +25,12 @@ module VX_generic_queue_ll
         assign full     = 0;
     end else begin
 
-        (* syn_ramstyle = "mlab" *) reg[DATAW-1:0]          data[SIZE-1:0];
+        `ifdef QUEUE_FORCE_MLAB
+        (* syn_ramstyle = "mlab" *) reg[DATAW-1:0] data[SIZE-1:0];
+        `else
+        reg[DATAW-1:0] data[SIZE-1:0];
+        `endif
+
         reg[DATAW-1:0]          curr_r, head_r;
         reg[$clog2(SIZE+1)-1:0] size_r;
         reg[$clog2(SIZE)-1:0]   wr_ctr_r;
