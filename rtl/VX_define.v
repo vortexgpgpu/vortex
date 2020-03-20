@@ -125,9 +125,6 @@
    -199
 
 
-
-`define NUMBER_CORES_PER_CLUSTER 2
-`define NUMBER_CLUSTERS 1
 `define NUMBER_CORES (`NUMBER_CORES_PER_CLUSTER*`NUMBER_CLUSTERS)
 
 // `define SINGLE_CORE_BENCH 0
@@ -135,8 +132,6 @@
 // ========================================= Dcache Configurable Knobs =========================================
 
 // General Cache Knobs
-   // Size of cache in bytes
-   `define DCACHE_SIZE_BYTES 1024
    // Size of line inside a bank in bytes
    `define DBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    // Number of banks {1, 2, 4, 8,...}
@@ -156,9 +151,9 @@
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
    // Core Request Queue Size
-   `define DREQQ_SIZE `NT*`NW
+   `define DREQQ_SIZE `NW
    // Miss Reserv Queue Knob
-   `define DMRVQ_SIZE `DREQQ_SIZE
+   `define DMRVQ_SIZE (`NW*`NT)
    // Dram Fill Rsp Queue Size
    `define DDFPQ_SIZE 2
    // Snoop Req Queue
@@ -188,8 +183,6 @@
 // ========================================= Icache Configurable Knobs =========================================
 
 // General Cache Knobs
-   // Size of cache in bytes
-   `define ICACHE_SIZE_BYTES 1024
    // Size of line inside a bank in bytes
    `define IBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    // Number of banks {1, 2, 4, 8,...}
@@ -294,8 +287,6 @@
 // ========================================= L2cache Configurable Knobs =========================================
 
 // General Cache Knobs
-   // Size of cache in bytes
-   `define LLCACHE_SIZE_BYTES 1024
    // Size of line inside a bank in bytes
    `define LLBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    // Number of banks {1, 2, 4, 8,...}
@@ -315,9 +306,9 @@
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
    // Core Request Queue Size
-   `define LLREQQ_SIZE (`NT*`NW*`NUMBER_CORES_PER_CLUSTER)
+   `define LLREQQ_SIZE (2*`NUMBER_CORES_PER_CLUSTER)
    // Miss Reserv Queue Knob
-   `define LLMRVQ_SIZE `LLREQQ_SIZE
+   `define LLMRVQ_SIZE (`DNUMBER_BANKS*`NUMBER_CORES_PER_CLUSTER)
    // Dram Fill Rsp Queue Size
    `define LLDFPQ_SIZE 2
    // Snoop Req Queue
@@ -345,7 +336,6 @@
 
 
 // ========================================= L3cache Configurable Knobs =========================================
-// `define L3C 1
 // General Cache Knobs
    // Size of cache in bytes
    `define L3CACHE_SIZE_BYTES 1024
