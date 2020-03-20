@@ -15,7 +15,8 @@ int main(int argc, char **argv)
 #define ALL_TESTS
 #ifdef ALL_TESTS
      bool passed = true;
-	 std::string tests[NUM_TESTS] = {
+
+  std::string tests[NUM_TESTS] = {
 	 	"../../emulator/riscv_tests/rv32ui-p-add.hex",
 	 	"../../emulator/riscv_tests/rv32ui-p-addi.hex",
 	 	"../../emulator/riscv_tests/rv32ui-p-and.hex",

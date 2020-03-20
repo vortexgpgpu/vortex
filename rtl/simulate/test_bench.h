@@ -13,6 +13,7 @@
 #include "VX_define.h"
 #include "ram.h"
 #include "VVortex.h"
+#include "VVortex__Syms.h"
 #include "verilated.h"
 
 #include "tb_debug.h"
@@ -462,7 +463,7 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
 
-    int status = (unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb & 0xf;
+    int status = (unsigned int) vortex->Vortex->vx_back_end->VX_wb->last_data_wb & 0xf;
 
     // std::cout << "Last wb: " << std::hex << ((unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb) << "\n";
 

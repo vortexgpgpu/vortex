@@ -75,7 +75,8 @@ module VX_writeback (
 		.out  ({use_wb_data                  , VX_writeback_inter.wb_valid, VX_writeback_inter.rd, VX_writeback_inter.wb, VX_writeback_inter.wb_warp_num, VX_writeback_inter.wb_pc})
 		);
 
-	reg[31:0] last_data_wb;
+
+	reg[31:0] last_data_wb /* verilator public */ ;
 	always @(posedge clk) begin
 		if ((|VX_writeback_inter.wb_valid) && (VX_writeback_inter.wb != 0) && (VX_writeback_inter.rd == 28)) begin
 			last_data_wb <= use_wb_data[0];
