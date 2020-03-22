@@ -127,7 +127,7 @@
 
 `define NUMBER_CORES (`NUMBER_CORES_PER_CLUSTER*`NUMBER_CLUSTERS)
 
-// `define SINGLE_CORE_BENCH 0
+`define SINGLE_CORE_BENCH 1
 `define GLOBAL_BLOCK_SIZE_BYTES 16
 // ========================================= Dcache Configurable Knobs =========================================
 
@@ -141,7 +141,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define DNUMBER_REQUESTS `NT
    // Number of cycles to complete stage 1 (read from memory)
-   `define DSTAGE_1_CYCLES 2
+   `define DSTAGE_1_CYCLES 1
    // Function ID
    `define DFUNC_ID 0
 
@@ -172,7 +172,7 @@
    `define DFFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
-  `define DFILL_INVALIDAOR_SIZE 16
+  `define DFILL_INVALIDAOR_SIZE 0
 
 // Dram knobs
    `define DSIMULATED_DRAM_LATENCY_CYCLES 10
@@ -192,7 +192,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define INUMBER_REQUESTS 1
    // Number of cycles to complete stage 1 (read from memory)
-   `define ISTAGE_1_CYCLES 2
+   `define ISTAGE_1_CYCLES 1
    // Function ID
    `define IFUNC_ID 1
 
@@ -214,16 +214,16 @@
    // Core Writeback Queue Size
    `define ICWBQ_SIZE `IREQQ_SIZE
    // Dram Writeback Queue Size
-   `define IDWBQ_SIZE 0
+   `define IDWBQ_SIZE 16
    // Dram Fill Req Queue Size
    `define IDFQQ_SIZE `IREQQ_SIZE
    // Lower Level Cache Hit Queue Size
-   `define ILLVQ_SIZE 0
+   `define ILLVQ_SIZE 16
    // Fill Forward SNP Queue
    `define IFFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
-  `define IFILL_INVALIDAOR_SIZE 16
+  `define IFILL_INVALIDAOR_SIZE 0
 
 // Dram knobs
    `define ISIMULATED_DRAM_LATENCY_CYCLES 10
@@ -244,7 +244,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define SNUMBER_REQUESTS `NT
    // Number of cycles to complete stage 1 (read from memory)
-   `define SSTAGE_1_CYCLES 2
+   `define SSTAGE_1_CYCLES 1
    // Function ID
    `define SFUNC_ID 2
 
@@ -258,24 +258,24 @@
    // Miss Reserv Queue Knob
    `define SMRVQ_SIZE `SREQQ_SIZE
    // Dram Fill Rsp Queue Size
-   `define SDFPQ_SIZE 0
+   `define SDFPQ_SIZE 16
    // Snoop Req Queue
-   `define SSNRQ_SIZE 0
+   `define SSNRQ_SIZE 16
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
    // Core Writeback Queue Size
    `define SCWBQ_SIZE `SREQQ_SIZE
    // Dram Writeback Queue Size
-   `define SDWBQ_SIZE 0
+   `define SDWBQ_SIZE 16
    // Dram Fill Req Queue Size
-   `define SDFQQ_SIZE 0
+   `define SDFQQ_SIZE 16
    // Lower Level Cache Hit Queue Size
-   `define SLLVQ_SIZE 0
+   `define SLLVQ_SIZE 16
    // Fill Forward SNP Queue
-   `define SFFSQ_SIZE 0
+   `define SFFSQ_SIZE 16
 
   // Fill Invalidator Size {Fill invalidator must be active}
-  `define SFILL_INVALIDAOR_SIZE 16
+  `define SFILL_INVALIDAOR_SIZE 0
 
 // Dram knobs
    `define SSIMULATED_DRAM_LATENCY_CYCLES 10
@@ -296,7 +296,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define LLNUMBER_REQUESTS (2*`NUMBER_CORES_PER_CLUSTER)
    // Number of cycles to complete stage 1 (read from memory)
-   `define LLSTAGE_1_CYCLES 2
+   `define LLSTAGE_1_CYCLES 1
    // Function ID
    `define LLFUNC_ID 3
 
@@ -322,12 +322,12 @@
    // Dram Fill Req Queue Size
    `define LLDFQQ_SIZE `LLREQQ_SIZE
    // Lower Level Cache Hit Queue Size
-   `define LLLLVQ_SIZE 0
+   `define LLLLVQ_SIZE 16
    // Fill Forward SNP Queue
    `define LLFFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
-  `define LLFILL_INVALIDAOR_SIZE 16
+  `define LLFILL_INVALIDAOR_SIZE 0
 
 // Dram knobs
    `define LLSIMULATED_DRAM_LATENCY_CYCLES 10
@@ -348,7 +348,7 @@
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `define L3NUMBER_REQUESTS (`NUMBER_CLUSTERS)
    // Number of cycles to complete stage 1 (read from memory)
-   `define L3STAGE_1_CYCLES 2
+   `define L3STAGE_1_CYCLES 1
    // Function ID
    `define L3FUNC_ID 3
 
@@ -379,7 +379,7 @@
    `define L3FFSQ_SIZE 8
 
   // Fill Invalidator Size {Fill invalidator must be active}
-  `define L3FILL_INVALIDAOR_SIZE 16
+  `define L3FILL_INVALIDAOR_SIZE 0
 
 // Dram knobs
    `define L3SIMULATED_DRAM_LATENCY_CYCLES 10

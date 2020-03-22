@@ -13,6 +13,7 @@ void test_tmc()
 	vx_tmc(4);
 
 	unsigned tid = vx_threadID(); // Get TID
+
 	tmc_array[tid] = tid;
 
 	vx_tmc(1);
@@ -85,6 +86,7 @@ void simple_kernel()
 
 	wsapwn_arr[wid] = wid;
 
+	wid = vx_warpID();
 	if (wid != 0)
 	{
 		vx_tmc(0);

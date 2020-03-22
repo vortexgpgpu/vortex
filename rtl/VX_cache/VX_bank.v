@@ -311,8 +311,8 @@ module VX_bank
 //	assign is_fill_in_pipe = (|is_fill_st1) || is_fill_st2;
 		
 
-	assign dfpq_pop =              !dfpq_empty    && !stall_bank_pipe && !dfpq_hazard_st0;
-	assign mrvq_pop = !dfpq_pop && mrvq_valid_st0 && !stall_bank_pipe && !mrvq_hazard_st0;
+	assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe && !mrvq_hazard_st0;
+	assign dfpq_pop = !mrvq_pop && !dfpq_empty && !stall_bank_pipe && !dfpq_hazard_st0;
 	assign reqq_pop = !mrvq_pop && !dfpq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !(reqq_hazard_st0 || (mrvq_valid_st0 && mrvq_hazard_st0)) && !is_fill_in_pipe;
 	assign snrq_pop = !reqq_pop && !reqq_pop && !mrvq_pop && !dfpq_pop && snrq_valid_st0 && !stall_bank_pipe && !snrq_hazard_st0;
 

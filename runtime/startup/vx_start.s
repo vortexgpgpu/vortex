@@ -20,22 +20,22 @@ _start:
     # Initialize SP
     # la sp, __stack_top
     la a1, vx_set_sp
-    li a0, 32
+    li a0, 4
     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
     jal vx_set_sp
-    li a0, 1
-    .word 0x0005006b    # tmc 1
+    # li a0, 1
+    # .word 0x0005006b    # tmc 1
     # Initialize global pointerp
      # call __cxx_global_var_init
       # Clear the bss segment
-      la      a0, _edata
-      la      a2, _end
-      sub     a2, a2, a0
-      li      a1, 0
-      call    memset
-      la      a0, __libc_fini_array   # Register global termination functions
-      call    atexit                  #  to be called upon exit
-      call    __libc_init_array       # Run global initialization functions
+      # la      a0, _edata
+      # la      a2, _end
+      # sub     a2, a2, a0
+      # li      a1, 0
+      # call    memset
+      # la      a0, __libc_fini_array   # Register global termination functions
+      # call    atexit                  #  to be called upon exit
+      # call    __libc_init_array       # Run global initialization functions
       # li a0, 4
       # .word 0x0005006b    # tmc 4
       call    main
@@ -46,7 +46,7 @@ _start:
 .type vx_set_sp, @function
 .global vx_set_sp
 vx_set_sp:
-      li a0, 32
+      li a0, 4
       .word 0x0005006b    # tmc 4
       
       .option push
@@ -55,7 +55,7 @@ vx_set_sp:
         addi  gp, gp, %pcrel_lo(1b)
       .option pop
 
-      csrr a3, 0x21        # get wid
+      csrr a3, 0x22        # get wid
       slli a3, a3, 0x1a    # shift by wid
       csrr a2, 0x20        # get tid
       slli a1, a2, 10      # multiply tid by 1024

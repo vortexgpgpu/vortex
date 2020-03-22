@@ -218,9 +218,11 @@ module VX_warp_scheduler (
 			// Lock/Release
 			if (scheduled_warp && !stall) begin
 				warp_lock[warp_num] <= 1'b1;
+				// warp_lock <= {`NW{1'b1}};
 			end
 			if (|icache_stage_valids && !stall) begin
 				warp_lock[icache_stage_wid] <= 1'b0;
+				// warp_lock <= {`NW{1'b0}};
 			end
 
 		end
@@ -292,7 +294,7 @@ module VX_warp_scheduler (
 
 	assign hazard = (should_jal || should_bra) && schedule;
 
-	assign real_schedule = schedule && !warp_stalled[warp_to_schedule] && !total_barrier_stall[warp_to_schedule];
+	assign real_schedule = schedule && !warp_stalled[warp_to_schedule] && !total_barrier_stall[warp_to_schedule] && !warp_lock[0];
 
 	assign global_stall = (stall || wstall_this_cycle || hazard || !real_schedule || is_join);
 

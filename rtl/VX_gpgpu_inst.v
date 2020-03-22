@@ -13,10 +13,11 @@ module VX_gpgpu_inst (
 	wire is_split              = (VX_gpu_inst_req.is_split);
 
 	wire[`NT_M1:0] tmc_new_mask;
+	wire all_threads = `NT < VX_gpu_inst_req.a_reg_data[0];
 	genvar curr_t;
 	generate
 	for (curr_t = 0; curr_t < `NT; curr_t=curr_t+1) begin : tmc_new_mask_init
-		assign tmc_new_mask[curr_t] = curr_t < VX_gpu_inst_req.a_reg_data[0];
+		assign tmc_new_mask[curr_t] = all_threads ? 1 : curr_t < VX_gpu_inst_req.a_reg_data[0];
 	end
 	endgenerate
 
@@ -30,13 +31,14 @@ module VX_gpgpu_inst (
 	assign VX_warp_ctl.ebreak = VX_warp_ctl.change_mask && (VX_warp_ctl.thread_mask == 0);
 
 
-	wire       wspawn    = VX_gpu_inst_req.is_wspawn;
-	wire[31:0] wspawn_pc = VX_gpu_inst_req.rd2;
+	wire       wspawn     = VX_gpu_inst_req.is_wspawn;
+	wire[31:0] wspawn_pc  = VX_gpu_inst_req.rd2;
+	wire       all_active = `NW < VX_gpu_inst_req.a_reg_data[0];
 	wire[`NW-1:0] wspawn_new_active;
 	genvar curr_w;
 	generate
 	for (curr_w = 0; curr_w < `NW; curr_w=curr_w+1) begin : wspawn_new_active_init
-		assign wspawn_new_active[curr_w] = curr_w < VX_gpu_inst_req.a_reg_data[0];
+		assign wspawn_new_active[curr_w] = all_active ? 1 : curr_w < VX_gpu_inst_req.a_reg_data[0];
 	end
 	endgenerate
 

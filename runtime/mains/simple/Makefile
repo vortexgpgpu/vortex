@@ -1,9 +1,9 @@
 
-COMP     = riscv32-unknown-elf-gcc
+COMP     = /opt/riscv-new/drops/bin/riscv32-unknown-elf-gcc
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../vortex_link.ld -ffreestanding -nostdlib
 
-DMP  = riscv32-unknown-elf-objdump
-CPY  = riscv32-unknown-elf-objcopy
+DMP  = /opt/riscv-new/drops/bin/riscv32-unknown-elf-objdump
+CPY  = /opt/riscv-new/drops/bin/riscv32-unknown-elf-objcopy
 
 
 NEWLIB  = ../../newlib/newlib.c
@@ -13,7 +13,7 @@ VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
 VX_TEST = ../../tests/tests.c
 VX_FIO  = ../../fileio/fileio.s
-LIBS    = ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = /opt/riscv-new/drops/riscv32-unknown-elf/lib/libc.a /opt/riscv-new/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_simple_main
 
