@@ -1,5 +1,5 @@
 
-COMP     = /opt/riscv-new/drops/bin/riscv32-unknown-elf-gcc
+COMP     = /opt/riscv-new/drops/bin/riscv32-unknown-elf-g++
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../vortex_link.ld -ffreestanding -nostdlib
 
 DMP  = /opt/riscv-new/drops/bin/riscv32-unknown-elf-objdump

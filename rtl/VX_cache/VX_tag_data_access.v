@@ -94,7 +94,7 @@ module VX_tag_data_access
 	wire[`DBANK_LINE_SIZE_RNG][31:0] use_write_data;
 
 
-	wire real_writefill = writefill_st1e && miss_st1e;
+	wire real_writefill = writefill_st1e && ((valid_req_st1e && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e)));
 
 
 	wire fill_sent;
@@ -238,14 +238,14 @@ module VX_tag_data_access
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
 
     wire should_write = (sw || sb || sh) && valid_req_st1e && use_read_valid_st1e && !miss_st1e;
-    wire force_write  = writefill_st1e && valid_req_st1e && miss_st1e && (!use_read_valid_st1e || (use_read_valid_st1e && !miss_st1e));
+    wire force_write  = real_writefill && valid_req_st1e && miss_st1e && (!use_read_valid_st1e || (use_read_valid_st1e && !miss_st1e));
 
     wire[`DBANK_LINE_SIZE_RNG][3:0]  we;
     wire[`DBANK_LINE_SIZE_RNG][31:0] data_write;
 	genvar g; 
 	generate
 		for (g = 0; g < `DBANK_LINE_SIZE_WORDS; g = g + 1) begin : write_enables
-		    wire normal_write = (block_offset == g[`WORD_SELECT_SIZE_RNG]) && should_write && !writefill_st1e;
+		    wire normal_write = (block_offset == g[`WORD_SELECT_SIZE_RNG]) && should_write && !real_writefill;
 
 		    assign we[g]      = (force_write)        ? 4'b1111  : 
 		    				 (normal_write && (FUNC_ID == `LLFUNC_ID)) ? 4'b1111  :

@@ -71,7 +71,7 @@ module VX_cache_miss_resrv
 	output wire                                  miss_resrv_valid_st0,
 	output wire[31:0]                            miss_resrv_addr_st0,
 	output wire[`WORD_SIZE_RNG]                  miss_resrv_data_st0,
-	output wire[`vx_clog2(NUMBER_REQUESTS)-1:0] miss_resrv_tid_st0,
+	output wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  miss_resrv_tid_st0,
 	output wire[4:0]                             miss_resrv_rd_st0,
 	output wire[1:0]                             miss_resrv_wb_st0,
 	output wire[`NW_M1:0]                        miss_resrv_warp_num_st0,
@@ -90,8 +90,11 @@ module VX_cache_miss_resrv
 		reg[`vx_clog2(MRVQ_SIZE)-1:0]  head_ptr;
 		reg[`vx_clog2(MRVQ_SIZE)-1:0]  tail_ptr;
 
+		reg[31:0] size;
 
-		assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
+
+		// assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
+		assign miss_resrv_full = (MRVQ_SIZE != 2) && (size == MRVQ_SIZE);
 
 
 		wire                            enqueue_possible = !miss_resrv_full;
@@ -108,7 +111,7 @@ module VX_cache_miss_resrv
 
 
 		wire                            dequeue_possible = valid_table[head_ptr] && ready_table[head_ptr];
-		wire[`vx_clog2(MRVQ_SIZE)-1:0] dequeue_index    = head_ptr;
+		wire[`vx_clog2(MRVQ_SIZE)-1:0] dequeue_index     = head_ptr;
 
 		assign miss_resrv_valid_st0 = (MRVQ_SIZE != 2) && dequeue_possible;
 		assign miss_resrv_pc_st0    = pc_table[dequeue_index];
@@ -126,6 +129,7 @@ module VX_cache_miss_resrv
 				pc_table    <= 0;
 			end else begin
 				if (miss_add && enqueue_possible && (MRVQ_SIZE != 2)) begin
+					size                          <= size + 1;
 					valid_table[enqueue_index]    <= 1;
 					ready_table[enqueue_index]    <= 0;
 					pc_table[enqueue_index]       <= miss_add_pc;
@@ -139,6 +143,7 @@ module VX_cache_miss_resrv
 				end
 
 				if (miss_resrv_pop && dequeue_possible) begin
+					size                          <= size - 1;
 					valid_table[dequeue_index]    <= 0;
 					ready_table[dequeue_index]    <= 0;
 					addr_table[dequeue_index]     <= 0;
