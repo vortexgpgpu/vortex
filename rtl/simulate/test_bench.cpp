@@ -12,7 +12,7 @@ int main(int argc, char **argv)
 	Verilated::traceEverOn(true);
 
 
-#define ALL_TESTS
+// #define ALL_TESTS
 #ifdef ALL_TESTS
      bool passed = true;
 
@@ -88,9 +88,9 @@ int main(int argc, char **argv)
 
 	#else
 
-	// char testing[] = "../../runtime/mains/simple/vx_simple_main.hex";
+	char testing[] = "../../runtime/mains/simple/vx_simple_main.hex";
 	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-lw.hex";
-	char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
+	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
 	Vortex v;
 	// const char *testing;
 

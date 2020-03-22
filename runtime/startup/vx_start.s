@@ -17,27 +17,34 @@
   .global _start
   .type   _start, @function
 _start:
-    # Initialize SP
-    # la sp, __stack_top
+    # li a0, 4
+    # .word 0x0005006b    # tmc 4
+    # csrr a2, 0x20       # get tid
+    # slli a2, a2, 2
+    # la a3, 0x80000000
+    # add a3, a3, a2
+    # lw a4, 0(a3)
     la a1, vx_set_sp
     li a0, 4
     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
     jal vx_set_sp
+    ##########################################
     # li a0, 1
     # .word 0x0005006b    # tmc 1
-    # Initialize global pointerp
-     # call __cxx_global_var_init
-      # Clear the bss segment
-      # la      a0, _edata
-      # la      a2, _end
-      # sub     a2, a2, a0
-      # li      a1, 0
-      # call    memset
-      # la      a0, __libc_fini_array   # Register global termination functions
-      # call    atexit                  #  to be called upon exit
-      # call    __libc_init_array       # Run global initialization functions
-      # li a0, 4
-      # .word 0x0005006b    # tmc 4
+    # # Initialize global pointerp
+    #  call __cxx_global_var_init
+    #   # Clear the bss segment
+    #   la      a0, _edata
+    #   la      a2, _end
+    #   sub     a2, a2, a0
+    #   li      a1, 0
+    #   call    memset
+    #   la      a0, __libc_fini_array   # Register global termination functions
+    #   call    atexit                  #  to be called upon exit
+    #   call    __libc_init_array       # Run global initialization functions
+      li a0, 4
+      .word 0x0005006b    # tmc 4
+      ##############################################
       call    main
       tail    exit
       .size  _start, .-_start
