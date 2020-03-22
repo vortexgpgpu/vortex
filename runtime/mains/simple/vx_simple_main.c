@@ -52,6 +52,18 @@ int main()
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
+	vx_print_str("Let's start...\n");
+	unsigned what[36];
+	for (int i = 0; i < 36; i++)
+	{
+		what[i] = i;
+	}
+
+	for (int i = 0; i < 36; i++)
+	{
+		vx_printf("Value: ", what[i]);
+	}
+
 
 	vx_print_str("Simple Main\n");
 

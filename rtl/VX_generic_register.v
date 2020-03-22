@@ -1,6 +1,6 @@
 
 module VX_generic_register 
-	#( parameter N = 1)
+	#( parameter N = 1, parameter Valid = 1)
 	(
 		input wire           clk,
 		input wire           reset,
@@ -10,18 +10,26 @@ module VX_generic_register
 		output wire[(N-1):0] out
 	);
 
-	reg[(N-1):0] value;
+	if (Valid == 0) begin
 
-	always @(posedge clk or posedge reset) begin
-		if (reset) begin
-			value <= 0;
-		end else if (flush) begin
-			value <= 0;
-		end else if (~stall) begin
-			value <= in;
+		assign out = in;
+
+	end else begin
+
+		reg[(N-1):0] value;
+
+		always @(posedge clk or posedge reset) begin
+			if (reset) begin
+				value <= 0;
+			end else if (flush) begin
+				value <= 0;
+			end else if (~stall) begin
+				value <= in;
+			end
 		end
-	end
 
-	assign out = value;
+		assign out = value;
+
+	end
 
 endmodule
