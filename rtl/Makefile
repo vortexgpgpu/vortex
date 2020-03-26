@@ -85,4 +85,4 @@ runRel: wRel
 	(cd obj_dir && ./VVortex)
 
 clean:
-	rm obj_dir/*
+	rm -rf obj_dir

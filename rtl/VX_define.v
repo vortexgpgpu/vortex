@@ -127,8 +127,10 @@
 
 `define NUMBER_CORES (`NUMBER_CORES_PER_CLUSTER*`NUMBER_CLUSTERS)
 
-`define SINGLE_CORE_BENCH 1
+//`define SINGLE_CORE_BENCH
+
 `define GLOBAL_BLOCK_SIZE_BYTES 16
+
 // ========================================= Dcache Configurable Knobs =========================================
 
 // General Cache Knobs

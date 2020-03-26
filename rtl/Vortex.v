@@ -6,7 +6,6 @@ module Vortex
 		parameter CORE_ID = 0
 	)
 	(
-
 		`ifdef SINGLE_CORE_BENCH
 			input  wire           clk,
 			input  wire           reset,
@@ -53,10 +52,10 @@ module Vortex
 		    input  wire [31:0]                       I_snp_req_addr,
 		    output wire                              I_snp_req_delay,
 
-
-
 		    output wire        out_ebreak
+
 		 `else 
+
 			input  wire           clk,
 			input  wire           reset,
 			// IO
