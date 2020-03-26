@@ -1,3 +1,4 @@
+`include "VX_cache_config.v"
 
 module VX_snp_fwd_arb
 	#(
