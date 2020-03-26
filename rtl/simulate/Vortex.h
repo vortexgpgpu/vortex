@@ -12,10 +12,9 @@
 
 #include "VX_define.h"
 #include "ram.h"
-#include "VVortex_SOC.h"
+#include "VVortex.h"
+#include "VVortex__Syms.h"
 #include "verilated.h"
-
-#include "tb_debug.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -39,19 +38,18 @@ typedef struct
 class Vortex
 {
     public:
-        Vortex();
+        Vortex(RAM* ram);
         ~Vortex();
-        bool simulate(std::string);
-    private:
-    	void ProcessFile(void);
+        bool simulate();
+    private:    	
         void print_stats(bool = true);
         bool ibus_driver();
         bool dbus_driver();
         void io_handler();
 
-        RAM ram;
+        RAM* ram;
 
-        VVortex_SOC * vortex;
+        VVortex * vortex;
 
         unsigned start_pc;
         bool     refill_d;
@@ -61,7 +59,6 @@ class Vortex
         long int curr_cycle;
         bool stop;
         bool unit_test;
-        std::string instruction_file_name;
         std::ofstream results;
         int stats_static_inst;
         int stats_dynamic_inst;
@@ -78,6 +75,7 @@ class Vortex
         int debug_debugAddr;
         double stats_sim_time;
         std::vector<dram_req_t> dram_req_vec;
+        std::vector<dram_req_t> I_dram_req_vec;
         #ifdef VCD_OUTPUT
         VerilatedVcdC   *m_trace;
         #endif
@@ -85,12 +83,13 @@ class Vortex
 
 
 
-Vortex::Vortex() : start_pc(0), curr_cycle(0), stop(true), unit_test(true), stats_static_inst(0), stats_dynamic_inst(-1),
+Vortex::Vortex(RAM* ram) : start_pc(0), curr_cycle(0), stop(true), unit_test(true), stats_static_inst(0), stats_dynamic_inst(-1),
                                                     stats_total_cycles(0), stats_fwd_stalls(0), stats_branch_stalls(0),
                                                     debug_state(0), ibus_state(0), dbus_state(0), debug_return(0),
                                                     debug_wait_num(0), debug_inst_num(0), debug_end_wait(0), debug_debugAddr(0)
 {
-	this->vortex  = new VVortex_SOC;
+    this->ram = ram;
+	this->vortex  = new VVortex;
     #ifdef VCD_OUTPUT
     this->m_trace = new VerilatedVcdC;
     this->vortex->trace(m_trace, 99);
@@ -106,12 +105,6 @@ Vortex::~Vortex()
     #endif
 	this->results.close();
 	delete this->vortex;
-}
-
-
-void Vortex::ProcessFile(void)
-{
-    loadHexImpl(this->instruction_file_name.c_str(), &this->ram);
 }
 
 void Vortex::print_stats(bool cycle_test)
@@ -137,7 +130,7 @@ void Vortex::print_stats(bool cycle_test)
 
 
     uint32_t status;
-    ram.getWord(0, &status);
+    ram->getWord(0, &status);
 
     if (this->unit_test)
     {
@@ -164,6 +157,84 @@ void Vortex::print_stats(bool cycle_test)
 
 bool Vortex::ibus_driver()
 {
+    
+    // Iterate through each element, and get pop index
+    int dequeue_index  = -1;
+    bool dequeue_valid = false;
+    for (int i = 0; i < this->I_dram_req_vec.size(); i++)
+    {
+        if (this->I_dram_req_vec[i].cycles_left > 0)
+        {
+            this->I_dram_req_vec[i].cycles_left -= 1;   
+        }
+
+        if ((this->I_dram_req_vec[i].cycles_left == 0) && (!dequeue_valid))
+        {
+            dequeue_index = i;
+            dequeue_valid = true;
+        }
+    }
+
+
+    if (vortex->I_dram_req)
+    {
+        // std::cout << "Icache Dram Request received!\n";
+        if (vortex->I_dram_req_read)
+        {
+            // std::cout << "Icache Dram Request is read!\n";
+            // Need to add an element
+            dram_req_t dram_req;
+            dram_req.cycles_left = vortex->I_dram_expected_lat;
+            dram_req.data_length = vortex->I_dram_req_size / 4;
+            dram_req.base_addr   = vortex->I_dram_req_addr;
+            dram_req.data        = (unsigned *) malloc(dram_req.data_length * sizeof(unsigned));
+
+            for (int i = 0; i < dram_req.data_length; i++)
+            {
+                unsigned curr_addr = dram_req.base_addr + (i*4);
+                unsigned data_rd;
+                ram->getWord(curr_addr, &data_rd);
+                dram_req.data[i] = data_rd;
+            }
+            // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
+            this->I_dram_req_vec.push_back(dram_req);
+        }
+
+        if (vortex->I_dram_req_write)
+        {
+            unsigned base_addr   = vortex->I_dram_req_addr;
+            unsigned data_length = vortex->I_dram_req_size / 4;
+
+            for (int i = 0; i < data_length; i++)
+            {
+                unsigned curr_addr = base_addr + (i*4);
+                unsigned data_wr   = vortex->I_dram_req_data[i];
+                ram->writeWord(curr_addr, &data_wr);
+            }
+        }
+    }
+
+    if (vortex->I_dram_fill_accept && dequeue_valid)
+    {
+        // std::cout << "Icache Dram Response Sending...!\n";
+
+        vortex->I_dram_fill_rsp      = 1;
+        vortex->I_dram_fill_rsp_addr = this->I_dram_req_vec[dequeue_index].base_addr;
+        // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->I_dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
+
+        for (int i = 0; i < this->I_dram_req_vec[dequeue_index].data_length; i++)
+        {
+            vortex->I_dram_fill_rsp_data[i] = this->I_dram_req_vec[dequeue_index].data[i];
+        }
+        free(this->I_dram_req_vec[dequeue_index].data);
+
+        this->I_dram_req_vec.erase(this->I_dram_req_vec.begin() + dequeue_index);
+    }
+    else
+    {
+        vortex->I_dram_fill_rsp      = 0;
+        vortex->I_dram_fill_rsp_addr = 0;
+    }
 
     return false;
 
@@ -172,18 +243,15 @@ bool Vortex::ibus_driver()
 void Vortex::io_handler()
 {
     // std::cout << "Checking\n";
-    for (int c = 0; c < vortex->number_cores; c++)
+    if (vortex->io_valid)
     {
-        if (vortex->io_valid[c])
-        {
-            uint32_t data_write = (uint32_t) vortex->io_data[c];
-            // std::cout << "IO VALID!\n";
-            char c = (char) data_write;
-            std::cerr << c;
-            // std::cout << c;
+        uint32_t data_write = (uint32_t) vortex->io_data;
+        // std::cout << "IO VALID!\n";
+        char c = (char) data_write;
+        std::cerr << c;
+        // std::cout << c;
 
-            std::cout << std::flush;
-        }
+        std::cout << std::flush;
     }
 }
 
@@ -209,51 +277,51 @@ bool Vortex::dbus_driver()
     }
 
 
-    if (vortex->out_dram_req)
+    if (vortex->dram_req)
     {
-        if (vortex->out_dram_req_read)
+        if (vortex->dram_req_read)
         {
             // Need to add an element
             dram_req_t dram_req;
-            dram_req.cycles_left = vortex->out_dram_expected_lat;
-            dram_req.data_length = vortex->out_dram_req_size / 4;
-            dram_req.base_addr   = vortex->out_dram_req_addr;
+            dram_req.cycles_left = vortex->dram_expected_lat;
+            dram_req.data_length = vortex->dram_req_size / 4;
+            dram_req.base_addr   = vortex->dram_req_addr;
             dram_req.data        = (unsigned *) malloc(dram_req.data_length * sizeof(unsigned));
 
             for (int i = 0; i < dram_req.data_length; i++)
             {
                 unsigned curr_addr = dram_req.base_addr + (i*4);
                 unsigned data_rd;
-                ram.getWord(curr_addr, &data_rd);
+                ram->getWord(curr_addr, &data_rd);
                 dram_req.data[i] = data_rd;
             }
             // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
             this->dram_req_vec.push_back(dram_req);
         }
 
-        if (vortex->out_dram_req_write)
+        if (vortex->dram_req_write)
         {
-            unsigned base_addr   = vortex->out_dram_req_addr;
-            unsigned data_length = vortex->out_dram_req_size / 4;
+            unsigned base_addr   = vortex->dram_req_addr;
+            unsigned data_length = vortex->dram_req_size / 4;
 
             for (int i = 0; i < data_length; i++)
             {
                 unsigned curr_addr = base_addr + (i*4);
-                unsigned data_wr   = vortex->out_dram_req_data[i];
-                ram.writeWord(curr_addr, &data_wr);
+                unsigned data_wr   = vortex->dram_req_data[i];
+                ram->writeWord(curr_addr, &data_wr);
             }
         }
     }
 
-    if (vortex->out_dram_fill_accept && dequeue_valid)
+    if (vortex->dram_fill_accept && dequeue_valid)
     {
-        vortex->out_dram_fill_rsp      = 1;
-        vortex->out_dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
+        vortex->dram_fill_rsp      = 1;
+        vortex->dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
         // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
 
         for (int i = 0; i < this->dram_req_vec[dequeue_index].data_length; i++)
         {
-            vortex->out_dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
+            vortex->dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
         }
         free(this->dram_req_vec[dequeue_index].data);
 
@@ -261,8 +329,8 @@ bool Vortex::dbus_driver()
     }
     else
     {
-        vortex->out_dram_fill_rsp      = 0;
-        vortex->out_dram_fill_rsp_addr = 0;
+        vortex->dram_fill_rsp      = 0;
+        vortex->dram_fill_rsp_addr = 0;
     }
 
     return false;
@@ -270,16 +338,9 @@ bool Vortex::dbus_driver()
 
 
 
-bool Vortex::simulate(std::string file_to_simulate)
+bool Vortex::simulate()
 {
-
-    this->instruction_file_name = file_to_simulate;
-    // this->results << "\n****************\t" << file_to_simulate << "\t****************\n";
-
-    this->ProcessFile();
-
     // auto start_time = std::chrono::high_resolution_clock::now();
-
 
     static bool stop      = false;
     static int counter    = 0;
@@ -386,15 +447,14 @@ bool Vortex::simulate(std::string file_to_simulate)
 
     std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
 
-    int status = 0;
-    // int status = (unsigned int) vortex->Vortex_SOC__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb & 0xf;
+    int status = (unsigned int) vortex->Vortex->vx_back_end->VX_wb->last_data_wb & 0xf;
 
     // std::cout << "Last wb: " << std::hex << ((unsigned int) vortex->Vortex__DOT__vx_back_end__DOT__VX_wb__DOT__last_data_wb) << "\n";
 
     // std::cout << "Something: " <<  result << '\n';
 
     // uint32_t status;
-    // ram.getWord(0, &status);
+    // ram->getWord(0, &status);
 
     this->print_stats();
 
