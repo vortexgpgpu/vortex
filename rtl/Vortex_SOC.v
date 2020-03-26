@@ -3,39 +3,39 @@
 
 module Vortex_SOC (
 
-    input  wire           clk,
-    input  wire           reset,
-    // IO
-    output wire                              io_valid[`NUMBER_CORES-1:0],
-    output wire[31:0]                        io_data [`NUMBER_CORES-1:0],
+    // System Clock
+    input  wire            clk,
+    input  wire            reset,
 
-    output wire[31:0]                        number_cores,
+    // IO
+    output wire             io_valid[`NUMBER_CORES-1:0],
+    output wire[31:0]       io_data [`NUMBER_CORES-1:0],
+
+    output wire[31:0]       number_cores,
 
     // DRAM Dcache Req
-    output wire                              out_dram_req,
-    output wire                              out_dram_req_write,
-    output wire                              out_dram_req_read,
-    output wire [31:0]                       out_dram_req_addr,
-    output wire [31:0]                       out_dram_req_size,
-    output wire [31:0]                       out_dram_req_data[`DBANK_LINE_SIZE_RNG],
-    output wire [31:0]                       out_dram_expected_lat,
+    output wire             out_dram_req,
+    output wire             out_dram_req_write,
+    output wire             out_dram_req_read,
+    output wire [31:0]      out_dram_req_addr,
+    output wire [31:0]      out_dram_req_size,
+    output wire [31:0]      out_dram_req_data[`DBANK_LINE_SIZE_RNG],
+    output wire [31:0]      out_dram_expected_lat,
 
     // DRAM Dcache Res
-    output wire                              out_dram_fill_accept,
-    input  wire                              out_dram_fill_rsp,
-    input  wire [31:0]                       out_dram_fill_rsp_addr,
-    input  wire [31:0]                       out_dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
+    output wire             out_dram_fill_accept,
+    input  wire             out_dram_fill_rsp,
+    input  wire [31:0]      out_dram_fill_rsp_addr,
+    input  wire [31:0]      out_dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
-    input  wire                              l3c_snp_req,
-    input  wire                              l3c_snp_req_addr,
-    output wire                              l3c_snp_req_delay,
+    input  wire             llc_snp_req,
+    input  wire             llc_snp_req_addr,
+    output wire             llc_snp_req_delay,
 
-
-    output wire        out_ebreak
-	);
+    output wire             out_ebreak
+);
 
 `ifdef L3C
-
 
     // DRAM Dcache Req
     wire [`NUMBER_CLUSTERS-1:0]                             dram_req;
@@ -54,11 +54,7 @@ module Vortex_SOC (
 
     assign number_cores = `NUMBER_CORES;
 
-    // IO
-    // wire                                                 per_core_io_valid[`NUMBER_CORES-1:0];
-    // wire[31:0]                                           per_core_io_data[`NUMBER_CORES-1:0];
-
-    // Out ebreak
+     // Out ebreak
     wire[`NUMBER_CORES-1:0]                              per_core_out_ebreak;
     assign out_ebreak = (&per_core_out_ebreak);
 
@@ -71,18 +67,17 @@ module Vortex_SOC (
 
     wire                                                     l3c_core_accept;
 
-
-    wire                                                      l3c_snp_fwd;
-    wire[31:0]                                                l3c_snp_fwd_addr;
-    wire[`L3NUMBER_REQUESTS-1:0]                              l3c_snp_fwd_delay_temp;
-    wire                                                      l3c_snp_fwd_delay;
+    wire                                                     l3c_snp_fwd;
+    wire[31:0]                                               l3c_snp_fwd_addr;
+    wire[`L3NUMBER_REQUESTS-1:0]                             l3c_snp_fwd_delay_temp;
+    wire                                                     l3c_snp_fwd_delay;
 
     assign l3c_snp_fwd_delay = (|l3c_snp_fwd_delay_temp);
 
 
-    wire[`L3NUMBER_REQUESTS-1:0]                                  l3c_wb;
-    wire[`L3NUMBER_REQUESTS-1:0] [31:0]                           l3c_wb_addr;
-    wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_SIZE_RNG][31:0]      l3c_wb_data;
+    wire[`L3NUMBER_REQUESTS-1:0]                             l3c_wb;
+    wire[`L3NUMBER_REQUESTS-1:0] [31:0]                      l3c_wb_addr;
+    wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_SIZE_RNG][31:0] l3c_wb_data;
 
     wire[`IBANK_LINE_SIZE_RNG][31:0] l3c_dram_req_data;
     wire[`IBANK_LINE_SIZE_RNG][31:0] l3c_dram_fill_rsp_data;
@@ -94,9 +89,6 @@ module Vortex_SOC (
             assign l3c_dram_fill_rsp_data[curr_l][31:0]  = out_dram_fill_rsp_data[curr_l][31:0];
         end
     endgenerate
-
-
-
 
     // 
     genvar l3c_curr_core;
@@ -203,9 +195,9 @@ module Vortex_SOC (
         .dram_snp_full         (dram_snp_full),
 
         // Snoop Request
-        .snp_req               (l3c_snp_req),
-        .snp_req_addr          (l3c_snp_req_addr),
-        .snp_req_delay         (l3c_snp_req_delay),
+        .snp_req               (llc_snp_req),
+        .snp_req_addr          (llc_snp_req_addr),
+        .snp_req_delay         (llc_snp_req_delay),
 
         .snp_fwd               (l3c_snp_fwd),
         .snp_fwd_addr          (l3c_snp_fwd_addr),
@@ -226,8 +218,6 @@ module Vortex_SOC (
     generate
         for (curr_cluster = 0; curr_cluster < `NUMBER_CLUSTERS; curr_cluster=curr_cluster+1) begin
         ////////////////////// BEGIN CLUSTER /////////////////
-
-
 
         // DRAM Dcache Req
         wire[`NUMBER_CORES_PER_CLUSTER-1:0]                              per_core_dram_req;
@@ -260,8 +250,6 @@ module Vortex_SOC (
         wire[`NUMBER_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_fill_rsp_addr;
         wire[`NUMBER_CORES_PER_CLUSTER-1:0][`IBANK_LINE_SIZE_RNG][31:0]  per_core_I_dram_fill_rsp_data;
 
-
-
         // Snoop Requests
         wire[`NUMBER_CORES_PER_CLUSTER-1:0]                              per_core_dcache_snp_req;
         wire[`NUMBER_CORES_PER_CLUSTER-1:0][31:0]                        per_core_dcache_snp_req_addr;
@@ -270,7 +258,6 @@ module Vortex_SOC (
         wire[`NUMBER_CORES_PER_CLUSTER-1:0]                              per_core_icache_snp_req;
         wire[`NUMBER_CORES_PER_CLUSTER-1:0][31:0]                        per_core_icache_snp_req_addr;
         wire[`NUMBER_CORES_PER_CLUSTER-1:0]                              per_core_icache_snp_req_delay;
-
 
         // generate
             for (curr_core = 0; curr_core < `NUMBER_CORES_PER_CLUSTER; curr_core=curr_core+1) begin
@@ -346,8 +333,6 @@ module Vortex_SOC (
         // endgenerate
 
 
-
-        // 
         // generate
             for (l2c_curr_core = 0; l2c_curr_core < `LLNUMBER_REQUESTS; l2c_curr_core=l2c_curr_core+2) begin
                 // Core Request
@@ -492,7 +477,6 @@ module Vortex_SOC (
 
 `else 
 
-
     assign number_cores = `NUMBER_CORES;
 
     // IO
@@ -545,6 +529,7 @@ module Vortex_SOC (
 
             assign io_valid[curr_core]  = per_core_io_valid[curr_core];
             assign io_data [curr_core]  = per_core_io_data [curr_core];
+            
             Vortex #(.CORE_ID(curr_core)) vortex_core(
                     .clk                        (clk),
                     .reset                      (reset),
@@ -735,15 +720,9 @@ module Vortex_SOC (
         .dram_snp_full         (dram_snp_full),
 
         // Snoop Request
-        .snp_req               (l3c_snp_req),
-        .snp_req_addr          (l3c_snp_req_addr)
+        .snp_req               (llc_snp_req),
+        .snp_req_addr          (llc_snp_req_addr)
         );
-
-
-
-    //////////////////// L2 Cache ////////////////////
-
-
 
 `endif
 	
