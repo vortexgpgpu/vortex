@@ -30,6 +30,10 @@ MAKEMULTICPP=(cd obj_dir && make -j -f VVortex_SOC.mk OPT='-DVL_DEBUG' VL_DEBUG=
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
+.PHONY: build_config
+build_config:
+	./gen_config.py --rtl_locations
+
 # -LDFLAGS '-lsystemc'
 VERILATOR:
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF' $(LIGHTW)
