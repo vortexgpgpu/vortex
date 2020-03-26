@@ -2,110 +2,92 @@
 `include "VX_cache_config.v"
 
 module Vortex
-	#(
+	#( 
 		parameter CORE_ID = 0
-	)
-	(
-		`ifdef SINGLE_CORE_BENCH
-			input  wire           clk,
-			input  wire           reset,
-			// IO
-			output wire        io_valid,
-			output wire[31:0]  io_data,
+	) (		
+`ifdef SINGLE_CORE_BENCH
 
-			// DRAM Dcache Req
-		    output wire                              dram_req,
-		    output wire                              dram_req_write,
-		    output wire                              dram_req_read,
-		    output wire [31:0]                       dram_req_addr,
-		    output wire [31:0]                       dram_req_size,
-		    output wire [31:0]                       dram_req_data[`DBANK_LINE_SIZE_RNG],
-		    output wire [31:0]                       dram_expected_lat,
+	// Clock
+	input  wire           	clk,
+	input  wire           	reset,
 
-			// DRAM Dcache Res
-			output wire                              dram_fill_accept,
-		    input  wire                              dram_fill_rsp,
-		    input  wire [31:0]                       dram_fill_rsp_addr,
-		    input  wire [31:0]                       dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
+	// IO
+	output wire        		io_valid,
+	output wire[31:0]  		io_data,
 
+	// DRAM Dcache Req
+	output wire             dram_req,
+	output wire             dram_req_write,
+	output wire             dram_req_read,
+	output wire [31:0]      dram_req_addr,
+	output wire [31:0]      dram_req_size,
+	output wire [31:0]      dram_req_data[`DBANK_LINE_SIZE_RNG],
+	output wire [31:0]      dram_expected_lat,
 
-			// DRAM Icache Req
-		    output wire                              I_dram_req,
-		    output wire                              I_dram_req_write,
-		    output wire                              I_dram_req_read,
-		    output wire [31:0]                       I_dram_req_addr,
-		    output wire [31:0]                       I_dram_req_size,
-		    output wire [31:0]                       I_dram_req_data[`IBANK_LINE_SIZE_RNG],
-		    output wire [31:0]                       I_dram_expected_lat,
+	// DRAM Dcache Res
+	output wire             dram_fill_accept,
+	input  wire             dram_fill_rsp,
+	input  wire [31:0]      dram_fill_rsp_addr,
+	input  wire [31:0]      dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
-			// DRAM Icache Res
-			output wire                              I_dram_fill_accept,
-		    input  wire                              I_dram_fill_rsp,
-		    input  wire [31:0]                       I_dram_fill_rsp_addr,
-		    input  wire [31:0]                       I_dram_fill_rsp_data[`IBANK_LINE_SIZE_RNG],
+	// LLC Snooping
+	input  wire             snp_req,
+	input  wire [31:0]      snp_req_addr,
+	output wire             snp_req_delay,
 
-		    input  wire                              snp_req,
-		    input  wire [31:0]                       snp_req_addr,
-		    output wire                              snp_req_delay,
+	output wire             out_ebreak
 
-		    input  wire                              I_snp_req,
-		    input  wire [31:0]                       I_snp_req_addr,
-		    output wire                              I_snp_req_delay,
+`else 
 
-		    output wire        out_ebreak
+	input  wire           					 clk,
+	input  wire           					 reset,
+	// IO
+	output wire        						 io_valid,
+	output wire[31:0]  						 io_data,
 
-		 `else 
+	// DRAM Dcache Req
+	output wire                              dram_req,
+	output wire                              dram_req_write,
+	output wire                              dram_req_read,
+	output wire [31:0]                       dram_req_addr,
+	output wire [31:0]                       dram_req_size,
+	output wire [`DBANK_LINE_SIZE_RNG][31:0] dram_req_data,
+	output wire [31:0]                       dram_expected_lat,
 
-			input  wire           clk,
-			input  wire           reset,
-			// IO
-			output wire        io_valid,
-			output wire[31:0]  io_data,
-
-			// DRAM Dcache Req
-		    output wire                              dram_req,
-		    output wire                              dram_req_write,
-		    output wire                              dram_req_read,
-		    output wire [31:0]                       dram_req_addr,
-		    output wire [31:0]                       dram_req_size,
-		    output wire [`DBANK_LINE_SIZE_RNG][31:0] dram_req_data,
-		    output wire [31:0]                       dram_expected_lat,
-
-			// DRAM Dcache Res
-			output wire                              dram_fill_accept,
-		    input  wire                              dram_fill_rsp,
-		    input  wire [31:0]                       dram_fill_rsp_addr,
-		    input  wire [`DBANK_LINE_SIZE_RNG][31:0] dram_fill_rsp_data,
+	// DRAM Dcache Res
+	output wire                              dram_fill_accept,
+	input  wire                              dram_fill_rsp,
+	input  wire [31:0]                       dram_fill_rsp_addr,
+	input  wire [`DBANK_LINE_SIZE_RNG][31:0] dram_fill_rsp_data,
 
 
-			// DRAM Icache Req
-		    output wire                              I_dram_req,
-		    output wire                              I_dram_req_write,
-		    output wire                              I_dram_req_read,
-		    output wire [31:0]                       I_dram_req_addr,
-		    output wire [31:0]                       I_dram_req_size,
-		    output wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_req_data,
-		    output wire [31:0]                       I_dram_expected_lat,
+	// DRAM Icache Req
+	output wire                              I_dram_req,
+	output wire                              I_dram_req_write,
+	output wire                              I_dram_req_read,
+	output wire [31:0]                       I_dram_req_addr,
+	output wire [31:0]                       I_dram_req_size,
+	output wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_req_data,
+	output wire [31:0]                       I_dram_expected_lat,
 
-			// DRAM Icache Res
-			output wire                              I_dram_fill_accept,
-		    input  wire                              I_dram_fill_rsp,
-		    input  wire [31:0]                       I_dram_fill_rsp_addr,
-		    input  wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_fill_rsp_data,
-
-
-		    input  wire                              snp_req,
-		    input  wire [31:0]                       snp_req_addr,
-		    output wire                              snp_req_delay,
-
-		    input  wire                              I_snp_req,
-		    input  wire [31:0]                       I_snp_req_addr,
-		    output wire                              I_snp_req_delay,
+	// DRAM Icache Res
+	output wire                              I_dram_fill_accept,
+	input  wire                              I_dram_fill_rsp,
+	input  wire [31:0]                       I_dram_fill_rsp_addr,
+	input  wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_fill_rsp_data,
 
 
-		    output wire        out_ebreak
-		`endif
-	);
+	input  wire                              snp_req,
+	input  wire [31:0]                       snp_req_addr,
+	output wire                              snp_req_delay,
+
+	input  wire                              I_snp_req,
+	input  wire [31:0]                       I_snp_req_addr,
+	output wire                              I_snp_req_delay,
+
+	output wire        						 out_ebreak
+`endif
+);
 
 	wire scheduler_empty;
 	wire out_ebreak_unqual;

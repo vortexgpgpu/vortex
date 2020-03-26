@@ -12,7 +12,6 @@
 // L2 Cache size
 `define LLCACHE_SIZE_BYTES 8192
 
-
 // `define QUEUE_FORCE_MLAB 1
 
 // Use l3 cache (required for cluster behavior)
