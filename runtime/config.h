@@ -1,2 +1,0 @@
-#define TOTAL_THREADS 4
-#define TOTAL_WARPS 4

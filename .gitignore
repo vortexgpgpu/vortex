@@ -4,5 +4,6 @@
 ./rtl/modelsim/*.vcd
 *.vcd
 .*
+!.gitignore
 *.pyc
 __pycache__
