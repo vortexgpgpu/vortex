@@ -93,6 +93,7 @@ module VX_tag_data_access
 	wire[`DBANK_LINE_SIZE_RNG][3:0]  use_write_enable;
 	wire[`DBANK_LINE_SIZE_RNG][31:0] use_write_data;
 
+	wire sw, sb, sh;
 
 	wire real_writefill = writefill_st1e && ((valid_req_st1e && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e)));
 
@@ -230,9 +231,9 @@ module VX_tag_data_access
 
 /////////////////////// STORE LOGIC ///////////////////
 
-    wire sw  = valid_req_st1e && (mem_write_st1e == `SW_MEM_WRITE);
-    wire sb  = valid_req_st1e && (mem_write_st1e == `SB_MEM_WRITE);
-    wire sh  = valid_req_st1e && (mem_write_st1e == `SH_MEM_WRITE);
+    assign sw  = valid_req_st1e && (mem_write_st1e == `SW_MEM_WRITE);
+    assign sb  = valid_req_st1e && (mem_write_st1e == `SB_MEM_WRITE);
+    assign sh  = valid_req_st1e && (mem_write_st1e == `SH_MEM_WRITE);
 
     wire[3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
@@ -280,7 +281,3 @@ module VX_tag_data_access
 	assign invalidate_line     = is_snp_st1e && !miss_st1e;
 
 endmodule
-
-
-
-
