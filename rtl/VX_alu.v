@@ -25,6 +25,9 @@ module VX_alu(
 		wire[63:0] mul_data_a, mul_data_b;
 		wire[63:0] mul_result;
 
+		wire[31:0] ALU_in1;
+		wire[31:0] ALU_in2;
+
         VX_divide #(
             .WIDTHN(32),
             .WIDTHD(32),
@@ -123,9 +126,6 @@ module VX_alu(
 
 		`ifdef SYN_FUNC
 		wire which_in2;
-
-		wire[31:0] ALU_in1;
-		wire[31:0] ALU_in2;
 		wire[31:0] upper_immed;
 
 		assign which_in2  = in_rs2_src == `RS2_IMMED;
@@ -164,10 +164,7 @@ module VX_alu(
 		end
 
 	`else
-		wire which_in2;
-
-		wire[31:0] ALU_in1;
-		wire[31:0] ALU_in2;
+		wire which_in2;		
 		wire[31:0] upper_immed;
 
 
