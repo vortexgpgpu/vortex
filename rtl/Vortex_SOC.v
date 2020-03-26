@@ -3,9 +3,9 @@
 
 module Vortex_SOC (
 
-    // System Clock
-    input  wire            clk,
-    input  wire            reset,
+    // Clock
+    input  wire             clk,
+    input  wire             reset,
 
     // IO
     output wire             io_valid[`NUMBER_CORES-1:0],
@@ -13,7 +13,7 @@ module Vortex_SOC (
 
     output wire[31:0]       number_cores,
 
-    // DRAM Dcache Req
+    // DRAM Req
     output wire             out_dram_req,
     output wire             out_dram_req_write,
     output wire             out_dram_req_read,
@@ -22,12 +22,13 @@ module Vortex_SOC (
     output wire [31:0]      out_dram_req_data[`DBANK_LINE_SIZE_RNG],
     output wire [31:0]      out_dram_expected_lat,
 
-    // DRAM Dcache Res
+    // DRAM Res
     output wire             out_dram_fill_accept,
     input  wire             out_dram_fill_rsp,
     input  wire [31:0]      out_dram_fill_rsp_addr,
     input  wire [31:0]      out_dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
+    // LLC Snooping
     input  wire             llc_snp_req,
     input  wire             llc_snp_req_addr,
     output wire             llc_snp_req_delay,
@@ -529,7 +530,7 @@ module Vortex_SOC (
 
             assign io_valid[curr_core]  = per_core_io_valid[curr_core];
             assign io_data [curr_core]  = per_core_io_data [curr_core];
-            
+
             Vortex #(.CORE_ID(curr_core)) vortex_core(
                     .clk                        (clk),
                     .reset                      (reset),
@@ -604,8 +605,6 @@ module Vortex_SOC (
     //         end
     //     end
     // endgenerate
-
-
 
     // 
     genvar l2c_curr_core;
