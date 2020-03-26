@@ -1,4 +1,4 @@
-#include "multi_test_bench.h"
+#include "Vortex_SOC.h"
 
 #define NUM_TESTS 46
 
@@ -65,13 +65,16 @@ int main(int argc, char **argv)
 	 };
 
     for (std::string s : tests) {
-        Vortex v;
-
-        std::cerr << DEFAULT << "\n---------------------------------------\n";
+			  std::cerr << DEFAULT << "\n---------------------------------------\n";
 
         std::cerr << s << std::endl;
 
-        bool curr = v.simulate(s);
+				RAM ram;
+				loadHexImpl(s.c_str(), &ram);
+
+				Vortex_SOC v(&ram);
+				bool curr = v.simulate();
+
         if ( curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
         if (!curr) std::cerr << RED   << "Test Failed: " << s << std::endl;
         std::cerr << DEFAULT;
@@ -90,7 +93,7 @@ int main(int argc, char **argv)
 	char testing[] = "../../runtime/mains/simple/vx_simple_main.hex";
 	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-lw.hex";
 	// char testing[] = "../../emulator/riscv_tests/rv32ui-p-sw.hex";
-	Vortex v;
+	
 	// const char *testing;
 
 	// if (argc >= 2) {
@@ -99,10 +102,14 @@ int main(int argc, char **argv)
 	//     testing = "../../kernel/vortex_test.hex";
 	// }
 
-    std::cerr << testing << std::endl;
+  std::cerr << testing << std::endl;
 
+	RAM ram;
+	loadHexImpl(testing, &ram);
 
-	bool curr = v.simulate(testing);
+	Vortex_SOC v(&ram);
+	bool curr = v.simulate();
+
 	if ( curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
 	if (!curr) std::cerr << RED   << "Test Failed: " << testing << std::endl;
 

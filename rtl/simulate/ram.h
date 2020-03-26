@@ -1,5 +1,4 @@
 #ifndef __RAM__
-
 #define __RAM__
 
 // #include "string.h"
@@ -12,8 +11,8 @@
 class RAM;
 
 uint32_t hti(char);
-uint32_t hToI(char *, uint32_t);
-void loadHexImpl(char *,RAM*);
+uint32_t hToI(const char *, uint32_t);
+void loadHexImpl(const char *,RAM*);
 
 class RAM{
 public:
@@ -24,6 +23,10 @@ public:
     }
     ~RAM(){
         for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete [] mem[i];
+    }
+
+    size_t size() const {
+        return (1ull << 32);
     }
 
     void clear(){
@@ -149,7 +152,7 @@ public:
 
 // MEMORY UTILS
 
-uint32_t hti(char c) {
+inline uint32_t hti(char c) {
     if (c >= 'A' && c <= 'F')
         return c - 'A' + 10;
     if (c >= 'a' && c <= 'f')
@@ -157,7 +160,7 @@ uint32_t hti(char c) {
     return c - '0';
 }
 
-uint32_t hToI(char *c, uint32_t size) {
+inline uint32_t hToI(const char *c, uint32_t size) {
     uint32_t value = 0;
     for (uint32_t i = 0; i < size; i++) {
         value += hti(c[i]) << ((size - i - 1) * 4);
@@ -167,7 +170,7 @@ uint32_t hToI(char *c, uint32_t size) {
 
 
 
-void loadHexImpl(const char *path, RAM* mem) {
+inline void loadHexImpl(const char *path, RAM* mem) {
     mem->clear();
     FILE *fp = fopen(path, "r");
     if(fp == 0){
