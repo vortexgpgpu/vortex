@@ -34,29 +34,33 @@ MAKEMULTICPP=(cd obj_dir && make -j -f VVortex_SOC.mk OPT='-DVL_DEBUG' VL_DEBUG=
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))' )
 
+.PHONY: build_config
+build_config:
+	./gen_config.py --rtl_locations
+
 # -LDFLAGS '-lsystemc'
-VERILATOR:
+VERILATOR: build_config
 	echo "#define VCD_OFF" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW)
 
-VERILATORnoWarnings:
+VERILATORnoWarnings: build_config
 	echo "#define VCD_OFF" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) $(CF)  $(WNO) $(DEB)
 
-VERILATORnoWarningsRel:
+VERILATORnoWarningsRel: build_config
 	echo "#define VCD_OFF" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) $(CFRel)  $(WNO) --threads $(THREADS)
 
 
-VERILATORMULTInoWarnings:
+VERILATORMULTInoWarnings: build_config
 	echo "#define VCD_OFF" > simulate/tb_debug.h
 	verilator $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) $(CF)  $(WNO) $(DEB)
 
-compdebug:
+compdebug: build_config
 	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
 	verilator_bin_dbg $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
 
-compdebugmulti:
+compdebugmulti: build_config
 	echo "#define VCD_OUTPUT" > simulate/tb_debug.h
 	verilator_bin_dbg $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '-std=c++11 -DVL_DEBUG' $(WNO)  $(DEB)
 
