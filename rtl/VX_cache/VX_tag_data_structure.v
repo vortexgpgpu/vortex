@@ -71,7 +71,8 @@ module VX_tag_data_structure
     reg                                    dirty[`BANK_LINE_COUNT-1:0];
 
 
-    wire[`TAG_SELECT_SIZE_RNG] kkkkkk = write_addr[`TAG_SELECT_ADDR_RNG];
+    wire[`TAG_SELECT_ADDR_RNG]  curr_tag = write_addr[`TAG_SELECT_ADDR_RNG];
+    wire[`LINE_SELECT_ADDR_RNG] curr_inx = write_addr[`LINE_SELECT_ADDR_RNG];
 
     assign read_valid = valid[read_addr[`LINE_SELECT_ADDR_RNG]];
     assign read_dirty = dirty[read_addr[`LINE_SELECT_ADDR_RNG]];

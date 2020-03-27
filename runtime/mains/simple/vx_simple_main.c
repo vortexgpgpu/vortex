@@ -39,12 +39,13 @@ void mat_add_kernel(void * void_arguments)
 
 	bool valid = (wid < arguments->numRows) && (tid < arguments->numColums);
 
-	__if (valid)
-	{
+	// __if (valid)
+	// {
 		unsigned index = (wid * arguments->numColums) + tid;
-		arguments->z[index] = arguments->x[index] + arguments->y[index];
-	}
-	__endif
+		unsigned val = arguments->x[index] + arguments->y[index];
+		arguments->z[index] = val;
+	// }
+	// __endif
 }
 
 int main()
@@ -79,8 +80,8 @@ int main()
 
 
 	// Test wspawn
-	vx_print_str("test_wspawn\n");
-	test_wsapwn();
+	// vx_print_str("test_wspawn\n");
+	// test_wsapwn();
 
 	vx_print_str("Shared Memory test\n");
 	unsigned * ptr = (unsigned *) 0xFFFF0000;
@@ -113,9 +114,9 @@ int main()
 
 	// vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
 
-	// for (int i = 0; i < arguments.numRows; i++)
+	// for (int i = 0; i < numWarps; i++)
 	// {
-	// 	for (int j = 0; j < arguments.numColums; j++)
+	// 	for (int j = 0; j < numThreads; j++)
 	// 	{
 	// 		unsigned index = (i * arguments.numColums) + j;
 	// 		vx_print_hex(z[index]);

@@ -69,12 +69,22 @@ module VX_lsu (
 	assign VX_mem_wb.wb_valid    = VX_dcache_rsp.core_wb_valid;
 	assign VX_mem_wb.wb_warp_num = VX_dcache_rsp.core_wb_warp_num;
 	assign VX_mem_wb.loaded_data = VX_dcache_rsp.core_wb_readdata;
-	assign VX_mem_wb.mem_wb_pc   = VX_dcache_rsp.core_wb_pc[0];
+	
+	wire[(`CLOG2(`NT))-1:0] use_pc_index;
+	wire found;
+	VX_generic_priority_encoder #(.N(`NT)) pick_first_pc(
+		.valids(VX_dcache_rsp.core_wb_valid),
+		.index (use_pc_index),
+		.found (found)
+		);
+
+	assign VX_mem_wb.mem_wb_pc   = VX_dcache_rsp.core_wb_pc[use_pc_index];
 
 
 
 
 
 endmodule // Memory
+
 
 
