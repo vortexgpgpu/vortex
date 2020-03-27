@@ -6,12 +6,15 @@
 `ifndef NT
 `define NT 4
 `endif
+
 `ifndef NW
 `define NW 8
 `endif
+
 `ifndef NUMBER_CORES_PER_CLUSTER
 `define NUMBER_CORES_PER_CLUSTER 2
 `endif
+
 `ifndef NUMBER_CLUSTERS
 `define NUMBER_CLUSTERS 1
 `endif
@@ -160,26 +163,32 @@
    `ifndef DCACHE_SIZE_BYTES
    `define DCACHE_SIZE_BYTES 4096
    `endif
+
    // Size of line inside a bank in bytes
    `ifndef DBANK_LINE_SIZE_BYTES
    `define DBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    `endif
+
    // Number of banks {1, 2, 4, 8,...}
    `ifndef DNUMBER_BANKS
    `define DNUMBER_BANKS 8
    `endif
+
    // Size of a word in bytes
    `ifndef DWORD_SIZE_BYTES
    `define DWORD_SIZE_BYTES 4
    `endif
+
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `ifndef DNUMBER_REQUESTS
    `define DNUMBER_REQUESTS `NT
    `endif
+
    // Number of cycles to complete stage 1 (read from memory)
    `ifndef DSTAGE_1_CYCLES
-   `define DSTAGE_1_CYCLES 2
+   `define DSTAGE_1_CYCLES 1
    `endif
+
    // Function ID
    `ifndef DFUNC_ID
    `define DFUNC_ID 0
@@ -235,7 +244,7 @@
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `ifndef DFILL_INVALIDAOR_SIZE
-  `define DFILL_INVALIDAOR_SIZE 16
+  `define DFILL_INVALIDAOR_SIZE 0
   `endif
 
 // Dram knobs
@@ -253,26 +262,32 @@
    `ifndef ICACHE_SIZE_BYTES
    `define ICACHE_SIZE_BYTES 1024
    `endif
+
    // Size of line inside a bank in bytes
    `ifndef IBANK_LINE_SIZE_BYTES
    `define IBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    `endif
+
    // Number of banks {1, 2, 4, 8,...}
    `ifndef INUMBER_BANKS
    `define INUMBER_BANKS 8
    `endif
+
    // Size of a word in bytes
    `ifndef IWORD_SIZE_BYTES
    `define IWORD_SIZE_BYTES 4
    `endif
+
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `ifndef INUMBER_REQUESTS
    `define INUMBER_REQUESTS 1
    `endif
+
    // Number of cycles to complete stage 1 (read from memory)
    `ifndef ISTAGE_1_CYCLES
-   `define ISTAGE_1_CYCLES 2
+   `define ISTAGE_1_CYCLES 1
    `endif
+
    // Function ID
    `ifndef IFUNC_ID
    `define IFUNC_ID 1
@@ -282,45 +297,55 @@
    `ifndef IBANK_LINE_SIZE_WORDS
    `define IBANK_LINE_SIZE_WORDS (`IBANK_LINE_SIZE_BYTES / `IWORD_SIZE_BYTES)
    `endif
+
    `ifndef IBANK_LINE_SIZE_RNG
    `define IBANK_LINE_SIZE_RNG `IBANK_LINE_SIZE_WORDS-1:0
    `endif
+
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
    // Core Request Queue Size
    `ifndef IREQQ_SIZE
    `define IREQQ_SIZE `NW
    `endif
+
    // Miss Reserv Queue Knob
    `ifndef IMRVQ_SIZE
    `define IMRVQ_SIZE `IREQQ_SIZE
    `endif
+
    // Dram Fill Rsp Queue Size
    `ifndef IDFPQ_SIZE
    `define IDFPQ_SIZE 2
    `endif
+
    // Snoop Req Queue
    `ifndef ISNRQ_SIZE
    `define ISNRQ_SIZE 8
    `endif
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
+
    // Core Writeback Queue Size
    `ifndef ICWBQ_SIZE
    `define ICWBQ_SIZE `IREQQ_SIZE
    `endif
+
    // Dram Writeback Queue Size
    `ifndef IDWBQ_SIZE
-   `define IDWBQ_SIZE 0
+   `define IDWBQ_SIZE 16
    `endif
+
    // Dram Fill Req Queue Size
    `ifndef IDFQQ_SIZE
    `define IDFQQ_SIZE `IREQQ_SIZE
    `endif
+
    // Lower Level Cache Hit Queue Size
    `ifndef ILLVQ_SIZE
-   `define ILLVQ_SIZE 0
+   `define ILLVQ_SIZE 16
    `endif
+
    // Fill Forward SNP Queue
    `ifndef IFFSQ_SIZE
    `define IFFSQ_SIZE 8
@@ -328,7 +353,7 @@
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `ifndef IFILL_INVALIDAOR_SIZE
-  `define IFILL_INVALIDAOR_SIZE 16
+  `define IFILL_INVALIDAOR_SIZE 0
   `endif
 
 // Dram knobs
@@ -345,26 +370,32 @@
    `ifndef SCACHE_SIZE_BYTES
    `define SCACHE_SIZE_BYTES 1024
    `endif
+
    // Size of line inside a bank in bytes
    `ifndef SBANK_LINE_SIZE_BYTES
    `define SBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    `endif
+
    // Number of banks {1, 2, 4, 8,...}
    `ifndef SNUMBER_BANKS
    `define SNUMBER_BANKS 8
    `endif
+
    // Size of a word in bytes
    `ifndef SWORD_SIZE_BYTES
    `define SWORD_SIZE_BYTES 4
    `endif
+
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `ifndef SNUMBER_REQUESTS
    `define SNUMBER_REQUESTS `NT
    `endif
+
    // Number of cycles to complete stage 1 (read from memory)
    `ifndef SSTAGE_1_CYCLES
-   `define SSTAGE_1_CYCLES 2
+   `define SSTAGE_1_CYCLES 1
    `endif
+
    // Function ID
    `ifndef SFUNC_ID
    `define SFUNC_ID 2
@@ -374,53 +405,63 @@
    `ifndef SBANK_LINE_SIZE_WORDS
    `define SBANK_LINE_SIZE_WORDS (`SBANK_LINE_SIZE_BYTES / `SWORD_SIZE_BYTES)
    `endif
+
    `ifndef SBANK_LINE_SIZE_RNG
    `define SBANK_LINE_SIZE_RNG `SBANK_LINE_SIZE_WORDS-1:0
    `endif
+
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
    // Core Request Queue Size
    `ifndef SREQQ_SIZE
    `define SREQQ_SIZE `NW
    `endif
+
    // Miss Reserv Queue Knob
    `ifndef SMRVQ_SIZE
    `define SMRVQ_SIZE `SREQQ_SIZE
    `endif
+
    // Dram Fill Rsp Queue Size
    `ifndef SDFPQ_SIZE
-   `define SDFPQ_SIZE 0
+   `define SDFPQ_SIZE 16
    `endif
+
    // Snoop Req Queue
    `ifndef SSNRQ_SIZE
-   `define SSNRQ_SIZE 0
+   `define SSNRQ_SIZE 16
    `endif
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
+
    // Core Writeback Queue Size
    `ifndef SCWBQ_SIZE
    `define SCWBQ_SIZE `SREQQ_SIZE
    `endif
+
    // Dram Writeback Queue Size
    `ifndef SDWBQ_SIZE
-   `define SDWBQ_SIZE 0
+   `define SDWBQ_SIZE 16
    `endif
+
    // Dram Fill Req Queue Size
    `ifndef SDFQQ_SIZE
-   `define SDFQQ_SIZE 0
+   `define SDFQQ_SIZE 16
    `endif
+
    // Lower Level Cache Hit Queue Size
    `ifndef SLLVQ_SIZE
-   `define SLLVQ_SIZE 0
+   `define SLLVQ_SIZE 16
    `endif
+
    // Fill Forward SNP Queue
    `ifndef SFFSQ_SIZE
-   `define SFFSQ_SIZE 0
+   `define SFFSQ_SIZE 16
    `endif
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `ifndef SFILL_INVALIDAOR_SIZE
-  `define SFILL_INVALIDAOR_SIZE 16
+  `define SFILL_INVALIDAOR_SIZE 0
   `endif
 
 // Dram knobs
@@ -439,26 +480,32 @@
    `ifndef LLCACHE_SIZE_BYTES
    `define LLCACHE_SIZE_BYTES 1024
    `endif
+
    // Size of line inside a bank in bytes
    `ifndef LLBANK_LINE_SIZE_BYTES
    `define LLBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    `endif
+   
    // Number of banks {1, 2, 4, 8,...}
    `ifndef LLNUMBER_BANKS
    `define LLNUMBER_BANKS 8
    `endif
+
    // Size of a word in bytes
    `ifndef LLWORD_SIZE_BYTES
    `define LLWORD_SIZE_BYTES (`LLBANK_LINE_SIZE_BYTES)
    `endif
+
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `ifndef LLNUMBER_REQUESTS
    `define LLNUMBER_REQUESTS (2*`NUMBER_CORES_PER_CLUSTER)
    `endif
+
    // Number of cycles to complete stage 1 (read from memory)
    `ifndef LLSTAGE_1_CYCLES
-   `define LLSTAGE_1_CYCLES 2
+   `define LLSTAGE_1_CYCLES 1
    `endif
+
    // Function ID
    `define LLFUNC_ID 3
 
@@ -466,6 +513,7 @@
    `ifndef LLBANK_LINE_SIZE_WORDS
    `define LLBANK_LINE_SIZE_WORDS (`LLBANK_LINE_SIZE_BYTES / `LLWORD_SIZE_BYTES)
    `endif
+
    `ifndef LLBANK_LINE_SIZE_RNG
    `define LLBANK_LINE_SIZE_RNG `LLBANK_LINE_SIZE_WORDS-1:0
    `endif
@@ -475,14 +523,17 @@
    `ifndef LLREQQ_SIZE
    `define LLREQQ_SIZE (2*`NUMBER_CORES_PER_CLUSTER)
    `endif
+
    // Miss Reserv Queue Knob
    `ifndef LLMRVQ_SIZE
    `define LLMRVQ_SIZE (`DNUMBER_BANKS*`NUMBER_CORES_PER_CLUSTER)
    `endif
+
    // Dram Fill Rsp Queue Size
    `ifndef LLDFPQ_SIZE
    `define LLDFPQ_SIZE 2
    `endif
+
    // Snoop Req Queue
    `ifndef LLSNRQ_SIZE
    `define LLSNRQ_SIZE 8
@@ -493,18 +544,22 @@
    `ifndef LLCWBQ_SIZE
    `define LLCWBQ_SIZE `LLREQQ_SIZE
    `endif
+
    // Dram Writeback Queue Size
    `ifndef LLDWBQ_SIZE
    `define LLDWBQ_SIZE 4
    `endif
+
    // Dram Fill Req Queue Size
    `ifndef LLDFQQ_SIZE
    `define LLDFQQ_SIZE `LLREQQ_SIZE
    `endif
+
    // Lower Level Cache Hit Queue Size
    `ifndef LLLLVQ_SIZE
-   `define LLLLVQ_SIZE 0
+   `define LLLLVQ_SIZE 16
    `endif
+
    // Fill Forward SNP Queue
    `ifndef LLFFSQ_SIZE
    `define LLFFSQ_SIZE 8
@@ -512,7 +567,7 @@
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `ifndef LLFILL_INVALIDAOR_SIZE
-  `define LLFILL_INVALIDAOR_SIZE 16
+  `define LLFILL_INVALIDAOR_SIZE 0
   `endif
 
 // Dram knobs
@@ -529,26 +584,32 @@
    `ifndef L3CACHE_SIZE_BYTES
    `define L3CACHE_SIZE_BYTES 1024
    `endif
+
    // Size of line inside a bank in bytes
    `ifndef L3BANK_LINE_SIZE_BYTES
    `define L3BANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
    `endif
+
    // Number of banks {1, 2, 4, 8,...}
    `ifndef L3NUMBER_BANKS
    `define L3NUMBER_BANKS 8
    `endif
+
    // Size of a word in bytes
    `ifndef L3WORD_SIZE_BYTES
    `define L3WORD_SIZE_BYTES (`L3BANK_LINE_SIZE_BYTES)
    `endif
+
    // Number of Word requests per cycle {1, 2, 4, 8, ...}
    `ifndef L3NUMBER_REQUESTS
    `define L3NUMBER_REQUESTS (`NUMBER_CLUSTERS)
    `endif
+
    // Number of cycles to complete stage 1 (read from memory)
    `ifndef L3STAGE_1_CYCLES
-   `define L3STAGE_1_CYCLES 2
+   `define L3STAGE_1_CYCLES 1
    `endif
+
    // Function ID
    `define L3FUNC_ID 3
 
@@ -556,23 +617,28 @@
    `ifndef L3BANK_LINE_SIZE_WORDS
    `define L3BANK_LINE_SIZE_WORDS (`L3BANK_LINE_SIZE_BYTES / `L3WORD_SIZE_BYTES)
    `endif
+
    `ifndef L3BANK_LINE_SIZE_RNG
    `define L3BANK_LINE_SIZE_RNG `L3BANK_LINE_SIZE_WORDS-1:0
    `endif
+
 // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
    // Core Request Queue Size
    `ifndef L3REQQ_SIZE
    `define L3REQQ_SIZE (`NT*`NW*`NUMBER_CLUSTERS)
    `endif
+
    // Miss Reserv Queue Knob
    `ifndef L3MRVQ_SIZE
    `define L3MRVQ_SIZE `LLREQQ_SIZE
    `endif
+
    // Dram Fill Rsp Queue Size
    `ifndef L3DFPQ_SIZE
    `define L3DFPQ_SIZE 2
    `endif
+
    // Snoop Req Queue
    `ifndef L3SNRQ_SIZE
    `define L3SNRQ_SIZE 8
@@ -583,18 +649,22 @@
    `ifndef L3CWBQ_SIZE
    `define L3CWBQ_SIZE `L3REQQ_SIZE
    `endif
+
    // Dram Writeback Queue Size
    `ifndef L3DWBQ_SIZE
    `define L3DWBQ_SIZE 4
    `endif
+
    // Dram Fill Req Queue Size
    `ifndef L3DFQQ_SIZE
    `define L3DFQQ_SIZE `L3REQQ_SIZE
    `endif
+
    // Lower Level Cache Hit Queue Size
    `ifndef L3LLVQ_SIZE
    `define L3LLVQ_SIZE 0
    `endif
+   
    // Fill Forward SNP Queue
    `ifndef L3FFSQ_SIZE
    `define L3FFSQ_SIZE 8
@@ -602,7 +672,7 @@
 
   // Fill Invalidator Size {Fill invalidator must be active}
   `ifndef L3FILL_INVALIDAOR_SIZE
-  `define L3FILL_INVALIDAOR_SIZE 16
+  `define L3FILL_INVALIDAOR_SIZE 0
   `endif
 
 // Dram knobs
