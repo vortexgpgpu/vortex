@@ -262,7 +262,7 @@ module VX_tag_data_access
 		end
 	endgenerate
 
-	assign use_write_enable = we;
+	assign use_write_enable = (writefill_st1e && !real_writefill) ? 0 : we;
 	assign use_write_data   = data_write;
 
 ///////////////////////
