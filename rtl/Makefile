@@ -35,23 +35,23 @@ build_config:
 	./gen_config.py --rtl_locations
 
 # -LDFLAGS '-lsystemc'
-VERILATOR:
+VERILATOR: build_config
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF' $(LIGHTW)
 
-VERILATORnoWarnings:
+VERILATORnoWarnings: build_config
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF' $(WNO) $(DEB)
 
-VERILATORnoWarningsRel:
+VERILATORnoWarningsRel: build_config
 	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF -O3 -DVL_THREADED' $(WNO) --threads $(THREADS)
 
 
-VERILATORMULTInoWarnings:
+VERILATORMULTInoWarnings: build_config
 	verilator $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF -O3 -DVL_THREADED' $(WNO) $(DEB) --threads $(THREADS)
 
-compdebug:
+compdebug: build_config
 	verilator_bin_dbg $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
 
-compdebugmulti:
+compdebugmulti: build_config
 	verilator_bin_dbg $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
 
 RUNFILE: VERILATOR
