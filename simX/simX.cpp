@@ -55,39 +55,45 @@ HarpToolMode findMode(int argc, char** argv) {
 }
 
 int emu_main(int argc, char **argv) {
-  string archString("rv32i"), imgFileName("a.dsfsdout.bin");
-  bool showHelp, showStats, basicMachine, batch;
+    string archString("rv32i");
+    string imgFileName("a.dsfsdout.bin");
+    bool showHelp(false), showStats(false), basicMachine(true);
+    bool cpu_mode(false);
+    int max_warps(32);
+    int max_threads(32);
 
-  /* Read the command line arguments. */
-  CommandLineArgFlag          fh("-h", "--help", "", showHelp);
-  CommandLineArgSetter<string>fc("-c", "--core", "", imgFileName);
-  CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
-  CommandLineArgFlag          fs("-s", "--stats", "", showStats);
-  CommandLineArgFlag          fb("-b", "--basic", "", basicMachine);
-  CommandLineArgFlag          fi("-i", "--batch", "", batch);
-  
-  CommandLineArg::readArgs(argc, argv);
-  if (showHelp) {
-    cout << Help::emuHelp;
-    return 0;
-  }
+    /* Read the command line arguments. */
+    CommandLineArgFlag          fh("-h", "--help", "", showHelp);
+    CommandLineArgSetter<string>fc("-c", "--core", "", imgFileName);
+    CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
+    CommandLineArgFlag          fs("-s", "--stats", "", showStats);
+    CommandLineArgFlag          fb("-b", "--basic", "", basicMachine);
+    CommandLineArgFlag          fx("-x", "--cpu", "", cpu_mode);
+    CommandLineArgSetter<int>   fw("-w", "--warps", "", max_warps);
+    CommandLineArgSetter<int>   ft("-t", "--threads", "", max_threads);
+    
+    CommandLineArg::readArgs(argc, argv);
+    
+    if (showHelp) {
+      cout << Help::emuHelp;
+      return 0;
+    }
 
-  /* Instantiate a Core, RAM, and console output. */
-  ArchDef arch(archString);
+    /* Instantiate a Core, RAM, and console output. */
+    ArchDef arch(archString, cpu_mode, max_warps, max_threads);
 
-  Decoder *dec;
+    Decoder *dec;
 
-  switch (arch.getEncChar()) {
+    switch (arch.getEncChar()) {
     case 'b': dec = new WordDecoder(arch); break;
     case 'w': dec = new WordDecoder(arch); break;
     case 'r': dec = new WordDecoder(arch); break;
     default:
       cout << "Unrecognized decoder type: '" << arch.getEncChar() << "'.\n";
       return 1;
-  }
+    }
 
     // std::cout << "TESTING:  " << tests[t] << "\n"; 
-
 
     MemoryUnit mu(4096, arch.getWordSize(), basicMachine);
     Core core(arch, *dec, mu/*, ID in multicore implementations*/);

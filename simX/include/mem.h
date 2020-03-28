@@ -168,16 +168,18 @@ namespace Harp {
     bool disableVm;
   };
 
-
   class RAM : public MemDevice {
   public:
       uint8_t* mem[1 << 12];
 
       RAM(){
-          for(uint32_t i = 0;i < (1 << 12);i++) mem[i] = NULL;
+          for(uint32_t i = 0;i < (1 << 12);i++) 
+            mem[i] = NULL;
       }
       ~RAM(){
-          for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete [] mem[i];
+          for(uint32_t i = 0;i < (1 << 12);i++) 
+            if(mem[i]) 
+              delete [] mem[i];
       }
 
       void clear(){
@@ -218,7 +220,7 @@ namespace Harp {
           }
       }
 
-      virtual Size size() const { return (1<<31); };
+      virtual Size size() const { return -1; }
 
       void getBlock(uint32_t address, uint8_t *data)
       {
@@ -325,137 +327,9 @@ namespace Harp {
 
   // MEMORY UTILS
 
-  uint32_t hti_old(char c) {
-      if (c >= 'A' && c <= 'F')
-          return c - 'A' + 10;
-      if (c >= 'a' && c <= 'f')
-          return c - 'a' + 10;
-      return c - '0';
-  }
-
-  uint32_t hToI_old(char *c, uint32_t size) {
-      uint32_t value = 0;
-      for (uint32_t i = 0; i < size; i++) {
-          value += hti_old(c[i]) << ((size - i - 1) * 4);
-      }
-      return value;
-  }
-
-
-
-  void loadHexImpl(std::string path) {
-      this->clear();
-      FILE *fp = fopen(&path[0], "r");
-      if(fp == 0){
-          std::cout << path << " not found" << std::endl;
-      }
-      //Preload 0x0 <-> 0x80000000 jumps
-      ((uint32_t*)this->get(0))[0] = 0xf1401073;
-      ((uint32_t*)this->get(0))[1] = 0xf1401073;
-
-      // ((uint32_t*)this->get(0))[1] = 0xf1401073;
-      ((uint32_t*)this->get(0))[2] = 0x30101073;
-
-      ((uint32_t*)this->get(0))[3] = 0x800000b7;
-      ((uint32_t*)this->get(0))[4] = 0x000080e7;
-      
-      ((uint32_t*)this->get(0x80000000))[0] = 0x00000097;
-
-      ((uint32_t*)this->get(0xb0000000))[0] = 0x01C02023;
-      // F00FFF10
-      ((uint32_t*)this->get(0xf00fff10))[0] = 0x12345678;
-
-
-
-      ((uint32_t*)this->get(0x70000000))[0] = 0x00008067;
-
-      {
-        uint32_t init_addr = 0x70000004;
-        for (int off = 0; off < 1024; off+=4)
-        {
-          uint32_t new_addr = init_addr+off;
-          ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
-        }
-      }
-
-      {
-        uint32_t init_addr = 0x71000000;
-        for (int off = 0; off < 1024; off+=4)
-        {
-          uint32_t new_addr = init_addr+off;
-          ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
-        }
-      }
-
-      {
-        uint32_t init_addr = 0x72000000;
-        for (int off = 0; off < 1024; off+=4)
-        {
-          uint32_t new_addr = init_addr+off;
-          ((uint32_t*)this->get(new_addr))[0] = 0x00000000;
-        }
-      }
-      
-
-      fseek(fp, 0, SEEK_END);
-      uint32_t size = ftell(fp);
-      fseek(fp, 0, SEEK_SET);
-      char* content = new char[size];
-      int x = fread(content, 1, size, fp);
-
-      if (!x) { std::cout << "COULD NOT READ FILE\n"; std::abort();}
-
-      int offset = 0;
-      char* line = content;
-      // std::cout << "WHTA\n";
-      while (1) {
-          if (line[0] == ':') {
-              uint32_t byteCount = hToI_old(line + 1, 2);
-              uint32_t nextAddr = hToI_old(line + 3, 4) + offset;
-              uint32_t key = hToI_old(line + 7, 2);
-              switch (key) {
-              case 0:
-                  for (uint32_t i = 0; i < byteCount; i++) {
-
-                      unsigned add = nextAddr + i;
-
-                      *(this->get(add)) = hToI_old(line + 9 + i * 2, 2);
-                      // std::cout << "lhi: Address: " << std::hex <<(add) << "\tValue: " << std::hex << hToI_old(line + 9 + i * 2, 2) << std::endl;
-                  }
-                  break;
-              case 2:
-  //              cout << offset << endl;
-                  offset = hToI_old(line + 9, 4) << 4;
-                  break;
-              case 4:
-  //              cout << offset << endl;
-                  offset = hToI_old(line + 9, 4) << 16;
-                  break;
-              default:
-  //              cout << "??? " << key << endl;
-                  break;
-              }
-          }
-
-          while (*line != '\n' && size != 0) {
-              line++;
-              size--;
-          }
-          if (size <= 1)
-              break;
-          line++;
-          size--;
-      }
-      
-
-      if (content) delete[] content;
-  }
+  void loadHexImpl(std::string path); 
 
   };
-
-
-
-
 }
 
 
