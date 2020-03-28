@@ -29,6 +29,8 @@ module VX_shared_memory_block
 	`ifndef SYN
 
 		reg[SMB_WORDS_PER_READ-1:0][3:0][7:0] shared_memory[SMB_HEIGHT-1:0];
+		
+		wire [$clog2(SMB_HEIGHT) - 1:0]reg_addr;
 
 		//wire need_to_write = (|we);
 		integer curr_ind;
@@ -48,8 +50,7 @@ module VX_shared_memory_block
 				if (we == 2'b11) shared_memory[reg_addr][3] <= wdata[3];
 			end
 		end
-
-              	wire [$clog2(SMB_HEIGHT) - 1:0]reg_addr;
+       	
 		assign reg_addr = addr;
 		// always @(posedge clk)
  		// 	reg_addr <= addr;

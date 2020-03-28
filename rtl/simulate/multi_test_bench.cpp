@@ -3,16 +3,10 @@
 #define NUM_TESTS 46
 
 int main(int argc, char **argv)
-{
-
-	// Verilated::debug(1);
 
 	Verilated::commandArgs(argc, argv);
 
-	Verilated::traceEverOn(true);
-
-
-// #define ALL_TESTS
+#define ALL_TESTS
 #ifdef ALL_TESTS
      bool passed = true;
 	 std::string tests[NUM_TESTS] = {

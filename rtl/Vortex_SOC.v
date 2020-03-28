@@ -369,11 +369,11 @@ module Vortex_SOC (
                 assign per_core_dram_fill_rsp_addr[(l2c_curr_core/2)]   = l2c_wb_addr[l2c_curr_core];
                 assign per_core_I_dram_fill_rsp_addr[(l2c_curr_core/2)] = l2c_wb_addr[l2c_curr_core+1];
 
-                assign per_core_dcache_snp_req     [(l2c_curr_core/2)]       = l2c_snp_fwd;
-                assign per_core_dcache_snp_req_addr[(l2c_curr_core/2)]       = l2c_snp_fwd_addr;
+                assign per_core_dcache_snp_req     [(l2c_curr_core/2)]  = l2c_snp_fwd;
+                assign per_core_dcache_snp_req_addr[(l2c_curr_core/2)]  = l2c_snp_fwd_addr;
 
-                assign per_core_icache_snp_req     [(l2c_curr_core/2)]       = l2c_snp_fwd;
-                assign per_core_icache_snp_req_addr[(l2c_curr_core/2)]       = l2c_snp_fwd_addr;
+                assign per_core_icache_snp_req     [(l2c_curr_core/2)]  = l2c_snp_fwd;
+                assign per_core_icache_snp_req_addr[(l2c_curr_core/2)]  = l2c_snp_fwd_addr;
             end
         // endgenerate
 
