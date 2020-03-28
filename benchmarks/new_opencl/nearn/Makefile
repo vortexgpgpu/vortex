@@ -1,4 +1,4 @@
-LLVM_LIB_PATH ?= $(wildcard ../compiler/lib)
+LLVM_LIB_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops/lib)
 POCLCC_PATH ?= $(wildcard ../compiler)
 POCLRT_PATH ?= $(wildcard ../runtime)
 DRIVER_PATH ?= $(wildcard ../../../driver/sw)
