@@ -1,7 +1,7 @@
 #CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
 CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
-#USE_MULTICORE=1
+USE_MULTICORE=1
 
 CFLAGS += -I../../include -I../../../../rtl/simulate
 
