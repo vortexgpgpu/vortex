@@ -291,8 +291,6 @@ void Vortex::flush_caches(uint32_t mem_addr, uint32_t size) {
 }
 
 bool Vortex::simulate() {
-  this->wait(50);
-
   // reset the device
   this->reset();
 

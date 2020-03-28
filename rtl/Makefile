@@ -5,8 +5,8 @@ INCLUDE=-I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterface
 SINGLE_CORE=Vortex.v
 MULTI_CORE=Vortex_SOC.v
 
-EXE=--exe ./simulate/test_bench.cpp
-MULTI_EXE=--exe ./simulate/multi_test_bench.cpp
+EXE=--exe ./simulate/test_bench.cpp ./simulate/Vortex.cpp
+MULTI_EXE=--exe ./simulate/multi_test_bench.cpp ./simulate/Vortex_SOC.cpp
 
 COMP=--compiler gcc --language 1800-2009
 
