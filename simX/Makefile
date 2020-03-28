@@ -2,13 +2,13 @@
 # HARPtools by Chad D. Kersey, Summer 2011                                     #
 ################################################################################
 
-CXXFLAGS ?= -std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
-# CXXFLAGS ?= -std=c++11 -fPIC -O0 -g -Wall -Wextra -pedantic # -g -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
+CXXFLAGS ?= -std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
+#CXXFLAGS ?= -std=c++11 -fPIC -g -O0 -Wall -Wextra -pedantic -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
 
 LIB_OBJS=simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
 
 
-INCLUDE=-I. -I../rtl/shared_memory -I../rtl/cache -I../rtl/interfaces -Isimulate -I../rtl
+INCLUDE=-I. -I../old_rtl -I../old_rtl/interfaces -I../old_rtl/cache -I../old_rtl/shared_memory -Isimulate
 FILE=cache_simX.v
 COMP=--compiler gcc
 LIB=

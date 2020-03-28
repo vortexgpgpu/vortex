@@ -1,5 +1,5 @@
 
-`include "../rtl/VX_define.v"
+`include "../old_rtl/VX_define.v"
 
 module cache_simX (
 	input       wire clk,    // Clock

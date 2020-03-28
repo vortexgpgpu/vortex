@@ -45,7 +45,7 @@ ostream &Harp::operator<<(ostream& os, Instruction &inst) {
   //   else os << "#0x" << hex << inst.immsrc;
   // }
 
-  D(3, instTable[inst.op].opString << ';\n');
+  os << instTable[inst.op].opString;
 
   return os;
 }
@@ -347,8 +347,6 @@ void trap_to_simulator(Warp & c)
 }
 
 void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
-  D(3, "Begin instruction execute.");
-
   /* If I try to execute a privileged instruction in user mode, throw an
      exception 3. */
   if (instTable[op].privileged && !c.supervisorMode) {
@@ -357,10 +355,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
     return;
   }
 
-
   bool is_vec = false;
-
-
 
   Size nextActiveThreads = c.activeThreads;
   Size wordSz = c.core->a.getWordSize();
@@ -425,7 +420,6 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
       case R_INST:
         // std::cout << "R_INST\n";
         m_exten = func7 & 0x1;
-
         if (m_exten)
         {
           // std::cout << "FOUND A MUL/DIV\n";
@@ -434,11 +428,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           {
             case 0:
               // MUL
-              // cout << "MUL\n";
+              D(3, "MUL: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               reg[rdest] = ((int) reg[rsrc[0]]) * ((int) reg[rsrc[1]]);
               break;
             case 1:
               // MULH
+              D(3, "MULH: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               {
                 int64_t first  = (int64_t) reg[rsrc[0]];
                 if (reg[rsrc[0]] & 0x80000000)
@@ -458,6 +453,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             case 2:
               // MULHSU
+              D(3, "MULHSU: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               {
                 int64_t first  = (int64_t) reg[rsrc[0]];
                 if (reg[rsrc[0]] & 0x80000000)
@@ -470,6 +466,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             case 3:
               // MULHU
+              D(3, "MULHU: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               {
                 uint64_t first  = (uint64_t) reg[rsrc[0]];
                 uint64_t second = (uint64_t) reg[rsrc[1]];
@@ -479,6 +476,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
                 break;
             case 4:
               // DIV
+              D(3, "DIV: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               if (reg[rsrc[1]] == 0) 
               {
                 reg[rdest] = -1;
@@ -490,6 +488,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             case 5:
               // DIVU
+              D(3, "DIVU: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               if (reg[rsrc[1]] == 0) 
               {
                 reg[rdest] = -1;
@@ -499,6 +498,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             case 6:
               // REM
+              D(3, "REM: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               if (reg[rsrc[1]] == 0) 
               {
                 reg[rdest] = reg[rsrc[0]];
@@ -508,6 +508,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               break;
             case 7:
               // REMU
+              D(3, "REMU: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               if (reg[rsrc[1]] == 0) 
               {
                 reg[rdest] = reg[rsrc[0]];
@@ -528,20 +529,24 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             case 0:
               if (func7)
               {
+                  D(3, "SUBI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
                   reg[rdest] = reg[rsrc[0]] - reg[rsrc[1]];
                   reg[rdest].trunc(wordSz);
               }
               else
               {
+                  D(3, "ADDI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
                   reg[rdest] = reg[rsrc[0]] + reg[rsrc[1]];
                   reg[rdest].trunc(wordSz);
               }
               break;
             case 1:
-                  reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
-                  reg[rdest].trunc(wordSz);
+              D(3, "SLLI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
+              reg[rdest] = reg[rsrc[0]] << reg[rsrc[1]];
+              reg[rdest].trunc(wordSz);
               break;
             case 2:
+              D(3, "SLTI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               if ( int(reg[rsrc[0]]) <  int(reg[rsrc[1]]))
               {
                 reg[rdest] = 1;
@@ -552,7 +557,8 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               }
               break;
             case 3:
-              if ( Word_u(reg[rsrc[0]]) <  Word_u(reg[rsrc[1]]))
+              D(3, "SLTU: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
+              if (Word_u(reg[rsrc[0]]) <  Word_u(reg[rsrc[1]]))
               {
                 reg[rdest] = 1;
               }
@@ -562,24 +568,29 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
               }
               break;
             case 4:
+              D(3, "XORI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               reg[rdest] = reg[rsrc[0]] ^ reg[rsrc[1]];
               break;
             case 5:
               if (func7)
-              {
+              {  
+                  D(3, "SRLI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
                   reg[rdest] = int(reg[rsrc[0]]) >> int(reg[rsrc[1]]);
                   reg[rdest].trunc(wordSz);
               }
               else
               {
+                  D(3, "SRLU: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
                   reg[rdest] = Word_u(reg[rsrc[0]]) >> Word_u(reg[rsrc[1]]);
                   reg[rdest].trunc(wordSz);
               }
               break;
             case 6:
+              D(3, "ORI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               reg[rdest] = reg[rsrc[0]] | reg[rsrc[1]];
               break;
             case 7:
+              D(3, "ANDI: r" << rdest << " <- r" << rsrc[0] << ", r" << rsrc[1]);
               reg[rdest] = reg[rsrc[0]] & reg[rsrc[1]];
               break;
             default:
@@ -589,35 +600,35 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         }
         break;
       case L_INST:
-           //std::cout << "L_INST\n";
-
-           memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);
-           shift_by  = ((reg[rsrc[0]] + immsrc) & 0x00000003) * 8;
-           data_read = c.core->mem.read(memAddr, c.supervisorMode);
-           trace_inst->is_lw = true;
-           trace_inst->mem_addresses[t] = memAddr;
-           // //std::cout <<std::hex<< "EXECUTE: " << reg[rsrc[0]] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
-
-        switch (func3)
-        {
-
+        memAddr   = ((reg[rsrc[0]] + immsrc) & 0xFFFFFFFC);
+        shift_by  = ((reg[rsrc[0]] + immsrc) & 0x00000003) * 8;
+        data_read = c.core->mem.read(memAddr, c.supervisorMode);
+        trace_inst->is_lw = true;
+        trace_inst->mem_addresses[t] = memAddr;
+        switch (func3) {
           case 0:
-            // LB
+            // LBI
+            D(3, "LBI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             reg[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
             break;
           case 1:
-            // LH
-            // //std::cout << "shifting by: " << shift_by << "  final data: " << ((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF) << "\n";
+            // LWI
+             D(3, "LWI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             reg[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
             break;
           case 2:
+            // LDI
+            D(3, "LDI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << (int)immsrc); 
             reg[rdest] = int(data_read & 0xFFFFFFFF);
             break;
           case 4:
             // LBU
+            D(3, "LBU: r" << rdest << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             reg[rdest] = unsigned((data_read >> shift_by) & 0xFF);
             break;
           case 5:
+            // LWU
+            D(3, "LWU: r" << rdest << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             reg[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
             break;
           default:
@@ -625,19 +636,22 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             std::abort();
           c.memAccesses.push_back(Warp::MemAccess(false, memAddr));
         }
+        D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
+        D(3, "LOAD MEM DATA: " << std::hex << data_read);
         break;
       case I_INST:
         //std::cout << "I_INST\n";
         switch (func3)
         {
-
           case 0:
             // ADDI
+            D(3, "ADDI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << immsrc);
             reg[rdest] = reg[rsrc[0]] + immsrc;
             reg[rdest].trunc(wordSz);
             break;
           case 2:
             // SLTI
+            D(3, "SLTI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << immsrc);
             if ( int(reg[rsrc[0]]) <  int(immsrc))
             {
               reg[rdest] = 1;
@@ -649,6 +663,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 3:
             // SLTIU
+            D(3, "SLTIU: r" << rdest << " <- r" << rsrc[0] << ", imm=" << immsrc);
             op1 = (unsigned) reg[rsrc[0]];
             if ( unsigned(reg[rsrc[0]]) <  unsigned(immsrc))
             {
@@ -661,18 +676,22 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 4:
             // XORI
+            D(3, "XORI: r" << rdest << " <- r" << rsrc[0] << ", imm=0x" << hex << immsrc);
             reg[rdest] = reg[rsrc[0]] ^ immsrc;
             break;
           case 6:
-            // ORI;
+            // ORI
+            D(3, "ORI: r" << rdest << " <- r" << rsrc[0] << ", imm=0x" << hex << immsrc);
             reg[rdest] = reg[rsrc[0]] | immsrc;
             break;
           case 7:
             // ANDI
+            D(3, "ANDI: r" << rdest << " <- r" << rsrc[0] << ", imm=0x" << hex << immsrc);
             reg[rdest] = reg[rsrc[0]] & immsrc;
             break;
           case 1:
             // SLLI
+            D(3, "SLLI: r" << rdest << " <- r" << rsrc[0] << ", imm=0x" << hex << immsrc);
             reg[rdest] = reg[rsrc[0]] << immsrc;
             reg[rdest].trunc(wordSz);
             break;
@@ -680,31 +699,20 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             if ((func7 == 0))
             {
               // SRLI
-                // //std::cout << "WTF\n";
-                bool isNeg  = ((0x80000000 & reg[rsrc[0]])) > 0;
-                Word result = Word_u(reg[rsrc[0]]) >> Word_u(immsrc);
-                // if (isNeg)
-                // {
-                //   Word mask = 0x80000000;
-                //   for (int i = 32; i < Word_u(immsrc); i++)
-                //   {
-                //     result |= mask;
-                //     mask = mask >> 1;
-                //   }
-                // }
-
-                reg[rdest] = result;
-      
-                reg[rdest].trunc(wordSz);
+              D(3, "SRLI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << immsrc);
+              bool isNeg  = ((0x80000000 & reg[rsrc[0]])) > 0;
+              Word result = Word_u(reg[rsrc[0]]) >> Word_u(immsrc);
+              reg[rdest] = result;      
+              reg[rdest].trunc(wordSz);
             }
             else
             {
-                // SRAI
-                // //std::cout << "WOHOOOOO\n";
-                op1 = reg[rsrc[0]];
-                op2 = immsrc;
-                reg[rdest] = op1 >> op2;
-                reg[rdest].trunc(wordSz);
+              // SRAI
+              D(3, "SRAI: r" << rdest << " <- r" << rsrc[0] << ", imm=" << immsrc);
+              op1 = reg[rsrc[0]];
+              op2 = immsrc;
+              reg[rdest] = op1 >> op2;
+              reg[rdest].trunc(wordSz);
             }
             break;
           default:
@@ -713,11 +721,8 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         }
         break;
       case S_INST:
-        //std::cout << "S_INST\n";
         ++c.stores;
-        memAddr = reg[rsrc[0]] + immsrc;
-        D(3, "STORE MEM ADDRESS: " << std::hex << reg[rsrc[0]] << " + " << immsrc << "\n");
-        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
+        memAddr = reg[rsrc[0]] + immsrc;                
         trace_inst->is_sw = true;
         trace_inst->mem_addresses[t] = memAddr;
         // //std::cout << "FUNC3: " << func3 << "\n";
@@ -730,21 +735,25 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         switch (func3)
         {
           case 0:
-            // //std::cout << "SB\n";
+            // SB
+            D(3, "SB: r" << rsrc[1] << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             c.core->mem.write(memAddr, reg[rsrc[1]] & 0x000000FF, c.supervisorMode, 1);
             break;
           case 1:
-            // //std::cout << "SH\n";
+            // SH
+            D(3, "SH: r" << rsrc[1] << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 2);
             break;
           case 2:
-            // //std::cout << std::hex << "SW: about to write: " << reg[rsrc[1]] << " to " << memAddr << "\n"; 
+            // SD
+            D(3, "SD: r" << rsrc[1] << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
             c.core->mem.write(memAddr, reg[rsrc[1]], c.supervisorMode, 4);
             break;
           default:
             cout << "ERROR: UNSUPPORTED S INST\n";
             std::abort();
         }
+        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
         c.memAccesses.push_back(Warp::MemAccess(true, memAddr));
 #ifdef EMU_INSTRUMENTATION
        Harp::OSDomain::osDomain->
@@ -752,13 +761,12 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 #endif
         break;
       case B_INST:
-        //std::cout << "B_INST\n";
-        trace_inst->stall_warp = true;
-        D(3,"func3:" << func3 << endl);
+        trace_inst->stall_warp = true;        
         switch (func3)
         {
           case 0:
             // BEQ
+            D(3,"BEQ: r" << rsrc[0] << ", r" << rsrc[1] << ", imm=" << (int)immsrc);
             if (int(reg[rsrc[0]]) == int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -767,7 +775,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 1:
             // BNE
-            D(3, "rsrc0: " << reg[rsrc[0]] << " rsrc1 : " << reg[rsrc[1]] << endl);
+            D(3,"BNE: r" << rsrc[0] << ", r" << rsrc[1] << ", imm=" << (int)immsrc);
             if (int(reg[rsrc[0]]) != int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -776,6 +784,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 4:
             // BLT
+            D(3,"BLT: r" << rsrc[0] << ", r" << rsrc[1] << ", imm=" << (int)immsrc);
             if (int(reg[rsrc[0]]) < int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -784,6 +793,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 5:
             // BGE
+            D(3,"BGE: r" << rsrc[0] << ", r" << rsrc[1] << ", imm=" << (int)immsrc);
             if (int(reg[rsrc[0]]) >= int(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -792,6 +802,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 6:
             // BLTU
+            D(3,"BLTU: r" << rsrc[0] << ", r" << rsrc[1] << ", imm=" << (int)immsrc);
             if (Word_u(reg[rsrc[0]]) < Word_u(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -800,6 +811,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 7:
             // BGEU
+            D(3,"BGEU: r" << rsrc[0] << ", r" << rsrc[1] << ", imm=" << (int)immsrc);
             if (Word_u(reg[rsrc[0]]) >= Word_u(reg[rsrc[1]]))
             {
               if (!pcSet) nextPc = (c.pc - 4) + immsrc;
@@ -809,26 +821,25 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         }
         break;
       case LUI_INST:
-        //std::cout << "LUI_INST\n";
+        D(3, "LUI: r" << rdest << " <- imm=0x" << hex << immsrc);
         reg[rdest] = (immsrc << 12) & 0xfffff000;
         break;
       case AUIPC_INST:
-        //std::cout << "AUIPC_INST\n";
+        D(3, "AUIPC: r" << rdest << " <- imm=0x" << hex << immsrc);
         reg[rdest] = ((immsrc << 12) & 0xfffff000) + (c.pc - 4);
         break;
       case JAL_INST:
-        //std::cout << "JAL_INST\n";
+        D(3, "JAL: r" << rdest << " <- imm=" << (int)immsrc);
         trace_inst->stall_warp = true;
         if (!pcSet) nextPc = (c.pc - 4) + immsrc;
         if (!pcSet) {/*std::cout << "JAL... SETTING PC: " << nextPc << "\n"; */}
-        if (rdest != 0)
-        {
+        if (rdest != 0) {
           reg[rdest] = c.pc;
         }
         pcSet = true;
         break;
       case JALR_INST:
-        D(3, "JALR_INST\n");
+        D(3, "JALR: r" << rdest << " <- r" << rsrc[0] << ", imm=" << (int)immsrc);
         trace_inst->stall_warp = true;
         if (!pcSet) nextPc = reg[rsrc[0]] + immsrc;
         if (!pcSet) {/*std::cout << "JALR... SETTING PC: " << nextPc << "\n";*/ }
@@ -841,99 +852,109 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
       case SYS_INST:
         //std::cout << "SYS_INST\n";
         temp = reg[rsrc[0]];
-        if (immsrc == 0x20) // ThreadID
-        {
-          reg[rdest] = t;
-          D(2, "CSR Reading tid " << hex << immsrc << dec << " and returning " << reg[rdest]);
-        } else if (immsrc == 0x21) // WarpID
-        {
-          reg[rdest] = c.id;
-          D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
-        } else if (immsrc == 0x25)
-        {
-          reg[rdest] = c.core->num_instructions;
-        } else if (immsrc == 0x26)
-        {
-          reg[rdest] = c.core->num_cycles;
+
+        if (!c.core->a.is_cpu_mode()) {
+          //
+          // GPGPU CSR extension
+          //
+          if (immsrc == 0x20) // ThreadID
+          {
+            reg[rdest] = t;
+            D(2, "CSR Reading tid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+          } 
+          else if (immsrc == 0x21) // WarpID
+          {
+            reg[rdest] = c.id;
+            D(2, "CSR Reading wid " << hex << immsrc << dec << " and returning " << reg[rdest]);
+          } 
+          else if (immsrc == 0x25)
+          {
+            reg[rdest] = c.core->num_instructions;
+          }  
+          else if (immsrc == 0x26)
+          {
+            reg[rdest] = c.core->num_cycles;
+          }
+        } else {
+          switch (func3)
+          {
+            case 1:
+              // printf("Case 1\n");
+              if (rdest != 0)
+              {
+                reg[rdest] = c.csr[immsrc & 0x00000FFF];
+              }
+              c.csr[immsrc & 0x00000FFF] = temp;
+              
+              break;
+            case 2:
+              // printf("Case 2\n");
+              if (rdest != 0)
+              {
+                // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
+                reg[rdest] = c.csr[immsrc & 0x00000FFF];
+              }
+              // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
+              c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
+              
+              break;
+            case 3:
+              // printf("Case 3\n");
+              if (rdest != 0)
+              {              
+                reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+              }
+                c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
+              
+              break;
+            case 5:
+              // printf("Case 5\n");
+              if (rdest != 0)
+              {
+                reg[rdest] = c.csr[immsrc & 0x00000FFF];
+              }
+                c.csr[immsrc & 0x00000FFF] = rsrc[0];
+              
+              break;
+            case 6:
+              // printf("Case 6\n");
+              if (rdest != 0)
+              {              
+                reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
+              }
+                c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
+              
+              break;
+            case 7:
+              // printf("Case 7\n");
+              if (rdest != 0)
+              {              
+                reg[rdest] = c.csr[immsrc & 0x00000FFF];
+              }
+                c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
+              
+              break;
+            case 0:
+            if (immsrc < 2)
+            {
+              //std::cout << "INTERRUPT ECALL/EBREAK\n";
+              nextActiveThreads = 0;
+              c.spawned = false;
+              // c.interrupt(0);
+            }
+              break;
+            default:
+              break;
+          }
         }
-        // switch (func3)
-        // {
-        //   case 1:
-        //     // printf("Case 1\n");
-        //     if (rdest != 0)
-        //     {
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //     c.csr[immsrc & 0x00000FFF] = temp;
-            
-        //     break;
-        //   case 2:
-        //     // printf("Case 2\n");
-        //     if (rdest != 0)
-        //     {
-        //       // printf("Reading from CSR: %d = %d\n", (immsrc & 0x00000FFF),  c.csr[immsrc & 0x00000FFF]);
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //     // printf("Writing to CSR --> %d = %d\n", immsrc,  (temp |  c.csr[immsrc & 0x00000FFF]));
-        //     c.csr[immsrc & 0x00000FFF] = temp |  c.csr[immsrc & 0x00000FFF];
-            
-        //     break;
-        //   case 3:
-        //     // printf("Case 3\n");
-        //     if (rdest != 0)
-        //     {              
-        //       reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = temp &  (~c.csr[immsrc & 0x00000FFF]);
-            
-        //     break;
-        //   case 5:
-        //     // printf("Case 5\n");
-        //     if (rdest != 0)
-        //     {
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = rsrc[0];
-            
-        //     break;
-        //   case 6:
-        //     // printf("Case 6\n");
-        //     if (rdest != 0)
-        //     {              
-        //       reg[rdest]                 = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = rsrc[0] |  c.csr[immsrc & 0x00000FFF];
-            
-        //     break;
-        //   case 7:
-        //     // printf("Case 7\n");
-        //     if (rdest != 0)
-        //     {              
-        //       reg[rdest] = c.csr[immsrc & 0x00000FFF];
-        //     }
-        //       c.csr[immsrc & 0x00000FFF] = rsrc[0] &  (~c.csr[immsrc & 0x00000FFF]);
-            
-        //     break;
-        //   case 0:
-        //   if (immsrc < 2)
-        //   {
-        //     //std::cout << "INTERRUPT ECALL/EBREAK\n";
-        //     nextActiveThreads = 0;
-        //     c.spawned = false;
-        //     // c.interrupt(0);
-        //   }
-        //     break;
-        //   default:
-        //     break;
-        // }
         break;
       case TRAP:
-        //std::cout << "INTERRUPT TRAP\n";
+        D(3, "TRAP");
         nextActiveThreads = 0;
         c.interrupt(0);
         break;
       case FENCE:
-        //std::cout << "FENCE_INST\n";
+        D(3, "FENCE");
         break;
       case PJ_INST:
         // pred jump reg
@@ -950,13 +971,13 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
         {
           case 1:
             // WSPAWN
-            D(3, "WSPAWN\n");
+            D(3, "WSPAWN");
             trace_inst->wspawn = true;
             if (sjOnce)
             {
               sjOnce = false;
               // //std::cout << "SIZE: " << c.core->w.size() << "\n";
-              num_to_wspawn = reg[rsrc[0]];
+              num_to_wspawn = std::min<unsigned>(reg[rsrc[0]], c.core->a.getNWarps());
 
               D(0, "Spawning " << num_to_wspawn << " new warps at PC: " << hex << reg[rsrc[1]]);
               for (unsigned i = 1; i < num_to_wspawn; ++i)
@@ -992,7 +1013,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           case 2:
           {
             // SPLIT
-            //std::cout << "SPLIT\n";
+            D(3, "SPLIT");
             trace_inst->stall_warp = true;
             if (sjOnce)
             {
@@ -1025,8 +1046,7 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
           }
           case 3:
             // JOIN
-            //std::cout << "JOIN\n";
-            D(3, "JOIN INSTRUCTION");
+            D(3, "JOIN");
             if (sjOnce)
             {
               sjOnce = false;
@@ -1062,9 +1082,9 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
             break;
           case 0:
             // TMC
-            //std::cout << "JALRS\n";
+            D(3, "TMC");
             trace_inst->stall_warp = true;
-            nextActiveThreads = reg[rsrc[0]];
+            nextActiveThreads = std::min<unsigned>(reg[rsrc[0]], c.core->a.getNThds());
             {
               for (int ff = 0; ff < c.tmask.size(); ff++)
               {
@@ -2418,8 +2438,6 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
 
   // std::cout << "finished instruction" << endl << flush;
 
-  D(3, "End instruction execute." << flush);
-
   c.activeThreads = nextActiveThreads;
 
   // if (nextActiveThreads != 0)
@@ -2429,8 +2447,6 @@ void Instruction::executeOn(Warp &c, trace_inst_t * trace_inst) {
   //     c.tmask[i] = c.tmask[i] && false;
   //   }
   // }
-
-
 
   // //std::cout << "new thread mask: ";
   // for (int i = 0; i < c.tmask.size(); ++i) //std::cout << " " << c.tmask[i];
