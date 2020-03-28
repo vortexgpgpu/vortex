@@ -1,7 +1,7 @@
 #CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
 CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
-USE_MULTICORE=1
+#USE_MULTICORE=1
 
 CFLAGS += -I../../include -I../../../../rtl/simulate
 
@@ -30,8 +30,8 @@ VL_FLAGS += -Wno-UNOPTFLAT -Wno-WIDTH
 VL_FLAGS += -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
 
 # Debugigng
-VL_FLAGS += --trace -DVL_DEBUG=1 
-CFLAGS += -DVCD_OUTPUT
+#VL_FLAGS += --trace -DVL_DEBUG=1 
+#CFLAGS += -DVCD_OUTPUT
 
 PROJECT = libvortex.so
 

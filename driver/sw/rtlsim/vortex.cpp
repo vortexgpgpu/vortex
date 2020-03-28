@@ -78,6 +78,7 @@ public:
         : is_done_(false)
         , mem_allocation_(VX_ALLOC_BASE_ADDR)
         , vortex_(&ram_) {
+        vortex_.reset();
         thread_ = new std::thread(__thread_proc__, this);        
     } 
 
