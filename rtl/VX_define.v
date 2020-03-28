@@ -219,7 +219,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef DDFPQ_SIZE
-`define DDFPQ_SIZE 2
+`define DDFPQ_SIZE 32
 `endif
 
 // Snoop Req Queue
@@ -327,7 +327,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef IDFPQ_SIZE
-`define IDFPQ_SIZE 2
+`define IDFPQ_SIZE 32
 `endif
 
 // Snoop Req Queue
@@ -433,7 +433,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef SDFPQ_SIZE
-`define SDFPQ_SIZE 16
+`define SDFPQ_SIZE 0
 `endif
 
 // Snoop Req Queue
@@ -538,7 +538,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef LLDFPQ_SIZE
-`define LLDFPQ_SIZE 2
+`define LLDFPQ_SIZE 32
 `endif
 
 // Snoop Req Queue
@@ -643,7 +643,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef L3DFPQ_SIZE
-`define L3DFPQ_SIZE 2
+`define L3DFPQ_SIZE 32
 `endif
 
 // Snoop Req Queue

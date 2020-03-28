@@ -30,10 +30,30 @@ module Vortex
 	input  wire [31:0]      dram_fill_rsp_addr,
 	input  wire [31:0]      dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
+
+	// DRAM Icache Req
+	output wire                              I_dram_req,
+	output wire                              I_dram_req_write,
+	output wire                              I_dram_req_read,
+	output wire [31:0]                       I_dram_req_addr,
+	output wire [31:0]                       I_dram_req_size,
+	output wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_req_data,
+	output wire [31:0]                       I_dram_expected_lat,
+
+	// DRAM Icache Res
+	output wire                              I_dram_fill_accept,
+	input  wire                              I_dram_fill_rsp,
+	input  wire [31:0]                       I_dram_fill_rsp_addr,
+	input  wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_fill_rsp_data,
+
 	// LLC Snooping
 	input  wire             snp_req,
 	input  wire [31:0]      snp_req_addr,
 	output wire             snp_req_delay,
+
+	input  wire                              I_snp_req,
+	input  wire [31:0]                       I_snp_req_addr,
+	output wire                              I_snp_req_delay,
 
 	output wire             out_ebreak
 

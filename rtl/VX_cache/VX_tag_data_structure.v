@@ -93,7 +93,7 @@ module VX_tag_data_structure
     		end
     	end else if (fill_sent) begin
             dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
-            valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+            // valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
         end
 
         if (invalidate) begin
