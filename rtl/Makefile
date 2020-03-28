@@ -46,7 +46,7 @@ VERILATORnoWarningsRel: build_config
 
 
 VERILATORMULTInoWarnings: build_config
-	verilator $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF -O3 -DVL_THREADED' $(WNO) $(DEB) --threads $(THREADS)
+	verilator $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF' $(WNO) $(DEB)
 
 compdebug: build_config
 	verilator_bin_dbg $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
