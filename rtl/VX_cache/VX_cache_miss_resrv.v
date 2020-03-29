@@ -96,7 +96,7 @@ module VX_cache_miss_resrv
 
 		// assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
 		assign miss_resrv_full = (MRVQ_SIZE != 2) && (size ==  MRVQ_SIZE   );
-		assign miss_resrv_stop = (MRVQ_SIZE != 2) && (size == (MRVQ_SIZE-4));
+		assign miss_resrv_stop = (MRVQ_SIZE != 2) && (size  > (MRVQ_SIZE-5));
 
 		wire                            enqueue_possible = !miss_resrv_full;
 		wire[`vx_clog2(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
