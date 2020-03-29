@@ -47,7 +47,8 @@ typedef struct vx_buffer_ {
 } vx_buffer_t;
 
 static size_t align_size(size_t size) {
-    return VX_CACHE_LINESIZE * ((size + VX_CACHE_LINESIZE - 1) / VX_CACHE_LINESIZE);
+    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+    return cache_block_size * ((size + cache_block_size - 1) / cache_block_size);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -103,7 +104,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     }
 
     device->fpga = accel_handle;
-    device->mem_allocation = VX_ALLOC_BASE_ADDR;
+    device->mem_allocation = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
 
     *hdevice = device;
 
@@ -133,7 +134,8 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
     vx_device_t *device = ((vx_device_t*)hdevice);
     
     size_t asize = align_size(size);
-    if (device->mem_allocation + asize > VX_ALLOC_BASE_ADDR)
+    auto dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
+    if (device->mem_allocation + asize > dev_mem_size)
         return -1;   
 
     *dev_maddr = device->mem_allocation;
@@ -245,7 +247,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
         return -1;
 
     CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_AVM_ADDRESS, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, (buffer->io_addr + src_offset)/VX_CACHE_LINESIZE));
+    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, buffer->io_addr + src_offset);
     CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_DATA_SIZE, size));   
     CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_CMD_TYPE, MMIO_CMD_TYPE_WRITE));
 
@@ -269,7 +271,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
         return -1;
 
     CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_AVM_ADDRESS, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, (buffer->io_addr + dest_offset)/VX_CACHE_LINESIZE));
+    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, buffer->io_addr + dest_offset);
     CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_DATA_SIZE, size));   
     CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_CMD_TYPE, MMIO_CMD_TYPE_READ));
 

@@ -1,8 +1,4 @@
-
-
-
 .section .text
-
 
 .type vx_wspawn, @function
 .global vx_wspawn
@@ -15,7 +11,6 @@ vx_wspawn:
 vx_tmc:
 	.word 0x0005006b    # tmc a0
 	ret
-
 
 .type vx_barrier, @function
 .global vx_barrier
@@ -35,12 +30,12 @@ vx_join:
 	.word 0x0000306b    #join
 	ret
 
-
 .type vx_warpID, @function
 .global vx_warpID
 vx_warpID:
 	csrr a0, 0x21 # read warp IDs
 	ret
+
 .type vx_warpNum, @function
 .global vx_warpNum
 vx_warpNum:
@@ -59,14 +54,12 @@ vx_getCycles:
     csrr a0, 0x26 # read thread IDs
     ret
     
-
 .type vx_getInst, @function
 .global vx_getInst
 vx_getInst:
     csrr a0, 0x25 # read thread IDs
     ret
     
-
 .type vx_resetStack, @function
 .global vx_resetStack
 vx_resetStack:
@@ -89,4 +82,4 @@ vx_resetStack:
     .word 0x0005006b    # tmc 0
 RETURN:
     ret
-
+    

@@ -8,7 +8,8 @@
 #include <chrono>
 
 #include <vortex.h>
-#include "core.h"
+#include <core.h>
+#include <config.h>
 
 #define PAGE_SIZE 4096
 
@@ -24,7 +25,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 static size_t align_size(size_t size) {
-    return VX_CACHE_LINESIZE * ((size + VX_CACHE_LINESIZE - 1) / VX_CACHE_LINESIZE);
+    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+    return cache_block_size * ((size + cache_block_size - 1) / cache_block_size);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -71,9 +73,9 @@ public:
     vx_device() 
         : is_done_(false)
         , is_running_(false)
-        , mem_allocation_(VX_ALLOC_BASE_ADDR)
-        , thread_(__thread_proc__, this)
-    {}
+        , thread_(__thread_proc__, this)  {
+        mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
+    }
 
     ~vx_device() {
         mutex_.lock();
@@ -84,8 +86,9 @@ public:
     }
 
     int alloc_local_mem(size_t size, size_t* dev_maddr) {
-        size_t asize = align_size(size);
-        if (mem_allocation_ + asize > VX_LOCAL_MEM_SIZE)
+        auto asize = align_size(size);
+        auto dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
+        if (mem_allocation_ + asize > dev_mem_size)
             return -1;
         *dev_maddr = mem_allocation_;
         mem_allocation_ += asize;
@@ -93,7 +96,7 @@ public:
     }
 
     int upload(void* src, size_t dest_addr, size_t size, size_t src_offset) {
-        size_t asize = align_size(size);
+        auto asize = align_size(size);
         if (dest_addr + asize > ram_.size())
             return -1;
 
@@ -148,7 +151,7 @@ public:
 private:
 
     void run() {        
-        Harp::ArchDef arch("rv32i", false, MAX_WARPS, MAX_THREADS);
+        Harp::ArchDef arch("rv32i", NW, NT);
         Harp::WordDecoder dec(arch);
         Harp::MemoryUnit mu(PAGE_SIZE, arch.getWordSize(), true);
         Harp::Core core(arch, dec, mu);

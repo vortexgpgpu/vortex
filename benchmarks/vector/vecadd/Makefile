@@ -7,10 +7,10 @@ CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostart
 DMP  = /nethome/ekim79/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
 CPY  = /nethome/ekim79/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 
-# VX_STR  = ../../startup/vx_start.s
+# VX_STR  = ../../startup/vx_start.S
 
 NEWLIB  = $(LIB_PATH)/newlib/newlib.c
-VX_STR  = $(LIB_PATH)/startup/vx_start.s
+VX_STR  = $(LIB_PATH)/startup/vx_start.S
 VX_INT  = $(LIB_PATH)/intrinsics/vx_intrinsics.s
 VX_IO   = $(LIB_PATH)/io/vx_io.s $(LIB_PATH)/io/vx_io.c
 VX_API  = $(LIB_PATH)/vx_api/vx_api.c
