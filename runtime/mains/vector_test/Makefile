@@ -9,12 +9,12 @@ DMP  = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-objdump
 CPY  = /home/priya/dev/riscv_vec/riscv-gnu/bin/riscv32-unknown-elf-objcopy
 
 
-# VX_STR  = ../../startup/vx_start.s
+# VX_STR  = ../../startup/vx_start.S
 
 
 
 NEWLIB  = ../../newlib/newlib.c
-VX_STR  = ../../startup/vx_start.s
+VX_STR  = ../../startup/vx_start.S
 VX_INT  = ../../intrinsics/vx_intrinsics.s
 VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c

@@ -8,7 +8,7 @@ CPY  = /opt/riscv/bin/riscv32-unknown-elf-objcopy
 
 
 NEWLIB  = ../../newlib/newlib.c ../../newlib/newlib_notimp.c ../../newlib/newlib.s
-VX_STR  = ../../startup/vx_start.s
+VX_STR  = ../../startup/vx_start.S
 VX_INT  = ../../intrinsics/vx_intrinsics.s
 VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
