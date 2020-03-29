@@ -82,31 +82,40 @@ module VX_tag_data_structure
     wire   going_to_write = (|write_enable);
 
     integer f;
+    integer l;
     always @(posedge clk) begin
-    	if (going_to_write) begin
-    		valid[write_addr[`LINE_SELECT_ADDR_RNG]]     <= 1;
-    		tag  [write_addr[`LINE_SELECT_ADDR_RNG]]     <= write_addr[`TAG_SELECT_ADDR_RNG];
-    		if (write_fill) begin
-    			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
-    		end else begin
-    			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 1;
+        if (reset) begin
+            for (l = 0; l < `BANK_LINE_COUNT; l=l+1) begin
+                valid[l] <= 0;
+                tag  [l] <= 0;
+                dirty[l] <= 0;
+                data [l] <= 0;
+            end
+        end else begin
+        	if (going_to_write) begin
+        		valid[write_addr[`LINE_SELECT_ADDR_RNG]]     <= 1;
+        		tag  [write_addr[`LINE_SELECT_ADDR_RNG]]     <= write_addr[`TAG_SELECT_ADDR_RNG];
+        		if (write_fill) begin
+        			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+        		end else begin
+        			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 1;
+        		end
+        	end else if (fill_sent) begin
+                dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+                // valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+            end
+
+            if (invalidate) begin
+                valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+            end
+
+    		for (f = 0; f < `DBANK_LINE_SIZE_WORDS; f = f + 1) begin
+    			if (write_enable[f][0]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][0] <= write_data[f][7 :0 ];
+    			if (write_enable[f][1]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][1] <= write_data[f][15:8 ];
+    			if (write_enable[f][2]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][2] <= write_data[f][23:16];
+    			if (write_enable[f][3]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][3] <= write_data[f][31:24];
     		end
-    	end else if (fill_sent) begin
-            dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
-            // valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
         end
-
-        if (invalidate) begin
-            valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
-        end
-
-		for (f = 0; f < `DBANK_LINE_SIZE_WORDS; f = f + 1) begin
-			if (write_enable[f][0]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][0] <= write_data[f][7 :0 ];
-			if (write_enable[f][1]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][1] <= write_data[f][15:8 ];
-			if (write_enable[f][2]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][2] <= write_data[f][23:16];
-			if (write_enable[f][3]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][3] <= write_data[f][31:24];
-		end
-
     end
 
 endmodule
