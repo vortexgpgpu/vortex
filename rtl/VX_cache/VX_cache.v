@@ -91,6 +91,8 @@ module VX_cache
     output wire [31:0]                       dram_req_size,
     output wire [`IBANK_LINE_SIZE_RNG][31:0] dram_req_data,
     output wire                              dram_req_because_of_wb,
+    input  wire                              dram_req_delay,
+
     output wire                              dram_snp_full,
 
 
@@ -183,7 +185,8 @@ module VX_cache
         .dram_req_addr              (dram_req_addr),
         .dram_req_size              (dram_req_size),
         .dram_req_data              (dram_req_data),
-        .dram_req_because_of_wb     (dram_req_because_of_wb)
+        .dram_req_because_of_wb     (dram_req_because_of_wb),
+        .dram_req_delay             (dram_req_delay)
         );
 
 

@@ -68,7 +68,9 @@ module VX_cache_dram_req_arb
     output wire [31:0]                                      dram_req_addr,
     output wire [31:0]                                      dram_req_size,
     output wire [`IBANK_LINE_SIZE_RNG][31:0]                dram_req_data,
-    output wire                                             dram_req_because_of_wb
+    output wire                                             dram_req_because_of_wb,
+
+    input wire                                              dram_req_delay
 	
 );
 
@@ -76,7 +78,7 @@ module VX_cache_dram_req_arb
 	wire[31:0] dfqq_req_addr;
 	wire dfqq_empty;
 	wire dwb_valid;
-	wire dfqq_pop  = !dwb_valid && dfqq_req; // If no dwb, and dfqq has valids, then pop
+	wire dfqq_pop  = !dwb_valid && dfqq_req && !dram_req_delay; // If no dwb, and dfqq has valids, then pop
 	wire dfqq_push = (|per_bank_dram_fill_req);
 
 	VX_cache_dfq_queue VX_cache_dfq_queue(
@@ -101,7 +103,7 @@ module VX_cache_dram_req_arb
 		);
 
 
-	assign per_bank_dram_wb_queue_pop = per_bank_dram_wb_req & ((1 << dwb_bank));
+	assign per_bank_dram_wb_queue_pop = dram_req_delay ? 0 : per_bank_dram_wb_req & ((1 << dwb_bank));
 
 
 	assign dram_req               = dwb_valid || dfqq_req;
