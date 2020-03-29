@@ -55,14 +55,33 @@ int main()
 
 	vx_print_str("Let's start... (This might take a while)\n");
 	unsigned what[36];
+	bool passed = true;
 	for (int i = 0; i < 36; i++)
 	{
 		what[i] = i;
+		// vx_print_hex(i);
+		// vx_printf(": ", what[i]);
+		if (what[i] != i)
+		{
+			passed = false;
+			vx_printf("T1 Fail On ", i);
+		}
 	}
 
 	for (int i = 0; i < 36; i++)
 	{
-		vx_printf("Value: ", what[i]);
+		// vx_print_hex(i);
+		// vx_printf(": ", what[i]);
+		if (what[i] != i)
+		{
+			passed = false;
+			vx_printf("T2 Fail on ", i);
+		}
+	}
+
+	if (passed)
+	{
+		vx_print_str("Wr->read and repeat(Wr) tests passed!\n");
 	}
 
 
@@ -80,8 +99,8 @@ int main()
 
 
 	// Test wspawn
-	// vx_print_str("test_wspawn\n");
-	// test_wsapwn();
+	vx_print_str("test_wspawn\n");
+	test_wsapwn();
 
 	vx_print_str("Shared Memory test\n");
 	unsigned * ptr = (unsigned *) 0xFFFF0000;
@@ -99,31 +118,34 @@ int main()
 
 	}
 
-	// vx_print_str("vx_spawnWarps mat_add_kernel\n");
+	vx_print_str("vx_spawnWarps mat_add_kernel\n");
 
-	// mat_add_args_t arguments;
-	// arguments.x         = x;
-	// arguments.y         = y;
-	// arguments.z         = z;
-	// arguments.numColums = 4;
-	// arguments.numRows   = 4;
+	mat_add_args_t arguments;
+	arguments.x         = x;
+	arguments.y         = y;
+	arguments.z         = z;
+	arguments.numColums = 4;
+	arguments.numRows   = 4;
 
 
-	// int numWarps   = 4;
-	// int numThreads = 4;
+	int numWarps   = 4;
+	int numThreads = 4;
 
-	// vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
 
-	// for (int i = 0; i < numWarps; i++)
-	// {
-	// 	for (int j = 0; j < numThreads; j++)
-	// 	{
-	// 		unsigned index = (i * arguments.numColums) + j;
-	// 		vx_print_hex(z[index]);
-	// 		vx_print_str(" ");
-	// 	}
-	// 	vx_print_str("\n");
-	// }
+	vx_print_str("Waiting to ensure other warps are done... (Takes a while)\n");
+	for (int i = 0; i < 5000; i++) {}
+
+	for (int i = 0; i < numWarps; i++)
+	{
+		for (int j = 0; j < numThreads; j++)
+		{
+			unsigned index = (i * arguments.numColums) + j;
+			vx_print_hex(z[index]);
+			vx_print_str(" ");
+		}
+		vx_print_str("\n");
+	}
 
 	return 0;
 }

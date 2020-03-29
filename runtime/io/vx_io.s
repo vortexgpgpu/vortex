@@ -23,6 +23,7 @@ be:
 .global vx_printc
 vx_printc:
     la t0, print_addr
+    lw t0, 0(t0)
     sw a1, 0(t0)
     ret
 
