@@ -22,9 +22,12 @@ be:
 .type vx_printc, @function
 .global vx_printc
 vx_printc:
-    la t0, 0x00010000
+    la t0, print_addr
+    lw t0, 0(t0)
     sw a1, 0(t0)
     ret
 
-
+.section .data
+print_addr:
+    .word 0x00010000 
 

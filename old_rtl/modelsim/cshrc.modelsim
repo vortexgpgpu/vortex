@@ -1,0 +1,8 @@
+	setenv PATH "${PATH}:/tools/mentor/modelsim/ms106a/modeltech/bin"
+	setenv MTI_VCO_MODE 1
+if (${?LM_LICENSE_FILE}) then
+  setenv LM_LICENSE_FILE "1717@ece-linlic.ece.gatech.edu:${LM_LICENSE_FILE}"
+ else
+  setenv LM_LICENSE_FILE "1717@ece-linlic.ece.gatech.edu"
+endif
+setenv MGLS_LICENSE_FILE 1717@ece-linlic.ece.gatech.edu

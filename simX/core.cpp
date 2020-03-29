@@ -80,19 +80,17 @@ using namespace std;
 
 void printTrace(trace_inst_t * trace, const char * stage_name)
 {
-    D(3, "********************************** " << stage_name << " *********************************");
-    D(3, "valid: " << trace->valid_inst);
-    D(3, "PC: " << hex << trace->pc << dec);
-    D(3, "wid: " << trace->wid);
-    D(3, "rd: " << trace->rd << "\trs1: " << trace->rs1 << "\trs2: " << trace->rs2);
-    D(3, "is_lw: " << trace->is_lw);
-    D(3, "is_sw: " << trace->is_sw);
-    D(3, "fetch_stall_cycles: " << trace->fetch_stall_cycles);
-    D(3, "mem_stall_cycles: " << trace->mem_stall_cycles);
-
-    D(3, "stall_warp: " << trace->stall_warp);
-    D(3, "wspawn: " << trace->wspawn);
-    D(3, "stalled: " << trace->stalled);
+    D(3, stage_name << ": valid=" << trace->valid_inst);
+    D(3, stage_name << ": PC=" << hex << trace->pc << dec);
+    D(3, stage_name << ": wid=" << trace->wid);
+    D(3, stage_name << ": rd=" << trace->rd << ", rs1=" << trace->rs1 << ", trs2=" << trace->rs2);
+    D(3, stage_name << ": is_lw=" << trace->is_lw);
+    D(3, stage_name << ": is_sw=" << trace->is_sw);
+    D(3, stage_name << ": fetch_stall_cycles=" << trace->fetch_stall_cycles);
+    D(3, stage_name << ": mem_stall_cycles=" << trace->mem_stall_cycles);
+    D(3, stage_name << ": stall_warp=" << trace->stall_warp);
+    D(3, stage_name << ": wspawn=" << trace->wspawn);
+    D(3, stage_name << ": stalled=" << trace->stalled);
 }
 
 #ifdef EMU_INSTRUMENTATION
@@ -126,17 +124,14 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   INIT_TRACE(inst_in_lsu);
   INIT_TRACE(inst_in_wb);
 
-  for (int i = 0; i < 32; i++)
-  {
+  for (int i = 0; i < 32; i++) {
     stallWarp[i] = false;
-    for (int j = 0; j < 32; j++)
-    {
+    for (int j = 0; j < 32; j++) {
         renameTable[i][j] = true;
     }
   }
 
-  for(int i = 0; i < 32; i++)
-  {
+  for(int i = 0; i < 32; i++) {
     vecRenameTable[i] = true;
   }
 
@@ -157,8 +152,9 @@ Core::Core(const ArchDef &a, Decoder &d, MemoryUnit &mem, Word id):
   cache_simulator->reset = 0;
   cache_simulator->clk   = 0;
 
-  for (unsigned i = 0; i < a.getNWarps(); ++i)
+  for (unsigned i = 0; i < a.getNWarps(); ++i) {
     w.push_back(Warp(this, i));
+  }
 
   w[0].activeThreads = 1;
   w[0].spawned = true;
@@ -171,19 +167,17 @@ bool Core::interrupt(Word r0) {
 
 void Core::step()
 {
-    D(3, "\n\n\n------------------------------------------------------");
-
-    D(3, "Started core::step" << flush);
+    D(3, "###########################################################");
 
     steps++;
     this->num_cycles++;
-    D(3, "CYCLE: " << this->num_cycles);
+    D(3, "cycle: " << this->num_cycles);
 
-    D(3, "Stalled Warps:");
-    for (int widd = 0; widd < a.getNWarps(); widd++)
-    {
-        D(3, stallWarp[widd] << " ");
+    DPH(3, "stalled warps:");
+    for (int widd = 0; widd < a.getNWarps(); widd++) {
+        DPN(3, " " << stallWarp[widd]);
     }
+    DPN(3, "\n");
   
     // cout << "Rename table\n";
     // for (int regii = 0; regii < 32; regii++)
@@ -213,8 +207,7 @@ void Core::step()
         stallWarp[release_warp_num] = false;
     }
 
-    D(3, "released warp" << flush);
-    D(3, "Finished core::step" << flush);
+    DPN(3, flush);
 }
 
 void Core::getCacheDelays(trace_inst_t * trace_inst)
@@ -400,11 +393,7 @@ void Core::warpScheduler()
 void Core::fetch()
 {
 
-  // #ifdef PRINT_ACTIVE_THREADS
-  D(3, "Threads:");
-  // #endif
-
-  // D(-1, "Found schedule: " << foundSchedule);
+   // D(-1, "Found schedule: " << foundSchedule);
 
     if ((!inst_in_scheduler.stalled) && (inst_in_fetch.fetch_stall_cycles == 0))
     {
@@ -416,23 +405,24 @@ void Core::fetch()
 
           if (foundSchedule)
           {
-              D(3, "Core step stepping warp " << schedule_w << '[' << w[schedule_w].activeThreads << ']');
+              auto active_threads_b = w[schedule_w].activeThreads;
+
               this->num_instructions = this->num_instructions + w[schedule_w].activeThreads;
               // this->num_instructions++;
               w[schedule_w].step(&inst_in_fetch);
-              D(3, "Now " << w[schedule_w].activeThreads << " active threads in " << schedule_w << flush);
+
+              auto active_threads_a = w[schedule_w].activeThreads;
+              if (active_threads_b != active_threads_a) {
+                D(3, "** warp #" << schedule_w << " active threads changed from " << active_threads_b << " to " << active_threads_a);
+              }              
             
               this->getCacheDelays(&inst_in_fetch);
-              D(3, "Got cache delays" << flush);
-              if (inst_in_fetch.stall_warp)
-              {
+              
+              if (inst_in_fetch.stall_warp) {
                 stallWarp[inst_in_fetch.wid] = true;
               }
-              D(3, "staled warps\n" << flush);
           }
-          D(3, "About to schedule warp\n" << flush);
           warpScheduler();
-          D(3, "Scheduled warp" << flush);
         }
     }
     else
@@ -441,30 +431,19 @@ void Core::fetch()
         if (inst_in_fetch.fetch_stall_cycles > 0) inst_in_fetch.fetch_stall_cycles--;
     }
 
-    D(3, "Printing trace" << flush);
     printTrace(&inst_in_fetch, "Fetch");
-    D(3, "printed trace" << flush);
-   
+       
     // #ifdef PRINT_ACTIVE_THREADS
-    D(3, "About to print active threads" << flush << "\n");
+    DPH(3, "active threads:");
     for (unsigned j = 0; j < w[schedule_w].tmask.size(); ++j) {
-      if (w[schedule_w].activeThreads > j && w[schedule_w].tmask[j])
-        {
-          D(3, " 1");
-        }
-      else 
-      {
-        D(3, " 0");
+      if (w[schedule_w].activeThreads > j && w[schedule_w].tmask[j]) {
+        DPN(3, " 1");
+      } else  {
+        DPN(3, " 0");
       }
-      if (j != w[schedule_w].tmask.size()-1 || schedule_w != w.size()-1) 
-      {
-        D(3, ',');
-      }
-    }
-    D(3, "\nPrinted active threads" << flush);
-    // #endif
-
-  
+    }   
+    DPN(3, "\n");
+    // #endif  
 
   // #ifdef PRINT_ACTIVE_THREADS
   // #endif
@@ -472,9 +451,6 @@ void Core::fetch()
 
 void Core::decode()
 {
-
-
-
     if ((inst_in_fetch.fetch_stall_cycles == 0) && !inst_in_scheduler.stalled)
     {
         CPY_TRACE(inst_in_decode, inst_in_fetch);
@@ -493,7 +469,7 @@ void Core::scheduler()
         INIT_TRACE(inst_in_decode);
     }
 
-    //printTrace(&inst_in_scheduler, "scheduler");
+    //printTrace(&inst_in_scheduler, "Scheduler");
 }
 
 void Core::load_store()
@@ -562,7 +538,6 @@ void Core::load_store()
 
 void Core::execute_unit()
 {
-    D(3, "$$$$$$$$$$$$$$$$$$$ EXE START\n" << flush);
     bool do_nothing = false;
     // EXEC is always not busy
     if (inst_in_scheduler.is_lw || inst_in_scheduler.is_sw)
@@ -615,7 +590,7 @@ void Core::execute_unit()
         }
         else
         {
-            D(3, "&&&&&&&&&&&&&&&&&&&&&&&& EXECUTE SRCS NOT READY");
+            D(3, "Execute: srcs not ready!");
             inst_in_scheduler.stalled = true;
             // INIT_TRACE(inst_in_exe);
             do_nothing = true;
@@ -627,15 +602,12 @@ void Core::execute_unit()
 
     // }
 
-    //printTrace(&inst_in_exe, "execute_unit");
+    //printTrace(&inst_in_exe, "EXE");
     // INIT_TRACE(inst_in_exe);
-    D(3, "EXECUTE END" << flush);
 }
 
 void Core::writeback()
 {
-
-
     if (inst_in_wb.rd > 0) renameTable[inst_in_wb.wid][inst_in_wb.rd] = true;
     if (inst_in_wb.vd > 0) vecRenameTable[inst_in_wb.vd] = true;
 
@@ -697,9 +669,7 @@ bool Core::running() const {
   if (stages_have_valid) return true;
 
   for (unsigned i = 0; i < w.size(); ++i)
-    if (w[i].running())
-    {
-        D(3, "Warp ID " << i << " is running");
+    if (w[i].running()) {
         return true;
     }
   return false;
@@ -777,8 +747,7 @@ void Warp::step(trace_inst_t * trace_inst) {
 
   // ++steps;
   
-  D(3, "in step pc=0x" << hex << pc);
-  D(3, "help: in PC: " << hex << pc << dec);
+  D(3, "current PC=0x" << hex << pc);
 
   // std::cout << "pc: " << hex << pc << "\n";
 
@@ -797,9 +766,6 @@ void Warp::step(trace_inst_t * trace_inst) {
   writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
   decPos = 0;
   inst = core->iDec.decode(fetchBuffer, decPos, trace_inst);
-
-  D(3, "Fetched at 0x" << hex << pc);
-  D(3, "0x" << hex << pc << ": " << *inst);
 
   // Update pc
   pc += decPos;
@@ -821,12 +787,10 @@ void Warp::step(trace_inst_t * trace_inst) {
       }
 
 
-      D(3, "Thread mask:");
-      D_RAW("  ");
-      for (unsigned i = 0; i < tmask.size(); ++i) D_RAW(tmask[i] << ' ');
-      D_RAW(endl);
-      D_RAW(endl);
-      D_RAW(endl);
+      DPH(3, "Thread mask:");
+      for (unsigned i = 0; i < tmask.size(); ++i) DPN(3, " " << tmask[i]);
+      DPN(3, "\n");
+
     // }
   // #endif
 

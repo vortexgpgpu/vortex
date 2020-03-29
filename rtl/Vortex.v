@@ -30,7 +30,6 @@ module Vortex
 	input  wire [31:0]      dram_fill_rsp_addr,
 	input  wire [31:0]      dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
 
-
 	// DRAM Icache Req
 	output wire                              I_dram_req,
 	output wire                              I_dram_req_write,

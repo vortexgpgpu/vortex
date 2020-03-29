@@ -133,7 +133,7 @@ int main()
 
 	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
 
-	vx_print_str("Waiting to ensure other warps are done... (Take a while)\n");
+	vx_print_str("Waiting to ensure other warps are done... (Takes a while)\n");
 	for (int i = 0; i < 5000; i++) {}
 
 	for (int i = 0; i < numWarps; i++)

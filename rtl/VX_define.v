@@ -162,7 +162,7 @@
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE_BYTES
-`define DCACHE_SIZE_BYTES 4096
+`define DCACHE_SIZE_BYTES 2048
 `endif
 
 // Size of line inside a bank in bytes
@@ -256,7 +256,7 @@
 
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef DFILL_INVALIDAOR_SIZE
-`define DFILL_INVALIDAOR_SIZE 0
+`define DFILL_INVALIDAOR_SIZE 32
 `endif
 
 // Dram knobs
@@ -270,7 +270,7 @@
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE_BYTES
-`define ICACHE_SIZE_BYTES 1024
+`define ICACHE_SIZE_BYTES 4096
 `endif
 
 // Size of line inside a bank in bytes
@@ -364,7 +364,7 @@
 
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef IFILL_INVALIDAOR_SIZE
-`define IFILL_INVALIDAOR_SIZE 0
+`define IFILL_INVALIDAOR_SIZE 32
 `endif
 
 // Dram knobs
@@ -470,7 +470,7 @@
 
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef SFILL_INVALIDAOR_SIZE
-`define SFILL_INVALIDAOR_SIZE 0
+`define SFILL_INVALIDAOR_SIZE 32
 `endif
 
 // Dram knobs
@@ -484,7 +484,7 @@
 
 // Size of cache in bytes
 `ifndef LLCACHE_SIZE_BYTES
-`define LLCACHE_SIZE_BYTES 1024
+`define LLCACHE_SIZE_BYTES 4096
 `endif
 
 // Size of line inside a bank in bytes
@@ -528,12 +528,12 @@
 
 // Core Request Queue Size
 `ifndef LLREQQ_SIZE
-`define LLREQQ_SIZE (2*`NUMBER_CORES_PER_CLUSTER)
+`define LLREQQ_SIZE 32
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef LLMRVQ_SIZE
-`define LLMRVQ_SIZE (`DNUMBER_BANKS*`NUMBER_CORES_PER_CLUSTER)
+`define LLMRVQ_SIZE 32
 `endif
 
 // Dram Fill Rsp Queue Size
@@ -543,7 +543,7 @@
 
 // Snoop Req Queue
 `ifndef LLSNRQ_SIZE
-`define LLSNRQ_SIZE 8
+`define LLSNRQ_SIZE 32
 `endif
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
@@ -555,7 +555,7 @@
 
 // Dram Writeback Queue Size
 `ifndef LLDWBQ_SIZE
-`define LLDWBQ_SIZE 4
+`define LLDWBQ_SIZE 16
 `endif
 
 // Dram Fill Req Queue Size
@@ -565,17 +565,17 @@
 
 // Lower Level Cache Hit Queue Size
 `ifndef LLLLVQ_SIZE
-`define LLLLVQ_SIZE 16
+`define LLLLVQ_SIZE 32
 `endif
 
 // Fill Forward SNP Queue
 `ifndef LLFFSQ_SIZE
-`define LLFFSQ_SIZE 8
+`define LLFFSQ_SIZE 32
 `endif
 
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef LLFILL_INVALIDAOR_SIZE
-`define LLFILL_INVALIDAOR_SIZE 0
+`define LLFILL_INVALIDAOR_SIZE 32
 `endif
 
 // Dram knobs
@@ -589,7 +589,7 @@
 
 // Size of cache in bytes
 `ifndef L3CACHE_SIZE_BYTES
-`define L3CACHE_SIZE_BYTES 1024
+`define L3CACHE_SIZE_BYTES 8192
 `endif
 
 // Size of line inside a bank in bytes
@@ -633,12 +633,12 @@
 
 // Core Request Queue Size
 `ifndef L3REQQ_SIZE
-`define L3REQQ_SIZE (`NT*`NW*`NUMBER_CLUSTERS)
+`define L3REQQ_SIZE 32
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef L3MRVQ_SIZE
-`define L3MRVQ_SIZE `LLREQQ_SIZE
+`define L3MRVQ_SIZE `L3REQQ_SIZE
 `endif
 
 // Dram Fill Rsp Queue Size
@@ -648,7 +648,7 @@
 
 // Snoop Req Queue
 `ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 8
+`define L3SNRQ_SIZE 32
 `endif
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
@@ -660,7 +660,7 @@
 
 // Dram Writeback Queue Size
 `ifndef L3DWBQ_SIZE
-`define L3DWBQ_SIZE 4
+`define L3DWBQ_SIZE 16
 `endif
 
 // Dram Fill Req Queue Size
@@ -680,7 +680,7 @@
 
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef L3FILL_INVALIDAOR_SIZE
-`define L3FILL_INVALIDAOR_SIZE 0
+`define L3FILL_INVALIDAOR_SIZE 32
 `endif
 
 // Dram knobs
