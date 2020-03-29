@@ -133,6 +133,7 @@ module VX_warp_scheduler (
 			thread_masks[0]       <= 1; // Activating first thread in first warp
 			warp_stalled          <= 0;
 			didnt_split           <= 0;
+			warp_lock             <= 0;      
 			// total_barrier_stall    = 0;
 			for (curr_w_help = 1; curr_w_help < `NW; curr_w_help=curr_w_help+1) begin
 				warp_pcs[curr_w_help]        <= 0;

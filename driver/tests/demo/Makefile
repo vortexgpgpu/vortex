@@ -50,7 +50,7 @@ run-ase: $(PROJECT)
 
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin
-
+	
 run-simx: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin
 
