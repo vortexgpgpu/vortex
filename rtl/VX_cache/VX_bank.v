@@ -218,6 +218,7 @@ module VX_bank
 
 	wire                                  mrvq_pop;
 	wire                                  mrvq_full;
+	wire                                  mrvq_stop;
 	wire                                  mrvq_valid_st0;
 	wire[`vx_clog2(NUMBER_REQUESTS)-1:0] mrvq_tid_st0;
 	wire [31:0]                           mrvq_addr_st0;
@@ -279,6 +280,7 @@ module VX_bank
 		.miss_add_mem_write      (miss_add_mem_write),
 		.miss_add_pc             (miss_add_pc),
 		.miss_resrv_full         (mrvq_full),
+		.miss_resrv_stop         (mrvq_stop),
 
 		// Broadcast
 		.is_fill_st1             (is_fill_st2),
@@ -321,7 +323,7 @@ module VX_bank
 
 	assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe && !mrvq_hazard_st0;
 	assign dfpq_pop = !mrvq_pop && !dfpq_empty && !stall_bank_pipe && !dfpq_hazard_st0;
-	assign reqq_pop = !mrvq_pop && !dfpq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !(reqq_hazard_st0 || (mrvq_valid_st0 && mrvq_hazard_st0)) && !is_fill_in_pipe;
+	assign reqq_pop = !mrvq_stop && !mrvq_pop && !dfpq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !(reqq_hazard_st0 || (mrvq_valid_st0 && mrvq_hazard_st0)) && !is_fill_in_pipe;
 	assign snrq_pop = !reqq_pop && !reqq_pop && !mrvq_pop && !dfpq_pop && snrq_valid_st0 && !stall_bank_pipe && !snrq_hazard_st0;
 
 	integer st1_cycle;

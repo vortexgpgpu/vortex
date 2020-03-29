@@ -61,6 +61,7 @@ module VX_cache_miss_resrv
 	input wire[2:0]                              miss_add_mem_write,
 	input wire[31:0]                             miss_add_pc,
 	output wire                                  miss_resrv_full,
+	output wire                                  miss_resrv_stop,
 
 	// Broadcast Fill
 	input wire                                   is_fill_st1,
@@ -94,8 +95,8 @@ module VX_cache_miss_resrv
 
 
 		// assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
-		assign miss_resrv_full = (MRVQ_SIZE != 2) && (size == MRVQ_SIZE);
-
+		assign miss_resrv_full = (MRVQ_SIZE != 2) && (size ==  MRVQ_SIZE   );
+		assign miss_resrv_stop = (MRVQ_SIZE != 2) && (size == (MRVQ_SIZE-4));
 
 		wire                            enqueue_possible = !miss_resrv_full;
 		wire[`vx_clog2(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
