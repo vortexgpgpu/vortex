@@ -5,20 +5,24 @@
 #include <vortex.h>
 #include "common.h"
 
-const char* program_file = nullptr;
+const char* program_file = "kernel.bin";
+uint32_t data_stride = 0xffffffff;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
-   std::cout << "Usage: -f: program [-h: help]" << std::endl;
+   std::cout << "Usage: [-f: program] [-n stride] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "f:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:f:h?")) != -1) {
     switch (c) {
-    case 'f': {
+    case 'n':
+      data_stride = atoi(optarg);
+      break;
+    case 'f':
       program_file = optarg;
-    } break;
+      break;
     case 'h':
     case '?': {
       show_usage();
@@ -53,13 +57,23 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   size_t value; 
   kernel_arg_t kernel_arg;
-
-  uint32_t stride = BLOCK_SIZE / sizeof(uint32_t);
-  uint32_t num_points = MAX_CORES * MAX_WARPS * MAX_THREADS * stride;
-  uint32_t buf_size = num_points * sizeof(uint32_t);
   
   // parse command arguments
   parse_args(argc, argv);
+
+  uint32_t block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+  uint32_t max_cores = vx_dev_caps(VX_CAPS_MAX_CORES);
+  uint32_t max_warps = vx_dev_caps(VX_CAPS_MAX_WARPS);
+  uint32_t max_threads = vx_dev_caps(VX_CAPS_MAX_THREADS);
+
+  if (data_stride == 0xffffffff) {
+    data_stride = block_size / sizeof(uint32_t);
+  }
+
+  uint32_t num_points = max_cores * max_warps * max_threads * data_stride;
+  uint32_t buf_size = num_points * sizeof(uint32_t);
+
+  std::cout << "number of workitems: " << num_points << std::endl;
 
   // open device connection
   std::cout << "open device connection" << std::endl;  
@@ -134,7 +148,9 @@ int main(int argc, char *argv[]) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    kernel_arg.stride = stride;
+    kernel_arg.num_warps = max_warps;
+    kernel_arg.num_threads = max_threads;
+    kernel_arg.stride = data_stride;
 
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
