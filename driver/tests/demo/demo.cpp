@@ -115,7 +115,8 @@ int main(int argc, char *argv[]) {
 
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
-  ret = vx_alloc_shared_mem(device, buf_size, &buffer);
+  uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
+  ret = vx_alloc_shared_mem(device, alloc_size, &buffer);
   if (ret != 0) {
     cleanup();
     return -1;  
@@ -205,6 +206,7 @@ int main(int argc, char *argv[]) {
   if (0 == errors) {
     printf("PASSED!\n");
   } else {
+    printf("Found %d errors!\n", errors);
     printf("FAILED!\n");
   }
 
