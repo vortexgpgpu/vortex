@@ -20,7 +20,6 @@
 `endif
 
 // `define QUEUE_FORCE_MLAB 1
-// `define L3C 1
 
 `define NT_M1 (`NT-1)
 
@@ -261,7 +260,7 @@
 
 // Dram knobs
 `ifndef DSIMULATED_DRAM_LATENCY_CYCLES
-`define DSIMULATED_DRAM_LATENCY_CYCLES 10
+`define DSIMULATED_DRAM_LATENCY_CYCLES 2
 `endif
 
 // ========================================= Icache Configurable Knobs =========================================
@@ -369,7 +368,7 @@
 
 // Dram knobs
 `ifndef ISIMULATED_DRAM_LATENCY_CYCLES
-`define ISIMULATED_DRAM_LATENCY_CYCLES 10
+`define ISIMULATED_DRAM_LATENCY_CYCLES 2
 `endif
 
 // ========================================= SM Configurable Knobs =========================================
@@ -475,7 +474,7 @@
 
 // Dram knobs
 `ifndef SSIMULATED_DRAM_LATENCY_CYCLES
-`define SSIMULATED_DRAM_LATENCY_CYCLES 10
+`define SSIMULATED_DRAM_LATENCY_CYCLES 2
 `endif
 
 // ========================================= L2cache Configurable Knobs =========================================
@@ -580,7 +579,7 @@
 
 // Dram knobs
 `ifndef LLSIMULATED_DRAM_LATENCY_CYCLES
-`define LLSIMULATED_DRAM_LATENCY_CYCLES 10
+`define LLSIMULATED_DRAM_LATENCY_CYCLES 2
 `endif
 
 // ========================================= L3cache Configurable Knobs =========================================
@@ -685,7 +684,7 @@
 
 // Dram knobs
 `ifndef L3SIMULATED_DRAM_LATENCY_CYCLES
-`define L3SIMULATED_DRAM_LATENCY_CYCLES 10
+`define L3SIMULATED_DRAM_LATENCY_CYCLES 2
 `endif
 
  // VX_DEFINE

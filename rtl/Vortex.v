@@ -24,6 +24,8 @@ module Vortex
 	output wire [31:0]      dram_req_data[`DBANK_LINE_SIZE_RNG],
 	output wire [31:0]      dram_expected_lat,
 
+	input  wire             dram_req_delay,
+
 	// DRAM Dcache Res
 	output wire             dram_fill_accept,
 	input  wire             dram_fill_rsp,
@@ -95,6 +97,7 @@ module Vortex
 	input  wire [31:0]                       I_dram_fill_rsp_addr,
 	input  wire [`IBANK_LINE_SIZE_RNG][31:0] I_dram_fill_rsp_data,
 
+	input  wire             dram_req_delay,
 
 	input  wire                              snp_req,
 	input  wire [31:0]                       snp_req_addr,
@@ -140,6 +143,8 @@ module Vortex
 	assign dram_expected_lat = `DSIMULATED_DRAM_LATENCY_CYCLES;
 	assign dram_fill_accept  = VX_gpu_dcache_dram_req.dram_fill_accept;
 
+	assign VX_gpu_dcache_dram_req.dram_req_delay = dram_req_delay;
+
 	genvar wordy;
 	generate
 		for (wordy = 0; wordy < `DBANK_LINE_SIZE_WORDS; wordy=wordy+1) begin
@@ -182,6 +187,8 @@ module Vortex
 	assign I_dram_req_size     = VX_gpu_icache_dram_req.dram_req_size;
 	assign I_dram_expected_lat = `ISIMULATED_DRAM_LATENCY_CYCLES;
 	assign I_dram_fill_accept  = VX_gpu_icache_dram_req.dram_fill_accept;
+
+	assign VX_gpu_icache_dram_req.dram_req_delay = dram_req_delay;
 
 	genvar iwordy;
 	generate
