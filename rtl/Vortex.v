@@ -114,7 +114,8 @@ module Vortex
 	wire scheduler_empty;
 	wire out_ebreak_unqual;
 
-	assign out_ebreak = out_ebreak_unqual && (scheduler_empty && 1);
+	// assign out_ebreak = out_ebreak_unqual && (scheduler_empty && 1);
+	assign out_ebreak = out_ebreak_unqual;
 
 
 	wire memory_delay;
