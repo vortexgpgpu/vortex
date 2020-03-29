@@ -101,9 +101,6 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
   bool predicated = false;
   if (predicated) { inst.setPred((code>>(inst_s-p-1))&pMask); }
 
-  // printf("CUrrent CODE: %x\n", code);
-  D(3, "Curr Code: " << hex << code << dec);
-
   Opcode op = (Opcode)((code>>shift_opcode)&opcode_mask);
   // std::cout << "opcode: " << op << "\n";
   inst.setOpcode(op);
@@ -324,7 +321,7 @@ Instruction *WordDecoder::decode(const std::vector<Byte> &v, Size &idx, trace_in
     // inst.setImmRef(*r);
   }
 
-  D(2, "Decoded 0x" << hex << code << " into: " << inst << '\n');
+  D(2, "Decoded instr 0x" << hex << code << " into: " << inst);
 
   return &inst;
 }

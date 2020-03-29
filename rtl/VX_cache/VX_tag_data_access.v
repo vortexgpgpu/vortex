@@ -249,7 +249,7 @@ module VX_tag_data_access
 		    wire normal_write = (block_offset == g[`WORD_SELECT_SIZE_RNG]) && should_write && !real_writefill;
 
 		    assign we[g]      = (force_write)        ? 4'b1111  : 
-		    				 (normal_write && (FUNC_ID == `LLFUNC_ID)) ? 4'b1111  :
+		    				 (should_write && !real_writefill && (FUNC_ID == `LLFUNC_ID)) ? 4'b1111  :
 		                        (normal_write && sw) ? 4'b1111  :
 		                        (normal_write && sb) ? sb_mask  :
 		                        (normal_write && sh) ? sh_mask  :

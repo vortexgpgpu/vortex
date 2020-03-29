@@ -1,32 +1,35 @@
 all: RUNFILE
 
-INCLUDE=-I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterfaces/ -Ipipe_regs/ -Icompat/ -Isimulate
+INCLUDE = -I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterfaces/ -Ipipe_regs/ -Icompat/ -Isimulate
 
-SINGLE_CORE=Vortex.v
-MULTI_CORE=Vortex_SOC.v
+SINGLE_CORE = Vortex.v
 
-EXE=--exe ./simulate/test_bench.cpp
-MULTI_EXE=--exe ./simulate/multi_test_bench.cpp
+MULTI_CORE = Vortex_SOC.v
 
-COMP=--compiler gcc --language 1800-2009
+EXE += --exe ./simulate/test_bench.cpp ./simulate/Vortex.cpp
 
-WNO=-Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
+MULTI_EXE += --exe ./simulate/multi_test_bench.cpp ./simulate/Vortex_SOC.cpp
+
+VF += -compiler gcc --language 1800-2009
+
+WNO += -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
 # WNO=
 
 # LIGHTW=
-LIGHTW=-Wno-UNOPTFLAT
+LIGHTW += -Wno-UNOPTFLAT
+
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
-LIB=
+LIB +=
 
-CF = -std=c++11 -fms-extensions
+CF += -std=c++11 -fms-extensions
 
-DEB=--trace -DVL_DEBUG=1 
+DEB += --trace -DVL_DEBUG=1 
 
-MAKECPP=(cd obj_dir && make -j -f VVortex.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+MAKECPP += (cd obj_dir && make -j -f VVortex.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
 
-MAKECPPRel=(cd obj_dir && make -j -f VVortex.mk)
+MAKECPPRel += (cd obj_dir && make -j -f VVortex.mk)
 
-MAKEMULTICPP=(cd obj_dir && make -j -f VVortex_SOC.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+MAKEMULTICPP += (cd obj_dir && make -j -f VVortex_SOC.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
@@ -36,23 +39,22 @@ build_config:
 
 # -LDFLAGS '-lsystemc'
 VERILATOR: build_config
-	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF' $(LIGHTW)
+	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF)' $(LIGHTW)
 
 VERILATORnoWarnings: build_config
-	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF' $(WNO) $(DEB)
+	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF)' $(WNO) $(DEB)
 
 VERILATORnoWarningsRel: build_config
-	verilator $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF -O3 -DVL_THREADED' $(WNO) --threads $(THREADS)
-
+	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -O3 -DVL_THREADED' $(WNO) --threads $(THREADS)
 
 VERILATORMULTInoWarnings: build_config
-	verilator $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OFF -O3 -DVL_THREADED' $(WNO) $(DEB) --threads $(THREADS)
+	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -O3 -DVL_THREADED' $(WNO) $(DEB) --threads $(THREADS)
 
 compdebug: build_config
-	verilator_bin_dbg $(COMP) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
+	verilator_bin_dbg $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
 
 compdebugmulti: build_config
-	verilator_bin_dbg $(COMP) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
+	verilator_bin_dbg $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
 
 RUNFILE: VERILATOR
 	$(MAKECPP)

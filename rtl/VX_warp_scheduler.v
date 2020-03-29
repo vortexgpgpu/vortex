@@ -298,7 +298,7 @@ module VX_warp_scheduler (
 
 	assign global_stall = (stall || wstall_this_cycle || hazard || !real_schedule || is_join);
 
-	assign scheduled_warp = !(wstall_this_cycle || hazard || !real_schedule || is_join);
+	assign scheduled_warp = !(wstall_this_cycle || hazard || !real_schedule || is_join) && !reset;
 
 	wire real_use_wspawn = use_wsapwn[warp_to_schedule];
 

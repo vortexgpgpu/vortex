@@ -558,7 +558,7 @@ module VX_bank
 	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0]  dwbq_req_data = readdata_st2;
 	wire                             dwbq_empty;
 	
-    wire possible_fill = valid_st2 && miss_st2;
+    wire possible_fill = valid_st2 && miss_st2 && !dram_fill_req_queue_full;
 	wire[31:0] fill_invalidator_addr = addr_st2 & `BASE_ADDR_MASK;
 	VX_fill_invalidator  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
@@ -590,7 +590,7 @@ module VX_bank
 		);
 
 	// Enqueu in dram_fill_req
-	assign dram_fill_req       = valid_st2 && miss_st2 && !invalidate_fill && !dram_fill_req_queue_full;
+	assign dram_fill_req       = possible_fill && !invalidate_fill;
 	assign dram_because_of_snp = is_snp_st2 && valid_st2 && miss_st2;
 	assign dram_snp_full       = snrq_full && snp_req;
 	assign dram_fill_req_addr  = addr_st2 & `BASE_ADDR_MASK;

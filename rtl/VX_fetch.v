@@ -98,8 +98,8 @@ module VX_fetch (
 		assign fe_inst_meta_fi.instruction = 32'h0;
 		assign fe_inst_meta_fi.inst_pc     = warp_pc;
 
-		wire start_mat_add = scheduled_warp && (warp_pc == 32'h80000e94) && (warp_num == 0);
-		wire end_mat_add   = scheduled_warp && (warp_pc == 32'h80000ef0) && (warp_num == 0);
+		wire start_mat_add = scheduled_warp && (warp_pc == 32'h80000ed8) && (warp_num == 0);
+		wire end_mat_add   = scheduled_warp && (warp_pc == 32'h80000fbc) && (warp_num == 0);
 
 
 endmodule

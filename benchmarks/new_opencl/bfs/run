@@ -1,0 +1,1 @@
+./bfs ../../data/bfs/graph1MW_6.txt

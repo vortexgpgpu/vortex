@@ -68,35 +68,21 @@ module VX_fill_invalidator
 		reg[FILL_INVALIDAOR_SIZE-1:0][31:0]   fills_address;
 
 
-		reg                                         success_found;
-		reg[(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
-
-		integer curr_fill;
+		reg[FILL_INVALIDAOR_SIZE-1:0] matched_fill;
+		wire matched;
+		integer fi;
 		always @(*) begin
-			invalidate_fill = 0;
-			success_found   = 0;
-			success_index   = 0;
-			for (curr_fill = 0; curr_fill < FILL_INVALIDAOR_SIZE; curr_fill=curr_fill+1) begin
-
-				if (fill_addr[31:`LINE_SELECT_ADDR_START] == fills_address[curr_fill][31:`LINE_SELECT_ADDR_START]) begin
-					if (possible_fill && fills_active[curr_fill]) begin
-						invalidate_fill = 1;
-					end
-
-					if (success_fill) begin
-						success_found = 1;
-						success_index = curr_fill;
-					end
-				end
+			for (fi = 0; fi < FILL_INVALIDAOR_SIZE; fi+=1) begin
+				matched_fill[fi] = fills_active[fi] && (fills_address[fi][31:`LINE_SELECT_ADDR_START] == fill_addr[31:`LINE_SELECT_ADDR_START]);
 			end
 		end
 
 
+		assign matched = (|(matched_fill));
 
 
-		wire [(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0] enqueue_index;
+		wire [(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0]  enqueue_index;
 		wire                                          enqueue_found;
-
 		VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(
 			.valids(~fills_active),
 			.index (enqueue_index),
@@ -104,6 +90,7 @@ module VX_fill_invalidator
 			);
 
 
+		assign invalidate_fill = possible_fill && matched;
 
 
 		always @(posedge clk) begin
@@ -111,17 +98,72 @@ module VX_fill_invalidator
 				fills_active  <= 0;
 				fills_address <= 0;
 			end else begin
-				if (possible_fill && !invalidate_fill) begin
-					fills_active[enqueue_index]  <= 1;
-					fills_address[enqueue_index] <= fill_addr;
-				end
 
-				if (success_found) begin
-					fills_active[success_index] <= 0;
+				if (possible_fill && !matched && enqueue_found) begin
+					fills_active [enqueue_index] <= 1;
+					fills_address[enqueue_index] <= fill_addr;
+				end else if (success_fill && matched) begin
+					fills_active <= fills_active & (~matched_fill);
 				end
 
 			end
 		end
+
+
+		// reg                                         success_found;
+		// reg[(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
+
+		// integer curr_fill;
+		// always @(*) begin
+		// 	invalidate_fill = 0;
+		// 	success_found   = 0;
+		// 	success_index   = 0;
+		// 	for (curr_fill = 0; curr_fill < FILL_INVALIDAOR_SIZE; curr_fill=curr_fill+1) begin
+
+		// 		if (fill_addr[31:`LINE_SELECT_ADDR_START] == fills_address[curr_fill][31:`LINE_SELECT_ADDR_START]) begin
+		// 			if (possible_fill && fills_active[curr_fill]) begin
+		// 				invalidate_fill = 1;
+		// 			end
+
+		// 			if (success_fill) begin
+		// 				success_found = 1;
+		// 				success_index = curr_fill;
+		// 			end
+		// 		end
+		// 	end
+		// end
+
+
+
+
+		// wire [(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0] enqueue_index;
+		// wire                                          enqueue_found;
+
+		// VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(
+		// 	.valids(~fills_active),
+		// 	.index (enqueue_index),
+		// 	.found (enqueue_found)
+		// 	);
+
+
+
+
+		// always @(posedge clk) begin
+		// 	if (reset) begin
+		// 		fills_active  <= 0;
+		// 		fills_address <= 0;
+		// 	end else begin
+		// 		if (possible_fill && !invalidate_fill) begin
+		// 			fills_active[enqueue_index]  <= 1;
+		// 			fills_address[enqueue_index] <= fill_addr;
+		// 		end
+
+		// 		if (success_found) begin
+		// 			fills_active[success_index] <= 0;
+		// 		end
+
+		// 	end
+		// end
 
 
 	end
