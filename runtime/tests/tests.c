@@ -100,6 +100,8 @@ void test_wsapwn()
 	vx_wspawn(4, func_ptr);
 	simple_kernel();
 
+	for (int i = 0; i < 100; i++) {}
+
 	vx_print_hex(wsapwn_arr[0]);
 	vx_print_str("\n");
 	vx_print_hex(wsapwn_arr[1]);
