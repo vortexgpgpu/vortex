@@ -21,6 +21,8 @@
 #include "include/args.h"
 #include "include/help.h"
 
+#include "../runtime/config.h"
+
 #include <sys/stat.h>
 
 //////////////
@@ -58,9 +60,8 @@ int emu_main(int argc, char **argv) {
     string archString("rv32i");
     string imgFileName("a.dsfsdout.bin");
     bool showHelp(false), showStats(false), basicMachine(true);
-    bool cpu_mode(false);
-    int max_warps(32);
-    int max_threads(32);
+    int max_warps(NW);
+    int max_threads(NT);
 
     /* Read the command line arguments. */
     CommandLineArgFlag          fh("-h", "--help", "", showHelp);
@@ -68,7 +69,6 @@ int emu_main(int argc, char **argv) {
     CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
     CommandLineArgFlag          fs("-s", "--stats", "", showStats);
     CommandLineArgFlag          fb("-b", "--basic", "", basicMachine);
-    CommandLineArgFlag          fx("-x", "--cpu", "", cpu_mode);
     CommandLineArgSetter<int>   fw("-w", "--warps", "", max_warps);
     CommandLineArgSetter<int>   ft("-t", "--threads", "", max_threads);
     
@@ -80,7 +80,7 @@ int emu_main(int argc, char **argv) {
     }
 
     /* Instantiate a Core, RAM, and console output. */
-    ArchDef arch(archString, cpu_mode, max_warps, max_threads);
+    ArchDef arch(archString, max_warps, max_threads);
 
     Decoder *dec;
 
