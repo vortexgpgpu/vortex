@@ -132,6 +132,9 @@ module VX_cache_miss_resrv
 				ready_table <= 0;
 				addr_table  <= 0;
 				pc_table    <= 0;
+				size        <= 0;
+				head_ptr    <= 0;
+				tail_ptr    <= 0;
 			end else begin
 				if (mrvq_push) begin
 					valid_table[enqueue_index]    <= 1;
