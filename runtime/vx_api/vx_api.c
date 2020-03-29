@@ -1,4 +1,4 @@
-
+#include "../config.h"
 #include "../intrinsics/vx_intrinsics.h"
 #include "vx_api.h"
 #include <inttypes.h>
@@ -11,24 +11,27 @@ func_t global_function_pointer;
 void * global_argument_struct;
 unsigned global_num_threads;
 
-void setup_call() {
+void spawn_warp_runonce() {
+	// active all threads
 	vx_tmc(global_num_threads);
+
+	// call user routine
 	global_function_pointer(global_argument_struct);
 
+	// resume single-thread execution on exit
 	unsigned wid = vx_warpID();
-	if (wid != 0)	{
-		vx_tmc(0); // Halt Warp Execution
-	}	else {
-		vx_tmc(1); // Only activate one thread
-	}
+	unsigned tmask = (0 == wid) ? 0x1 : 0x0; 
+	vx_tmc(tmask);
 }
 
 void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void * args) {
 	global_function_pointer = func_ptr;
 	global_argument_struct  = args;
 	global_num_threads      = numThreads;
-	vx_wspawn(numWarps, (unsigned) setup_call);
-	setup_call();
+	if (numWarps > 1) {
+		vx_wspawn(numWarps, (unsigned)spawn_warp_runonce);
+	}
+	spawn_warp_runonce();
 }
 
 unsigned               pocl_threads;
@@ -36,20 +39,20 @@ struct context_t *     pocl_ctx;
 vx_pocl_workgroup_func pocl_pfn;
 const void *           pocl_args;
 
-void pocl_spawn_runonce() {
-	
+void pocl_spawn_warp_runonce() {
+	// active all threads
 	vx_tmc(pocl_threads);
 
 	int x = vx_threadID();
-	int y = vx_warpID();
+	int y = vx_warpNum();
 
+	// call kernel routine
 	(pocl_pfn)(pocl_args, pocl_ctx, x, y, 0);
 
-	if (y != 0)	{
-		vx_tmc(0);
-	}
-
-	vx_tmc(1);
+	// resume single-thread execution on exit
+	int wid = vx_warpID();
+	unsigned tmask = (0 == wid) ? 0x1 : 0x0; 
+	vx_tmc(tmask);
 }
 
 void pocl_spawn(struct context_t * ctx, vx_pocl_workgroup_func pfn, const void * args) {
@@ -64,10 +67,10 @@ void pocl_spawn(struct context_t * ctx, vx_pocl_workgroup_func pfn, const void *
 	pocl_args    = args;
 
 	if (ctx->num_groups[1] > 1)	{
-		vx_wspawn(ctx->num_groups[1], (unsigned)&pocl_spawn_runonce);
+		vx_wspawn(ctx->num_groups[1], (unsigned)&pocl_spawn_warp_runonce);
 	}
 
-	pocl_spawn_runonce();
+	pocl_spawn_warp_runonce();
 }
 
 #ifdef __cplusplus

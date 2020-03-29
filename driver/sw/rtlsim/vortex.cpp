@@ -30,7 +30,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 static size_t align_size(size_t size) {
-    return VX_CACHE_LINESIZE * ((size + VX_CACHE_LINESIZE - 1) / VX_CACHE_LINESIZE);
+    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+    return cache_block_size * ((size + cache_block_size - 1) / cache_block_size);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -76,10 +77,10 @@ class vx_device {
 public:
     vx_device() 
         : is_done_(false)
-        , mem_allocation_(VX_ALLOC_BASE_ADDR)
         , vortex_(&ram_) {
         vortex_.reset();
         thread_ = new std::thread(__thread_proc__, this);        
+        mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
     } 
 
     ~vx_device() {        
@@ -95,7 +96,8 @@ public:
 
     int alloc_local_mem(size_t size, size_t* dev_maddr) {
         size_t asize = align_size(size);
-        if (mem_allocation_ + asize > VX_LOCAL_MEM_SIZE)
+        auto dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
+        if (mem_allocation_ + asize > dev_mem_size)
             return -1;
         *dev_maddr = mem_allocation_;
         mem_allocation_ += asize;

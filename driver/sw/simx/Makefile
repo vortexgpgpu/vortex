@@ -1,16 +1,11 @@
 CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
 #CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
-MAX_WARPS ?= 8
-MAX_THREADS ?= 4
-
-CFLAGS += -I../../include -I../../../../simX/include
+CFLAGS += -I../../include -I../../../../simX/include  -I../../../../runtime
 
 CFLAGS += -fPIC
 
 CFLAGS += -DUSE_SIMX 
-
-CFLAGS += -DMAX_WARPS=$(MAX_WARPS) -DMAX_THREADS=$(MAX_THREADS)
 
 LDFLAGS += -shared -pthread
 

@@ -3,7 +3,7 @@ CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
 #USE_MULTICORE=1
 
-CFLAGS += -I../../include -I../../../../rtl/simulate
+CFLAGS += -I../../include -I../../../../rtl/simulate -I../../../../runtime
 
 CFLAGS += -fPIC
 
