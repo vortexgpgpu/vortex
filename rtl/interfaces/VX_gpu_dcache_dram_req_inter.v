@@ -27,6 +27,10 @@ interface VX_gpu_dcache_dram_req_inter
     // DRAM Cache can't accept response
     wire                              dram_fill_accept;
 
+
+    // DRAM Cache can't accept request
+    wire                              dram_req_delay;
+
 endinterface
 
 
