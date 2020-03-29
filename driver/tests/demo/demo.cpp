@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
   kernel_arg_t kernel_arg;
 
   uint32_t stride = BLOCK_SIZE / sizeof(uint32_t);
-  uint32_t num_points = MAX_WARPS * MAX_THREADS * stride;
+  uint32_t num_points = MAX_CORES * MAX_WARPS * MAX_THREADS * stride;
   uint32_t buf_size = num_points * sizeof(uint32_t);
   
   // parse command arguments
