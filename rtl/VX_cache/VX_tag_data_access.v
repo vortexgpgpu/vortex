@@ -272,12 +272,12 @@ module VX_tag_data_access
 		assign readword_st1e = data_Qual;
 	end
 	
-	assign miss_st1e           = ((valid_req_st1e || is_snp_st1e) && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e));
+	assign miss_st1e           = (valid_req_st1e && is_snp_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e)) || ((valid_req_st1e && !is_snp_st1e) && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e));
 	assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
 	assign readdata_st1e       = use_read_data_st1e;
 	assign readtag_st1e        = use_read_tag_st1e;
 	assign fill_sent           = miss_st1e;
 	assign fill_saw_dirty_st1e = real_writefill && dirty_st1e;
-	assign invalidate_line     = is_snp_st1e && !miss_st1e;
+	assign invalidate_line     = is_snp_st1e && miss_st1e;
 
 endmodule
