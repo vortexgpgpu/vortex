@@ -3,6 +3,8 @@
 
 #include "../../../runtime/config.h"
 
+#define MAX_CORES NUMBER_CORES
+
 #define MAX_WARPS NW
 
 #define MAX_THREADS NT
