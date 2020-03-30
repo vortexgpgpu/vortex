@@ -271,8 +271,17 @@ module VX_tag_data_access
 	end else begin
 		assign readword_st1e = data_Qual;
 	end
+
+
+	wire[`TAG_SELECT_ADDR_RNG] writeaddr_tag = writeaddr_st1e[`TAG_SELECT_ADDR_RNG];
+
+	wire tags_match   = writeaddr_tag != use_read_tag_st1e;
 	
-	assign miss_st1e           = (valid_req_st1e && is_snp_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e)) || ((valid_req_st1e && !is_snp_st1e) && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && !writefill_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e));
+	wire snoop_hit    = valid_req_st1e &&  is_snp_st1e && tags_match;
+	wire req_invalid  = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
+	wire req_miss     = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && tags_match;
+	
+	assign miss_st1e           = snoop_hit || req_invalid || req_miss;
 	assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
 	assign readdata_st1e       = use_read_data_st1e;
 	assign readtag_st1e        = use_read_tag_st1e;
