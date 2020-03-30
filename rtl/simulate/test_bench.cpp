@@ -1,4 +1,5 @@
-#include "Vortex.h"
+#include "simulator.h"
+#include <iostream>
 
 #define NUM_TESTS 46
 
@@ -70,7 +71,7 @@ int main(int argc, char **argv)
         RAM ram;
 	      loadHexImpl(s.c_str(), &ram);
 
-				Vortex v(&ram);
+				Simulator v(&ram);
         bool curr = v.simulate();
 
         if ( curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
@@ -105,8 +106,8 @@ int main(int argc, char **argv)
   RAM ram;
 	loadHexImpl(testing, &ram);
 
-	Vortex v(&ram);
-	bool curr = v.simulate();
+	Simulator simulator(&ram);
+	bool curr = simulator.run();
 
 	if ( curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
 	if (!curr) std::cerr << RED   << "Test Failed: " << testing << std::endl;
