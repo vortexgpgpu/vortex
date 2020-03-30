@@ -15,8 +15,14 @@
 #include "VX_define.h"
 #include "ram.h"
 
-#include <fstream>
+#include <ostream>
 #include <vector>
+
+//#define ENABLE_DRAM_STALLS
+#define DRAM_LATENCY 200
+#define DRAM_RQ_SIZE 16
+#define DRAM_STALLS_MODULO 16
+#define PIPELINE_FLUSH_LATENCY 300
 
 typedef struct {
   int cycles_left;
@@ -34,55 +40,33 @@ public:
   bool is_busy();  
   void reset();
   void step();
-  void flush_caches(uint32_t mem_addr, uint32_t size);
+  void flush_caches(uint32_t mem_addr, uint32_t size);  
   bool run();
+  void print_stats(std::ostream& out);
 
-protected:
-
-  void print_stats(bool cycle_test = true);
+private:  
 
 #ifndef USE_MULTICORE
-  bool ibus_driver();
+  void ibus_driver();
 #endif
 
-  bool dbus_driver();
+  void dbus_driver();
   void io_handler();  
   void send_snoops(uint32_t mem_addr, uint32_t size);
   void wait(uint32_t cycles);
 
-  RAM *ram;
-
-  unsigned start_pc;
-  bool refill_d;
-  unsigned refill_addr_d;
-  bool refill_i;
-  unsigned refill_addr_i;
-  long int curr_cycle;
-  bool stop;
-  bool unit_test;
-  std::ofstream results;
-  int stats_static_inst;
-  int stats_dynamic_inst;
-  int stats_total_cycles;
-  int stats_fwd_stalls;
-  int stats_branch_stalls;
-  int debug_state;
-  int ibus_state;
-  int dbus_state;
-  int debug_return;
-  int debug_wait_num;
-  int debug_inst_num;
-  int debug_end_wait;
-  int debug_debugAddr;
-  double stats_sim_time;
-  std::vector<dram_req_t> dram_req_vec;
-  std::vector<dram_req_t> I_dram_req_vec;
+  uint64_t total_cycles_;
+  bool dram_stalled_;
+  bool I_dram_stalled_;
+  std::vector<dram_req_t> dram_req_vec_;
+  std::vector<dram_req_t> I_dram_req_vec_;
+  RAM *ram_;
 #ifdef USE_MULTICORE
-  VVortex_SOC *vortex;
+  VVortex_SOC *vortex_;
 #else
-  VVortex *vortex;
+  VVortex *vortex_;
 #endif
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *m_trace;
+  VerilatedVcdC *trace_;
 #endif
 };
