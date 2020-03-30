@@ -1,5 +1,5 @@
-CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
-#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
+#CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
+CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
 USE_MULTICORE=1
 
@@ -23,10 +23,9 @@ SRCS = vortex.cpp ../vx_utils.cpp ../../../rtl/simulate/$(RTL_TOP).cpp
 
 RTL_INCLUDE = -I../../../rtl -I../../../rtl/interfaces -I../../../rtl/cache -I../../../rtl/VX_cache -I../../../rtl/shared_memory -I../../../rtl/pipe_regs -I../../../rtl/compat
 
-THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
-VL_FLAGS += --threads $(THREADS)
-
-VL_FLAGS += -Wno-UNOPTFLAT -Wno-WIDTH 
+# Enable Verilator multithreaded simulation
+#THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
+#VL_FLAGS += --threads $(THREADS)
 
 VL_FLAGS += -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
 
