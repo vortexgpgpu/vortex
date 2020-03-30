@@ -9,12 +9,7 @@
 
 #include <vortex.h>
 #include <ram.h>
-
-#ifdef USE_MULTICORE
-#include <Vortex_SOC.h>
-#else
-#include <Vortex.h>
-#endif
+#include <simulator.h>
 
 #define PAGE_SIZE           4096
 
@@ -77,8 +72,8 @@ class vx_device {
 public:
     vx_device() 
         : is_done_(false)
-        , vortex_(&ram_) {
-        vortex_.reset();
+        , simulator_(&ram_) {
+        simulator_.reset();
         thread_ = new std::thread(__thread_proc__, this);        
         mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
     } 
@@ -136,7 +131,7 @@ public:
     int flush_caches(size_t dev_maddr, size_t size) {
         
         mutex_.lock();     
-        vortex_.flush_caches(dev_maddr, size);
+        simulator_.flush_caches(dev_maddr, size);
         mutex_.unlock();
 
         return 0;
@@ -145,7 +140,7 @@ public:
     int start() {   
 
         mutex_.lock();     
-        vortex_.reset();
+        simulator_.reset();
         mutex_.unlock();
 
         return 0;
@@ -155,7 +150,7 @@ public:
         auto timeout_sec = (timeout < 0) ? timeout : (timeout / 1000);
         for (;;) {
             mutex_.lock();
-            bool is_busy = vortex_.is_busy();
+            bool is_busy = simulator_.is_busy();
             mutex_.unlock();
 
             if (!is_busy || 0 == timeout_sec--)
@@ -180,7 +175,7 @@ private:
                 break;
 
             mutex_.lock();
-            vortex_.step();
+            simulator_.step();
             mutex_.unlock();
         }
 
@@ -194,11 +189,7 @@ private:
     bool is_done_; 
     size_t mem_allocation_;     
     RAM ram_;
-#ifdef USE_MULTICORE
-    Vortex_SOC vortex_;
-#else
-    Vortex vortex_;
-#endif
+    Simulator simulator_;
     std::thread* thread_;   
     std::mutex mutex_;
 };

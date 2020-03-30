@@ -1,23 +1,22 @@
-// C++ libraries
-#include <utility>
-#include <iostream>
-#include <map>
-#include <iterator>
-#include <iomanip>
-#include <fstream>
-#include <unistd.h>
-#include <vector>
-#include <math.h>
-#include <algorithm>
+#pragma once
 
-#include "VX_define.h"
-#include "ram.h"
+#ifdef USE_MULTICORE
 #include "VVortex_SOC.h"
+#else
+#include "VVortex.h"
+#endif
+#include "VVortex__Syms.h"
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
 #endif
+
+#include "VX_define.h"
+#include "ram.h"
+
+#include <fstream>
+#include <vector>
 
 typedef struct {
   int cycles_left;
@@ -26,26 +25,32 @@ typedef struct {
   unsigned *data;
 } dram_req_t;
 
-class Vortex_SOC {
+class Simulator {
 public:
-  Vortex_SOC(RAM *ram);
-  ~Vortex_SOC();
+  
+  Simulator(RAM *ram);
+  virtual ~Simulator();
+
   bool is_busy();  
   void reset();
   void step();
   void flush_caches(uint32_t mem_addr, uint32_t size);
-  bool simulate();
-private:
+  bool run();
+
+protected:
+
   void print_stats(bool cycle_test = true);
+
+#ifndef USE_MULTICORE
   bool ibus_driver();
+#endif
+
   bool dbus_driver();
   void io_handler();  
   void send_snoops(uint32_t mem_addr, uint32_t size);
   void wait(uint32_t cycles);
 
   RAM *ram;
-
-  VVortex_SOC *vortex;
 
   unsigned start_pc;
   bool refill_d;
@@ -71,6 +76,12 @@ private:
   int debug_debugAddr;
   double stats_sim_time;
   std::vector<dram_req_t> dram_req_vec;
+  std::vector<dram_req_t> I_dram_req_vec;
+#ifdef USE_MULTICORE
+  VVortex_SOC *vortex;
+#else
+  VVortex *vortex;
+#endif
 #ifdef VCD_OUTPUT
   VerilatedVcdC *m_trace;
 #endif
