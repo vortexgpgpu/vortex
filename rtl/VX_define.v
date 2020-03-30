@@ -223,7 +223,7 @@
 
 // Snoop Req Queue
 `ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 8
+`define DSNRQ_SIZE 32
 `endif
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
@@ -250,7 +250,7 @@
 
 // Fill Forward SNP Queue
 `ifndef DFFSQ_SIZE
-`define DFFSQ_SIZE 8
+`define DFFSQ_SIZE 32
 `endif
 
 // Fill Invalidator Size {Fill invalidator must be active}
@@ -331,7 +331,7 @@
 
 // Snoop Req Queue
 `ifndef ISNRQ_SIZE
-`define ISNRQ_SIZE 8
+`define ISNRQ_SIZE 32
 `endif
 
 // Queues for writebacks Knobs {1, 2, 4, 8, ...}
