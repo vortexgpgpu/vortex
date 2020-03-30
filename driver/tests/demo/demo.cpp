@@ -178,6 +178,66 @@ int main(int argc, char *argv[]) {
     return -1;  
   }
 
+  // flush the destination buffer caches
+  std::cout << "flush the destination buffer caches" << std::endl;
+  ret = vx_flush_caches(device, kernel_arg.dst_ptr, buf_size);
+  if (ret != 0) {
+    cleanup();
+    return -1;  
+  }
+
+  // download destination buffer
+  std::cout << "download destination buffer" << std::endl;
+  ret = vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0);
+  if (ret != 0) {
+    cleanup();
+    return -1;  
+  }
+
+  // verify result
+  std::cout << "verify result" << std::endl;  
+  {
+    auto buf_ptr = (int*)vx_host_ptr(buffer);
+    for (uint32_t i = 0; i < num_points; ++i) {
+      int ref = i * i; 
+      int cur = buf_ptr[i];
+      if (cur != ref) {
+        ++errors;
+      }
+    }
+  }
+
+  if (errors != 0) {
+    printf("Found %d errors!\n", errors);
+    printf("FAILED!\n");
+    cleanup();
+    return -1;  
+  }
+
+  // start device
+  std::cout << "start device" << std::endl;
+  ret = vx_start(device);
+  if (ret != 0) {
+    cleanup();
+    return -1;  
+  }
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  ret = vx_ready_wait(device, -1);
+  if (ret != 0) {
+    cleanup();
+    return -1;  
+  }
+
+  // flush the destination buffer caches
+  std::cout << "flush the destination buffer caches" << std::endl;
+  ret = vx_flush_caches(device, kernel_arg.dst_ptr, buf_size);
+  if (ret != 0) {
+    cleanup();
+    return -1;  
+  }
+
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
   ret = vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0);
