@@ -523,7 +523,7 @@ module VX_bank
 	wire invalidate_fill;
 
 	// Enqueue to miss reserv if it's a valid miss
-	assign miss_add       = valid_st2 && miss_st2 && !mrvq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full));
+	assign miss_add       = valid_st2 && !is_snp_st2 && miss_st2 && !mrvq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full));
 	assign miss_add_pc    = pc_st2;
 	assign miss_add_addr  = addr_st2;
 	assign miss_add_data  = writeword_st2;
