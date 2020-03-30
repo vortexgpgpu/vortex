@@ -31,7 +31,7 @@ module Vortex_SOC (
 
     // LLC Snooping
     input  wire             llc_snp_req,
-    input  wire             llc_snp_req_addr,
+    input  wire[31:0]       llc_snp_req_addr,
     output wire             llc_snp_req_delay,
 
     output wire             out_ebreak
