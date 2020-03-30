@@ -95,7 +95,8 @@ module VX_cache_dram_req_arb
 		);
 
 	wire[`vx_clog2(NUMBER_BANKS)-1:0] dwb_bank;
-	wire[NUMBER_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req | per_bank_dram_because_of_snp;
+	// wire[NUMBER_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req | per_bank_dram_because_of_snp;
+	wire[NUMBER_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req;
 	VX_generic_priority_encoder #(.N(NUMBER_BANKS)) VX_sel_dwb(
 		.valids(use_wb_valid),
 		.index (dwb_bank),
@@ -112,6 +113,7 @@ module VX_cache_dram_req_arb
 	assign dram_req_addr          = (dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : dfqq_req_addr) & `BASE_ADDR_MASK;
 	assign dram_req_size          = BANK_LINE_SIZE_BYTES;
 	assign {dram_req_data}        = dwb_valid ? {per_bank_dram_wb_req_data[dwb_bank] }: 0;
-	assign dram_req_because_of_wb = dwb_valid ? per_bank_dram_because_of_snp[dwb_bank] : 0;
+	// assign dram_req_because_of_wb = dwb_valid ? per_bank_dram_because_of_snp[dwb_bank] : 0;
+	assign dram_req_because_of_wb = 0;
 
 endmodule
