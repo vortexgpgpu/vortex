@@ -6,9 +6,7 @@ SINGLE_CORE = Vortex.v
 
 MULTI_CORE = Vortex_SOC.v
 
-EXE += --exe ./simulate/test_bench.cpp ./simulate/Vortex.cpp
-
-MULTI_EXE += --exe ./simulate/multi_test_bench.cpp ./simulate/Vortex_SOC.cpp
+EXE += --exe ./simulate/test_bench.cpp ./simulate/simulator.cpp
 
 VF += -compiler gcc --language 1800-2009
 
@@ -48,13 +46,13 @@ VERILATORnoWarningsRel: build_config
 	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -O3 -DVL_THREADED' $(WNO) --threads $(THREADS)
 
 VERILATORMULTInoWarnings: build_config
-	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF)' $(WNO) $(DEB)
+	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE' $(WNO) $(DEB)
 
 compdebug: build_config
 	verilator_bin_dbg $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
 
 compdebugmulti: build_config
-	verilator_bin_dbg $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(MULTI_EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
+	verilator_bin_dbg $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
 
 RUNFILE: VERILATOR
 	$(MAKECPP)
