@@ -257,7 +257,7 @@ bool Vortex::is_busy() {
 
 void Vortex::send_snoops(uint32_t mem_addr, uint32_t size) {
   // align address to LLC block boundaries
-  auto aligned_addr_start = GLOBAL_BLOCK_SIZE_BYTES * ((mem_addr + GLOBAL_BLOCK_SIZE_BYTES - 1) / GLOBAL_BLOCK_SIZE_BYTES);
+  auto aligned_addr_start = GLOBAL_BLOCK_SIZE_BYTES * (mem_addr / GLOBAL_BLOCK_SIZE_BYTES);
   auto aligned_addr_end = GLOBAL_BLOCK_SIZE_BYTES * ((mem_addr + size + GLOBAL_BLOCK_SIZE_BYTES - 1) / GLOBAL_BLOCK_SIZE_BYTES);
 
   // submit snoop requests for the needed blocks

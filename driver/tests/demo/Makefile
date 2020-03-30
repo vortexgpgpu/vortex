@@ -43,16 +43,16 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../sw/simx -lvortex -o $@
 
 run-fpga: $(PROJECT)
-	LD_LIBRARY_PATH=../../sw/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin
+	LD_LIBRARY_PATH=../../sw/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 
 run-ase: $(PROJECT)
-	LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin
+	LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 
 run-rtlsim: $(PROJECT)
-	LD_LIBRARY_PATH=../../sw/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin
+	LD_LIBRARY_PATH=../../sw/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 	
 run-simx: $(PROJECT)
-	LD_LIBRARY_PATH=../../sw/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin
+	LD_LIBRARY_PATH=../../sw/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
