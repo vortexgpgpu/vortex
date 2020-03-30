@@ -19,7 +19,7 @@ else
 	RTL_TOP = Vortex
 endif
 
-SRCS = vortex.cpp ../vx_utils.cpp ../../../rtl/simulate/$(RTL_TOP).cpp
+SRCS = vortex.cpp ../vx_utils.cpp ../../../rtl/simulate/simulator.cpp
 
 RTL_INCLUDE = -I../../../rtl -I../../../rtl/interfaces -I../../../rtl/cache -I../../../rtl/VX_cache -I../../../rtl/shared_memory -I../../../rtl/pipe_regs -I../../../rtl/compat
 
