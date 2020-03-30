@@ -2,10 +2,11 @@
 
 #ifdef USE_MULTICORE
 #include "VVortex_SOC.h"
+#include "VVortex_SOC__Syms.h"
 #else
 #include "VVortex.h"
-#endif
 #include "VVortex__Syms.h"
+#endif
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
