@@ -560,7 +560,7 @@ module VX_bank
 	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0]  dwbq_req_data = readdata_st2;
 	wire                             dwbq_empty;
 	
-    wire possible_fill = valid_st2 && miss_st2 && !dram_fill_req_queue_full;
+    wire possible_fill = valid_st2 && miss_st2 && !dram_fill_req_queue_full && !is_snp_st2;
 	wire[31:0] fill_invalidator_addr = addr_st2 & `BASE_ADDR_MASK;
 	VX_fill_invalidator  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
