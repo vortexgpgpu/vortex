@@ -2,166 +2,129 @@
 #include <iostream>
 #include <iomanip>
 
-unsigned long time_stamp = 0;
-
-double sc_time_stamp() {
-  return time_stamp / 1000.0;
-}
-
 Simulator::Simulator(RAM *ram)
-    : start_pc(0), curr_cycle(0), stop(true), unit_test(true), stats_static_inst(0), stats_dynamic_inst(-1),
-      stats_total_cycles(0), stats_fwd_stalls(0), stats_branch_stalls(0),
-      debug_state(0), ibus_state(0), dbus_state(0), debug_return(0),
-      debug_wait_num(0), debug_inst_num(0), debug_end_wait(0), debug_debugAddr(0) {
-
-  this->ram = ram;
+    : total_cycles_(0)
+    , dram_stalled_(false)
+    , I_dram_stalled_(false) {
+  ram_ = ram;
 
 #ifdef USE_MULTICORE
-  this->vortex = new VVortex_SOC();
+  vortex_ = new VVortex_SOC();
 #else
-  this->vortex = new VVortex();
+  vortex_ = new VVortex();
 #endif
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  this->m_trace = new VerilatedVcdC;
-  this->vortex->trace(m_trace, 99);
-  this->m_trace->open("trace.vcd");
-#endif
-
-  this->results.open("../results.txt");
+  trace_ = new VerilatedVcdC;
+  vortex_->trace(trace_, 99);
+  trace_->open("trace.vcd");
+#endif  
 }
 
 Simulator::~Simulator() {
 #ifdef VCD_OUTPUT
-  m_trace->close();
+  trace_->close();
 #endif
-  this->results.close();
-  delete this->vortex;
+  delete vortex_;
 }
 
-void Simulator::print_stats(bool cycle_test) {
-  if (cycle_test) {
-    this->results << std::left;
-    // this->results << "# Static Instructions:\t" << std::dec << this->stats_static_inst << std::endl;
-    this->results << std::setw(24) << "# Dynamic Instructions:" << std::dec << this->stats_dynamic_inst << std::endl;
-    this->results << std::setw(24) << "# of total cycles:" << std::dec << this->stats_total_cycles << std::endl;
-    this->results << std::setw(24) << "# of forwarding stalls:" << std::dec << this->stats_fwd_stalls << std::endl;
-    this->results << std::setw(24) << "# of branch stalls:" << std::dec << this->stats_branch_stalls << std::endl;
-    this->results << std::setw(24) << "# CPI:" << std::dec << (double)this->stats_total_cycles / (double)this->stats_dynamic_inst << std::endl;
-    this->results << std::setw(24) << "# time to simulate: " << std::dec << this->stats_sim_time << " milliseconds" << std::endl;
-  } else {
-    this->results << std::left;
-    this->results << std::setw(24) << "# of total cycles:" << std::dec << this->stats_total_cycles << std::endl;
-    this->results << std::setw(24) << "# time to simulate: " << std::dec << this->stats_sim_time << " milliseconds" << std::endl;
-  }
-
-  uint32_t status;
-  ram->getWord(0, &status);
-
-  if (this->unit_test) {
-    if (status == 1) {
-      this->results << std::setw(24) << "# GRADE:"
-                    << "PASSING\n";
-    } else {
-      this->results << std::setw(24) << "# GRADE:"
-                    << "Failed on test: " << status << "\n";
-    }
-  } else {
-    this->results << std::setw(24) << "# GRADE:"
-                  << "N/A [NOT A UNIT TEST]\n";
-  }
-
-  this->stats_static_inst = 0;
-  this->stats_dynamic_inst = -1;
-  this->stats_total_cycles = 0;
-  this->stats_fwd_stalls = 0;
-  this->stats_branch_stalls = 0;
+void Simulator::print_stats(std::ostream& out) {
+  out << std::left;
+  out << std::setw(24) << "# of total cycles:" << std::dec << total_cycles_ << std::endl;
 }
 
 #ifndef USE_MULTICORE
 
-bool Simulator::ibus_driver() {
+void Simulator::ibus_driver() {
   // Iterate through each element, and get pop index
   int dequeue_index = -1;
   bool dequeue_valid = false;
-  for (int i = 0; i < this->I_dram_req_vec.size(); i++) {
-    if (this->I_dram_req_vec[i].cycles_left > 0) {
-      this->I_dram_req_vec[i].cycles_left -= 1;
+  for (int i = 0; i < I_dram_req_vec_.size(); i++) {
+    if (I_dram_req_vec_[i].cycles_left > 0) {
+      I_dram_req_vec_[i].cycles_left -= 1;
     }
 
-    if ((this->I_dram_req_vec[i].cycles_left == 0) && (!dequeue_valid)) {
+    if ((I_dram_req_vec_[i].cycles_left == 0) && (!dequeue_valid)) {
       dequeue_index = i;
       dequeue_valid = true;
     }
   }
 
-  if (vortex->I_dram_req) {
+  if (vortex_->I_dram_req && !I_dram_stalled_) {
     // std::cout << "Icache Dram Request received!\n";
-    if (vortex->I_dram_req_read) {
+    if (vortex_->I_dram_req_read) {
       // std::cout << "Icache Dram Request is read!\n";
       // Need to add an element
       dram_req_t dram_req;
-      dram_req.cycles_left = vortex->I_dram_expected_lat;
-      dram_req.data_length = vortex->I_dram_req_size / 4;
-      dram_req.base_addr = vortex->I_dram_req_addr;
+      dram_req.cycles_left = DRAM_LATENCY;
+      dram_req.data_length = vortex_->I_dram_req_size / 4;
+      dram_req.base_addr = vortex_->I_dram_req_addr;
       dram_req.data = (unsigned *)malloc(dram_req.data_length * sizeof(unsigned));
 
       for (int i = 0; i < dram_req.data_length; i++) {
         unsigned curr_addr = dram_req.base_addr + (i * 4);
         unsigned data_rd;
-        ram->getWord(curr_addr, &data_rd);
+        ram_->getWord(curr_addr, &data_rd);
         dram_req.data[i] = data_rd;
       }
       // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
-      this->I_dram_req_vec.push_back(dram_req);
+      I_dram_req_vec_.push_back(dram_req);
     }
 
-    if (vortex->I_dram_req_write) {
-      unsigned base_addr = vortex->I_dram_req_addr;
-      unsigned data_length = vortex->I_dram_req_size / 4;
+    if (vortex_->I_dram_req_write) {
+      unsigned base_addr = vortex_->I_dram_req_addr;
+      unsigned data_length = vortex_->I_dram_req_size / 4;
 
       for (int i = 0; i < data_length; i++) {
         unsigned curr_addr = base_addr + (i * 4);
-        unsigned data_wr = vortex->I_dram_req_data[i];
-        ram->writeWord(curr_addr, &data_wr);
+        unsigned data_wr = vortex_->I_dram_req_data[i];
+        ram_->writeWord(curr_addr, &data_wr);
       }
     }
   }
 
-  if (vortex->I_dram_fill_accept && dequeue_valid) {
+  if (vortex_->I_dram_fill_accept && dequeue_valid) {
     // std::cout << "Icache Dram Response Sending...!\n";
 
-    vortex->I_dram_fill_rsp = 1;
-    vortex->I_dram_fill_rsp_addr = this->I_dram_req_vec[dequeue_index].base_addr;
-    // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->I_dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
+    vortex_->I_dram_fill_rsp = 1;
+    vortex_->I_dram_fill_rsp_addr = I_dram_req_vec_[dequeue_index].base_addr;
+    // std::cout << "Fill Rsp -> Addr: " << std::hex << (I_dram_req_vec_[dequeue_index].base_addr) << std::dec << "\n";
 
-    for (int i = 0; i < this->I_dram_req_vec[dequeue_index].data_length; i++) {
-      vortex->I_dram_fill_rsp_data[i] = this->I_dram_req_vec[dequeue_index].data[i];
+    for (int i = 0; i < I_dram_req_vec_[dequeue_index].data_length; i++) {
+      vortex_->I_dram_fill_rsp_data[i] = I_dram_req_vec_[dequeue_index].data[i];
     }
-    free(this->I_dram_req_vec[dequeue_index].data);
+    free(I_dram_req_vec_[dequeue_index].data);
 
-    this->I_dram_req_vec.erase(this->I_dram_req_vec.begin() + dequeue_index);
+    I_dram_req_vec_.erase(I_dram_req_vec_.begin() + dequeue_index);
   } else {
-    vortex->I_dram_fill_rsp = 0;
-    vortex->I_dram_fill_rsp_addr = 0;
+    vortex_->I_dram_fill_rsp = 0;
+    vortex_->I_dram_fill_rsp_addr = 0;
   }
 
-  return false;
+#ifdef ENABLE_DRAM_STALLS
+  I_dram_stalled_ = false;
+  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
+    I_dram_stalled_ = true;
+  } else
+  if (I_dram_req_vec_.size() >= DRAM_RQ_SIZE) {
+    I_dram_stalled_ = true;
+  }  
+#endif
 }
 
 #endif
 
-bool Simulator::dbus_driver() {
+void Simulator::dbus_driver() {
   // Iterate through each element, and get pop index
   int dequeue_index = -1;
   bool dequeue_valid = false;
-  for (int i = 0; i < this->dram_req_vec.size(); i++) {
-    if (this->dram_req_vec[i].cycles_left > 0) {
-      this->dram_req_vec[i].cycles_left -= 1;
+  for (int i = 0; i < dram_req_vec_.size(); i++) {
+    if (dram_req_vec_[i].cycles_left > 0) {
+      dram_req_vec_[i].cycles_left -= 1;
     }
 
-    if ((this->dram_req_vec[i].cycles_left == 0) && (!dequeue_valid)) {
+    if ((dram_req_vec_[i].cycles_left == 0) && (!dequeue_valid)) {
       dequeue_index = i;
       dequeue_valid = true;
     }
@@ -169,113 +132,117 @@ bool Simulator::dbus_driver() {
 
 #ifdef USE_MULTICORE
 
-  if (vortex->out_dram_req) {
-    if (vortex->out_dram_req_read) {
+  if (vortex_->out_dram_req && !dram_stalled_) {
+    if (vortex_->out_dram_req_read) {
       // Need to add an element
       dram_req_t dram_req;
-      dram_req.cycles_left = vortex->out_dram_expected_lat;
-      dram_req.data_length = vortex->out_dram_req_size / 4;
-      dram_req.base_addr = vortex->out_dram_req_addr;
+      dram_req.cycles_left = DRAM_LATENCY;
+      dram_req.data_length = vortex_->out_dram_req_size / 4;
+      dram_req.base_addr = vortex_->out_dram_req_addr;
       dram_req.data = (unsigned *)malloc(dram_req.data_length * sizeof(unsigned));
 
       for (int i = 0; i < dram_req.data_length; i++) {
         unsigned curr_addr = dram_req.base_addr + (i * 4);
         unsigned data_rd;
-        ram->getWord(curr_addr, &data_rd);
+        ram_->getWord(curr_addr, &data_rd);
         dram_req.data[i] = data_rd;
       }
-      // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
-      this->dram_req_vec.push_back(dram_req);
+      dram_req_vec_.push_back(dram_req);
     }
 
-    if (vortex->out_dram_req_write) {
-      unsigned base_addr = vortex->out_dram_req_addr;
-      unsigned data_length = vortex->out_dram_req_size / 4;
+    if (vortex_->out_dram_req_write) {
+      unsigned base_addr = vortex_->out_dram_req_addr;
+      unsigned data_length = vortex_->out_dram_req_size / 4;
 
       for (int i = 0; i < data_length; i++) {
         unsigned curr_addr = base_addr + (i * 4);
-        unsigned data_wr = vortex->out_dram_req_data[i];
-        ram->writeWord(curr_addr, &data_wr);
+        unsigned data_wr = vortex_->out_dram_req_data[i];
+        ram_->writeWord(curr_addr, &data_wr);
       }
     }
   }
 
-  if (vortex->out_dram_fill_accept && dequeue_valid) {
-    vortex->out_dram_fill_rsp = 1;
-    vortex->out_dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
-    // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
+  if (vortex_->out_dram_fill_accept && dequeue_valid) {
+    vortex_->out_dram_fill_rsp = 1;
+    vortex_->out_dram_fill_rsp_addr = dram_req_vec_[dequeue_index].base_addr;
 
-    for (int i = 0; i < this->dram_req_vec[dequeue_index].data_length; i++) {
-      vortex->out_dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
+    for (int i = 0; i < dram_req_vec_[dequeue_index].data_length; i++) {
+      vortex_->out_dram_fill_rsp_data[i] = dram_req_vec_[dequeue_index].data[i];
     }
-    free(this->dram_req_vec[dequeue_index].data);
+    free(dram_req_vec_[dequeue_index].data);
 
-    this->dram_req_vec.erase(this->dram_req_vec.begin() + dequeue_index);
+    dram_req_vec_.erase(dram_req_vec_.begin() + dequeue_index);
   } else {
-    vortex->out_dram_fill_rsp = 0;
-    vortex->out_dram_fill_rsp_addr = 0;
+    vortex_->out_dram_fill_rsp = 0;
+    vortex_->out_dram_fill_rsp_addr = 0;
   }
 
 #else
 
-  if (vortex->dram_req) {
-    if (vortex->dram_req_read) {
+  if (vortex_->dram_req && !dram_stalled_) {
+    if (vortex_->dram_req_read) {
       // Need to add an element
       dram_req_t dram_req;
-      dram_req.cycles_left = vortex->dram_expected_lat;
-      dram_req.data_length = vortex->dram_req_size / 4;
-      dram_req.base_addr = vortex->dram_req_addr;
+      dram_req.cycles_left = DRAM_LATENCY;
+      dram_req.data_length = vortex_->dram_req_size / 4;
+      dram_req.base_addr = vortex_->dram_req_addr;
       dram_req.data = (unsigned *)malloc(dram_req.data_length * sizeof(unsigned));
 
       for (int i = 0; i < dram_req.data_length; i++) {
         unsigned curr_addr = dram_req.base_addr + (i * 4);
         unsigned data_rd;
-        ram->getWord(curr_addr, &data_rd);
+        ram_->getWord(curr_addr, &data_rd);
         dram_req.data[i] = data_rd;
       }
-      // std::cout << "Fill Req -> Addr: " << std::hex << dram_req.base_addr << std::dec << "\n";
-      this->dram_req_vec.push_back(dram_req);
+      dram_req_vec_.push_back(dram_req);
     }
 
-    if (vortex->dram_req_write) {
-      unsigned base_addr = vortex->dram_req_addr;
-      unsigned data_length = vortex->dram_req_size / 4;
+    if (vortex_->dram_req_write) {
+      unsigned base_addr = vortex_->dram_req_addr;
+      unsigned data_length = vortex_->dram_req_size / 4;
 
       for (int i = 0; i < data_length; i++) {
         unsigned curr_addr = base_addr + (i * 4);
-        unsigned data_wr = vortex->dram_req_data[i];
-        ram->writeWord(curr_addr, &data_wr);
+        unsigned data_wr = vortex_->dram_req_data[i];
+        ram_->writeWord(curr_addr, &data_wr);
       }
     }
   }
 
-  if (vortex->dram_fill_accept && dequeue_valid) {
-    vortex->dram_fill_rsp = 1;
-    vortex->dram_fill_rsp_addr = this->dram_req_vec[dequeue_index].base_addr;
-    // std::cout << "Fill Rsp -> Addr: " << std::hex << (this->dram_req_vec[dequeue_index].base_addr) << std::dec << "\n";
+  if (vortex_->dram_fill_accept && dequeue_valid) {
+    vortex_->dram_fill_rsp = 1;
+    vortex_->dram_fill_rsp_addr = dram_req_vec_[dequeue_index].base_addr;
 
-    for (int i = 0; i < this->dram_req_vec[dequeue_index].data_length; i++) {
-      vortex->dram_fill_rsp_data[i] = this->dram_req_vec[dequeue_index].data[i];
+    for (int i = 0; i < dram_req_vec_[dequeue_index].data_length; i++) {
+      vortex_->dram_fill_rsp_data[i] = dram_req_vec_[dequeue_index].data[i];
     }
-    free(this->dram_req_vec[dequeue_index].data);
+    free(dram_req_vec_[dequeue_index].data);
 
-    this->dram_req_vec.erase(this->dram_req_vec.begin() + dequeue_index);
+    dram_req_vec_.erase(dram_req_vec_.begin() + dequeue_index);
   } else {
-    vortex->dram_fill_rsp = 0;
-    vortex->dram_fill_rsp_addr = 0;
+    vortex_->dram_fill_rsp = 0;
+    vortex_->dram_fill_rsp_addr = 0;
   }
   
 #endif
 
-  return false;
+#ifdef ENABLE_DRAM_STALLS
+  dram_stalled_ = false;
+  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
+    dram_stalled_ = true;
+  } else
+  if (dram_req_vec_.size() >= DRAM_RQ_SIZE) {
+    dram_stalled_ = true;
+  }  
+#endif
 }
 
 void Simulator::io_handler() {
 #ifdef USE_MULTICORE
   bool io_valid = false;
-  for (int c = 0; c < vortex->number_cores; c++) {
-    if (vortex->io_valid[c]) {
-      uint32_t data_write = (uint32_t)vortex->io_data[c];
+  for (int c = 0; c < vortex_->number_cores; c++) {
+    if (vortex_->io_valid[c]) {
+      uint32_t data_write = (uint32_t)vortex_->io_data[c];
       char c = (char)data_write;
       std::cerr << c;      
       io_valid = true;
@@ -285,8 +252,8 @@ void Simulator::io_handler() {
     std::cout << std::flush;
   }
 #else
-  if (vortex->io_valid) {
-    uint32_t data_write = (uint32_t)vortex->io_data;
+  if (vortex_->io_valid) {
+    uint32_t data_write = (uint32_t)vortex_->io_data;
     char c = (char)data_write;
     std::cerr << c;
     std::cout << std::flush;
@@ -295,21 +262,21 @@ void Simulator::io_handler() {
 }
 
 void Simulator::reset() {  
-  vortex->reset = 1;
+  vortex_->reset = 1;
   this->step();
-  vortex->reset = 0;
+  vortex_->reset = 0;
 }
 
 void Simulator::step() {
-  vortex->clk = 0;
-  vortex->eval();
+  vortex_->clk = 0;
+  vortex_->eval();
 
 #ifdef VCD_OUTPUT
-  m_trace->dump(2 * this->stats_total_cycles + 0);
+  trace_->dump(2 * total_cycles_ + 0);
 #endif
 
-  vortex->clk = 1;
-  vortex->eval();
+  vortex_->clk = 1;
+  vortex_->eval();
 
 #ifndef USE_MULTICORE
   ibus_driver();
@@ -319,11 +286,10 @@ void Simulator::step() {
   io_handler();
 
 #ifdef VCD_OUTPUT
-  m_trace->dump(2 * this->stats_total_cycles + 1);
+  trace_->dump(2 * total_cycles_ + 1);
 #endif
 
-  ++time_stamp;
-  ++stats_total_cycles;
+  ++total_cycles_;
 }
 
 void Simulator::wait(uint32_t cycles) {
@@ -333,7 +299,7 @@ void Simulator::wait(uint32_t cycles) {
 }
 
 bool Simulator::is_busy() {
-  return (0 == vortex->out_ebreak);
+  return (0 == vortex_->out_ebreak);
 }
 
 void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
@@ -343,34 +309,34 @@ void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
 
 #ifdef USE_MULTICORE
   // submit snoop requests for the needed blocks
-  vortex->llc_snp_req_addr = aligned_addr_start;
-  vortex->llc_snp_req = false;
+  vortex_->llc_snp_req_addr = aligned_addr_start;
+  vortex_->llc_snp_req = false;
   for (;;) {
     this->step();
-    if (vortex->llc_snp_req) {
-      vortex->llc_snp_req = false;
-      if (vortex->llc_snp_req_addr >= aligned_addr_end)
+    if (vortex_->llc_snp_req) {
+      vortex_->llc_snp_req = false;
+      if (vortex_->llc_snp_req_addr >= aligned_addr_end)
         break;
-      vortex->llc_snp_req_addr += GLOBAL_BLOCK_SIZE_BYTES;
+      vortex_->llc_snp_req_addr += GLOBAL_BLOCK_SIZE_BYTES;
     }    
-    if (!vortex->llc_snp_req_delay) {
-      vortex->llc_snp_req = true;      
+    if (!vortex_->llc_snp_req_delay) {
+      vortex_->llc_snp_req = true;      
     }
   }
 #else
   // submit snoop requests for the needed blocks
-  vortex->snp_req_addr = aligned_addr_start;
-  vortex->snp_req = false;
+  vortex_->snp_req_addr = aligned_addr_start;
+  vortex_->snp_req = false;
   for (;;) {
     this->step();
-    if (vortex->snp_req) {
-      vortex->snp_req = false;
-      if (vortex->snp_req_addr >= aligned_addr_end)
+    if (vortex_->snp_req) {
+      vortex_->snp_req = false;
+      if (vortex_->snp_req_addr >= aligned_addr_end)
         break;
-      vortex->snp_req_addr += GLOBAL_BLOCK_SIZE_BYTES;
+      vortex_->snp_req_addr += GLOBAL_BLOCK_SIZE_BYTES;
     }    
-    if (!vortex->snp_req_delay) {
-      vortex->snp_req = true;      
+    if (!vortex_->snp_req_delay) {
+      vortex_->snp_req = true;      
     }
   }
 #endif
@@ -385,8 +351,8 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   this->send_snoops(mem_addr, size);
 #endif
 
-  // wait 300 cycles to ensure that the request has committed
-  this->wait(300);
+  // wait some cycles to ensure that the request has committed
+  this->wait(PIPELINE_FLUSH_LATENCY);
 }
 
 bool Simulator::run() {
@@ -394,22 +360,18 @@ bool Simulator::run() {
   this->reset();
 
   // execute program
-  while (!vortex->out_ebreak) {
+  while (!vortex_->out_ebreak) {
     this->step();
   }
 
   // wait 5 cycles to flush the pipeline
   this->wait(5);
 
-  std::cerr << "New Total Cycles: " << (this->stats_total_cycles) << "\n";
-
-  this->print_stats();
-
 #ifdef USE_MULTICORE
   int status = 0;
 #else
   // check riscv-tests PASSED/FAILED status
-  int status = (unsigned int) vortex->Vortex->vx_back_end->VX_wb->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex->vx_back_end->VX_wb->last_data_wb & 0xf;
 #endif
 
   return (status == 1);

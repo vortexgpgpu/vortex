@@ -1,5 +1,7 @@
 #include "simulator.h"
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 
 #define NUM_TESTS 46
 
@@ -10,9 +12,9 @@ int main(int argc, char **argv)
 
 	Verilated::commandArgs(argc, argv);
 
-// #define ALL_TESTS
+//#define ALL_TESTS
 #ifdef ALL_TESTS
-     bool passed = true;
+  bool passed = true;
 
   std::string tests[NUM_TESTS] = {
 	 	"../../emulator/riscv_tests/rv32ui-p-add.hex",
@@ -63,31 +65,31 @@ int main(int argc, char **argv)
 	 	"../../emulator/riscv_tests/rv32um-p-remu.hex"
 	 };
 
-    for (std::string s : tests) {
-        std::cerr << DEFAULT << "\n---------------------------------------\n";
+	for (std::string s : tests) {
+		std::cerr << DEFAULT << "\n---------------------------------------\n";
 
-        std::cerr << s << std::endl;
+		std::cerr << s << std::endl;
 
-        RAM ram;
-	      loadHexImpl(s.c_str(), &ram);
+		RAM ram;
+		loadHexImpl(s.c_str(), &ram);
 
-				Simulator v(&ram);
-        bool curr = v.simulate();
+		Simulator simulator(&ram);
+		bool curr = simulator.run();
 
-        if ( curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
-        if (!curr) std::cerr << RED   << "Test Failed: " << s << std::endl;
-        std::cerr << DEFAULT;
-        passed = passed && curr;
-    }
+		if (curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
+		if (!curr) std::cerr << RED   << "Test Failed: " << s << std::endl;
+		std::cerr << DEFAULT;
+		passed = passed && curr;
+	}
 
-    std::cerr << DEFAULT << "\n***************************************\n";
+	std::cerr << DEFAULT << "\n***************************************\n";
 
-    if( passed) std::cerr << DEFAULT << "PASSED ALL TESTS\n";
+	if (passed) std::cerr << DEFAULT << "PASSED ALL TESTS\n";
 	if(!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
 
 	return !passed;
 
-	#else
+#else
 
 	char testing[] = "../../runtime/mains/simple/vx_simple_main.hex";
 	//char testing[] = "../../emulator/riscv_tests/rv32ui-p-lw.hex";
@@ -109,7 +111,7 @@ int main(int argc, char **argv)
 	Simulator simulator(&ram);
 	bool curr = simulator.run();
 
-	if ( curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
+	if (curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
 	if (!curr) std::cerr << RED   << "Test Failed: " << testing << std::endl;
 
     return !curr;
