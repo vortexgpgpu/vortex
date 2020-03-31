@@ -235,6 +235,8 @@ void Simulator::dbus_driver() {
     dram_stalled_ = true;
   }  
 #endif
+
+  vortex_->out_dram_req_delay = dram_stalled_;
 }
 
 void Simulator::io_handler() {
