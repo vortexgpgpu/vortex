@@ -49,6 +49,7 @@ module VX_tag_data_structure
     (
 	input  wire                            clk,
 	input  wire                            reset,
+    input  wire                            stall_bank_pipe,
 
 	input  wire[31:0]                      read_addr,
 	output wire                            read_valid,
@@ -91,7 +92,7 @@ module VX_tag_data_structure
                 dirty[l] <= 0;
                 data [l] <= 0;
             end
-        end else begin
+        end else if (!stall_bank_pipe) begin
         	if (going_to_write) begin
         		valid[write_addr[`LINE_SELECT_ADDR_RNG]]     <= 1;
         		tag  [write_addr[`LINE_SELECT_ADDR_RNG]]     <= write_addr[`TAG_SELECT_ADDR_RNG];

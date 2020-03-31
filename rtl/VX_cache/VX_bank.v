@@ -468,6 +468,7 @@ module VX_bank
 		.clk           (clk),
 		.reset         (reset),
 		.stall         (stall_bank_pipe),
+		.stall_bank_pipe(stall_bank_pipe),
 
 		// Initial Read
 		.readaddr_st10 (addr_st1[0]),
