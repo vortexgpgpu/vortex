@@ -154,25 +154,26 @@ int _isatty (int file)
 
 int _lseek(int fd, int offset, int whence)
 {
-	// vx_print_str("Hello from _lseek\n");
-	char * write_buffer = (char *) FILE_IO_WRITE;
-	char * read_buffer  = (char *) FILE_IO_READ;
+	// // vx_print_str("Hello from _lseek\n");
+	// char * write_buffer = (char *) FILE_IO_WRITE;
+	// char * read_buffer  = (char *) FILE_IO_READ;
 
-	int cmd_id = LSEEK;
+	// int cmd_id = LSEEK;
 
-	upload((char **) &write_buffer, (char *) &cmd_id , sizeof(int));
-	upload((char **) &write_buffer, (char *) &fd     , sizeof(int));
-	upload((char **) &write_buffer, (char *) &offset , sizeof(int));
-	upload((char **) &write_buffer, (char *) &whence , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &cmd_id , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &fd     , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &offset , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &whence , sizeof(int));
 
 
-	trap_to_simulator();
+	// trap_to_simulator();
 
-	int retval;
+	// int retval;
 
-	download((char **) &read_buffer, (char *) &retval);
+	// download((char **) &read_buffer, (char *) &retval);
 
-	return retval;
+	// return retval;
+	return 0;
 
 }
 
@@ -184,47 +185,48 @@ int _lseek(int fd, int offset, int whence)
 int _read (int file, char *ptr, int len)
 {
 
-	char * write_buffer = (char *) FILE_IO_WRITE;
-	char * read_buffer  = (char *) FILE_IO_READ;
+	// char * write_buffer = (char *) FILE_IO_WRITE;
+	// char * read_buffer  = (char *) FILE_IO_READ;
 
-	int cmd_id = READ;
+	// int cmd_id = READ;
 
-	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
-	upload((char **) &write_buffer, (char *) &ptr   , sizeof(int));
-	upload((char **) &write_buffer, (char *) &len   , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	// upload((char **) &write_buffer, (char *) &file  , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &ptr   , sizeof(int));
+	// upload((char **) &write_buffer, (char *) &len   , sizeof(int));
 
-	trap_to_simulator();
+	// trap_to_simulator();
 
 
-  	return len;
+ //  	return len;
+	return 0;
 
 }
 
 int _write (int file, char *buf, int nbytes)
 {
 
-	char * write_buffer = (char *) FILE_IO_WRITE;
+	// char * write_buffer = (char *) FILE_IO_WRITE;
 
-	int cmd_id = WRITE;
+	// int cmd_id = WRITE;
 
-	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	upload((char **) &write_buffer, (char *) &file  , sizeof(int));
-	upload((char **) &write_buffer, (char *)  buf  , nbytes);
+	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	// upload((char **) &write_buffer, (char *) &file  , sizeof(int));
+	// upload((char **) &write_buffer, (char *)  buf  , nbytes);
 
 
-	trap_to_simulator();
+	// trap_to_simulator();
 
 	// vx_print_str("Hello from _write\n");
 
-	// int i;
+	int i;
 
-	// unsigned int volatile * const print_addr = (unsigned int *) 0x00010000;
+	unsigned int volatile * const print_addr = (unsigned int *) 0x00010000;
 
-	// for (i = 0; i < nbytes; i++)
-	// {
-	// 	(*print_addr) = buf[i];
- //    }
+	for (i = 0; i < nbytes; i++)
+	{
+		(*print_addr) = buf[i];
+    }
         
 	return nbytes;
 
@@ -232,12 +234,12 @@ int _write (int file, char *buf, int nbytes)
 
 
 
-static int heap_start = (int) 0x10000000;
-static int head_end   = (int) 0x20000000;
+static int heap_start = (int) 0x30000000;
+static int head_end   = (int) 0x40000000;
 
 void * _sbrk (int nbytes)
 {
-	// vx_print_str("Hello from _sbrk\n");
+	vx_print_str("Hello from _sbrk\n");
 	// vx_printf("nbytes: ", nbytes);
 
 	//if (nbytes < 0) //vx_print_str("nbytes less than zero\n");
@@ -250,10 +252,10 @@ void * _sbrk (int nbytes)
 
 	// vx_printf("New nbytes: ", nbytes);
 
-	// if (nbytes > 10240)
-	// {
-	// 	nbytes = 10240;
-	// }
+	if (nbytes > 10240)
+	{
+		nbytes = 10240;
+	}
 
   // if (((unsigned) head_end) > ((unsigned) (heap_ptr + nbytes)))
 	if (true)
@@ -265,11 +267,11 @@ void * _sbrk (int nbytes)
 		// vx_print_str("\n");
 		return (void *) base;
     }
-	else
-    {
-		errno = ENOMEM;
-		return  (void *) -1;
-    }
+	// else
+ //    {
+	// 	errno = ENOMEM;
+	// 	return  (void *) -1;
+ //    }
 }       /* _sbrk () */
 
 
@@ -282,24 +284,25 @@ void _exit(int val)
 
 int _open(const char *name, int flags, int mode)
 {
-	char * write_buffer = (char *) FILE_IO_WRITE;
-	char * read_buffer = (char *) FILE_IO_READ;
+	// char * write_buffer = (char *) FILE_IO_WRITE;
+	// char * read_buffer = (char *) FILE_IO_READ;
 
-	int cmd_id = OPEN;
+	// int cmd_id = OPEN;
 
-	upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
-	upload((char **) &write_buffer, (char *) &name  , sizeof (char *));
-	upload((char **) &write_buffer, (char *) &flags , sizeof(int));
-	upload((char **) &write_buffer, (char *) & mode , sizeof(int));
-
-
-	trap_to_simulator();
-
-	int fd;
-	download((char **) &read_buffer, (char *) &fd);
+	// upload((char **) &write_buffer, (char *) &cmd_id, sizeof(int));
+	// upload((char **) &write_buffer, (char *) &name  , sizeof (char *));
+	// upload((char **) &write_buffer, (char *) &flags , sizeof(int));
+	// upload((char **) &write_buffer, (char *) & mode , sizeof(int));
 
 
-	return fd;
+	// trap_to_simulator();
+
+	// int fd;
+	// download((char **) &read_buffer, (char *) &fd);
+
+
+	// return fd;
+	return 0;
 
 }
 
