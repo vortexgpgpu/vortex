@@ -345,14 +345,14 @@ void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   // send snoops for L1 flush
   this->send_snoops(mem_addr, size);
+  this->wait(PIPELINE_FLUSH_LATENCY);
 
-#if NUMBER_CORES != 1
+// #if NUMBER_CORES != 1
   // send snoops for L2 flush
   this->send_snoops(mem_addr, size);
-#endif
-
-  // wait some cycles to ensure that the request has committed
   this->wait(PIPELINE_FLUSH_LATENCY);
+// #endif
+
 }
 
 bool Simulator::run() {
