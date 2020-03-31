@@ -19,7 +19,7 @@
 #include <ostream>
 #include <vector>
 
-//#define ENABLE_DRAM_STALLS
+#define ENABLE_DRAM_STALLS
 #define DRAM_LATENCY 200
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
