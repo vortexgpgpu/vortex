@@ -111,6 +111,8 @@ void Simulator::ibus_driver() {
     I_dram_stalled_ = true;
   }  
 #endif
+
+  vortex_->dram_req_delay = I_dram_stalled_;
 }
 
 #endif
@@ -236,7 +238,11 @@ void Simulator::dbus_driver() {
   }  
 #endif
 
+#ifdef USE_MULTICORE
   vortex_->out_dram_req_delay = dram_stalled_;
+#else
+  vortex_->dram_req_delay = dram_stalled_;
+#endif
 }
 
 void Simulator::io_handler() {
