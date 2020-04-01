@@ -132,6 +132,16 @@ void Simulator::dbus_driver() {
     }
   }
 
+#ifdef ENABLE_DRAM_STALLS
+  dram_stalled_ = false;
+  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
+    dram_stalled_ = true;
+  } else
+  if (dram_req_vec_.size() >= DRAM_RQ_SIZE) {
+    dram_stalled_ = true;
+  }  
+#endif
+
 #ifdef USE_MULTICORE
 
   if (vortex_->out_dram_req && !dram_stalled_) {
@@ -226,16 +236,6 @@ void Simulator::dbus_driver() {
     vortex_->dram_fill_rsp_addr = 0;
   }
   
-#endif
-
-#ifdef ENABLE_DRAM_STALLS
-  dram_stalled_ = false;
-  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
-    dram_stalled_ = true;
-  } else
-  if (dram_req_vec_.size() >= DRAM_RQ_SIZE) {
-    dram_stalled_ = true;
-  }  
 #endif
 
 #ifdef USE_MULTICORE
