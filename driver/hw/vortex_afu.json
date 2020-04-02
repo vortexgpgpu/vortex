@@ -3,7 +3,19 @@
    "afu-image": {
       "power": 0,
       "clock-frequency-high": "auto",
-      "clock-frequency-low": "auto",
+      "clock-frequency-low":  "auto",
+      
+      "mmio-csr-cmd":         10,      
+      "mmio-csr-status":      12,      
+      "mmio-csr-io-addr":     14,
+      "mmio-csr-mem-addr":    16,
+      "mmio-csr-data-size":   18,
+      
+      "cmd-type-read":        1,
+      "cmd-type-write":       2,
+      "cmd-type-run":         3,
+      "cmd-type-snoop":       4,
+
       "afu-top-interface":
          {
             "class": "ccip_std_afu_avalon_mm",

@@ -1,6 +1,4 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <iostream>
 #include <unistd.h>
 #include <vortex.h>
 
@@ -9,8 +7,8 @@ static void parse_args(int argc, char **argv) {
   while ((c = getopt(argc, argv, "?")) != -1) {
     switch (c) {
     case '?': {
-      printf("Test.\n");
-      printf("Usage: [-h: help]\n");
+      std::cout << "Test." << std::endl;
+      std::cout << "Usage: [-h: help]" << std::endl;
       exit(0);
     } break;
     default:
@@ -20,12 +18,17 @@ static void parse_args(int argc, char **argv) {
 }
 
 uint64_t shuffle(int i, uint64_t value) {
-  return (value << i) | (value & ((1 << i)-1));;
+  //return (value << i) | (value & ((1 << i)-1));;
+  return 0x0badf00ddeadbeef;
 }
 
-int run_test(vx_buffer_h sbuf, vx_buffer_h dbuf, uint32_t address, uint64_t value, int num_blocks) {
-  int err;
-  int num_failures = 0;
+int run_test(vx_buffer_h sbuf, 
+             vx_buffer_h dbuf, 
+             uint32_t address, 
+             uint64_t value, 
+             int num_blocks) {
+  int ret;
+  int errors = 0;
 
   // write sbuf data
   for (int i = 0; i < 8 * num_blocks; ++i) {
@@ -33,75 +36,114 @@ int run_test(vx_buffer_h sbuf, vx_buffer_h dbuf, uint32_t address, uint64_t valu
   }
 
   // write buffer to local memory
-  err = vx_copy_to_dev(sbuf, address, 64 * num_blocks, 0);
-  if (err != 0)
-    return -1;
+  std::cout << "write buffer to local memory" << std::endl;
+  ret = vx_copy_to_dev(sbuf, address, 64 * num_blocks, 0);
+  if (ret != 0)
+    return ret;
 
   // read buffer from local memory
-  err = vx_copy_from_dev(dbuf, address, 64 * num_blocks, 0);
-  if (err != 0)
-    return -1;
+  std::cout << "read buffer from local memory" << std::endl;
+  ret = vx_copy_from_dev(dbuf, address, 64 * num_blocks, 0);
+  if (ret != 0)
+    return ret;
 
   // verify result
+  std::cout << "verify result" << std::endl;
   for (int i = 0; i < 8 * num_blocks; ++i) {
     auto curr = ((uint64_t*)vx_host_ptr(dbuf))[i];
     auto ref = shuffle(i, value);
     if (curr != ref) {
-      printf("error @ %x: actual %ld, expected %ld\n", address + 64 * i, curr, ref);
-      ++num_failures;
+      std::cout << "error @ " << std::hex << (address + 64 * i)
+                << ": actual " << curr << ", expected " << ref << std::endl;
+      ++errors;
     }
-  }  
-  return num_failures;
+  } 
+  
+  if (errors != 0) {
+    std::cout << "Found " << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+
+vx_device_h device = nullptr;
+vx_buffer_h sbuf = nullptr;
+vx_buffer_h dbuf = nullptr;
+
+void cleanup() {
+  if (sbuf) {
+    vx_buf_release(sbuf);
+  }
+  if (dbuf) {
+    vx_buf_release(dbuf);
+  }
+  if (device) {
+    vx_dev_close(device);
+  }
 }
 
 int main(int argc, char *argv[]) {
-  int err;
-  int num_failures = 0;
+  int ret;
 
   // parse command arguments
   parse_args(argc, argv);
 
   // open device connection
+  std::cout << "open device connection" << std::endl;
   vx_device_h device;
-  err = vx_dev_open(&device);
-  if (err != 0)
-    return -1;
+  ret = vx_dev_open(&device);
+  if (ret != 0)
+    return ret;
 
   // create source buffer
-  vx_buffer_h sbuf;
-  err = vx_alloc_shared_mem(device, 4096, &sbuf);
-  if (err != 0) {
-    vx_dev_close(device);
-    return -1;
+  std::cout << "create source buffer" << std::endl;
+  ret = vx_alloc_shared_mem(device, 4096, &sbuf);
+  if (ret != 0) {
+    cleanup();
+    return ret;
   }
   
   // create destination buffer
-  vx_buffer_h dbuf;
-  err = vx_alloc_shared_mem(device, 4096, &dbuf);
-  if (err != 0) {
-    vx_buf_release(sbuf);
-    vx_dev_close(device);
-    return -1;
+  std::cout << "create destination buffer" << std::endl;
+  ret = vx_alloc_shared_mem(device, 4096, &dbuf);
+  if (ret != 0) {
+    cleanup();
+    return ret;
   }
 
   // run tests
-  num_failures += run_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
-  num_failures += run_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 2);
-  num_failures += run_test(sbuf, dbuf, 0x20000000, 0xff00ff00ff00ff00, 4);
-  num_failures += run_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
-
-  // releae buffers
-  vx_buf_release(sbuf);
-  vx_buf_release(dbuf);
-
-  // close device
-  vx_dev_close(device);
-
-  if (0 == num_failures) {
-    printf("Test PASSED\n");
-  } else {
-    printf("Test FAILED\n");
+  std::cout << "run tests" << std::endl;
+  ret = run_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
+  if (ret != 0) {
+    cleanup();
+    return ret;
   }
 
-  return num_failures;
+  ret = run_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 2);
+  if (ret != 0) {
+    cleanup();
+    return ret;
+  }
+
+  ret = run_test(sbuf, dbuf, 0x20000000, 0xff00ff00ff00ff00, 4);
+  if (ret != 0) {
+    cleanup();
+    return ret;
+  }
+
+  ret = run_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
+  if (ret != 0) {
+    cleanup();
+    return ret;
+  }
+
+  // cleanup
+  std::cout << "cleanup" << std::endl;  
+  cleanup();
+
+  std::cout << "Test PASSED" << std::endl;
+
+  return 0;
 }
