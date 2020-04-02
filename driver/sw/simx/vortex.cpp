@@ -13,15 +13,6 @@
 
 #define PAGE_SIZE 4096
 
-#define CHECK_RES(_expr)                                            \
-   do {                                                             \
-     fpga_result res = _expr;                                       \
-     if (res == FPGA_OK)                                            \
-       break;                                                       \
-     printf("OPAE Error: '%s' returned %d!\n", #_expr, (int)res);   \
-     return -1;                                                     \
-   } while (false)
-
 ///////////////////////////////////////////////////////////////////////////////
 
 static size_t align_size(size_t size) {
@@ -206,7 +197,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 extern int vx_dev_open(vx_device_h* hdevice) {
-    if (NULL == hdevice)
+    if (nullptr == hdevice)
         return  -1;
 
     *hdevice = new vx_device();
@@ -226,8 +217,8 @@ extern int vx_dev_close(vx_device_h hdevice) {
 }
 
 extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr) {
-    if (NULL == hdevice 
-     || NULL == dev_maddr
+    if (nullptr == hdevice 
+     || nullptr == dev_maddr
      || 0 >= size)
         return -1;
 
@@ -236,7 +227,7 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
 }
 
 extern int vx_flush_caches(vx_device_h hdevice, size_t /*dev_maddr*/, size_t size) {
-    if (NULL == hdevice 
+    if (nullptr == hdevice 
      || 0 >= size)
         return -1;
     // this functionality is not need by simX 
@@ -246,7 +237,7 @@ extern int vx_flush_caches(vx_device_h hdevice, size_t /*dev_maddr*/, size_t siz
 extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hbuffer) {
     if (nullptr == hdevice 
      || 0 >= size
-     || NULL == hbuffer)
+     || nullptr == hbuffer)
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);

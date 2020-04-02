@@ -4,32 +4,32 @@
 #include <unistd.h>
 #include <assert.h>
 #include <uuid/uuid.h>
-
 #include <opae/fpga.h>
 #include <vortex.h>
 #include "vortex_afu.h"
-
-// MMIO Address Mappings
-#define MMIO_COPY_IO_ADDRESS    0X120
-#define MMIO_COPY_AVM_ADDRESS   0x100
-#define MMIO_COPY_DATA_SIZE     0X118
-
-#define MMIO_CMD_TYPE           0X110
-#define MMIO_READY_FOR_CMD      0X198
-
-#define MMIO_CMD_TYPE_READ      0 
-#define MMIO_CMD_TYPE_WRITE     1 
-#define MMIO_CMD_TYPE_START     2 
-#define MMIO_CMD_TYPE_SNOOP     3 
 
 #define CHECK_RES(_expr)                                            \
    do {                                                             \
      fpga_result res = _expr;                                       \
      if (res == FPGA_OK)                                            \
        break;                                                       \
-     printf("OPAE Error: '%s' returned %d!\n", #_expr, (int)res);   \
+     printf("OPAE Error: '%s' returned %d, %s!\n",                  \
+            #_expr, (int)res, fpgaErrStr(res));                     \
      return -1;                                                     \
    } while (false)
+
+///////////////////////////////////////////////////////////////////////////////
+
+#define CMD_TYPE_READ       AFU_IMAGE_CMD_TYPE_READ
+#define CMD_TYPE_WRITE      AFU_IMAGE_CMD_TYPE_WRITE
+#define CMD_TYPE_RUN      AFU_IMAGE_CMD_TYPE_RUN
+#define CMD_TYPE_SNOOP      AFU_IMAGE_CMD_TYPE_SNOOP
+
+#define MMIO_CSR_CMD        (AFU_IMAGE_MMIO_CSR_CMD * 4)
+#define MMIO_CSR_STATUS     (AFU_IMAGE_MMIO_CSR_STATUS * 4)
+#define MMIO_CSR_IO_ADDR    (AFU_IMAGE_MMIO_CSR_IO_ADDR * 4)
+#define MMIO_CSR_MEM_ADDR   (AFU_IMAGE_MMIO_CSR_MEM_ADDR * 4)
+#define MMIO_CSR_DATA_SIZE  (AFU_IMAGE_MMIO_CSR_DATA_SIZE * 4)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -42,21 +42,19 @@ typedef struct vx_buffer_ {
     uint64_t wsid;
     volatile void* host_ptr;
     uint64_t io_addr;
-    fpga_handle fpga;
+    vx_device_h hdevice;
     size_t size;
 } vx_buffer_t;
 
 static size_t align_size(size_t size) {
-    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);    
     return cache_block_size * ((size + cache_block_size - 1) / cache_block_size);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Search for an accelerator matching the requested UUID and connect to it
-// Convert this to void if required as storing the fpga_handle to params variable
 extern int vx_dev_open(vx_device_h* hdevice) {
-    fpga_properties filter = NULL;
+    fpga_properties filter = nullptr;
     fpga_result res;
     fpga_guid guid;
     fpga_token accel_token;
@@ -64,11 +62,14 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     fpga_handle accel_handle;
     vx_device_t* device;
 
-    if (NULL == hdevice)
+    if (nullptr == hdevice)
         return  -1;
 
+    // ensure that the block size 64
+    assert(64 == vx_dev_caps(VX_CAPS_CACHE_LINESIZE));
+
     // Set up a filter that will search for an accelerator
-    fpgaGetProperties(NULL, &filter);
+    fpgaGetProperties(nullptr, &filter);
     fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR);
 
     // Add the desired UUID to the filter
@@ -84,13 +85,13 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     if (num_matches < 1) {
         fprintf(stderr, "Accelerator %s not found!\n", AFU_ACCEL_UUID);
-        return NULL;
+        return -1;
     }
 
     // Open accelerator
     res = fpgaOpen(accel_token, &accel_handle, 0);
     if (FPGA_OK != res) {
-        return NULL;
+        return -1;
     }
 
     // Done with token
@@ -98,9 +99,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     // allocate device object
     device = (vx_device_t*)malloc(sizeof(vx_device_t));
-    if (NULL == device) {
+    if (nullptr == device) {
         fpgaClose(accel_handle);
-        return NULL;
+        return -1;
     }
 
     device->fpga = accel_handle;
@@ -111,9 +112,8 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     return 0;
 }
 
-// Close the fpga when all the operations are done
 extern int vx_dev_close(vx_device_h hdevice) {
-    if (NULL == hdevice)
+    if (nullptr == hdevice)
         return -1;
 
     vx_device_t *device = ((vx_device_t*)hdevice);
@@ -126,15 +126,15 @@ extern int vx_dev_close(vx_device_h hdevice) {
 }
 
 extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr) {
-    if (NULL == hdevice 
-     || NULL == dev_maddr
+    if (nullptr == hdevice 
+     || nullptr == dev_maddr
      || 0 >= size)
         return -1;
 
     vx_device_t *device = ((vx_device_t*)hdevice);
     
     size_t asize = align_size(size);
-    auto dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
+    size_t dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
     if (device->mem_allocation + asize > dev_mem_size)
         return -1;   
 
@@ -151,9 +151,9 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
     uint64_t io_addr;
     vx_buffer_t* buffer;
 
-    if (NULL == hdevice
+    if (nullptr == hdevice
      || 0 >= size
-     || NULL == hbuffer)
+     || nullptr == hbuffer)
         return -1;
 
     vx_device_t *device = ((vx_device_t*)hdevice);
@@ -174,7 +174,7 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
 
     // allocate buffer object
     buffer = (vx_buffer_t*)malloc(sizeof(vx_buffer_t));
-    if (NULL == buffer) {
+    if (nullptr == buffer) {
         fpgaReleaseBuffer(device->fpga, wsid);
         return -1;
     }
@@ -182,7 +182,7 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
     buffer->wsid = wsid;
     buffer->host_ptr = host_ptr;
     buffer->io_addr = io_addr;
-    buffer->fpga = device->fpga;
+    buffer->hdevice = hdevice;
     buffer->size = size;
 
     *hbuffer = buffer;
@@ -191,136 +191,30 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
 }
 
 extern volatile void* vx_host_ptr(vx_buffer_h hbuffer) {
+    if (nullptr == hbuffer)
+        return nullptr;
+
     vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-    if (NULL == buffer)
-        return NULL;
 
     return buffer->host_ptr;
 }
 
 extern int vx_buf_release(vx_buffer_h hbuffer) {
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-    if (NULL == buffer)
+    if (nullptr == hbuffer)
         return -1;
 
-    fpgaReleaseBuffer(buffer->fpga, buffer->wsid);
+    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
+    vx_device_t *device = ((vx_device_t*)buffer->hdevice);
+
+    fpgaReleaseBuffer(device->fpga, buffer->wsid);
 
     free(buffer);
 
     return 0;
 }
 
-// Check if HW is ready for SW
-static int ready_for_sw(fpga_handle hdevice) {
-    uint64_t data = 0;
-    struct timespec sleep_time; 
-    
-#ifdef USE_ASE
-    sleep_time.tv_sec = 1;
-    sleep_time.tv_nsec = 0;
-#else
-    sleep_time.tv_sec = 0;
-    sleep_time.tv_nsec = 1000000;
-#endif
-
-    do {
-        CHECK_RES(fpgaReadMMIO64(hdevice, 0, MMIO_READY_FOR_CMD, &data));
-        nanosleep(&sleep_time, NULL);
-    } while (data != 0x1);
-
-    return 0;
-}
-
-extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t src_offset) {
-    if (NULL == hbuffer 
-     || 0 >= size)
-        return -1;
-
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-
-    // bound checking
-    if (size + src_offset > buffer->size)
-        return -1;
-
-    // Ensure ready for new command
-    if (ready_for_sw(buffer->fpga) != 0)
-        return -1;
-
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_AVM_ADDRESS, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, buffer->io_addr + src_offset);
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_DATA_SIZE, size));   
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_CMD_TYPE, MMIO_CMD_TYPE_WRITE));
-
-    // Wait for the write operation to finish
-    return ready_for_sw(buffer->fpga);
-}
-
-extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t dest_offset) {
-    if (NULL == hbuffer 
-     || 0 >= size)
-        return -1;
-
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-
-    // bound checking
-    if (size + dest_offset > buffer->size)
-        return -1;
-
-    // Ensure ready for new command
-    if (ready_for_sw(buffer->fpga) != 0)
-        return -1;
-
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_AVM_ADDRESS, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, buffer->io_addr + dest_offset);
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_DATA_SIZE, size));   
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_CMD_TYPE, MMIO_CMD_TYPE_READ));
-
-    // Wait for the write operation to finish
-    return ready_for_sw(buffer->fpga);
-}
-
-extern int vx_flush_caches(vx_device_h hdevice, size_t dev_maddr, size_t size) {
-    if (NULL == hbuffer 
-     || 0 >= size)
-        return -1;
-
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-
-    // bound checking
-    if (size + src_offset > buffer->size)
-        return -1;
-
-    // Ensure ready for new command
-    if (ready_for_sw(buffer->fpga) != 0)
-        return -1;
-
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_AVM_ADDRESS, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_IO_ADDRESS, (buffer->io_addr + src_offset)/VX_CACHE_LINESIZE));
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_COPY_DATA_SIZE, size));   
-    CHECK_RES(fpgaWriteMMIO64(buffer->fpga, 0, MMIO_CMD_TYPE, MMIO_CMD_TYPE_SNOOP));
-
-    // Wait for the write operation to finish
-    return ready_for_sw(buffer->fpga);
-    return 0;
-}
-
-extern int vx_start(vx_device_h hdevice) {
-    if (NULL == hdevice)
-        return -1;
-
-    vx_device_t *device = ((vx_device_t*)hdevice);
-
-    // Ensure ready for new command
-    if (ready_for_sw(device->fpga) != 0)
-        return -1;
-
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, MMIO_CMD_TYPE_START));
-
-    return 0;
-}
-
 extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
-    if (NULL == hdevice)
+    if (nullptr == hdevice)
         return -1;
     
     vx_device_t *device = ((vx_device_t*)hdevice);
@@ -328,7 +222,7 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     uint64_t data = 0;
     struct timespec sleep_time; 
 
-#ifdef USE_ASE
+#if defined(USE_ASE)
     sleep_time.tv_sec = 1;
     sleep_time.tv_nsec = 0;
 #else
@@ -339,13 +233,106 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     // to milliseconds
     long long sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
     
-    do {
-        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_READY_FOR_CMD, &data));
-        nanosleep(&sleep_time, NULL);
-        sleep_time_ms -= sleep_time_ms;
-        if (timeout <= sleep_time_ms)
-            break;        
-    } while (data != 0x1);
+    for (;;) {
+        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_STATUS, &data));
+        if (0 == data || 0 == timeout)
+            break;
+        nanosleep(&sleep_time, nullptr);
+        timeout -= sleep_time_ms;
+    };
+
+    return 0;
+}
+
+extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t src_offset) {
+    if (nullptr == hbuffer 
+     || 0 >= size)
+        return -1;
+
+    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
+    vx_device_t *device = ((vx_device_t*)buffer->hdevice);
+
+    // bound checking
+    if (size + src_offset > buffer->size)
+        return -1;
+
+    // Ensure ready for new command
+    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+        return -1;
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, buffer->io_addr + src_offset));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_WRITE));
+
+    // Wait for the write operation to finish
+    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+        return -1;
+
+    return 0;
+}
+
+extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t dest_offset) {
+    if (nullptr == hbuffer 
+     || 0 >= size)
+        return -1;
+
+    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
+    vx_device_t *device = ((vx_device_t*)buffer->hdevice);
+
+    // bound checking
+    if (size + dest_offset > buffer->size)
+        return -1;
+
+    // Ensure ready for new command
+    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+        return -1;
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, buffer->io_addr + dest_offset));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));    
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_READ));
+
+    // Wait for the write operation to finish
+    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+        return -1;
+
+    return 0;
+}
+
+extern int vx_flush_caches(vx_device_h hdevice, size_t dev_maddr, size_t size) {
+    if (nullptr == hdevice 
+     || 0 >= size)
+        return -1;
+
+    vx_device_t* device = ((vx_device_t*)hdevice);
+
+    // Ensure ready for new command
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_SNOOP));
+
+    // Wait for the write operation to finish
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;
+
+    return 0;
+}
+
+extern int vx_start(vx_device_h hdevice) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device_t *device = ((vx_device_t*)hdevice);
+
+    // Ensure ready for new command
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_RUN));
 
     return 0;
 }

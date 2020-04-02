@@ -1,6 +1,5 @@
 #include <iostream>
 #include <unistd.h>
-#include <unistd.h>
 #include <string.h>
 #include <vortex.h>
 #include "common.h"
@@ -40,21 +39,77 @@ static void parse_args(int argc, char **argv) {
   }
 }
 
-vx_device_h device;
-vx_buffer_h buffer;
+int run_test(vx_device_h device, 
+             vx_buffer_h buffer, 
+             const kernel_arg_t& kernel_arg,
+             uint32_t buf_size, 
+             uint32_t num_points) {
+  int ret;
+
+  // start device
+  std::cout << "start device" << std::endl;
+  ret = vx_start(device);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  ret = vx_ready_wait(device, -1);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // flush the destination buffer caches
+  std::cout << "flush the destination buffer caches" << std::endl;
+  ret = vx_flush_caches(device, kernel_arg.dst_ptr, buf_size);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // download destination buffer
+  std::cout << "download destination buffer" << std::endl;
+  ret = vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // verify result
+  std::cout << "verify result" << std::endl;  
+  {
+    int errors = 0;
+    auto buf_ptr = (int*)vx_host_ptr(buffer);
+    for (uint32_t i = 0; i < num_points; ++i) {
+      int ref = i * i; 
+      int cur = buf_ptr[i];
+      if (cur != ref) {
+        ++errors;
+      }
+    }
+    if (errors != 0) {
+      std::cout << "Found " << errors << " errors!" << std::endl;
+      std::cout << "FAILED!" << std::endl;
+      return 1;  
+    }
+  }
+
+  return 0;
+}
+
+vx_device_h device = nullptr;
+vx_buffer_h buffer = nullptr;
 
 void cleanup() {
-  if (device) {
-    vx_dev_close(device);
-  }
   if (buffer) {
     vx_buf_release(buffer);
+  }
+  if (device) {
+    vx_dev_close(device);
   }
 }
 
 int main(int argc, char *argv[]) {
   int ret;
-  int errors = 0;
   size_t value; 
   kernel_arg_t kernel_arg;
   
@@ -79,14 +134,14 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;  
   ret = vx_dev_open(&device);
   if (ret != 0)
-    return -1;
+    return ret;
 
   // upload program
   std::cout << "upload program" << std::endl;  
   ret = vx_upload_kernel_file(device, program_file);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
 
   // allocate device memory
@@ -95,21 +150,21 @@ int main(int argc, char *argv[]) {
   ret = vx_alloc_dev_mem(device, buf_size, &value);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
   kernel_arg.src0_ptr = value;
 
   ret = vx_alloc_dev_mem(device, buf_size, &value);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
   kernel_arg.src1_ptr = value;
 
   ret = vx_alloc_dev_mem(device, buf_size, &value);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
   kernel_arg.dst_ptr = value;
 
@@ -119,7 +174,7 @@ int main(int argc, char *argv[]) {
   ret = vx_alloc_shared_mem(device, alloc_size, &buffer);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
 
   // populate source buffer values
@@ -137,13 +192,13 @@ int main(int argc, char *argv[]) {
   ret = vx_copy_to_dev(buffer, kernel_arg.src0_ptr, buf_size, 0);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
 
   ret = vx_copy_to_dev(buffer, kernel_arg.src1_ptr, buf_size, 0);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;  
   }
 
   // upload kernel argument
@@ -158,117 +213,29 @@ int main(int argc, char *argv[]) {
     ret = vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0);
     if (ret != 0) {
       cleanup();
-      return -1;  
+      return ret;  
     }
   }
 
-  // start device
-  std::cout << "start device" << std::endl;
-  ret = vx_start(device);
+  // run tests
+  std::cout << "run tests" << std::endl;
+  ret = run_test(device, buffer, kernel_arg, buf_size, num_points);
   if (ret != 0) {
     cleanup();
-    return -1;  
+    return ret;
   }
-
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
-  ret = vx_ready_wait(device, -1);
+  
+  ret = run_test(device, buffer, kernel_arg, buf_size, num_points);
   if (ret != 0) {
     cleanup();
-    return -1;  
-  }
-
-  // flush the destination buffer caches
-  std::cout << "flush the destination buffer caches" << std::endl;
-  ret = vx_flush_caches(device, kernel_arg.dst_ptr, buf_size);
-  if (ret != 0) {
-    cleanup();
-    return -1;  
-  }
-
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  ret = vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0);
-  if (ret != 0) {
-    cleanup();
-    return -1;  
-  }
-
-  // verify result
-  std::cout << "verify result" << std::endl;  
-  {
-    auto buf_ptr = (int*)vx_host_ptr(buffer);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      int ref = i * i; 
-      int cur = buf_ptr[i];
-      if (cur != ref) {
-        ++errors;
-      }
-    }
-  }
-
-  if (errors != 0) {
-    printf("Found %d errors!\n", errors);
-    printf("FAILED!\n");
-    cleanup();
-    return -1;  
-  }
-
-  // start device
-  std::cout << "start device" << std::endl;
-  ret = vx_start(device);
-  if (ret != 0) {
-    cleanup();
-    return -1;  
-  }
-
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
-  ret = vx_ready_wait(device, -1);
-  if (ret != 0) {
-    cleanup();
-    return -1;  
-  }
-
-  // flush the destination buffer caches
-  std::cout << "flush the destination buffer caches" << std::endl;
-  ret = vx_flush_caches(device, kernel_arg.dst_ptr, buf_size);
-  if (ret != 0) {
-    cleanup();
-    return -1;  
-  }
-
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  ret = vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0);
-  if (ret != 0) {
-    cleanup();
-    return -1;  
-  }
-
-  // verify result
-  std::cout << "verify result" << std::endl;  
-  {
-    auto buf_ptr = (int*)vx_host_ptr(buffer);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      int ref = i * i; 
-      int cur = buf_ptr[i];
-      if (cur != ref) {
-        ++errors;
-      }
-    }
+    return ret;
   }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  if (0 == errors) {
-    printf("PASSED!\n");
-  } else {
-    printf("Found %d errors!\n", errors);
-    printf("FAILED!\n");
-  }
+  std::cout << "PASSED!" << std::endl;
 
-  return errors;
+  return 0;
 }

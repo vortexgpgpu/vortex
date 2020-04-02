@@ -17,6 +17,9 @@ $(BUILD_DIR)/Makefile:
 run-ase:
 	cd $(BUILD_DIR) && MENT_VSIM_OPT="-dpicpppath /usr/bin/gcc" make sim
 
+wave:
+	vsim -view $(BUILD_DIR)/work/vsim.wlf -do wave.do
+
 run-fpga:
 	# TODO
 
