@@ -2,13 +2,19 @@
 #include <unistd.h>
 #include <vortex.h>
 
+int test = -1;
+
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "?")) != -1) {
+  while ((c = getopt(argc, argv, "t:h?")) != -1) {
     switch (c) {
+    case 't': {
+      test = atoi(optarg);
+    } break;
+    case 'h': 
     case '?': {
       std::cout << "Test." << std::endl;
-      std::cout << "Usage: [-h: help]" << std::endl;
+      std::cout << "Usage: [-t testno][-h: help]" << std::endl;
       exit(0);
     } break;
     default:
@@ -21,11 +27,11 @@ uint64_t shuffle(int i, uint64_t value) {
   return (value << i) | (value & ((1 << i)-1));;
 }
 
-int run_test(vx_buffer_h sbuf, 
-             vx_buffer_h dbuf, 
-             uint32_t address, 
-             uint64_t value, 
-             int num_blocks) {
+int run_test_0(vx_buffer_h sbuf, 
+               vx_buffer_h dbuf, 
+               uint32_t address, 
+               uint64_t value, 
+               int num_blocks) {
   int ret;
   int errors = 0;
 
@@ -62,6 +68,33 @@ int run_test(vx_buffer_h sbuf,
     std::cout << "Found " << errors << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
     return 1;
+  }
+
+  return 0;
+}
+
+int run_test_1(vx_device_h device, const char* program) {
+  int ret;
+  
+  // upload program
+  std::cout << "upload program" << std::endl;  
+  ret = vx_upload_kernel_file(device, program);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // start device
+  std::cout << "start device" << std::endl;
+  ret = vx_start(device);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  ret = vx_ready_wait(device, -1);
+  if (ret != 0) {
+    return ret;  
   }
 
   return 0;
@@ -112,30 +145,51 @@ int main(int argc, char *argv[]) {
     return ret;
   }
 
-  // run tests
-  std::cout << "run tests" << std::endl;
-  ret = run_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
-  if (ret != 0) {
-    cleanup();
-    return ret;
+  // run tests  
+  if (0 == test || -1 == test) {
+    std::cout << "run test suite 0" << std::endl;
+
+    ret = run_test_0(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
+
+    ret = run_test_0(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 2);
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
+
+    ret = run_test_0(sbuf, dbuf, 0x20000000, 0xff00ff00ff00ff00, 4);
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
+
+    ret = run_test_0(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
   }
 
-  ret = run_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 2);
-  if (ret != 0) {
-    cleanup();
-    return ret;
+  if (1 == test || -1 == test) {
+    std::cout << "run test suite 1" << std::endl;
+    ret = run_test_1(device, "rv32ui-p-lw.bin");
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
   }
 
-  ret = run_test(sbuf, dbuf, 0x20000000, 0xff00ff00ff00ff00, 4);
-  if (ret != 0) {
-    cleanup();
-    return ret;
-  }
-
-  ret = run_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
-  if (ret != 0) {
-    cleanup();
-    return ret;
+  if (2 == test || -1 == test) {
+    std::cout << "run test suite 1" << std::endl;
+    ret = run_test_1(device, "rv32ui-p-sw.bin");
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
   }
 
   // cleanup

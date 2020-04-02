@@ -175,7 +175,8 @@ begin
         16'h0006: af2cp_sTxPort.c2.data <= 64'h0; // next AFU
         16'h0008: af2cp_sTxPort.c2.data <= 64'h0; // reserved
         MMIO_CSR_STATUS: begin
-          $display("%t: STATUS: state=%0d", $time, state);
+          if (state != af2cp_sTxPort.c2.data) 
+            $display("%t: STATUS: state=%0d", $time, state);
           af2cp_sTxPort.c2.data <= state;
         end  
         default: af2cp_sTxPort.c2.data <= 64'h0;
