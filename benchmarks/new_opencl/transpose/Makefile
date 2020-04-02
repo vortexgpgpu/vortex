@@ -1,6 +1,6 @@
-RISCV_TOOL_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
-POCLCC_PATH ?= $(wildcard ~/dev/pocl/drops_vortex_cc)
-POCLRT_PATH ?= $(wildcard ..)
+LLVM_LIB_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops/lib)
+POCLCC_PATH ?= $(wildcard ../compiler)
+POCLRT_PATH ?= $(wildcard ../runtime)
 DRIVER_PATH ?= $(wildcard ../../../driver/sw)
 
 CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-errors
@@ -16,7 +16,7 @@ SRCS = main.cc transpose_gold.cpp
 all: $(PROJECT)
 
 kernel.pocl: kernel.cl
-	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCLCC_PATH)/lib:$(DRIVER_PATH)/simx $(POCLCC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(LLVM_LIB_PATH):$(POCLCC_PATH)/lib:$(DRIVER_PATH)/simx $(POCLCC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
  
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
