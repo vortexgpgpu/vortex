@@ -18,7 +18,7 @@ run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-ase: $(PROJECT)
-	LIBOPAE_LOG=1 LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)

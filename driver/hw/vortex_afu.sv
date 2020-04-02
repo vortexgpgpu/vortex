@@ -145,11 +145,11 @@ begin
         end
         MMIO_CSR_DATA_SIZE: begin          
           csr_data_size <= $bits(csr_data_size)'((cp2af_sRxPort.c0.data + 63) >> 6);          
-          $display("%t: CSR_DATA_SIZE: %d", $time, $bits(csr_data_size)'((cp2af_sRxPort.c0.data + 63) >> 6));
+          $display("%t: CSR_DATA_SIZE: %0d", $time, $bits(csr_data_size)'((cp2af_sRxPort.c0.data + 63) >> 6));
         end
         MMIO_CSR_CMD: begin          
           csr_cmd <= $bits(csr_cmd)'(cp2af_sRxPort.c0.data);
-          $display("%t: CSR_CMD: %d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
+          $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
         end
       endcase
     end
@@ -175,7 +175,7 @@ begin
         16'h0006: af2cp_sTxPort.c2.data <= 64'h0; // next AFU
         16'h0008: af2cp_sTxPort.c2.data <= 64'h0; // reserved
         MMIO_CSR_STATUS: begin
-          $display("%t: STATUS: state=%d", $time, state);
+          $display("%t: STATUS: state=%0d", $time, state);
           af2cp_sTxPort.c2.data <= state;
         end  
         default: af2cp_sTxPort.c2.data <= 64'h0;
@@ -209,11 +209,11 @@ begin
       STATE_IDLE: begin             
         case (csr_cmd)
           CMD_TYPE_READ: begin     
-            $display("%t: CMD READ: ia=%h da=%h sz=%d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            $display("%t: CMD READ: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
             state <= STATE_READ;   
           end 
           CMD_TYPE_WRITE: begin      
-            $display("%t: CMD WRITE: ia=%h da=%h sz=%d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            $display("%t: CMD WRITE: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
             state <= STATE_WRITE;
           end 
           CMD_TYPE_RUN: begin        
@@ -222,7 +222,7 @@ begin
             state <= STATE_RUN;                    
           end
           CMD_TYPE_SNOOP: begin
-            $display("%t: CMD SNOOP: da=%h sz=%d", $time, csr_mem_addr, csr_data_size);
+            $display("%t: CMD SNOOP: da=%h sz=%0d", $time, csr_mem_addr, csr_data_size);
             state <= STATE_SNOOP1;
           end
         endcase
@@ -316,7 +316,7 @@ begin
           avs_address <= csr_mem_addr + avs_write_ctr;
           avs_write <= 1;
           avs_write_ctr <= avs_write_ctr + 1;
-          $display("%t: AVS Wr Req: addr=%h value=%h", $time, csr_mem_addr + avs_write_ctr, cp2af_sRxPort.c0.data[63:0]);
+          $display("%t: AVS Wr Req: addr=%h (%0d/%0d)", $time, csr_mem_addr + avs_write_ctr, avs_write_ctr + 1, csr_data_size);
         end
       end
 
@@ -337,7 +337,7 @@ begin
           avs_writedata <= {>>{vx_dram_req_data}};
           avs_address <= (vx_dram_req_addr >> 6);
           avs_write <= 1;
-          $display("%t: AVS Wr Req: addr=%h value=%h", $time, vx_dram_req_addr >> 6, {vx_dram_req_data[1], vx_dram_req_data[0]});
+          $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr >> 6);
         end
       end
     endcase
@@ -447,7 +447,7 @@ begin
     if (cci_read_pending
      && cp2af_sRxPort.c0.rspValid) 
     begin
-      $display("%t: CCI Rd Rsp: value=%h", $time, cp2af_sRxPort.c0.data[63:0]);
+      $display("%t: CCI Rd Rsp", $time);
       cci_read_pending <= 0;
     end    
   end
@@ -497,7 +497,7 @@ begin
       af2cp_sTxPort.c1.data  <= t_ccip_clData'(avs_rdq_dout);
       af2cp_sTxPort.c1.valid <= 1;      
       cci_write_pending      <= 1;
-      $display("%t: CCI Wr Req: addr=%h value=%h", $time, wr_hdr.address, avs_rdq_dout[63:0]);
+      $display("%t: CCI Wr Req: addr=%h", $time, wr_hdr.address);
     end
 
     if (cci_write_pending
@@ -505,7 +505,7 @@ begin
     begin
       cci_write_ctr     <= cci_write_ctr + 1;
       cci_write_pending <= 0;
-      $display("%t: CCI Wr Rsp", $time);      
+      $display("%t: CCI Wr Rsp (%0d/%0d)", $time, cci_write_ctr + 1, csr_data_size);      
     end
   end
 end
