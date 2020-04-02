@@ -281,7 +281,6 @@ begin
     avs_writedata   <= 0;    
     avs_read        <= 0;
     avs_write       <= 0;
-
     avs_read_ctr    <= 0;
     avs_write_ctr   <= 0;
   end
@@ -323,9 +322,7 @@ begin
 
       STATE_RUN: begin
         if (vx_dram_req_read
-         && !avs_waitrequest
-         && !avs_raq_full 
-         && !avs_rdq_full) 
+         && !vx_dram_req_delay) 
         begin
           avs_address <= (vx_dram_req_addr >> 6);
           avs_read <= 1;
@@ -333,7 +330,7 @@ begin
         end 
         
         if (vx_dram_req_write
-         && !avs_waitrequest) 
+         && !vx_dram_req_delay) 
         begin
           avs_writedata <= {>>{vx_dram_req_data}};
           avs_address <= (vx_dram_req_addr >> 6);
@@ -351,7 +348,10 @@ begin
 end
 
 // Vortex DRAM requests stalling
-assign vx_dram_req_delay = !(avs_read || avs_write);
+assign vx_dram_req_delay = !((STATE_RUN == state) 
+                          && !avs_waitrequest 
+                          && !avs_raq_full 
+                          && !avs_rdq_full);
 
 // Vortex DRAM fill response
 always_comb 
@@ -369,7 +369,7 @@ always_comb
 begin
   avs_raq_pop  = vx_dram_fill_rsp || cci_write_req;
   avs_raq_din  = avs_address;
-  avs_raq_push = avs_write;
+  avs_raq_push = avs_read;
 end
 
 VX_generic_queue_ll #(
@@ -463,10 +463,10 @@ logic cci_write_pending;
 always_comb 
 begin
   cci_write_req = (STATE_READ == state) 
-                && !avs_rdq_empty 
-                && !cp2af_sRxPort.c1TxAlmFull
-                && !cci_write_pending
-                && cci_write_ctr < csr_data_size;
+               && !avs_rdq_empty 
+               && !cp2af_sRxPort.c1TxAlmFull
+               && !cci_write_pending
+               && cci_write_ctr < csr_data_size;
 
   wr_hdr = t_ccip_c1_ReqMemHdr'(0);
   wr_hdr.address = csr_io_addr + cci_write_ctr;
