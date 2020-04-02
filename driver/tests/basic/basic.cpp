@@ -18,8 +18,7 @@ static void parse_args(int argc, char **argv) {
 }
 
 uint64_t shuffle(int i, uint64_t value) {
-  //return (value << i) | (value & ((1 << i)-1));;
-  return 0x0badf00ddeadbeef;
+  return (value << i) | (value & ((1 << i)-1));;
 }
 
 int run_test(vx_buffer_h sbuf, 
