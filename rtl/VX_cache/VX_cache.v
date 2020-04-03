@@ -43,6 +43,10 @@ module VX_cache
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 16, 
 
+    // Prefetcher
+    parameter PRFQ_SIZE                     = 64,
+    parameter PRFQ_STRIDE                   = 0,
+
 // Dram knobs
     parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
 
@@ -166,6 +170,8 @@ module VX_cache
         .DFQQ_SIZE                    (DFQQ_SIZE),
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+        .PRFQ_SIZE                    (PRFQ_SIZE),
+        .PRFQ_STRIDE                  (PRFQ_STRIDE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
         )
         VX_cache_dram_req_arb
