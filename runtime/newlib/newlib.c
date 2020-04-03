@@ -234,8 +234,8 @@ int _write (int file, char *buf, int nbytes)
 
 
 
-static int heap_start = (int) 0x30000000;
-static int head_end   = (int) 0x40000000;
+static int heap_start = (int) 0x90000000;
+static int head_end   = (int) 0xa0000000;
 
 void * _sbrk (int nbytes)
 {
