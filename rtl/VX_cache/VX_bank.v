@@ -114,8 +114,6 @@ module VX_bank
 	wire       snrq_valid_st0;
 	wire[31:0] snrq_addr_st0;
 
-	reg        snrq_hazard_st0;
-
 	assign snrq_valid_st0 = !snrq_empty;
 	VX_generic_queue_ll #(.DATAW(32), .SIZE(SNRQ_SIZE)) snr_queue(
 		.clk     (clk),
@@ -133,7 +131,6 @@ module VX_bank
 	wire                            dfpq_full;
 	wire[31:0]                      dfpq_addr_st0;
 	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] dfpq_filldata_st0;
-	reg                             dfpq_hazard_st0;
 
 	assign dram_fill_accept = !dfpq_full;
 
@@ -161,7 +158,6 @@ module VX_bank
 	wire [`NW_M1:0]                       reqq_req_warp_num_st0;
 	wire [2:0]                            reqq_req_mem_read_st0;  
 	wire [2:0]                            reqq_req_mem_write_st0;
-	reg                                   reqq_hazard_st0;
 	wire [31:0]                           reqq_req_pc_st0;
 
 	assign reqq_push = !delay_req && (|bank_valids);
@@ -229,7 +225,6 @@ module VX_bank
 	wire [`NW_M1:0]                       mrvq_warp_num_st0;
 	wire [2:0]                            mrvq_mem_read_st0;  
 	wire [2:0]                            mrvq_mem_write_st0;
-	reg                                   mrvq_hazard_st0;
 
 	wire                                  miss_add;
 	wire[31:0]                            miss_add_addr;
@@ -321,27 +316,12 @@ module VX_bank
 //	assign is_fill_in_pipe = (|is_fill_st1) || is_fill_st2;
 		
 
-	assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe && !mrvq_hazard_st0;
-	assign dfpq_pop = !mrvq_pop && !dfpq_empty && !stall_bank_pipe && !dfpq_hazard_st0;
-	assign reqq_pop = !mrvq_stop && !mrvq_pop && !dfpq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !(reqq_hazard_st0 || (mrvq_valid_st0 && mrvq_hazard_st0)) && !is_fill_in_pipe;
-	assign snrq_pop = !reqq_pop && !reqq_pop && !mrvq_pop && !dfpq_pop && snrq_valid_st0 && !stall_bank_pipe && !snrq_hazard_st0;
+	assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe;
+	assign dfpq_pop = !mrvq_pop && !dfpq_empty && !stall_bank_pipe;
+	assign reqq_pop = !mrvq_stop && !mrvq_pop && !dfpq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !is_fill_in_pipe;
+	assign snrq_pop = !reqq_pop && !reqq_pop && !mrvq_pop && !dfpq_pop && snrq_valid_st0 && !stall_bank_pipe;
 
 	integer st1_cycle;
-
-	always @(*) begin
-		dfpq_hazard_st0 = 0;
-		mrvq_hazard_st0 = 0;
-		reqq_hazard_st0 = 0;
-		snrq_hazard_st0 = 0;
-		// for (st1_cycle = 0; st1_cycle < STAGE_1_CYCLES; st1_cycle = st1_cycle + 1) begin
-		// 	if (valid_st1[st1_cycle] && going_to_write_st1[st1_cycle]) begin
-		// 		if (dfpq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) dfpq_hazard_st0 = 1;
-		// 		if (mrvq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) mrvq_hazard_st0 = 1;
-		// 		if (reqq_req_addr_st0[31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) reqq_hazard_st0 = 1;
-		// 		if (snrq_addr_st0    [31:`LINE_SELECT_ADDR_START] == addr_st1[st1_cycle][31:`LINE_SELECT_ADDR_START]) snrq_hazard_st0 = 1;
-		// 	end
-		// end
-	end
 
 	wire                                  qual_is_fill_st0;
 	wire                                  qual_valid_st0;
