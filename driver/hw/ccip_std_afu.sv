@@ -108,7 +108,7 @@ module ccip_std_afu
       #(
         .NUM_LOCAL_MEM_BANKS(NUM_LOCAL_MEM_BANKS)
         )
-      hello_mem_afu_inst
+      vortex_afu_inst
        (
         .clk                 (clk),
         .SoftReset           (reset_T1),

@@ -1,5 +1,5 @@
 
-CXXFLAGS += -std=c++17 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../../sw/include
 
@@ -12,13 +12,13 @@ SRCS = basic.cpp
 all: $(PROJECT)
 
 $(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../sw/simx -lvortex -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../sw/dummy -lvortex -o $@
 
 run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-ase: $(PROJECT)
-	LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	ASE_LOG=0 LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
