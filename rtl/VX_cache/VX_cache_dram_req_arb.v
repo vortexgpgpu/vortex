@@ -39,6 +39,10 @@ module VX_cache_dram_req_arb
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
+ 	// Prefetcher
+	parameter PRFQ_SIZE                     = 64,
+	parameter PRFQ_STRIDE                   = 2,
+
 // Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
 
@@ -74,6 +78,33 @@ module VX_cache_dram_req_arb
 	
 );
 
+
+	wire       pref_pop;
+	wire       pref_valid;
+	wire[31:0] pref_addr;
+
+	assign pref_pop = !dwb_valid && !dfqq_req && !dram_req_delay && pref_valid;
+	VX_prefetcher #(
+		.PRFQ_SIZE           (PRFQ_SIZE),
+		.PRFQ_STRIDE         (PRFQ_STRIDE),
+		.BANK_LINE_SIZE_BYTES(BANK_LINE_SIZE_BYTES),
+		.WORD_SIZE_BYTES     (WORD_SIZE_BYTES)
+		) 
+	    prfqq
+	    (
+		.clk          (clk),
+		.reset        (reset),
+
+		.dram_req     (dram_req && dram_req_read),
+		.dram_req_addr(dram_req_addr),
+
+		.pref_pop     (pref_pop),
+		.pref_valid   (pref_valid),
+		.pref_addr    (pref_addr)
+
+
+		);
+
 	wire dfqq_req;
 	wire[31:0] dfqq_req_addr;
 	wire dfqq_empty;
@@ -107,10 +138,10 @@ module VX_cache_dram_req_arb
 	assign per_bank_dram_wb_queue_pop = dram_req_delay ? 0 : use_wb_valid & ((1 << dwb_bank));
 
 
-	assign dram_req               = dwb_valid || dfqq_req;
+	assign dram_req               = dwb_valid || dfqq_req || pref_pop;
 	assign dram_req_write         = dwb_valid;
-	assign dram_req_read          = dfqq_req && !dwb_valid;
-	assign dram_req_addr          = (dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : dfqq_req_addr) & `BASE_ADDR_MASK;
+	assign dram_req_read          = (dfqq_req && !dwb_valid) || pref_pop;
+	assign dram_req_addr          = (dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : (dfqq_req ? dfqq_req_addr : pref_addr)) & `BASE_ADDR_MASK;
 	assign dram_req_size          = BANK_LINE_SIZE_BYTES;
 	assign {dram_req_data}        = dwb_valid ? {per_bank_dram_wb_req_data[dwb_bank] }: 0;
 	// assign dram_req_because_of_wb = dwb_valid ? per_bank_dram_because_of_snp[dwb_bank] : 0;
