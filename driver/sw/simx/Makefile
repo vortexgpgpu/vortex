@@ -1,7 +1,7 @@
 CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
 #CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
-CFLAGS += -I../../include -I../../../../simX/include  -I../../../../runtime
+CFLAGS += -I../../include -I../../../../simX/include -I../../../../runtime
 
 CFLAGS += -fPIC
 

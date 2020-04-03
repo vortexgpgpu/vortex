@@ -35,7 +35,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_
   if (NULL == content || 0 == size)
     return -1;
 
-  uint32_t buffer_transfer_size = 4096;
+  uint32_t buffer_transfer_size = 65536;
   uint32_t kernel_base_addr = vx_dev_caps(VX_CAPS_KERNEL_BASE_ADDR);
 
   // allocate device buffer

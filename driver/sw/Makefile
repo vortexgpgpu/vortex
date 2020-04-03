@@ -1,6 +1,9 @@
 
 
-all: opae rtlsim simx
+all: dummy
+
+dummy:
+	$(MAKE) -C dummy
 
 opae:
 	$(MAKE) -C opae
@@ -12,6 +15,7 @@ simx:
 	$(MAKE) -C simx
 
 clean:
+	$(MAKE) clean -C dummy
 	$(MAKE) clean -C opae
 	$(MAKE) clean -C rtlsim
 	$(MAKE) clean -C simx

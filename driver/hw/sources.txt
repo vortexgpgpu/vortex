@@ -1,5 +1,7 @@
 vortex_afu.json
 
++define+GLOBAL_BLOCK_SIZE_BYTES=64
+
 +incdir+.
 +incdir+../../rtl
 +incdir+../../rtl/shared_memory
@@ -13,6 +15,7 @@ vortex_afu.json
 ../../rtl/VX_define.v
 ../../rtl/VX_cache/VX_cache_config.v
 ../../rtl/Vortex_SOC.v
+../../rtl/Vortex_Cluster.v
 ../../rtl/Vortex.v
 ../../rtl/VX_front_end.v
 ../../rtl/VX_back_end.v

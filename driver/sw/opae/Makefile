@@ -1,7 +1,7 @@
 
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I/tools/opae/1.4.0/include
+CXXFLAGS += -I../include -I/tools/opae/1.4.0/include  -I../../../runtime
 
 LDFLAGS += -L/tools/opae/1.4.0/lib
 
@@ -16,6 +16,8 @@ CXXFLAGS +=-fstack-protector
 
 # Position independent code
 CXXFLAGS += -fPIC
+
+CXXFLAGS += -DGLOBAL_BLOCK_SIZE_BYTES=64
 
 LDFLAGS += -luuid
 
@@ -50,7 +52,7 @@ $(PROJECT_ASE): $(SRCS) $(ASE_DIR)
 	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $@
 
 vortex.o: vortex.cpp $(AFU_JSON_INFO)
-	$(CC) $(CXXFLAGS) -c vortex.cpp -o $@
+	$(CXX) $(CXXFLAGS) -c vortex.cpp -o $@
 
 $(ASE_DIR):
 	mkdir -p ase
