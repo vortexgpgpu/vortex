@@ -43,6 +43,10 @@ module VX_cache
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 16, 
 
+    // Prefetcher
+    parameter PRFQ_SIZE                     = 64,
+    parameter PRFQ_STRIDE                   = 0,
+
 // Dram knobs
     parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
 
@@ -147,7 +151,8 @@ module VX_cache
     assign snp_req_delay = (|per_bank_snrq_full);
 
 
-    assign dram_fill_accept = (NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
+    // assign dram_fill_accept = (NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
+    assign dram_fill_accept = (|per_bank_dram_fill_accept);
 
     VX_cache_dram_req_arb  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
@@ -165,6 +170,8 @@ module VX_cache
         .DFQQ_SIZE                    (DFQQ_SIZE),
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
+        .PRFQ_SIZE                    (PRFQ_SIZE),
+        .PRFQ_STRIDE                  (PRFQ_STRIDE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
         )
         VX_cache_dram_req_arb
