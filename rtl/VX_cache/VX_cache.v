@@ -147,7 +147,8 @@ module VX_cache
     assign snp_req_delay = (|per_bank_snrq_full);
 
 
-    assign dram_fill_accept = (NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
+    // assign dram_fill_accept = (NUMBER_BANKS == 1) ? per_bank_dram_fill_accept[0] : per_bank_dram_fill_accept[dram_fill_rsp_addr[`BANK_SELECT_ADDR_RNG]];
+    assign dram_fill_accept = (|per_bank_dram_fill_accept);
 
     VX_cache_dram_req_arb  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
