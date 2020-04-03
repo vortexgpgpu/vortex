@@ -342,7 +342,7 @@ begin
 
     if (avs_readdatavalid) 
     begin
-      $display("%t: AVS Rd Rsp: value=%h", $time, avs_readdata[63:0]);
+      $display("%t: AVS Rd Rsp", $time);
     end   
   end
 end
@@ -357,7 +357,7 @@ assign vx_dram_req_delay = !((STATE_RUN == state)
 always_comb 
 begin
   vx_dram_fill_rsp            = (STATE_RUN == state) && !avs_rdq_empty && vx_dram_fill_accept;
-  vx_dram_fill_rsp_addr       = avs_raq_dout;
+  vx_dram_fill_rsp_addr       = (avs_raq_dout << 6);
   {>>{vx_dram_fill_rsp_data}} = avs_rdq_dout;
 end
 
