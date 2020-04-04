@@ -68,6 +68,7 @@ vortex_afu.json
 ../../rtl/VX_cache/VX_cache_miss_resrv.v
 ../../rtl/VX_cache/VX_fill_invalidator.v
 ../../rtl/VX_cache/VX_tag_data_structure.v
+../../rtl/VX_cache/VX_prefetcher.v
 ../../rtl/cache/VX_generic_pe.v
 ../../rtl/cache/cache_set.v
 ../../rtl/cache/VX_d_cache.v
