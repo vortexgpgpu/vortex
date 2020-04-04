@@ -27,11 +27,11 @@ uint64_t shuffle(int i, uint64_t value) {
   return (value << i) | (value & ((1 << i)-1));;
 }
 
-int run_test_0(vx_buffer_h sbuf, 
-               vx_buffer_h dbuf, 
-               uint32_t address, 
-               uint64_t value, 
-               int num_blocks) {
+int run_memcpy_test(vx_buffer_h sbuf, 
+                    vx_buffer_h dbuf, 
+                    uint32_t address, 
+                    uint64_t value, 
+                    int num_blocks) {
   int ret;
   int errors = 0;
 
@@ -73,7 +73,7 @@ int run_test_0(vx_buffer_h sbuf,
   return 0;
 }
 
-int run_test_1(vx_device_h device, const char* program) {
+int run_riscv_test(vx_device_h device, const char* program) {
   int ret;
   
   // upload program
@@ -93,6 +93,40 @@ int run_test_1(vx_device_h device, const char* program) {
   // wait for completion
   std::cout << "wait for completion" << std::endl;
   ret = vx_ready_wait(device, -1);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  return 0;
+}
+
+int run_snoop_test(vx_device_h device) {
+  int ret;
+  
+  // upload program
+  std::cout << "upload program" << std::endl;  
+  ret = vx_upload_kernel_file(device, "rv32ui-p-lw.bin");
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // start device
+  std::cout << "start device" << std::endl;
+  ret = vx_start(device);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  ret = vx_ready_wait(device, -1);
+  if (ret != 0) {
+    return ret;  
+  }
+
+  // send snooping request
+  std::cout << "flush the caches" << std::endl;
+  ret = vx_flush_caches(device, 0x80002000, 64);
   if (ret != 0) {
     return ret;  
   }
@@ -147,27 +181,15 @@ int main(int argc, char *argv[]) {
 
   // run tests  
   if (0 == test || -1 == test) {
-    std::cout << "run test suite 0" << std::endl;
+    std::cout << "run memcpy test" << std::endl;
 
-    ret = run_test_0(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
+    ret = run_memcpy_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
     if (ret != 0) {
       cleanup();
       return ret;
     }
 
-    ret = run_test_0(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 2);
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
-
-    ret = run_test_0(sbuf, dbuf, 0x20000000, 0xff00ff00ff00ff00, 4);
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
-
-    ret = run_test_0(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
+    ret = run_memcpy_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
     if (ret != 0) {
       cleanup();
       return ret;
@@ -175,8 +197,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (1 == test || -1 == test) {
-    std::cout << "run test suite 1" << std::endl;
-    ret = run_test_1(device, "rv32ui-p-lw.bin");
+    std::cout << "run riscv-lw test" << std::endl;
+    ret = run_riscv_test(device, "rv32ui-p-lw.bin");
     if (ret != 0) {
       cleanup();
       return ret;
@@ -184,8 +206,17 @@ int main(int argc, char *argv[]) {
   }
 
   if (2 == test || -1 == test) {
-    std::cout << "run test suite 1" << std::endl;
-    ret = run_test_1(device, "rv32ui-p-sw.bin");
+    std::cout << "run riscv-sw test" << std::endl;
+    ret = run_riscv_test(device, "rv32ui-p-sw.bin");
+    if (ret != 0) {
+      cleanup();
+      return ret;
+    }
+  }
+
+  if (3 == test || -1 == test) {
+    std::cout << "run snoop test" << std::endl;
+    ret = run_snoop_test(device);
     if (ret != 0) {
       cleanup();
       return ret;
