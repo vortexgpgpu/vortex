@@ -82,6 +82,9 @@ module VX_cache_dram_req_arb
 	wire       pref_pop;
 	wire       pref_valid;
 	wire[31:0] pref_addr;
+	
+	wire 	   dwb_valid;
+	wire       dfqq_req;
 
 	assign pref_pop = !dwb_valid && !dfqq_req && !dram_req_delay && pref_valid;
 	VX_prefetcher #(
@@ -105,10 +108,8 @@ module VX_cache_dram_req_arb
 
 		);
 
-	wire dfqq_req;
 	wire[31:0] dfqq_req_addr;
-	wire dfqq_empty;
-	wire dwb_valid;
+	wire dfqq_empty;	
 	wire dfqq_pop  = !dwb_valid && dfqq_req && !dram_req_delay; // If no dwb, and dfqq has valids, then pop
 	wire dfqq_push = (|per_bank_dram_fill_req);
 
