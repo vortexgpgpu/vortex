@@ -46,7 +46,7 @@ run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 
 run-ase: $(PROJECT)
-	ASE_LOG=0 LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
+	ASE_LOG=0 LD_LIBRARY_PATH=../../sw/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 1
 
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
