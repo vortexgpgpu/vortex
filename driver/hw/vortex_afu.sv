@@ -246,6 +246,7 @@ begin
       STATE_RUN: begin
         if (vx_ebreak)
         begin
+          // TODO: Add delay stage before returning to IDLE
           state <= STATE_IDLE;
         end
       end
@@ -253,6 +254,7 @@ begin
       STATE_SNOOP1: begin
         if (vx_snoop_delay >= VX_SNOOPING_DELAY) 
         begin
+          // TODO: Allow both RUN and SNOOP states to use the AVS bus
           state <= STATE_SNOOP2;
         end
       end
