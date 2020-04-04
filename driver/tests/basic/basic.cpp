@@ -28,10 +28,10 @@ uint64_t shuffle(int i, uint64_t value) {
 }
 
 int run_memcopy_test(vx_buffer_h sbuf, 
-                    vx_buffer_h dbuf, 
-                    uint32_t address, 
-                    uint64_t value, 
-                    int num_blocks) {
+                     vx_buffer_h dbuf, 
+                     uint32_t address, 
+                     uint64_t value, 
+                     int num_blocks) {
   int ret;
   int errors = 0;
 
@@ -73,8 +73,29 @@ int run_memcopy_test(vx_buffer_h sbuf,
   return 0;
 }
 
-int run_riscv_test(vx_device_h device, const char* program) {
+int run_kernel_test(vx_device_h device, 
+                    vx_buffer_h sbuf, 
+                    vx_buffer_h dbuf, 
+                    const char* program) {
   int ret;
+  int errors = 0;
+
+  uint64_t seed = 0x0badf00d40ff40ff;
+  int num_blocks = 4;
+
+  unsigned src_dev_addr = 0x10000000;
+  unsigned dest_dev_addr = 0x20000000;
+
+  // write sbuf data
+  for (int i = 0; i < 8 * num_blocks; ++i) {
+    ((uint64_t*)vx_host_ptr(sbuf))[i] = shuffle(i, seed);
+  }
+
+  // write buffer to local memory
+  std::cout << "write buffer to local memory" << std::endl;
+  ret = vx_copy_to_dev(sbuf, src_dev_addr, 64 * num_blocks, 0);
+  if (ret != 0)
+    return ret;
   
   // upload program
   std::cout << "upload program" << std::endl;  
@@ -97,38 +118,35 @@ int run_riscv_test(vx_device_h device, const char* program) {
     return ret;  
   }
 
-  return 0;
-}
-
-int run_snoop_test(vx_device_h device) {
-  int ret;
-  
-  // upload program
-  std::cout << "upload program" << std::endl;  
-  ret = vx_upload_kernel_file(device, "snooping.bin");
-  if (ret != 0) {
-    return ret;  
-  }
-
-  // start device
-  std::cout << "start device" << std::endl;
-  ret = vx_start(device);
-  if (ret != 0) {
-    return ret;  
-  }
-
-  // wait for completion
-  std::cout << "wait for completion" << std::endl;
-  ret = vx_ready_wait(device, -1);
-  if (ret != 0) {
-    return ret;  
-  }
-
   // flush the caches
   std::cout << "flush the caches" << std::endl;
-  ret = vx_flush_caches(device, 0x10000000, 64*8);
+  ret = vx_flush_caches(device, dest_dev_addr, 64 * num_blocks);
   if (ret != 0) {
     return ret;  
+  }
+
+  // read buffer from local memory
+  std::cout << "read buffer from local memory" << std::endl;
+  ret = vx_copy_from_dev(dbuf, dest_dev_addr, 64 * num_blocks, 0);
+  if (ret != 0)
+    return ret;
+
+  // verify result
+  std::cout << "verify result" << std::endl;
+  for (int i = 0; i < 8 * num_blocks; ++i) {
+    auto curr = ((uint64_t*)vx_host_ptr(dbuf))[i];
+    auto ref = shuffle(i, seed);
+    if (curr != ref) {
+      std::cout << "error @ " << std::hex << (dest_dev_addr + 64 * i)
+                << ": actual " << curr << ", expected " << ref << std::endl;
+      ++errors;
+    }
+  } 
+  
+  if (errors != 0) {
+    std::cout << "Found " << errors << " errors!" << std::endl;
+    std::cout << "FAILED!" << std::endl;
+    return 1;
   }
 
   return 0;
@@ -197,26 +215,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (1 == test || -1 == test) {
-    std::cout << "run riscv-lw test" << std::endl;
-    ret = run_riscv_test(device, "rv32ui-p-lw.bin");
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
-  }
-
-  if (2 == test || -1 == test) {
-    std::cout << "run riscv-sw test" << std::endl;
-    ret = run_riscv_test(device, "rv32ui-p-sw.bin");
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
-  }
-
-  if (3 == test || -1 == test) {
-    std::cout << "run snoop test" << std::endl;
-    ret = run_snoop_test(device);
+    std::cout << "run kernel test" << std::endl;
+    ret = run_kernel_test(device, sbuf, dbuf, "kernel.bin");
     if (ret != 0) {
       cleanup();
       return ret;
