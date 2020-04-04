@@ -14,7 +14,7 @@
       "cmd-type-read":        1,
       "cmd-type-write":       2,
       "cmd-type-run":         3,
-      "cmd-type-snoop":       4,
+      "cmd-type-clflush":     4,
 
       "afu-top-interface":
          {

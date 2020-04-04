@@ -22,8 +22,8 @@
 
 #define CMD_TYPE_READ       AFU_IMAGE_CMD_TYPE_READ
 #define CMD_TYPE_WRITE      AFU_IMAGE_CMD_TYPE_WRITE
-#define CMD_TYPE_RUN      AFU_IMAGE_CMD_TYPE_RUN
-#define CMD_TYPE_SNOOP      AFU_IMAGE_CMD_TYPE_SNOOP
+#define CMD_TYPE_RUN        AFU_IMAGE_CMD_TYPE_RUN
+#define CMD_TYPE_CLFLUSH    AFU_IMAGE_CMD_TYPE_CLFLUSH
 
 #define MMIO_CSR_CMD        (AFU_IMAGE_MMIO_CSR_CMD * 4)
 #define MMIO_CSR_STATUS     (AFU_IMAGE_MMIO_CSR_STATUS * 4)
@@ -313,7 +313,7 @@ extern int vx_flush_caches(vx_device_h hdevice, size_t dev_maddr, size_t size) {
 
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_SNOOP));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_CLFLUSH));
 
     // Wait for the write operation to finish
     if (vx_ready_wait(hdevice, -1) != 0)

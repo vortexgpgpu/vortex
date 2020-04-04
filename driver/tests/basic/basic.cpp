@@ -27,7 +27,7 @@ uint64_t shuffle(int i, uint64_t value) {
   return (value << i) | (value & ((1 << i)-1));;
 }
 
-int run_memcpy_test(vx_buffer_h sbuf, 
+int run_memcopy_test(vx_buffer_h sbuf, 
                     vx_buffer_h dbuf, 
                     uint32_t address, 
                     uint64_t value, 
@@ -105,7 +105,7 @@ int run_snoop_test(vx_device_h device) {
   
   // upload program
   std::cout << "upload program" << std::endl;  
-  ret = vx_upload_kernel_file(device, "rv32ui-p-lw.bin");
+  ret = vx_upload_kernel_file(device, "snooping.bin");
   if (ret != 0) {
     return ret;  
   }
@@ -124,9 +124,9 @@ int run_snoop_test(vx_device_h device) {
     return ret;  
   }
 
-  // send snooping request
+  // flush the caches
   std::cout << "flush the caches" << std::endl;
-  ret = vx_flush_caches(device, 0x80002000, 64);
+  ret = vx_flush_caches(device, 0x10000000, 64*8);
   if (ret != 0) {
     return ret;  
   }
@@ -181,15 +181,15 @@ int main(int argc, char *argv[]) {
 
   // run tests  
   if (0 == test || -1 == test) {
-    std::cout << "run memcpy test" << std::endl;
+    std::cout << "run memcopy test" << std::endl;
 
-    ret = run_memcpy_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
+    ret = run_memcopy_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
     if (ret != 0) {
       cleanup();
       return ret;
     }
 
-    ret = run_memcpy_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
+    ret = run_memcopy_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
     if (ret != 0) {
       cleanup();
       return ret;
