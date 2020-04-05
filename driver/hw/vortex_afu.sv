@@ -34,7 +34,9 @@ module vortex_afu #(
 );
 
 localparam AVS_RD_QUEUE_SIZE  = 16;
-localparam VX_SNOOPING_DELAY  = 300;
+
+localparam VX_SNOOP_DELAY     = 300;
+localparam VX_SNOOP_LEVELS    = 2;
 
 localparam AFU_ID_L           = 16'h0002;      // AFU ID Lower
 localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher 
@@ -42,7 +44,7 @@ localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher
 localparam CMD_TYPE_READ      = `AFU_IMAGE_CMD_TYPE_READ;
 localparam CMD_TYPE_WRITE     = `AFU_IMAGE_CMD_TYPE_WRITE;
 localparam CMD_TYPE_RUN       = `AFU_IMAGE_CMD_TYPE_RUN;
-localparam CMD_TYPE_SNOOP     = `AFU_IMAGE_CMD_TYPE_SNOOP;
+localparam CMD_TYPE_CLFLUSH   = `AFU_IMAGE_CMD_TYPE_CLFLUSH;
 
 localparam MMIO_CSR_CMD       = `AFU_IMAGE_MMIO_CSR_CMD; 
 localparam MMIO_CSR_STATUS    = `AFU_IMAGE_MMIO_CSR_STATUS;
@@ -52,13 +54,12 @@ localparam MMIO_CSR_DATA_SIZE = `AFU_IMAGE_MMIO_CSR_DATA_SIZE;
 
 logic [127:0] afu_id = `AFU_ACCEL_UUID;
 
-typedef enum logic[2:0] { 
+typedef enum logic[3:0] { 
   STATE_IDLE,
   STATE_READ,
   STATE_WRITE,
   STATE_RUN, 
-  STATE_SNOOP1,
-  STATE_SNOOP2
+  STATE_CLFLUSH
 } state_t;
 
 state_t state;
@@ -192,7 +193,7 @@ logic [31:0] cci_write_ctr;
 logic [31:0] avs_read_ctr;
 logic [31:0] avs_write_ctr;
 logic [31:0] vx_snoop_ctr;
-logic [31:0] vx_snoop_delay;
+logic [9:0]  vx_snoop_delay;
 logic        vx_reset;
 
 always_ff @(posedge clk) 
@@ -210,21 +211,21 @@ begin
       STATE_IDLE: begin             
         case (csr_cmd)
           CMD_TYPE_READ: begin     
-            $display("%t: CMD READ: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            $display("%t: STATE READ: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
             state <= STATE_READ;   
           end 
           CMD_TYPE_WRITE: begin      
-            $display("%t: CMD WRITE: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            $display("%t: STATE WRITE: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
             state <= STATE_WRITE;
           end 
           CMD_TYPE_RUN: begin        
-            $display("%t: CMD START", $time);
+            $display("%t: STATE START", $time);
             vx_reset <= 1;
             state <= STATE_RUN;                    
           end
-          CMD_TYPE_SNOOP: begin
-            $display("%t: CMD SNOOP: da=%h sz=%0d", $time, csr_mem_addr, csr_data_size);
-            state <= STATE_SNOOP1;
+          CMD_TYPE_CLFLUSH: begin
+            $display("%t: STATE CFLUSH: da=%h sz=%0d", $time, csr_mem_addr, csr_data_size);
+            state <= STATE_CLFLUSH;
           end
         endcase
       end      
@@ -250,15 +251,8 @@ begin
         end
       end
 
-      STATE_SNOOP1: begin
-        if (vx_snoop_delay >= VX_SNOOPING_DELAY) 
-        begin
-          state <= STATE_SNOOP2;
-        end
-      end
-
-      STATE_SNOOP2: begin
-        if (vx_snoop_delay >= VX_SNOOPING_DELAY) 
+      STATE_CLFLUSH: begin
+        if (vx_snoop_delay >= VX_SNOOP_DELAY) 
         begin
           state <= STATE_IDLE;
         end
@@ -320,7 +314,7 @@ begin
         end
       end
 
-      STATE_RUN: begin
+      STATE_RUN, STATE_CLFLUSH: begin
         if (vx_dram_req_read
          && !vx_dram_req_delay) 
         begin
@@ -348,15 +342,20 @@ begin
 end
 
 // Vortex DRAM requests stalling
-assign vx_dram_req_delay = !((STATE_RUN == state) 
-                          && !avs_waitrequest 
-                          && !avs_raq_full 
-                          && !avs_rdq_full);
 
-// Vortex DRAM fill response
+logic vortex_enabled;
+
 always_comb 
 begin
-  vx_dram_fill_rsp            = (STATE_RUN == state) && !avs_rdq_empty && vx_dram_fill_accept;
+  vortex_enabled = (STATE_RUN == state) || (STATE_CLFLUSH == state);
+  vx_dram_req_delay = !vortex_enabled || avs_waitrequest || avs_raq_full || avs_rdq_full;
+end
+
+// Vortex DRAM fill response
+
+always_comb 
+begin
+  vx_dram_fill_rsp            = vortex_enabled && !avs_rdq_empty && vx_dram_fill_accept;
   vx_dram_fill_rsp_addr       = (avs_raq_dout << 6);
   {>>{vx_dram_fill_rsp_data}} = avs_rdq_dout;
 end
@@ -524,31 +523,24 @@ begin
   else begin
     if (STATE_IDLE == state) 
     begin
-      vx_snoop_ctr <= 0;
+      vx_snoop_ctr   <= 0;
       vx_snoop_delay <= 0;
     end
 
     vx_snp_req <= 0;
 
-    if ((STATE_SNOOP1 == state
-      || STATE_SNOOP2 == state)
+    if ((STATE_CLFLUSH == state)
      && vx_snoop_ctr < csr_data_size
-     && vx_snp_req_delay)
+     && !vx_snp_req_delay)
     begin
-      vx_snp_req <= 1;
-      vx_snoop_ctr <= vx_snoop_ctr + 1;
+      vx_snp_req_addr <= (csr_mem_addr + vx_snoop_ctr) << 6;
+      vx_snp_req      <= 1;
+      vx_snoop_ctr    <= vx_snoop_ctr + 1;
     end
 
-    if ((vx_snoop_ctr >= csr_data_size)
-     && (vx_snoop_delay < VX_SNOOPING_DELAY))
+    if (vx_snoop_ctr == csr_data_size)
     begin 
       vx_snoop_delay <= vx_snoop_delay + 1;
-    end
-
-    if (vx_snoop_delay >= VX_SNOOPING_DELAY)
-    begin
-      vx_snoop_ctr <= 0;
-      vx_snoop_delay <= 0;
     end
   end
 end

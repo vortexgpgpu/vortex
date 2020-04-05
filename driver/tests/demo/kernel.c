@@ -16,7 +16,7 @@ void kernel_body(void* arg) {
 	unsigned i = ((wNo * _arg->num_threads) + tid) * _arg->stride;
 
 	for (unsigned j = 0; j < _arg->stride; ++j) {
-		z[i+j] = x[i+j] * y[i+j];
+		z[i+j] = x[i+j] + y[i+j];
 	}
 }
 

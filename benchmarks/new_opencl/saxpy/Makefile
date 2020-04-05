@@ -7,7 +7,7 @@ CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-error
 
 CXXFLAGS += -I$(POCLRT_PATH)/include
 
-LDFLAGS += -L$(POCLRT_PATH)/lib -L$(DRIVER_PATH)/simx -lOpenCL -lvortex
+LDFLAGS += -L$(POCLRT_PATH)/lib -L$(DRIVER_PATH)/dummy -lOpenCL -lvortex
 
 PROJECT = saxpy
 
@@ -25,7 +25,7 @@ run-fpga: $(PROJECT) kernel.pocl
 	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-ase: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	ASE_LOG=0 LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-simx: $(PROJECT) kernel.pocl   
 	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)

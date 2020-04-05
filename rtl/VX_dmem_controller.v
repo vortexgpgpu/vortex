@@ -95,6 +95,8 @@ module VX_dmem_controller (
 		.DFQQ_SIZE                    (`SDFQQ_SIZE),
 		.LLVQ_SIZE                    (`SLLVQ_SIZE),
 		.FFSQ_SIZE                    (`SFFSQ_SIZE),
+		.PRFQ_SIZE                    (`SPRFQ_SIZE),
+		.PRFQ_STRIDE                  (`SPRFQ_STRIDE),
 		.FILL_INVALIDAOR_SIZE         (`SFILL_INVALIDAOR_SIZE),
 		.SIMULATED_DRAM_LATENCY_CYCLES(`SSIMULATED_DRAM_LATENCY_CYCLES)
 		)
@@ -153,6 +155,7 @@ module VX_dmem_controller (
 		// Snoop Request
 		.snp_req               (0),
 		.snp_req_addr          (0),
+		.snp_req_delay         (),
 
 		// Snoop Forward
 		.snp_fwd               (),
@@ -177,6 +180,8 @@ module VX_dmem_controller (
 		.DFQQ_SIZE                    (`DDFQQ_SIZE),
 		.LLVQ_SIZE                    (`DLLVQ_SIZE),
 		.FFSQ_SIZE                    (`DFFSQ_SIZE),
+		.PRFQ_SIZE                    (`DPRFQ_SIZE),
+		.PRFQ_STRIDE                  (`DPRFQ_STRIDE),
 		.FILL_INVALIDAOR_SIZE         (`DFILL_INVALIDAOR_SIZE),
 		.SIMULATED_DRAM_LATENCY_CYCLES(`DSIMULATED_DRAM_LATENCY_CYCLES)
 		)
@@ -263,6 +268,8 @@ module VX_dmem_controller (
 		.DFQQ_SIZE                    (`IDFQQ_SIZE),
 		.LLVQ_SIZE                    (`ILLVQ_SIZE),
 		.FFSQ_SIZE                    (`IFFSQ_SIZE),
+		.PRFQ_SIZE                    (`IPRFQ_SIZE),
+		.PRFQ_STRIDE                  (`IPRFQ_STRIDE),
 		.FILL_INVALIDAOR_SIZE         (`IFILL_INVALIDAOR_SIZE),
 		.SIMULATED_DRAM_LATENCY_CYCLES(`ISIMULATED_DRAM_LATENCY_CYCLES)
 		)
