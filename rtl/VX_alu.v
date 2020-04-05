@@ -177,7 +177,7 @@ module VX_alu(
 
 		assign upper_immed = {in_upper_immed, {12{1'b0}}};
 
-		always @(in_alu_op or ALU_in1 or ALU_in2) begin
+		always @(*) begin
 			case(in_alu_op)
 				`ADD:        out_alu_result = $signed(ALU_in1) + $signed(ALU_in2);
 				`SUB:        out_alu_result = $signed(ALU_in1) - $signed(ALU_in2);
