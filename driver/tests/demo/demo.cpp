@@ -80,7 +80,7 @@ int run_test(vx_device_h device,
     int errors = 0;
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      int ref = i * i; 
+      int ref = i + i; 
       int cur = buf_ptr[i];
       if (cur != ref) {
         ++errors;
