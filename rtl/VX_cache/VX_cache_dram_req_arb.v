@@ -140,8 +140,8 @@ module VX_cache_dram_req_arb
 
 
 	assign dram_req               = dwb_valid || dfqq_req || pref_pop;
-	assign dram_req_write         = dwb_valid;
-	assign dram_req_read          = (dfqq_req && !dwb_valid) || pref_pop;
+	assign dram_req_write         = dwb_valid && dram_req;
+	assign dram_req_read          = ((dfqq_req && !dwb_valid) || pref_pop) && dram_req;
 	assign dram_req_addr          = (dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : (dfqq_req ? dfqq_req_addr : pref_addr)) & `BASE_ADDR_MASK;
 	assign dram_req_size          = BANK_LINE_SIZE_BYTES;
 	assign {dram_req_data}        = dwb_valid ? {per_bank_dram_wb_req_data[dwb_bank] }: 0;
