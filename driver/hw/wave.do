@@ -27,12 +27,17 @@ add wave -noupdate -label avs_raq_full /ase_top/ase_top_generic/platform_shim_cc
 add wave -noupdate -label avs_rdq_full /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/avs_rdq_full
 add wave -noupdate -label avs_raq_empty /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/avs_raq_empty
 add wave -noupdate -label avs_rdq_empty /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/avs_rdq_empty
+add wave -noupdate -label vortex_enabled /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vortex_enabled
+add wave -noupdate -label vx_reset /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/reset
+add wave -noupdate -label vx_dram_req_read /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_req_read
 add wave -noupdate -label vx_dram_req_write /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_req_write
 add wave -noupdate -label vx_dram_req_delay /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_req_delay
-add wave -noupdate -label vx_dram_req_read /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_req_read
-add wave -noupdate -label vx_reset /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/reset
+add wave -noupdate -label vx_dram_req_addr -radix hexadecimal /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_req_addr
+add wave -noupdate -label vx_draw_req_data -radix hexadecimal /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_req_data
 add wave -noupdate -label out_dram_fill_rsp /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/out_dram_fill_rsp
 add wave -noupdate -label out_dram_fill_accept /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/out_dram_fill_accept
+add wave -noupdate -label vx_draw_fill_rsp_data -radix hexadecimal /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_fill_rsp_data
+add wave -noupdate -label vx_dram_fill_rsp_addr -radix hexadecimal /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_dram_fill_rsp_addr
 add wave -noupdate -label llc_snp_req /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/llc_snp_req
 add wave -noupdate -label llc_snp_req_delay /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/llc_snp_req_delay
 add wave -noupdate -label out_break /ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/out_ebreak
@@ -45,7 +50,7 @@ add wave -noupdate -label warp_stalled {/ase_top/ase_top_generic/platform_shim_c
 add wave -noupdate -label warp_lock {/ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/genblk1/Vortex_Cluster/genblk1[0]/vortex_core/vx_front_end/vx_fetch/warp_scheduler/warp_lock}
 add wave -noupdate -label use_active {/ase_top/ase_top_generic/platform_shim_ccip_std_afu/ccip_std_afu/vortex_afu_inst/vx_soc/genblk1/Vortex_Cluster/genblk1[0]/vortex_core/vx_front_end/vx_fetch/warp_scheduler/use_active}
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 2} {66234495 ps} 0}
+WaveRestoreCursors {{Cursor 2} {360293 ps} 0}
 quietly wave cursor active 1
 configure wave -namecolwidth 195
 configure wave -valuecolwidth 100
@@ -61,4 +66,4 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits ps
 update
-WaveRestoreZoom {66041656 ps} {66406344 ps}
+WaveRestoreZoom {346453 ps} {711141 ps}

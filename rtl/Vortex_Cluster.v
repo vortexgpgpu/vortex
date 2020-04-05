@@ -230,6 +230,8 @@ module Vortex_Cluster
         .DFQQ_SIZE                    (`LLDFQQ_SIZE),
         .LLVQ_SIZE                    (`LLLLVQ_SIZE),
         .FFSQ_SIZE                    (`LLFFSQ_SIZE),
+        .PRFQ_SIZE                    (`LLPRFQ_SIZE),
+        .PRFQ_STRIDE                  (`LLPRFQ_STRIDE),
         .FILL_INVALIDAOR_SIZE         (`LLFILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(`LLSIMULATED_DRAM_LATENCY_CYCLES)
         )

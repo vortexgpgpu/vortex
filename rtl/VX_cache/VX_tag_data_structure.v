@@ -88,9 +88,9 @@ module VX_tag_data_structure
         if (reset) begin
             for (l = 0; l < `BANK_LINE_COUNT; l=l+1) begin
                 valid[l] <= 0;
-                tag  [l] <= 0;
+                // tag  [l] <= 0;
                 dirty[l] <= 0;
-                data [l] <= 0;
+                // data [l] <= 0;
             end
         end else if (!stall_bank_pipe) begin
         	if (going_to_write) begin

@@ -82,6 +82,9 @@ module VX_cache_dram_req_arb
 	wire       pref_pop;
 	wire       pref_valid;
 	wire[31:0] pref_addr;
+	
+	wire 	   dwb_valid;
+	wire       dfqq_req;
 
 	assign pref_pop = !dwb_valid && !dfqq_req && !dram_req_delay && pref_valid;
 	VX_prefetcher #(
@@ -105,10 +108,8 @@ module VX_cache_dram_req_arb
 
 		);
 
-	wire dfqq_req;
 	wire[31:0] dfqq_req_addr;
-	wire dfqq_empty;
-	wire dwb_valid;
+	wire dfqq_empty;	
 	wire dfqq_pop  = !dwb_valid && dfqq_req && !dram_req_delay; // If no dwb, and dfqq has valids, then pop
 	wire dfqq_push = (|per_bank_dram_fill_req);
 
@@ -139,8 +140,8 @@ module VX_cache_dram_req_arb
 
 
 	assign dram_req               = dwb_valid || dfqq_req || pref_pop;
-	assign dram_req_write         = dwb_valid;
-	assign dram_req_read          = (dfqq_req && !dwb_valid) || pref_pop;
+	assign dram_req_write         = dwb_valid && dram_req;
+	assign dram_req_read          = ((dfqq_req && !dwb_valid) || pref_pop) && dram_req;
 	assign dram_req_addr          = (dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : (dfqq_req ? dfqq_req_addr : pref_addr)) & `BASE_ADDR_MASK;
 	assign dram_req_size          = BANK_LINE_SIZE_BYTES;
 	assign {dram_req_data}        = dwb_valid ? {per_bank_dram_wb_req_data[dwb_bank] }: 0;
