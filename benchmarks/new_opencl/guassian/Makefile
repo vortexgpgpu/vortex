@@ -1,4 +1,4 @@
-LLVM_LIB_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops/lib)
+LLVM_PATH   ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
 POCLCC_PATH ?= $(wildcard ../compiler)
 POCLRT_PATH ?= $(wildcard ../runtime)
 DRIVER_PATH ?= $(wildcard ../../../driver/sw)
@@ -16,7 +16,7 @@ SRCS = main.cc clutils.cpp utils.cpp
 all: $(PROJECT)
 
 kernel.pocl: kernel.cl
-	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(LLVM_LIB_PATH):$(POCLCC_PATH)/lib:$(DRIVER_PATH)/simx $(POCLCC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+	LLVM_INSTALL_PATH=$(LLVM_PATH) POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(LLVM_PATH)/lib:$(POCLCC_PATH)/lib:$(DRIVER_PATH)/simx $(POCLCC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
  
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
