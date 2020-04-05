@@ -40,7 +40,16 @@ wire terminate_sim;
 wire[`NW_M1:0] icache_stage_wid;
 wire[`NT-1:0]  icache_stage_valids;
 
-assign fetch_ebreak = vortex_ebreak || terminate_sim;
+reg old_ebreak; // This should be eventually removed
+always @(posedge clk) begin
+	if (reset) begin
+		old_ebreak <= 0;
+	end else begin
+		old_ebreak <= old_ebreak || fetch_ebreak;
+	end
+end
+
+assign fetch_ebreak = vortex_ebreak || terminate_sim || old_ebreak;
 
 
 VX_wstall_inter          VX_wstall();
