@@ -25,7 +25,7 @@ run-fpga: $(PROJECT) kernel.pocl
 	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-ase: $(PROJECT) kernel.pocl   
-	ASE_LOG=0 ASE_LOG=0 LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	ASE_LOG=0 LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-simx: $(PROJECT) kernel.pocl   
 	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
