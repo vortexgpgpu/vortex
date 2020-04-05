@@ -357,8 +357,8 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
 
 // #if NUMBER_CORES != 1
   // send snoops for L2 flush
-  this->send_snoops(mem_addr, size);
-  this->wait(PIPELINE_FLUSH_LATENCY);
+  // this->send_snoops(mem_addr, size);
+  // this->wait(PIPELINE_FLUSH_LATENCY);
 // #endif
 
 }
