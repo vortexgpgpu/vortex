@@ -253,6 +253,15 @@
 `define DFFSQ_SIZE 32
 `endif
 
+// Prefetcher
+`ifndef DPRFQ_SIZE
+`define DPRFQ_SIZE 32
+`endif
+
+`ifndef DPRFQ_STRIDE
+`define DPRFQ_STRIDE 0
+`endif
+
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef DFILL_INVALIDAOR_SIZE
 `define DFILL_INVALIDAOR_SIZE 32
@@ -361,6 +370,15 @@
 `define IFFSQ_SIZE 8
 `endif
 
+// Prefetcher
+`ifndef IPRFQ_SIZE
+`define IPRFQ_SIZE 32
+`endif
+
+`ifndef IPRFQ_STRIDE
+`define IPRFQ_STRIDE 0
+`endif
+
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef IFILL_INVALIDAOR_SIZE
 `define IFILL_INVALIDAOR_SIZE 32
@@ -465,6 +483,15 @@
 // Fill Forward SNP Queue
 `ifndef SFFSQ_SIZE
 `define SFFSQ_SIZE 16
+`endif
+
+// Prefetcher
+`ifndef SPRFQ_SIZE
+`define SPRFQ_SIZE 4
+`endif
+
+`ifndef SPRFQ_STRIDE
+`define SPRFQ_STRIDE 0
 `endif
 
 // Fill Invalidator Size {Fill invalidator must be active}
@@ -572,6 +599,15 @@
 `define LLFFSQ_SIZE 32
 `endif
 
+// Prefetcher
+`ifndef LLPRFQ_SIZE
+`define LLPRFQ_SIZE 32
+`endif
+
+`ifndef LLPRFQ_STRIDE
+`define LLPRFQ_STRIDE 0
+`endif
+
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef LLFILL_INVALIDAOR_SIZE
 `define LLFILL_INVALIDAOR_SIZE 32
@@ -675,6 +711,15 @@
 // Fill Forward SNP Queue
 `ifndef L3FFSQ_SIZE
 `define L3FFSQ_SIZE 8
+`endif
+
+// Prefetcher
+`ifndef L3PRFQ_SIZE
+`define L3PRFQ_SIZE 32
+`endif
+
+`ifndef L3PRFQ_STRIDE
+`define L3PRFQ_STRIDE 0
 `endif
 
 // Fill Invalidator Size {Fill invalidator must be active}

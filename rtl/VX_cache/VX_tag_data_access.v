@@ -290,6 +290,6 @@ module VX_tag_data_access
 	assign readtag_st1e        = use_read_tag_st1e;
 	assign fill_sent           = miss_st1e;
 	assign fill_saw_dirty_st1e = real_writefill && dirty_st1e;
-	assign invalidate_line     = is_snp_st1e && miss_st1e;
+	assign invalidate_line     = snoop_hit;
 
 endmodule

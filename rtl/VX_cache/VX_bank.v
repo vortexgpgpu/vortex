@@ -106,6 +106,15 @@ module VX_bank
 );
 
 
+	reg snoop_state = 0;
+
+	always @(posedge clk) begin
+		if (reset) begin
+			snoop_state <= 0;
+		end else begin
+			snoop_state <= (snoop_state | snp_req) && ((FUNC_ID == `LLFUNC_ID) || (FUNC_ID == `L3FUNC_ID));
+		end
+	end
 
 
 	wire       snrq_pop;
@@ -504,7 +513,7 @@ module VX_bank
 	wire invalidate_fill;
 
 	// Enqueue to miss reserv if it's a valid miss
-	assign miss_add       = valid_st2 && !is_snp_st2 && miss_st2 && !mrvq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	assign miss_add       = valid_st2 && !is_snp_st2 && miss_st2 && !mrvq_full && !(should_flush && dwbq_push) && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
 	assign miss_add_pc    = pc_st2;
 	assign miss_add_addr  = addr_st2;
 	assign miss_add_data  = writeword_st2;
@@ -535,12 +544,23 @@ module VX_bank
 		.full    (cwbq_full)
 		);
 
+	wire should_flush  = snoop_state && valid_st2 && (miss_add_mem_write != `NO_MEM_WRITE) && !is_snp_st2 && !is_fill_st2;
 	// Enqueue to DWB Queue
-	wire                             dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && !dwbq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
-	wire[31:0]                       dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]} & `BASE_ADDR_MASK;
-	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0]  dwbq_req_data = readdata_st2;
+	wire                             dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2 || should_flush) && !dwbq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	wire[31:0]                       dwbq_req_addr;
 	wire                             dwbq_empty;
-	
+
+	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] dwbq_req_data;
+	if ((FUNC_ID == `LLFUNC_ID) || (FUNC_ID == `L3FUNC_ID)) begin
+		assign dwbq_req_data = (should_flush && dwbq_push) ? writeword_st2 : readdata_st2;
+		assign dwbq_req_addr = (should_flush && dwbq_push) ? (addr_st2) : ({readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]} & `BASE_ADDR_MASK);
+	end else begin
+		assign dwbq_req_data = readdata_st2;
+		assign dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]} & `BASE_ADDR_MASK;
+	end
+
+
+
     wire possible_fill = valid_st2 && miss_st2 && !dram_fill_req_queue_full && !is_snp_st2;
 	wire[31:0] fill_invalidator_addr = addr_st2 & `BASE_ADDR_MASK;
 	VX_fill_invalidator  #(
