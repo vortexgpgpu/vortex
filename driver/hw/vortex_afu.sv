@@ -194,7 +194,6 @@ logic [31:0] avs_read_ctr;
 logic [31:0] avs_write_ctr;
 logic [31:0] vx_snoop_ctr;
 logic [9:0]  vx_snoop_delay;
-logic [1:0]  vx_snoop_level;
 logic        vx_reset;
 
 always_ff @(posedge clk) 
@@ -248,13 +247,12 @@ begin
       STATE_RUN: begin
         if (vx_ebreak)
         begin
-          // TODO: Add delay stage before returning to IDLE
           state <= STATE_IDLE;
         end
       end
 
       STATE_CLFLUSH: begin
-        if (vx_snoop_level >= VX_SNOOP_LEVELS) 
+        if (vx_snoop_delay >= VX_SNOOP_DELAY) 
         begin
           state <= STATE_IDLE;
         end
@@ -521,21 +519,18 @@ begin
     vx_snp_req      <= 0;
     vx_snoop_ctr    <= 0;
     vx_snoop_delay  <= 0;
-    vx_snoop_level  <= 0;
   end
   else begin
     if (STATE_IDLE == state) 
     begin
       vx_snoop_ctr   <= 0;
       vx_snoop_delay <= 0;
-      vx_snoop_level <= 0;
     end
 
     vx_snp_req <= 0;
 
     if ((STATE_CLFLUSH == state)
      && vx_snoop_ctr < csr_data_size
-     && vx_snoop_level < VX_SNOOP_LEVELS
      && !vx_snp_req_delay)
     begin
       vx_snp_req_addr <= (csr_mem_addr + vx_snoop_ctr) << 6;
@@ -543,17 +538,9 @@ begin
       vx_snoop_ctr    <= vx_snoop_ctr + 1;
     end
 
-    if ((vx_snoop_ctr == csr_data_size)
-     && (vx_snoop_delay < VX_SNOOP_DELAY))
+    if (vx_snoop_ctr == csr_data_size)
     begin 
       vx_snoop_delay <= vx_snoop_delay + 1;
-    end
-
-    if (vx_snoop_delay == VX_SNOOP_DELAY)
-    begin
-      vx_snoop_ctr   <= 0;
-      vx_snoop_delay <= 0;
-      vx_snoop_level <= vx_snoop_level + 1;
     end
   end
 end
