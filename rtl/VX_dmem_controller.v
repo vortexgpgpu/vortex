@@ -155,7 +155,7 @@ module VX_dmem_controller (
 		// Snoop Request
 		.snp_req               (0),
 		.snp_req_addr          (0),
-		.snp_req_delay         (0),
+		.snp_req_delay         (),
 
 		// Snoop Forward
 		.snp_fwd               (),
