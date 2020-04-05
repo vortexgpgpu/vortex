@@ -507,6 +507,10 @@ module VX_bank
 		.out  ({is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , pc_st2 , inst_meta_st2                  })
 		);
 
+
+	wire should_flush;
+	wire dwbq_push;
+
 	wire cwbq_full;
 	wire dwbq_full;
 	wire ffsq_full;
@@ -544,9 +548,9 @@ module VX_bank
 		.full    (cwbq_full)
 		);
 
-	wire should_flush  = snoop_state && valid_st2 && (miss_add_mem_write != `NO_MEM_WRITE) && !is_snp_st2 && !is_fill_st2;
+	assign should_flush  = snoop_state && valid_st2 && (miss_add_mem_write != `NO_MEM_WRITE) && !is_snp_st2 && !is_fill_st2;
 	// Enqueue to DWB Queue
-	wire                             dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2 || should_flush) && !dwbq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	assign                           dwbq_push     = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2 || should_flush) && !dwbq_full && !((is_snp_st2 && valid_st2 && ffsq_full) ||((valid_st2 && !miss_st2) && cwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
 	wire[31:0]                       dwbq_req_addr;
 	wire                             dwbq_empty;
 
