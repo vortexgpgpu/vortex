@@ -1,13 +1,14 @@
-LLVM_PATH   ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
-POCLCC_PATH ?= $(wildcard ../compiler)
-POCLRT_PATH ?= $(wildcard ../runtime)
-DRIVER_PATH ?= $(wildcard ../../../driver/sw)
+RISCV_TOOL_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
+POCL_CC_PATH ?= $(wildcard ../compiler)
+POCL_RT_PATH ?= $(wildcard ../runtime)
+VORTEX_DRV_PATH ?= $(wildcard ../../../driver/sw)
+VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
 CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I$(POCLRT_PATH)/include
+CXXFLAGS += -I$(POCL_RT_PATH)/include
 
-LDFLAGS += -L$(POCLRT_PATH)/lib -L$(DRIVER_PATH)/dummy -lOpenCL -lvortex
+LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/dummy -lOpenCL -lvortex
 
 PROJECT = vecadd
 
@@ -16,22 +17,22 @@ SRCS = main.cc
 all: $(PROJECT)
 
 kernel.pocl: kernel.cl
-	LLVM_INSTALL_PATH=$(LLVM_PATH) POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(LLVM_PATH)/lib:$(POCLCC_PATH)/lib:$(DRIVER_PATH)/simx $(POCLCC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+	LLVM_INSTALL_PATH=$(RISCV_TOOL_PATH) VORTEX_RUNTIME_PATH=$(VORTEX_RT_PATH) POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib:$(VORTEX_DRV_PATH)/simx $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
  
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-fpga: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-ase: $(PROJECT) kernel.pocl   
-	ASE_LOG=0 LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	ASE_LOG=0 LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-simx: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-rtlsim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
