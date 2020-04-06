@@ -1,5 +1,6 @@
-#CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
-CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
+# CFLAGS += -std=c++11 -O3 -Wall -Wextra -pedantic -Wfatal-errors
+CFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
+# CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -pedantic -Wfatal-errors
 
 USE_MULTICORE=1
 
@@ -27,7 +28,7 @@ RTL_INCLUDE = -I../../../rtl -I../../../rtl/interfaces -I../../../rtl/cache -I..
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 #VL_FLAGS += --threads $(THREADS)
 
-VL_FLAGS += -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
+VL_FLAGS += -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN -Wno-BLKLOOPINIT
 
 # Debugigng
 #VL_FLAGS += --trace -DVL_DEBUG=1 
