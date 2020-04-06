@@ -351,6 +351,8 @@ void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
 }
 
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
+  printf("[sim] total cycles: %lld\n", this->total_cycles_);
+
   // send snoops for L1 flush
   this->send_snoops(mem_addr, size);
   this->wait(PIPELINE_FLUSH_LATENCY);
