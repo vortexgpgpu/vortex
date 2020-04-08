@@ -1,0 +1,39 @@
+use the following step to build vortex and run it on fpga on intel cloud server using OPAE. 
+This script is also present at ~/dev/runVortex
+
+## To configure quartus and opae. Run this after logging in.
+source /export/fpga/bin/setup-fpga-env fpga-pac-a10
+#########################
+## Vortex Run commands ##
+#########################
+## Synthesis
+cd ~/dev/Vortex/driver/hw/
+# Configure a Quartus build area
+afu_synth_setup -s sources.txt build_fpga
+cd build_fpga
+# Run Quartus in the vLab batch queue
+qsub-synth
+# Check if the job is submitted to the queue and running. Status should be R 
+qstat | grep tinebp
+# Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C 
+watch ‘qstat | grep tinebp’
+## Executing on FPGA
+# From the build_fpga directory acquire a fpga node
+qsub-fpga
+# Go to the directory whree qsub-synth was run above
+cd $PBS_O_WORKDIR
+# Load the image onto an FPGA
+fpgaconf vortex_afu.gbs
+# If this says Multiple ports. Then use --bus with fpgaconf. #bus info can be found by fpgainfo port
+#fpgaconf --bus 0xaf vortex_afu.gbs
+## Running the Test case 
+cd ../../sw/opae
+make clean
+make
+# For shared library
+export LD_LIBRARY_PATH=${PWD}:$LD_LIBRARY_PATH
+# Run the program
+cd ../../tests/basic
+make clean
+make
+./basic
