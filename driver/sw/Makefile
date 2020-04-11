@@ -1,9 +1,9 @@
 
 
-all: dummy
+all: stub
 
-dummy:
-	$(MAKE) -C dummy
+stub:
+	$(MAKE) -C stub
 
 opae:
 	$(MAKE) -C opae
