@@ -40,7 +40,7 @@ kernel.elf: $(SRCS)
 	$(VX_CC) $(VX_CFLAGS) $(VX_STR) $(VX_FIO) $(VX_NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_SRCS) -I$(VX_RT_PATH) -o kernel.elf
 
 $(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../sw/dummy -lvortex -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../sw/stub -lvortex -o $@
 
 run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../sw/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16

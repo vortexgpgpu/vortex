@@ -8,7 +8,7 @@ CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-error
 
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 
-LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/dummy -lOpenCL -lvortex
+LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
 
 PROJECT = guassian
 
