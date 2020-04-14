@@ -94,10 +94,9 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
   cl_event writeEvent, kernelEvent, readEvent;
   float writeTime = 0, readTime = 0, kernelTime = 0;
   float writeMB = 0, readMB = 0;
-
-  gaussianElim_program =
-      cl_compileProgram((char *)"gaussianElim_kernels.cl", NULL);
-
+  
+  gaussianElim_program = cl_compileProgram((char *)"gaussianElim_kernels.cl", NULL);
+  
   fan1_kernel = clCreateKernel(gaussianElim_program, "Fan1", &status);
   status = cl_errChk(status, (char *)"Error Creating Fan1 kernel", true);
   if (status)

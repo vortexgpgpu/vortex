@@ -48,7 +48,7 @@
 #define CL_CHECK_ERR(_expr)                                                    \
   ({                                                                           \
     cl_int _err = CL_INVALID_VALUE;                                            \
-    typeof(_expr) _ret = _expr;                                                \
+    decltype(_expr) _ret = _expr;                                                \
     if (_err != CL_SUCCESS) {                                                  \
       fprintf(stderr, "OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
       abort();                                                                 \
@@ -60,6 +60,30 @@ void pfn_notify(const char *errinfo, const void *private_info, size_t cb,
                 void *user_data) {
   fprintf(stderr, "OpenCL Error (via pfn_notify): %s\n", errinfo);
 }
+
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
+
+uint8_t *kernel_bin = NULL;
+
 // inlcude pocl float to half conversions
 typedef union {
   int32_t i;
@@ -151,6 +175,8 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 
   if (context != 0)
     clReleaseContext(context);
+
+  if (kernel_bin) free(kernel_bin);
 }
 
 int main(int argc, char **argv) {
@@ -158,8 +184,13 @@ int main(int argc, char **argv) {
 
   cl_platform_id platform_id;
   cl_device_id device_id;
-  size_t binary_size;
+  size_t kernel_size;
+  cl_int binary_status = 0;
   int i;
+
+  // read kernel binary from file  
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
 
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -178,7 +209,8 @@ int main(int argc, char **argv) {
   //  If that is not available, then create the program from source
   //  and store the binary for future use.
   std::cout << "Attempting to create program from binary..." << std::endl;
-  cl_program program = clCreateProgramWithBuiltInKernels(context, 1, &device_id, "sfilter", NULL);
+  cl_program program = CL_CHECK_ERR(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
   if (program == NULL) {
     std::cerr << "Failed to write program binary" << std::endl;
     Cleanup(context, queue, program, kernel, memObjects);

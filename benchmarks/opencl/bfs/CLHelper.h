@@ -39,6 +39,27 @@ string kernel_names[2] = {"BFS_1", "BFS_2"};
 int work_group_size = 512;
 int device_id_inused = 0; // deviced id used (default : 0)
 
+int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
+
 /*
  * Converts the contents of a file into a string
  */
@@ -222,14 +243,25 @@ free(allPlatforms);*/
   const char * source    = source_str.c_str();
   size_t sourceSize[]    = { source_str.length() };*/
 
-  oclHandles.program = clCreateProgramWithBuiltInKernels(
-      oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED],
-      "BFS_1;BFS_2", &resultCL);
+  //oclHandles.program = clCreateProgramWithBuiltInKernels(
+  //    oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED],
+  //   "BFS_1;BFS_2", &resultCL);
   /*oclHandles.program = clCreateProgramWithSource(oclHandles.context,
                                                   1,
                                                   &source,
                                                   sourceSize,
                                                   &resultCL);*/
+  // read kernel binary from file  
+  uint8_t *kernel_bin = NULL;
+  size_t kernel_size;
+  cl_int binary_status = 0;
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    std::abort();
+
+ oclHandles.program = clCreateProgramWithBinary(
+    oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED], &kernel_size, &kernel_bin, &binary_status, &resultCL);
+  free(kernel_bin);
+
   if ((resultCL != CL_SUCCESS) || (oclHandles.program == NULL))
     throw(string("InitCL()::Error: Loading Binary into cl_program. "
                  "(clCreateProgramWithBinary)"));
