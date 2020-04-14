@@ -4,7 +4,7 @@ INCLUDE = -I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterfa
 
 SINGLE_CORE = Vortex.v
 
-MULTI_CORE = Vortex_SOC.v
+MULTI_CORE = Vortex_Socket.v
 
 EXE += --exe ./simulate/test_bench.cpp ./simulate/simulator.cpp
 
@@ -27,7 +27,7 @@ MAKECPP += (cd obj_dir && make -j -f VVortex.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_
 
 MAKECPPRel += (cd obj_dir && make -j -f VVortex.mk)
 
-MAKEMULTICPP += (cd obj_dir && make -j -f VVortex_SOC.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+MAKEMULTICPP += (cd obj_dir && make -j -f VVortex_Socket.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
@@ -76,7 +76,7 @@ run: w
 	(cd obj_dir && ./VVortex)
 
 run-multicore: multicore
-	(cd obj_dir && ./VVortex_SOC)
+	(cd obj_dir && ./VVortex_Socket)
 
 runRel: wRel
 	(cd obj_dir && ./VVortex)
