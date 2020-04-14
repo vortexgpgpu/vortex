@@ -1,4 +1,4 @@
-set search_path			[concat /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_db/ /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_hard_db/ ../rtl/ ../rtl/interfaces ../rtl/pipe_regs ../rtl/shared_memory ../rtl/cache ../models/memory/cln28hpm/2d_hardmacro_db]
+set search_path			[concat /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_db/ /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_hard_db/ ../../rtl/ ../../rtl/interfaces ../../rtl/pipe_regs ../../rtl/shared_memory ../../rtl/cache ../../models/memory/cln28hpm/2d_hardmacro_db]
 set link_library		[concat * sc12mc_cln28hpm_base_ulvt_c35_ssg_typical_max_0p81v_m40c.db rf2_32x128_wm1_ss_0p81v_0p81v_m40c.db rf2_256x128_wm1_ss_0p81v_0p81v_m40c.db rf2_256x19_wm0_ss_0p81v_0p81v_m40c.db rf2_128x128_wm1_ss_0p81v_0p81v_m40c.db dw_foundation.sldb]
 set symbol_library		{}
 set target_library		[concat sc12mc_cln28hpm_base_ulvt_c35_ssg_typical_max_0p81v_m40c.db]

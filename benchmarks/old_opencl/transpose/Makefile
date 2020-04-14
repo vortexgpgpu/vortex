@@ -18,9 +18,8 @@ VX_SRCS += $(VX_RT_PATH)/io/vx_io.s $(VX_RT_PATH)/io/vx_io.c
 VX_SRCS += $(VX_RT_PATH)/fileio/fileio.s
 VX_SRCS += $(VX_RT_PATH)/tests/tests.c
 VX_SRCS += $(VX_RT_PATH)/vx_api/vx_api.c
-VX_SRCS += $(VX_STR) $(VX_FIO) $(VX_NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST)
 
-VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/mains/vortex_link.ld
+VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/startup/vx_link.ld
 
 CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32 
 CXXFLAGS += -ffreestanding # program may not begin at main()

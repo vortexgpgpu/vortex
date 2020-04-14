@@ -1,6 +1,6 @@
 PROJECT = VX_d_cache
 TOP_LEVEL_ENTITY = VX_d_cache
-SRC_FILE = ../VX_d_cache.v
+SRC_FILE = ../../../rtl/cache/VX_d_cache.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family

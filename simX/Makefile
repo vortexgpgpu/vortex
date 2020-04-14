@@ -8,7 +8,7 @@ CXXFLAGS ?= -std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -DUSE_DEBUG=3 -DPRINT_A
 LIB_OBJS=simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
 
 
-INCLUDE=-I. -I../old_rtl -I../old_rtl/interfaces -I../old_rtl/cache -I../old_rtl/shared_memory -Isimulate
+INCLUDE=-I. -I../hw/old_rtl -I../hw/old_rtl/interfaces -I../hw/old_rtl/cache -I../hw/old_rtl/shared_memory
 FILE=cache_simX.v
 COMP=--compiler gcc
 LIB=

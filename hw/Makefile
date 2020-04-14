@@ -1,12 +1,12 @@
 all: RUNFILE
 
-INCLUDE = -I. -Ishared_memory -Icache -IVX_cache -IVX_cache/interfaces -Iinterfaces/ -Ipipe_regs/ -Icompat/ -Isimulate
+INCLUDE = -I./rtl/ -I./rtl/shared_memory -I./rtl/cache -I./rtl/generic_cache -I./rtl/generic_cache/interfaces -I./rtl/interfaces/ -I./rtl/pipe_regs/ -I./rtl/compat/ -I./rtl/simulate
 
 SINGLE_CORE = Vortex.v
 
 MULTI_CORE = Vortex_Socket.v
 
-EXE += --exe ./simulate/test_bench.cpp ./simulate/simulator.cpp
+EXE += --exe ./simulate/testbench.cpp ./simulate/simulator.cpp
 
 VF += -compiler gcc --language 1800-2009
 

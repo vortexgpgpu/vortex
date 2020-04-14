@@ -26,9 +26,9 @@ base=${name%.*}
 
 . "$filename"
 
-make -C rtl build_config
+make -C hw build_config
 make -C runtime build_config
-make -C driver/sw/rtlsim
+make -C driver/rtlsim
 
 for test_name in ${test_names[@]}; do
 
