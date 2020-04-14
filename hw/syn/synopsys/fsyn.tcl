@@ -1,4 +1,4 @@
-set search_path			[concat ../models/memory/cln28hpm/rf2_128x128_wm1 ../models/memory/cln28hpm/rf2_256x128_wm1 ../models/memory/cln28hpm/rf2_256_19_wm0 ../models/memory/cln28hpm/rf2_32x128_wm1  ../rtl/ ../rtl/interfaces ../rtl/pipe_regs ../rtl/shared_memory ../rtl/cache]
+set search_path			[concat ../../models/memory/cln28hpm/rf2_128x128_wm1 ../../models/memory/cln28hpm/rf2_256x128_wm1 ../../models/memory/cln28hpm/rf2_256_19_wm0 ../../models/memory/cln28hpm/rf2_32x128_wm1  ../../rtl/ ../../rtl/interfaces ../../rtl/pipe_regs ../../rtl/shared_memory ../../rtl/cache]
 set link_library		[concat NanGate_15nm_OCL.db]
 set symbol_library		{}
 set target_library		[concat NanGate_15nm_OCL.db]

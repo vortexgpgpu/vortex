@@ -3,7 +3,7 @@ TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
 SYSROOT ?= $(TOOLCHAIN_PATH)/riscv32-unknown-elf
 POCL_CC_PATH ?= $(realpath ../compiler)
 POCL_RT_PATH ?= $(realpath ../runtime)
-VORTEX_DRV_PATH ?= $(realpath ../../../driver/sw)
+VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
 CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-errors

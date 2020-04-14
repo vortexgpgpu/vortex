@@ -20,13 +20,13 @@ print('Custom params:', ', '.join(['='.join(x) for x in defines.items()]))
 parser = argparse.ArgumentParser()
 parser.add_argument('--outc', default='none', help='Output C header')
 parser.add_argument('--outv', default='none', help='Output Verilog header')
-parser.add_argument('--rtl_locations', action='store_true', help='use outc and outv for rtl and rtl/simulate')
+parser.add_argument('--rtl_locations', action='store_true', help='use outc and outv for rtl and verilator')
 
 args = parser.parse_args()
 
 if args.rtl_locations:
     args.outc = path.join(rtl_root, 'simulate/VX_define.h')
-    args.outv = path.join(rtl_root, 'VX_define_synth.v')
+    args.outv = path.join(rtl_root, 'rtl/VX_define_synth.v')
 
 if args.outc == 'none' and args.outv == 'none':
     print('Warning: not emitting any files. Specify arguments')
@@ -100,7 +100,7 @@ if args.outc != 'none':
 
 // Translated from VX_define.v:
 '''[1:].format(date=datetime.now()), file=f)
-        with open(path.join(rtl_root, 'VX_define.v'), 'r') as r:
+        with open(path.join(rtl_root, 'rtl/VX_define.v'), 'r') as r:
             for line in r:
                 if in_expansion:
                     f.write(post_process_line(line))

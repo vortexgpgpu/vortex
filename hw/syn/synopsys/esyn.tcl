@@ -1,5 +1,5 @@
-#set search_path		[concat /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_db/ /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_hard_db/ ../rtl/ ../rtl/interfaces ../rtl/pipe_regs ../rtl/shared_memory ../rtl/cache ../models/memory/cln28hpm/2d_hardmacro_db]
-set search_path			[concat ../rtl/ ../rtl/interfaces ../rtl/pipe_regs ../rtl/shared_memory ../rtl/cache ../models/memory/cln28hpm/2d_hardmacro_db]
+#set search_path		[concat /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_db/ /nethome/dshim8/Desktop/GTCAD-3DPKG-v3/example/tech/cln28hpm/2d_hard_db/ ../../rtl/ ../../rtl/interfaces ../../rtl/pipe_regs ../../rtl/shared_memory ../../rtl/cache ../../models/memory/cln28hpm/2d_hardmacro_db]
+set search_path			[concat ../../rtl/ ../../rtl/interfaces ../../rtl/pipe_regs ../../rtl/shared_memory ../../rtl/cache ../../models/memory/cln28hpm/2d_hardmacro_db]
 set link_library		[concat ./NanGate_15nm_OCL.db]
 set symbol_library		{}
 set target_library		[concat ./NanGate_15nm_OCL.db]

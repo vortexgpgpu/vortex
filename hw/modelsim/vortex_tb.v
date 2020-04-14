@@ -78,7 +78,7 @@ reg[31:0]  io_data;
 	// Rsp
 	reg [31:0]  i_m_readdata_i[`ICACHE_BANKS - 1:0][`ICACHE_NUM_WORDS_PER_BLOCK-1:0];
 	reg         i_m_ready_i;
-reg         out_ebreak;
+    reg         out_ebreak;
 
 
 	reg[31:0] hi;
@@ -87,9 +87,7 @@ reg         out_ebreak;
 
 	initial begin
 		// $fdumpfile("vortex1.vcd");
-		load_file("../../runtime/mains/simple/vx_simple_main.hex");
-		// load_file("../../emulator/riscv_tests/rv32ui-p-add.hex");
-		//load_file("../../kernel/vortex_test.hex");
+		load_file("../../runtime/tests/simple/vx_simple_main.hex");
 		$dumpvars(0, vortex_tb);
 		reset = 1;
 		clk = 0;

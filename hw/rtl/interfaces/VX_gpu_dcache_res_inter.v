@@ -1,6 +1,6 @@
 
 
-`include "../VX_cache/VX_cache_config.v"
+`include "../generic_cache/VX_cache_config.v"
 
 `ifndef VX_GPU_DCACHE_RES
 

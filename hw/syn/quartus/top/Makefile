@@ -1,6 +1,6 @@
 PROJECT = Vortex
 TOP_LEVEL_ENTITY = Vortex_Socket
-SRC_FILE = ../Vortex.v
+SRC_FILE = ../../../rtl/Vortex.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 QUARTUS_ROOT ?= /tools/reconfig/intel/18.0
@@ -57,7 +57,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc vortex.sdc -inc "..;../interfaces;../pipe_regs;../cache;../VX_cache;../shared_memory;../compat"
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc vortex.sdc -inc "..;../interfaces;../pipe_regs;../cache;../generic_cache;../shared_memory;../compat"
 	
 syn.chg:
 	$(STAMP) syn.chg

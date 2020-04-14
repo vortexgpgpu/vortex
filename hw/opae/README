@@ -7,7 +7,7 @@ source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 ## Vortex Run commands ##
 #########################
 ## Synthesis
-cd ~/dev/Vortex/driver/hw/
+cd /driver/hw/
 # Configure a Quartus build area
 afu_synth_setup -s sources.txt build_fpga
 cd build_fpga
@@ -27,13 +27,13 @@ fpgaconf vortex_afu.gbs
 # If this says Multiple ports. Then use --bus with fpgaconf. #bus info can be found by fpgainfo port
 #fpgaconf --bus 0xaf vortex_afu.gbs
 ## Running the Test case 
-cd ../../sw/opae
+cd /driver/opae
 make clean
 make
 # For shared library
 export LD_LIBRARY_PATH=${PWD}:$LD_LIBRARY_PATH
 # Run the program
-cd ../../tests/basic
+cd /driver/tests/basic
 make clean
 make
 ./basic
