@@ -14,7 +14,7 @@ vortex_afu.json
 ../../rtl/VX_define_synth.v
 ../../rtl/VX_define.v
 ../../rtl/VX_cache/VX_cache_config.v
-../../rtl/Vortex_SOC.v
+../../rtl/Vortex_Socket.v
 ../../rtl/Vortex_Cluster.v
 ../../rtl/Vortex.v
 ../../rtl/VX_front_end.v

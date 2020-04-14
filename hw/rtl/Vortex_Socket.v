@@ -1,7 +1,7 @@
 `include "VX_define.v"
 `include "VX_cache_config.v"
 
-module Vortex_SOC (
+module Vortex_Socket (
 
     // Clock
     input  wire             clk,

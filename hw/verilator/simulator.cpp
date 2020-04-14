@@ -9,7 +9,7 @@ Simulator::Simulator(RAM *ram)
   ram_ = ram;
 
 #ifdef USE_MULTICORE
-  vortex_ = new VVortex_SOC();
+  vortex_ = new VVortex_Socket();
 #else
   vortex_ = new VVortex();
 #endif

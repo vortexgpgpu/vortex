@@ -1,5 +1,5 @@
 PROJECT = Vortex
-TOP_LEVEL_ENTITY = Vortex_SOC
+TOP_LEVEL_ENTITY = Vortex_Socket
 SRC_FILE = ../Vortex.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 

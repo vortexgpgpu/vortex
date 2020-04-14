@@ -547,7 +547,7 @@ end
 
 // Vortex binding /////////////////////////////////////////////////////////////
 
-Vortex_SOC #() vx_soc (
+Vortex_Socket #() vx_socket (
   .clk                    (clk),
   .reset                  (SoftReset || vx_reset),
 

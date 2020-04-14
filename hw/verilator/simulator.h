@@ -1,8 +1,8 @@
 #pragma once
 
 #ifdef USE_MULTICORE
-#include "VVortex_SOC.h"
-#include "VVortex_SOC__Syms.h"
+#include "VVortex_Socket.h"
+#include "VVortex_Socket__Syms.h"
 #else
 #include "VVortex.h"
 #include "VVortex__Syms.h"
@@ -63,7 +63,7 @@ private:
   std::vector<dram_req_t> I_dram_req_vec_;
   RAM *ram_;
 #ifdef USE_MULTICORE
-  VVortex_SOC *vortex_;
+  VVortex_Socket *vortex_;
 #else
   VVortex *vortex_;
 #endif

@@ -14,7 +14,7 @@ LDFLAGS += -shared -pthread
 
 ifdef USE_MULTICORE
 	CFLAGS += -DUSE_MULTICORE
-	RTL_TOP = Vortex_SOC
+	RTL_TOP = Vortex_Socket
 else
     VL_FLAGS += -DSINGLE_CORE_BENCH
 	RTL_TOP = Vortex
