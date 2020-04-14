@@ -55,28 +55,6 @@ static cl_device_type device_type;
 static cl_device_id *device_list;
 static cl_int num_devices;
 
-
-static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
-  if (nullptr == filename || nullptr == data || 0 == size)
-    return -1;
-
-  FILE* fp = fopen(filename, "r");
-  if (NULL == fp) {
-    fprintf(stderr, "Failed to load kernel.");
-    return -1;
-  }
-  fseek(fp , 0 , SEEK_END);
-  long fsize = ftell(fp);
-  rewind(fp);
-
-  *data = (uint8_t*)malloc(fsize);
-  *size = fread(*data, 1, fsize, fp);
-  
-  fclose(fp);
-  
-  return 0;
-}
-
 static int initialize(int use_gpu) {
   cl_int result;
   size_t size;
@@ -169,9 +147,27 @@ float *feature_d;
 float *clusters_d;
 float *center_d;
 
-uint8_t* kernel_bin = NULL;
-size_t kernel_size = 0;
-cl_int binary_status = 0;
+	
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
 
 
 int allocate(int n_points, int n_features, int n_clusters, float **feature) {
@@ -197,18 +193,11 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature) {
   if (initialize(use_gpu))
     return -1;
 
-  // Load Kernel
-  if (read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size)) {
-    return -1;
-  }
-
   // compile kernel
   cl_int err = 0;
   //const char *slist[2] = {source, 0};
   //cl_program prog = clCreateProgramWithSource(context, 1, slist, NULL, &err);
-  cl_program prog = clCreateProgramWithBinary(
-    context, 1, device_list, &kernel_size, &kernel_bin, &binary_status, &err);
-  // cl_program prog = clCreateProgramWithBuiltInKernels(context, 1, device_list, "kmeans_kernel_c;kmeans_swap", &err);       
+  cl_program prog = clCreateProgramWithBuiltInKernels(context, 1, device_list, "kmeans_kernel_c;kmeans_swap", &err);       
   if (err != CL_SUCCESS) {
     printf("ERROR: clCreateProgramWithSource() => %d\n", err);
     return -1;
@@ -314,7 +303,6 @@ void deallocateMemory() {
   clReleaseMemObject(d_feature_swap);
   clReleaseMemObject(d_cluster);
   clReleaseMemObject(d_membership);
-  if (kernel_bin) free(kernel_bin);
   free(membership_OCL);
 }
 

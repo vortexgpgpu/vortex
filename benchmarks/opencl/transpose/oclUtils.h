@@ -17,7 +17,7 @@
 // *********************************************************************
 
 // Common headers:  Cross-API utililties and OpenCL header
-#include <shrUtils.h>
+#include "shrUtils.h"
 
 // All OpenCL headers
 #if defined (__APPLE__) || defined(MACOSX)
