@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_execute_unit (
 	input wire               clk,
@@ -18,8 +18,8 @@ module VX_execute_unit (
 	output wire out_delay
 );
 
-	wire[`NT_M1:0][31:0] in_a_reg_data;
-	wire[`NT_M1:0][31:0] in_b_reg_data;
+	wire[`NUM_THREADS-1:0][31:0] in_a_reg_data;
+	wire[`NUM_THREADS-1:0][31:0] in_b_reg_data;
 	wire[4:0]            in_alu_op;
 	wire                 in_rs2_src;
 	wire[31:0]           in_itype_immed;
@@ -41,11 +41,11 @@ module VX_execute_unit (
 	assign in_curr_PC     = VX_exec_unit_req.curr_PC;
 
 
-	wire[`NT_M1:0][31:0]  alu_result;
-	wire[`NT_M1:0]  alu_stall;
+	wire[`NUM_THREADS-1:0][31:0]  alu_result;
+	wire[`NUM_THREADS-1:0]  alu_stall;
 	genvar index_out_reg;
 	generate
-		for (index_out_reg = 0; index_out_reg < `NT; index_out_reg = index_out_reg + 1) begin : alu_defs
+		for (index_out_reg = 0; index_out_reg < `NUM_THREADS; index_out_reg = index_out_reg + 1) begin : alu_defs
 			VX_alu vx_alu(
 				.clk(clk),
 				.reset(reset),
@@ -69,9 +69,9 @@ module VX_execute_unit (
 	assign out_delay = no_slot_exec || internal_stall;
 
 
-	wire [$clog2(`NT)-1:0] jal_branch_use_index;
+	wire [$clog2(`NUM_THREADS)-1:0] jal_branch_use_index;
 	wire                   jal_branch_found_valid;
-	VX_generic_priority_encoder #(.N(`NT)) choose_alu_result(
+	VX_generic_priority_encoder #(.N(`NUM_THREADS)) choose_alu_result(
 		.valids(VX_exec_unit_req.valid),
 		.index (jal_branch_use_index),
 		.found (jal_branch_found_valid)
@@ -95,10 +95,10 @@ module VX_execute_unit (
 	end
 
 
-	wire[`NT_M1:0][31:0] duplicate_PC_data;
+	wire[`NUM_THREADS-1:0][31:0] duplicate_PC_data;
 	genvar i;
 	generate
-		for (i = 0; i < `NT; i=i+1) begin : pc_data_setup
+		for (i = 0; i < `NUM_THREADS; i=i+1) begin : pc_data_setup
 			assign duplicate_PC_data[i] = VX_exec_unit_req.PC_next;
 		end
 	endgenerate
@@ -113,7 +113,7 @@ module VX_execute_unit (
 	// Actual Writeback
 	assign VX_inst_exec_wb.rd          = VX_exec_unit_req.rd;
 	assign VX_inst_exec_wb.wb          = VX_exec_unit_req.wb;
-	assign VX_inst_exec_wb.wb_valid    = VX_exec_unit_req.valid & {`NT{!internal_stall}};
+	assign VX_inst_exec_wb.wb_valid    = VX_exec_unit_req.valid & {`NUM_THREADS{!internal_stall}};
 	assign VX_inst_exec_wb.wb_warp_num = VX_exec_unit_req.warp_num;
 	assign VX_inst_exec_wb.alu_result  = VX_exec_unit_req.jal ? duplicate_PC_data : alu_result;
 
@@ -141,7 +141,7 @@ module VX_execute_unit (
 	// 	.out  ({VX_inst_exec_wb.rd     , VX_inst_exec_wb.wb     , VX_inst_exec_wb.wb_valid     , VX_inst_exec_wb.wb_warp_num     , VX_inst_exec_wb.alu_result     , VX_inst_exec_wb.exec_wb_pc     })
 	// 	);
 
-	VX_generic_register #(.N(33 + `NW_M1 + 1)) jal_reg(
+	VX_generic_register #(.N(33 + `NW_BITS-1 + 1)) jal_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(zero),
@@ -150,7 +150,7 @@ module VX_execute_unit (
 		.out  ({VX_jal_rsp.jal     , VX_jal_rsp.jal_dest     , VX_jal_rsp.jal_warp_num})
 		);
 
-	VX_generic_register #(.N(34 + `NW_M1 + 1)) branch_reg(
+	VX_generic_register #(.N(34 + `NW_BITS-1 + 1)) branch_reg(
 		.clk  (clk),
 		.reset(reset),
 		.stall(zero),

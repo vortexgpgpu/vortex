@@ -2,7 +2,7 @@
 //        Also add a bit about wheter the "Way ID" is valid / being held or if it is just default
 //        Also make sure all possible output states are transmitted back to the bank correctly
 
-// `include "VX_define.v"
+// `include "VX_define.vh"
 module cache_set(clk,
            rst,
            // These next 4 are possible modes that the Set could be in, I am making them 4 different variables for indexing purposes
@@ -94,7 +94,7 @@ module cache_set(clk,
           readdata <= data[3];
         end
       end else if (access) begin 
-      //tag[`NT_M1:0] <= i_p_addr[`NT_M1:0][13:12]; 
+      //tag[`NUM_THREADS-1:0] <= i_p_addr[`NUM_THREADS-1:0][13:12]; 
         counter <= ((counter + 1) ^ 3'b100); // Counter determining which to evict in the event of miss only increment when miss !!! NEED TO FIX LOGIC
         // Hit in First Column
         if (tag[0] == o_tag && valid[0]) begin 

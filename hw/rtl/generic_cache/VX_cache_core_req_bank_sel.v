@@ -1,5 +1,5 @@
 
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_cache_core_req_bank_sel
 	#(

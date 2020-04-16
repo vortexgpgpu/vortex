@@ -16,7 +16,7 @@ export V_DCACHE_SIZE_BYTES={dcachek}
 export V_ICACHE_SIZE_BYTES={icachek}
 
 # L2 Cache size
-export V_LLCACHE_SIZE_BYTES={l2k}
+export V_L2CACHE_SIZE_BYTES={l2k}
 
 {codegen}
 

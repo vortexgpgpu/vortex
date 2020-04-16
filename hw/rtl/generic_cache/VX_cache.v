@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_cache
     #(
@@ -66,7 +66,7 @@ module VX_cache
     // Req meta
     input wire [4:0]                         core_req_rd,
     input wire [NUMBER_REQUESTS-1:0][1:0]    core_req_wb,
-    input wire [`NW_M1:0]                    core_req_warp_num,
+    input wire [`NW_BITS-1:0]                    core_req_warp_num,
     input wire [31:0]                        core_req_pc,
     output wire                              delay_req,
 
@@ -75,7 +75,7 @@ module VX_cache
     output wire [NUMBER_REQUESTS-1:0]        core_wb_valid,
     output wire [4:0]                        core_wb_req_rd,
     output wire [1:0]                        core_wb_req_wb,
-    output wire [`NW_M1:0]                   core_wb_warp_num,
+    output wire [`NW_BITS-1:0]                   core_wb_warp_num,
     output wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] core_wb_readdata,
     output wire [NUMBER_REQUESTS-1:0][31:0]  core_wb_pc,
     output wire [NUMBER_REQUESTS-1:0][31:0]  core_wb_address,
@@ -84,7 +84,7 @@ module VX_cache
     // Dram Fill Response
     input  wire                              dram_fill_rsp,
     input  wire [31:0]                       dram_fill_rsp_addr,
-    input  wire [`IBANK_LINE_SIZE_RNG][31:0] dram_fill_rsp_data,
+    input  wire [`IBANK_LINE_WORDS-1:0][31:0] dram_fill_rsp_data,
     output wire                              dram_fill_accept,
 
     // Dram request
@@ -93,7 +93,7 @@ module VX_cache
     output wire                              dram_req_read,
     output wire [31:0]                       dram_req_addr,
     output wire [31:0]                       dram_req_size,
-    output wire [`IBANK_LINE_SIZE_RNG][31:0] dram_req_data,
+    output wire [`IBANK_LINE_WORDS-1:0][31:0] dram_req_data,
     output wire                              dram_req_because_of_wb,
     input  wire                              dram_req_delay,
 
@@ -119,7 +119,7 @@ module VX_cache
     wire [NUMBER_BANKS-1:0][`vx_clog2(NUMBER_REQUESTS)-1:0]  per_bank_wb_tid;
     wire [NUMBER_BANKS-1:0][4:0]                             per_bank_wb_rd;
     wire [NUMBER_BANKS-1:0][1:0]                             per_bank_wb_wb;
-    wire [NUMBER_BANKS-1:0][`NW_M1:0]                        per_bank_wb_warp_num;
+    wire [NUMBER_BANKS-1:0][`NW_BITS-1:0]                        per_bank_wb_warp_num;
     wire [NUMBER_BANKS-1:0][`WORD_SIZE_RNG]                  per_bank_wb_data;
     wire [NUMBER_BANKS-1:0][31:0]                            per_bank_wb_pc;
     wire [NUMBER_BANKS-1:0][31:0]                            per_bank_wb_address;
@@ -134,7 +134,7 @@ module VX_cache
     wire[NUMBER_BANKS-1:0]                                   per_bank_dram_wb_req;
     wire[NUMBER_BANKS-1:0]                                   per_bank_dram_because_of_snp;
     wire[NUMBER_BANKS-1:0][31:0]                             per_bank_dram_wb_req_addr;
-    wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] per_bank_dram_wb_req_data;
+    wire[NUMBER_BANKS-1:0][`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] per_bank_dram_wb_req_data;
 
     wire[NUMBER_BANKS-1:0]                                   per_bank_reqq_full;
 
@@ -287,7 +287,7 @@ module VX_cache
             wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] curr_bank_writedata;
             wire [4:0]                             curr_bank_rd;
             wire [NUMBER_REQUESTS-1:0][1:0]        curr_bank_wb;
-            wire [`NW_M1:0]                        curr_bank_warp_num;
+            wire [`NW_BITS-1:0]                        curr_bank_warp_num;
             wire [NUMBER_REQUESTS-1:0][2:0]        curr_bank_mem_read;  
             wire [NUMBER_REQUESTS-1:0][2:0]        curr_bank_mem_write;
             wire [31:0]                            curr_bank_pc;
@@ -298,13 +298,13 @@ module VX_cache
             wire [31:0]                            curr_bank_wb_pc;
             wire [4:0]                             curr_bank_wb_rd;
             wire [1:0]                             curr_bank_wb_wb;
-            wire [`NW_M1:0]                        curr_bank_wb_warp_num;
+            wire [`NW_BITS-1:0]                        curr_bank_wb_warp_num;
             wire [`WORD_SIZE_RNG]                  curr_bank_wb_data;
             wire [31:0]                            curr_bank_wb_address;
 
             wire                                   curr_bank_dram_fill_rsp;
             wire [31:0]                            curr_bank_dram_fill_rsp_addr;
-            wire [`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0]       curr_bank_dram_fill_rsp_data;
+            wire [`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0]       curr_bank_dram_fill_rsp_data;
             wire                                   curr_bank_dram_fill_accept;
 
             wire                                   curr_bank_dfqq_full;
@@ -316,7 +316,7 @@ module VX_cache
             wire                                   curr_bank_dram_wb_queue_pop;
             wire                                   curr_bank_dram_wb_req;
             wire[31:0]                             curr_bank_dram_wb_req_addr;
-            wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] curr_bank_dram_wb_req_data;
+            wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] curr_bank_dram_wb_req_data;
 
             wire                                   curr_bank_snp_req;
             wire[31:0]                             curr_bank_snp_req_addr;

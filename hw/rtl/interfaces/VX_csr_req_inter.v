@@ -1,5 +1,5 @@
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 `ifndef VX_CSR_REQ
 
@@ -7,8 +7,8 @@
 
 interface VX_csr_req_inter ();
 
-	wire[`NT_M1:0] valid;
-	wire[`NW_M1:0] warp_num;
+	wire[`NUM_THREADS-1:0] valid;
+	wire[`NW_BITS-1:0] warp_num;
 	wire[4:0]      rd;
 	wire[1:0]      wb;
 	wire[4:0]      alu_op;

@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_dcache_llv_resp_bank_sel
 	#(
@@ -48,13 +48,13 @@ module VX_dcache_llv_resp_bank_sel
     output reg [NUMBER_BANKS-1:0]                                   per_bank_llvq_pop,
     input  wire[NUMBER_BANKS-1:0]                                   per_bank_llvq_valid,
     input  wire[NUMBER_BANKS-1:0][31:0]                             per_bank_llvq_res_addr,
-    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][31:0]        per_bank_llvq_res_data,
+    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_WORDS-1:0][31:0]        per_bank_llvq_res_data,
  	input  wire[NUMBER_BANKS-1:0][`vx_clog2(NUMBER_REQUESTS)-1:0]  per_bank_llvq_res_tid,
  
    	input  wire                             llvq_pop,
     output reg[NUMBER_REQUESTS-1:0]         llvq_valid,
     output reg[NUMBER_REQUESTS-1:0][31:0]   llvq_res_addr,
-    output reg[NUMBER_REQUESTS-1:0][`BANK_LINE_SIZE_RNG][31:0] llvq_res_data
+    output reg[NUMBER_REQUESTS-1:0][`BANK_LINE_WORDS-1:0][31:0] llvq_res_data
 
 
 );

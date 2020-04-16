@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 `include "VX_d_cache.v"
 
 module VX_d_cache_tb;
@@ -6,13 +6,13 @@ module VX_d_cache_tb;
   parameter NUMBER_BANKS = 8;
 
   reg clk, reset, im_ready;
-  reg [`NT_M1:0] i_p_valid;
-  reg  [`NT_M1:0][13:0] i_p_addr; // FIXME
+  reg [`NUM_THREADS-1:0] i_p_valid;
+  reg [`NUM_THREADS-1:0][13:0] i_p_addr; // FIXME
   reg        i_p_initial_request;
-  reg [`NT_M1:0][31:0]  i_p_writedata;
+  reg [`NUM_THREADS-1:0][31:0]  i_p_writedata;
   reg         i_p_read_or_write; //, i_p_write;
-  reg [`NT_M1:0][31:0]  o_p_readdata;
-  reg [`NT_M1:0]        o_p_readdata_valid;
+  reg [`NUM_THREADS-1:0][31:0]  o_p_readdata;
+  reg [`NUM_THREADS-1:0]        o_p_readdata_valid;
   reg        o_p_waitrequest;
   reg [13:0]  o_m_addr; // Only one address is sent out at a time to memory
   reg         o_m_valid;

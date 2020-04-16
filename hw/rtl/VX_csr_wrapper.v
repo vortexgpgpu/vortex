@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_csr_wrapper (
 	VX_csr_req_inter VX_csr_req,
@@ -8,17 +8,17 @@ module VX_csr_wrapper (
 );
 
 
-	wire[`NT_M1:0][31:0] thread_ids;
-	wire[`NT_M1:0][31:0] warp_ids;
+	wire[`NUM_THREADS-1:0][31:0] thread_ids;
+	wire[`NUM_THREADS-1:0][31:0] warp_ids;
 
 	genvar cur_t, cur_tw;
 	generate
-	for (cur_t = 0; cur_t < `NT; cur_t = cur_t + 1) begin : thread_ids_init
+	for (cur_t = 0; cur_t < `NUM_THREADS; cur_t = cur_t + 1) begin : thread_ids_init
 		assign thread_ids[cur_t] = cur_t;
 	end
 
-	for (cur_tw = 0; cur_tw < `NT; cur_tw = cur_tw + 1) begin : warp_ids_init
-		assign warp_ids[cur_tw] = {{(31-`NW_M1){1'b0}}, VX_csr_req.warp_num};
+	for (cur_tw = 0; cur_tw < `NUM_THREADS; cur_tw = cur_tw + 1) begin : warp_ids_init
+		assign warp_ids[cur_tw] = {{(31-`NW_BITS-1){1'b0}}, VX_csr_req.warp_num};
 	end
 	endgenerate
 

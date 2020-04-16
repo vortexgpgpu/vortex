@@ -1,7 +1,7 @@
 `ifndef VX_CACHE_CONFIG
 `define VX_CACHE_CONFIG
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 
 //                         data           tid                    rd  wb     warp_num   read  write
@@ -10,10 +10,10 @@
 `define vx_clog2(value) ((value == 1) ? 1 : $clog2(value))
 
 
-`define MRVQ_METADATA_SIZE (`WORD_SIZE + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1) + 3 + 3)
+`define MRVQ_METADATA_SIZE (`WORD_SIZE + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_BITS-1 + 1) + 3 + 3)
 
 //                          5 + 2 + 4          + 3 + 3 + 1
-`define REQ_INST_META_SIZE (5 + 2 + (`NW_M1+1) + 3 + 3 + `vx_clog2(NUMBER_REQUESTS))
+`define REQ_INST_META_SIZE (5 + 2 + (`NW_BITS-1+1) + 3 + 3 + `vx_clog2(NUMBER_REQUESTS))
 
 // `define vx_clog2_h(value, x) (value == (1 << x)) ? (x)
 
@@ -60,9 +60,7 @@
 // 8
 `define BANK_LINE_COUNT (`BANK_SIZE_BYTES/BANK_LINE_SIZE_BYTES)
 // 4
-`define BANK_LINE_SIZE_WORDS (BANK_LINE_SIZE_BYTES / WORD_SIZE_BYTES)
-// 3:0
-`define BANK_LINE_SIZE_RNG `BANK_LINE_SIZE_WORDS-1:0
+`define BANK_LINE_WORDS (BANK_LINE_SIZE_BYTES / WORD_SIZE_BYTES)
 
 // Offset is fixed
 `define OFFSET_ADDR_NUM_BITS 2
@@ -73,7 +71,7 @@
 `define OFFSET_SIZE_RNG `OFFSET_SIZE_END:0
 
 // 2
-`define WORD_SELECT_NUM_BITS (`vx_clog2(`BANK_LINE_SIZE_WORDS))
+`define WORD_SELECT_NUM_BITS (`vx_clog2(`BANK_LINE_WORDS))
 // 2
 `define WORD_SELECT_SIZE_END (`WORD_SELECT_NUM_BITS)
 // 2

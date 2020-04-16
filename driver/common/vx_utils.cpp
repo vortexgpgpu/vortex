@@ -9,11 +9,11 @@ extern int vx_dev_caps(int caps_id) {
   case VX_CAPS_VERSION:
     return 0;
   case VX_CAPS_MAX_CORES:
-    return NUMBER_CORES;
+    return NUM_CORES;
   case VX_CAPS_MAX_WARPS:
-    return NW;
+    return NUM_WARPS;
   case VX_CAPS_MAX_THREADS:
-    return NT;
+    return NUM_THREADS;
   case VX_CAPS_CACHE_LINESIZE:
     return GLOBAL_BLOCK_SIZE_BYTES;
   case VX_CAPS_LOCAL_MEM_SIZE:

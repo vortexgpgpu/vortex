@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_gpr (
 	input wire                  clk,
@@ -8,8 +8,8 @@ module VX_gpr (
 	VX_gpr_read_inter           VX_gpr_read,
 	VX_wb_inter                 VX_writeback_inter,
 
-	output reg[`NT_M1:0][31:0] out_a_reg_data,
-	output reg[`NT_M1:0][31:0] out_b_reg_data
+	output reg[`NUM_THREADS-1:0][31:0] out_a_reg_data,
+	output reg[`NUM_THREADS-1:0][31:0] out_b_reg_data
 );
 
 
@@ -41,10 +41,10 @@ module VX_gpr (
 		wire going_to_write = write_enable & (|VX_writeback_inter.wb_valid);
 
 
-		wire[`NT_M1:0][31:0] write_bit_mask;
+		wire[`NUM_THREADS-1:0][31:0] write_bit_mask;
 
 		genvar curr_t;
-		for (curr_t = 0; curr_t < `NT; curr_t=curr_t+1) begin
+		for (curr_t = 0; curr_t < `NUM_THREADS; curr_t=curr_t+1) begin
 			wire local_write = write_enable & VX_writeback_inter.wb_valid[curr_t];
 			assign write_bit_mask[curr_t] = {32{~local_write}};
 		end
@@ -59,14 +59,14 @@ module VX_gpr (
 		wire cena_1  = 0;
 		wire cena_2  = 0;
 
-		wire[`NT_M1:0][31:0] temp_a;
-		wire[`NT_M1:0][31:0] temp_b;
+		wire[`NUM_THREADS-1:0][31:0] temp_a;
+		wire[`NUM_THREADS-1:0][31:0] temp_b;
 
 
 		`ifndef SYN
 			genvar thread;
 			genvar curr_bit;
-			for (thread = 0; thread < `NT; thread = thread + 1)
+			for (thread = 0; thread < `NUM_THREADS; thread = thread + 1)
 			begin
 				for (curr_bit = 0; curr_bit < 32; curr_bit=curr_bit+1)
 				begin
@@ -83,7 +83,7 @@ module VX_gpr (
 		`endif 
 
 
-		wire[`NT_M1:0][31:0] to_write = (VX_writeback_inter.rd != 0) ? VX_writeback_inter.write_data : 0;
+		wire[`NUM_THREADS-1:0][31:0] to_write = (VX_writeback_inter.rd != 0) ? VX_writeback_inter.write_data : 0;
 
 		genvar curr_base_thread;
 		for (curr_base_thread = 0; curr_base_thread < 'NT; curr_base_thread=curr_base_thread+4)

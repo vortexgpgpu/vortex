@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 `define NUM_WORDS_PER_BLOCK 4
 
@@ -33,17 +33,17 @@ module VX_d_cache_encapsulate (
     //parameter cache_entry = 9;
     input  wire            clk, rst;
 
-    input  wire        i_p_valid[`NT_M1:0];
-    input  wire [31:0] i_p_addr[`NT_M1:0];
+    input  wire        i_p_valid[`NUM_THREADS-1:0];
+    input  wire [31:0] i_p_addr[`NUM_THREADS-1:0];
     input  wire        i_p_initial_request;
-    input  wire [31:0] i_p_writedata[`NT_M1:0];
+    input  wire [31:0] i_p_writedata[`NUM_THREADS-1:0];
     input  wire        i_p_read_or_write;
 
     input  wire [31:0] i_m_readdata[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0];
     input  wire        i_m_ready;
 
-    output reg [31:0]  o_p_readdata[`NT_M1:0];
-    output reg         o_p_readdata_valid[`NT_M1:0] ;
+    output reg [31:0]  o_p_readdata[`NUM_THREADS-1:0];
+    output reg         o_p_readdata_valid[`NUM_THREADS-1:0] ;
     output reg         o_p_waitrequest;
 
     output reg [31:0]  o_m_addr;
@@ -53,12 +53,12 @@ module VX_d_cache_encapsulate (
 
 
     // Inter
-    wire [`NT_M1:0]        i_p_valid_inter;
-    wire [`NT_M1:0][31:0]  i_p_addr_inter;
-    wire [`NT_M1:0][31:0]  i_p_writedata_inter;
+    wire [`NUM_THREADS-1:0]        i_p_valid_inter;
+    wire [`NUM_THREADS-1:0][31:0]  i_p_addr_inter;
+    wire [`NUM_THREADS-1:0][31:0]  i_p_writedata_inter;
 
-    reg [`NT_M1:0][31:0]   o_p_readdata_inter;
-    reg [`NT_M1:0]         o_p_readdata_valid_inter;
+    reg [`NUM_THREADS-1:0][31:0]   o_p_readdata_inter;
+    reg [`NUM_THREADS-1:0]         o_p_readdata_valid_inter;
 
     reg[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0]  o_m_writedata_inter;
     wire[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata_inter;
@@ -66,7 +66,7 @@ module VX_d_cache_encapsulate (
 
     genvar curr_thraed, curr_bank, curr_word;
 	 generate
-    for (curr_thraed = 0; curr_thraed < `NT; curr_thraed = curr_thraed + 1) begin : threads
+    for (curr_thraed = 0; curr_thraed < `NUM_THREADS; curr_thraed = curr_thraed + 1) begin : threads
     	assign i_p_valid_inter[curr_thraed]                = i_p_valid[curr_thraed];
     	assign i_p_addr_inter[curr_thraed]                 = i_p_addr[curr_thraed];
     	assign i_p_writedata_inter[curr_thraed]            = i_p_writedata[curr_thraed];

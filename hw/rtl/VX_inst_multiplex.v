@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_inst_multiplex (
 	// Inputs
@@ -12,9 +12,9 @@ module VX_inst_multiplex (
 	VX_csr_req_inter         VX_csr_req
 );
 
-	wire[`NT_M1:0] is_mem_mask;
-	wire[`NT_M1:0] is_gpu_mask;
-	wire[`NT_M1:0] is_csr_mask;
+	wire[`NUM_THREADS-1:0] is_mem_mask;
+	wire[`NUM_THREADS-1:0] is_gpu_mask;
+	wire[`NUM_THREADS-1:0] is_csr_mask;
 
 	wire is_mem = (VX_bckE_req.mem_write != `NO_MEM_WRITE) || (VX_bckE_req.mem_read != `NO_MEM_READ);
 	wire is_gpu = (VX_bckE_req.is_wspawn || VX_bckE_req.is_tmc || VX_bckE_req.is_barrier || VX_bckE_req.is_split);
@@ -23,7 +23,7 @@ module VX_inst_multiplex (
 
 	genvar currT;
 	generate
-	for (currT = 0; currT < `NT; currT = currT + 1) begin : mask_init
+	for (currT = 0; currT < `NUM_THREADS; currT = currT + 1) begin : mask_init
 		assign is_mem_mask[currT] = is_mem;
 		assign is_gpu_mask[currT] = is_gpu;
 		assign is_csr_mask[currT] = is_csr;

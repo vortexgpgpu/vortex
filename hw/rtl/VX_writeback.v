@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_writeback (
 	input wire clk,
@@ -64,9 +64,9 @@ module VX_writeback (
 
 	wire zero = 0;
 
-	wire[`NT-1:0][31:0] use_wb_data;
+	wire[`NUM_THREADS-1:0][31:0] use_wb_data;
 
-	VX_generic_register #(.N(39 + `NW_M1 + 1 + `NT*33)) wb_register(
+	VX_generic_register #(.N(39 + `NW_BITS-1 + 1 + `NUM_THREADS*33)) wb_register(
 		.clk  (clk),
 		.reset(reset),
 		.stall(zero),

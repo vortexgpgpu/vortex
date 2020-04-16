@@ -1,5 +1,5 @@
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 `ifndef VX_EXE_UNIT_REQ_INTER
 
@@ -8,8 +8,8 @@
 interface VX_exec_unit_req_inter ();
 
 	// Meta
-	wire[`NT_M1:0]       valid;
-	wire[`NW_M1:0]       warp_num;
+	wire[`NUM_THREADS-1:0]       valid;
+	wire[`NW_BITS-1:0]       warp_num;
 	wire[31:0]           curr_PC;
 	wire[31:0]           PC_next;
 
@@ -18,8 +18,8 @@ interface VX_exec_unit_req_inter ();
 	wire[1:0]            wb;
 
 	// Data and alu op
-	wire[`NT_M1:0][31:0] a_reg_data;
-	wire[`NT_M1:0][31:0] b_reg_data;
+	wire[`NUM_THREADS-1:0][31:0] a_reg_data;
+	wire[`NUM_THREADS-1:0][31:0] b_reg_data;
 	wire[4:0]            alu_op;
 	wire[4:0]            rs1;
 	wire[4:0]            rs2;

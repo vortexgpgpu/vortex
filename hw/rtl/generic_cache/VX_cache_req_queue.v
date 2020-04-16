@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_cache_req_queue
 	#(
@@ -55,7 +55,7 @@ module VX_cache_req_queue
 	input wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] bank_writedata,
 	input wire [4:0]                        bank_rd,
 	input wire [NUMBER_REQUESTS-1:0][1:0]   bank_wb,
-	input wire [`NW_M1:0]                   bank_warp_num,
+	input wire [`NW_BITS-1:0]                   bank_warp_num,
 	input wire [NUMBER_REQUESTS-1:0][2:0]   bank_mem_read,  
 	input wire [NUMBER_REQUESTS-1:0][2:0]   bank_mem_write,
 	input wire [31:0]                       bank_pc,
@@ -68,7 +68,7 @@ module VX_cache_req_queue
 	output wire [`WORD_SIZE_RNG]                  reqq_req_writedata_st0,
 	output wire [4:0]                             reqq_req_rd_st0,
 	output wire [1:0]                             reqq_req_wb_st0,
-	output wire [`NW_M1:0]                        reqq_req_warp_num_st0,
+	output wire [`NW_BITS-1:0]                        reqq_req_warp_num_st0,
 	output wire [2:0]                             reqq_req_mem_read_st0,  
 	output wire [2:0]                             reqq_req_mem_write_st0,
 	output wire [31:0]                            reqq_req_pc_st0,
@@ -83,7 +83,7 @@ module VX_cache_req_queue
 	wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] out_per_writedata;
 	wire [4:0]                        out_per_rd;
 	wire [NUMBER_REQUESTS-1:0][1:0]   out_per_wb;
-	wire [`NW_M1:0]                   out_per_warp_num;
+	wire [`NW_BITS-1:0]                   out_per_warp_num;
 	wire [NUMBER_REQUESTS-1:0][2:0]   out_per_mem_read;  
 	wire [NUMBER_REQUESTS-1:0][2:0]   out_per_mem_write;
 	wire [31:0]                       out_per_pc;
@@ -95,7 +95,7 @@ module VX_cache_req_queue
 	reg [4:0]                        use_per_rd;
 	reg [NUMBER_REQUESTS-1:0][1:0]   use_per_wb;
 	reg [31:0]                       use_per_pc;
-	reg [`NW_M1:0]                   use_per_warp_num;
+	reg [`NW_BITS-1:0]                   use_per_warp_num;
 	reg [NUMBER_REQUESTS-1:0][2:0]   use_per_mem_read;  
 	reg [NUMBER_REQUESTS-1:0][2:0]   use_per_mem_write;
 
@@ -105,7 +105,7 @@ module VX_cache_req_queue
 	wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] qual_writedata;
 	wire [4:0]                        qual_rd;
 	wire [NUMBER_REQUESTS-1:0][1:0]   qual_wb;
-	wire [`NW_M1:0]                   qual_warp_num;
+	wire [`NW_BITS-1:0]                   qual_warp_num;
 	wire [NUMBER_REQUESTS-1:0][2:0]   qual_mem_read;  
 	wire [NUMBER_REQUESTS-1:0][2:0]   qual_mem_write;
 	wire [31:0]                       qual_pc;
@@ -120,7 +120,7 @@ module VX_cache_req_queue
 	wire push_qual = reqq_push && !reqq_full;
 	wire pop_qual  = !out_empty && use_empty;
 
-	VX_generic_queue_ll #(.DATAW( (NUMBER_REQUESTS * (1+32+`WORD_SIZE)) + 5 + (NUMBER_REQUESTS*2) + (`NW_M1+1) + (NUMBER_REQUESTS * (3 + 3)) + 32 ), .SIZE(REQQ_SIZE)) reqq_queue(
+	VX_generic_queue_ll #(.DATAW( (NUMBER_REQUESTS * (1+32+`WORD_SIZE)) + 5 + (NUMBER_REQUESTS*2) + (`NW_BITS-1+1) + (NUMBER_REQUESTS * (3 + 3)) + 32 ), .SIZE(REQQ_SIZE)) reqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),

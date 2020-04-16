@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 `ifndef VX_GPR_JAL_INTER
 
 `define VX_GPR_JAL_INTER

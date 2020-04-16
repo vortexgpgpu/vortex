@@ -1,4 +1,4 @@
-`include "../generic_cache/VX_cache_config.v"
+`include "../generic_cache/VX_cache_config.vh"
 
 `ifndef VX_GPU_SNP_REQ_RSP
 

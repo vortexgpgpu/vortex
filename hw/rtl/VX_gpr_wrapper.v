@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_gpr_wrapper (
 	input wire                  clk,
@@ -7,22 +7,21 @@ module VX_gpr_wrapper (
 	VX_wb_inter                 VX_writeback_inter,	
 	VX_gpr_jal_inter            VX_gpr_jal,
 
-	output wire[`NT_M1:0][31:0] out_a_reg_data,
-	output wire[`NT_M1:0][31:0] out_b_reg_data
+	output wire[`NUM_THREADS-1:0][31:0] out_a_reg_data,
+	output wire[`NUM_THREADS-1:0][31:0] out_b_reg_data
 	
 );
 
-	wire[`NW-1:0][`NT_M1:0][31:0] temp_a_reg_data;
-	wire[`NW-1:0][`NT_M1:0][31:0] temp_b_reg_data;
+	wire[`NUM_WARPS-1:0][`NUM_THREADS-1:0][31:0] temp_a_reg_data;
+	wire[`NUM_WARPS-1:0][`NUM_THREADS-1:0][31:0] temp_b_reg_data;
 
-	wire[`NT_M1:0][31:0] jal_data;
+	wire[`NUM_THREADS-1:0][31:0] jal_data;
 	genvar index;
 	generate 
-	for (index = 0; index <= `NT_M1; index = index + 1) begin : jal_data_assign
+	for (index = 0; index < `NUM_THREADS; index = index + 1) begin : jal_data_assign
 		assign jal_data[index] = VX_gpr_jal.curr_PC;
 	end
 	endgenerate
-
 
 	`ifndef ASIC
 		assign out_a_reg_data = (VX_gpr_jal.is_jal   ? jal_data :  (temp_a_reg_data[VX_gpr_read.warp_num]));
@@ -31,8 +30,8 @@ module VX_gpr_wrapper (
 
 		wire zer = 0;
 
-		wire[`NW_M1:0] old_warp_num;	
-		VX_generic_register #(`NW_M1+1) store_wn(
+		wire[`NW_BITS-1:0] old_warp_num;	
+		VX_generic_register #(`NW_BITS-1+1) store_wn(
 			.clk  (clk),
 			.reset(reset),
 			.stall(zer),
@@ -49,7 +48,7 @@ module VX_gpr_wrapper (
 	genvar warp_index;
 	generate
 		
-		for (warp_index = 0; warp_index < `NW; warp_index = warp_index + 1) begin : warp_gprs
+		for (warp_index = 0; warp_index < `NUM_WARPS; warp_index = warp_index + 1) begin : warp_gprs
 
 			wire valid_write_request = warp_index == VX_writeback_inter.wb_warp_num;
 			VX_gpr vx_gpr(

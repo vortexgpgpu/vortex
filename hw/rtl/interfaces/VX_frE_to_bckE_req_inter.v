@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 `ifndef VX_FrE_to_BE_INTER
 
@@ -30,8 +30,8 @@ interface VX_frE_to_bckE_req_inter ();
 	wire                 jal;
 	wire[31:0]           jal_offset;
 	wire[31:0]           PC_next;
-	wire[`NT_M1:0]       valid;
-	wire[`NW_M1:0]       warp_num;
+	wire[`NUM_THREADS-1:0]       valid;
+	wire[`NW_BITS-1:0]       warp_num;
 
 	// GPGPU stuff
 	wire                 is_wspawn;

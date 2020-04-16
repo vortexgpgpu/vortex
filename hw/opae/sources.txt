@@ -11,9 +11,10 @@ vortex_afu.json
 +incdir+../rtl/pipe_regs
 +incdir+../rtl/compat
 
-../rtl/VX_define_synth.v
-../rtl/VX_define.v
-../rtl/generic_cache/VX_cache_config.v
+../rtl/VX_user_config.vh
+../rtl/VX_config.vh
+../rtl/VX_define.vh
+../rtl/generic_cache/VX_cache_config.vh
 ../rtl/Vortex_Socket.v
 ../rtl/Vortex_Cluster.v
 ../rtl/Vortex.v

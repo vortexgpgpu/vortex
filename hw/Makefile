@@ -33,7 +33,7 @@ THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu
 
 .PHONY: build_config
 build_config:
-	./gen_config.py --rtl_locations
+	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./simulate/VX_config.h
 
 # -LDFLAGS '-lsystemc'
 VERILATOR: build_config
