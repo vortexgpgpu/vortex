@@ -13,7 +13,7 @@
 #include <verilated_vcd_c.h>
 #endif
 
-#include "VX_define.h"
+#include "VX_config.h"
 #include "ram.h"
 
 #include <ostream>
@@ -56,7 +56,7 @@ private:
   void send_snoops(uint32_t mem_addr, uint32_t size);
   void wait(uint32_t cycles);
 
-  uint64_t total_cycles_;
+  int64_t total_cycles_;
   bool dram_stalled_;
   bool I_dram_stalled_;
   std::vector<dram_req_t> dram_req_vec_;

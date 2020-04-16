@@ -7,11 +7,11 @@ module VX_fill_invalidator
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
@@ -81,7 +81,7 @@ module VX_fill_invalidator
 		assign matched = (|(matched_fill));
 
 
-		wire [(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0]  enqueue_index;
+		wire [(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0]  enqueue_index;
 		wire                                          enqueue_found;
 		VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(
 			.valids(~fills_active),
@@ -111,7 +111,7 @@ module VX_fill_invalidator
 
 
 		// reg                                         success_found;
-		// reg[(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
+		// reg[(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
 
 		// integer curr_fill;
 		// always @(*) begin
@@ -136,7 +136,7 @@ module VX_fill_invalidator
 
 
 
-		// wire [(`vx_clog2(FILL_INVALIDAOR_SIZE))-1:0] enqueue_index;
+		// wire [(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0] enqueue_index;
 		// wire                                          enqueue_found;
 
 		// VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(

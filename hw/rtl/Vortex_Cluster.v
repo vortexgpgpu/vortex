@@ -43,14 +43,14 @@ module Vortex_Cluster
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_req_read;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_dram_req_addr;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_dram_req_size;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`DBANK_LINE_WORDS-1:0][31:0]  per_core_dram_req_data;
+    wire[`NUM_CORES_PER_CLUSTER-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_req_data;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_dram_expected_lat;
 
     // DRAM Dcache Res
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_fill_accept;
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_fill_rsp;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_dram_fill_rsp_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`DBANK_LINE_WORDS-1:0][31:0]  per_core_dram_fill_rsp_data;
+    wire[`NUM_CORES_PER_CLUSTER-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_fill_rsp_data;
 
     // DRAM Icache Req
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_req;
@@ -58,14 +58,14 @@ module Vortex_Cluster
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_req_read;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_req_addr;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_req_size;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`IBANK_LINE_WORDS-1:0][31:0]  per_core_I_dram_req_data;
+    wire[`NUM_CORES_PER_CLUSTER-1:0][`IBANK_LINE_WORDS-1:0][31:0] per_core_I_dram_req_data;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_expected_lat;
 
     // DRAM Icache Res
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_fill_accept;
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_fill_rsp;
     wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_fill_rsp_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`IBANK_LINE_WORDS-1:0][31:0]  per_core_I_dram_fill_rsp_data;
+    wire[`NUM_CORES_PER_CLUSTER-1:0][`IBANK_LINE_WORDS-1:0][31:0] per_core_I_dram_fill_rsp_data;
 
     // Out ebreak
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_out_ebreak;
@@ -73,10 +73,10 @@ module Vortex_Cluster
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_io_valid;
     wire[`NUM_CORES_PER_CLUSTER-1:0][31:0]                        per_core_io_data;
 
-    wire                                                             l2c_core_accept;
+    wire                                                          l2c_core_accept;
 
-    wire                                                             snp_fwd;
-    wire[31:0]                                                       snp_fwd_addr;
+    wire                                                          snp_fwd;
+    wire[31:0]                                                    snp_fwd_addr;
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              snp_fwd_delay;
 
     assign out_ebreak = (&per_core_out_ebreak);
@@ -137,21 +137,21 @@ module Vortex_Cluster
     endgenerate
 
     //////////////////// L2 Cache ////////////////////
-    wire[`L2NUMBER_REQUESTS-1:0]                             l2c_core_req;
-    wire[`L2NUMBER_REQUESTS-1:0][2:0]                        l2c_core_req_mem_write;
-    wire[`L2NUMBER_REQUESTS-1:0][2:0]                        l2c_core_req_mem_read;
-    wire[`L2NUMBER_REQUESTS-1:0][31:0]                       l2c_core_req_addr;
-    wire[`L2NUMBER_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0] l2c_core_req_data;
-    wire[`L2NUMBER_REQUESTS-1:0][1:0]                        l2c_core_req_wb;
+    wire[`L2NUM_REQUESTS-1:0]                             l2c_core_req;
+    wire[`L2NUM_REQUESTS-1:0][2:0]                        l2c_core_req_mem_write;
+    wire[`L2NUM_REQUESTS-1:0][2:0]                        l2c_core_req_mem_read;
+    wire[`L2NUM_REQUESTS-1:0][31:0]                       l2c_core_req_addr;
+    wire[`L2NUM_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0] l2c_core_req_data;
+    wire[`L2NUM_REQUESTS-1:0][1:0]                        l2c_core_req_wb;
 
-    wire[`L2NUMBER_REQUESTS-1:0]                             l2c_core_no_wb_slot;
+    wire[`L2NUM_REQUESTS-1:0]                             l2c_core_no_wb_slot;
 
-    wire[`L2NUMBER_REQUESTS-1:0]                                  l2c_wb;
-    wire[`L2NUMBER_REQUESTS-1:0] [31:0]                           l2c_wb_addr;
-    wire[`L2NUMBER_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]      l2c_wb_data;
+    wire[`L2NUM_REQUESTS-1:0]                                  l2c_wb;
+    wire[`L2NUM_REQUESTS-1:0] [31:0]                           l2c_wb_addr;
+    wire[`L2NUM_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]     l2c_wb_data;
 
-    wire[`DBANK_LINE_WORDS-1:0][31:0]                             dram_req_data_port;
-    wire[`DBANK_LINE_WORDS-1:0][31:0]                             dram_fill_rsp_data_port;
+    wire[`DBANK_LINE_WORDS-1:0][31:0]                          dram_req_data_port;
+    wire[`DBANK_LINE_WORDS-1:0][31:0]                          dram_fill_rsp_data_port;
 
     genvar llb_index;
     generate
@@ -163,7 +163,7 @@ module Vortex_Cluster
 
     genvar l2c_curr_core;
     generate
-        for (l2c_curr_core = 0; l2c_curr_core < `L2NUMBER_REQUESTS; l2c_curr_core=l2c_curr_core+2) begin
+        for (l2c_curr_core = 0; l2c_curr_core < `L2NUM_REQUESTS; l2c_curr_core=l2c_curr_core+2) begin
             // Core Request
             assign l2c_core_req           [l2c_curr_core]   = per_core_dram_req  [(l2c_curr_core/2)];
             assign l2c_core_req           [l2c_curr_core+1] = per_core_I_dram_req[(l2c_curr_core/2)];
@@ -204,9 +204,9 @@ module Vortex_Cluster
     VX_cache #(
         .CACHE_SIZE_BYTES             (`L2CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (`L2BANK_LINE_SIZE_BYTES),
-        .NUMBER_BANKS                 (`L2NUMBER_BANKS),
+        .NUM_BANKS                    (`L2NUM_BANKS),
         .WORD_SIZE_BYTES              (`L2WORD_SIZE_BYTES),
-        .NUMBER_REQUESTS              (`L2NUMBER_REQUESTS),
+        .NUM_REQUESTS                 (`L2NUM_REQUESTS),
         .STAGE_1_CYCLES               (`L2STAGE_1_CYCLES),
         .FUNC_ID                      (`L2FUNC_ID),
         .REQQ_SIZE                    (`L2REQQ_SIZE),

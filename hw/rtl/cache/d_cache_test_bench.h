@@ -38,9 +38,9 @@ class VX_d_cache
         long int curr_cycle;
         int stats_total_cycles = 0;
         int stats_dram_accesses = 0;
-        #ifdef VCD_OUTPUT
+    #ifdef VCD_OUTPUT
         VerilatedVcdC   *m_trace;
-        #endif
+    #endif
 };
 
 
@@ -49,22 +49,20 @@ VX_d_cache::VX_d_cache() : curr_cycle(0), stats_total_cycles(0), stats_dram_acce
 {
 
     this->vx_d_cache_ = new VVX_d_cache_encapsulate;
-    #ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
     this->m_trace = new VerilatedVcdC;
     this->vx_d_cache_->trace(m_trace, 99);
     this->m_trace->open("trace.vcd");
-    #endif
+#endif
     //this->results.open("../results.txt");
 }
 
 VX_d_cache::~VX_d_cache()
-{
-
-    
+{   
     delete this->vx_d_cache_;
-    #ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
     m_trace->close();
-    #endif
+#endif
 }
 
 bool VX_d_cache::operation(int counter_value, bool do_op) {

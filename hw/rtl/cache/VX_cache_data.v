@@ -46,10 +46,10 @@ module VX_cache_data
 	
 );
 
-    //localparam NUMBER_BANKS         = CACHE_BANKS;
+    //localparam NUM_BANKS         = CACHE_BANKS;
     //localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
     // localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
-	//localparam NUMBER_INDEXES       = NUM_IND;
+	//localparam NUM_INDEXES       = NUM_IND;
 
     wire currently_writing = (|we);
     wire update_dirty      = ((!dirty_use) && currently_writing) || (evict);

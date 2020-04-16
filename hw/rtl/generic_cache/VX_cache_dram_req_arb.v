@@ -7,11 +7,11 @@ module VX_cache_dram_req_arb
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
@@ -54,27 +54,27 @@ module VX_cache_dram_req_arb
 
 
 	// Fill Request
-    output wire                                             dfqq_full,
-    input  wire[NUMBER_BANKS-1:0]                          per_bank_dram_fill_req,
-    input  wire[NUMBER_BANKS-1:0][31:0]                    per_bank_dram_fill_req_addr,
+    output wire                                           dfqq_full,
+    input  wire[NUM_BANKS-1:0]                            per_bank_dram_fill_req,
+    input  wire[NUM_BANKS-1:0][31:0]                      per_bank_dram_fill_req_addr,
 
     // DFQ Request
-    output wire[NUMBER_BANKS-1:0]                            per_bank_dram_wb_queue_pop,
-    input  wire[NUMBER_BANKS-1:0]                            per_bank_dram_wb_req,
-    input  wire[NUMBER_BANKS-1:0][31:0]                      per_bank_dram_wb_req_addr,
-    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] per_bank_dram_wb_req_data,
-    input  wire[NUMBER_BANKS-1:0]                            per_bank_dram_because_of_snp,
+    output wire[NUM_BANKS-1:0]                            per_bank_dram_wb_queue_pop,
+    input  wire[NUM_BANKS-1:0]                            per_bank_dram_wb_req,
+    input  wire[NUM_BANKS-1:0][31:0]                      per_bank_dram_wb_req_addr,
+    input  wire[NUM_BANKS-1:0][`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] per_bank_dram_wb_req_data,
+    input  wire[NUM_BANKS-1:0]                            per_bank_dram_because_of_snp,
 
     // real Dram request
-    output wire                                             dram_req,
-    output wire                                             dram_req_write,
-    output wire                                             dram_req_read,
-    output wire [31:0]                                      dram_req_addr,
-    output wire [31:0]                                      dram_req_size,
-    output wire [`IBANK_LINE_WORDS-1:0][31:0]                dram_req_data,
-    output wire                                             dram_req_because_of_wb,
+    output wire                                           dram_req,
+    output wire                                           dram_req_write,
+    output wire                                           dram_req_read,
+    output wire [31:0]                                    dram_req_addr,
+    output wire [31:0]                                    dram_req_size,
+    output wire [`IBANK_LINE_WORDS-1:0][31:0]             dram_req_data,
+    output wire                                           dram_req_because_of_wb,
 
-    input wire                                              dram_req_delay
+    input wire                                            dram_req_delay
 	
 );
 
@@ -126,10 +126,10 @@ module VX_cache_dram_req_arb
 		.dfqq_full                  (dfqq_full)
 		);
 
-	wire[`vx_clog2(NUMBER_BANKS)-1:0] dwb_bank;
-	// wire[NUMBER_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req | per_bank_dram_because_of_snp;
-	wire[NUMBER_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req;
-	VX_generic_priority_encoder #(.N(NUMBER_BANKS)) VX_sel_dwb(
+	wire[`LOG2UP(NUM_BANKS)-1:0] dwb_bank;
+	// wire[NUM_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req | per_bank_dram_because_of_snp;
+	wire[NUM_BANKS-1:0]            use_wb_valid = per_bank_dram_wb_req;
+	VX_generic_priority_encoder #(.N(NUM_BANKS)) VX_sel_dwb(
 		.valids(use_wb_valid),
 		.index (dwb_bank),
 		.found (dwb_valid)

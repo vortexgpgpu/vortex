@@ -7,11 +7,11 @@ module VX_tag_data_access
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
     // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
@@ -64,7 +64,7 @@ module VX_tag_data_access
 	input  wire[2:0]                       mem_write_st1e,
 	input  wire[2:0]                       mem_read_st1e, 
 
-	output wire[`WORD_SIZE_RNG]             readword_st1e,
+	output wire[`WORD_SIZE_RNG]            readword_st1e,
 	output wire[`DBANK_LINE_WORDS-1:0][31:0] readdata_st1e,
 	output wire[`TAG_SELECT_SIZE_RNG]      readtag_st1e,
 	output wire                            miss_st1e,
@@ -104,9 +104,9 @@ module VX_tag_data_access
 	VX_tag_data_structure  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
-        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .NUM_BANKS                    (NUM_BANKS),
         .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
-        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .NUM_REQUESTS                 (NUM_REQUESTS),
         .STAGE_1_CYCLES               (STAGE_1_CYCLES),
         .FUNC_ID                      (FUNC_ID),
         .REQQ_SIZE                    (REQQ_SIZE),

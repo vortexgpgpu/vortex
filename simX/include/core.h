@@ -19,9 +19,9 @@
 #include "Vcache_simX.h"
 #include "verilated.h"
 
-// #ifdef VCD_OUTPUT
+#ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
-// #endif
+#endif
 
 
 #include "trace.h"

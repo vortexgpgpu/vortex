@@ -10,8 +10,8 @@ template = """
 
 export V_NT={threads}
 export V_NW={warps}
-export V_NUMBER_CORES_PER_CLUSTER={cores}
-export V_NUMBER_CLUSTERS={clusters}
+export V_NUM_CORES_PER_CLUSTER={cores}
+export V_NUM_CLUSTERS={clusters}
 export V_DCACHE_SIZE_BYTES={dcachek}
 export V_ICACHE_SIZE_BYTES={icachek}
 

@@ -1,4 +1,4 @@
-all: RUNFILE
+all: singlecore
 
 INCLUDE = -I./rtl/ -I./rtl/shared_memory -I./rtl/cache -I./rtl/generic_cache -I./rtl/generic_cache/interfaces -I./rtl/interfaces/ -I./rtl/pipe_regs/ -I./rtl/compat/ -I./rtl/simulate
 
@@ -10,12 +10,6 @@ EXE += --exe ./simulate/testbench.cpp ./simulate/simulator.cpp
 
 VF += -compiler gcc --language 1800-2009
 
-WNO += -Wno-UNDRIVEN --Wno-PINMISSING -Wno-STMTDLY -Wno-WIDTH -Wno-UNSIGNED -Wno-UNOPTFLAT -Wno-LITENDIAN
-# WNO=
-
-# LIGHTW=
-LIGHTW += -Wno-UNOPTFLAT
-
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
 LIB +=
 
@@ -23,63 +17,70 @@ CF += -std=c++11 -fms-extensions
 
 DEB += --trace -DVL_DEBUG=1 
 
-MAKECPP += (cd obj_dir && make -j -f VVortex.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+MAKECPP_S += (cd obj_dir && make -j -f VVortex.mk)
 
-MAKECPPRel += (cd obj_dir && make -j -f VVortex.mk)
-
-MAKEMULTICPP += (cd obj_dir && make -j -f VVortex_Socket.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+MAKECPP_M += (cd obj_dir && make -j -f VVortex_Socket.mk)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
 .PHONY: build_config
+
 build_config:
 	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./simulate/VX_config.h
 
-# -LDFLAGS '-lsystemc'
-VERILATOR: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF)' $(LIGHTW)
+gen-singlecore: build_config
+	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF)'
 
-VERILATORnoWarnings: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF)' $(WNO) $(DEB)
+gen-singlecore-t: build_config
+	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -O3' --threads $(THREADS)
 
-VERILATORnoWarningsRel: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -O3 -DVL_THREADED' $(WNO) --threads $(THREADS)
+gen-singlecore-d: build_config
+	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT' $(DEB)
 
-VERILATORMULTInoWarnings: build_config
-	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE' $(WNO) $(DEB)
+gen-multicore: build_config
+	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE'
+	
+gen-multicore-t: build_config
+	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE -O3' --threads $(THREADS)
 
-compdebug: build_config
-	verilator_bin_dbg $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
+gen-multicore-d: build_config
+	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DUSE_MULTICORE' $(DEB)
 
-compdebugmulti: build_config
-	verilator_bin_dbg $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE -DVCD_OUTPUT -DVL_DEBUG' $(WNO)  $(DEB)
+singlecore: gen-singlecore
+	(cd obj_dir && make -j -f VVortex.mk)
 
-RUNFILE: VERILATOR
-	$(MAKECPP)
+singlecore-t: gen-singlecore-t
+	(cd obj_dir && make -j -f VVortex.mk)
 
-debug: compdebug
-	$(MAKECPP)
+singlecore-d: gen-singlecore-d
+	(cd obj_dir && make -j -f VVortex.mk)
 
-w: VERILATORnoWarnings
-	$(MAKECPP)
+multicore: gen-multicore
+	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-wRel: VERILATORnoWarningsRel
-	$(MAKECPPRel)
+multicore-t: gen-multicore-t
+	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-multicore: VERILATORMULTInoWarnings
-	$(MAKEMULTICPP)
+multicore-d: gen-multicore-d
+	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-dmulticore: compdebugmulti
-	$(MAKEMULTICPP)
-
-run: w
+run: singlecore
 	(cd obj_dir && ./VVortex)
 
-run-multicore: multicore
+run-d: singlecore-d
+	(cd obj_dir && ./VVortex)
+
+run-t: singlecore-t
+	(cd obj_dir && ./VVortex)
+
+run-m: multicore
 	(cd obj_dir && ./VVortex_Socket)
 
-runRel: wRel
-	(cd obj_dir && ./VVortex)
+run-md: multicore-d
+	(cd obj_dir && ./VVortex_Socket)
+
+run-mt: multicore-t
+	(cd obj_dir && ./VVortex_Socket)
 
 clean:
 	rm -rf obj_dir

@@ -66,7 +66,7 @@ module VX_d_cache
                i_m_ready
      );
 
-    //parameter NUMBER_BANKS         = `CACHE_BANKS;
+    //parameter NUM_BANKS         = `CACHE_BANKS;
     //localparam NUM_WORDS_PER_BLOCK = `CACHE_BLOCK / (`CACHE_BANKS*4);
 
     //localparam CACHE_BLOCK_PER_BANK = (`CACHE_BLOCK / `CACHE_BANKS);
@@ -148,7 +148,7 @@ module VX_d_cache
 
 
 
-    VX_cache_bank_valid #(.NUMBER_BANKS  (CACHE_BANKS), 
+    VX_cache_bank_valid #(.NUM_BANKS  (CACHE_BANKS), 
                           .LOG_NUM_BANKS (LOG_NUM_BANKS), 
                           .NUM_REQ       (NUM_REQ)) multip_banks(
       .i_p_valid         (use_valid),
@@ -261,7 +261,7 @@ module VX_d_cache
       miss_addr               <= 0;
       // evict_addr              <= 0;
       // threads_serviced_Qual    = 0;
-      // for (init_b = 0; init_b < NUMBER_BANKS; init_b=init_b+1)
+      // for (init_b = 0; init_b < NUM_BANKS; init_b=init_b+1)
       // begin
       //   debug_hit_per_bank_mask[init_b] <= 0;
       // end

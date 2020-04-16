@@ -7,11 +7,11 @@ module VX_bank
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
     // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
@@ -54,24 +54,24 @@ module VX_bank
 
 	// Input Core Request
 	input wire                                    delay_req,
-	input wire [NUMBER_REQUESTS-1:0]              bank_valids,
-	input wire [NUMBER_REQUESTS-1:0][31:0]        bank_addr,
-	input wire [NUMBER_REQUESTS-1:0][`WORD_SIZE_RNG] bank_writedata,
+	input wire [NUM_REQUESTS-1:0]                 bank_valids,
+	input wire [NUM_REQUESTS-1:0][31:0]           bank_addr,
+	input wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] bank_writedata,
 	input wire [4:0]                              bank_rd,
-	input wire [NUMBER_REQUESTS-1:0][1:0]         bank_wb,
+	input wire [NUM_REQUESTS-1:0][1:0]            bank_wb,
 	input wire [31:0]                             bank_pc,
-	input wire [`NW_BITS-1:0]                         bank_warp_num,
-	input wire [NUMBER_REQUESTS-1:0][2:0]         bank_mem_read,  
-	input wire [NUMBER_REQUESTS-1:0][2:0]         bank_mem_write,
+	input wire [`NW_BITS-1:0]                     bank_warp_num,
+	input wire [NUM_REQUESTS-1:0][2:0]            bank_mem_read,  
+	input wire [NUM_REQUESTS-1:0][2:0]            bank_mem_write,
 	output wire                                   reqq_full,
 
 	// Output Core WB
 	input  wire                                   bank_wb_pop,
 	output wire                                   bank_wb_valid,
-	output wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  bank_wb_tid,
+	output wire [`LOG2UP(NUM_REQUESTS)-1:0]       bank_wb_tid,
 	output wire [4:0]                             bank_wb_rd,
 	output wire [1:0]                             bank_wb_wb,
-	output wire [`NW_BITS-1:0]                        bank_wb_warp_num,
+	output wire [`NW_BITS-1:0]                    bank_wb_warp_num,
 	output wire [`WORD_SIZE_RNG]                  bank_wb_data,
 	output wire [31:0]                            bank_wb_pc,
 	output wire [31:0]                            bank_wb_address,
@@ -104,7 +104,6 @@ module VX_bank
 	output wire[31:0]                             snp_fwd_addr,
 	input  wire                                   snp_fwd_pop
 );
-
 
 	reg snoop_state = 0;
 
@@ -152,19 +151,18 @@ module VX_bank
 		.out_data({dfpq_addr_st0, dfpq_filldata_st0}),
 		.empty   (dfpq_empty),
 		.full    (dfpq_full)
-		);
-
+	);
 
 	wire                                  reqq_pop;
 	wire                                  reqq_push;
 	wire                                  reqq_empty;
 	wire                                  reqq_req_st0;
-	wire[`vx_clog2(NUMBER_REQUESTS)-1:0] reqq_req_tid_st0;
+	wire[`LOG2UP(NUM_REQUESTS)-1:0]       reqq_req_tid_st0;
 	wire [31:0]                           reqq_req_addr_st0;
 	wire [`WORD_SIZE_RNG]                 reqq_req_writeword_st0;
 	wire [4:0]                            reqq_req_rd_st0;
 	wire [1:0]                            reqq_req_wb_st0;
-	wire [`NW_BITS-1:0]                       reqq_req_warp_num_st0;
+	wire [`NW_BITS-1:0]                   reqq_req_warp_num_st0;
 	wire [2:0]                            reqq_req_mem_read_st0;  
 	wire [2:0]                            reqq_req_mem_write_st0;
 	wire [31:0]                           reqq_req_pc_st0;
@@ -174,9 +172,9 @@ module VX_bank
 	VX_cache_req_queue  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
-        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .NUM_BANKS                    (NUM_BANKS),
         .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
-        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .NUM_REQUESTS                 (NUM_REQUESTS),
         .STAGE_1_CYCLES               (STAGE_1_CYCLES),
         .REQQ_SIZE                    (REQQ_SIZE),
         .MRVQ_SIZE                    (MRVQ_SIZE),
@@ -225,37 +223,37 @@ module VX_bank
 	wire                                  mrvq_full;
 	wire                                  mrvq_stop;
 	wire                                  mrvq_valid_st0;
-	wire[`vx_clog2(NUMBER_REQUESTS)-1:0] mrvq_tid_st0;
+	wire[`LOG2UP(NUM_REQUESTS)-1:0]       mrvq_tid_st0;
 	wire [31:0]                           mrvq_addr_st0;
 	wire [`WORD_SIZE_RNG]                 mrvq_writeword_st0;
 	wire [4:0]                            mrvq_rd_st0;
 	wire [1:0]                            mrvq_wb_st0;
 	wire [31:0]                           miss_resrv_pc_st0;
-	wire [`NW_BITS-1:0]                       mrvq_warp_num_st0;
+	wire [`NW_BITS-1:0]                   mrvq_warp_num_st0;
 	wire [2:0]                            mrvq_mem_read_st0;  
 	wire [2:0]                            mrvq_mem_write_st0;
 
 	wire                                  miss_add;
 	wire[31:0]                            miss_add_addr;
 	wire[`WORD_SIZE_RNG]                  miss_add_data;
-	wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  miss_add_tid;
+	wire[`LOG2UP(NUM_REQUESTS)-1:0]       miss_add_tid;
 	wire[4:0]                             miss_add_rd;
 	wire[1:0]                             miss_add_wb;
-	wire[`NW_BITS-1:0]                        miss_add_warp_num;
+	wire[`NW_BITS-1:0]                    miss_add_warp_num;
 	wire[2:0]                             miss_add_mem_read;
 	wire[2:0]                             miss_add_mem_write;
 
 	wire[31:0]                            miss_add_pc;
 
-	wire[31:0]                      	addr_st2;
-	wire                            	is_fill_st2;
+	wire[31:0]                      	  addr_st2;
+	wire                            	  is_fill_st2;
 
 	VX_cache_miss_resrv #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
-        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .NUM_BANKS                    (NUM_BANKS),
         .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
-        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .NUM_REQUESTS                 (NUM_REQUESTS),
         .STAGE_1_CYCLES               (STAGE_1_CYCLES),
         .REQQ_SIZE                    (REQQ_SIZE),
         .MRVQ_SIZE                    (MRVQ_SIZE),
@@ -312,7 +310,7 @@ module VX_bank
 	wire            going_to_write_st1[STAGE_1_CYCLES-1:0];	
 	wire [31:0]		addr_st1          [STAGE_1_CYCLES-1:0];
 
-	reg[16:0] p_stage;
+	integer p_stage;
 	always @(*) begin
 		is_fill_in_pipe = 0;
 		for (p_stage = 0; p_stage < STAGE_1_CYCLES; p_stage=p_stage+1) begin
@@ -322,8 +320,7 @@ module VX_bank
 		if (is_fill_st2) is_fill_in_pipe = 1;
 	end
 
-//	assign is_fill_in_pipe = (|is_fill_st1) || is_fill_st2;
-		
+//	assign is_fill_in_pipe = (|is_fill_st1) || is_fill_st2;		
 
 	assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe;
 	assign dfpq_pop = !mrvq_pop && !dfpq_empty && !stall_bank_pipe;
@@ -421,10 +418,10 @@ module VX_bank
 
 	wire [4:0]                             rd_st1e;
 	wire [1:0]                             wb_st1e;
-	wire [`NW_BITS-1:0]                        warp_num_st1e;
+	wire [`NW_BITS-1:0]                    warp_num_st1e;
 	wire [2:0]                             mem_read_st1e;  
 	wire [2:0]                             mem_write_st1e;
-	wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  tid_st1e;
+	wire [`LOG2UP(NUM_REQUESTS)-1:0]       tid_st1e;
 	wire                                   fill_saw_dirty_st1e;
 	wire                                   is_snp_st1e;
 
@@ -436,9 +433,9 @@ module VX_bank
 	VX_tag_data_access  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
-        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .NUM_BANKS                    (NUM_BANKS),
         .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
-        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .NUM_REQUESTS                 (NUM_REQUESTS),
         .STAGE_1_CYCLES               (STAGE_1_CYCLES),
         .FUNC_ID                      (FUNC_ID),
         .REQQ_SIZE                    (REQQ_SIZE),
@@ -527,15 +524,15 @@ module VX_bank
 	// Enqueue to CWB Queue
 	wire                                   cwbq_push      = (valid_st2 && !miss_st2) && !cwbq_full && !((FUNC_ID == `L2FUNC_ID) && (miss_add_wb == 0)) && !((is_snp_st2 && valid_st2 && ffsq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
 	wire [`WORD_SIZE_RNG]                  cwbq_data      = readword_st2;
-	wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  cwbq_tid       = miss_add_tid;
+	wire [`LOG2UP(NUM_REQUESTS)-1:0]       cwbq_tid       = miss_add_tid;
 	wire [4:0]                             cwbq_rd        = miss_add_rd;
 	wire [1:0]                             cwbq_wb        = miss_add_wb;
-	wire [`NW_BITS-1:0]                        cwbq_warp_num  = miss_add_warp_num;
+	wire [`NW_BITS-1:0]                    cwbq_warp_num  = miss_add_warp_num;
 	wire [31:0]                            cwbq_pc        = pc_st2;
 	
 	wire                                   cwbq_empty;
 	assign bank_wb_valid = !cwbq_empty;
-	VX_generic_queue_ll #(.DATAW( `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_BITS-1+1) + `WORD_SIZE + 32 + 32), .SIZE(CWBQ_SIZE)) cwb_queue(
+	VX_generic_queue_ll #(.DATAW( `LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS-1+1) + `WORD_SIZE + 32 + 32), .SIZE(CWBQ_SIZE)) cwb_queue(
 		.clk     (clk),
 		.reset   (reset),
 
@@ -570,9 +567,9 @@ module VX_bank
 	VX_fill_invalidator  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
         .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
-        .NUMBER_BANKS                 (NUMBER_BANKS),
+        .NUM_BANKS                    (NUM_BANKS),
         .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
-        .NUMBER_REQUESTS              (NUMBER_REQUESTS),
+        .NUM_REQUESTS                 (NUM_REQUESTS),
         .STAGE_1_CYCLES               (STAGE_1_CYCLES),
         .REQQ_SIZE                    (REQQ_SIZE),
         .MRVQ_SIZE                    (MRVQ_SIZE),

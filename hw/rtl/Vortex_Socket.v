@@ -93,17 +93,17 @@ module Vortex_Socket (
         wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_req_addr;
         wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_req_size;
         wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_expected_lat;
-        wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0]  per_cluster_dram_req_data;
-        wire[31:0]                                              per_cluster_dram_req_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
+        wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_cluster_dram_req_data;
+        wire[31:0]                                           per_cluster_dram_req_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
 
-        wire                                                    l3c_core_accept;
+        wire                                                 l3c_core_accept;
 
         // // DRAM Dcache Res
         wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_fill_accept;
         wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_fill_rsp;
         wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_fill_rsp_addr;
-        wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0]  per_cluster_dram_fill_rsp_data;
-        wire[31:0]                                              per_cluster_dram_fill_rsp_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
+        wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_cluster_dram_fill_rsp_data;
+        wire[31:0]                                           per_cluster_dram_fill_rsp_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
 
         wire[`NUM_CLUSTERS-1:0][`NUM_CORES_PER_CLUSTER-1:0]        per_cluster_io_valid;
         wire[`NUM_CLUSTERS-1:0][`NUM_CORES_PER_CLUSTER-1:0][31:0]  per_cluster_io_data;
@@ -155,22 +155,22 @@ module Vortex_Socket (
         end
 
         //////////////////// L3 Cache ////////////////////
-        wire[`L3NUMBER_REQUESTS-1:0]                             l3c_core_req;
-        wire[`L3NUMBER_REQUESTS-1:0][2:0]                        l3c_core_req_mem_write;
-        wire[`L3NUMBER_REQUESTS-1:0][2:0]                        l3c_core_req_mem_read;
-        wire[`L3NUMBER_REQUESTS-1:0][31:0]                       l3c_core_req_addr;
-        wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0] l3c_core_req_data;
-        wire[`L3NUMBER_REQUESTS-1:0][1:0]                        l3c_core_req_wb;
+        wire[`L3NUM_REQUESTS-1:0]                             l3c_core_req;
+        wire[`L3NUM_REQUESTS-1:0][2:0]                        l3c_core_req_mem_write;
+        wire[`L3NUM_REQUESTS-1:0][2:0]                        l3c_core_req_mem_read;
+        wire[`L3NUM_REQUESTS-1:0][31:0]                       l3c_core_req_addr;
+        wire[`L3NUM_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0] l3c_core_req_data;
+        wire[`L3NUM_REQUESTS-1:0][1:0]                        l3c_core_req_wb;
 
-        wire[`L3NUMBER_REQUESTS-1:0]                             l3c_core_no_wb_slot;
+        wire[`L3NUM_REQUESTS-1:0]                             l3c_core_no_wb_slot;
 
-        wire[`L3NUMBER_REQUESTS-1:0]                                  l3c_wb;
-        wire[`L3NUMBER_REQUESTS-1:0] [31:0]                           l3c_wb_addr;
-        wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]      l3c_wb_data;
+        wire[`L3NUM_REQUESTS-1:0]                                  l3c_wb;
+        wire[`L3NUM_REQUESTS-1:0] [31:0]                           l3c_wb_addr;
+        wire[`L3NUM_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]     l3c_wb_data;
 
 
-        wire[`DBANK_LINE_WORDS-1:0][31:0]                             dram_req_data_port;
-        wire[`DBANK_LINE_WORDS-1:0][31:0]                             dram_fill_rsp_data_port;
+        wire[`DBANK_LINE_WORDS-1:0][31:0]                          dram_req_data_port;
+        wire[`DBANK_LINE_WORDS-1:0][31:0]                          dram_fill_rsp_data_port;
 
         genvar llb_index;
             for (llb_index = 0; llb_index < `DBANK_LINE_WORDS; llb_index=llb_index+1) begin
@@ -180,7 +180,7 @@ module Vortex_Socket (
 
         // 
         genvar l3c_curr_cluster;
-            for (l3c_curr_cluster = 0; l3c_curr_cluster < `L3NUMBER_REQUESTS; l3c_curr_cluster=l3c_curr_cluster+1) begin
+            for (l3c_curr_cluster = 0; l3c_curr_cluster < `L3NUM_REQUESTS; l3c_curr_cluster=l3c_curr_cluster+1) begin
                 // Core Request
                 assign l3c_core_req           [l3c_curr_cluster]   = per_cluster_dram_req      [l3c_curr_cluster];
 
@@ -208,9 +208,9 @@ module Vortex_Socket (
         VX_cache #(
             .CACHE_SIZE_BYTES             (`L3CACHE_SIZE_BYTES),
             .BANK_LINE_SIZE_BYTES         (`L3BANK_LINE_SIZE_BYTES),
-            .NUMBER_BANKS                 (`L3NUMBER_BANKS),
+            .NUM_BANKS                    (`L3NUM_BANKS),
             .WORD_SIZE_BYTES              (`L3WORD_SIZE_BYTES),
-            .NUMBER_REQUESTS              (`L3NUMBER_REQUESTS),
+            .NUM_REQUESTS                 (`L3NUM_REQUESTS),
             .STAGE_1_CYCLES               (`L3STAGE_1_CYCLES),
             .FUNC_ID                      (`L2FUNC_ID),
             .REQQ_SIZE                    (`L3REQQ_SIZE),

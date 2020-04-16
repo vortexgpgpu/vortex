@@ -24,12 +24,12 @@ module VX_dmem_controller (
 );
 
 
-	VX_gpu_dcache_res_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_rsp_smem();
-	VX_gpu_dcache_req_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_req_smem();
+	VX_gpu_dcache_res_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   VX_dcache_rsp_smem();
+	VX_gpu_dcache_req_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   VX_dcache_req_smem();
 
 
-	VX_gpu_dcache_res_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_rsp_dcache();
-	VX_gpu_dcache_req_inter   #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))   VX_dcache_req_dcache();
+	VX_gpu_dcache_res_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   VX_dcache_rsp_dcache();
+	VX_gpu_dcache_req_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   VX_dcache_req_dcache();
 
 
 	wire to_shm          = VX_dcache_req.core_req_addr[0][31:24] == 8'hFF;
@@ -81,9 +81,9 @@ module VX_dmem_controller (
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`SCACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`SBANK_LINE_SIZE_BYTES),
-		.NUMBER_BANKS                 (`SNUMBER_BANKS),
+		.NUM_BANKS                    (`SNUM_BANKS),
 		.WORD_SIZE_BYTES              (`SWORD_SIZE_BYTES),
-		.NUMBER_REQUESTS              (`SNUMBER_REQUESTS),
+		.NUM_REQUESTS                 (`SNUM_REQUESTS),
 		.STAGE_1_CYCLES               (`SSTAGE_1_CYCLES),
 		.FUNC_ID                      (`SFUNC_ID),
 		.REQQ_SIZE                    (`SREQQ_SIZE),
@@ -166,9 +166,9 @@ module VX_dmem_controller (
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`DCACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`DBANK_LINE_SIZE_BYTES),
-		.NUMBER_BANKS                 (`DNUMBER_BANKS),
+		.NUM_BANKS                    (`DNUM_BANKS),
 		.WORD_SIZE_BYTES              (`DWORD_SIZE_BYTES),
-		.NUMBER_REQUESTS              (`DNUMBER_REQUESTS),
+		.NUM_REQUESTS                 (`DNUM_REQUESTS),
 		.STAGE_1_CYCLES               (`DSTAGE_1_CYCLES),
 		.FUNC_ID                      (`DFUNC_ID),
 		.REQQ_SIZE                    (`DREQQ_SIZE),
@@ -254,9 +254,9 @@ module VX_dmem_controller (
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`ICACHE_SIZE_BYTES),
 		.BANK_LINE_SIZE_BYTES         (`IBANK_LINE_SIZE_BYTES),
-		.NUMBER_BANKS                 (`INUMBER_BANKS),
+		.NUM_BANKS                    (`INUM_BANKS),
 		.WORD_SIZE_BYTES              (`IWORD_SIZE_BYTES),
-		.NUMBER_REQUESTS              (`INUMBER_REQUESTS),
+		.NUM_REQUESTS                 (`INUM_REQUESTS),
 		.STAGE_1_CYCLES               (`ISTAGE_1_CYCLES),
 		.FUNC_ID                      (`IFUNC_ID),
 		.REQQ_SIZE                    (`IREQQ_SIZE),

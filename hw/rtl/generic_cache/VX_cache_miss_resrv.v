@@ -8,11 +8,11 @@ module VX_cache_miss_resrv
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
@@ -53,10 +53,10 @@ module VX_cache_miss_resrv
 	input wire                                   miss_add,
 	input wire[31:0]                             miss_add_addr,
 	input wire[`WORD_SIZE_RNG]                   miss_add_data,
-	input wire[`vx_clog2(NUMBER_REQUESTS)-1:0]   miss_add_tid,
+	input wire[`LOG2UP(NUM_REQUESTS)-1:0]        miss_add_tid,
 	input wire[4:0]                              miss_add_rd,
 	input wire[1:0]                              miss_add_wb,
-	input wire[`NW_BITS-1:0]                         miss_add_warp_num,
+	input wire[`NW_BITS-1:0]                     miss_add_warp_num,
 	input wire[2:0]                              miss_add_mem_read,
 	input wire[2:0]                              miss_add_mem_write,
 	input wire[31:0]                             miss_add_pc,
@@ -72,24 +72,24 @@ module VX_cache_miss_resrv
 	output wire                                  miss_resrv_valid_st0,
 	output wire[31:0]                            miss_resrv_addr_st0,
 	output wire[`WORD_SIZE_RNG]                  miss_resrv_data_st0,
-	output wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  miss_resrv_tid_st0,
+	output wire[`LOG2UP(NUM_REQUESTS)-1:0]       miss_resrv_tid_st0,
 	output wire[4:0]                             miss_resrv_rd_st0,
 	output wire[1:0]                             miss_resrv_wb_st0,
-	output wire[`NW_BITS-1:0]                        miss_resrv_warp_num_st0,
+	output wire[`NW_BITS-1:0]                    miss_resrv_warp_num_st0,
 	output wire[2:0]                             miss_resrv_mem_read_st0,
 	output wire[31:0]                            miss_resrv_pc_st0,
 	output wire[2:0]                             miss_resrv_mem_write_st0
 	
 );
 
-		// Size of metadata = 32 + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_BITS-1 + 1)
+		// Size of metadata = 32 + `LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS-1 + 1)
 		reg[`MRVQ_METADATA_SIZE-1:0]   metadata_table[MRVQ_SIZE-1:0];
 		reg[MRVQ_SIZE-1:0][31:0]       addr_table;
 		reg[MRVQ_SIZE-1:0][31:0]       pc_table;
 		reg[MRVQ_SIZE-1:0]             valid_table;
 		reg[MRVQ_SIZE-1:0]             ready_table;
-		reg[`vx_clog2(MRVQ_SIZE)-1:0]  head_ptr;
-		reg[`vx_clog2(MRVQ_SIZE)-1:0]  tail_ptr;
+		reg[`LOG2UP(MRVQ_SIZE)-1:0]    head_ptr;
+		reg[`LOG2UP(MRVQ_SIZE)-1:0]    tail_ptr;
 
 		reg[31:0] size;
 
@@ -99,7 +99,7 @@ module VX_cache_miss_resrv
 		assign miss_resrv_stop = (MRVQ_SIZE != 2) && (size  > (MRVQ_SIZE-5));
 
 		wire                            enqueue_possible = !miss_resrv_full;
-		wire[`vx_clog2(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
+		wire[`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
 
 		reg[MRVQ_SIZE-1:0] make_ready;
 		genvar curr_e;
@@ -112,7 +112,7 @@ module VX_cache_miss_resrv
 
 
 		wire                            dequeue_possible = valid_table[head_ptr] && ready_table[head_ptr];
-		wire[`vx_clog2(MRVQ_SIZE)-1:0] dequeue_index     = head_ptr;
+		wire[`LOG2UP(MRVQ_SIZE)-1:0] dequeue_index     = head_ptr;
 
 		assign miss_resrv_valid_st0 = (MRVQ_SIZE != 2) && dequeue_possible;
 		assign miss_resrv_pc_st0    = pc_table[dequeue_index];

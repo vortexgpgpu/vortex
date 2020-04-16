@@ -3,7 +3,7 @@
 
 module VX_d_cache_tb;
 
-  parameter NUMBER_BANKS = 8;
+  parameter NUM_BANKS = 8;
 
   reg clk, reset, im_ready;
   reg [`NUM_THREADS-1:0] i_p_valid;
@@ -16,9 +16,9 @@ module VX_d_cache_tb;
   reg        o_p_waitrequest;
   reg [13:0]  o_m_addr; // Only one address is sent out at a time to memory
   reg         o_m_valid;
-  reg [(NUMBER_BANKS * 32) - 1:0] o_m_writedata;
+  reg [(NUM_BANKS * 32) - 1:0] o_m_writedata;
   reg         o_m_read_or_write; //, o_m_write;
-  reg [(NUMBER_BANKS * 32) - 1:0] i_m_readdata;  // Read Data that is passed from the memory module back to the controller
+  reg [(NUM_BANKS * 32) - 1:0] i_m_readdata;  // Read Data that is passed from the memory module back to the controller
 
 
   VX_d_cache d_cache(.clk(clk),
