@@ -84,8 +84,8 @@ module VX_csr_pipe
 
 	genvar cur_tw;
 	for (cur_tw = 0; cur_tw < `NUM_THREADS; cur_tw = cur_tw + 1) begin
-		assign warp_ids[cur_tw] = warp_num_s2;
-		assign warp_idz[cur_tw] = 32'(warp_num_s2 + (CORE_ID * `NUM_WARPS));
+		assign warp_ids[cur_tw] = 32'(warp_num_s2);
+		assign warp_idz[cur_tw] = 32'(warp_num_s2) + (CORE_ID * `NUM_WARPS);
 	end
 
 	genvar cur_v;

@@ -45,8 +45,8 @@
 `define DBANK_LINE_SIZE (`DBANK_LINE_SIZE_BYTES * 8)
 
 // Number of banks {1, 2, 4, 8,...}
-`ifndef DNUMBER_BANKS
-`define DNUMBER_BANKS 8
+`ifndef DNUM_BANKS
+`define DNUM_BANKS 8
 `endif
 
 // Size of a word in bytes
@@ -55,8 +55,8 @@
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef DNUMBER_REQUESTS
-`define DNUMBER_REQUESTS `NUM_THREADS
+`ifndef DNUM_REQUESTS
+`define DNUM_REQUESTS `NUM_THREADS
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)
@@ -141,8 +141,8 @@
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
-`ifndef INUMBER_BANKS
-`define INUMBER_BANKS 8
+`ifndef INUM_BANKS
+`define INUM_BANKS 8
 `endif
 
 // Size of a word in bytes
@@ -151,8 +151,8 @@
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef INUMBER_REQUESTS
-`define INUMBER_REQUESTS 1
+`ifndef INUM_REQUESTS
+`define INUM_REQUESTS 1
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)
@@ -237,8 +237,8 @@
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
-`ifndef SNUMBER_BANKS
-`define SNUMBER_BANKS 8
+`ifndef SNUM_BANKS
+`define SNUM_BANKS 8
 `endif
 
 // Size of a word in bytes
@@ -247,8 +247,8 @@
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef SNUMBER_REQUESTS
-`define SNUMBER_REQUESTS `NUM_THREADS
+`ifndef SNUM_REQUESTS
+`define SNUM_REQUESTS `NUM_THREADS
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)
@@ -333,8 +333,8 @@
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
-`ifndef L2NUMBER_BANKS
-`define L2NUMBER_BANKS 8
+`ifndef L2NUM_BANKS
+`define L2NUM_BANKS 8
 `endif
 
 // Size of a word in bytes
@@ -343,8 +343,8 @@
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef L2NUMBER_REQUESTS
-`define L2NUMBER_REQUESTS (2*`NUM_CORES_PER_CLUSTER)
+`ifndef L2NUM_REQUESTS
+`define L2NUM_REQUESTS (2*`NUM_CORES_PER_CLUSTER)
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)
@@ -429,8 +429,8 @@
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
-`ifndef L3NUMBER_BANKS
-`define L3NUMBER_BANKS 8
+`ifndef L3NUM_BANKS
+`define L3NUM_BANKS 8
 `endif
 
 // Size of a word in bytes
@@ -439,8 +439,8 @@
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef L3NUMBER_REQUESTS
-`define L3NUMBER_REQUESTS (`NUM_CLUSTERS)
+`ifndef L3NUM_REQUESTS
+`define L3NUM_REQUESTS (`NUM_CLUSTERS)
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)

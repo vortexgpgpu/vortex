@@ -23,8 +23,8 @@ module VX_prefetcher
 );
 
 
-	reg[`vx_clog2(PRFQ_STRIDE):0]   use_valid;
-	reg[31:0]                       use_addr;
+	reg[`LOG2UP(PRFQ_STRIDE):0]   use_valid;
+	reg[31:0]                     use_addr;
 
 
 	wire       current_valid;

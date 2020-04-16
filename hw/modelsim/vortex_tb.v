@@ -1,7 +1,7 @@
 
 `include "../VX_define.vh"
 
-//`define NUMBER_BANKS 8
+//`define NUM_BANKS 8
 //`define NUM_WORDS_PER_BLOCK 4
 
 `define ARM_UD_MODEL

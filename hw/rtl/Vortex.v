@@ -122,9 +122,9 @@ module Vortex
 	wire schedule_delay;
 
 	// Dcache Interface
-	VX_gpu_dcache_res_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_rsp();
-	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_req();
-	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`DNUMBER_REQUESTS))  VX_dcache_req_qual();
+	VX_gpu_dcache_res_inter #(.NUM_REQUESTS(`DNUM_REQUESTS))  VX_dcache_rsp();
+	VX_gpu_dcache_req_inter #(.NUM_REQUESTS(`DNUM_REQUESTS))  VX_dcache_req();
+	VX_gpu_dcache_req_inter #(.NUM_REQUESTS(`DNUM_REQUESTS))  VX_dcache_req_qual();
 
 	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) VX_gpu_dcache_dram_req();
 	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) VX_gpu_dcache_dram_res();
@@ -172,8 +172,8 @@ module Vortex
 	assign VX_dcache_req_qual.core_no_wb_slot    = VX_dcache_req.core_no_wb_slot;
 
 
-	VX_gpu_dcache_res_inter #(.NUMBER_REQUESTS(`INUMBER_REQUESTS))  VX_icache_rsp();
-	VX_gpu_dcache_req_inter #(.NUMBER_REQUESTS(`INUMBER_REQUESTS))  VX_icache_req();
+	VX_gpu_dcache_res_inter #(.NUM_REQUESTS(`INUM_REQUESTS))  VX_icache_rsp();
+	VX_gpu_dcache_req_inter #(.NUM_REQUESTS(`INUM_REQUESTS))  VX_icache_req();
 
 	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) VX_gpu_icache_dram_req();
 	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) VX_gpu_icache_dram_res();

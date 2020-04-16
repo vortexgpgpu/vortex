@@ -33,10 +33,10 @@ module VX_cache_data_per_index
 	output wire                                 dirty_use
 	
 );
-    //localparam NUMBER_BANKS         = CACHE_BANKS;
+    //localparam NUM_BANKS         = CACHE_BANKS;
     //localparam CACHE_BLOCK_PER_BANK = (CACHE_BLOCK / CACHE_BANKS);
     // localparam NUM_WORDS_PER_BLOCK  = CACHE_BLOCK / (CACHE_BANKS*4);
-    //localparam NUMBER_INDEXES       = `DCACHE_NUM_IND;
+    //localparam NUM_INDEXES       = `DCACHE_NUM_IND;
 
     wire [CACHE_WAYS-1:0][TAG_SIZE_END:TAG_SIZE_START]          	tag_use_per_way;
     wire [CACHE_WAYS-1:0][NUM_WORDS_PER_BLOCK-1:0][31:0] 	data_use_per_way;

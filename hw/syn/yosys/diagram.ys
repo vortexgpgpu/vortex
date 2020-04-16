@@ -1,0 +1,5 @@
+# load design
+read_verilog -sv -I../../rtl -I../../rtl/interfaces -I../../rtl/cache -I../../rtl/generic_cache -I../../rtl/shared_memory -I../../rtl/pipe_regs -I../../rtl/compat ../../rtl/Vortex.v
+
+# dump diagram
+show

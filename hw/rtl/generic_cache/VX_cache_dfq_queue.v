@@ -7,11 +7,11 @@ module VX_cache_dfq_queue
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
@@ -45,11 +45,11 @@ module VX_cache_dfq_queue
 
 	)
 	(
-	input  wire                          clk,
-	input  wire                          reset,
-	input  wire                          dfqq_push,
-    input  wire[NUMBER_BANKS-1:0]       per_bank_dram_fill_req,
-    input  wire[NUMBER_BANKS-1:0][31:0] per_bank_dram_fill_req_addr,
+	input  wire                      clk,
+	input  wire                      reset,
+	input  wire                      dfqq_push,
+    input  wire[NUM_BANKS-1:0]       per_bank_dram_fill_req,
+    input  wire[NUM_BANKS-1:0][31:0] per_bank_dram_fill_req_addr,
 
 	input  wire            dfqq_pop,
     output wire            dfqq_req,
@@ -58,18 +58,18 @@ module VX_cache_dfq_queue
 	output wire            dfqq_full
 );
 
-    wire[NUMBER_BANKS-1:0]       out_per_bank_dram_fill_req;
-    wire[NUMBER_BANKS-1:0][31:0] out_per_bank_dram_fill_req_addr;
+    wire[NUM_BANKS-1:0]       out_per_bank_dram_fill_req;
+    wire[NUM_BANKS-1:0][31:0] out_per_bank_dram_fill_req_addr;
 
 
-    reg [NUMBER_BANKS-1:0]       use_per_bank_dram_fill_req;
-    reg [NUMBER_BANKS-1:0][31:0] use_per_bank_dram_fill_req_addr;
+    reg [NUM_BANKS-1:0]       use_per_bank_dram_fill_req;
+    reg [NUM_BANKS-1:0][31:0] use_per_bank_dram_fill_req_addr;
 
 
-    wire[NUMBER_BANKS-1:0]       qual_bank_dram_fill_req;
-    wire[NUMBER_BANKS-1:0][31:0] qual_bank_dram_fill_req_addr;
+    wire[NUM_BANKS-1:0]       qual_bank_dram_fill_req;
+    wire[NUM_BANKS-1:0][31:0] qual_bank_dram_fill_req_addr;
 
-    wire[NUMBER_BANKS-1:0]       updated_bank_dram_fill_req;
+    wire[NUM_BANKS-1:0]       updated_bank_dram_fill_req;
 
 
     wire o_empty;
@@ -79,7 +79,7 @@ module VX_cache_dfq_queue
 
 	wire push_qual = dfqq_push && !dfqq_full;
 	wire pop_qual  = dfqq_pop  && use_empty && !out_empty;
-	VX_generic_queue_ll #(.DATAW(NUMBER_BANKS * (1+32)), .SIZE(DFQQ_SIZE)) dfqq_queue(
+	VX_generic_queue_ll #(.DATAW(NUM_BANKS * (1+32)), .SIZE(DFQQ_SIZE)) dfqq_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
@@ -90,13 +90,12 @@ module VX_cache_dfq_queue
 		.full    (dfqq_full)
 		);
 
-
-	assign qual_bank_dram_fill_req      = use_empty ? (out_per_bank_dram_fill_req & {NUMBER_BANKS{!o_empty}}) : (use_per_bank_dram_fill_req & {NUMBER_BANKS{!use_empty}}); 
+	assign qual_bank_dram_fill_req      = use_empty ? (out_per_bank_dram_fill_req & {NUM_BANKS{!o_empty}}) : (use_per_bank_dram_fill_req & {NUM_BANKS{!use_empty}}); 
 	assign qual_bank_dram_fill_req_addr = use_empty ? out_per_bank_dram_fill_req_addr : use_per_bank_dram_fill_req_addr;
 
-	wire[`vx_clog2(NUMBER_BANKS)-1:0] qual_request_index;
+	wire[`LOG2UP(NUM_BANKS)-1:0] qual_request_index;
 	wire                               qual_has_request;
-	VX_generic_priority_encoder #(.N(NUMBER_BANKS)) VX_sel_bank(
+	VX_generic_priority_encoder #(.N(NUM_BANKS)) VX_sel_bank(
 		.valids(qual_bank_dram_fill_req),
 		.index (qual_request_index),
 		.found (qual_has_request)

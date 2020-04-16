@@ -8,11 +8,11 @@ module VX_cache_core_req_bank_sel
 	// Size of line inside a bank in bytes
 	parameter BANK_LINE_SIZE_BYTES          = 16, 
 	// Number of banks {1, 2, 4, 8,...}
-	parameter NUMBER_BANKS                  = 8, 
+	parameter NUM_BANKS                     = 8, 
 	// Size of a word in bytes
 	parameter WORD_SIZE_BYTES               = 4, 
 	// Number of Word requests per cycle {1, 2, 4, 8, ...}
-	parameter NUMBER_REQUESTS               = 2, 
+	parameter NUM_REQUESTS                  = 2, 
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
     // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
@@ -48,10 +48,10 @@ module VX_cache_core_req_bank_sel
 
 	)
 	(
-	input  wire [NUMBER_REQUESTS-1:0]                       core_req_valid,
-	input  wire [NUMBER_REQUESTS-1:0][31:0]                 core_req_addr,
+	input  wire [NUM_REQUESTS-1:0]                   core_req_valid,
+	input  wire [NUM_REQUESTS-1:0][31:0]             core_req_addr,
 	
-	output reg  [NUMBER_BANKS-1:0][NUMBER_REQUESTS-1:0]    per_bank_valids
+	output reg  [NUM_BANKS-1:0][NUM_REQUESTS-1:0]    per_bank_valids
 );
 
 	wire[31:0] req_address;
@@ -60,8 +60,8 @@ module VX_cache_core_req_bank_sel
 		integer curr_req;
 		always @(*) begin
 			per_bank_valids = 0;
-			for (curr_req = 0; curr_req < NUMBER_REQUESTS; curr_req = curr_req + 1) begin
-				if (NUMBER_BANKS == 1) begin
+			for (curr_req = 0; curr_req < NUM_REQUESTS; curr_req = curr_req + 1) begin
+				if (NUM_BANKS == 1) begin
 					// If there is only one bank, then only map requests to that bank
 					per_bank_valids[0][curr_req] = core_req_valid[curr_req];
 				end else begin

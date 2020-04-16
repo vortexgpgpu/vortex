@@ -25,7 +25,7 @@ module VX_d_cache_encapsulate (
 		i_m_ready
 );
 
-    parameter NUMBER_BANKS = 8;
+    parameter NUM_BANKS = 8;
 
 
 
@@ -39,7 +39,7 @@ module VX_d_cache_encapsulate (
     input  wire [31:0] i_p_writedata[`NUM_THREADS-1:0];
     input  wire        i_p_read_or_write;
 
-    input  wire [31:0] i_m_readdata[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0];
+    input  wire [31:0] i_m_readdata[NUM_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0];
     input  wire        i_m_ready;
 
     output reg [31:0]  o_p_readdata[`NUM_THREADS-1:0];
@@ -48,7 +48,7 @@ module VX_d_cache_encapsulate (
 
     output reg [31:0]  o_m_addr;
     output reg         o_m_valid;
-    output reg [31:0]  o_m_writedata[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0];
+    output reg [31:0]  o_m_writedata[NUM_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0];
     output reg         o_m_read_or_write;
 
 
@@ -60,8 +60,8 @@ module VX_d_cache_encapsulate (
     reg [`NUM_THREADS-1:0][31:0]   o_p_readdata_inter;
     reg [`NUM_THREADS-1:0]         o_p_readdata_valid_inter;
 
-    reg[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0]  o_m_writedata_inter;
-    wire[NUMBER_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata_inter;
+    reg[NUM_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0]  o_m_writedata_inter;
+    wire[NUM_BANKS - 1:0][`NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata_inter;
 
 
     genvar curr_thraed, curr_bank, curr_word;
@@ -74,7 +74,7 @@ module VX_d_cache_encapsulate (
     	assign o_p_readdata_valid[curr_thraed] = o_p_readdata_valid_inter[curr_thraed];
     end
 	 
-    for (curr_bank = 0; curr_bank < NUMBER_BANKS; curr_bank = curr_bank + 1) begin : banks
+    for (curr_bank = 0; curr_bank < NUM_BANKS; curr_bank = curr_bank + 1) begin : banks
     	for (curr_word = 0; curr_word < `NUM_WORDS_PER_BLOCK; curr_word = curr_word + 1) begin : words
 
     		assign o_m_writedata[curr_bank][curr_word] = o_m_writedata_inter[curr_bank][curr_word];

@@ -351,13 +351,13 @@ void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
 }
 
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
-  printf("[sim] total cycles: %lld\n", this->total_cycles_);
+  printf("[sim] total cycles: %ld\n", this->total_cycles_);
 
   // send snoops for L1 flush
   this->send_snoops(mem_addr, size);
   this->wait(PIPELINE_FLUSH_LATENCY);
 
-// #if NUMBER_CORES != 1
+// #if NUM_CORES != 1
   // send snoops for L2 flush
   // this->send_snoops(mem_addr, size);
   // this->wait(PIPELINE_FLUSH_LATENCY);

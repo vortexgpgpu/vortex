@@ -57,10 +57,10 @@ module VX_Cache_Bank
             evicted_way
            );
 
-   // localparam NUMBER_BANKS         = `CACHE_BANKS;
+   // localparam NUM_BANKS         = `CACHE_BANKS;
    // localparam CACHE_BLOCK_PER_BANK = (`CACHE_BLOCK / `CACHE_BANKS);
    // localparam NUM_WORDS_PER_BLOCK  = `CACHE_BLOCK / (`CACHE_BANKS*4);
-   // localparam NUMBER_INDEXES       = `NUM_IND;
+   // localparam NUM_INDEXES       = `NUM_IND;
 
     localparam CACHE_IDLE    = 0; // Idle
     localparam SEND_MEM_REQ  = 1; // Write back this block into memory
