@@ -1,9 +1,8 @@
 
-`include "../VX_define.vh"
-
 `ifndef VX_ICACHE_REQ
-
 `define VX_ICACHE_REQ
+
+`include "../VX_define.vh"
 
 interface VX_icache_request_inter ();
 
@@ -14,6 +13,5 @@ interface VX_icache_request_inter ();
 	wire[31:0] 			out_cache_driver_in_data;
 
 endinterface
-
 
 `endif

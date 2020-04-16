@@ -1,15 +1,14 @@
 
-`include "../VX_define.vh"
-
 `ifndef VX_LSU_REQ_INTER
-
 `define VX_LSU_REQ_INTER
+
+`include "../VX_define.vh"
 
 interface VX_lsu_req_inter ();
 
 	wire[`NUM_THREADS-1:0]       valid;
-	wire[31:0]           lsu_pc;
-	wire[`NW_BITS-1:0]       warp_num;
+	wire[31:0]           	 	 lsu_pc;
+	wire[`NW_BITS-1:0]        	 warp_num;
 	wire[`NUM_THREADS-1:0][31:0] store_data;
 	wire[`NUM_THREADS-1:0][31:0] base_address; // A reg data
 	wire[31:0]           offset;       // itype_immed
@@ -19,6 +18,5 @@ interface VX_lsu_req_inter ();
 	wire[1:0]            wb;
 
 endinterface
-
 
 `endif

@@ -1,16 +1,12 @@
-
+`ifndef VX_GPU_DCACHE_RES
+`define VX_GPU_DCACHE_RES
 
 `include "../generic_cache/VX_cache_config.vh"
-
-`ifndef VX_GPU_DCACHE_RES
-
-`define VX_GPU_DCACHE_RES
 
 interface VX_gpu_dcache_res_inter
 	#(
 		parameter NUM_REQUESTS = 32
-	)
-	();
+	) ();
 
 	// Cache WB
     wire [NUM_REQUESTS-1:0]        core_wb_valid;
@@ -24,6 +20,5 @@ interface VX_gpu_dcache_res_inter
     wire                           delay_req;
 
 endinterface
-
 
 `endif

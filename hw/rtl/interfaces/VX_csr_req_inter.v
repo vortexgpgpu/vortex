@@ -1,9 +1,7 @@
+`ifndef VX_CSR_REQ
+`define VX_CSR_REQ
 
 `include "../VX_define.vh"
-
-`ifndef VX_CSR_REQ
-
-`define VX_CSR_REQ
 
 interface VX_csr_req_inter ();
 
@@ -17,8 +15,6 @@ interface VX_csr_req_inter ();
 	wire           csr_immed;
 	wire[31:0]     csr_mask;
 
-
 endinterface
-
 
 `endif

@@ -1,10 +1,9 @@
 
 
-`include "../generic_cache/VX_cache_config.vh"
-
 `ifndef VX_GPU_DRAM_DCACHE_REQ
-
 `define VX_GPU_DRAM_DCACHE_REQ
+
+`include "../generic_cache/VX_cache_config.vh"
 
 interface VX_gpu_dcache_dram_req_inter
     #(
@@ -27,11 +26,9 @@ interface VX_gpu_dcache_dram_req_inter
     // DRAM Cache can't accept response
     wire                              dram_fill_accept;
 
-
     // DRAM Cache can't accept request
     wire                              dram_req_delay;
 
 endinterface
-
 
 `endif

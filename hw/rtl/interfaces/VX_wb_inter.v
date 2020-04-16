@@ -1,9 +1,7 @@
-`include "../VX_define.vh"
-
 `ifndef VX_WB_INTER
-
 `define VX_WB_INTER
 
+`include "../VX_define.vh"
 
 interface VX_wb_inter ();
 
@@ -15,7 +13,5 @@ interface VX_wb_inter ();
 	wire[`NW_BITS-1:0]        wb_warp_num;
 
 endinterface
-
-
 
 `endif

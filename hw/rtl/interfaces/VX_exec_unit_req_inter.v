@@ -1,17 +1,15 @@
+`ifndef VX_EXE_UNIT_REQ_INTER
+`define VX_EXE_UNIT_REQ_INTER
 
 `include "../VX_define.vh"
-
-`ifndef VX_EXE_UNIT_REQ_INTER
-
-`define VX_EXE_UNIT_REQ_INTER
 
 interface VX_exec_unit_req_inter ();
 
 	// Meta
-	wire[`NUM_THREADS-1:0]       valid;
-	wire[`NW_BITS-1:0]       warp_num;
-	wire[31:0]           curr_PC;
-	wire[31:0]           PC_next;
+	wire[`NUM_THREADS-1:0]      valid;
+	wire[`NW_BITS-1:0]       	warp_num;
+	wire[31:0]           		curr_PC;
+	wire[31:0]           		PC_next;
 
 	// Write Back Info
 	wire[4:0]            rd;
@@ -45,7 +43,7 @@ interface VX_exec_unit_req_inter ();
 	wire[11:0]           csr_address;
 	wire                 csr_immed;
 	wire[31:0]           csr_mask;
-endinterface
 
+endinterface
 
 `endif
