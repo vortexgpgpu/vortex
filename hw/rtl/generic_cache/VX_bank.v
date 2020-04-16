@@ -1,5 +1,5 @@
-`include "VX_cache_config.v"
-`include "VX_define.v"
+`include "VX_cache_config.vh"
+`include "VX_define.vh"
 module VX_bank 
 	#(
 	// Size of cache in bytes
@@ -60,7 +60,7 @@ module VX_bank
 	input wire [4:0]                              bank_rd,
 	input wire [NUMBER_REQUESTS-1:0][1:0]         bank_wb,
 	input wire [31:0]                             bank_pc,
-	input wire [`NW_M1:0]                         bank_warp_num,
+	input wire [`NW_BITS-1:0]                         bank_warp_num,
 	input wire [NUMBER_REQUESTS-1:0][2:0]         bank_mem_read,  
 	input wire [NUMBER_REQUESTS-1:0][2:0]         bank_mem_write,
 	output wire                                   reqq_full,
@@ -71,7 +71,7 @@ module VX_bank
 	output wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  bank_wb_tid,
 	output wire [4:0]                             bank_wb_rd,
 	output wire [1:0]                             bank_wb_wb,
-	output wire [`NW_M1:0]                        bank_wb_warp_num,
+	output wire [`NW_BITS-1:0]                        bank_wb_warp_num,
 	output wire [`WORD_SIZE_RNG]                  bank_wb_data,
 	output wire [31:0]                            bank_wb_pc,
 	output wire [31:0]                            bank_wb_address,
@@ -86,14 +86,14 @@ module VX_bank
 	// Dram Fill Response
 	input  wire                                   dram_fill_rsp,
 	input  wire [31:0]                            dram_fill_addr,
-	input  wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] dram_fill_rsp_data,
+	input  wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] dram_fill_rsp_data,
 	output wire                                   dram_fill_accept,
 
 	// Dram WB Requests
 	input  wire                                   dram_wb_queue_pop,
 	output wire                                   dram_wb_req,
 	output wire[31:0]                             dram_wb_req_addr,
-	output wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] dram_wb_req_data,
+	output wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] dram_wb_req_data,
 
 	// Snp Request
 	input  wire                                   snp_req,
@@ -112,7 +112,7 @@ module VX_bank
 		if (reset) begin
 			snoop_state <= 0;
 		end else begin
-			snoop_state <= (snoop_state | snp_req) && ((FUNC_ID == `LLFUNC_ID) || (FUNC_ID == `L3FUNC_ID));
+			snoop_state <= (snoop_state | snp_req) && ((FUNC_ID == `L2FUNC_ID) || (FUNC_ID == `L3FUNC_ID));
 		end
 	end
 
@@ -139,11 +139,11 @@ module VX_bank
 	wire                            dfpq_empty;
 	wire                            dfpq_full;
 	wire[31:0]                      dfpq_addr_st0;
-	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] dfpq_filldata_st0;
+	wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] dfpq_filldata_st0;
 
 	assign dram_fill_accept = !dfpq_full;
 
-	VX_generic_queue_ll #(.DATAW(32+(`BANK_LINE_SIZE_WORDS*`WORD_SIZE)), .SIZE(DFPQ_SIZE)) dfp_queue(
+	VX_generic_queue_ll #(.DATAW(32+(`BANK_LINE_WORDS*`WORD_SIZE)), .SIZE(DFPQ_SIZE)) dfp_queue(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (dram_fill_rsp),
@@ -164,7 +164,7 @@ module VX_bank
 	wire [`WORD_SIZE_RNG]                 reqq_req_writeword_st0;
 	wire [4:0]                            reqq_req_rd_st0;
 	wire [1:0]                            reqq_req_wb_st0;
-	wire [`NW_M1:0]                       reqq_req_warp_num_st0;
+	wire [`NW_BITS-1:0]                       reqq_req_warp_num_st0;
 	wire [2:0]                            reqq_req_mem_read_st0;  
 	wire [2:0]                            reqq_req_mem_write_st0;
 	wire [31:0]                           reqq_req_pc_st0;
@@ -231,7 +231,7 @@ module VX_bank
 	wire [4:0]                            mrvq_rd_st0;
 	wire [1:0]                            mrvq_wb_st0;
 	wire [31:0]                           miss_resrv_pc_st0;
-	wire [`NW_M1:0]                       mrvq_warp_num_st0;
+	wire [`NW_BITS-1:0]                       mrvq_warp_num_st0;
 	wire [2:0]                            mrvq_mem_read_st0;  
 	wire [2:0]                            mrvq_mem_write_st0;
 
@@ -241,7 +241,7 @@ module VX_bank
 	wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  miss_add_tid;
 	wire[4:0]                             miss_add_rd;
 	wire[1:0]                             miss_add_wb;
-	wire[`NW_M1:0]                        miss_add_warp_num;
+	wire[`NW_BITS-1:0]                        miss_add_warp_num;
 	wire[2:0]                             miss_add_mem_read;
 	wire[2:0]                             miss_add_mem_write;
 
@@ -336,7 +336,7 @@ module VX_bank
 	wire                                  qual_valid_st0;
 	wire [31:0]                           qual_addr_st0;
 	wire [`WORD_SIZE_RNG]                 qual_writeword_st0;
-	wire [`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] qual_writedata_st0;
+	wire [`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] qual_writedata_st0;
 	wire [`REQ_INST_META_SIZE-1:0]        qual_inst_meta_st0;
 	wire                                  qual_going_to_write_st0;
 	wire                                  qual_is_snp;
@@ -344,7 +344,7 @@ module VX_bank
 
 	wire [`WORD_SIZE_RNG]                 writeword_st1     [STAGE_1_CYCLES-1:0];
 	wire [`REQ_INST_META_SIZE-1:0]        inst_meta_st1     [STAGE_1_CYCLES-1:0];	
-	wire [`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] writedata_st1[STAGE_1_CYCLES-1:0];
+	wire [`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] writedata_st1[STAGE_1_CYCLES-1:0];
 	wire                                  is_snp_st1        [STAGE_1_CYCLES-1:0];
 	wire [31:0]                           pc_st1            [STAGE_1_CYCLES-1:0];
 
@@ -387,7 +387,7 @@ module VX_bank
 								reqq_pop ? reqq_req_writeword_st0 :
 								0;
 
-	VX_generic_register #(.N( 1 + 1 + 1 +  `WORD_SIZE + 32 + `REQ_INST_META_SIZE + (`BANK_LINE_SIZE_WORDS*`WORD_SIZE) + 1 + 32)) s0_1_c0 (
+	VX_generic_register #(.N( 1 + 1 + 1 +  `WORD_SIZE + 32 + `REQ_INST_META_SIZE + (`BANK_LINE_WORDS*`WORD_SIZE) + 1 + 32)) s0_1_c0 (
 	.clk  (clk),
 	.reset(reset),
 	.stall(stall_bank_pipe),
@@ -399,7 +399,7 @@ module VX_bank
 	genvar curr_stage;
 	generate
 		for (curr_stage = 1; curr_stage < STAGE_1_CYCLES; curr_stage = curr_stage + 1) begin
-			VX_generic_register #(.N( 1 + 1 + 1 +  `WORD_SIZE + 32 + `REQ_INST_META_SIZE + (`BANK_LINE_SIZE_WORDS*`WORD_SIZE) + 1 + 32)) s0_1_cc (
+			VX_generic_register #(.N( 1 + 1 + 1 +  `WORD_SIZE + 32 + `REQ_INST_META_SIZE + (`BANK_LINE_WORDS*`WORD_SIZE) + 1 + 32)) s0_1_cc (
 			.clk  (clk),
 			.reset(reset),
 			.stall(stall_bank_pipe),
@@ -412,7 +412,7 @@ module VX_bank
 
 
 	wire[`WORD_SIZE_RNG]            readword_st1e;
-	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] readdata_st1e;
+	wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] readdata_st1e;
 	wire[`TAG_SELECT_SIZE_RNG]      readtag_st1e;
 	wire                            miss_st1e;
 	wire                            dirty_st1e;
@@ -421,7 +421,7 @@ module VX_bank
 
 	wire [4:0]                             rd_st1e;
 	wire [1:0]                             wb_st1e;
-	wire [`NW_M1:0]                        warp_num_st1e;
+	wire [`NW_BITS-1:0]                        warp_num_st1e;
 	wire [2:0]                             mem_read_st1e;  
 	wire [2:0]                             mem_write_st1e;
 	wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  tid_st1e;
@@ -488,7 +488,7 @@ module VX_bank
 	wire                            valid_st2;	
 	wire[`WORD_SIZE_RNG]            writeword_st2;
 	wire[`WORD_SIZE_RNG]            readword_st2;
-	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] readdata_st2;
+	wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] readdata_st2;
 	wire                            miss_st2;
 	wire                            dirty_st2;
 	wire[`REQ_INST_META_SIZE-1:0]   inst_meta_st2;
@@ -498,7 +498,7 @@ module VX_bank
 	wire [31:0]                     pc_st2;
 
 
-	VX_generic_register #(.N( 1+1+1+1+32+`WORD_SIZE+`WORD_SIZE+(`BANK_LINE_SIZE_WORDS * `WORD_SIZE) + `REQ_INST_META_SIZE + `TAG_SELECT_NUM_BITS + 32 + 2)) st_1e_2 (
+	VX_generic_register #(.N( 1+1+1+1+32+`WORD_SIZE+`WORD_SIZE+(`BANK_LINE_WORDS * `WORD_SIZE) + `REQ_INST_META_SIZE + `TAG_SELECT_NUM_BITS + 32 + 2)) st_1e_2 (
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall_bank_pipe),
@@ -525,17 +525,17 @@ module VX_bank
 
 
 	// Enqueue to CWB Queue
-	wire                                   cwbq_push      = (valid_st2 && !miss_st2) && !cwbq_full && !((FUNC_ID == `LLFUNC_ID) && (miss_add_wb == 0)) && !((is_snp_st2 && valid_st2 && ffsq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
+	wire                                   cwbq_push      = (valid_st2 && !miss_st2) && !cwbq_full && !((FUNC_ID == `L2FUNC_ID) && (miss_add_wb == 0)) && !((is_snp_st2 && valid_st2 && ffsq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_queue_full));
 	wire [`WORD_SIZE_RNG]                  cwbq_data      = readword_st2;
 	wire [`vx_clog2(NUMBER_REQUESTS)-1:0]  cwbq_tid       = miss_add_tid;
 	wire [4:0]                             cwbq_rd        = miss_add_rd;
 	wire [1:0]                             cwbq_wb        = miss_add_wb;
-	wire [`NW_M1:0]                        cwbq_warp_num  = miss_add_warp_num;
+	wire [`NW_BITS-1:0]                        cwbq_warp_num  = miss_add_warp_num;
 	wire [31:0]                            cwbq_pc        = pc_st2;
 	
 	wire                                   cwbq_empty;
 	assign bank_wb_valid = !cwbq_empty;
-	VX_generic_queue_ll #(.DATAW( `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1+1) + `WORD_SIZE + 32 + 32), .SIZE(CWBQ_SIZE)) cwb_queue(
+	VX_generic_queue_ll #(.DATAW( `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_BITS-1+1) + `WORD_SIZE + 32 + 32), .SIZE(CWBQ_SIZE)) cwb_queue(
 		.clk     (clk),
 		.reset   (reset),
 
@@ -554,8 +554,8 @@ module VX_bank
 	wire[31:0]                       dwbq_req_addr;
 	wire                             dwbq_empty;
 
-	wire[`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] dwbq_req_data;
-	if ((FUNC_ID == `LLFUNC_ID) || (FUNC_ID == `L3FUNC_ID)) begin
+	wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] dwbq_req_data;
+	if ((FUNC_ID == `L2FUNC_ID) || (FUNC_ID == `L3FUNC_ID)) begin
 		assign dwbq_req_data = (should_flush && dwbq_push) ? writeword_st2 : readdata_st2;
 		assign dwbq_req_addr = (should_flush && dwbq_push) ? (addr_st2) : ({readtag_st2, addr_st2[`LINE_SELECT_ADDR_END:0]} & `BASE_ADDR_MASK);
 	end else begin
@@ -603,7 +603,7 @@ module VX_bank
 	assign dram_fill_req_addr  = addr_st2 & `BASE_ADDR_MASK;
 
 	assign dram_wb_req = !dwbq_empty;
-	VX_generic_queue_ll #(.DATAW( 32 + (`BANK_LINE_SIZE_WORDS * `WORD_SIZE)), .SIZE(DWBQ_SIZE)) dwb_queue(
+	VX_generic_queue_ll #(.DATAW( 32 + (`BANK_LINE_WORDS * `WORD_SIZE)), .SIZE(DWBQ_SIZE)) dwb_queue(
 		.clk     (clk),
 		.reset   (reset),
 

@@ -1,17 +1,15 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_lsu_addr_gen (
-	input  wire[`NT_M1:0][31:0] base_address,
+	input  wire[`NUM_THREADS-1:0][31:0] base_address,
 	input  wire[31:0]           offset,
-	output wire[`NT_M1:0][31:0] address
+	output wire[`NUM_THREADS-1:0][31:0] address
 	
 );
-
-
-	genvar index;
+	genvar i;
 	generate
-	for (index = 0; index < `NT; index = index + 1) begin : addresses
-		assign address[index] = base_address[index] + offset;
+	for (i = 0; i < `NUM_THREADS; i = i + 1) begin : addresses
+		assign address[i] = base_address[i] + offset;
 	end
 	endgenerate
 

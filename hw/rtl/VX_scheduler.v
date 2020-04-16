@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_scheduler (
 	input wire                clk,
@@ -10,8 +10,7 @@ module VX_scheduler (
 	VX_wb_inter               VX_writeback_inter,
 
 	output wire schedule_delay,
-	output wire is_empty
-	
+	output wire is_empty	
 );
 
 	/* verilator lint_off WIDTH */
@@ -19,7 +18,7 @@ module VX_scheduler (
 
 	assign is_empty = count_valid == 0;
 
-	reg[31:0][`NT-1:0] rename_table[`NW-1:0];
+	reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
 
 	wire valid_wb  = (VX_writeback_inter.wb != 0) && (|VX_writeback_inter.wb_valid) && (VX_writeback_inter.rd != 0);
 	wire wb_inc    = (VX_bckE_req.wb != 0) && (VX_bckE_req.rd != 0);
@@ -32,12 +31,10 @@ module VX_scheduler (
 	wire is_load  = (VX_bckE_req.mem_read  != `NO_MEM_READ);
 
 	// classify our next instruction.
-	wire is_mem   = is_store || is_load;
-	wire is_gpu = (VX_bckE_req.is_wspawn || VX_bckE_req.is_tmc || VX_bckE_req.is_barrier || VX_bckE_req.is_split);
-	wire is_csr = VX_bckE_req.is_csr;
+	wire is_mem  = is_store || is_load;
+	wire is_gpu  = (VX_bckE_req.is_wspawn || VX_bckE_req.is_tmc || VX_bckE_req.is_barrier || VX_bckE_req.is_split);
+	wire is_csr  = VX_bckE_req.is_csr;
 	wire is_exec = !is_mem && !is_gpu && !is_csr;
-
-
 
 	// wire rs1_pass        = 0;
 	// wire rs2_pass        = 0;
@@ -47,7 +44,6 @@ module VX_scheduler (
 	wire rs1_rename_qual = ((rs1_rename) && (VX_bckE_req.rs1 != 0));
 	wire rs2_rename_qual = ((rs2_rename) && (VX_bckE_req.rs2 != 0 && using_rs2));
 	wire  rd_rename_qual = ((rd_rename ) && (VX_bckE_req.rd  != 0));
-
 
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual || rd_rename_qual;
 
@@ -61,7 +57,7 @@ module VX_scheduler (
 	always @(posedge clk or posedge reset) begin
 
 		if (reset) begin
-			for (w = 0; w < `NW; w=w+1)
+			for (w = 0; w < `NUM_WARPS; w=w+1)
 			begin
 				for (i = 0; i < 32; i = i + 1)
 				begin
@@ -74,7 +70,6 @@ module VX_scheduler (
 		
 			if (valid_wb && ((rename_table[VX_writeback_inter.wb_warp_num][VX_writeback_inter.rd] & (~VX_writeback_inter.wb_valid)) == 0)) count_valid = count_valid - 1;
 			if (!schedule_delay && wb_inc) count_valid = count_valid + 1;
-
 		end
 	end
 

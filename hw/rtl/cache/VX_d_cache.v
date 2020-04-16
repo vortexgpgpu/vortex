@@ -8,7 +8,7 @@
 // TO DO:
 //   - Send in a response from memory of what the data is from the test bench
 
-`include "VX_define.v"
+`include "VX_define.vh"
 //`include "VX_Cache_Bank.v"
 //`include "VX_cache_bank_valid.v" 
 //`include "VX_priority_encoder.v"

@@ -142,7 +142,7 @@ public:
 private:
 
     void run() {        
-        Harp::ArchDef arch("rv32i", NW, NT);
+        Harp::ArchDef arch("rv32i", NUM_WARPS, NUM_THREADS);
         Harp::WordDecoder dec(arch);
         Harp::MemoryUnit mu(PAGE_SIZE, arch.getWordSize(), true);
         Harp::Core core(arch, dec, mu);

@@ -1,12 +1,12 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_icache_stage (
 	input  wire              clk,
 	input  wire              reset,
 	input  wire              total_freeze,
 	output wire              icache_stage_delay,
-	output wire[`NW_M1:0]    icache_stage_wid,
-	output wire[`NT-1:0]     icache_stage_valids,
+	output wire[`NW_BITS-1:0]    icache_stage_wid,
+	output wire[`NUM_THREADS-1:0]     icache_stage_valids,
 	VX_inst_meta_inter       fe_inst_meta_fi,
 	VX_inst_meta_inter       fe_inst_meta_id,
 
@@ -14,7 +14,7 @@ module VX_icache_stage (
 	VX_gpu_dcache_req_inter  VX_icache_req
 );
 
-		reg[`NT-1:0] threads_active[`NW-1:0];
+		reg[`NUM_THREADS-1:0] threads_active[`NUM_WARPS-1:0];
 
 		wire   valid_inst = (|fe_inst_meta_fi.valid);
 
@@ -39,7 +39,7 @@ module VX_icache_stage (
 		/* verilator lint_off WIDTH */
 
 		assign icache_stage_wid            = fe_inst_meta_id.warp_num;
-		assign icache_stage_valids         = fe_inst_meta_id.valid & {`NT{!icache_stage_delay}};
+		assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
 
 		// Cache can't accept request
 	  	assign icache_stage_delay = VX_icache_rsp.delay_req;
@@ -50,7 +50,7 @@ module VX_icache_stage (
 		integer curr_w;
 		always @(posedge clk) begin
 			if (reset) begin
-				for (curr_w = 0; curr_w < `NW; curr_w=curr_w+1) threads_active[curr_w] <= 0;
+				for (curr_w = 0; curr_w < `NUM_WARPS; curr_w=curr_w+1) threads_active[curr_w] <= 0;
 			end else begin
 				if (valid_inst && !icache_stage_delay) begin
 					/* verilator lint_off WIDTH */

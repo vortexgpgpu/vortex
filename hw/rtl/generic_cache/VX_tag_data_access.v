@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_tag_data_access
 	#(
@@ -60,12 +60,12 @@ module VX_tag_data_access
 	input  wire                            writefill_st1e,
 	input  wire[31:0]                      writeaddr_st1e,
 	input  wire[`WORD_SIZE_RNG]            writeword_st1e,
-	input  wire[`DBANK_LINE_SIZE_RNG][31:0] writedata_st1e,
+	input  wire[`DBANK_LINE_WORDS-1:0][31:0] writedata_st1e,
 	input  wire[2:0]                       mem_write_st1e,
 	input  wire[2:0]                       mem_read_st1e, 
 
 	output wire[`WORD_SIZE_RNG]             readword_st1e,
-	output wire[`DBANK_LINE_SIZE_RNG][31:0] readdata_st1e,
+	output wire[`DBANK_LINE_WORDS-1:0][31:0] readdata_st1e,
 	output wire[`TAG_SELECT_SIZE_RNG]      readtag_st1e,
 	output wire                            miss_st1e,
 	output wire                            dirty_st1e,
@@ -74,25 +74,25 @@ module VX_tag_data_access
 );
 
 
-	reg[`DBANK_LINE_SIZE_RNG][31:0] readdata_st[STAGE_1_CYCLES-1:0];
+	reg[`DBANK_LINE_WORDS-1:0][31:0] readdata_st[STAGE_1_CYCLES-1:0];
 
 	reg                            read_valid_st1c[STAGE_1_CYCLES-1:0];
 	reg                            read_dirty_st1c[STAGE_1_CYCLES-1:0];
 	reg[`TAG_SELECT_SIZE_RNG]      read_tag_st1c  [STAGE_1_CYCLES-1:0];
-	reg[`DBANK_LINE_SIZE_RNG][31:0] read_data_st1c [STAGE_1_CYCLES-1:0];
+	reg[`DBANK_LINE_WORDS-1:0][31:0] read_data_st1c [STAGE_1_CYCLES-1:0];
 
 
 	wire                            qual_read_valid_st1;
 	wire                            qual_read_dirty_st1;
 	wire[`TAG_SELECT_SIZE_RNG]      qual_read_tag_st1;
-	wire[`DBANK_LINE_SIZE_RNG][31:0] qual_read_data_st1;
+	wire[`DBANK_LINE_WORDS-1:0][31:0] qual_read_data_st1;
 
 	wire                            use_read_valid_st1e;
 	wire                            use_read_dirty_st1e;
 	wire[`TAG_SELECT_SIZE_RNG]      use_read_tag_st1e;
-	wire[`DBANK_LINE_SIZE_RNG][31:0] use_read_data_st1e;
-	wire[`DBANK_LINE_SIZE_RNG][3:0]  use_write_enable;
-	wire[`DBANK_LINE_SIZE_RNG][31:0] use_write_data;
+	wire[`DBANK_LINE_WORDS-1:0][31:0] use_read_data_st1e;
+	wire[`DBANK_LINE_WORDS-1:0][3:0]  use_write_enable;
+	wire[`DBANK_LINE_WORDS-1:0][31:0] use_write_data;
 
 	wire sw, sb, sh;
 
@@ -140,8 +140,8 @@ module VX_tag_data_access
 		.fill_sent   (fill_sent)
 		);
 
-	// VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`DBANK_LINE_SIZE_WORDS*32) )) s0_1_c0 (
-	VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`DBANK_LINE_SIZE_WORDS*32) ), .Valid(0)) s0_1_c0 (
+	// VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`DBANK_LINE_WORDS*32) )) s0_1_c0 (
+	VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`DBANK_LINE_WORDS*32) ), .Valid(0)) s0_1_c0 (
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall),
@@ -153,7 +153,7 @@ module VX_tag_data_access
 	genvar curr_stage;
 	generate
 		for (curr_stage = 1; curr_stage < STAGE_1_CYCLES-1; curr_stage = curr_stage + 1) begin
-			VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`DBANK_LINE_SIZE_WORDS*32) )) s0_1_cc (
+			VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_NUM_BITS + (`DBANK_LINE_WORDS*32) )) s0_1_cc (
 				.clk  (clk),
 				.reset(reset),
 				.stall(stall),
@@ -170,7 +170,7 @@ module VX_tag_data_access
 	assign use_read_tag_st1e   = (FUNC_ID == `SFUNC_ID) ? writeaddr_st1e[`TAG_SELECT_ADDR_RNG] : read_tag_st1c  [STAGE_1_CYCLES-1]; // Tag is always the same in SM
 
 	genvar curr_w;
-	for (curr_w = 0; curr_w < `DBANK_LINE_SIZE_WORDS; curr_w = curr_w+1) assign use_read_data_st1e[curr_w][31:0]  = read_data_st1c[STAGE_1_CYCLES-1][curr_w][31:0];
+	for (curr_w = 0; curr_w < `DBANK_LINE_WORDS; curr_w = curr_w+1) assign use_read_data_st1e[curr_w][31:0]  = read_data_st1c[STAGE_1_CYCLES-1][curr_w][31:0];
 	// assign use_read_data_st1e  = read_data_st1c [STAGE_1_CYCLES-1];
 
 /////////////////////// LOAD LOGIC ///////////////////
@@ -243,23 +243,23 @@ module VX_tag_data_access
     wire should_write = (sw || sb || sh) && valid_req_st1e && use_read_valid_st1e && !miss_st1e && !is_snp_st1e;
     wire force_write  = real_writefill;
 
-    wire[`DBANK_LINE_SIZE_RNG][3:0]  we;
-    wire[`DBANK_LINE_SIZE_RNG][31:0] data_write;
+    wire[`DBANK_LINE_WORDS-1:0][3:0]  we;
+    wire[`DBANK_LINE_WORDS-1:0][31:0] data_write;
 	genvar g; 
 	generate
-		for (g = 0; g < `DBANK_LINE_SIZE_WORDS; g = g + 1) begin : write_enables
+		for (g = 0; g < `DBANK_LINE_WORDS; g = g + 1) begin : write_enables
 		    wire normal_write = (block_offset == g[`WORD_SELECT_SIZE_RNG]) && should_write && !real_writefill;
 
 		    assign we[g]      = (force_write)        ? 4'b1111  : 
-		    				 (should_write && !real_writefill && (FUNC_ID == `LLFUNC_ID)) ? 4'b1111  :
+		    				 (should_write && !real_writefill && (FUNC_ID == `L2FUNC_ID)) ? 4'b1111  :
 		                        (normal_write && sw) ? 4'b1111  :
 		                        (normal_write && sb) ? sb_mask  :
 		                        (normal_write && sh) ? sh_mask  :
 		                        4'b0000;
 
-		    if (!(FUNC_ID == `LLFUNC_ID)) assign data_write[g] = force_write ? writedata_st1e[g] : use_write_dat;
+		    if (!(FUNC_ID == `L2FUNC_ID)) assign data_write[g] = force_write ? writedata_st1e[g] : use_write_dat;
 		end
-		if ((FUNC_ID == `LLFUNC_ID)) begin
+		if ((FUNC_ID == `L2FUNC_ID)) begin
 			assign data_write = force_write ? writedata_st1e : writeword_st1e;
 		end
 	endgenerate
@@ -268,7 +268,7 @@ module VX_tag_data_access
 	assign use_write_data   = data_write;
 
 ///////////////////////
-	if (FUNC_ID == `LLFUNC_ID) begin
+	if (FUNC_ID == `L2FUNC_ID) begin
 		assign readword_st1e = read_data_st1c[STAGE_1_CYCLES-1];
 	end else begin
 		assign readword_st1e = data_Qual;

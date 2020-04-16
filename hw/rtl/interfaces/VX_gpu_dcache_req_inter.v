@@ -1,6 +1,6 @@
 
 
-`include "../generic_cache/VX_cache_config.v"
+`include "../generic_cache/VX_cache_config.vh"
 
 `ifndef VX_GPU_DCACHE_REQ
 
@@ -20,7 +20,7 @@ interface VX_gpu_dcache_req_inter
 	wire [NUMBER_REQUESTS-1:0][2:0]    core_req_mem_write;
     wire [4:0]                         core_req_rd;
     wire [NUMBER_REQUESTS-1:0][1:0]    core_req_wb;
-    wire [`NW_M1:0]                    core_req_warp_num;
+    wire [`NW_BITS-1:0]                    core_req_warp_num;
     wire [31:0]                        core_req_pc;
 
     // Can't WB

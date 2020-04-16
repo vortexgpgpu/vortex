@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 `ifndef VX_GPU_INST_REQ_IN
 
@@ -6,8 +6,8 @@
 
 interface VX_gpu_inst_req_inter();
 
-	wire[`NT_M1:0]       valid;
-	wire[`NW_M1:0]       warp_num;
+	wire[`NUM_THREADS-1:0]       valid;
+	wire[`NW_BITS-1:0]       warp_num;
 	wire                 is_wspawn;
 	wire                 is_tmc;   
 	wire                 is_split; 
@@ -16,7 +16,7 @@ interface VX_gpu_inst_req_inter();
 
 	wire[31:0]           pc_next;
 
-	wire[`NT_M1:0][31:0] a_reg_data;
+	wire[`NUM_THREADS-1:0][31:0] a_reg_data;
 	wire[31:0]           rd2;
 
 

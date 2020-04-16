@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_warp_scheduler (
 	input wire           clk,    // Clock
@@ -7,57 +7,57 @@ module VX_warp_scheduler (
 	// Wspawn
 	input wire           wspawn,
 	input wire[31:0]     wsapwn_pc,
-	input wire[`NW-1:0]  wspawn_new_active,
+	input wire[`NUM_WARPS-1:0]  wspawn_new_active,
 
 	// CTM
 	input  wire           ctm,
-	input  wire[`NT_M1:0] ctm_mask,
-	input  wire[`NW_M1:0] ctm_warp_num,
+	input  wire[`NUM_THREADS-1:0] ctm_mask,
+	input  wire[`NW_BITS-1:0] ctm_warp_num,
 
 	// WHALT
 	input  wire           whalt,
-	input  wire[`NW_M1:0] whalt_warp_num,
+	input  wire[`NW_BITS-1:0] whalt_warp_num,
 
 	input wire                 is_barrier,
 	input wire[31:0]           barrier_id,
-	input wire[$clog2(`NW):0]  num_warps,
-	input wire[`NW_M1:0]       barrier_warp_num,
+	input wire[$clog2(`NUM_WARPS):0]  num_warps,
+	input wire[`NW_BITS-1:0]       barrier_warp_num,
 
 	// WSTALL
 	input  wire           wstall,
-	input  wire[`NW_M1:0] wstall_warp_num,
+	input  wire[`NW_BITS-1:0] wstall_warp_num,
 
 	// Split
 	input wire            is_split,
 	input wire            dont_split,
-	input wire[`NT_M1:0]  split_new_mask,
-	input wire[`NT_M1:0]  split_later_mask,
+	input wire[`NUM_THREADS-1:0]  split_new_mask,
+	input wire[`NUM_THREADS-1:0]  split_later_mask,
 	input wire[31:0]      split_save_pc,	
-	input wire[`NW_M1:0]  split_warp_num,
+	input wire[`NW_BITS-1:0]  split_warp_num,
 
 	// Join
 	input wire            is_join,
-	input wire[`NW_M1:0]  join_warp_num,
+	input wire[`NW_BITS-1:0]  join_warp_num,
 
 	// JAL
 	input wire           jal,
 	input wire[31:0]     jal_dest,
-	input wire[`NW_M1:0] jal_warp_num,
+	input wire[`NW_BITS-1:0] jal_warp_num,
 
 	// Branch
 	input wire           branch_valid,
 	input wire           branch_dir,
 	input wire[31:0]     branch_dest,
-	input wire[`NW_M1:0] branch_warp_num,
+	input wire[`NW_BITS-1:0] branch_warp_num,
 
-	output wire[`NT_M1:0] thread_mask,
-	output wire[`NW_M1:0] warp_num,
+	output wire[`NUM_THREADS-1:0] thread_mask,
+	output wire[`NW_BITS-1:0] warp_num,
 	output wire[31:0]     warp_pc,
 	output wire           out_ebreak,
 	output wire           scheduled_warp,
 
-	input  wire[`NW_M1:0]    icache_stage_wid,
-	input  wire[`NT-1:0]     icache_stage_valids
+	input  wire[`NW_BITS-1:0]    icache_stage_wid,
+	input  wire[`NUM_THREADS-1:0]     icache_stage_valids
 
 );
 
@@ -66,41 +66,41 @@ module VX_warp_scheduler (
 
 	wire update_visible_active;
 
-	wire[(1+32+`NT_M1):0] d[`NW-1:0];
+	wire[(1+32+`NUM_THREADS-1):0] d[`NUM_WARPS-1:0];
 
 	wire           join_fall;
 	wire[31:0]     join_pc;
-	wire[`NT_M1:0] join_tm;
+	wire[`NUM_THREADS-1:0] join_tm;
 
 	wire in_wspawn = wspawn;
 	wire in_ctm = ctm;
 	wire in_whalt = whalt;
 	wire in_wstall = wstall;
 
-	reg[`NW-1:0] warp_active;
-	reg[`NW-1:0] warp_stalled;
+	reg[`NUM_WARPS-1:0] warp_active;
+	reg[`NUM_WARPS-1:0] warp_stalled;
 
-	reg [`NW-1:0]  visible_active;
-	wire[`NW-1:0]  use_active;
+	reg [`NUM_WARPS-1:0]  visible_active;
+	wire[`NUM_WARPS-1:0]  use_active;
 
-	reg [`NW-1:0]  warp_lock;
+	reg [`NUM_WARPS-1:0]  warp_lock;
 
 	wire wstall_this_cycle;
 
-	reg[`NT_M1:0] thread_masks[`NW-1:0];
-	reg[31:0]     warp_pcs[`NW-1:0];
+	reg[`NUM_THREADS-1:0] thread_masks[`NUM_WARPS-1:0];
+	reg[31:0]     warp_pcs[`NUM_WARPS-1:0];
 
 	// barriers
-	reg[`NW-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
+	reg[`NUM_WARPS-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
 	wire         reached_barrier_limit;
-	wire[`NW-1:0] curr_barrier_mask;
-	wire[$clog2(`NW):0] curr_barrier_count;
+	wire[`NUM_WARPS-1:0] curr_barrier_mask;
+	wire[$clog2(`NUM_WARPS):0] curr_barrier_count;
 
 	// wsapwn
 	reg[31:0]    use_wsapwn_pc;
-	reg[`NW-1:0] use_wsapwn;
+	reg[`NUM_WARPS-1:0] use_wsapwn;
 
-	wire[`NW_M1:0] warp_to_schedule;
+	wire[`NW_BITS-1:0] warp_to_schedule;
 	wire           schedule;
 
 	wire hazard;
@@ -110,12 +110,12 @@ module VX_warp_scheduler (
 
 	wire[31:0] new_pc;
 
-	reg[`NW-1:0] total_barrier_stall;
+	reg[`NUM_WARPS-1:0] total_barrier_stall;
 
 	reg didnt_split;
 
 	/* verilator lint_off UNUSED */
-	// wire[$clog2(`NW):0] num_active;
+	// wire[$clog2(`NUM_WARPS):0] num_active;
 	/* verilator lint_on UNUSED */
 
 	integer curr_w_help;
@@ -135,7 +135,7 @@ module VX_warp_scheduler (
 			didnt_split           <= 0;
 			warp_lock             <= 0;      
 			// total_barrier_stall    = 0;
-			for (curr_w_help = 1; curr_w_help < `NW; curr_w_help=curr_w_help+1) begin
+			for (curr_w_help = 1; curr_w_help < `NUM_WARPS; curr_w_help=curr_w_help+1) begin
 				warp_pcs[curr_w_help]        <= 0;
 				warp_active[curr_w_help]     <= 0; // Activating first warp
 				visible_active[curr_w_help]  <= 0; // Activating first warp
@@ -147,7 +147,7 @@ module VX_warp_scheduler (
 			if (wspawn) begin
 				warp_active    <= wspawn_new_active;
 				use_wsapwn_pc  <= wsapwn_pc;
-				use_wsapwn     <= wspawn_new_active & (~`NW'b1);
+				use_wsapwn     <= wspawn_new_active & (~`NUM_WARPS'b1);
 			end
 
 			if (is_barrier) begin
@@ -219,30 +219,30 @@ module VX_warp_scheduler (
 			// Lock/Release
 			if (scheduled_warp && !stall) begin
 				warp_lock[warp_num] <= 1'b1;
-				// warp_lock <= {`NW{1'b1}};
+				// warp_lock <= {`NUM_WARPS{1'b1}};
 			end
 			if (|icache_stage_valids && !stall) begin
 				warp_lock[icache_stage_wid] <= 1'b0;
-				// warp_lock <= {`NW{1'b0}};
+				// warp_lock <= {`NUM_WARPS{1'b0}};
 			end
 
 		end
 	end
 
-	VX_countones #(.N(`NW)) barrier_count(
+	VX_countones #(.N(`NUM_WARPS)) barrier_count(
 		.valids(curr_barrier_mask),
 		.count (curr_barrier_count)
 		);
 
-	wire[$clog2(`NW):0] count_visible_active;
-	VX_countones #(.N(`NW)) num_visible(
+	wire[$clog2(`NUM_WARPS):0] count_visible_active;
+	VX_countones #(.N(`NUM_WARPS)) num_visible(
 		.valids(visible_active),
 		.count (count_visible_active)
 		);
 
 	// assign curr_barrier_count    = $countones(curr_barrier_mask);
 
-	assign curr_barrier_mask     = barrier_stall_mask[barrier_id][`NW-1:0];
+	assign curr_barrier_mask     = barrier_stall_mask[barrier_id][`NUM_WARPS-1:0];
 	assign reached_barrier_limit = curr_barrier_count == (num_warps);
 
 	assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
@@ -253,15 +253,15 @@ module VX_warp_scheduler (
 	// 	total_barrier_stall = 0;
 	// 	for (curr_b = 0; curr_b < `NUM_BARRIERS; curr_b=curr_b+1)
 	// 	begin
-	// 		total_barrier_stall[`NW-1:0] = total_barrier_stall[`NW-1:0] | barrier_stall_mask[curr_b];
+	// 		total_barrier_stall[`NUM_WARPS-1:0] = total_barrier_stall[`NUM_WARPS-1:0] | barrier_stall_mask[curr_b];
 	// 	end
 	// end
 
 
 	assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);
 
-	wire[(1+32+`NT_M1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
-	wire[(1+32+`NT_M1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
+	wire[(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
+	wire[(1+32+`NUM_THREADS-1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
 
 
 	assign {join_fall, join_pc, join_tm} = d[join_warp_num];
@@ -270,13 +270,13 @@ module VX_warp_scheduler (
 
 	genvar curr_warp;
 	generate
-	for (curr_warp = 0; curr_warp < `NW; curr_warp = curr_warp + 1) begin : stacks
+	for (curr_warp = 0; curr_warp < `NUM_WARPS; curr_warp = curr_warp + 1) begin : stacks
 		wire correct_warp_s = (curr_warp == split_warp_num);
 		wire correct_warp_j = (curr_warp == join_warp_num);
 
 		wire push = (is_split && !dont_split) && correct_warp_s;
 		wire pop  = is_join  && correct_warp_j;
-		VX_generic_stack #(.WIDTH(1+32+`NT), .DEPTH($clog2(`NT)+1)) ipdom_stack(
+		VX_generic_stack #(.WIDTH(1+32+`NUM_THREADS), .DEPTH($clog2(`NUM_THREADS)+1)) ipdom_stack(
 			.clk  (clk),
 			.reset(reset),
 			.push (push),
@@ -304,7 +304,7 @@ module VX_warp_scheduler (
 	wire real_use_wspawn = use_wsapwn[warp_to_schedule];
 
 	assign warp_pc     = real_use_wspawn ? use_wsapwn_pc : warp_pcs[warp_to_schedule];
-	assign thread_mask = (global_stall) ? 0 : (real_use_wspawn ? `NT'b1 : thread_masks[warp_to_schedule]);
+	assign thread_mask = (global_stall) ? 0 : (real_use_wspawn ? `NUM_THREADS'b1 : thread_masks[warp_to_schedule]);
 	assign warp_num    = warp_to_schedule;
 
 	assign update_use_wspawn = use_wsapwn[warp_to_schedule] && !global_stall;

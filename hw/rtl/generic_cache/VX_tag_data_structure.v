@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_tag_data_structure
     #(
@@ -55,18 +55,18 @@ module VX_tag_data_structure
 	output wire                            read_valid,
 	output wire                            read_dirty,
 	output wire[`TAG_SELECT_SIZE_RNG]      read_tag,
-	output wire[`DBANK_LINE_SIZE_RNG][31:0] read_data,
+	output wire[`DBANK_LINE_WORDS-1:0][31:0] read_data,
 
     input  wire                            invalidate,
-	input  wire[`DBANK_LINE_SIZE_RNG][3:0]  write_enable,
+	input  wire[`DBANK_LINE_WORDS-1:0][3:0]  write_enable,
 	input  wire                            write_fill,
 	input  wire[31:0]                      write_addr,
-	input  wire[`DBANK_LINE_SIZE_RNG][31:0] write_data,
+	input  wire[`DBANK_LINE_WORDS-1:0][31:0] write_data,
     input  wire                            fill_sent
 	
 );
 
-    reg[`DBANK_LINE_SIZE_RNG][3:0][7:0]    data [`BANK_LINE_COUNT-1:0];
+    reg[`DBANK_LINE_WORDS-1:0][3:0][7:0]    data [`BANK_LINE_COUNT-1:0];
     reg[`TAG_SELECT_SIZE_RNG]              tag  [`BANK_LINE_COUNT-1:0];
     reg                                    valid[`BANK_LINE_COUNT-1:0];
     reg                                    dirty[`BANK_LINE_COUNT-1:0];
@@ -110,7 +110,7 @@ module VX_tag_data_structure
                 valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
             end
 
-    		for (f = 0; f < `DBANK_LINE_SIZE_WORDS; f = f + 1) begin
+    		for (f = 0; f < `DBANK_LINE_WORDS; f = f + 1) begin
     			if (write_enable[f][0]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][0] <= write_data[f][7 :0 ];
     			if (write_enable[f][1]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][1] <= write_data[f][15:8 ];
     			if (write_enable[f][2]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][2] <= write_data[f][23:16];

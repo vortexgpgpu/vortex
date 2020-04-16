@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 module VX_shared_memory
 	#(
@@ -21,14 +21,14 @@ module VX_shared_memory
 	//INPUTS
 	input wire clk,
 	input wire reset,
-	input wire[`NT_M1:0] in_valid,
-	input wire[`NT_M1:0][31:0] in_address,
-	input wire[`NT_M1:0][31:0] in_data,
+	input wire[`NUM_THREADS-1:0] in_valid,
+	input wire[`NUM_THREADS-1:0][31:0] in_address,
+	input wire[`NUM_THREADS-1:0][31:0] in_data,
 	input wire[2:0] mem_read,
 	input wire[2:0] mem_write,
 	//OUTPUTS
-	output wire[`NT_M1:0] out_valid,
-	output wire[`NT_M1:0][31:0] out_data,
+	output wire[`NUM_THREADS-1:0] out_valid,
+	output wire[`NUM_THREADS-1:0][31:0] out_data,
 	output wire stall
 	);
 
@@ -39,8 +39,8 @@ reg[SM_BANKS - 1:0][31:0] temp_address;
 reg[SM_BANKS - 1:0][31:0] temp_in_data;
 reg[SM_BANKS - 1:0] temp_in_valid;
 
-reg[`NT_M1:0] temp_out_valid;
-reg[`NT_M1:0][31:0] temp_out_data;
+reg[`NUM_THREADS-1:0] temp_out_valid;
+reg[`NUM_THREADS-1:0][31:0] temp_out_data;
 
 //reg [NB:0][6:0] block_addr;
 //reg [NB:0][3:0][31:0] block_wdata;
@@ -54,20 +54,19 @@ reg [SM_BANKS - 1:0][SM_LOG_WORDS_PER_READ-1:0] block_we;
 wire send_data;
 
 //reg[NB:0][1:0] req_num;
-reg[SM_BANKS - 1:0][`CLOG2(NUM_REQ) - 1:0] req_num; // not positive about this
+reg[SM_BANKS - 1:0][`LOG2UP(NUM_REQ) - 1:0] req_num; // not positive about this
 
-wire [`NT_M1:0] orig_in_valid;
-
+wire [`NUM_THREADS-1:0] orig_in_valid;
 
 genvar f;
-	generate
-		for(f = 0; f < `NT; f = f+1) begin : orig_in_valid_setup
-			assign orig_in_valid[f] = in_valid[f];
-		end
+generate
+	for(f = 0; f < `NUM_THREADS; f = f+1) begin : orig_in_valid_setup
+		assign orig_in_valid[f] = in_valid[f];
+	end
 
-		assign out_valid  = send_data ? temp_out_valid : 0;
-		assign out_data   = send_data ? temp_out_data : 0;
-	endgenerate
+	assign out_valid  = send_data ? temp_out_valid : 0;
+	assign out_data   = send_data ? temp_out_data : 0;
+endgenerate
 
 
 //VX_priority_encoder_sm #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_priority_encoder_sm(

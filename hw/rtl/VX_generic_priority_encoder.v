@@ -1,7 +1,7 @@
 `ifndef VX_GENERIC_PRIORITY_ENCODER
 `define VX_GENERIC_PRIORITY_ENCODER
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_generic_priority_encoder
   #(
@@ -10,8 +10,8 @@ module VX_generic_priority_encoder
   (
     input  wire[N-1:0] valids,
     //output reg[$clog2(N)-1:0] index,
-    output reg[(`CLOG2(N))-1:0] index,
-    //output reg[`CLOG2(N):0] index, // eh
+    output reg[(`LOG2UP(N))-1:0] index,
+    //output reg[`LOG2UP(N):0] index, // eh
     output reg           found
   );
 
@@ -22,7 +22,7 @@ module VX_generic_priority_encoder
 		for (i = N-1; i >= 0; i = i - 1) begin
 			if (valids[i]) begin
 				//index = i[$clog2(N)-1:0];
-        		index = i[(`CLOG2(N))-1:0];
+        		index = i[(`LOG2UP(N))-1:0];
 				found = 1;
 			end
 		end

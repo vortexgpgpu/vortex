@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_cache_dfq_queue
 	#(

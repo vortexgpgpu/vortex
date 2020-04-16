@@ -1,5 +1,5 @@
 
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_cache_miss_resrv
 	#(
@@ -56,7 +56,7 @@ module VX_cache_miss_resrv
 	input wire[`vx_clog2(NUMBER_REQUESTS)-1:0]   miss_add_tid,
 	input wire[4:0]                              miss_add_rd,
 	input wire[1:0]                              miss_add_wb,
-	input wire[`NW_M1:0]                         miss_add_warp_num,
+	input wire[`NW_BITS-1:0]                         miss_add_warp_num,
 	input wire[2:0]                              miss_add_mem_read,
 	input wire[2:0]                              miss_add_mem_write,
 	input wire[31:0]                             miss_add_pc,
@@ -75,14 +75,14 @@ module VX_cache_miss_resrv
 	output wire[`vx_clog2(NUMBER_REQUESTS)-1:0]  miss_resrv_tid_st0,
 	output wire[4:0]                             miss_resrv_rd_st0,
 	output wire[1:0]                             miss_resrv_wb_st0,
-	output wire[`NW_M1:0]                        miss_resrv_warp_num_st0,
+	output wire[`NW_BITS-1:0]                        miss_resrv_warp_num_st0,
 	output wire[2:0]                             miss_resrv_mem_read_st0,
 	output wire[31:0]                            miss_resrv_pc_st0,
 	output wire[2:0]                             miss_resrv_mem_write_st0
 	
 );
 
-		// Size of metadata = 32 + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_M1 + 1)
+		// Size of metadata = 32 + `vx_clog2(NUMBER_REQUESTS) + 5 + 2 + (`NW_BITS-1 + 1)
 		reg[`MRVQ_METADATA_SIZE-1:0]   metadata_table[MRVQ_SIZE-1:0];
 		reg[MRVQ_SIZE-1:0][31:0]       addr_table;
 		reg[MRVQ_SIZE-1:0][31:0]       pc_table;

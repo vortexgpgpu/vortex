@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 module VX_csr_data (
 	input wire clk,    // Clock
@@ -19,17 +19,17 @@ module VX_csr_data (
 
 	/* verilator lint_off WIDTH */
 
-	// wire[`NT_M1:0][31:0] thread_ids;
-	// wire[`NT_M1:0][31:0] warp_ids;
+	// wire[`NUM_THREADS-1:0][31:0] thread_ids;
+	// wire[`NUM_THREADS-1:0][31:0] warp_ids;
 
 	// genvar cur_t;
-	// for (cur_t = 0; cur_t < `NT; cur_t = cur_t + 1) begin
+	// for (cur_t = 0; cur_t < `NUM_THREADS; cur_t = cur_t + 1) begin
 	// 	assign thread_ids[cur_t] = cur_t;
 	// end
 
 	// genvar cur_tw;
-	// for (cur_tw = 0; cur_tw < `NT; cur_tw = cur_tw + 1) begin
-	// 	assign warp_ids[cur_tw] = {{(31-`NW_M1){1'b0}}, in_read_warp_num};
+	// for (cur_tw = 0; cur_tw < `NUM_THREADS; cur_tw = cur_tw + 1) begin
+	// 	assign warp_ids[cur_tw] = {{(31-`NW_BITS-1){1'b0}}, in_read_warp_num};
 	// end
 
 	reg[11:0] csr[1023:0];

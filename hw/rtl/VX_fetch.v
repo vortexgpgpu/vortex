@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_fetch (
 	input  wire              clk,
@@ -7,8 +7,8 @@ module VX_fetch (
 	VX_join_inter            VX_join,
 	input  wire              schedule_delay,
 	input  wire              icache_stage_delay,
-	input  wire[`NW_M1:0]    icache_stage_wid,
-	input  wire[`NT-1:0]     icache_stage_valids,
+	input  wire[`NW_BITS-1:0]    icache_stage_wid,
+	input  wire[`NUM_THREADS-1:0]     icache_stage_valids,
 
 	output wire              out_ebreak,
 	VX_jal_response_inter    VX_jal_rsp,
@@ -17,8 +17,8 @@ module VX_fetch (
 	VX_warp_ctl_inter        VX_warp_ctl
 );
 
-		wire[`NT_M1:0] thread_mask;
-		wire[`NW_M1:0] warp_num;
+		wire[`NUM_THREADS-1:0] thread_mask;
+		wire[`NW_BITS-1:0] warp_num;
 		wire[31:0]     warp_pc;
 		wire           scheduled_warp;
 

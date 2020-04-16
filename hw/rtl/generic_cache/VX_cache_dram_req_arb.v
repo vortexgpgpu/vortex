@@ -1,4 +1,4 @@
-`include "VX_cache_config.v"
+`include "VX_cache_config.vh"
 
 module VX_cache_dram_req_arb
 	#(
@@ -62,7 +62,7 @@ module VX_cache_dram_req_arb
     output wire[NUMBER_BANKS-1:0]                            per_bank_dram_wb_queue_pop,
     input  wire[NUMBER_BANKS-1:0]                            per_bank_dram_wb_req,
     input  wire[NUMBER_BANKS-1:0][31:0]                      per_bank_dram_wb_req_addr,
-    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_SIZE_RNG][`WORD_SIZE-1:0] per_bank_dram_wb_req_data,
+    input  wire[NUMBER_BANKS-1:0][`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] per_bank_dram_wb_req_data,
     input  wire[NUMBER_BANKS-1:0]                            per_bank_dram_because_of_snp,
 
     // real Dram request
@@ -71,7 +71,7 @@ module VX_cache_dram_req_arb
     output wire                                             dram_req_read,
     output wire [31:0]                                      dram_req_addr,
     output wire [31:0]                                      dram_req_size,
-    output wire [`IBANK_LINE_SIZE_RNG][31:0]                dram_req_data,
+    output wire [`IBANK_LINE_WORDS-1:0][31:0]                dram_req_data,
     output wire                                             dram_req_because_of_wb,
 
     input wire                                              dram_req_delay

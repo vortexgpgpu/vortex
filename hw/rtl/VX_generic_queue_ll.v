@@ -1,5 +1,3 @@
-`include "VX_define_synth.v"
-
 module VX_generic_queue_ll
 	#(
 		parameter DATAW = 4,

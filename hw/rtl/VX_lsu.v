@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_lsu (
 		input wire               clk,
@@ -15,7 +15,7 @@ module VX_lsu (
 	);
 
 	// Generate Addresses
-	wire[`NT_M1:0][31:0] address;
+	wire[`NUM_THREADS-1:0][31:0] address;
 	VX_lsu_addr_gen VX_lsu_addr_gen
 	(
 		.base_address(VX_lsu_req.base_address),
@@ -23,19 +23,19 @@ module VX_lsu (
 		.address     (address)
 	);
 
-	wire[`NT_M1:0][31:0] use_address;
-	wire[`NT_M1:0][31:0] use_store_data;
-	wire[`NT_M1:0]       use_valid;
+	wire[`NUM_THREADS-1:0][31:0] use_address;
+	wire[`NUM_THREADS-1:0][31:0] use_store_data;
+	wire[`NUM_THREADS-1:0]       use_valid;
 	wire[2:0]            use_mem_read; 
 	wire[2:0]            use_mem_write;
 	wire[4:0]            use_rd;
-	wire[`NW_M1:0]       use_warp_num;
+	wire[`NW_BITS-1:0]       use_warp_num;
 	wire[1:0]            use_wb;
 	wire[31:0]           use_pc;	
 
 	wire zero = 0;
 
-	VX_generic_register #(.N(45 + `NW_M1 + 1 + `NT*65)) lsu_buffer(
+	VX_generic_register #(.N(45 + `NW_BITS-1 + 1 + `NUM_THREADS*65)) lsu_buffer(
 		.clk  (clk),
 		.reset(reset),
 		.stall(out_delay),
@@ -49,10 +49,10 @@ module VX_lsu (
 	assign VX_dcache_req.core_req_valid      = use_valid;
 	assign VX_dcache_req.core_req_addr       = use_address;
 	assign VX_dcache_req.core_req_writedata  = use_store_data;
-	assign VX_dcache_req.core_req_mem_read   = {`NT{use_mem_read}};
-	assign VX_dcache_req.core_req_mem_write  = {`NT{use_mem_write}};
+	assign VX_dcache_req.core_req_mem_read   = {`NUM_THREADS{use_mem_read}};
+	assign VX_dcache_req.core_req_mem_write  = {`NUM_THREADS{use_mem_write}};
 	assign VX_dcache_req.core_req_rd         = use_rd;
-	assign VX_dcache_req.core_req_wb         = {`NT{use_wb}};
+	assign VX_dcache_req.core_req_wb         = {`NUM_THREADS{use_wb}};
 	assign VX_dcache_req.core_req_warp_num   = use_warp_num;
 	assign VX_dcache_req.core_req_pc         = use_pc;
 
@@ -70,9 +70,9 @@ module VX_lsu (
 	assign VX_mem_wb.wb_warp_num = VX_dcache_rsp.core_wb_warp_num;
 	assign VX_mem_wb.loaded_data = VX_dcache_rsp.core_wb_readdata;
 	
-	wire[(`CLOG2(`NT))-1:0] use_pc_index;
+	wire[(`LOG2UP(`NUM_THREADS))-1:0] use_pc_index;
 	wire found;
-	VX_generic_priority_encoder #(.N(`NT)) pick_first_pc(
+	VX_generic_priority_encoder #(.N(`NUM_THREADS)) pick_first_pc(
 		.valids(VX_dcache_rsp.core_wb_valid),
 		.index (use_pc_index),
 		.found (found)

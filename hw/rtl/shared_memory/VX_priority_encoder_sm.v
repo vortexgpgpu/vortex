@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 module VX_priority_encoder_sm
 	#(
@@ -10,9 +10,9 @@ module VX_priority_encoder_sm
 	//INPUTS
 	input wire			        	clk,
 	input wire				        reset,
-	input wire[`NT_M1:0]			in_valid,
-	input wire[`NT_M1:0][31:0] 		in_address,
-	input wire[`NT_M1:0][31:0] 		in_data,
+	input wire[`NUM_THREADS-1:0]			in_valid,
+	input wire[`NUM_THREADS-1:0][31:0] 		in_address,
+	input wire[`NUM_THREADS-1:0][31:0] 		in_data,
 	// OUTPUTS
 	// To SM Module
 	output reg[NB:0]         	    out_valid,
@@ -20,16 +20,16 @@ module VX_priority_encoder_sm
 	output reg[NB:0][31:0] 		    out_data,
 
 	// To Processor
-	output wire[NB:0][`CLOG2(NUM_REQ) - 1:0]		    req_num,
+	output wire[NB:0][`LOG2UP(NUM_REQ) - 1:0]		    req_num,
 	output reg 			            stall,
 	output wire                     send_data // Finished all of the requests
 );
 
-	reg[`NT_M1:0] left_requests;
-	reg[`NT_M1:0] serviced;
+	reg[`NUM_THREADS-1:0] left_requests;
+	reg[`NUM_THREADS-1:0] serviced;
 
 
-	wire[`NT_M1:0] use_valid;
+	wire[`NUM_THREADS-1:0] use_valid;
 
 
 	wire requests_left = (|left_requests);
@@ -37,7 +37,7 @@ module VX_priority_encoder_sm
 	assign use_valid = (requests_left) ? left_requests : in_valid;
 
 
-	wire[NB:0][`NT_M1:0] bank_valids;
+	wire[NB:0][`NUM_THREADS-1:0] bank_valids;
 	VX_bank_valids #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_bank_valid(
 		.in_valids(use_valid),
 		.in_addr(in_address),
@@ -49,9 +49,9 @@ module VX_priority_encoder_sm
 	genvar curr_bank;
 	generate
 		for (curr_bank = 0; curr_bank <= NB; curr_bank = curr_bank + 1) begin : countones_blocks
-			wire[`CLOG2(`NT):0] num_valids;
+			wire[`LOG2UP(`NUM_THREADS):0] num_valids;
 
-			VX_countones #(.N(`NT)) valids_counter (
+			VX_countones #(.N(`NUM_THREADS)) valids_counter (
 				.valids(bank_valids[curr_bank]),
 				.count (num_valids)
 				);
@@ -64,7 +64,7 @@ module VX_priority_encoder_sm
 	assign stall     = (|more_than_one_valid);
 	assign send_data = (!stall) && (|in_valid); // change
 
-	wire[NB:0][(`CLOG2(NUM_REQ)) - 1:0] internal_req_num;
+	wire[NB:0][(`LOG2UP(NUM_REQ)) - 1:0] internal_req_num;
 	wire[NB:0]      internal_out_valid;
 
 
@@ -96,11 +96,11 @@ module VX_priority_encoder_sm
 	assign out_valid = internal_out_valid;
 
 
-	wire[`NT_M1:0] serviced_qual = in_valid & (serviced);
+	wire[`NUM_THREADS-1:0] serviced_qual = in_valid & (serviced);
 
-	wire[`NT_M1:0] new_left_requests = (left_requests == 0) ? (in_valid & ~serviced_qual) : (left_requests & ~ serviced_qual);
+	wire[`NUM_THREADS-1:0] new_left_requests = (left_requests == 0) ? (in_valid & ~serviced_qual) : (left_requests & ~ serviced_qual);
 
-	// wire[`NT_M1:0] new_left_requests = left_requests & ~(serviced_qual);
+	// wire[`NUM_THREADS-1:0] new_left_requests = left_requests & ~(serviced_qual);
 
 	always @(posedge clk, posedge reset) begin
 		if (reset) begin

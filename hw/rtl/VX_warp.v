@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 
 module VX_warp (
@@ -6,7 +6,7 @@ module VX_warp (
 	input  wire       reset,
 	input  wire       stall,
 	input  wire       remove,
-	input  wire[`NT_M1:0] in_thread_mask,
+	input  wire[`NUM_THREADS-1:0] in_thread_mask,
 	input  wire       in_change_mask,
 	input  wire       in_jal,
 	input  wire[31:0] in_jal_dest,
@@ -16,20 +16,20 @@ module VX_warp (
 	input  wire[31:0] in_wspawn_pc,
 
 	output wire[31:0] out_PC,
-	output wire[`NT_M1:0] out_valid
+	output wire[`NUM_THREADS-1:0] out_valid
 );
 
 		reg[31:0] real_PC;
 		logic [31:0] temp_PC;
 		logic [31:0] use_PC;
-		reg[`NT_M1:0] valid;
+		reg[`NUM_THREADS-1:0] valid;
 
-		reg[`NT_M1:0] valid_zero;
+		reg[`NUM_THREADS-1:0] valid_zero;
 
 		integer ini_cur_th = 0;
 		initial begin
 			real_PC = 0;
-			for (ini_cur_th = 1; ini_cur_th < `NT; ini_cur_th=ini_cur_th+1) begin
+			for (ini_cur_th = 1; ini_cur_th < `NUM_THREADS; ini_cur_th=ini_cur_th+1) begin
 				valid[ini_cur_th]   = 0; // Thread 1 active
 				valid_zero[ini_cur_th] = 0;
 			end
@@ -49,7 +49,7 @@ module VX_warp (
 
 		genvar out_cur_th;
 		generate
-			for (out_cur_th = 0; out_cur_th < `NT; out_cur_th = out_cur_th+1) begin : out_valid_assign
+			for (out_cur_th = 0; out_cur_th < `NUM_THREADS; out_cur_th = out_cur_th+1) begin : out_valid_assign
 				assign out_valid[out_cur_th] = in_change_mask ? in_thread_mask[out_cur_th] : stall ? 1'b0  : valid[out_cur_th];
 			end
 		endgenerate

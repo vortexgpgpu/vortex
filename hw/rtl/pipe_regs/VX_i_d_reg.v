@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 module VX_i_d_reg (
 	input wire             clk,
@@ -14,7 +14,7 @@ module VX_i_d_reg (
 	wire stall = in_freeze == 1'b1;
 
 
-	VX_generic_register #( .N( 64 + `NW_M1 + 1 + `NT ) ) i_d_reg (
+	VX_generic_register #( .N( 64 + `NW_BITS-1 + 1 + `NUM_THREADS ) ) i_d_reg (
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall),

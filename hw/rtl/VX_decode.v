@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_decode(
 	// Fetch Inputs
@@ -16,11 +16,11 @@ module VX_decode(
 
 		wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
 		wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
-		wire[`NW_M1:0]  in_warp_num        = fd_inst_meta_de.warp_num;
+		wire[`NW_BITS-1:0]  in_warp_num        = fd_inst_meta_de.warp_num;
 
 		assign VX_frE_to_bckE_req.curr_PC  = in_curr_PC;
 
-		wire[`NT_M1:0]  in_valid = fd_inst_meta_de.valid;
+		wire[`NUM_THREADS-1:0]  in_valid = fd_inst_meta_de.valid;
 
 		wire[6:0]  curr_opcode;
 

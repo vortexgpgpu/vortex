@@ -1,5 +1,5 @@
-`include "VX_define.v"
-`include "VX_cache_config.v"
+`include "VX_define.vh"
+`include "VX_cache_config.vh"
 
 module Vortex_Socket (
 
@@ -8,8 +8,8 @@ module Vortex_Socket (
     input  wire             reset,
 
     // IO
-    output wire             io_valid[`NUMBER_CORES-1:0],
-    output wire[31:0]       io_data [`NUMBER_CORES-1:0],
+    output wire             io_valid[`NUM_CORES-1:0],
+    output wire[31:0]       io_data [`NUM_CORES-1:0],
 
     output wire[31:0]       number_cores,
 
@@ -19,7 +19,7 @@ module Vortex_Socket (
     output wire             out_dram_req_read,
     output wire [31:0]      out_dram_req_addr,
     output wire [31:0]      out_dram_req_size,
-    output wire [31:0]      out_dram_req_data[`DBANK_LINE_SIZE_RNG],
+    output wire [31:0]      out_dram_req_data[`DBANK_LINE_WORDS-1:0],
     output wire [31:0]      out_dram_expected_lat,
     input  wire             out_dram_req_delay,
 
@@ -27,7 +27,7 @@ module Vortex_Socket (
     output wire             out_dram_fill_accept,
     input  wire             out_dram_fill_rsp,
     input  wire [31:0]      out_dram_fill_rsp_addr,
-    input  wire [31:0]      out_dram_fill_rsp_data[`DBANK_LINE_SIZE_RNG],
+    input  wire [31:0]      out_dram_fill_rsp_data[`DBANK_LINE_WORDS-1:0],
 
     // LLC Snooping
     input  wire             llc_snp_req,
@@ -36,18 +36,16 @@ module Vortex_Socket (
 
     output wire             out_ebreak
 );
+    assign number_cores = `NUM_CORES;
 
-    assign number_cores = `NUMBER_CORES;
+    if (`NUM_CLUSTERS == 1) begin
 
-
-    if (`NUMBER_CLUSTERS == 1) begin
-
-        wire[`NUMBER_CORES-1:0]       cluster_io_valid;
-        wire[`NUMBER_CORES-1:0][31:0] cluster_io_data;
+        wire[`NUM_CORES-1:0]       cluster_io_valid;
+        wire[`NUM_CORES-1:0][31:0] cluster_io_data;
 
 
         genvar curr_c;
-        for (curr_c = 0; curr_c < `NUMBER_CORES; curr_c=curr_c+1) begin
+        for (curr_c = 0; curr_c < `NUM_CORES; curr_c=curr_c+1) begin
             assign io_valid[curr_c] = cluster_io_valid[curr_c];
             assign io_data [curr_c] = cluster_io_data [curr_c];
         end
@@ -76,62 +74,57 @@ module Vortex_Socket (
             .llc_snp_req_addr      (llc_snp_req_addr),
             .llc_snp_req_delay     (llc_snp_req_delay),
             .out_ebreak            (out_ebreak)
-            );
+        );
+
     end else begin
 
         wire                       snp_fwd;
         wire[31:0]                 snp_fwd_addr;
-        wire[`NUMBER_CLUSTERS-1:0] snp_fwd_delay;
+        wire[`NUM_CLUSTERS-1:0] snp_fwd_delay;
 
-        wire[`NUMBER_CLUSTERS-1:0] per_cluster_out_ebreak;
+        wire[`NUM_CLUSTERS-1:0] per_cluster_out_ebreak;
 
         assign out_ebreak = (&per_cluster_out_ebreak);
 
-
         // // DRAM Dcache Req
-        wire[`NUMBER_CLUSTERS-1:0]                              per_cluster_dram_req;
-        wire[`NUMBER_CLUSTERS-1:0]                              per_cluster_dram_req_write;
-        wire[`NUMBER_CLUSTERS-1:0]                              per_cluster_dram_req_read;
-        wire[`NUMBER_CLUSTERS-1:0] [31:0]                       per_cluster_dram_req_addr;
-        wire[`NUMBER_CLUSTERS-1:0] [31:0]                       per_cluster_dram_req_size;
-        wire[`NUMBER_CLUSTERS-1:0] [31:0]                       per_cluster_dram_expected_lat;
-        wire[`NUMBER_CLUSTERS-1:0][`DBANK_LINE_SIZE_RNG][31:0]  per_cluster_dram_req_data;
-        wire[31:0]                                              per_cluster_dram_req_data_up[`NUMBER_CLUSTERS-1:0][`DBANK_LINE_SIZE_RNG];
+        wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_req;
+        wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_req_write;
+        wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_req_read;
+        wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_req_addr;
+        wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_req_size;
+        wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_expected_lat;
+        wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0]  per_cluster_dram_req_data;
+        wire[31:0]                                              per_cluster_dram_req_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
 
         wire                                                    l3c_core_accept;
 
         // // DRAM Dcache Res
-        wire[`NUMBER_CLUSTERS-1:0]                              per_cluster_dram_fill_accept;
-        wire[`NUMBER_CLUSTERS-1:0]                              per_cluster_dram_fill_rsp;
-        wire[`NUMBER_CLUSTERS-1:0] [31:0]                       per_cluster_dram_fill_rsp_addr;
-        wire[`NUMBER_CLUSTERS-1:0][`DBANK_LINE_SIZE_RNG][31:0]  per_cluster_dram_fill_rsp_data;
-        wire[31:0]                                              per_cluster_dram_fill_rsp_data_up[`NUMBER_CLUSTERS-1:0][`DBANK_LINE_SIZE_RNG];
+        wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_fill_accept;
+        wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_fill_rsp;
+        wire[`NUM_CLUSTERS-1:0] [31:0]                       per_cluster_dram_fill_rsp_addr;
+        wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0]  per_cluster_dram_fill_rsp_data;
+        wire[31:0]                                              per_cluster_dram_fill_rsp_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
 
-        wire[`NUMBER_CLUSTERS-1:0][`NUMBER_CORES_PER_CLUSTER-1:0]        per_cluster_io_valid;
-        wire[`NUMBER_CLUSTERS-1:0][`NUMBER_CORES_PER_CLUSTER-1:0][31:0]  per_cluster_io_data;
+        wire[`NUM_CLUSTERS-1:0][`NUM_CORES_PER_CLUSTER-1:0]        per_cluster_io_valid;
+        wire[`NUM_CLUSTERS-1:0][`NUM_CORES_PER_CLUSTER-1:0][31:0]  per_cluster_io_data;
 
-        genvar curr_c;
-        genvar curr_cc;
-        genvar curr_word;
-        for (curr_c = 0; curr_c < `NUMBER_CLUSTERS; curr_c =curr_c+1) begin
-            for (curr_cc = 0; curr_cc < `NUMBER_CORES_PER_CLUSTER; curr_cc=curr_cc+1) begin
-                assign io_valid[curr_cc+(curr_c*`NUMBER_CORES_PER_CLUSTER)] = per_cluster_io_valid[curr_c][curr_cc];
-                assign io_data [curr_cc+(curr_c*`NUMBER_CORES_PER_CLUSTER)] = per_cluster_io_data [curr_c][curr_cc];
+        genvar curr_c, curr_cc, curr_word;
+        for (curr_c = 0; curr_c < `NUM_CLUSTERS; curr_c =curr_c+1) begin
+            for (curr_cc = 0; curr_cc < `NUM_CORES_PER_CLUSTER; curr_cc=curr_cc+1) begin
+                assign io_valid[curr_cc+(curr_c*`NUM_CORES_PER_CLUSTER)] = per_cluster_io_valid[curr_c][curr_cc];
+                assign io_data [curr_cc+(curr_c*`NUM_CORES_PER_CLUSTER)] = per_cluster_io_data [curr_c][curr_cc];
             end
 
 
-            for (curr_word = 0; curr_word < `DBANK_LINE_SIZE_WORDS; curr_word = curr_word+1) begin
+            for (curr_word = 0; curr_word < `DBANK_LINE_WORDS; curr_word = curr_word+1) begin
                 assign per_cluster_dram_req_data        [curr_c][curr_word] = per_cluster_dram_req_data_up  [curr_c][curr_word];
                 assign per_cluster_dram_fill_rsp_data_up[curr_c][curr_word] = per_cluster_dram_fill_rsp_data[curr_c][curr_word];
             end
 
         end
 
-
-
         genvar curr_cluster;
-        for (curr_cluster = 0; curr_cluster < `NUMBER_CLUSTERS; curr_cluster=curr_cluster+1) begin
-
+        for (curr_cluster = 0; curr_cluster < `NUM_CLUSTERS; curr_cluster=curr_cluster+1) begin
 
             Vortex_Cluster #(.CLUSTER_ID(curr_cluster)) Vortex_Cluster(
                 .clk                   (clk),
@@ -158,36 +151,32 @@ module Vortex_Socket (
                 .llc_snp_req_delay     (snp_fwd_delay[curr_cluster]),
 
                 .out_ebreak            (per_cluster_out_ebreak           [curr_cluster])
-                );
+            );
         end
-
 
         //////////////////// L3 Cache ////////////////////
         wire[`L3NUMBER_REQUESTS-1:0]                             l3c_core_req;
         wire[`L3NUMBER_REQUESTS-1:0][2:0]                        l3c_core_req_mem_write;
         wire[`L3NUMBER_REQUESTS-1:0][2:0]                        l3c_core_req_mem_read;
         wire[`L3NUMBER_REQUESTS-1:0][31:0]                       l3c_core_req_addr;
-        wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_SIZE_RNG][31:0] l3c_core_req_data;
+        wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0] l3c_core_req_data;
         wire[`L3NUMBER_REQUESTS-1:0][1:0]                        l3c_core_req_wb;
 
         wire[`L3NUMBER_REQUESTS-1:0]                             l3c_core_no_wb_slot;
 
-
-
         wire[`L3NUMBER_REQUESTS-1:0]                                  l3c_wb;
         wire[`L3NUMBER_REQUESTS-1:0] [31:0]                           l3c_wb_addr;
-        wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_SIZE_RNG][31:0]      l3c_wb_data;
+        wire[`L3NUMBER_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]      l3c_wb_data;
 
 
-        wire[`DBANK_LINE_SIZE_RNG][31:0]                             dram_req_data_port;
-        wire[`DBANK_LINE_SIZE_RNG][31:0]                             dram_fill_rsp_data_port;
+        wire[`DBANK_LINE_WORDS-1:0][31:0]                             dram_req_data_port;
+        wire[`DBANK_LINE_WORDS-1:0][31:0]                             dram_fill_rsp_data_port;
 
         genvar llb_index;
-            for (llb_index = 0; llb_index < `DBANK_LINE_SIZE_WORDS; llb_index=llb_index+1) begin
+            for (llb_index = 0; llb_index < `DBANK_LINE_WORDS; llb_index=llb_index+1) begin
                 assign out_dram_req_data          [llb_index] = dram_req_data_port[llb_index];
                 assign dram_fill_rsp_data_port[llb_index] = out_dram_fill_rsp_data[llb_index];
             end
-
 
         // 
         genvar l3c_curr_cluster;
@@ -212,7 +201,6 @@ module Vortex_Socket (
                 assign per_cluster_dram_fill_rsp     [l3c_curr_cluster] = l3c_wb     [l3c_curr_cluster];
                 assign per_cluster_dram_fill_rsp_data[l3c_curr_cluster] = l3c_wb_data[l3c_curr_cluster];
                 assign per_cluster_dram_fill_rsp_addr[l3c_curr_cluster] = l3c_wb_addr[l3c_curr_cluster];
-
             end
 
         wire dram_snp_full;
@@ -224,7 +212,7 @@ module Vortex_Socket (
             .WORD_SIZE_BYTES              (`L3WORD_SIZE_BYTES),
             .NUMBER_REQUESTS              (`L3NUMBER_REQUESTS),
             .STAGE_1_CYCLES               (`L3STAGE_1_CYCLES),
-            .FUNC_ID                      (`LLFUNC_ID),
+            .FUNC_ID                      (`L2FUNC_ID),
             .REQQ_SIZE                    (`L3REQQ_SIZE),
             .MRVQ_SIZE                    (`L3MRVQ_SIZE),
             .DFPQ_SIZE                    (`L3DFPQ_SIZE),
@@ -238,9 +226,7 @@ module Vortex_Socket (
             .PRFQ_STRIDE                  (`L3PRFQ_STRIDE),
             .FILL_INVALIDAOR_SIZE         (`L3FILL_INVALIDAOR_SIZE),
             .SIMULATED_DRAM_LATENCY_CYCLES(`L3SIMULATED_DRAM_LATENCY_CYCLES)
-            )
-            gpu_l3cache
-            (
+        ) gpu_l3cache (
             .clk               (clk),
             .reset             (reset),
 
@@ -300,10 +286,8 @@ module Vortex_Socket (
             .snp_fwd               (snp_fwd),
             .snp_fwd_addr          (snp_fwd_addr),
             .snp_fwd_delay         (|snp_fwd_delay)
-            );
+        );
 
     end
-
-
 
 endmodule

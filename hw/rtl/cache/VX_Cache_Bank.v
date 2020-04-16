@@ -2,7 +2,7 @@
 //        Also add a bit about wheter the "Way ID" is valid / being held or if it is just default
 //        Also make sure all possible output states are transmitted back to the bank correctly
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_Cache_Bank
     #(
@@ -67,7 +67,7 @@ module VX_Cache_Bank
     localparam RECIV_MEM_RSP = 2;
 
 
-    localparam BLOCK_NUM_BITS = `CLOG2(CACHE_BLOCK);
+    localparam BLOCK_NUM_BITS = `LOG2UP(CACHE_BLOCK);
     // Inputs
     input wire rst;
     input wire clk;

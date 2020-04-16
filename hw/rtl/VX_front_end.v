@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_front_end (
 	input wire clk,
@@ -37,8 +37,8 @@ wire icache_stage_delay;
 wire vortex_ebreak;
 wire terminate_sim;
 
-wire[`NW_M1:0] icache_stage_wid;
-wire[`NT-1:0]  icache_stage_valids;
+wire[`NW_BITS-1:0] icache_stage_wid;
+wire[`NUM_THREADS-1:0]  icache_stage_valids;
 
 reg old_ebreak; // This should be eventually removed
 always @(posedge clk) begin

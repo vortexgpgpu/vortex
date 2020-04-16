@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_dmem_controller (
 	input wire               clk,
@@ -36,7 +36,7 @@ module VX_dmem_controller (
     wire dcache_wants_wb = (|VX_dcache_rsp_dcache.core_wb_valid);
 
 	// Dcache Request
-	assign VX_dcache_req_dcache.core_req_valid       = VX_dcache_req.core_req_valid & {`NT{~to_shm}};
+	assign VX_dcache_req_dcache.core_req_valid       = VX_dcache_req.core_req_valid & {`NUM_THREADS{~to_shm}};
 	assign VX_dcache_req_dcache.core_req_addr        = VX_dcache_req.core_req_addr;
 	assign VX_dcache_req_dcache.core_req_writedata   = VX_dcache_req.core_req_writedata;
 	assign VX_dcache_req_dcache.core_req_mem_read    = VX_dcache_req.core_req_mem_read;
@@ -49,7 +49,7 @@ module VX_dmem_controller (
 
 
     // Shred Memory Request
-	assign VX_dcache_req_smem.core_req_valid       = VX_dcache_req.core_req_valid & {`NT{to_shm}};
+	assign VX_dcache_req_smem.core_req_valid       = VX_dcache_req.core_req_valid & {`NUM_THREADS{to_shm}};
 	assign VX_dcache_req_smem.core_req_addr        = VX_dcache_req.core_req_addr;
 	assign VX_dcache_req_smem.core_req_writedata   = VX_dcache_req.core_req_writedata;
 	assign VX_dcache_req_smem.core_req_mem_read    = VX_dcache_req.core_req_mem_read;
@@ -73,8 +73,8 @@ module VX_dmem_controller (
 
 
 
-	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_smem_dram_req();
-	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_SIZE_WORDS(`DBANK_LINE_SIZE_WORDS)) VX_gpu_smem_dram_res();
+	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) VX_gpu_smem_dram_req();
+	VX_gpu_dcache_dram_res_inter #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) VX_gpu_smem_dram_res();
 
 
 

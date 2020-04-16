@@ -1,5 +1,5 @@
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 `ifndef VX_ICACHE_REQ
 
