@@ -1,9 +1,8 @@
 
-`include "../VX_define.vh"
-
 `ifndef VX_WARP_CTL_INTER
-
 `define VX_WARP_CTL_INTER
+
+`include "../VX_define.vh"
 
 interface VX_warp_ctl_inter ();
 
@@ -29,8 +28,6 @@ interface VX_warp_ctl_inter ();
 	wire[`NUM_THREADS-1:0] split_later_mask;
 	wire[31:0]     split_save_pc;
 
-
 endinterface
-
 
 `endif

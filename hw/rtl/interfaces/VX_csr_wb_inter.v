@@ -1,9 +1,7 @@
+`ifndef VX_CSR_WB_REQ
+`define VX_CSR_WB_REQ
 
 `include "../VX_define.vh"
-
-`ifndef VX_CSR_WB_REQ
-
-`define VX_CSR_WB_REQ
 
 interface VX_csr_wb_inter ();
 

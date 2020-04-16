@@ -1,9 +1,8 @@
 
-`include "../VX_define.vh"
-
 `ifndef VX_DRAM_REQ_RSP_INTER
-
 `define VX_DRAM_REQ_RSP_INTER
+
+`include "../VX_define.vh"
 
 interface VX_dram_req_rsp_inter #(
 	parameter NUM_BANKS = 8,
@@ -20,8 +19,6 @@ interface VX_dram_req_rsp_inter #(
     wire[NUM_BANKS - 1:0][NUM_WORDS_PER_BLOCK-1:0][31:0] i_m_readdata;
     wire                                                                    i_m_ready;
 
-
 endinterface
-
 
 `endif

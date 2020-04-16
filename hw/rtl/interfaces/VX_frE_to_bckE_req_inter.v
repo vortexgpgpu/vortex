@@ -1,9 +1,7 @@
+`ifndef VX_FrE_to_BE_INTER
+`define VX_FrE_to_BE_INTER
 
 `include "VX_define.vh"
-
-`ifndef VX_FrE_to_BE_INTER
-
-`define VX_FrE_to_BE_INTER
 
 interface VX_frE_to_bckE_req_inter ();
 
@@ -30,7 +28,7 @@ interface VX_frE_to_bckE_req_inter ();
 	wire                 jal;
 	wire[31:0]           jal_offset;
 	wire[31:0]           PC_next;
-	wire[`NUM_THREADS-1:0]       valid;
+	wire[`NUM_THREADS-1:0]   valid;
 	wire[`NW_BITS-1:0]       warp_num;
 
 	// GPGPU stuff
@@ -39,8 +37,6 @@ interface VX_frE_to_bckE_req_inter ();
 	wire                 is_split; 
 	wire                 is_barrier;
 
-
 endinterface
-
 
 `endif

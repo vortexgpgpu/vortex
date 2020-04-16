@@ -1,11 +1,9 @@
-`include "../generic_cache/VX_cache_config.vh"
-
 `ifndef VX_GPU_SNP_REQ_RSP
-
 `define VX_GPU_SNP_REQ_RSP
 
-interface VX_gpu_snp_req_rsp
-	();
+`include "../generic_cache/VX_cache_config.vh"
+
+interface VX_gpu_snp_req_rsp ();
 
 	// Snoop request
 	wire        snp_req;
@@ -15,6 +13,5 @@ interface VX_gpu_snp_req_rsp
 	wire        snp_delay;
 
 endinterface
-
 
 `endif
