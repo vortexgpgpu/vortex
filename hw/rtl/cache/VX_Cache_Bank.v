@@ -67,7 +67,7 @@ module VX_Cache_Bank
     localparam RECIV_MEM_RSP = 2;
 
 
-    localparam BLOCK_NUM_BITS = `LOG2UP(CACHE_BLOCK);
+    localparam BLOCK_BITS = `LOG2UP(CACHE_BLOCK);
     // Inputs
     input wire rst;
     input wire clk;
@@ -134,9 +134,7 @@ module VX_Cache_Bank
     assign write_from_mem = (state == RECIV_MEM_RSP) && valid_in; // TODO
     assign hit            = (access && (tag_use == o_tag) && valid_use);
     //assign eviction_addr = {eviction_tag, actual_index, block_offset, 5'b0}; // Fix with actual data
-    assign eviction_addr  = {eviction_tag, actual_index, {(BLOCK_NUM_BITS){1'b0}}}; // Fix with actual data
-
-
+    assign eviction_addr  = {eviction_tag, actual_index, {(BLOCK_BITS){1'b0}}}; // Fix with actual data
 
     wire lw  = (i_p_mem_read == `LW_MEM_READ);
     wire lb  = (i_p_mem_read == `LB_MEM_READ);
@@ -158,13 +156,11 @@ module VX_Cache_Bank
                              b2 ? (data_use[block_offset] >> 16) :
                              (data_use[block_offset] >> 24);
 
-
     wire[31:0] lb_data     = (data_unQual[7] ) ? (data_unQual | 32'hFFFFFF00) : (data_unQual & 32'hFF);
     wire[31:0] lh_data     = (data_unQual[15]) ? (data_unQual | 32'hFFFF0000) : (data_unQual & 32'hFFFF);
     wire[31:0] lbu_data    = (data_unQual & 32'hFF);
     wire[31:0] lhu_data    = (data_unQual & 32'hFFFF);
     wire[31:0] lw_data     = (data_unQual);
-
 
     wire[31:0] sw_data     = writedata;
 
@@ -174,8 +170,6 @@ module VX_Cache_Bank
                              writedata;
 
     wire[31:0] sh_data     = b2 ? {writedata[15:0], {16{1'b0}}} : writedata;
-
-
 
     wire[31:0] use_write_data  = sb ? sb_data :
                                  sh ? sh_data :
@@ -188,13 +182,10 @@ module VX_Cache_Bank
                              lbu ? lbu_data :
                              lw_data;
 
-
     assign readdata     = (access) ? data_Qual : 32'b0; // Fix with actual data
-
 
     wire[3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
     wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
-
 
     wire[NUM_WORDS_PER_BLOCK-1:0][3:0]  we;
     wire[NUM_WORDS_PER_BLOCK-1:0][31:0] data_write;
@@ -209,13 +200,11 @@ module VX_Cache_Bank
                             (normal_write && sh) ? sh_mask  :
                             4'b0000;
 
-
         // assign we[g]      = (normal_write || (write_from_mem)) ? 1'b1 : 1'b0;
         assign data_write[g] = write_from_mem ? fetched_writedata[g] : use_write_data;
         assign way_to_update = evicted_way;
     end
 	 endgenerate
-
 
     VX_cache_data_per_index #(
           .CACHE_WAYS         (CACHE_WAYS),
@@ -243,8 +232,6 @@ module VX_Cache_Bank
         .valid_use    (valid_use),
         .dirty_use    (dirty_use)
       );
-
-
 
 endmodule
 

@@ -46,23 +46,23 @@ module VX_tag_data_structure #(
 	input  wire                             reset,
     input  wire                             stall_bank_pipe,
 
-	input  wire[`LINE_SELECT_SIZE_RNG]      read_addr,
+	input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
 	output wire                             read_valid,
 	output wire                             read_dirty,
-	output wire[`TAG_SELECT_SIZE_RNG]       read_tag,
+	output wire[`TAG_SELECT_BITS-1:0]       read_tag,
 	output wire[`DBANK_LINE_WORDS-1:0][31:0] read_data,
 
     input  wire                             invalidate,
 	input  wire[`DBANK_LINE_WORDS-1:0][3:0] write_enable,
 	input  wire                             write_fill,
-	input  wire[`LINE_SELECT_SIZE_RNG]      write_addr,
-    input  wire[`TAG_SELECT_SIZE_RNG]       tag_index,
+	input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
+    input  wire[`TAG_SELECT_BITS-1:0]       tag_index,
 	input  wire[`DBANK_LINE_WORDS-1:0][31:0] write_data,
     input  wire                             fill_sent	
 );
 
     reg [`DBANK_LINE_WORDS-1:0][3:0][7:0]  data  [`BANK_LINE_COUNT-1:0];
-    reg [`TAG_SELECT_SIZE_RNG]             tag   [`BANK_LINE_COUNT-1:0];
+    reg [`TAG_SELECT_BITS-1:0]             tag   [`BANK_LINE_COUNT-1:0];
     reg                                    valid [`BANK_LINE_COUNT-1:0];
     reg                                    dirty [`BANK_LINE_COUNT-1:0];   
 
