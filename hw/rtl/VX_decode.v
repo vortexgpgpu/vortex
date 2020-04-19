@@ -3,12 +3,12 @@
 
 module VX_decode(
 	// Fetch Inputs
-	VX_inst_meta_inter     fd_inst_meta_de,
+	VX_inst_meta_if     fd_inst_meta_de,
 
 	// Outputs
-	VX_frE_to_bckE_req_inter vx_frE_to_bckE_req,
-	VX_wstall_inter          vx_wstall,
-	VX_join_inter            vx_join,
+	VX_frE_to_bckE_req_if vx_frE_to_bckE_req,
+	VX_wstall_if          vx_wstall,
+	VX_join_if            vx_join,
 
 	output wire              terminate_sim
 

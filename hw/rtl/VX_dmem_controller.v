@@ -5,29 +5,29 @@ module VX_dmem_controller (
 	input wire               reset,
 
 	// Dram <-> Dcache
-	VX_gpu_dcache_dram_req_inter vx_gpu_dcache_dram_req,
-	VX_gpu_dcache_dram_rsp_inter vx_gpu_dcache_dram_res,
-	VX_gpu_snp_req_rsp           vx_gpu_dcache_snp_req,
+	VX_gpu_dcache_dram_req_if vx_gpu_dcache_dram_req,
+	VX_gpu_dcache_dram_rsp_if vx_gpu_dcache_dram_res,
+	VX_gpu_snp_req_rsp_if     vx_gpu_dcache_snp_req,
 
 	// Dram <-> Icache
-	VX_gpu_dcache_dram_req_inter vx_gpu_icache_dram_req,
-	VX_gpu_dcache_dram_rsp_inter vx_gpu_icache_dram_res,
-	VX_gpu_snp_req_rsp           vx_gpu_icache_snp_req,
+	VX_gpu_dcache_dram_req_if vx_gpu_icache_dram_req,
+	VX_gpu_dcache_dram_rsp_if vx_gpu_icache_dram_res,
+	VX_gpu_snp_req_rsp_if     vx_gpu_icache_snp_req,
 
 	// Core <-> Dcache
-	VX_gpu_dcache_rsp_inter  vx_dcache_rsp,
-	VX_gpu_dcache_req_inter  vx_dcache_req,
+	VX_gpu_dcache_rsp_if  vx_dcache_rsp,
+	VX_gpu_dcache_req_if  vx_dcache_req,
 
 	// Core <-> Icache
-	VX_gpu_dcache_rsp_inter  vx_icache_rsp,
-	VX_gpu_dcache_req_inter  vx_icache_req
+	VX_gpu_dcache_rsp_if  vx_icache_rsp,
+	VX_gpu_dcache_req_if  vx_icache_req
 );
 
-	VX_gpu_dcache_rsp_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_rsp_smem();
-	VX_gpu_dcache_req_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_req_smem();
+	VX_gpu_dcache_rsp_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_rsp_smem();
+	VX_gpu_dcache_req_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_req_smem();
 
-	VX_gpu_dcache_rsp_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_rsp_dcache();
-	VX_gpu_dcache_req_inter   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_req_dcache();
+	VX_gpu_dcache_rsp_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_rsp_dcache();
+	VX_gpu_dcache_req_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   vx_dcache_req_dcache();
 
 	wire to_shm          = vx_dcache_req.core_req_addr[0][31:24] == 8'hFF;
     wire dcache_wants_wb = (|vx_dcache_rsp_dcache.core_wb_valid);
@@ -66,8 +66,8 @@ module VX_dmem_controller (
 
     assign vx_dcache_rsp.delay_req         = to_shm          ? vx_dcache_rsp_smem.delay_req : vx_dcache_rsp_dcache.delay_req;
 
-	VX_gpu_dcache_dram_req_inter #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) vx_gpu_smem_dram_req();
-	VX_gpu_dcache_dram_rsp_inter #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) vx_gpu_smem_dram_res();
+	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) vx_gpu_smem_dram_req();
+	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) vx_gpu_smem_dram_res();
 
 	VX_cache #(
 		.CACHE_SIZE_BYTES             (`SCACHE_SIZE_BYTES),
@@ -118,9 +118,9 @@ module VX_dmem_controller (
 		.core_wb_warp_num  	(vx_dcache_rsp_smem.core_wb_warp_num),
 		.core_wb_readdata  	(vx_dcache_rsp_smem.core_wb_readdata),
 		.core_wb_pc        	(vx_dcache_rsp_smem.core_wb_pc),
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.core_wb_address   	(),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 
 		// DRAM response
 		.dram_rsp_valid     (vx_gpu_smem_dram_res.dram_rsp_valid),
@@ -140,15 +140,15 @@ module VX_dmem_controller (
 		// Snoop Request
 		.snp_req_valid      (0),
 		.snp_req_addr       (0),
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.snp_req_full       (),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 
 		// Snoop Forward
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.snp_fwd_valid      (),
 		.snp_fwd_addr       (),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 		.snp_fwd_full       (0)
 	);
 
@@ -201,9 +201,9 @@ module VX_dmem_controller (
 		.core_wb_warp_num  (vx_dcache_rsp_dcache.core_wb_warp_num),
 		.core_wb_readdata  (vx_dcache_rsp_dcache.core_wb_readdata),
 		.core_wb_pc        (vx_dcache_rsp_dcache.core_wb_pc),
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.core_wb_address   (),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 
 		// DRAM response
 		.dram_rsp_valid     (vx_gpu_dcache_dram_res.dram_rsp_valid),
@@ -226,10 +226,10 @@ module VX_dmem_controller (
 		.snp_req_full       (vx_gpu_dcache_snp_req.snp_req_full),
 
 		// Snoop Forward
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.snp_fwd_valid      (),
 		.snp_fwd_addr       (),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 		.snp_fwd_full       (0)
 	);
 
@@ -282,9 +282,9 @@ module VX_dmem_controller (
 		.core_wb_warp_num	(vx_icache_rsp.core_wb_warp_num),
 		.core_wb_readdata  	(vx_icache_rsp.core_wb_readdata),
 		.core_wb_pc        	(vx_icache_rsp.core_wb_pc),
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.core_wb_address   	(),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 
 		// DRAM response
 		.dram_rsp_valid     (vx_gpu_icache_dram_res.dram_rsp_valid),
@@ -307,10 +307,10 @@ module VX_dmem_controller (
 		.snp_req_full       (vx_gpu_icache_snp_req.snp_req_full),
 
 		// Snoop Forward
-	/* verilator lint_off PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_BEGIN
 		.snp_fwd_valid      (),
 		.snp_fwd_addr       (),
-	/* verilator lint_on PINCONNECTEMPTY */
+	`IGNORE_WARNINGS_END
 		.snp_fwd_full       (0)
 	);
 

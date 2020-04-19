@@ -2,10 +2,10 @@
 
 module VX_gpgpu_inst (
 	// Input
-	VX_gpu_inst_req_inter    vx_gpu_inst_req,
+	VX_gpu_inst_req_if    vx_gpu_inst_req,
 
 	// Output
-	VX_warp_ctl_inter        vx_warp_ctl
+	VX_warp_ctl_if        vx_warp_ctl
 );
 	wire[`NUM_THREADS-1:0] curr_valids = vx_gpu_inst_req.valid;
 	wire is_split              = (vx_gpu_inst_req.is_split);

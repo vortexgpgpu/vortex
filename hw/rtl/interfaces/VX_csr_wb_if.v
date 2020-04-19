@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_csr_wb_inter ();
+interface VX_csr_wb_if ();
 
 	wire [`NUM_THREADS-1:0]			valid;
 	wire [`NW_BITS-1:0]      		warp_num;

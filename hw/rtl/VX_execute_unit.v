@@ -4,15 +4,15 @@ module VX_execute_unit (
 	input wire               clk,
 	input wire               reset,
 		// Request
-	VX_exec_unit_req_inter   vx_exec_unit_req,
+	VX_exec_unit_req_if   vx_exec_unit_req,
 
 	// Output
 		// Writeback
-	VX_inst_exec_wb_inter    vx_inst_exec_wb,
+	VX_inst_exec_wb_if    vx_inst_exec_wb,
 		// JAL Response
-	VX_jal_response_inter    vx_jal_rsp,
+	VX_jal_response_if    vx_jal_rsp,
 		// Branch Response
-	VX_branch_response_inter vx_branch_rsp,
+	VX_branch_response_if vx_branch_rsp,
 
 	input wire no_slot_exec,
 	output wire out_delay
@@ -109,11 +109,11 @@ module VX_execute_unit (
 	endgenerate
 
 
-	// VX_inst_exec_wb_inter    vx_inst_exec_wb_temp();
+	// VX_inst_exec_wb_if    vx_inst_exec_wb_temp();
 		// JAL Response
-	VX_jal_response_inter    vx_jal_rsp_temp();
+	VX_jal_response_if    vx_jal_rsp_temp();
 		// Branch Response
-	VX_branch_response_inter vx_branch_rsp_temp();
+	VX_branch_response_if vx_branch_rsp_temp();
 
 	// Actual Writeback
 	assign vx_inst_exec_wb.rd          = vx_exec_unit_req.rd;

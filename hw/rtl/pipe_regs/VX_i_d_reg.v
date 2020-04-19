@@ -5,8 +5,8 @@ module VX_i_d_reg (
 	input wire             reset,
 	input wire             in_freeze,
 
-	VX_inst_meta_inter     fe_inst_meta_fd,
-	VX_inst_meta_inter     fd_inst_meta_de
+	VX_inst_meta_if     fe_inst_meta_fd,
+	VX_inst_meta_if     fd_inst_meta_de
 
 );
 

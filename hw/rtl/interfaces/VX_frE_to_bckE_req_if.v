@@ -3,7 +3,7 @@
 
 `include "VX_define.vh"
 
-interface VX_frE_to_bckE_req_inter ();
+interface VX_frE_to_bckE_req_if ();
 
 	wire [11:0]      		csr_address;
 	wire                 	is_csr;

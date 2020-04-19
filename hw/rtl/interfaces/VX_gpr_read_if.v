@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_gpr_read_inter ();
+interface VX_gpr_read_if ();
 
 	wire [4:0]      	rs1;
 	wire [4:0]      	rs2;

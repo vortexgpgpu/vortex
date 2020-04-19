@@ -12,8 +12,13 @@
 `define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
 `define DEBUG_END   /* verilator lint_on UNUSED */     
 
-`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ 
-`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */     
+`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
+                              /* verilator lint_off PINCONNECTEMPTY */ \
+                              /* verilator lint_off DECLFILENAME */
+
+`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
+                              /* verilator lint_on PINCONNECTEMPTY */ \
+                              /* verilator lint_on DECLFILENAME */
 
 `define STRINGIFY(x) `"x`"
 

@@ -4,7 +4,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_inst_mem_wb_inter ();
+interface VX_inst_mem_wb_if ();
 
 	wire [`NUM_THREADS-1:0][31:0]	loaded_data; 
 	wire [31:0]            			mem_wb_pc;

@@ -6,9 +6,9 @@ module VX_csr_pipe #(
 	input wire clk,    // Clock
 	input wire reset,
 	input wire no_slot_csr,
-	VX_csr_req_inter vx_csr_req,
-	VX_wb_inter      vx_writeback,
-	VX_csr_wb_inter  vx_csr_wb,
+	VX_csr_req_if vx_csr_req,
+	VX_wb_if      vx_writeback,
+	VX_csr_wb_if  vx_csr_wb,
 	output wire stall_gpr_csr	
 );
 

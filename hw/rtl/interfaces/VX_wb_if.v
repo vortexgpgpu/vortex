@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_wb_inter ();
+interface VX_wb_if ();
 
 	wire [`NUM_THREADS-1:0][31:0] 	write_data; 
 	wire [31:0]            			wb_pc;

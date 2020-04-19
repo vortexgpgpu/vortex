@@ -9,49 +9,49 @@ module VX_back_end
 	input wire reset, 
 	input wire schedule_delay,
 
-	VX_gpu_dcache_rsp_inter  vx_dcache_rsp,
-	VX_gpu_dcache_req_inter  vx_dcache_req,
+	VX_gpu_dcache_rsp_if  vx_dcache_rsp,
+	VX_gpu_dcache_req_if  vx_dcache_req,
 
 	output wire               out_mem_delay,
 	output wire               out_exec_delay,
 	output wire               gpr_stage_delay,
-	VX_jal_response_inter     vx_jal_rsp,
-	VX_branch_response_inter  vx_branch_rsp,
+	VX_jal_response_if     vx_jal_rsp,
+	VX_branch_response_if  vx_branch_rsp,
 
-	VX_frE_to_bckE_req_inter  vx_bckE_req,
-	VX_wb_inter               vx_writeback_inter,
+	VX_frE_to_bckE_req_if  vx_bckE_req,
+	VX_wb_if               vx_writeback_if,
 
-	VX_warp_ctl_inter         vx_warp_ctl
+	VX_warp_ctl_if         vx_warp_ctl
 );
 
 
-VX_wb_inter             vx_writeback_temp();
-assign vx_writeback_inter.wb           = vx_writeback_temp.wb;
-assign vx_writeback_inter.rd           = vx_writeback_temp.rd;
-assign vx_writeback_inter.write_data   = vx_writeback_temp.write_data;
-assign vx_writeback_inter.wb_valid     = vx_writeback_temp.wb_valid;
-assign vx_writeback_inter.wb_warp_num  = vx_writeback_temp.wb_warp_num;
-assign vx_writeback_inter.wb_pc        = vx_writeback_temp.wb_pc;
+VX_wb_if             vx_writeback_temp();
+assign vx_writeback_if.wb           = vx_writeback_temp.wb;
+assign vx_writeback_if.rd           = vx_writeback_temp.rd;
+assign vx_writeback_if.write_data   = vx_writeback_temp.write_data;
+assign vx_writeback_if.wb_valid     = vx_writeback_temp.wb_valid;
+assign vx_writeback_if.wb_warp_num  = vx_writeback_temp.wb_warp_num;
+assign vx_writeback_if.wb_pc        = vx_writeback_temp.wb_pc;
 
-// assign VX_writeback_inter(vx_writeback_temp);
+// assign VX_writeback_if(vx_writeback_temp);
 
 wire                     no_slot_mem;
 wire                     no_slot_exec;
 
 // LSU input + output
-VX_lsu_req_inter         vx_lsu_req();
-VX_inst_mem_wb_inter     vx_mem_wb();
+VX_lsu_req_if         vx_lsu_req();
+VX_inst_mem_wb_if     vx_mem_wb();
 
 // Exec unit input + output
-VX_exec_unit_req_inter   vx_exec_unit_req();
-VX_inst_exec_wb_inter    vx_inst_exec_wb();
+VX_exec_unit_req_if   vx_exec_unit_req();
+VX_inst_exec_wb_if    vx_inst_exec_wb();
 
 // GPU unit input
-VX_gpu_inst_req_inter    vx_gpu_inst_req();
+VX_gpu_inst_req_if    vx_gpu_inst_req();
 
 // CSR unit inputs
-VX_csr_req_inter         vx_csr_req();
-VX_csr_wb_inter          vx_csr_wb();
+VX_csr_req_if         vx_csr_req();
+VX_csr_wb_if          vx_csr_wb();
 wire                     no_slot_csr;
 wire                     stall_gpr_csr;
 
@@ -59,7 +59,7 @@ VX_gpr_stage vx_gpr_stage(
 	.clk               (clk),
 	.reset             (reset),
 	.schedule_delay    (schedule_delay),
-	.vx_writeback_inter(vx_writeback_temp),
+	.vx_writeback_if(vx_writeback_temp),
 	.vx_bckE_req       (vx_bckE_req),
 	// New
 	.vx_exec_unit_req(vx_exec_unit_req),
@@ -124,7 +124,7 @@ VX_writeback vx_wb (
 	.vx_inst_exec_wb   (vx_inst_exec_wb),
 	.vx_csr_wb         (vx_csr_wb),
 
-	.vx_writeback_inter(vx_writeback_temp),
+	.vx_writeback_if(vx_writeback_temp),
 	.no_slot_mem       (no_slot_mem),
 	.no_slot_exec      (no_slot_exec),
 	.no_slot_csr       (no_slot_csr)

@@ -227,12 +227,12 @@ module Vortex_Cluster
 
         // Core Writeback
         .core_wb_valid      (l2c_wb),
-    /* verilator lint_off PINCONNECTEMPTY */
+    `IGNORE_WARNINGS_BEGIN
         .core_wb_req_rd     (),
         .core_wb_req_wb     (),
         .core_wb_warp_num   (),
         .core_wb_pc         (),
-    /* verilator lint_on PINCONNECTEMPTY */
+    `IGNORE_WARNINGS_END
         .core_wb_readdata   ({l2c_wb_data}),
         .core_wb_address    (l2c_wb_addr),
         

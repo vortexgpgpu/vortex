@@ -25,9 +25,9 @@ module VX_divide #(
 
     generate
         if (NREP != DREP) begin
-        /* verilator lint_off DECLFILENAME */
+        `IGNORE_WARNINGS_BEGIN
             different_nrep_drep_not_yet_supported non_existing_module();
-        /* verilator lint_on DECLFILENAME */
+        `IGNORE_WARNINGS_END
         end
 
         if (IMPL == "quartus") begin
@@ -98,7 +98,7 @@ module VX_divide #(
 
             if (NREP == "SIGNED") begin
 
-                /*VX_divide_internal_signed #(
+                /*VX_divide_ifnal_signed #(
                     .WIDTHN,
                     .WIDTHD
                 )div(

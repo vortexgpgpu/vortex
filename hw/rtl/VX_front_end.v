@@ -6,26 +6,26 @@ module VX_front_end (
 
 	input wire           schedule_delay,
 
-	VX_warp_ctl_inter        vx_warp_ctl,
+	VX_warp_ctl_if        vx_warp_ctl,
 
-	VX_gpu_dcache_rsp_inter  vx_icache_rsp,
-	VX_gpu_dcache_req_inter  vx_icache_req,
+	VX_gpu_dcache_rsp_if  vx_icache_rsp,
+	VX_gpu_dcache_req_if  vx_icache_req,
 
-	VX_jal_response_inter    vx_jal_rsp,
-	VX_branch_response_inter vx_branch_rsp,
+	VX_jal_response_if    vx_jal_rsp,
+	VX_branch_response_if vx_branch_rsp,
 
-	VX_frE_to_bckE_req_inter vx_bckE_req,
+	VX_frE_to_bckE_req_if vx_bckE_req,
 
 	output wire fetch_ebreak
 );
 
 
-VX_inst_meta_inter        fe_inst_meta_fi();
-VX_inst_meta_inter        fe_inst_meta_fi2();
-VX_inst_meta_inter        fe_inst_meta_id();
+VX_inst_meta_if        fe_inst_meta_fi();
+VX_inst_meta_if        fe_inst_meta_fi2();
+VX_inst_meta_if        fe_inst_meta_id();
 
-VX_frE_to_bckE_req_inter  vx_frE_to_bckE_req();
-VX_inst_meta_inter        fd_inst_meta_de();
+VX_frE_to_bckE_req_if  vx_frE_to_bckE_req();
+VX_inst_meta_if        fd_inst_meta_de();
 
 wire total_freeze = schedule_delay;
 wire icache_stage_delay;
@@ -48,8 +48,8 @@ end
 assign fetch_ebreak = vortex_ebreak || terminate_sim || old_ebreak;
 
 
-VX_wstall_inter          vx_wstall();
-VX_join_inter            vx_join();
+VX_wstall_if          vx_wstall();
+VX_join_if            vx_join();
 
 VX_fetch vx_fetch(
 		.clk                (clk),

@@ -1,7 +1,7 @@
 module VX_csr_handler (
 	input wire        clk,
 	input wire[`CSR_ADDR_SIZE-1:0] in_decode_csr_address, // done
-	VX_csr_write_request_inter vx_csr_w_req,
+	VX_csr_write_request_if vx_csr_w_req,
 	input wire        in_wb_valid,
 	output wire[31:0] out_decode_csr_data // done
 );

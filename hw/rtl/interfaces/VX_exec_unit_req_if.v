@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_exec_unit_req_inter ();
+interface VX_exec_unit_req_if ();
 
 	// Meta
 	wire [`NUM_THREADS-1:0]		valid;
