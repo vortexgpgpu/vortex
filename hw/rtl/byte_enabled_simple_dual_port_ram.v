@@ -17,29 +17,28 @@ module byte_enabled_simple_dual_port_ram
 	// Thread   Byte  Bit
 	logic [`NUM_THREADS-1:0][3:0][7:0] GPR[31:0];
 
-	// initial begin
-	// 	for (ini = 0; ini < 32; ini = ini + 1) GPR[ini] = 0;
-	// end
-
-	integer ini;
 	always @(posedge clk) begin
-		if (we) begin
-			integer thread_ind;
-			for (thread_ind = 0; thread_ind < `NUM_THREADS; thread_ind = thread_ind + 1) begin
-				if (be[thread_ind]) begin
-					GPR[waddr][thread_ind][0] <= wdata[thread_ind][7:0];
-				 	GPR[waddr][thread_ind][1] <= wdata[thread_ind][15:8];
-					GPR[waddr][thread_ind][2] <= wdata[thread_ind][23:16];
-					GPR[waddr][thread_ind][3] <= wdata[thread_ind][31:24];
+		if (reset) begin
+			//--
+		end else begin
+			if (we) begin
+				integer thread_ind;
+				for (thread_ind = 0; thread_ind < `NUM_THREADS; thread_ind = thread_ind + 1) begin
+					if (be[thread_ind]) begin
+						GPR[waddr][thread_ind][0] <= wdata[thread_ind][7:0];
+						GPR[waddr][thread_ind][1] <= wdata[thread_ind][15:8];
+						GPR[waddr][thread_ind][2] <= wdata[thread_ind][23:16];
+						GPR[waddr][thread_ind][3] <= wdata[thread_ind][31:24];
+					end
 				end
-			end
-		end			
-		// $display("^^^^^^^^^^^^^^^^^^^^^^^");
-		// for (regi = 0; regi <= 31; regi = regi + 1) begin
-		// 	for (threadi = 0; threadi < `NUM_THREADS; threadi = threadi + 1) begin
-		// 		if (GPR[regi][threadi] != 0) $display("$%d: %h",regi, GPR[regi][threadi]);
-		// 	end
-		// end
+			end	
+			// $display("^^^^^^^^^^^^^^^^^^^^^^^");
+			// for (regi = 0; regi <= 31; regi = regi + 1) begin
+			// 	for (threadi = 0; threadi < `NUM_THREADS; threadi = threadi + 1) begin
+			// 		if (GPR[regi][threadi] != 0) $display("$%d: %h",regi, GPR[regi][threadi]);
+			// 	end
+			// end
+		end
 	end
 	
 	assign q1 = GPR[raddr1];

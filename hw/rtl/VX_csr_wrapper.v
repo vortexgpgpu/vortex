@@ -2,9 +2,8 @@
 `include "VX_define.vh"
 
 module VX_csr_wrapper (
-	VX_csr_req_inter VX_csr_req,
-
-	VX_csr_wb_inter  VX_csr_wb
+	VX_csr_req_inter vx_csr_req,
+	VX_csr_wb_inter  vx_csr_wb
 );
 
 
@@ -18,21 +17,21 @@ module VX_csr_wrapper (
 	end
 
 	for (cur_tw = 0; cur_tw < `NUM_THREADS; cur_tw = cur_tw + 1) begin : warp_ids_init
-		assign warp_ids[cur_tw] = {{(31-`NW_BITS-1){1'b0}}, VX_csr_req.warp_num};
+		assign warp_ids[cur_tw] = {{(31-`NW_BITS-1){1'b0}}, vx_csr_req.warp_num};
 	end
 	endgenerate
 
 
-	assign VX_csr_wb.valid    = VX_csr_req.valid;
-	assign VX_csr_wb.warp_num = VX_csr_req.warp_num;
-	assign VX_csr_wb.rd       = VX_csr_req.rd;
-	assign VX_csr_wb.wb       = VX_csr_req.wb;
+	assign vx_csr_wb.valid    = vx_csr_req.valid;
+	assign vx_csr_wb.warp_num = vx_csr_req.warp_num;
+	assign vx_csr_wb.rd       = vx_csr_req.rd;
+	assign vx_csr_wb.wb       = vx_csr_req.wb;
 
 
-	wire thread_select        = VX_csr_req.csr_address == 12'h20;
-	wire warp_select          = VX_csr_req.csr_address == 12'h21;
+	wire thread_select        = vx_csr_req.csr_address == 12'h20;
+	wire warp_select          = vx_csr_req.csr_address == 12'h21;
 
-	assign VX_csr_wb.csr_result = thread_select ? thread_ids :
+	assign vx_csr_wb.csr_result = thread_select ? thread_ids :
 						          warp_select   ? warp_ids   :
 						          0;
 

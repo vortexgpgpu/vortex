@@ -1,15 +1,13 @@
 `include "VX_cache_config.vh"
 
-module VX_prefetcher
-	#(
-		parameter PRFQ_SIZE                     = 64,
-		parameter PRFQ_STRIDE                   = 2,
-		// Size of line inside a bank in bytes
-		parameter BANK_LINE_SIZE_BYTES          = 16,
-		// Size of a word in bytes
-		parameter WORD_SIZE_BYTES               = 4
-	)
-	(
+module VX_prefetcher #(
+	parameter PRFQ_SIZE                     = 64,
+	parameter PRFQ_STRIDE                   = 2,
+	// Size of line inside a bank in bytes
+	parameter BANK_LINE_SIZE_BYTES          = 16,
+	// Size of a word in bytes
+	parameter WORD_SIZE_BYTES               = 4
+) (
 	input wire  clk,
 	input wire  reset,
 
@@ -21,11 +19,8 @@ module VX_prefetcher
 	output wire[31:0] pref_addr
 	
 );
-
-
 	reg[`LOG2UP(PRFQ_STRIDE):0]   use_valid;
 	reg[31:0]                     use_addr;
-
 
 	wire       current_valid;
 	wire[31:0] current_addr;
@@ -33,12 +28,14 @@ module VX_prefetcher
 	wire current_full;
 	wire current_empty;
 
-
 	assign current_valid = ~current_empty;
 
 	wire update_use = ((use_valid == 0) || ((use_valid-1) == 0)) && current_valid;
 
-	VX_generic_queue_ll #(.DATAW(32), .SIZE(PRFQ_SIZE)) pfq_queue(
+	VX_generic_queue_ll #(
+		.DATAW(32), 
+		.SIZE(PRFQ_SIZE)
+	) pfq_queue (
 		.clk     (clk),
 		.reset   (reset),
 
@@ -50,13 +47,10 @@ module VX_prefetcher
 
 		.empty   (current_empty),
 		.full    (current_full)
-		);
-
-
+	);
 
 	assign pref_valid = use_valid != 0;
 	assign pref_addr  = use_addr;
-
 
 	always @(posedge clk) begin
 		if (reset) begin
@@ -70,7 +64,6 @@ module VX_prefetcher
 				use_valid <= use_valid - 1;
 				use_addr  <= use_addr + BANK_LINE_SIZE_BYTES;
 			end
-
 		end
 	end
 

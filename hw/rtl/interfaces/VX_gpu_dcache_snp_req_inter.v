@@ -5,7 +5,7 @@
 
 interface VX_gpu_dcache_snp_req_inter ();
 	// Snoop Req
-    wire            snp_req;
+    wire            snp_req_valid;
     wire [31:0]     snp_req_addr;
 
 endinterface

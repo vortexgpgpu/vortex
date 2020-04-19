@@ -47,14 +47,14 @@ module VX_dcache_llv_resp_bank_sel
 	(
     output reg [NUM_BANKS-1:0]                             per_bank_llvq_pop,
     input  wire[NUM_BANKS-1:0]                             per_bank_llvq_valid,
-    input  wire[NUM_BANKS-1:0][31:0]                       per_bank_llvq_res_addr,
-    input  wire[NUM_BANKS-1:0][`BANK_LINE_WORDS-1:0][31:0] per_bank_llvq_res_data,
- 	input  wire[NUM_BANKS-1:0][`LOG2UP(NUM_REQUESTS)-1:0]  per_bank_llvq_res_tid,
+    input  wire[NUM_BANKS-1:0][31:0]                       per_bank_llvq_rsp_addr,
+    input  wire[NUM_BANKS-1:0][`BANK_LINE_WORDS-1:0][31:0] per_bank_llvq_rsp_data,
+ 	input  wire[NUM_BANKS-1:0][`LOG2UP(NUM_REQUESTS)-1:0]  per_bank_llvq_rsp_tid,
  
    	input  wire                                              llvq_pop,
     output reg[NUM_REQUESTS-1:0]                             llvq_valid,
-    output reg[NUM_REQUESTS-1:0][31:0]                       llvq_res_addr,
-    output reg[NUM_REQUESTS-1:0][`BANK_LINE_WORDS-1:0][31:0] llvq_res_data
+    output reg[NUM_REQUESTS-1:0][31:0]                       llvq_rsp_addr,
+    output reg[NUM_REQUESTS-1:0][`BANK_LINE_WORDS-1:0][31:0] llvq_rsp_data
 
 
 );
@@ -62,7 +62,7 @@ module VX_dcache_llv_resp_bank_sel
 	wire [(`LOG2UP(NUM_BANKS))-1:0] main_bank_index;
 	wire                                  found_bank;
 
-	VX_generic_priority_encoder #(.N(NUM_BANKS)) VX_sel_bank(
+	VX_generic_priority_encoder #(.N(NUM_BANKS)) vx_sel_bank(
 	.valids(per_bank_llvq_valid),
 	.index (main_bank_index),
 	.found (found_bank)
@@ -71,13 +71,13 @@ module VX_dcache_llv_resp_bank_sel
 
 	always @(*) begin
 		llvq_valid = 0;
-		llvq_res_addr = 0;
-		llvq_res_data = 0;
+		llvq_rsp_addr = 0;
+		llvq_rsp_data = 0;
 		per_bank_llvq_pop = 0;
 		if (found_bank && llvq_pop) begin
-			llvq_valid   [per_bank_llvq_res_tid[main_bank_index]] = 1'b1;
-			llvq_res_addr[per_bank_llvq_res_tid[main_bank_index]] = per_bank_llvq_res_addr[main_bank_index];
-			llvq_res_data[per_bank_llvq_res_tid[main_bank_index]] = per_bank_llvq_res_data[main_bank_index];
+			llvq_valid   [per_bank_llvq_rsp_tid[main_bank_index]] = 1'b1;
+			llvq_rsp_addr[per_bank_llvq_rsp_tid[main_bank_index]] = per_bank_llvq_rsp_addr[main_bank_index];
+			llvq_rsp_data[per_bank_llvq_rsp_tid[main_bank_index]] = per_bank_llvq_rsp_data[main_bank_index];
 			per_bank_llvq_pop[main_bank_index]                    = 1'b1;
 		end
 	end

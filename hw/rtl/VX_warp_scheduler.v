@@ -19,7 +19,9 @@ module VX_warp_scheduler (
 	input  wire[`NW_BITS-1:0] whalt_warp_num,
 
 	input wire                 is_barrier,
+/* verilator lint_off UNUSED */
 	input wire[31:0]           barrier_id,
+/* verilator lint_on UNUSED */
 	input wire[$clog2(`NUM_WARPS):0]  num_warps,
 	input wire[`NW_BITS-1:0]       barrier_warp_num,
 
@@ -60,10 +62,7 @@ module VX_warp_scheduler (
 	input  wire[`NUM_THREADS-1:0]     icache_stage_valids
 
 );
-
-	/* verilator lint_off WIDTH */
 	wire update_use_wspawn;
-
 	wire update_visible_active;
 
 	wire[(1+32+`NUM_THREADS-1):0] d[`NUM_WARPS-1:0];
@@ -72,10 +71,12 @@ module VX_warp_scheduler (
 	wire[31:0]     join_pc;
 	wire[`NUM_THREADS-1:0] join_tm;
 
+/* verilator lint_off UNUSED */
 	wire in_wspawn = wspawn;
 	wire in_ctm = ctm;
 	wire in_whalt = whalt;
 	wire in_wstall = wstall;
+/* verilator lint_on UNUSED */
 
 	reg[`NUM_WARPS-1:0] warp_active;
 	reg[`NUM_WARPS-1:0] warp_stalled;
@@ -114,13 +115,12 @@ module VX_warp_scheduler (
 
 	reg didnt_split;
 
-	/* verilator lint_off UNUSED */
 	// wire[$clog2(`NUM_WARPS):0] num_active;
 	/* verilator lint_on UNUSED */
 
 	integer curr_w_help;
 	integer curr_barrier;
-	always @(posedge clk or posedge reset) begin
+	always @(posedge clk) begin
 		if (reset) begin
 			for (curr_barrier = 0; curr_barrier < `NUM_BARRIERS; curr_barrier=curr_barrier+1) begin
 				barrier_stall_mask[curr_barrier] <= 0;

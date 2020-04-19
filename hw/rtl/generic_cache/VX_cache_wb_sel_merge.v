@@ -1,7 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_wb_sel_merge
-	#(
+module VX_cache_wb_sel_merge #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -17,8 +16,7 @@ module VX_cache_wb_sel_merge
     // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
     parameter FUNC_ID                       = 0,
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+	// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -28,7 +26,7 @@ module VX_cache_wb_sel_merge
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -41,35 +39,29 @@ module VX_cache_wb_sel_merge
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+	// Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
-
+) (
 	// Per Bank WB
-	input  wire [NUM_BANKS-1:0]                                  per_bank_wb_valid,
-    input  wire [NUM_BANKS-1:0][`LOG2UP(NUM_REQUESTS)-1:0]       per_bank_wb_tid,
-    input  wire [NUM_BANKS-1:0][4:0]                             per_bank_wb_rd,
-    input  wire [NUM_BANKS-1:0][1:0]                             per_bank_wb_wb,
-    input  wire [NUM_BANKS-1:0][`NW_BITS-1:0]                    per_bank_wb_warp_num,
-    input  wire [NUM_BANKS-1:0][`WORD_SIZE_RNG]                  per_bank_wb_data,
-    input  wire [NUM_BANKS-1:0][31:0]                            per_bank_wb_pc,
-    input  wire [NUM_BANKS-1:0][31:0]                            per_bank_wb_address,
-    output wire [NUM_BANKS-1:0]                                  per_bank_wb_pop,
-
+	input  wire [NUM_BANKS-1:0]                           	per_bank_wb_valid,
+    input  wire [NUM_BANKS-1:0][`LOG2UP(NUM_REQUESTS)-1:0]  per_bank_wb_tid,
+    input  wire [NUM_BANKS-1:0][4:0]                        per_bank_wb_rd,
+    input  wire [NUM_BANKS-1:0][1:0]                        per_bank_wb_wb,
+    input  wire [NUM_BANKS-1:0][`NW_BITS-1:0]               per_bank_wb_warp_num,
+    input  wire [NUM_BANKS-1:0][`WORD_SIZE_RNG]             per_bank_wb_data,
+    input  wire [NUM_BANKS-1:0][31:0]                       per_bank_wb_pc,
+    input  wire [NUM_BANKS-1:0][31:0]                       per_bank_wb_address,
+    output wire [NUM_BANKS-1:0]                             per_bank_wb_pop,
 
     // Core Writeback
-    input  wire                                                   core_no_wb_slot,
-    output reg  [NUM_REQUESTS-1:0]                                core_wb_valid,
-    output reg  [NUM_REQUESTS-1:0][`WORD_SIZE_RNG]                core_wb_readdata,
-    output reg  [NUM_REQUESTS-1:0][31:0]                          core_wb_pc,
-    output wire [4:0]                                             core_wb_req_rd,
-    output wire [1:0]                                             core_wb_req_wb,
-    output wire [`NW_BITS-1:0]                                    core_wb_warp_num,
-    output reg  [NUM_REQUESTS-1:0][31:0]                          core_wb_address
-	
+    input  wire                                             core_no_wb_slot,
+    output reg  [NUM_REQUESTS-1:0]                          core_wb_valid,
+    output reg  [NUM_REQUESTS-1:0][`WORD_SIZE_RNG]          core_wb_readdata,
+    output reg  [NUM_REQUESTS-1:0][31:0]                    core_wb_pc,
+    output wire [4:0]                                       core_wb_req_rd,
+    output wire [1:0]                                       core_wb_req_wb,
+    output wire [`NW_BITS-1:0]                              core_wb_warp_num,
+    output reg  [NUM_REQUESTS-1:0][31:0]                    core_wb_address	
 );
 
 	reg [NUM_BANKS-1:0] per_bank_wb_pop_unqual;
@@ -83,15 +75,16 @@ module VX_cache_wb_sel_merge
 	// 	end
 	// endgenerate
 
-
 	wire [`LOG2UP(NUM_BANKS)-1:0] main_bank_index;
-	wire                                  found_bank;
+	wire                          found_bank;
 
-	VX_generic_priority_encoder #(.N(NUM_BANKS)) VX_sel_bank(
+	VX_generic_priority_encoder #(
+		.N(NUM_BANKS)
+	) vx_sel_bank (
 		.valids(per_bank_wb_valid),
 		.index (main_bank_index),
 		.found (found_bank)
-		);
+	);
 
 	assign core_wb_req_rd   = per_bank_wb_rd[main_bank_index];
 	assign core_wb_req_wb   = per_bank_wb_wb[main_bank_index];
@@ -106,42 +99,36 @@ module VX_cache_wb_sel_merge
 			core_wb_address  = 0;
 			for (this_bank = 0; this_bank < NUM_BANKS; this_bank = this_bank + 1) begin
 				if ((FUNC_ID == `L2FUNC_ID) || (FUNC_ID == `L3FUNC_ID)) begin
-
-						if (found_bank
-						 && !core_wb_valid[per_bank_wb_tid[this_bank]] 
-						 && per_bank_wb_valid[this_bank] 
-						 && ((main_bank_index == `LOG2UP(NUM_BANKS)'(this_bank)) 
-						  || (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index]))) begin
-							core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
-							core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
-							core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
-							core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
-							per_bank_wb_pop_unqual[this_bank]            = 1;
-						end else begin
-							per_bank_wb_pop_unqual[this_bank]            = 0;
-						end
-
+					if (found_bank
+					&& !core_wb_valid[per_bank_wb_tid[this_bank]] 
+					&& per_bank_wb_valid[this_bank] 
+					&& ((main_bank_index == `LOG2UP(NUM_BANKS)'(this_bank)) 
+					|| (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index]))) begin
+						core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
+						core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
+						core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
+						core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
+						per_bank_wb_pop_unqual[this_bank]            = 1;
+					end else begin
+						per_bank_wb_pop_unqual[this_bank]            = 0;
+					end
 				end else begin
-
-						if (((main_bank_index == `LOG2UP(NUM_BANKS)'(this_bank))
-						  || (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index])) 
-						&& found_bank 
-						&& !core_wb_valid[per_bank_wb_tid[this_bank]] 
-						&& (per_bank_wb_valid[this_bank]) 
-						&& (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) 
-						&& (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
-							core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
-							core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
-							core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
-							core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
-							per_bank_wb_pop_unqual[this_bank]            = 1;
-						end else begin
-							per_bank_wb_pop_unqual[this_bank]            = 0;
-
-						end
-
+					if (((main_bank_index == `LOG2UP(NUM_BANKS)'(this_bank))
+						|| (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index])) 
+					&& found_bank 
+					&& !core_wb_valid[per_bank_wb_tid[this_bank]] 
+					&& (per_bank_wb_valid[this_bank]) 
+					&& (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) 
+					&& (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
+						core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
+						core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
+						core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
+						core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
+						per_bank_wb_pop_unqual[this_bank]            = 1;
+					end else begin
+						per_bank_wb_pop_unqual[this_bank]            = 0;
+					end
 				end
-
 			end
 		end
 	endgenerate

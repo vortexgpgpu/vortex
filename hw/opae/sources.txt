@@ -92,7 +92,7 @@ vortex_afu.json
 ../rtl/interfaces/VX_gpu_dcache_dram_req_inter.v
 ../rtl/interfaces/VX_csr_req_inter.v
 ../rtl/interfaces/VX_icache_request_inter.v
-../rtl/interfaces/VX_gpu_dcache_res_inter.v
+../rtl/interfaces/VX_gpu_dcache_rsp_inter.v
 ../rtl/interfaces/VX_frE_to_bckE_req_inter.v
 ../rtl/interfaces/VX_dram_req_rsp_inter.v
 ../rtl/interfaces/VX_dcache_request_inter.v
@@ -113,7 +113,7 @@ vortex_afu.json
 ../rtl/interfaces/VX_jal_response_inter.v
 ../rtl/interfaces/VX_warp_ctl_inter.v
 ../rtl/interfaces/VX_gpu_dcache_snp_req_inter.v
-../rtl/interfaces/VX_gpu_dcache_dram_res_inter.v
+../rtl/interfaces/VX_gpu_dcache_dram_rsp_inter.v
 ../rtl/interfaces/VX_inst_mem_wb_inter.v
 
 ccip_interface_reg.sv

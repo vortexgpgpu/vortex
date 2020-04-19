@@ -10,6 +10,8 @@ EXE += --exe ./simulate/testbench.cpp ./simulate/simulator.cpp
 
 VF += -compiler gcc --language 1800-2009
 
+VF += --assert -Wall -Wpedantic
+
 # LIB=-LDFLAGS '-L/usr/local/systemc/'
 LIB +=
 

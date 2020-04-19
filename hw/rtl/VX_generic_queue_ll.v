@@ -1,40 +1,36 @@
-module VX_generic_queue_ll
-	#(
-		parameter DATAW = 4,
-		parameter SIZE  = 277
-	)
-	(
+module VX_generic_queue_ll #(
+    parameter DATAW,
+    parameter SIZE = 16
+) (
+/* verilator lint_off UNUSED */    
 	input  wire             clk,
 	input  wire             reset,
 	input  wire             push,
-	input  wire [DATAW-1:0] in_data,
-
-	input  wire             pop,
-	output wire [DATAW-1:0] out_data,
+    input  wire             pop,    
 	output wire             empty,
-	output wire             full
+	output wire             full,
+/* verilator lint_on UNUSED */		
+    input  wire [DATAW-1:0] in_data,
+	output wire [DATAW-1:0] out_data
 ); 
-
-    /* verilator lint_off WIDTH */
-
     if (SIZE == 0) begin
 
         assign empty    = 1;
-        assign out_data = 0;
+        assign out_data = in_data;
         assign full     = 0;
 
     end else begin // (SIZE > 0)
-
+    
     `ifdef QUEUE_FORCE_MLAB
-        (* syn_ramstyle = "mlab" *) reg[DATAW-1:0] data[SIZE-1:0];
+        (* syn_ramstyle = "mlab" *) reg [DATAW-1:0] data [SIZE-1:0];
     `else
-        reg[ DATAW-1:0] data[SIZE-1:0];
+        reg [DATAW-1:0] data [SIZE-1:0];
     `endif
 
-        reg [DATAW-1:0]          head_r;        
-        reg [$clog2(SIZE+1)-1:0] size_r;        
-        wire                     reading;
-        wire                     writing;
+        reg [DATAW-1:0]           head_r;        
+        reg [`LOG2UP(SIZE+1)-1:0] size_r;        
+        wire                      reading;
+        wire                      writing;
 
         assign reading = pop && !empty;
         assign writing = push && !full; 
@@ -65,9 +61,9 @@ module VX_generic_queue_ll
         end else begin // (SIZE > 1)
 
             reg [DATAW-1:0]         curr_r;
-            reg [$clog2(SIZE)-1:0]  wr_ctr_r;
-            reg [$clog2(SIZE)-1:0]  rd_ptr_r;
-            reg [$clog2(SIZE)-1:0]  rd_next_ptr_r;
+            reg [`LOG2UP(SIZE)-1:0] wr_ctr_r;
+            reg [`LOG2UP(SIZE)-1:0] rd_ptr_r;
+            reg [`LOG2UP(SIZE)-1:0] rd_next_ptr_r;
             reg                     empty_r;
             reg                     full_r;
             reg                     bypass_r;
@@ -106,7 +102,7 @@ module VX_generic_queue_ll
                     data[wr_ctr_r] <= in_data;
                 end
             end
-       
+        
             always @(posedge clk) begin
                 if (reset) begin
                     curr_r        <= 0;
@@ -135,7 +131,5 @@ module VX_generic_queue_ll
             assign full = full_r;
         end
     end
-
-    /* verilator lint_on WIDTH */
-    
+        
 endmodule

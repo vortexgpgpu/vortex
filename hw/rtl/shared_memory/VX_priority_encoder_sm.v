@@ -102,7 +102,7 @@ module VX_priority_encoder_sm
 
 	// wire[`NUM_THREADS-1:0] new_left_requests = left_requests & ~(serviced_qual);
 
-	always @(posedge clk, posedge reset) begin
+	always @(posedge clk) begin
 		if (reset) begin
 			left_requests <= 0;
 			// serviced       = 0;

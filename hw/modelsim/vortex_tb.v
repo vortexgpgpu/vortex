@@ -1,4 +1,3 @@
-
 `include "../VX_define.vh"
 
 //`define NUM_BANKS 8
@@ -118,7 +117,7 @@ reg[31:0]  io_data;
 		.i_m_readdata_i               (i_m_readdata_i),
 		.i_m_ready_i                  (i_m_ready_i),
 		.out_ebreak                   (out_ebreak)
-		);
+	);
 
 	always @(negedge clk) begin
 		ibus_driver(clk, o_m_read_addr_i, o_m_evict_addr_i, o_m_valid_i, o_m_writedata_i, o_m_read_or_write_i, `ICACHE_BANKS, `ICACHE_NUM_WORDS_PER_BLOCK, i_m_readdata_i, i_m_ready_i);
@@ -138,14 +137,13 @@ reg[31:0]  io_data;
 		cycle_num = cycle_num + 1;
 	end
 
-	always @(clk, posedge reset) begin
+	always @(clk) begin
 		if (reset) begin
 			reset = 0;
 			clk = 0;
 		end
 
 		#5 clk <= ~clk;
-
 	end
 
 endmodule

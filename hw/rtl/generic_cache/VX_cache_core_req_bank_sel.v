@@ -54,8 +54,6 @@ module VX_cache_core_req_bank_sel
 	output reg  [NUM_BANKS-1:0][NUM_REQUESTS-1:0]    per_bank_valids
 );
 
-	wire[31:0] req_address;
-
 	generate
 		integer curr_req;
 		always @(*) begin

@@ -1,21 +1,19 @@
-module VX_mult
-    #(
-        parameter WIDTHA=1,
-        parameter WIDTHB=1,
-        parameter WIDTHP=1,
-        parameter REP="UNSIGNED",
-        parameter SPEED="MIXED", // "MIXED" or "HIGHEST"
-        parameter PIPELINE=0,
-        parameter FORCE_LE="NO"
-    )
-    (
-        input clock, aclr, clken,
+module VX_mult #(
+    parameter WIDTHA=1,
+    parameter WIDTHB=1,
+    parameter WIDTHP=1,
+    parameter REP="UNSIGNED",
+    parameter SPEED="MIXED", // "MIXED" or "HIGHEST"
+    parameter PIPELINE=0,
+    parameter FORCE_LE="NO"
+) (
+    input clock, aclr, clken,
 
-        input [WIDTHA-1:0] dataa,
-        input [WIDTHB-1:0] datab,
+    input [WIDTHA-1:0] dataa,
+    input [WIDTHB-1:0] datab,
 
-        output reg [WIDTHP-1:0] result
-    );
+    output reg [WIDTHP-1:0] result
+);
 
 // synthesis read_comments_as_HDL on
 // localparam IMPL = "quartus";
@@ -29,10 +27,11 @@ module VX_mult
 
         if (IMPL == "quartus") begin
 
-            localparam lpm_speed=SPEED == "HIGHEST" ? 10:5;
+            localparam lpm_speed = (SPEED == "HIGHEST") ? 10 : 5;
 
             if (FORCE_LE == "YES") begin
-                lpm_mult#(
+            /* verilator lint_off DECLFILENAME */    
+                lpm_mult #(            
                     .LPM_WIDTHA(WIDTHA),
                     .LPM_WIDTHB(WIDTHB),
                     .LPM_WIDTHP(WIDTHP),
@@ -40,7 +39,7 @@ module VX_mult
                     .LPM_PIPELINE(PIPELINE),
                     .DSP_BLOCK_BALANCING("LOGIC ELEMENTS"),
                     .MAXIMIZE_SPEED(lpm_speed)
-                ) quartus_mult(
+                ) quartus_mult (
                     .clock(clock),
                     .aclr(aclr),
                     .clken(clken),
@@ -48,6 +47,7 @@ module VX_mult
                     .datab(datab),
                     .result(result)
                 );
+            /* verilator lint_on DECLFILENAME */
             end
             else begin
                 lpm_mult#(

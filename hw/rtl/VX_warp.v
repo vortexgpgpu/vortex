@@ -38,7 +38,7 @@ module VX_warp (
 		end
 
 
-		always @(posedge clk, posedge reset) begin
+		always @(posedge clk) begin
 			if (remove) begin
 				valid <= valid_zero;
 			end else if (in_change_mask) begin
@@ -69,7 +69,7 @@ module VX_warp (
 		assign use_PC = temp_PC;
 		assign out_PC = temp_PC;
 
-		always @(posedge clk or posedge reset) begin
+		always @(posedge clk) begin
 			if (reset) begin
 				real_PC <= 0;
 			end else if (in_wspawn == 1'b1) begin
