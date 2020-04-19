@@ -115,9 +115,9 @@ module VX_cache #(
     wire                                                  dfqq_full;
     wire [NUM_BANKS-1:0]                                  per_bank_dram_fill_req_valid;
     wire [NUM_BANKS-1:0][31:0]                            per_bank_dram_fill_req_addr;
- /* verilator lint_off UNUSED */   
+`DEBUG_BEGIN  
     wire [NUM_BANKS-1:0]                                  per_bank_dram_fill_req_is_snp;
-/* verilator lint_on UNUSED */
+`DEBUG_END
     wire [NUM_BANKS-1:0]                                  per_bank_dram_rsp_ready;
 
     wire [NUM_BANKS-1:0]                                  per_bank_dram_wb_queue_pop;

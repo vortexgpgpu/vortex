@@ -30,10 +30,6 @@ VX_inst_meta_inter        fd_inst_meta_de();
 wire total_freeze = schedule_delay;
 wire icache_stage_delay;
 
-/* verilator lint_off UNUSED */
-// wire real_fetch_ebreak;
-/* verilator lint_on UNUSED */
-
 wire vortex_ebreak;
 wire terminate_sim;
 

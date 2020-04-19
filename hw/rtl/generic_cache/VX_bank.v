@@ -304,9 +304,9 @@ module VX_bank #(
 
 	wire            valid_st1         [STAGE_1_CYCLES-1:0];
 	wire            is_fill_st1       [STAGE_1_CYCLES-1:0];
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire            going_to_write_st1[STAGE_1_CYCLES-1:0];	
-/* verilator lint_on UNUSED */
+`DEBUG_END
 	wire [31:0]		addr_st1          [STAGE_1_CYCLES-1:0];
 
 	integer p_stage;
@@ -417,12 +417,12 @@ module VX_bank #(
 	wire                            miss_st1e;
 	wire                            dirty_st1e;
 	wire[31:0]                      pc_st1e;
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire [4:0]                             rd_st1e;
 	wire [1:0]                             wb_st1e;
 	wire [`NW_BITS-1:0]                    warp_num_st1e;
 	wire [`LOG2UP(NUM_REQUESTS)-1:0]       tid_st1e;
-/* verilator lint_on UNUSED */
+`DEBUG_END
 	wire [2:0]                             mem_read_st1e;  
 	wire [2:0]                             mem_write_st1e;	
 	wire                                   fill_saw_dirty_st1e;

@@ -70,9 +70,9 @@ module VX_lsu (
 	
 	wire[(`LOG2UP(`NUM_THREADS))-1:0] use_pc_index;
 
-/* verilator lint_off UNUSED */	
+`DEBUG_BEGIN
 	wire found;
-/* verilator lint_on UNUSED */
+`DEBUG_END
 
 	VX_generic_priority_encoder #(.N(`NUM_THREADS)) pick_first_pc(
 		.valids(vx_dcache_rsp.core_wb_valid),

@@ -9,6 +9,12 @@
 // `define ASIC 1
 // `define SYN_FUNC 1
 
+`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
+`define DEBUG_END   /* verilator lint_on UNUSED */     
+
+`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ 
+`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */     
+
 `define STRINGIFY(x) `"x`"
 
 `define STATIC_ASSERT(cond, msg)    \

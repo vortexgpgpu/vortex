@@ -8,10 +8,10 @@ module VX_csr_data (
 	input wire           			in_write_valid,
 	input wire[`CSR_WIDTH-1:0]      in_write_csr_data,
 
-/* verilator lint_off UNUSED */
+`IGNORE_WARNINGS_BEGIN
     // We use a smaller storage for CSRs than the standard 4KB in RISC-V
 	input wire[`CSR_ADDR_SIZE-1:0]	in_write_csr_address,
-/* verilator lint_on UNUSED */
+`IGNORE_WARNINGS_END
 
 	output wire[31:0]    out_read_csr_data,
 

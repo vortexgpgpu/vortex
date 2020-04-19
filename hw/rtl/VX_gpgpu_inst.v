@@ -44,9 +44,9 @@ module VX_gpgpu_inst (
 	assign vx_warp_ctl.is_barrier = vx_gpu_inst_req.is_barrier && valid_inst;
 	assign vx_warp_ctl.barrier_id = vx_gpu_inst_req.a_reg_data[0];
 
-/* verilator lint_off UNUSED */
-	wire[31:0] num_warps_m1       = vx_gpu_inst_req.rd2 - 1;
-/* verilator lint_on UNUSED */
+`DEBUG_BEGIN
+	wire[31:0] num_warps_m1 = vx_gpu_inst_req.rd2 - 1;
+`DEBUG_END
 
 	assign vx_warp_ctl.num_warps  = num_warps_m1[$clog2(`NUM_WARPS):0];
 

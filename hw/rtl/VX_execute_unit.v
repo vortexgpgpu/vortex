@@ -23,9 +23,9 @@ module VX_execute_unit (
 	wire[4:0]            in_alu_op;
 	wire                 in_rs2_src;
 	wire[31:0]           in_itype_immed;
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire[2:0]            in_branch_type;
-/* verilator lint_on UNUSED */
+`DEBUG_END
 	wire[19:0]           in_upper_immed;
 	wire                 in_jal;
 	wire[31:0]           in_jal_offset;
@@ -69,10 +69,10 @@ module VX_execute_unit (
 
 	assign out_delay = no_slot_exec || internal_stall;
 
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire [$clog2(`NUM_THREADS)-1:0] jal_branch_use_index;
 	wire  jal_branch_found_valid;
-/* verilator lint_on UNUSED */	
+`DEBUG_END
 
 	VX_generic_priority_encoder #(
 		.N(`NUM_THREADS)

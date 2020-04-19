@@ -2,14 +2,14 @@ module VX_generic_queue_ll #(
     parameter DATAW,
     parameter SIZE = 16
 ) (
-/* verilator lint_off UNUSED */    
+`IGNORE_WARNINGS_BEGIN  
 	input  wire             clk,
 	input  wire             reset,
 	input  wire             push,
     input  wire             pop,    
 	output wire             empty,
 	output wire             full,
-/* verilator lint_on UNUSED */		
+`IGNORE_WARNINGS_END		
     input  wire [DATAW-1:0] in_data,
 	output wire [DATAW-1:0] out_data
 ); 

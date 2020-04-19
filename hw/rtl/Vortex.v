@@ -89,9 +89,9 @@ module Vortex
 	output wire        					out_ebreak
 `endif
 );
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire scheduler_empty;
-/* verilator lint_on UNUSED */
+`DEBUG_END
 
 	wire memory_delay;
 	wire exec_delay;

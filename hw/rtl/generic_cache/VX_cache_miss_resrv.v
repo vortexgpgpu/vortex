@@ -61,10 +61,10 @@ module VX_cache_miss_resrv #(
 	// Broadcast Fill
 	input wire                                   is_fill_st1,
 
-/* verilator lint_off UNUSED */
+`IGNORE_WARNINGS_BEGIN
     // TODO: should fix this
 	input wire[31:0]                             fill_addr_st1,
-/* verilator lint_on UNUSED */
+`IGNORE_WARNINGS_END
 
 	// Miss dequeue
 	input  wire                                  miss_resrv_pop,

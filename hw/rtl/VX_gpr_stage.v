@@ -23,13 +23,13 @@ module VX_gpr_stage (
 	VX_gpu_inst_req_inter    vx_gpu_inst_req,
 	VX_csr_req_inter         vx_csr_req
 );
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire[31:0] curr_PC = vx_bckE_req.curr_PC;
 	wire[2:0] branchType = vx_bckE_req.branch_type;
 	wire is_store = (vx_bckE_req.mem_write != `NO_MEM_WRITE);
 	wire is_load  = (vx_bckE_req.mem_read  != `NO_MEM_READ);
 	wire jalQual = vx_bckE_req.jalQual;
-/* verilator lint_on UNUSED */	
+`DEBUG_END
 
 	VX_gpr_read_inter vx_gpr_read();
 	assign vx_gpr_read.rs1      = vx_bckE_req.rs1;
@@ -76,9 +76,9 @@ module VX_gpr_stage (
 		.vx_gpu_inst_req (vx_gpu_inst_req_temp),
 		.vx_csr_req      (vx_csr_req_temp)
 	);
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire is_lsu = (|vx_lsu_req_temp.valid);
-/* verilator lint_on UNUSED */
+`DEBUG_END
 	wire stall_rest = 0;
 	wire flush_rest = schedule_delay;
 

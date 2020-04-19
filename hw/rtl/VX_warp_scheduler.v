@@ -19,9 +19,9 @@ module VX_warp_scheduler (
 	input  wire[`NW_BITS-1:0] whalt_warp_num,
 
 	input wire                 is_barrier,
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	input wire[31:0]           barrier_id,
-/* verilator lint_on UNUSED */
+`DEBUG_END
 	input wire[$clog2(`NUM_WARPS):0]  num_warps,
 	input wire[`NW_BITS-1:0]       barrier_warp_num,
 
@@ -71,12 +71,12 @@ module VX_warp_scheduler (
 	wire[31:0]     join_pc;
 	wire[`NUM_THREADS-1:0] join_tm;
 
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
 	wire in_wspawn = wspawn;
 	wire in_ctm = ctm;
 	wire in_whalt = whalt;
 	wire in_wstall = wstall;
-/* verilator lint_on UNUSED */
+`DEBUG_END
 
 	reg[`NUM_WARPS-1:0] warp_active;
 	reg[`NUM_WARPS-1:0] warp_stalled;
@@ -114,9 +114,6 @@ module VX_warp_scheduler (
 	reg[`NUM_WARPS-1:0] total_barrier_stall;
 
 	reg didnt_split;
-
-	// wire[$clog2(`NUM_WARPS):0] num_active;
-	/* verilator lint_on UNUSED */
 
 	integer curr_w_help;
 	integer curr_barrier;
