@@ -6,15 +6,15 @@ module VX_front_end (
 
 	input wire           schedule_delay,
 
-	VX_warp_ctl_inter         VX_warp_ctl,
+	VX_warp_ctl_inter        vx_warp_ctl,
 
-	VX_gpu_dcache_res_inter  VX_icache_rsp,
-	VX_gpu_dcache_req_inter  VX_icache_req,
+	VX_gpu_dcache_rsp_inter  vx_icache_rsp,
+	VX_gpu_dcache_req_inter  vx_icache_req,
 
-	VX_jal_response_inter    VX_jal_rsp,
-	VX_branch_response_inter VX_branch_rsp,
+	VX_jal_response_inter    vx_jal_rsp,
+	VX_branch_response_inter vx_branch_rsp,
 
-	VX_frE_to_bckE_req_inter  VX_bckE_req,
+	VX_frE_to_bckE_req_inter vx_bckE_req,
 
 	output wire fetch_ebreak
 );
@@ -24,8 +24,8 @@ VX_inst_meta_inter        fe_inst_meta_fi();
 VX_inst_meta_inter        fe_inst_meta_fi2();
 VX_inst_meta_inter        fe_inst_meta_id();
 
-VX_frE_to_bckE_req_inter VX_frE_to_bckE_req();
-VX_inst_meta_inter       fd_inst_meta_de();
+VX_frE_to_bckE_req_inter  vx_frE_to_bckE_req();
+VX_inst_meta_inter        fd_inst_meta_de();
 
 wire total_freeze = schedule_delay;
 wire icache_stage_delay;
@@ -52,21 +52,21 @@ end
 assign fetch_ebreak = vortex_ebreak || terminate_sim || old_ebreak;
 
 
-VX_wstall_inter          VX_wstall();
-VX_join_inter            VX_join();
+VX_wstall_inter          vx_wstall();
+VX_join_inter            vx_join();
 
 VX_fetch vx_fetch(
 		.clk                (clk),
 		.reset              (reset),
 		.icache_stage_wid   (icache_stage_wid),
 		.icache_stage_valids(icache_stage_valids),
-		.VX_wstall          (VX_wstall),
-		.VX_join            (VX_join),
+		.vx_wstall          (vx_wstall),
+		.vx_join            (vx_join),
 		.schedule_delay     (schedule_delay),
-		.VX_jal_rsp         (VX_jal_rsp),
-		.VX_warp_ctl        (VX_warp_ctl),
+		.vx_jal_rsp         (vx_jal_rsp),
+		.vx_warp_ctl        (vx_warp_ctl),
 		.icache_stage_delay (icache_stage_delay),
-		.VX_branch_rsp      (VX_branch_rsp),
+		.vx_branch_rsp      (vx_branch_rsp),
 		.out_ebreak         (vortex_ebreak), // fetch_ebreak
 		.fe_inst_meta_fi    (fe_inst_meta_fi)
 	);
@@ -84,7 +84,7 @@ VX_f_d_reg vx_f_i_reg(
 		.fd_inst_meta_de(fe_inst_meta_fi2)
 	);
 
-VX_icache_stage VX_icache_stage(
+VX_icache_stage vx_icache_stage(
 	.clk                (clk),
 	.reset              (reset),
 	.total_freeze       (total_freeze),
@@ -93,8 +93,8 @@ VX_icache_stage VX_icache_stage(
 	.icache_stage_wid   (icache_stage_wid),
 	.fe_inst_meta_fi    (fe_inst_meta_fi2),
 	.fe_inst_meta_id    (fe_inst_meta_id),
-	.VX_icache_rsp      (VX_icache_rsp),
-	.VX_icache_req      (VX_icache_req)
+	.vx_icache_rsp      (vx_icache_rsp),
+	.vx_icache_req      (vx_icache_req)
 	);
 
 
@@ -109,9 +109,9 @@ VX_i_d_reg vx_i_d_reg(
 
 VX_decode vx_decode(
 		.fd_inst_meta_de   (fd_inst_meta_de),
-		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
-		.VX_wstall         (VX_wstall),
-		.VX_join           (VX_join),
+		.vx_frE_to_bckE_req(vx_frE_to_bckE_req),
+		.vx_wstall         (vx_wstall),
+		.vx_join           (vx_join),
 		.terminate_sim     (terminate_sim)
 	);
 
@@ -122,8 +122,8 @@ VX_d_e_reg vx_d_e_reg(
 		.reset          (reset),
 		.in_branch_stall(no_br_stall),
 		.in_freeze      (total_freeze),
-		.VX_frE_to_bckE_req(VX_frE_to_bckE_req),
-		.VX_bckE_req       (VX_bckE_req)
+		.vx_frE_to_bckE_req(vx_frE_to_bckE_req),
+		.vx_bckE_req       (vx_bckE_req)
 	);
 
 endmodule

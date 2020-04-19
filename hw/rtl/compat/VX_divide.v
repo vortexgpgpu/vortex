@@ -1,21 +1,19 @@
-module VX_divide
-    #(
-        parameter WIDTHN=1,
-        parameter WIDTHD=1,
-        parameter NREP="UNSIGNED",
-        parameter DREP="UNSIGNED",
-        parameter SPEED="MIXED", // "MIXED" or "HIGHEST"
-        parameter PIPELINE=0
-    )
-    (
-        input clock, aclr, clken,
+module VX_divide #(
+    parameter WIDTHN=1,
+    parameter WIDTHD=1,
+    parameter NREP="UNSIGNED",
+    parameter DREP="UNSIGNED",
+    parameter SPEED="MIXED", // "MIXED" or "HIGHEST"
+    parameter PIPELINE=0
+) (
+    input clock, aclr, clken,
 
-        input [WIDTHN-1:0] numer,
-        input [WIDTHD-1:0] denom,
+    input [WIDTHN-1:0] numer,
+    input [WIDTHD-1:0] denom,
 
-        output reg [WIDTHN-1:0] quotient,
-        output reg [WIDTHD-1:0] remainder
-    );
+    output reg [WIDTHN-1:0] quotient,
+    output reg [WIDTHD-1:0] remainder
+);
 
 // synthesis read_comments_as_HDL on
 // localparam IMPL = "quartus";
@@ -27,14 +25,16 @@ module VX_divide
 
     generate
         if (NREP != DREP) begin
+        /* verilator lint_off DECLFILENAME */
             different_nrep_drep_not_yet_supported non_existing_module();
+        /* verilator lint_on DECLFILENAME */
         end
 
         if (IMPL == "quartus") begin
 
             localparam lpm_speed=SPEED == "HIGHEST" ? 9:5;
 
-            lpm_divide#(
+            lpm_divide #(
                 .LPM_WIDTHN(WIDTHN),
                 .LPM_WIDTHD(WIDTHD),
                 .LPM_NREPRESENTATION(NREP),
@@ -42,7 +42,7 @@ module VX_divide
                 .LPM_PIPELINE(PIPELINE),
                 .LPM_REMAINDERPOSITIVE("FALSE"), // emulate verilog % operator
                 .MAXIMIZE_SPEED(lpm_speed)
-            ) quartus_divider(
+            ) quartus_divider (
                 .clock(clock),
                 .aclr(aclr),
                 .clken(clken),
@@ -51,7 +51,6 @@ module VX_divide
                 .quotient(quotient),
                 .remain(remainder)
             );
-
         end
         else begin
 

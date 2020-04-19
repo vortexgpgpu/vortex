@@ -27,7 +27,6 @@
 
 typedef struct {
   int cycles_left;
-  int data_length;
   unsigned base_addr;
   unsigned *data;
 } dram_req_t;

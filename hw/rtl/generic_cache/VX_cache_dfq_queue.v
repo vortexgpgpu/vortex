@@ -1,7 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_dfq_queue
-	#(
+module VX_cache_dfq_queue #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -15,8 +14,7 @@ module VX_cache_dfq_queue
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+    // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -26,7 +24,7 @@ module VX_cache_dfq_queue
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+    // Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -39,16 +37,13 @@ module VX_cache_dfq_queue
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+    // Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
+) (
 	input  wire                      clk,
 	input  wire                      reset,
 	input  wire                      dfqq_push,
-    input  wire[NUM_BANKS-1:0]       per_bank_dram_fill_req,
+    input  wire[NUM_BANKS-1:0]       per_bank_dram_fill_req_valid,
     input  wire[NUM_BANKS-1:0][31:0] per_bank_dram_fill_req_addr,
 
 	input  wire            dfqq_pop,
@@ -61,16 +56,13 @@ module VX_cache_dfq_queue
     wire[NUM_BANKS-1:0]       out_per_bank_dram_fill_req;
     wire[NUM_BANKS-1:0][31:0] out_per_bank_dram_fill_req_addr;
 
-
     reg [NUM_BANKS-1:0]       use_per_bank_dram_fill_req;
     reg [NUM_BANKS-1:0][31:0] use_per_bank_dram_fill_req_addr;
-
 
     wire[NUM_BANKS-1:0]       qual_bank_dram_fill_req;
     wire[NUM_BANKS-1:0][31:0] qual_bank_dram_fill_req_addr;
 
     wire[NUM_BANKS-1:0]       updated_bank_dram_fill_req;
-
 
     wire o_empty;
 
@@ -79,27 +71,34 @@ module VX_cache_dfq_queue
 
 	wire push_qual = dfqq_push && !dfqq_full;
 	wire pop_qual  = dfqq_pop  && use_empty && !out_empty;
-	VX_generic_queue_ll #(.DATAW(NUM_BANKS * (1+32)), .SIZE(DFQQ_SIZE)) dfqq_queue(
+
+	VX_generic_queue_ll #(
+		.DATAW(NUM_BANKS * (1+32)), 
+		.SIZE(DFQQ_SIZE)
+	) dfqq_queue (
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
-		.in_data ({per_bank_dram_fill_req, per_bank_dram_fill_req_addr}),
+		.in_data ({per_bank_dram_fill_req_valid, per_bank_dram_fill_req_addr}),
 		.pop     (pop_qual),
 		.out_data({out_per_bank_dram_fill_req, out_per_bank_dram_fill_req_addr}),
 		.empty   (o_empty),
 		.full    (dfqq_full)
-		);
+	);
 
 	assign qual_bank_dram_fill_req      = use_empty ? (out_per_bank_dram_fill_req & {NUM_BANKS{!o_empty}}) : (use_per_bank_dram_fill_req & {NUM_BANKS{!use_empty}}); 
 	assign qual_bank_dram_fill_req_addr = use_empty ? out_per_bank_dram_fill_req_addr : use_per_bank_dram_fill_req_addr;
 
 	wire[`LOG2UP(NUM_BANKS)-1:0] qual_request_index;
-	wire                               qual_has_request;
-	VX_generic_priority_encoder #(.N(NUM_BANKS)) VX_sel_bank(
+	wire                         qual_has_request;
+
+	VX_generic_priority_encoder #(
+		.N(NUM_BANKS)
+	) vx_sel_bank (
 		.valids(qual_bank_dram_fill_req),
 		.index (qual_request_index),
 		.found (qual_has_request)
-		);
+	);
 
 	assign dfqq_empty    = !qual_has_request;
 	assign dfqq_req      = qual_bank_dram_fill_req     [qual_request_index];
@@ -118,6 +117,5 @@ module VX_cache_dfq_queue
 			end
 		end
 	end
-
 
 endmodule

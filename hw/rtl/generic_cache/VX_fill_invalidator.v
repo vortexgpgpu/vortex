@@ -82,16 +82,17 @@ module VX_fill_invalidator
 
 
 		wire [(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0]  enqueue_index;
-		wire                                          enqueue_found;
-		VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(
+		wire                                        enqueue_found;
+
+		VX_generic_priority_encoder #(
+			.N(FILL_INVALIDAOR_SIZE)
+		) vx_sel_bank (
 			.valids(~fills_active),
 			.index (enqueue_index),
 			.found (enqueue_found)
-			);
-
+		);
 
 		assign invalidate_fill = possible_fill && matched;
-
 
 		always @(posedge clk) begin
 			if (reset) begin
@@ -108,7 +109,6 @@ module VX_fill_invalidator
 
 			end
 		end
-
 
 		// reg                                         success_found;
 		// reg[(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
@@ -133,20 +133,14 @@ module VX_fill_invalidator
 		// 	end
 		// end
 
-
-
-
 		// wire [(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0] enqueue_index;
 		// wire                                          enqueue_found;
 
-		// VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) VX_sel_bank(
+		// VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) vx_sel_bank(
 		// 	.valids(~fills_active),
 		// 	.index (enqueue_index),
 		// 	.found (enqueue_found)
 		// 	);
-
-
-
 
 		// always @(posedge clk) begin
 		// 	if (reset) begin
@@ -165,8 +159,6 @@ module VX_fill_invalidator
 		// 	end
 		// end
 
-
 	end
-
 
 endmodule

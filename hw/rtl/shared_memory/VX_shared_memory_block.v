@@ -8,8 +8,8 @@ module VX_shared_memory_block
 		parameter BITS_PER_BANK          = 3
 )
 (
-	input wire             clk,    // Clock
-	input wire             reset,
+	input wire               clk,    // Clock
+	input wire               reset,
 	//input wire[6:0]        addr,
 	//input wire[3:0][31:0]  wdata,
 	//input wire[1:0]        we,
@@ -22,28 +22,16 @@ module VX_shared_memory_block
 	input wire                                  shm_write,
 
 	output wire[SMB_WORDS_PER_READ-1:0][31:0]   data_out
-
 );
-
-
 	`ifndef SYN
 
-		reg[SMB_WORDS_PER_READ-1:0][3:0][7:0] shared_memory[SMB_HEIGHT-1:0];
-		
-		wire [$clog2(SMB_HEIGHT) - 1:0]reg_addr;
+		reg [SMB_WORDS_PER_READ-1:0][3:0][7:0] shared_memory[SMB_HEIGHT-1:0];		
+		wire [$clog2(SMB_HEIGHT) - 1:0] reg_addr;
 
-		//wire need_to_write = (|we);
-		integer curr_ind;
-		// initial begin
-		// 		for (curr_ind = 0; curr_ind < SMB_HEIGHT; curr_ind = curr_ind + 1)
-		// 		begin
-		// 			shared_memory[curr_ind] = 0;
-		// 		end
-		// end
-		always @(posedge clk, posedge reset) begin
+		always @(posedge clk) begin
 			if (reset) begin
-				//for (curr_ind = 0; curr_ind < 128; curr_ind = curr_ind + 1)
-			end else if(shm_write) begin
+				//--
+			end else if (shm_write) begin
 				if (we == 2'b00) shared_memory[reg_addr][0] <= wdata[0];
 				if (we == 2'b01) shared_memory[reg_addr][1] <= wdata[1];
 				if (we == 2'b10) shared_memory[reg_addr][2] <= wdata[2];
@@ -52,10 +40,6 @@ module VX_shared_memory_block
 		end
        	
 		assign reg_addr = addr;
-		// always @(posedge clk)
- 		// 	reg_addr <= addr;
-
-
 		assign data_out = shm_write ? 0 : shared_memory[reg_addr];
 
 	`else
@@ -69,6 +53,7 @@ module VX_shared_memory_block
 		//assign write_bit_mask[1] = (we == 2'b01) ? {32{1'b1}} : {32{1'b0}};
 		//assign write_bit_mask[2] = (we == 2'b10) ? {32{1'b1}} : {32{1'b0}};
 		//assign write_bit_mask[3] = (we == 2'b11) ? {32{1'b1}} : {32{1'b0}};
+		
 		genvar curr_word;
 		for (curr_word = 0; curr_word < SMB_WORDS_PER_READ; curr_word = curr_word + 1)
 		begin
@@ -114,7 +99,6 @@ module VX_shared_memory_block
 	         .COLLDISN(1'b1)
 	   );
 	   /* verilator lint_on PINCONNECTEMPTY */
-
 
  	`endif
 

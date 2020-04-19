@@ -1,7 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_req_queue
-	#(
+module VX_cache_req_queue #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -15,8 +14,7 @@ module VX_cache_req_queue
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+	// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -26,7 +24,7 @@ module VX_cache_req_queue
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -39,12 +37,9 @@ module VX_cache_req_queue
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+	// Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
+) (
 	input  wire                             clk,
 	input  wire                             reset,
 
@@ -88,7 +83,6 @@ module VX_cache_req_queue
 	wire [NUM_REQUESTS-1:0][2:0]   out_per_mem_write;
 	wire [31:0]                    out_per_pc;
 
-
  	reg [NUM_REQUESTS-1:0]        use_per_valids;
 	reg [NUM_REQUESTS-1:0][31:0]  use_per_addr;
 	reg [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] use_per_writedata;
@@ -98,7 +92,6 @@ module VX_cache_req_queue
 	reg [`NW_BITS-1:0]            use_per_warp_num;
 	reg [NUM_REQUESTS-1:0][2:0]   use_per_mem_read;  
 	reg [NUM_REQUESTS-1:0][2:0]   use_per_mem_write;
-
 
  	wire [NUM_REQUESTS-1:0]       qual_valids;
 	wire [NUM_REQUESTS-1:0][31:0] qual_addr;
@@ -110,7 +103,9 @@ module VX_cache_req_queue
 	wire [NUM_REQUESTS-1:0][2:0]  qual_mem_write;
 	wire [31:0]                   qual_pc;
 
+/* verilator lint_off UNUSED */
     reg [NUM_REQUESTS-1:0]        updated_valids;
+/* verilator lint_on UNUSED */
 
     wire o_empty;
 
@@ -120,17 +115,19 @@ module VX_cache_req_queue
 	wire push_qual = reqq_push && !reqq_full;
 	wire pop_qual  = !out_empty && use_empty;
 
-	VX_generic_queue_ll #(.DATAW( (NUM_REQUESTS * (1+32+`WORD_SIZE)) + 5 + (NUM_REQUESTS*2) + (`NW_BITS-1+1) + (NUM_REQUESTS * (3 + 3)) + 32 ), .SIZE(REQQ_SIZE)) reqq_queue(
-		.clk     (clk),
-		.reset   (reset),
-		.push    (push_qual),
-		.in_data ({bank_valids   , bank_addr   , bank_writedata   , bank_rd   , bank_wb   , bank_warp_num   , bank_mem_read   , bank_mem_write   , bank_pc}),
-		.pop     (pop_qual),
-		.out_data({out_per_valids, out_per_addr, out_per_writedata, out_per_rd, out_per_wb, out_per_warp_num, out_per_mem_read, out_per_mem_write, out_per_pc}),
-		.empty   (o_empty),
-		.full    (reqq_full)
-		);
-
+	VX_generic_queue_ll #(
+		.DATAW( (NUM_REQUESTS * (1+32+`WORD_SIZE)) + 5 + (NUM_REQUESTS*2) + (`NW_BITS-1+1) + (NUM_REQUESTS * (3 + 3)) + 32 ), 
+		.SIZE(REQQ_SIZE)
+	) reqq_queue (
+		.clk      (clk),
+		.reset    (reset),
+		.push     (push_qual),
+		.in_data  ({bank_valids   , bank_addr   , bank_writedata   , bank_rd   , bank_wb   , bank_warp_num   , bank_mem_read   , bank_mem_write   , bank_pc}),
+		.pop      (pop_qual),
+		.out_data ({out_per_valids, out_per_addr, out_per_writedata, out_per_rd, out_per_wb, out_per_warp_num, out_per_mem_read, out_per_mem_write, out_per_pc}),
+		.empty    (o_empty),
+		.full     (reqq_full)
+	);
 
 	wire[NUM_REQUESTS-1:0] real_out_per_valids = out_per_valids & {NUM_REQUESTS{~out_empty}};
 
@@ -146,11 +143,13 @@ module VX_cache_req_queue
 
 	wire[`LOG2UP(NUM_REQUESTS)-1:0] qual_request_index;
 	wire                                  qual_has_request;
-	VX_generic_priority_encoder #(.N(NUM_REQUESTS)) VX_sel_bank(
+	VX_generic_priority_encoder #(
+		.N(NUM_REQUESTS)
+	) vx_sel_bank (
 		.valids(qual_valids),
 		.index (qual_request_index),
 		.found (qual_has_request)
-		);
+	);
 
 	assign reqq_empty              = !qual_has_request;
 	assign reqq_req_st0            = qual_has_request;
@@ -164,14 +163,12 @@ module VX_cache_req_queue
 	assign reqq_req_mem_write_st0  = qual_mem_write[qual_request_index];
 	assign reqq_req_pc_st0         = qual_pc;
 
-
 	always @(*) begin
 		updated_valids = qual_valids;
 		if (qual_has_request) begin
 			updated_valids[qual_request_index] = 0;
 		end
 	end
-
 
 	always @(posedge clk) begin
 		if (reset) begin
@@ -203,6 +200,5 @@ module VX_cache_req_queue
 			// end
 		end
 	end
-
 
 endmodule

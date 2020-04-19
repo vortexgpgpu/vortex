@@ -6,11 +6,12 @@
 interface VX_gpu_snp_req_rsp ();
 
 	// Snoop request
-	wire        snp_req;
-	wire[31:0]  snp_req_addr;
+	wire        snp_req_valid;
+	wire [31:0] snp_req_addr;	
+	wire        snp_req_full;
 
 	// Snoop Response
-	wire        snp_delay;
+	// TODO:
 
 endinterface
 

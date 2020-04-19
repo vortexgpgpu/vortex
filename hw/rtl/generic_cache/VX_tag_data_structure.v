@@ -1,7 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_tag_data_structure
-    #(
+module VX_tag_data_structure #(
     // Size of cache in bytes
     parameter CACHE_SIZE_BYTES              = 1024, 
     // Size of line inside a bank in bytes
@@ -17,8 +16,7 @@ module VX_tag_data_structure
     // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
     parameter FUNC_ID                       = 0,
     
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+    // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
     // Core Request Queue Size
     parameter REQQ_SIZE                     = 8, 
     // Miss Reserv Queue Knob
@@ -28,7 +26,7 @@ module VX_tag_data_structure
     // Snoop Req Queue
     parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+    // Queues for writebacks Knobs {1, 2, 4, 8, ...}
     // Core Writeback Queue Size
     parameter CWBQ_SIZE                     = 8, 
     // Dram Writeback Queue Size
@@ -41,44 +39,37 @@ module VX_tag_data_structure
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+    // Dram knobs
     parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
+) (
+	input  wire                             clk,
+	input  wire                             reset,
+    input  wire                             stall_bank_pipe,
 
-
-    )
-    (
-	input  wire                            clk,
-	input  wire                            reset,
-    input  wire                            stall_bank_pipe,
-
-	input  wire[31:0]                      read_addr,
-	output wire                            read_valid,
-	output wire                            read_dirty,
-	output wire[`TAG_SELECT_SIZE_RNG]      read_tag,
+	input  wire[`LINE_SELECT_SIZE_RNG]      read_addr,
+	output wire                             read_valid,
+	output wire                             read_dirty,
+	output wire[`TAG_SELECT_SIZE_RNG]       read_tag,
 	output wire[`DBANK_LINE_WORDS-1:0][31:0] read_data,
 
-    input  wire                            invalidate,
-	input  wire[`DBANK_LINE_WORDS-1:0][3:0]  write_enable,
-	input  wire                            write_fill,
-	input  wire[31:0]                      write_addr,
+    input  wire                             invalidate,
+	input  wire[`DBANK_LINE_WORDS-1:0][3:0] write_enable,
+	input  wire                             write_fill,
+	input  wire[`LINE_SELECT_SIZE_RNG]      write_addr,
+    input  wire[`TAG_SELECT_SIZE_RNG]       tag_index,
 	input  wire[`DBANK_LINE_WORDS-1:0][31:0] write_data,
-    input  wire                            fill_sent
-	
+    input  wire                             fill_sent	
 );
 
-    reg[`DBANK_LINE_WORDS-1:0][3:0][7:0]   data [`BANK_LINE_COUNT-1:0];
-    reg[`TAG_SELECT_SIZE_RNG]              tag  [`BANK_LINE_COUNT-1:0];
-    reg                                    valid[`BANK_LINE_COUNT-1:0];
-    reg                                    dirty[`BANK_LINE_COUNT-1:0];
+    reg [`DBANK_LINE_WORDS-1:0][3:0][7:0]  data  [`BANK_LINE_COUNT-1:0];
+    reg [`TAG_SELECT_SIZE_RNG]             tag   [`BANK_LINE_COUNT-1:0];
+    reg                                    valid [`BANK_LINE_COUNT-1:0];
+    reg                                    dirty [`BANK_LINE_COUNT-1:0];   
 
-
-    wire[`TAG_SELECT_ADDR_RNG]  curr_tag = write_addr[`TAG_SELECT_ADDR_RNG];
-    wire[`LINE_SELECT_ADDR_RNG] curr_inx = write_addr[`LINE_SELECT_ADDR_RNG];
-
-    assign read_valid = valid[read_addr[`LINE_SELECT_ADDR_RNG]];
-    assign read_dirty = dirty[read_addr[`LINE_SELECT_ADDR_RNG]];
-    assign read_tag   = tag  [read_addr[`LINE_SELECT_ADDR_RNG]];
-    assign read_data  = data [read_addr[`LINE_SELECT_ADDR_RNG]];
+    assign read_valid = valid [read_addr];
+    assign read_dirty = dirty [read_addr];
+    assign read_tag   = tag   [read_addr];
+    assign read_data  = data  [read_addr];
 
     wire   going_to_write = (|write_enable);
 
@@ -94,27 +85,27 @@ module VX_tag_data_structure
             end
         end else if (!stall_bank_pipe) begin
         	if (going_to_write) begin
-        		valid[write_addr[`LINE_SELECT_ADDR_RNG]]     <= 1;
-        		tag  [write_addr[`LINE_SELECT_ADDR_RNG]]     <= write_addr[`TAG_SELECT_ADDR_RNG];
+        		valid[write_addr] <= 1;
+        		tag  [write_addr] <= tag_index;
         		if (write_fill) begin
-        			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+        			dirty[write_addr] <= 0;
         		end else begin
-        			dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 1;
+        			dirty[write_addr] <= 1;
         		end
         	end else if (fill_sent) begin
-                dirty[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
-                // valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+                dirty[write_addr] <= 0;
+                // valid[write_addr] <= 0;
             end
 
             if (invalidate) begin
-                valid[write_addr[`LINE_SELECT_ADDR_RNG]] <= 0;
+                valid[write_addr] <= 0;
             end
 
     		for (f = 0; f < `DBANK_LINE_WORDS; f = f + 1) begin
-    			if (write_enable[f][0]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][0] <= write_data[f][7 :0 ];
-    			if (write_enable[f][1]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][1] <= write_data[f][15:8 ];
-    			if (write_enable[f][2]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][2] <= write_data[f][23:16];
-    			if (write_enable[f][3]) data[write_addr[`LINE_SELECT_ADDR_RNG]][f][3] <= write_data[f][31:24];
+    			if (write_enable[f][0]) data[write_addr][f][0] <= write_data[f][7 :0 ];
+    			if (write_enable[f][1]) data[write_addr][f][1] <= write_data[f][15:8 ];
+    			if (write_enable[f][2]) data[write_addr][f][2] <= write_data[f][23:16];
+    			if (write_enable[f][3]) data[write_addr][f][3] <= write_data[f][31:24];
     		end
         end
     end

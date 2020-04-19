@@ -1,8 +1,7 @@
 
 `include "VX_cache_config.vh"
 
-module VX_cache_miss_resrv
-	#(
+module VX_cache_miss_resrv #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -16,8 +15,7 @@ module VX_cache_miss_resrv
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+	// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -27,7 +25,7 @@ module VX_cache_miss_resrv
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -40,12 +38,9 @@ module VX_cache_miss_resrv
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+	// Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
+) (
 	input wire clk,
 	input wire reset,
 
@@ -65,7 +60,11 @@ module VX_cache_miss_resrv
 
 	// Broadcast Fill
 	input wire                                   is_fill_st1,
+
+/* verilator lint_off UNUSED */
+    // TODO: should fix this
 	input wire[31:0]                             fill_addr_st1,
+/* verilator lint_on UNUSED */
 
 	// Miss dequeue
 	input  wire                                  miss_resrv_pop,
@@ -81,96 +80,91 @@ module VX_cache_miss_resrv
 	output wire[2:0]                             miss_resrv_mem_write_st0
 	
 );
+	// Size of metadata = 32 + `LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS-1 + 1)
+	reg [`MRVQ_METADATA_SIZE-1:0]   metadata_table[MRVQ_SIZE-1:0];
+	reg [MRVQ_SIZE-1:0][31:0]       addr_table;
+	reg [MRVQ_SIZE-1:0][31:0]       pc_table;
+	reg [MRVQ_SIZE-1:0]             valid_table;
+	reg [MRVQ_SIZE-1:0]             ready_table;
+	reg [`LOG2UP(MRVQ_SIZE)-1:0]    head_ptr;
+	reg [`LOG2UP(MRVQ_SIZE)-1:0]    tail_ptr;
 
-		// Size of metadata = 32 + `LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS-1 + 1)
-		reg[`MRVQ_METADATA_SIZE-1:0]   metadata_table[MRVQ_SIZE-1:0];
-		reg[MRVQ_SIZE-1:0][31:0]       addr_table;
-		reg[MRVQ_SIZE-1:0][31:0]       pc_table;
-		reg[MRVQ_SIZE-1:0]             valid_table;
-		reg[MRVQ_SIZE-1:0]             ready_table;
-		reg[`LOG2UP(MRVQ_SIZE)-1:0]    head_ptr;
-		reg[`LOG2UP(MRVQ_SIZE)-1:0]    tail_ptr;
+	reg [31:0] size;
 
-		reg[31:0] size;
+	// assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
+	assign miss_resrv_full = (MRVQ_SIZE != 2) && (size ==  MRVQ_SIZE   );
+	assign miss_resrv_stop = (MRVQ_SIZE != 2) && (size  > (MRVQ_SIZE-5));
 
+	wire                           enqueue_possible = !miss_resrv_full;
+	wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
 
-		// assign miss_resrv_full = (MRVQ_SIZE != 2) && (tail_ptr+1) == head_ptr;
-		assign miss_resrv_full = (MRVQ_SIZE != 2) && (size ==  MRVQ_SIZE   );
-		assign miss_resrv_stop = (MRVQ_SIZE != 2) && (size  > (MRVQ_SIZE-5));
+	reg [MRVQ_SIZE-1:0] make_ready;
+	genvar curr_e;
+	generate
+		for (curr_e = 0; curr_e < MRVQ_SIZE; curr_e=curr_e+1) begin
+			assign make_ready[curr_e] = is_fill_st1 && valid_table[curr_e]
+													&& addr_table[curr_e][31:`LINE_SELECT_ADDR_START] == fill_addr_st1[31:`LINE_SELECT_ADDR_START];
+		end
+	endgenerate
 
-		wire                            enqueue_possible = !miss_resrv_full;
-		wire[`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
+	wire                          dequeue_possible = valid_table[head_ptr] && ready_table[head_ptr];
+	wire [`LOG2UP(MRVQ_SIZE)-1:0] dequeue_index    = head_ptr;
 
-		reg[MRVQ_SIZE-1:0] make_ready;
-		genvar curr_e;
-		generate
-			for (curr_e = 0; curr_e < MRVQ_SIZE; curr_e=curr_e+1) begin
-				assign make_ready[curr_e] = is_fill_st1 && valid_table[curr_e]
-				                                        && addr_table[curr_e][31:`LINE_SELECT_ADDR_START] == fill_addr_st1[31:`LINE_SELECT_ADDR_START];
+	assign miss_resrv_valid_st0 = (MRVQ_SIZE != 2) && dequeue_possible;
+	assign miss_resrv_pc_st0    = pc_table[dequeue_index];
+	assign miss_resrv_addr_st0  = addr_table[dequeue_index];
+	assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_rd_st0, miss_resrv_wb_st0, miss_resrv_warp_num_st0, miss_resrv_mem_read_st0, miss_resrv_mem_write_st0} = metadata_table[dequeue_index];
+
+	wire mrvq_push = miss_add && enqueue_possible && (MRVQ_SIZE != 2);
+	wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
+
+	wire update_ready = (|make_ready);
+	integer i;
+	always @(posedge clk) begin
+		if (reset) begin
+			for (i = 0; i < MRVQ_SIZE; i=i+1) begin
+				metadata_table[i] <= 0;
 			end
-		endgenerate
+			valid_table <= 0;
+			ready_table <= 0;
+			addr_table  <= 0;
+			pc_table    <= 0;
+			size        <= 0;
+			head_ptr    <= 0;
+			tail_ptr    <= 0;
+		end else begin
+			if (mrvq_push) begin
+				valid_table[enqueue_index]    <= 1;
+				ready_table[enqueue_index]    <= 0;
+				pc_table[enqueue_index]       <= miss_add_pc;
+				addr_table[enqueue_index]     <= miss_add_addr;
+				metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_rd, miss_add_wb, miss_add_warp_num, miss_add_mem_read, miss_add_mem_write};
+				tail_ptr                      <= tail_ptr + 1;
+			end
 
+			if (update_ready) begin
+				ready_table <= ready_table | make_ready;
+			end
 
-		wire                            dequeue_possible = valid_table[head_ptr] && ready_table[head_ptr];
-		wire[`LOG2UP(MRVQ_SIZE)-1:0] dequeue_index     = head_ptr;
+			if (mrvq_pop) begin
+				valid_table[dequeue_index]    <= 0;
+				ready_table[dequeue_index]    <= 0;
+				addr_table[dequeue_index]     <= 0;
+				metadata_table[dequeue_index] <= 0;
+				pc_table[dequeue_index]       <= 0;
+				head_ptr                      <= head_ptr + 1;
+			end
 
-		assign miss_resrv_valid_st0 = (MRVQ_SIZE != 2) && dequeue_possible;
-		assign miss_resrv_pc_st0    = pc_table[dequeue_index];
-		assign miss_resrv_addr_st0  = addr_table[dequeue_index];
-		assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_rd_st0, miss_resrv_wb_st0, miss_resrv_warp_num_st0, miss_resrv_mem_read_st0, miss_resrv_mem_write_st0} = metadata_table[dequeue_index];
-
-
-		wire mrvq_push = miss_add && enqueue_possible && (MRVQ_SIZE != 2);
-		wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
-
-		wire update_ready = (|make_ready);
-		integer i;
-		always @(posedge clk) begin
-			if (reset) begin
-				for (i = 0; i < MRVQ_SIZE; i=i+1) metadata_table[i] <= 0;
-				valid_table <= 0;
-				ready_table <= 0;
-				addr_table  <= 0;
-				pc_table    <= 0;
-				size        <= 0;
-				head_ptr    <= 0;
-				tail_ptr    <= 0;
-			end else begin
+			if (!(mrvq_push && mrvq_pop)) begin
 				if (mrvq_push) begin
-					valid_table[enqueue_index]    <= 1;
-					ready_table[enqueue_index]    <= 0;
-					pc_table[enqueue_index]       <= miss_add_pc;
-					addr_table[enqueue_index]     <= miss_add_addr;
-					metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_rd, miss_add_wb, miss_add_warp_num, miss_add_mem_read, miss_add_mem_write};
-					tail_ptr                      <= tail_ptr + 1;
-				end
-
-				if (update_ready) begin
-					ready_table <= ready_table | make_ready;
+					size <= size + 1;
 				end
 
 				if (mrvq_pop) begin
-					valid_table[dequeue_index]    <= 0;
-					ready_table[dequeue_index]    <= 0;
-					addr_table[dequeue_index]     <= 0;
-					metadata_table[dequeue_index] <= 0;
-					pc_table[dequeue_index]       <= 0;
-					head_ptr                      <= head_ptr + 1;
+					size <= size - 1;
 				end
-
-				if (!(mrvq_push && mrvq_pop)) begin
-					if (mrvq_push) begin
-						size <= size + 1;
-					end
-
-					if (mrvq_pop) begin
-						size <= size - 1;
-					end
-				end
-
 			end
 		end
-
-
+	end
 
 endmodule

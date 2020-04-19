@@ -9,15 +9,35 @@
 // `define ASIC 1
 // `define SYN_FUNC 1
 
+`define STRINGIFY(x) `"x`"
+
+`define STATIC_ASSERT(cond, msg)    \
+    generate                        \
+        if (!(cond)) $error(msg);   \
+    endgenerate
+
 `define LOG2UP(x) ((x > 1) ? $clog2(x) : 1)
 
 `define NUM_CORES_PER_CLUSTER (`NUM_CORES / `NUM_CLUSTERS)
 
-`define NW_BITS `LOG2UP(`NUM_WARPS)
+`define NW_BITS (`LOG2UP(`NUM_WARPS))
 
-`define NT_BITS `LOG2UP(`NUM_THREADS)
+`define NT_BITS (`LOG2UP(`NUM_THREADS))
 
-`define NC_BITS `LOG2UP(`NUM_CORES)
+`define NC_BITS (`LOG2UP(`NUM_CORES))
+
+`define NUM_GPRS 32
+
+`define CSR_ADDR_SIZE 12
+
+`define NUM_CSRS 1024
+
+`define CSR_WIDTH 12
+
+`define CSR_CYCL_L 12'hC00;
+`define CSR_CYCL_H 12'hC80;
+`define CSR_INST_L 12'hC02;
+`define CSR_INST_H 12'hC82;
 
 `define R_INST 7'd51
 `define L_INST 7'd3
@@ -114,6 +134,9 @@
 
 // Bank Number of words in a line
 `define DBANK_LINE_WORDS (`DBANK_LINE_SIZE_BYTES / `DWORD_SIZE_BYTES)
+
+// Word size in bits
+`define DWORD_SIZE_BITS (`DWORD_SIZE_BYTES * 8)
 
 // ======================= Icache Configurable Knobs ==========================
 
