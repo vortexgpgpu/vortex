@@ -33,10 +33,10 @@ interface VX_exec_unit_req_inter ();
 	wire                jal;
 	wire [31:0]         jal_offset;
 
-/* verilator lint_off UNUSED */
+`IGNORE_WARNINGS_BEGIN
 	wire                ebreak;
 	wire                wspawn;
-/* verilator lint_on UNUSED */
+`IGNORE_WARNINGS_END
 
 	// CSR info
 	wire                is_csr;

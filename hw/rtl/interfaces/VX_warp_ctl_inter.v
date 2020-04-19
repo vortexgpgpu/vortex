@@ -23,9 +23,9 @@ interface VX_warp_ctl_inter ();
 
 	wire           			is_split;
 	wire           			dont_split;
-/* verilator lint_off UNUSED */
+`IGNORE_WARNINGS_BEGIN
 	wire [`NW_BITS-1:0] 	split_warp_num;
-/* verilator lint_on UNUSED */
+`IGNORE_WARNINGS_END
 	wire [`NUM_THREADS-1:0] split_new_mask;
 	wire [`NUM_THREADS-1:0] split_later_mask;
 	wire [31:0]     		split_save_pc;

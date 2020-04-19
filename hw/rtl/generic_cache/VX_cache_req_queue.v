@@ -103,9 +103,9 @@ module VX_cache_req_queue #(
 	wire [NUM_REQUESTS-1:0][2:0]  qual_mem_write;
 	wire [31:0]                   qual_pc;
 
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
     reg [NUM_REQUESTS-1:0]        updated_valids;
-/* verilator lint_on UNUSED */
+`DEBUG_END
 
     wire o_empty;
 

@@ -21,9 +21,9 @@ interface VX_frE_to_bckE_req_inter ();
 	wire [2:0]            	branch_type;
 	wire [19:0]           	upper_immed;
 	wire [31:0]           	curr_PC;
-/* verilator lint_off UNUSED */
+`IGNORE_WARNINGS_BEGIN
 	wire                 	ebreak;
-/* verilator lint_on UNUSED */
+`IGNORE_WARNINGS_END
 	wire                 	jalQual;
 	wire                 	jal;
 	wire [31:0]           	jal_offset;

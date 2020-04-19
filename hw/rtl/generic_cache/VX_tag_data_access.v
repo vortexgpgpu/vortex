@@ -48,17 +48,13 @@ module VX_tag_data_access #(
 	input  wire                            is_snp_st1e,
 	input  wire                            stall_bank_pipe,
 	// Initial Reading
-/* verilator lint_off UNUSED */
-    // TODO:
+`IGNORE_WARNINGS_BEGIN
+    // TODO: should fix this
 	input  wire[31:0]                      readaddr_st10, 
-/* verilator lint_on UNUSED */
-	// Write/Read Logic
+	input  wire[31:0]                      writeaddr_st1e,
+`IGNORE_WARNINGS_END
 	input  wire                            valid_req_st1e,
 	input  wire                            writefill_st1e,
-/* verilator lint_off UNUSED */
-    // TODO:
-	input  wire[31:0]                      writeaddr_st1e,
-/* verilator lint_on UNUSED */	
 	input  wire[`WORD_SIZE_RNG]            writeword_st1e,
 	input  wire[`DBANK_LINE_WORDS-1:0][31:0] writedata_st1e,
 	input  wire[2:0]                       mem_write_st1e,
@@ -176,7 +172,7 @@ module VX_tag_data_access #(
 	wire[`OFFSET_SIZE_RNG]      byte_select  = writeaddr_st1e[`OFFSET_ADDR_RNG];
 	wire[`WORD_SELECT_SIZE_RNG] block_offset = writeaddr_st1e[`WORD_SELECT_ADDR_RNG];
 
-/* verilator lint_off UNUSED */
+`IGNORE_WARNINGS_BEGIN
     wire lw  = valid_req_st1e && (mem_read_st1e == `LW_MEM_READ);
     wire lb  = valid_req_st1e && (mem_read_st1e == `LB_MEM_READ);
     wire lh  = valid_req_st1e && (mem_read_st1e == `LH_MEM_READ);
@@ -187,14 +183,14 @@ module VX_tag_data_access #(
     wire b1 = (byte_select == 1);
     wire b2 = (byte_select == 2);
 	wire b3 = (byte_select == 3);
-/* verilator lint_on UNUSED */
+`IGNORE_WARNINGS_END
 
-/* verilator lint_off UNUSED */
+`DEBUG_BEGIN
     wire[31:0] w0 = read_data_st1c[STAGE_1_CYCLES-1][0][31:0];
     wire[31:0] w1 = read_data_st1c[STAGE_1_CYCLES-1][1][31:0];
     wire[31:0] w2 = read_data_st1c[STAGE_1_CYCLES-1][2][31:0];
     wire[31:0] w3 = read_data_st1c[STAGE_1_CYCLES-1][3][31:0];
-/* verilator lint_on UNUSED */    
+`DEBUG_END   
 
 /////////////////////// STORE LOGIC ///////////////////
 

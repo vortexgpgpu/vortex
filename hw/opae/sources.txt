@@ -87,7 +87,6 @@ vortex_afu.json
 ../rtl/interfaces/VX_inst_meta_inter.v
 ../rtl/interfaces/VX_join_inter.v
 ../rtl/interfaces/VX_icache_response_inter.v
-../rtl/interfaces/VX_gpr_wspawn_inter.v
 ../rtl/interfaces/VX_inst_exec_wb_inter.v
 ../rtl/interfaces/VX_gpu_dcache_dram_req_inter.v
 ../rtl/interfaces/VX_csr_req_inter.v
@@ -107,7 +106,6 @@ vortex_afu.json
 ../rtl/interfaces/VX_gpu_inst_req_inter.v
 ../rtl/interfaces/VX_wstall_inter.v
 ../rtl/interfaces/VX_wb_inter.v
-../rtl/interfaces/VX_gpr_clone_inter.v
 ../rtl/interfaces/VX_gpr_read_inter.v
 ../rtl/interfaces/VX_mem_req_inter.v
 ../rtl/interfaces/VX_jal_response_inter.v

@@ -1,23 +1,20 @@
 all: singlecore
 
+CF += -std=c++11 -fms-extensions
+
+VF += -compiler gcc --language 1800-2009 --assert -Wall -Wpedantic
+
 INCLUDE = -I./rtl/ -I./rtl/shared_memory -I./rtl/cache -I./rtl/generic_cache -I./rtl/generic_cache/interfaces -I./rtl/interfaces/ -I./rtl/pipe_regs/ -I./rtl/compat/ -I./rtl/simulate
 
 SINGLE_CORE = Vortex.v
 
 MULTI_CORE = Vortex_Socket.v
 
-EXE += --exe ./simulate/testbench.cpp ./simulate/simulator.cpp
+SRCS += ./simulate/testbench.cpp ./simulate/simulator.cpp
 
-VF += -compiler gcc --language 1800-2009
+VF += -exe $(SRCS) $(INCLUDE)
 
-VF += --assert -Wall -Wpedantic
-
-# LIB=-LDFLAGS '-L/usr/local/systemc/'
-LIB +=
-
-CF += -std=c++11 -fms-extensions
-
-DEB += --trace -DVL_DEBUG=1 
+DBG += --trace -DVL_DEBUG=1 
 
 MAKECPP_S += (cd obj_dir && make -j -f VVortex.mk)
 
@@ -31,22 +28,22 @@ build_config:
 	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./simulate/VX_config.h
 
 gen-singlecore: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF)'
+	verilator $(VF) -DNDEBUG -cc $(SINGLE_CORE) -CFLAGS '$(CF) -DNDEBUG'
 
 gen-singlecore-t: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -O3' --threads $(THREADS)
+	verilator $(VF) -cc $(SINGLE_CORE) -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
 
 gen-singlecore-d: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT' $(DEB)
+	verilator $(VF) -cc $(SINGLE_CORE) -CFLAGS '$(CF) -DVCD_OUTPUT' $(DBG)
 
 gen-multicore: build_config
-	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE'
+	verilator $(VF) -DNDEBUG -cc $(MULTI_CORE) -CFLAGS '$(CF) -DNDEBUG -DUSE_MULTICORE'
 	
 gen-multicore-t: build_config
-	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DUSE_MULTICORE -O3' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG -cc $(MULTI_CORE) -CFLAGS '$(CF) -DNDEBUG -O2 -DUSE_MULTICORE' --threads $(THREADS)
 
 gen-multicore-d: build_config
-	verilator $(VF) -cc $(MULTI_CORE) $(INCLUDE) $(EXE) $(LIB) -CFLAGS '$(CF) -DVCD_OUTPUT -DUSE_MULTICORE' $(DEB)
+	verilator $(VF) -cc $(MULTI_CORE) -CFLAGS '$(CF) -DVCD_OUTPUT -DUSE_MULTICORE' $(DBG)
 
 singlecore: gen-singlecore
 	(cd obj_dir && make -j -f VVortex.mk)

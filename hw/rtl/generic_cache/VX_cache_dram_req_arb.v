@@ -94,9 +94,11 @@ module VX_cache_dram_req_arb #(
 	);
 
 	wire[31:0] dfqq_req_addr;
-/* verilator lint_off UNUSED */
+	
+`DEBUG_BEGIN
 	wire dfqq_empty;	
-/* verilator lint_on UNUSED */
+`DEBUG_END
+
 	wire dfqq_pop  = !dwb_valid && dfqq_req && !dram_req_full; // If no dwb, and dfqq has valids, then pop
 	wire dfqq_push = (|per_bank_dram_fill_req_valid);
 

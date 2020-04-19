@@ -17,11 +17,9 @@ SRC = \
 ../rtl/interfaces/VX_dram_req_rsp_inter.v \
 ../rtl/interfaces/VX_exec_unit_req_inter.v \
 ../rtl/interfaces/VX_frE_to_bckE_req_inter.v \
-../rtl/interfaces/VX_gpr_clone_inter.v \
 ../rtl/interfaces/VX_gpr_data_inter.v \
 ../rtl/interfaces/VX_gpr_jal_inter.v \
 ../rtl/interfaces/VX_gpr_read_inter.v \
-../rtl/interfaces/VX_gpr_wspawn_inter.v \
 ../rtl/interfaces/VX_gpu_inst_req_inter.v \
 ../rtl/interfaces/VX_icache_request_inter.v \
 ../rtl/interfaces/VX_icache_response_inter.v \
