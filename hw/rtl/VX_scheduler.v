@@ -6,8 +6,8 @@ module VX_scheduler (
 	input wire                memory_delay,
 	input wire 				  exec_delay,
 	input wire                gpr_stage_delay,
-	VX_frE_to_bckE_req_inter  vx_bckE_req,
-	VX_wb_inter               vx_writeback_inter,
+	VX_frE_to_bckE_req_if  vx_bckE_req,
+	VX_wb_if               vx_writeback_if,
 
 	output wire schedule_delay,
 	output wire is_empty	
@@ -18,7 +18,7 @@ module VX_scheduler (
 
 	reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
 
-	wire valid_wb  = (vx_writeback_inter.wb != 0) && (|vx_writeback_inter.wb_valid) && (vx_writeback_inter.rd != 0);
+	wire valid_wb  = (vx_writeback_if.wb != 0) && (|vx_writeback_if.wb_valid) && (vx_writeback_if.rd != 0);
 	wire wb_inc    = (vx_bckE_req.wb != 0) && (vx_bckE_req.rd != 0);
 
 	wire rs1_rename = rename_table[vx_bckE_req.warp_num][vx_bckE_req.rs1] != 0;
@@ -59,7 +59,7 @@ module VX_scheduler (
 			end
 		end else begin
 			if (valid_wb) begin
-				rename_table[vx_writeback_inter.wb_warp_num][vx_writeback_inter.rd] <= rename_table[vx_writeback_inter.wb_warp_num][vx_writeback_inter.rd] & (~vx_writeback_inter.wb_valid);
+				rename_table[vx_writeback_if.wb_warp_num][vx_writeback_if.rd] <= rename_table[vx_writeback_if.wb_warp_num][vx_writeback_if.rd] & (~vx_writeback_if.wb_valid);
 			end
 
 			if (!schedule_delay && wb_inc) begin
@@ -67,7 +67,7 @@ module VX_scheduler (
 			end
 		
 			if (valid_wb 
-			 && (0 == (rename_table[vx_writeback_inter.wb_warp_num][vx_writeback_inter.rd] & ~vx_writeback_inter.wb_valid))) begin
+			 && (0 == (rename_table[vx_writeback_if.wb_warp_num][vx_writeback_if.rd] & ~vx_writeback_if.wb_valid))) begin
 			   	count_valid <= count_valid - 1;
 			end
 

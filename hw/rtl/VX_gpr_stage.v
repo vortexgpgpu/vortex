@@ -12,16 +12,16 @@ module VX_gpr_stage (
 
 	// inputs
 	// Instruction Information
-	VX_frE_to_bckE_req_inter   vx_bckE_req,
+	VX_frE_to_bckE_req_if   vx_bckE_req,
 
 	// WriteBack inputs
-	VX_wb_inter                vx_writeback_inter,
+	VX_wb_if                vx_writeback_if,
 
 	// Outputs
-	VX_exec_unit_req_inter   vx_exec_unit_req,
-	VX_lsu_req_inter         vx_lsu_req,
-	VX_gpu_inst_req_inter    vx_gpu_inst_req,
-	VX_csr_req_inter         vx_csr_req
+	VX_exec_unit_req_if   vx_exec_unit_req,
+	VX_lsu_req_if         vx_lsu_req,
+	VX_gpu_inst_req_if    vx_gpu_inst_req,
+	VX_csr_req_if         vx_csr_req
 );
 `DEBUG_BEGIN
 	wire[31:0] curr_PC = vx_bckE_req.curr_PC;
@@ -31,27 +31,27 @@ module VX_gpr_stage (
 	wire jalQual = vx_bckE_req.jalQual;
 `DEBUG_END
 
-	VX_gpr_read_inter vx_gpr_read();
+	VX_gpr_read_if vx_gpr_read();
 	assign vx_gpr_read.rs1      = vx_bckE_req.rs1;
 	assign vx_gpr_read.rs2      = vx_bckE_req.rs2;
 	assign vx_gpr_read.warp_num = vx_bckE_req.warp_num;
 
 `ifndef ASIC
-	VX_gpr_jal_inter vx_gpr_jal();
+	VX_gpr_jal_if vx_gpr_jal();
 	assign vx_gpr_jal.is_jal  = vx_bckE_req.jalQual;
 	assign vx_gpr_jal.curr_PC = vx_bckE_req.curr_PC;
 `else 
-	VX_gpr_jal_inter vx_gpr_jal();
+	VX_gpr_jal_if vx_gpr_jal();
 	assign vx_gpr_jal.is_jal  = vx_exec_unit_req.jalQual;
 	assign vx_gpr_jal.curr_PC = vx_exec_unit_req.curr_PC;
 `endif
 
-	VX_gpr_data_inter           vx_gpr_datf();
+	VX_gpr_data_if           vx_gpr_datf();
 
 	VX_gpr_wrapper vx_grp_wrapper (
 		.clk               (clk),
 		.reset             (reset),
-		.vx_writeback_inter(vx_writeback_inter),
+		.vx_writeback_if(vx_writeback_if),
 		.vx_gpr_read       (vx_gpr_read),
 		.vx_gpr_jal        (vx_gpr_jal),
 
@@ -63,10 +63,10 @@ module VX_gpr_stage (
 	// assign vx_bckE_req_out.csr_mask = (vx_bckE_req.sr_immed == 1'b1) ?  {27'h0, vx_bckE_req.rs1} : vx_gpr_data.a_reg_data[0];
 
 	// Outputs
-	VX_exec_unit_req_inter   vx_exec_unit_req_temp();
-	VX_lsu_req_inter         vx_lsu_req_temp();
-	VX_gpu_inst_req_inter    vx_gpu_inst_req_temp();
-	VX_csr_req_inter         vx_csr_req_temp();
+	VX_exec_unit_req_if   vx_exec_unit_req_temp();
+	VX_lsu_req_if         vx_lsu_req_temp();
+	VX_gpu_inst_req_if    vx_gpu_inst_req_temp();
+	VX_csr_req_if         vx_csr_req_temp();
 
 	VX_inst_multiplex vx_inst_mult(
 		.vx_bckE_req     (vx_bckE_req),

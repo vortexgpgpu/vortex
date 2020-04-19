@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_mem_req_inter ();
+interface VX_mem_req_if ();
 
 	wire [`NUM_THREADS-1:0][31:0] 	alu_result;
 	wire [2:0]            			mem_read; 

@@ -4,7 +4,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_lsu_req_inter ();
+interface VX_lsu_req_if ();
 
 	wire [`NUM_THREADS-1:0]       	valid;
 	wire [31:0]           	 	 	lsu_pc;

@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_dcache_response_inter ();
+interface VX_dcache_response_if ();
 
 	wire [`NUM_THREADS-1:0][31:0] in_cache_driver_out_data;
 	wire                          delay;

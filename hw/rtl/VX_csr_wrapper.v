@@ -2,8 +2,8 @@
 `include "VX_define.vh"
 
 module VX_csr_wrapper (
-	VX_csr_req_inter vx_csr_req,
-	VX_csr_wb_inter  vx_csr_wb
+	VX_csr_req_if vx_csr_req,
+	VX_csr_wb_if  vx_csr_wb
 );
 
 

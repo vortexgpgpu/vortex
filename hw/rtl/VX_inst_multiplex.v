@@ -2,14 +2,14 @@
 
 module VX_inst_multiplex (
 	// Inputs
-	VX_frE_to_bckE_req_inter vx_bckE_req,
-	VX_gpr_data_inter        vx_gpr_data,
+	VX_frE_to_bckE_req_if vx_bckE_req,
+	VX_gpr_data_if        vx_gpr_data,
 
 	// Outputs
-	VX_exec_unit_req_inter   vx_exec_unit_req,
-	VX_lsu_req_inter         vx_lsu_req,
-	VX_gpu_inst_req_inter    vx_gpu_inst_req,
-	VX_csr_req_inter         vx_csr_req
+	VX_exec_unit_req_if   vx_exec_unit_req,
+	VX_lsu_req_if         vx_lsu_req,
+	VX_gpu_inst_req_if    vx_gpu_inst_req,
+	VX_csr_req_if         vx_csr_req
 );
 
 	wire[`NUM_THREADS-1:0] is_mem_mask;

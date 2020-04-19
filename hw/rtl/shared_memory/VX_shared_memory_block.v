@@ -61,7 +61,7 @@ module VX_shared_memory_block
 		end
 
 		// Using ASIC MEM
-		/* verilator lint_off PINCONNECTEMPTY */
+		`IGNORE_WARNINGS_BEGIN
 	   rf2_128x128_wm1 first_ram (
 	         .CENYA(),
 	         .AYA(),
@@ -98,7 +98,7 @@ module VX_shared_memory_block
 	         .SEB(1'b0),
 	         .COLLDISN(1'b1)
 	   );
-	   /* verilator lint_on PINCONNECTEMPTY */
+	   `IGNORE_WARNINGS_END
 
  	`endif
 

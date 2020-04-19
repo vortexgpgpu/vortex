@@ -25,7 +25,7 @@ module cache_simX (
 
 
 	//////////////////// ICACHE ///////////////////
-	VX_icache_request_inter  VX_icache_req;
+	VX_icache_request_if  VX_icache_req;
 	assign VX_icache_req.pc_address                    = in_icache_pc_addr;
 	assign VX_icache_req.out_cache_driver_in_mem_read  = (in_icache_valid_pc_addr) ? `LW_MEM_READ : `NO_MEM_READ;
 	assign VX_icache_req.out_cache_driver_in_mem_write = `NO_MEM_WRITE;
@@ -33,11 +33,11 @@ module cache_simX (
 	assign VX_icache_req.out_cache_driver_in_data      = 0;
 
 
-	VX_icache_response_inter VX_icache_rsp;
+	VX_icache_response_if VX_icache_rsp;
 	assign out_icache_stall = VX_icache_rsp.delay;
 
 
-	VX_dram_req_rsp_inter #(
+	VX_dram_req_rsp_if #(
 		
 		.NUMBER_BANKS(`ICACHE_BANKS),
 		.NUM_WORDS_PER_BLOCK(`ICACHE_NUM_WORDS_PER_BLOCK)
@@ -52,7 +52,7 @@ module cache_simX (
 
 	//////////////////// DCACHE ///////////////////
 
-	VX_dcache_request_inter  VX_dcache_req;
+	VX_dcache_request_if  VX_dcache_req;
 	assign VX_dcache_req.out_cache_driver_in_mem_read  = in_dcache_mem_read;
 	assign VX_dcache_req.out_cache_driver_in_mem_write = in_dcache_mem_write;
 	assign VX_dcache_req.out_cache_driver_in_data      = 0;
@@ -64,11 +64,11 @@ module cache_simX (
 		assign VX_dcache_req.out_cache_driver_in_valid[curr_t]     = in_dcache_in_valid[curr_t];
 	end
 
-	VX_dcache_response_inter VX_dcache_rsp;
+	VX_dcache_response_if VX_dcache_rsp;
 	assign out_dcache_stall = VX_dcache_rsp.delay;
 
 
-	VX_dram_req_rsp_inter #(
+	VX_dram_req_rsp_if #(
 
 		.NUMBER_BANKS(`DCACHE_BANKS),
 		.NUM_WORDS_PER_BLOCK(`DCACHE_NUM_WORDS_PER_BLOCK)

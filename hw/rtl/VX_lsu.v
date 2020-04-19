@@ -4,13 +4,13 @@ module VX_lsu (
 	input wire               clk,
 	input wire               reset,
 	input wire               no_slot_mem,
-	VX_lsu_req_inter         vx_lsu_req,
+	VX_lsu_req_if         vx_lsu_req,
 
 	// Write back to GPR
-	VX_inst_mem_wb_inter     vx_mem_wb,
+	VX_inst_mem_wb_if     vx_mem_wb,
 
-	VX_gpu_dcache_rsp_inter  vx_dcache_rsp,
-	VX_gpu_dcache_req_inter  vx_dcache_req,
+	VX_gpu_dcache_rsp_if  vx_dcache_rsp,
+	VX_gpu_dcache_req_if  vx_dcache_req,
 	output wire              out_delay
 );
 	// Generate Addresses

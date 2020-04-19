@@ -4,7 +4,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_warp_ctl_inter ();
+interface VX_warp_ctl_if ();
 
 	wire [`NW_BITS-1:0] 	warp_num;
 	wire           			change_mask;

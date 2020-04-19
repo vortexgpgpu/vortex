@@ -5,8 +5,8 @@ module VX_d_e_reg (
 	input wire               reset,
 	input wire               in_branch_stall,
 	input wire               in_freeze,
-	VX_frE_to_bckE_req_inter vx_frE_to_bckE_req,
-	VX_frE_to_bckE_req_inter vx_bckE_req
+	VX_frE_to_bckE_req_if vx_frE_to_bckE_req,
+	VX_frE_to_bckE_req_if vx_bckE_req
 );
 
 	wire stall = in_freeze;

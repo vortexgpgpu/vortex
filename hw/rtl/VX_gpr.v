@@ -4,8 +4,8 @@ module VX_gpr (
 	input wire          clk,
 	input wire          reset,
 	input wire          valid_write_request,
-	VX_gpr_read_inter	vx_gpr_read,
-	VX_wb_inter         vx_writeback_inter,
+	VX_gpr_read_if	vx_gpr_read,
+	VX_wb_if         vx_writeback_if,
 
 	output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] out_a_reg_data,
 	output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] out_b_reg_data
@@ -13,28 +13,28 @@ module VX_gpr (
 	wire write_enable;
 	
 	`ifndef ASIC
-		assign write_enable = valid_write_request && ((vx_writeback_inter.wb != 0)) && (vx_writeback_inter.rd != 0);
+		assign write_enable = valid_write_request && ((vx_writeback_if.wb != 0)) && (vx_writeback_if.rd != 0);
 
 		byte_enabled_simple_dual_port_ram first_ram(
 			.we    (write_enable),
 			.clk   (clk),
 			.reset (reset),
-			.waddr (vx_writeback_inter.rd),
+			.waddr (vx_writeback_if.rd),
 			.raddr1(vx_gpr_read.rs1),
 			.raddr2(vx_gpr_read.rs2),
-			.be    (vx_writeback_inter.wb_valid),
-			.wdata (vx_writeback_inter.write_data),
+			.be    (vx_writeback_if.wb_valid),
+			.wdata (vx_writeback_if.write_data),
 			.q1    (out_a_reg_data),
 			.q2    (out_b_reg_data)
 		);
 	`else 
-		assign write_enable = valid_write_request && ((vx_writeback_inter.wb != 0));
-		wire going_to_write = write_enable & (|vx_writeback_inter.wb_valid);
+		assign write_enable = valid_write_request && ((vx_writeback_if.wb != 0));
+		wire going_to_write = write_enable & (|vx_writeback_if.wb_valid);
 		wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] write_bit_mask;
 
 		genvar curr_t;
 		for (curr_t = 0; curr_t < `NUM_THREADS; curr_t=curr_t+1) begin
-			wire local_write = write_enable & vx_writeback_inter.wb_valid[curr_t];
+			wire local_write = write_enable & vx_writeback_if.wb_valid[curr_t];
 			assign write_bit_mask[curr_t] = {`NUM_GPRS{~local_write}};
 		end
 
@@ -65,12 +65,12 @@ module VX_gpr (
 		assign out_b_reg_data = temp_b;
 	`endif
 
-		wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = (vx_writeback_inter.rd != 0) ? vx_writeback_inter.write_data : 0;
+		wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = (vx_writeback_if.rd != 0) ? vx_writeback_if.write_data : 0;
 
 		genvar curr_base_thread;
 		for (curr_base_thread = 0; curr_base_thread < 'NT; curr_base_thread=curr_base_thread+4)
 		begin
-			/* verilator lint_off PINCONNECTEMPTY */
+			`IGNORE_WARNINGS_BEGIN
 		   rf2_32x128_wm1 first_ram (
 				.CENYA(),
 				.AYA(),
@@ -86,7 +86,7 @@ module VX_gpr (
 				.CLKB(clk),
 				.CENB(cenb),
 				.WENB(write_bit_mask[(curr_base_thread+3):(curr_base_thread)]),
-				.AB(vx_writeback_inter.rd[(curr_base_thread+3):(curr_base_thread)]),
+				.AB(vx_writeback_if.rd[(curr_base_thread+3):(curr_base_thread)]),
 				.DB(to_write[(curr_base_thread+3):(curr_base_thread)]),
 				.EMAA(3'b011),
 				.EMASA(1'b0),
@@ -107,9 +107,9 @@ module VX_gpr (
 				.SEB(1'b0),
 				.COLLDISN(1'b1)
 		   );
-		   /* verilator lint_on PINCONNECTEMPTY */
+		   `IGNORE_WARNINGS_END
 
-		   /* verilator lint_off PINCONNECTEMPTY */
+		   `IGNORE_WARNINGS_BEGIN
 		   rf2_`NUM_GPRSx128_wm1 second_ram (
 				.CENYA(),
 				.AYA(),
@@ -125,7 +125,7 @@ module VX_gpr (
 				.CLKB(clk),
 				.CENB(cenb),
 				.WENB(write_bit_mask[(curr_base_thread+3):(curr_base_thread)]),
-				.AB(vx_writeback_inter.rd[(curr_base_thread+3):(curr_base_thread)]),
+				.AB(vx_writeback_if.rd[(curr_base_thread+3):(curr_base_thread)]),
 				.DB(to_write[(curr_base_thread+3):(curr_base_thread)]),
 				.EMAA(3'b011),
 				.EMASA(1'b0),
@@ -146,7 +146,7 @@ module VX_gpr (
 				.SEB(1'b0),
 				.COLLDISN(1'b1)
 		   );
-		   /* verilator lint_on PINCONNECTEMPTY */
+		   `IGNORE_WARNINGS_END
 		end
 
 	`endif

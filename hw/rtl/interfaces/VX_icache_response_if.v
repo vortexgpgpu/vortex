@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_icache_response_inter ();
+interface VX_icache_response_if ();
 
 	// wire ready;
 	// wire stall;

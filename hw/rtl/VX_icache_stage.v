@@ -7,11 +7,11 @@ module VX_icache_stage (
 	output wire              icache_stage_delay,
 	output wire[`NW_BITS-1:0] icache_stage_wid,
 	output wire[`NUM_THREADS-1:0] icache_stage_valids,
-	VX_inst_meta_inter       fe_inst_meta_fi,
-	VX_inst_meta_inter       fe_inst_meta_id,
+	VX_inst_meta_if       fe_inst_meta_fi,
+	VX_inst_meta_if       fe_inst_meta_id,
 
-	VX_gpu_dcache_rsp_inter  vx_icache_rsp,
-	VX_gpu_dcache_req_inter  vx_icache_req
+	VX_gpu_dcache_rsp_if  vx_icache_rsp,
+	VX_gpu_dcache_req_if  vx_icache_req
 );
 
 	reg[`NUM_THREADS-1:0] threads_active[`NUM_WARPS-1:0];

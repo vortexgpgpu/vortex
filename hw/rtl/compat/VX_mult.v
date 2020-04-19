@@ -30,7 +30,7 @@ module VX_mult #(
             localparam lpm_speed = (SPEED == "HIGHEST") ? 10 : 5;
 
             if (FORCE_LE == "YES") begin
-            /* verilator lint_off DECLFILENAME */    
+            `IGNORE_WARNINGS_BEGIN    
                 lpm_mult #(            
                     .LPM_WIDTHA(WIDTHA),
                     .LPM_WIDTHB(WIDTHB),
@@ -47,7 +47,7 @@ module VX_mult #(
                     .datab(datab),
                     .result(result)
                 );
-            /* verilator lint_on DECLFILENAME */
+            `IGNORE_WARNINGS_END
             end
             else begin
                 lpm_mult#(

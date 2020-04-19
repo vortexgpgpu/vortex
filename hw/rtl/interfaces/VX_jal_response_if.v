@@ -4,7 +4,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_jal_response_inter ();
+interface VX_jal_response_if ();
 
 	wire           		jal;
 	wire [31:0]     	jal_dest;

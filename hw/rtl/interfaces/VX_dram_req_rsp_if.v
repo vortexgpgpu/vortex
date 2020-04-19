@@ -4,7 +4,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_dram_req_rsp_inter #(
+interface VX_dram_req_rsp_if #(
 	parameter NUM_BANKS = 8,
 	parameter NUM_WORDS_PER_BLOCK = 4
 ) ();

@@ -4,7 +4,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_mw_wb_inter ();
+interface VX_mw_wb_if ();
 
 	wire [`NUM_THREADS-1:0][31:0] 	alu_result;
 	wire [`NUM_THREADS-1:0][31:0] 	mem_result;

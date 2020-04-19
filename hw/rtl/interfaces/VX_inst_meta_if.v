@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_inst_meta_inter ();
+interface VX_inst_meta_if ();
 
 	wire [31:0]       		instruction;
 	wire [31:0]       		inst_pc;

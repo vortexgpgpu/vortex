@@ -104,7 +104,7 @@ module VX_cache_data  #(
     assign data_use = data_out_d;
 
     // Using ASIC MEM
-    /* verilator lint_off PINCONNECTEMPTY */
+    `IGNORE_WARNINGS_BEGIN
     rf2_32x128_wm1 data (
         .CENYA(),
         .AYA(),
@@ -141,7 +141,7 @@ module VX_cache_data  #(
         .SEB(1'b0),
         .COLLDISN(1'b1)
     );
-    /* verilator lint_on PINCONNECTEMPTY */
+    `IGNORE_WARNINGS_END
 
     wire[16:0] old_tag;
     wire       old_valid;
@@ -169,7 +169,7 @@ module VX_cache_data  #(
     assign valid_use = old_valid;
     assign tag_use   = old_tag;
 
-    /* verilator lint_off PINCONNECTEMPTY */
+    `IGNORE_WARNINGS_BEGIN
     rf2_32x19_wm0 meta (
         .CENYA(),
         .AYA(),
@@ -206,7 +206,7 @@ module VX_cache_data  #(
         .SEB(1'b0),
         .COLLDISN(1'b1)
     );
-    /* verilator lint_on PINCONNECTEMPTY */
+    `IGNORE_WARNINGS_END
 `endif
 
 endmodule

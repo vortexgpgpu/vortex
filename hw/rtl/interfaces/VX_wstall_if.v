@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_wstall_inter();
+interface VX_wstall_if();
 
 	wire           		wstall;
 	wire [`NW_BITS-1:0] warp_num;

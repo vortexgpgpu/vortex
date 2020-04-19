@@ -3,9 +3,9 @@
 module VX_gpr_wrapper (
 	input wire                  clk,
 	input wire                  reset,
-	VX_gpr_read_inter           vx_gpr_read,
-	VX_wb_inter                 vx_writeback_inter,	
-	VX_gpr_jal_inter            vx_gpr_jal,
+	VX_gpr_read_if           vx_gpr_read,
+	VX_wb_if                 vx_writeback_if,	
+	VX_gpr_jal_if            vx_gpr_jal,
 
 	output wire[`NUM_THREADS-1:0][31:0] out_a_reg_data,
 	output wire[`NUM_THREADS-1:0][31:0] out_b_reg_data
@@ -52,13 +52,13 @@ module VX_gpr_wrapper (
 		
 		for (warp_index = 0; warp_index < `NUM_WARPS; warp_index = warp_index + 1) begin : warp_gprs
 
-			wire valid_write_request = warp_index == vx_writeback_inter.wb_warp_num;
+			wire valid_write_request = warp_index == vx_writeback_if.wb_warp_num;
 			VX_gpr vx_gpr(
 				.clk                (clk),
 				.reset              (reset),
 				.valid_write_request(valid_write_request),
 				.vx_gpr_read        (vx_gpr_read),
-				.vx_writeback_inter (vx_writeback_inter),
+				.vx_writeback_if (vx_writeback_if),
 				.out_a_reg_data     (temp_a_reg_data[warp_index]),
 				.out_b_reg_data     (temp_b_reg_data[warp_index])
 				);

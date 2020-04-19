@@ -3,7 +3,7 @@
 
 `include "../generic_cache/VX_cache_config.vh"
 
-interface VX_gpu_snp_req_rsp ();
+interface VX_gpu_snp_req_rsp_if ();
 
 	// Snoop request
 	wire        snp_req_valid;

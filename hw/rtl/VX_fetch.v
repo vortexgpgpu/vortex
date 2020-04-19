@@ -3,18 +3,18 @@
 module VX_fetch (
 	input  wire              clk,
 	input  wire              reset,
-	VX_wstall_inter          vx_wstall,
-	VX_join_inter            vx_join,
+	VX_wstall_if          vx_wstall,
+	VX_join_if            vx_join,
 	input  wire              schedule_delay,
 	input  wire              icache_stage_delay,
 	input  wire[`NW_BITS-1:0]    icache_stage_wid,
 	input  wire[`NUM_THREADS-1:0]     icache_stage_valids,
 
 	output wire              out_ebreak,
-	VX_jal_response_inter    vx_jal_rsp,
-	VX_branch_response_inter vx_branch_rsp,
-	VX_inst_meta_inter       fe_inst_meta_fi,
-	VX_warp_ctl_inter        vx_warp_ctl
+	VX_jal_response_if    vx_jal_rsp,
+	VX_branch_response_if vx_branch_rsp,
+	VX_inst_meta_if       fe_inst_meta_fi,
+	VX_warp_ctl_if        vx_warp_ctl
 );
 
 	wire[`NUM_THREADS-1:0] thread_mask;

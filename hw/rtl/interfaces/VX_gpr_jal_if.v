@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_gpr_jal_inter ();
+interface VX_gpr_jal_if ();
 
 	wire       is_jal;
 	wire[31:0] curr_PC;

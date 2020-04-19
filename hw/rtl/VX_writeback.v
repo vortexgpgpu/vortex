@@ -4,20 +4,20 @@ module VX_writeback (
 	input wire clk,
 	input wire reset,
 	// Mem WB info
-	VX_inst_mem_wb_inter     vx_mem_wb,
+	VX_inst_mem_wb_if     vx_mem_wb,
 	// EXEC Unit WB info
-	VX_inst_exec_wb_inter    vx_inst_exec_wb,
+	VX_inst_exec_wb_if    vx_inst_exec_wb,
 	// CSR Unit WB info
-	VX_csr_wb_inter          vx_csr_wb,
+	VX_csr_wb_if          vx_csr_wb,
 
 	// Actual WB to GPR
-	VX_wb_inter              vx_writeback_inter,
+	VX_wb_if              vx_writeback_if,
 	output wire              no_slot_mem,
 	output wire 			 no_slot_exec,
 	output wire              no_slot_csr
 );
 
-	VX_wb_inter              vx_writeback_tempp();
+	VX_wb_if              vx_writeback_tempp();
 
 	wire exec_wb = (vx_inst_exec_wb.wb != 0) && (|vx_inst_exec_wb.wb_valid);
 	wire mem_wb  = (vx_mem_wb.wb       != 0) && (|vx_mem_wb.wb_valid);
@@ -72,18 +72,18 @@ module VX_writeback (
 		.stall(zero),
 		.flush(zero),
 		.in   ({vx_writeback_tempp.write_data, vx_writeback_tempp.wb_valid, vx_writeback_tempp.rd, vx_writeback_tempp.wb, vx_writeback_tempp.wb_warp_num, vx_writeback_tempp.wb_pc}),
-		.out  ({use_wb_data                  , vx_writeback_inter.wb_valid, vx_writeback_inter.rd, vx_writeback_inter.wb, vx_writeback_inter.wb_warp_num, vx_writeback_inter.wb_pc})
+		.out  ({use_wb_data                  , vx_writeback_if.wb_valid, vx_writeback_if.rd, vx_writeback_if.wb, vx_writeback_if.wb_warp_num, vx_writeback_if.wb_pc})
 		);
 
 
 	reg[31:0] last_data_wb /* verilator public */ ;
 	always @(posedge clk) begin
-		if ((|vx_writeback_inter.wb_valid) && (vx_writeback_inter.wb != 0) && (vx_writeback_inter.rd == 28)) begin
+		if ((|vx_writeback_if.wb_valid) && (vx_writeback_if.wb != 0) && (vx_writeback_if.rd == 28)) begin
 			last_data_wb <= use_wb_data[0];
 		end
 	end
 
-	assign vx_writeback_inter.write_data = use_wb_data;
+	assign vx_writeback_if.write_data = use_wb_data;
 
 endmodule : VX_writeback
 
