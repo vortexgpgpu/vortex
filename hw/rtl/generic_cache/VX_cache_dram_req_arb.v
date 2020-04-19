@@ -102,7 +102,7 @@ module VX_cache_dram_req_arb #(
 	wire dfqq_pop  = !dwb_valid && dfqq_req && !dram_req_full; // If no dwb, and dfqq has valids, then pop
 	wire dfqq_push = (|per_bank_dram_fill_req_valid);
 
-	VX_cache_dfq_queue vx_cache_dfq_queue(
+	VX_cache_dfq_queue cache_dfq_queue(
 		.clk                        	(clk),
 		.reset                      	(reset),
 		.dfqq_push                  	(dfqq_push),
@@ -121,7 +121,7 @@ module VX_cache_dram_req_arb #(
 	
 	VX_generic_priority_encoder #(
 		.N(NUM_BANKS)
-	) vx_sel_dwb (
+	) sel_dwb (
 		.valids(use_wb_valid),
 		.index (dwb_bank),
 		.found (dwb_valid)

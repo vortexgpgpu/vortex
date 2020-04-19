@@ -86,7 +86,7 @@ reg[31:0]  io_data;
 
 	initial begin
 		// $fdumpfile("vortex1.vcd");
-		load_file("../../runtime/tests/simple/vx_simple_main.hex");
+		load_file("../../runtime/tests/simple/simple_main_if.hex");
 		$dumpvars(0, vortex_tb);
 		reset = 1;
 		clk = 0;

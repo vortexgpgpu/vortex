@@ -110,7 +110,7 @@ module VX_tag_data_access #(
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
-	) vx_tag_data_structure (
+	) tag_data_structure (
 		.clk         (clk),
 		.reset       (reset),
 		.stall_bank_pipe(stall_bank_pipe),

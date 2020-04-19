@@ -3,13 +3,13 @@
 module VX_csr_pipe #(
 	parameter CORE_ID = 0
 ) (
-	input wire clk,    // Clock
-	input wire reset,
-	input wire no_slot_csr,
-	VX_csr_req_if vx_csr_req,
-	VX_wb_if      vx_writeback,
-	VX_csr_wb_if  vx_csr_wb,
-	output wire stall_gpr_csr	
+	input wire		clk,
+	input wire 		reset,
+	input wire 		no_slot_csr,
+	VX_csr_req_if 	csr_req_if,
+	VX_wb_if      	writeback_if,
+	VX_csr_wb_if  	csr_wb_if,
+	output wire 	stall_gpr_csr	
 );
 
 	wire[`NUM_THREADS-1:0] valid_s2;
@@ -24,16 +24,16 @@ module VX_csr_pipe #(
 	wire[31:0] csr_read_data_unqual;
 	wire[31:0] csr_read_data;
 
-	assign stall_gpr_csr = no_slot_csr && vx_csr_req.is_csr && |(vx_csr_req.valid);
+	assign stall_gpr_csr = no_slot_csr && csr_req_if.is_csr && |(csr_req_if.valid);
 
-	assign csr_read_data = (csr_address_s2 == vx_csr_req.csr_address) ? csr_updated_data_s2 : csr_read_data_unqual;
+	assign csr_read_data = (csr_address_s2 == csr_req_if.csr_address) ? csr_updated_data_s2 : csr_read_data_unqual;
 
-	wire writeback = |vx_writeback.wb_valid;
+	wire writeback = |writeback_if.wb_valid;
 	
-	VX_csr_data vx_csr_data(
+	VX_csr_data csr_data(
 		.clk                 (clk),
 		.reset               (reset),
-		.in_read_csr_address (vx_csr_req.csr_address),
+		.in_read_csr_address (csr_req_if.csr_address),
 		.in_write_valid      (is_csr_s2),
 		.in_write_csr_data   (csr_updated_data_s2[`CSR_WIDTH-1:0]),
 		.in_write_csr_address(csr_address_s2),
@@ -44,10 +44,10 @@ module VX_csr_pipe #(
 	reg [31:0] csr_updated_data;
 
 	always @(*) begin
-		case (vx_csr_req.alu_op)
-			`CSR_ALU_RW: csr_updated_data = vx_csr_req.csr_mask;
-			`CSR_ALU_RS: csr_updated_data = csr_read_data | vx_csr_req.csr_mask;
-			`CSR_ALU_RC: csr_updated_data = csr_read_data & (32'hFFFFFFFF - vx_csr_req.csr_mask);
+		case (csr_req_if.alu_op)
+			`CSR_ALU_RW: csr_updated_data = csr_req_if.csr_mask;
+			`CSR_ALU_RS: csr_updated_data = csr_read_data | csr_req_if.csr_mask;
+			`CSR_ALU_RC: csr_updated_data = csr_read_data & (32'hFFFFFFFF - csr_req_if.csr_mask);
 			default:     csr_updated_data = 32'hdeadbeef;
 		endcase
 	end	
@@ -61,7 +61,7 @@ module VX_csr_pipe #(
 		.reset(reset),
 		.stall(no_slot_csr),
 		.flush(zero),
-		.in   ({vx_csr_req.valid, vx_csr_req.warp_num, vx_csr_req.rd, vx_csr_req.wb, vx_csr_req.is_csr, vx_csr_req.csr_address, csr_read_data   , csr_updated_data   }),
+		.in   ({csr_req_if.valid, csr_req_if.warp_num, csr_req_if.rd, csr_req_if.wb, csr_req_if.is_csr, csr_req_if.csr_address, csr_read_data   , csr_updated_data   }),
 		.out  ({valid_s2        , warp_num_s2        , rd_s2        , wb_s2        , is_csr_s2        , csr_address_s2        , csr_read_data_s2, csr_updated_data_s2})
 	);
 
@@ -97,10 +97,10 @@ module VX_csr_pipe #(
 								warp_id_select ? warp_idz   :
 							    csr_vec_read_data_s2;
 
-	assign vx_csr_wb.valid      = valid_s2;
-	assign vx_csr_wb.warp_num   = warp_num_s2;
-	assign vx_csr_wb.rd         = rd_s2;
-	assign vx_csr_wb.wb         = wb_s2;
-	assign vx_csr_wb.csr_result = final_csr_data;
+	assign csr_wb_if.valid      = valid_s2;
+	assign csr_wb_if.warp_num   = warp_num_s2;
+	assign csr_wb_if.rd         = rd_s2;
+	assign csr_wb_if.wb         = wb_s2;
+	assign csr_wb_if.csr_result = final_csr_data;
 
 endmodule

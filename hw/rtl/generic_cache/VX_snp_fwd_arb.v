@@ -22,7 +22,7 @@ module VX_snp_fwd_arb
 
 	VX_generic_priority_encoder #(
 		.N(NUM_BANKS)
-	) vx_sel_ffsq(
+	) sel_ffsq (
 		.valids(qual_per_bank_snp_fwd),
 		.index (fsq_bank),
 		.found (fsq_valid)

@@ -142,10 +142,11 @@ module VX_cache_req_queue #(
 	assign qual_pc         = use_per_pc;
 
 	wire[`LOG2UP(NUM_REQUESTS)-1:0] qual_request_index;
-	wire                                  qual_has_request;
+	wire                            qual_has_request;
+
 	VX_generic_priority_encoder #(
 		.N(NUM_REQUESTS)
-	) vx_sel_bank (
+	) sel_bank (
 		.valids(qual_valids),
 		.index (qual_request_index),
 		.found (qual_has_request)

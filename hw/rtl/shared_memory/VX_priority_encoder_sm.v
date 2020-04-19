@@ -28,21 +28,22 @@ module VX_priority_encoder_sm
 	reg[`NUM_THREADS-1:0] left_requests;
 	reg[`NUM_THREADS-1:0] serviced;
 
-
 	wire[`NUM_THREADS-1:0] use_valid;
-
 
 	wire requests_left = (|left_requests);
 
 	assign use_valid = (requests_left) ? left_requests : in_valid;
 
-
 	wire[NB:0][`NUM_THREADS-1:0] bank_valids;
-	VX_bank_valids #(.NB(NB), .BITS_PER_BANK(BITS_PER_BANK)) vx_bank_valid(
+
+	VX_bank_valids #(
+		.NB(NB), 
+		.BITS_PER_BANK(BITS_PER_BANK)
+	) bank_valid (
 		.in_valids(use_valid),
 		.in_addr(in_address),
 		.bank_valids(bank_valids)
-		);
+	);
 
 	wire[NB:0] more_than_one_valid;
 
@@ -73,11 +74,13 @@ module VX_priority_encoder_sm
 	generate
 	for (curr_bank_o = 0; curr_bank_o <= NB; curr_bank_o = curr_bank_o + 1) begin : encoders
 
-		VX_generic_priority_encoder #(.N(NUM_REQ)) vx_priority_encoder(
+		VX_generic_priority_encoder #(
+			.N(NUM_REQ)
+		) priority_encoder (
 		    .valids(bank_valids[curr_bank_o]),
 		    .index(internal_req_num[curr_bank_o]),
 		    .found(internal_out_valid[curr_bank_o])
-		  );
+		);
 		assign out_address[curr_bank_o] = internal_out_valid[curr_bank_o] ? in_address[internal_req_num[curr_bank_o]] : 0;
 		assign out_data[curr_bank_o]    = internal_out_valid[curr_bank_o] ? in_data[internal_req_num[curr_bank_o]] : 0;
 	end
@@ -91,10 +94,8 @@ module VX_priority_encoder_sm
 		end
 	end
 
-
 	assign req_num   = internal_req_num;
 	assign out_valid = internal_out_valid;
-
 
 	wire[`NUM_THREADS-1:0] serviced_qual = in_valid & (serviced);
 

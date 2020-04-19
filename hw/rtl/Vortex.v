@@ -99,106 +99,106 @@ module Vortex
 	wire schedule_delay;
 
 	// Dcache Interface
-	VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  vx_dcache_rsp();
-	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  vx_dcache_req();
-	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  vx_dcache_req_qual();
+	VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_rsp_if();
+	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_if();
+	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_qual_if();
 
-	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) vx_gpu_dcache_dram_req();
-	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) vx_gpu_dcache_dram_res();
+	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_req_if();
+	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_res_if();
 
-	assign vx_gpu_dcache_dram_res.dram_rsp_valid = dram_rsp_valid;
-	assign vx_gpu_dcache_dram_res.dram_rsp_addr  = dram_rsp_addr;
+	assign gpu_dcache_dram_res_if.dram_rsp_valid = dram_rsp_valid;
+	assign gpu_dcache_dram_res_if.dram_rsp_addr  = dram_rsp_addr;
 
-	assign dram_req_write  = vx_gpu_dcache_dram_req.dram_req_write;
-	assign dram_req_read   = vx_gpu_dcache_dram_req.dram_req_read;
-	assign dram_req_addr   = vx_gpu_dcache_dram_req.dram_req_addr;
-	assign dram_rsp_ready  = vx_gpu_dcache_dram_req.dram_rsp_ready;
+	assign dram_req_write  = gpu_dcache_dram_req_if.dram_req_write;
+	assign dram_req_read   = gpu_dcache_dram_req_if.dram_req_read;
+	assign dram_req_addr   = gpu_dcache_dram_req_if.dram_req_addr;
+	assign dram_rsp_ready  = gpu_dcache_dram_req_if.dram_rsp_ready;
 
-	assign vx_gpu_dcache_dram_req.dram_req_full = dram_req_full;
+	assign gpu_dcache_dram_req_if.dram_req_full = dram_req_full;
 
 	genvar i;
 	generate
 		for (i = 0; i < `DBANK_LINE_WORDS; i=i+1) begin
-			assign vx_gpu_dcache_dram_res.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
-			assign dram_req_data[i * 32 +: 32]                  = vx_gpu_dcache_dram_req.dram_req_data[i];
+			assign gpu_dcache_dram_res_if.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
+			assign dram_req_data[i * 32 +: 32]                  = gpu_dcache_dram_req_if.dram_req_data[i];
 		end
 	endgenerate
 
 	wire temp_io_valid = (!memory_delay) 
-					  && (|vx_dcache_req.core_req_valid) 
-					  && (vx_dcache_req.core_req_mem_write[0] != `NO_MEM_WRITE) 
-					  && (vx_dcache_req.core_req_addr[0] == 32'h00010000);
+					  && (|dcache_req_if.core_req_valid) 
+					  && (dcache_req_if.core_req_mem_write[0] != `NO_MEM_WRITE) 
+					  && (dcache_req_if.core_req_addr[0] == 32'h00010000);
 
-	wire[31:0] temp_io_data = vx_dcache_req.core_req_writedata[0];
+	wire[31:0] temp_io_data = dcache_req_if.core_req_writedata[0];
 	assign io_valid         = temp_io_valid;
 	assign io_data          = temp_io_data;
 
-	assign vx_dcache_req_qual.core_req_valid     = vx_dcache_req.core_req_valid & {`NUM_THREADS{~io_valid}};
-	assign vx_dcache_req_qual.core_req_addr      = vx_dcache_req.core_req_addr;
-	assign vx_dcache_req_qual.core_req_writedata = vx_dcache_req.core_req_writedata;
-	assign vx_dcache_req_qual.core_req_mem_read  = vx_dcache_req.core_req_mem_read;
-	assign vx_dcache_req_qual.core_req_mem_write = vx_dcache_req.core_req_mem_write;
-	assign vx_dcache_req_qual.core_req_rd        = vx_dcache_req.core_req_rd;
-	assign vx_dcache_req_qual.core_req_wb        = vx_dcache_req.core_req_wb;
-	assign vx_dcache_req_qual.core_req_warp_num  = vx_dcache_req.core_req_warp_num;
-	assign vx_dcache_req_qual.core_req_pc        = vx_dcache_req.core_req_pc;
-	assign vx_dcache_req_qual.core_no_wb_slot    = vx_dcache_req.core_no_wb_slot;
+	assign dcache_req_qual_if.core_req_valid     = dcache_req_if.core_req_valid & {`NUM_THREADS{~io_valid}};
+	assign dcache_req_qual_if.core_req_addr      = dcache_req_if.core_req_addr;
+	assign dcache_req_qual_if.core_req_writedata = dcache_req_if.core_req_writedata;
+	assign dcache_req_qual_if.core_req_mem_read  = dcache_req_if.core_req_mem_read;
+	assign dcache_req_qual_if.core_req_mem_write = dcache_req_if.core_req_mem_write;
+	assign dcache_req_qual_if.core_req_rd        = dcache_req_if.core_req_rd;
+	assign dcache_req_qual_if.core_req_wb        = dcache_req_if.core_req_wb;
+	assign dcache_req_qual_if.core_req_warp_num  = dcache_req_if.core_req_warp_num;
+	assign dcache_req_qual_if.core_req_pc        = dcache_req_if.core_req_pc;
+	assign dcache_req_qual_if.core_no_wb_slot    = dcache_req_if.core_no_wb_slot;
 
-	VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`INUM_REQUESTS))  vx_icache_rsp();
-	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`INUM_REQUESTS))  vx_icache_req();
+	VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_rsp_if();
+	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_req_if();
 
-	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) vx_gpu_icache_dram_req();
-	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) vx_gpu_icache_dram_res();
+	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_req_if();
+	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_res_if();
 
-	assign vx_gpu_icache_dram_res.dram_rsp_valid      = I_dram_rsp_valid;
-	assign vx_gpu_icache_dram_res.dram_rsp_addr = I_dram_rsp_addr;
+	assign gpu_icache_dram_res_if.dram_rsp_valid      = I_dram_rsp_valid;
+	assign gpu_icache_dram_res_if.dram_rsp_addr = I_dram_rsp_addr;
 
-	assign I_dram_req_write  = vx_gpu_icache_dram_req.dram_req_write;
-	assign I_dram_req_read   = vx_gpu_icache_dram_req.dram_req_read;
-	assign I_dram_req_addr   = vx_gpu_icache_dram_req.dram_req_addr;
-	assign I_dram_rsp_ready  = vx_gpu_icache_dram_req.dram_rsp_ready;
+	assign I_dram_req_write  = gpu_icache_dram_req_if.dram_req_write;
+	assign I_dram_req_read   = gpu_icache_dram_req_if.dram_req_read;
+	assign I_dram_req_addr   = gpu_icache_dram_req_if.dram_req_addr;
+	assign I_dram_rsp_ready  = gpu_icache_dram_req_if.dram_rsp_ready;
 
-	assign vx_gpu_icache_dram_req.dram_req_full = I_dram_req_full;
+	assign gpu_icache_dram_req_if.dram_req_full = I_dram_req_full;
 
 	genvar j;
 	generate
 		for (j = 0; j < `IBANK_LINE_WORDS; j = j + 1) begin
-			assign vx_gpu_icache_dram_res.dram_rsp_data[j] = I_dram_rsp_data[j * 32 +: 32];
-			assign I_dram_req_data[j * 32 +: 32]                = vx_gpu_icache_dram_req.dram_req_data[j];
+			assign gpu_icache_dram_res_if.dram_rsp_data[j] = I_dram_rsp_data[j * 32 +: 32];
+			assign I_dram_req_data[j * 32 +: 32]                = gpu_icache_dram_req_if.dram_req_data[j];
 		end
 	endgenerate
 
 /////////////////////////////////////////////////////////////////////////
 
 // Front-end to Back-end
-VX_frE_to_bckE_req_if    vx_bckE_req(); // New instruction request to EXE/MEM
+VX_frE_to_bckE_req_if    bckE_req_if(); // New instruction request to EXE/MEM
 
 // Back-end to Front-end
-VX_wb_if                 vx_writeback_if(); // Writeback to GPRs
-VX_branch_response_if    vx_branch_rsp();      // Branch Resolution to Fetch
-VX_jal_response_if   	vx_jal_rsp();         // Jump resolution to Fetch
+VX_wb_if                 writeback_if(); // Writeback to GPRs
+VX_branch_response_if    branch_rsp_if();      // Branch Resolution to Fetch
+VX_jal_response_if   	jal_rsp_if();         // Jump resolution to Fetch
 
 // CSR Buses
-// VX_csr_write_request_if vx_csr_w_req();
+// VX_csr_write_request_if csr_w_req_if();
 
-VX_warp_ctl_if        	vx_warp_ctl();
-VX_gpu_snp_req_rsp_if   vx_gpu_icache_snp_req();
-VX_gpu_snp_req_rsp_if   vx_gpu_dcache_snp_req();
+VX_warp_ctl_if        	warp_ctl_if();
+VX_gpu_snp_req_rsp_if   gpu_icache_snp_req_if();
+VX_gpu_snp_req_rsp_if   gpu_dcache_snp_req_if();
 
-assign vx_gpu_dcache_snp_req.snp_req_valid  = snp_req_valid;
-assign vx_gpu_dcache_snp_req.snp_req_addr   = snp_req_addr;
-assign snp_req_full                        = vx_gpu_dcache_snp_req.snp_req_full;
+assign gpu_dcache_snp_req_if.snp_req_valid  = snp_req_valid;
+assign gpu_dcache_snp_req_if.snp_req_addr   = snp_req_addr;
+assign snp_req_full                         = gpu_dcache_snp_req_if.snp_req_full;
 
-VX_front_end vx_front_end(
+VX_front_end front_end(
 	.clk                 (clk),
 	.reset               (reset),
-	.vx_warp_ctl         (vx_warp_ctl),
-	.vx_bckE_req         (vx_bckE_req),
+	.warp_ctl_if         (warp_ctl_if),
+	.bckE_req_if         (bckE_req_if),
 	.schedule_delay      (schedule_delay),
-	.vx_icache_rsp       (vx_icache_rsp),
-	.vx_icache_req       (vx_icache_req),
-	.vx_jal_rsp          (vx_jal_rsp),
-	.vx_branch_rsp       (vx_branch_rsp),
+	.icache_rsp_if       (icache_rsp_if),
+	.icache_req_if       (icache_req_if),
+	.jal_rsp_if          (jal_rsp_if),
+	.branch_rsp_if       (branch_rsp_if),
 	.fetch_ebreak        (out_ebreak)
 );
 
@@ -208,56 +208,56 @@ VX_scheduler schedule(
 	.memory_delay      	(memory_delay),
 	.exec_delay        	(exec_delay),
 	.gpr_stage_delay   	(gpr_stage_delay),
-	.vx_bckE_req       	(vx_bckE_req),
-	.vx_writeback_if	(vx_writeback_if),
+	.bckE_req_if       	(bckE_req_if),
+	.writeback_if	    (writeback_if),
 	.schedule_delay    	(schedule_delay),
 	.is_empty          	(scheduler_empty)
 );
 
-VX_back_end #(.CORE_ID(CORE_ID)) vx_back_end(
+VX_back_end #(.CORE_ID(CORE_ID)) back_end(
 	.clk                 (clk),
 	.reset               (reset),
 	.schedule_delay      (schedule_delay),
-	.vx_warp_ctl         (vx_warp_ctl),
-	.vx_bckE_req         (vx_bckE_req),
-	.vx_jal_rsp          (vx_jal_rsp),
-	.vx_branch_rsp       (vx_branch_rsp),
-	.vx_dcache_rsp       (vx_dcache_rsp),
-	.vx_dcache_req       (vx_dcache_req),
-	.vx_writeback_if  (vx_writeback_if),
+	.warp_ctl_if         (warp_ctl_if),
+	.bckE_req_if         (bckE_req_if),
+	.jal_rsp_if          (jal_rsp_if),
+	.branch_rsp_if       (branch_rsp_if),
+	.dcache_rsp_if       (dcache_rsp_if),
+	.dcache_req_if       (dcache_req_if),
+	.writeback_if        (writeback_if),
 	.out_mem_delay       (memory_delay),
 	.out_exec_delay      (exec_delay),
 	.gpr_stage_delay     (gpr_stage_delay)
 );
 
-VX_dmem_controller vx_dmem_controller(
+VX_dmem_controller dmem_controller(
 	.clk                      (clk),
 	.reset                    (reset),
 
 	// Dram <-> Dcache
-	.vx_gpu_dcache_dram_req   (vx_gpu_dcache_dram_req),
-	.vx_gpu_dcache_dram_res   (vx_gpu_dcache_dram_res),
-	.vx_gpu_dcache_snp_req    (vx_gpu_dcache_snp_req),
+	.gpu_dcache_dram_req_if   (gpu_dcache_dram_req_if),
+	.gpu_dcache_dram_res_if   (gpu_dcache_dram_res_if),
+	.gpu_dcache_snp_req_if    (gpu_dcache_snp_req_if),
 
 	// Dram <-> Icache
-	.vx_gpu_icache_dram_req   (vx_gpu_icache_dram_req),
-	.vx_gpu_icache_dram_res   (vx_gpu_icache_dram_res),
-	.vx_gpu_icache_snp_req    (vx_gpu_icache_snp_req),
+	.gpu_icache_dram_req_if   (gpu_icache_dram_req_if),
+	.gpu_icache_dram_res_if   (gpu_icache_dram_res_if),
+	.gpu_icache_snp_req_if    (gpu_icache_snp_req_if),
 
 	// Core <-> Icache
-	.vx_icache_req            (vx_icache_req),
-	.vx_icache_rsp            (vx_icache_rsp),
+	.icache_req_if            (icache_req_if),
+	.icache_rsp_if            (icache_rsp_if),
 
 	// Core <-> Dcache
-	.vx_dcache_req            (vx_dcache_req_qual),
-	.vx_dcache_rsp            (vx_dcache_rsp)
+	.dcache_req_if            (dcache_req_qual_if),
+	.dcache_rsp_if            (dcache_rsp_if)
 );
 
-// VX_csr_handler vx_csr_handler(
+// VX_csr_handler csr_handler(
 // 		.clk                  (clk),
 // 		.in_decode_csr_address(decode_csr_address),
-// 		.vx_csr_w_req         (vx_csr_w_req),
-// 		.in_wb_valid          (vx_writeback_if.wb_valid[0]),
+// 		.csr_w_req_if         (csr_w_req_if),
+// 		.in_wb_valid          (writeback_if.wb_valid[0]),
 // 		.out_decode_csr_data  (csr_decode_csr_data)
 // );
 

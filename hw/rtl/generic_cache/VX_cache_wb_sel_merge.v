@@ -80,7 +80,7 @@ module VX_cache_wb_sel_merge #(
 
 	VX_generic_priority_encoder #(
 		.N(NUM_BANKS)
-	) vx_sel_bank (
+	) sel_bank (
 		.valids(per_bank_wb_valid),
 		.index (main_bank_index),
 		.found (found_bank)

@@ -3,22 +3,22 @@
 
 module VX_decode(
 	// Fetch Inputs
-	VX_inst_meta_if     fd_inst_meta_de,
+	VX_inst_meta_if       fd_inst_meta_de,
 
 	// Outputs
-	VX_frE_to_bckE_req_if vx_frE_to_bckE_req,
-	VX_wstall_if          vx_wstall,
-	VX_join_if            vx_join,
+	VX_frE_to_bckE_req_if frE_to_bckE_req_if,
+	VX_wstall_if          wstall_if,
+	VX_join_if            join_if,
 
-	output wire              terminate_sim
+	output wire           terminate_sim
 
 );
 
 	wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
 	wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
-	wire[`NW_BITS-1:0]  in_warp_num        = fd_inst_meta_de.warp_num;
+	wire[`NW_BITS-1:0]  in_warp_num    = fd_inst_meta_de.warp_num;
 
-	assign vx_frE_to_bckE_req.curr_PC  = in_curr_PC;
+	assign frE_to_bckE_req_if.curr_PC  = in_curr_PC;
 
 	wire[`NUM_THREADS-1:0]  in_valid = fd_inst_meta_de.valid;
 
@@ -84,20 +84,20 @@ module VX_decode(
 	reg[2:0] temp_branch_type;
 	reg      temp_branch_stall;
 
-	assign vx_frE_to_bckE_req.valid = fd_inst_meta_de.valid;
+	assign frE_to_bckE_req_if.valid = fd_inst_meta_de.valid;
 
-	assign vx_frE_to_bckE_req.warp_num = in_warp_num;
+	assign frE_to_bckE_req_if.warp_num = in_warp_num;
 
 	assign curr_opcode = in_instruction[6:0];
 
-	assign vx_frE_to_bckE_req.rd   = in_instruction[11:7];
-	assign vx_frE_to_bckE_req.rs1  = in_instruction[19:15];
-	assign vx_frE_to_bckE_req.rs2  = in_instruction[24:20];
+	assign frE_to_bckE_req_if.rd   = in_instruction[11:7];
+	assign frE_to_bckE_req_if.rs1  = in_instruction[19:15];
+	assign frE_to_bckE_req_if.rs2  = in_instruction[24:20];
 	assign func3    = in_instruction[14:12];
 	assign func7    = in_instruction[31:25];
 	assign u_12     = in_instruction[31:20];
 
-	assign vx_frE_to_bckE_req.PC_next = in_curr_PC + 32'h4;
+	assign frE_to_bckE_req_if.PC_next = in_curr_PC + 32'h4;
 
 	// Write Back sigal
 	assign is_rtype     = (curr_opcode == `R_INST);
@@ -123,43 +123,43 @@ module VX_decode(
 	assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
 
 
-	assign vx_join.is_join       = is_join;
-	assign vx_join.join_warp_num = in_warp_num;
+	assign join_if.is_join       = is_join;
+	assign join_if.join_warp_num = in_warp_num;
 
 
-	assign vx_frE_to_bckE_req.is_wspawn  = is_wspawn;
-	assign vx_frE_to_bckE_req.is_tmc     = is_tmc;
-	assign vx_frE_to_bckE_req.is_split   = is_split;
-	assign vx_frE_to_bckE_req.is_barrier = is_barrier;
+	assign frE_to_bckE_req_if.is_wspawn  = is_wspawn;
+	assign frE_to_bckE_req_if.is_tmc     = is_tmc;
+	assign frE_to_bckE_req_if.is_split   = is_split;
+	assign frE_to_bckE_req_if.is_barrier = is_barrier;
 
 
 
-	assign vx_frE_to_bckE_req.csr_immed = is_csr_immed;
-	assign vx_frE_to_bckE_req.is_csr    = is_csr;
+	assign frE_to_bckE_req_if.csr_immed = is_csr_immed;
+	assign frE_to_bckE_req_if.is_csr    = is_csr;
 
 
-	assign vx_frE_to_bckE_req.wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :
+	assign frE_to_bckE_req_if.wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :
 											is_linst ? `WB_MEM :
 												(is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
 													`NO_WB;
 
 
-	assign vx_frE_to_bckE_req.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
+	assign frE_to_bckE_req_if.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
 
 	// MEM signals 
-	assign vx_frE_to_bckE_req.mem_read  = (is_linst) ? func3 : `NO_MEM_READ;
-	assign vx_frE_to_bckE_req.mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
+	assign frE_to_bckE_req_if.mem_read  = (is_linst) ? func3 : `NO_MEM_READ;
+	assign frE_to_bckE_req_if.mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
 
 	// UPPER IMMEDIATE
 	always @(*) begin
 		case(curr_opcode)
-			`LUI_INST:   temp_upper_immed  = {func7, vx_frE_to_bckE_req.rs2, vx_frE_to_bckE_req.rs1, func3};
-			`AUIPC_INST: temp_upper_immed  = {func7, vx_frE_to_bckE_req.rs2, vx_frE_to_bckE_req.rs1, func3};
+			`LUI_INST:   temp_upper_immed  = {func7, frE_to_bckE_req_if.rs2, frE_to_bckE_req_if.rs1, func3};
+			`AUIPC_INST: temp_upper_immed  = {func7, frE_to_bckE_req_if.rs2, frE_to_bckE_req_if.rs1, func3};
 			default:     temp_upper_immed  = 20'h0;
 		endcase // curr_opcode
 	end
 
-	assign vx_frE_to_bckE_req.upper_immed = temp_upper_immed;
+	assign frE_to_bckE_req_if.upper_immed = temp_upper_immed;
 
 
 	assign jal_b_19_to_12      = in_instruction[19:12];
@@ -171,7 +171,7 @@ module VX_decode(
 	assign jal_1_offset        = {{11{jal_b_20}}, jal_unsigned_offset};
 
 
-	assign jalr_immed   = {func7, vx_frE_to_bckE_req.rs2};
+	assign jalr_immed   = {func7, frE_to_bckE_req_if.rs2};
 	assign jal_2_offset = {{20{jalr_immed[11]}}, jalr_immed};
 
 
@@ -208,16 +208,16 @@ module VX_decode(
 		endcase
 	end
 
-	assign vx_frE_to_bckE_req.jalQual    = is_jal;
-	assign vx_frE_to_bckE_req.jal        = temp_jal;
-	assign vx_frE_to_bckE_req.jal_offset = temp_jal_offset;
+	assign frE_to_bckE_req_if.jalQual    = is_jal;
+	assign frE_to_bckE_req_if.jal        = temp_jal;
+	assign frE_to_bckE_req_if.jal_offset = temp_jal_offset;
 
 	// wire is_ebreak;
 
 
 	// assign is_ebreak = is_e_inst;
 	wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && (|in_valid));
-	assign vx_frE_to_bckE_req.ebreak = ebreak;
+	assign frE_to_bckE_req_if.ebreak = ebreak;
 	assign terminate_sim = is_e_inst;
 
 
@@ -226,26 +226,26 @@ module VX_decode(
 	assign csr_cond1  = func3 != 3'h0;
 	assign csr_cond2  = u_12  >= 12'h2;
 
-	assign vx_frE_to_bckE_req.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
+	assign frE_to_bckE_req_if.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
 
 
 	// ITYPE IMEED
 	assign alu_shift_i       = (func3 == 3'h1) || (func3 == 3'h5);
-	assign alu_shift_i_immed = {{7{1'b0}}, vx_frE_to_bckE_req.rs2};
+	assign alu_shift_i_immed = {{7{1'b0}}, frE_to_bckE_req_if.rs2};
 	assign alu_tempp = alu_shift_i ? alu_shift_i_immed : u_12;
 
 
 	always @(*) begin
 		case(curr_opcode)
 				`ALU_INST: temp_itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
-				`S_INST:   temp_itype_immed = {{20{func7[6]}}, func7, vx_frE_to_bckE_req.rd};
+				`S_INST:   temp_itype_immed = {{20{func7[6]}}, func7, frE_to_bckE_req_if.rd};
 				`L_INST:   temp_itype_immed = {{20{u_12[11]}}, u_12};
 				`B_INST:   temp_itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
 				default:   temp_itype_immed = 32'hdeadbeef;
 			endcase
 	end
 
-	assign vx_frE_to_bckE_req.itype_immed = temp_itype_immed;
+	assign frE_to_bckE_req_if.itype_immed = temp_itype_immed;
 
 	always @(*) begin
 		case(curr_opcode)
@@ -282,10 +282,10 @@ module VX_decode(
 		endcase
 	end
 
-	assign vx_frE_to_bckE_req.branch_type = temp_branch_type;
+	assign frE_to_bckE_req_if.branch_type = temp_branch_type;
 
-	assign vx_wstall.wstall               = (temp_branch_stall || is_tmc || is_split || is_barrier) && (|in_valid);
-	assign vx_wstall.warp_num             = in_warp_num;
+	assign wstall_if.wstall               = (temp_branch_stall || is_tmc || is_split || is_barrier) && (|in_valid);
+	assign wstall_if.warp_num             = in_warp_num;
 
 	always @(*) begin
 		// ALU OP
@@ -330,14 +330,14 @@ module VX_decode(
 
 	wire[4:0] temp_final_alu;
 
-	assign temp_final_alu = is_btype ? ((vx_frE_to_bckE_req.branch_type < `BLTU) ? `SUB : `SUBU) :
+	assign temp_final_alu = is_btype ? ((frE_to_bckE_req_if.branch_type < `BLTU) ? `SUB : `SUBU) :
 									is_lui ? `LUI_ALU :
 										is_auipc ? `AUIPC_ALU :
 											is_csr ? csr_alu :
 												(is_stype || is_linst) ? `ADD :
 													alu_op;
 
-	assign vx_frE_to_bckE_req.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
+	assign frE_to_bckE_req_if.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
 
 endmodule
 
