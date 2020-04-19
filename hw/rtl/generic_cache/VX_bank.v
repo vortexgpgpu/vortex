@@ -410,13 +410,12 @@ module VX_bank #(
 		end
 	endgenerate
 
-
-	wire[`WORD_SIZE_RNG]            readword_st1e;
+	wire[`WORD_SIZE_RNG]                   readword_st1e;
 	wire[`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] readdata_st1e;
-	wire[`TAG_SELECT_SIZE_RNG]      readtag_st1e;
-	wire                            miss_st1e;
-	wire                            dirty_st1e;
-	wire[31:0]                      pc_st1e;
+	wire[`TAG_SELECT_BITS-1:0]             readtag_st1e;
+	wire                                   miss_st1e;
+	wire                                   dirty_st1e;
+	wire[31:0]                             pc_st1e;
 `DEBUG_BEGIN
 	wire [4:0]                             rd_st1e;
 	wire [1:0]                             wb_st1e;
@@ -489,13 +488,13 @@ module VX_bank #(
 	wire                            miss_st2;
 	wire                            dirty_st2;
 	wire[`REQ_INST_META_SIZE-1:0]   inst_meta_st2;
-	wire[`TAG_SELECT_SIZE_RNG]      readtag_st2;	
+	wire[`TAG_SELECT_BITS-1:0]      readtag_st2;	
 	wire                            fill_saw_dirty_st2;
 	wire                            is_snp_st2;
 	wire [31:0]                     pc_st2;
 
 	VX_generic_register #(
-		.N( 1+1+1+1+32+`WORD_SIZE+`WORD_SIZE+(`BANK_LINE_WORDS * `WORD_SIZE) + `REQ_INST_META_SIZE + `TAG_SELECT_NUM_BITS + 32 + 2)
+		.N( 1+1+1+1+32+`WORD_SIZE+`WORD_SIZE+(`BANK_LINE_WORDS * `WORD_SIZE) + `REQ_INST_META_SIZE + `TAG_SELECT_BITS + 32 + 2)
 	) st_1e_2 (
 		.clk  (clk),
 		.reset(reset),
