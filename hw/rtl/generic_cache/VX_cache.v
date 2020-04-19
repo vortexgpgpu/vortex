@@ -157,7 +157,7 @@ module VX_cache #(
         .PRFQ_SIZE                     (PRFQ_SIZE),
         .PRFQ_STRIDE                   (PRFQ_STRIDE),
         .SIMULATED_DRAM_LATENCY_CYCLES (SIMULATED_DRAM_LATENCY_CYCLES)
-    ) vx_cache_dram_req_arb (
+    ) cache_dram_req_arb (
         .clk                         (clk),
         .reset                       (reset),
         .dfqq_full                   (dfqq_full),
@@ -191,7 +191,7 @@ module VX_cache #(
         .LLVQ_SIZE                     (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE          (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES (SIMULATED_DRAM_LATENCY_CYCLES)
-    ) vx_cache_core_req_bank_sell (
+    ) cache_core_req_bank_sell (
         .core_req_valid  (core_req_valid),
         .core_req_addr   (core_req_addr),
         .per_bank_valids (per_bank_valids)
@@ -215,7 +215,7 @@ module VX_cache #(
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
-    ) vx_cache_core_wb_sel_merge (
+    ) cache_core_wb_sel_merge (
         .per_bank_wb_valid   (per_bank_wb_valid),
         .per_bank_wb_tid     (per_bank_wb_tid),
         .per_bank_wb_rd      (per_bank_wb_rd),
@@ -239,7 +239,7 @@ module VX_cache #(
     // Snoop Forward Logic
     VX_snp_fwd_arb #(
         .NUM_BANKS(NUM_BANKS)
-    ) vx_snp_fwd_arb(
+    ) snp_fwd_arb(
         .per_bank_snp_fwd     (per_bank_snp_fwd),
         .per_bank_snp_fwd_addr(per_bank_snp_fwd_addr),
         .per_bank_snp_fwd_pop (per_bank_snp_fwd_pop),

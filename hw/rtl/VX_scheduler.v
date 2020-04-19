@@ -1,13 +1,13 @@
 `include "VX_define.vh"
 
 module VX_scheduler (
-	input wire                clk,
-	input wire                reset,
-	input wire                memory_delay,
-	input wire 				  exec_delay,
-	input wire                gpr_stage_delay,
-	VX_frE_to_bckE_req_if  vx_bckE_req,
-	VX_wb_if               vx_writeback_if,
+	input wire              clk,
+	input wire              reset,
+	input wire              memory_delay,
+	input wire 				exec_delay,
+	input wire         		gpr_stage_delay,
+	VX_frE_to_bckE_req_if  	bckE_req_if,
+	VX_wb_if               	writeback_if,
 
 	output wire schedule_delay,
 	output wire is_empty	
@@ -18,31 +18,31 @@ module VX_scheduler (
 
 	reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
 
-	wire valid_wb  = (vx_writeback_if.wb != 0) && (|vx_writeback_if.wb_valid) && (vx_writeback_if.rd != 0);
-	wire wb_inc    = (vx_bckE_req.wb != 0) && (vx_bckE_req.rd != 0);
+	wire valid_wb  = (writeback_if.wb != 0) && (|writeback_if.wb_valid) && (writeback_if.rd != 0);
+	wire wb_inc    = (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
 
-	wire rs1_rename = rename_table[vx_bckE_req.warp_num][vx_bckE_req.rs1] != 0;
-	wire rs2_rename = rename_table[vx_bckE_req.warp_num][vx_bckE_req.rs2] != 0;
-	wire rd_rename  = rename_table[vx_bckE_req.warp_num][vx_bckE_req.rd ] != 0;
+	wire rs1_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs1] != 0;
+	wire rs2_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs2] != 0;
+	wire rd_rename  = rename_table[bckE_req_if.warp_num][bckE_req_if.rd ] != 0;
 
-	wire is_store = (vx_bckE_req.mem_write != `NO_MEM_WRITE);
-	wire is_load  = (vx_bckE_req.mem_read  != `NO_MEM_READ);
+	wire is_store = (bckE_req_if.mem_write != `NO_MEM_WRITE);
+	wire is_load  = (bckE_req_if.mem_read  != `NO_MEM_READ);
 
 	// classify our next instruction.
 	wire is_mem  = is_store || is_load;
-	wire is_gpu  = (vx_bckE_req.is_wspawn || vx_bckE_req.is_tmc || vx_bckE_req.is_barrier || vx_bckE_req.is_split);
-	wire is_csr  = vx_bckE_req.is_csr;
+	wire is_gpu  = (bckE_req_if.is_wspawn || bckE_req_if.is_tmc || bckE_req_if.is_barrier || bckE_req_if.is_split);
+	wire is_csr  = bckE_req_if.is_csr;
 	wire is_exec = !is_mem && !is_gpu && !is_csr;
 
-	wire using_rs2       = (vx_bckE_req.rs2_src == `RS2_REG) || is_store || vx_bckE_req.is_barrier || vx_bckE_req.is_wspawn;
+	wire using_rs2       = (bckE_req_if.rs2_src == `RS2_REG) || is_store || bckE_req_if.is_barrier || bckE_req_if.is_wspawn;
 
-	wire rs1_rename_qual = ((rs1_rename) && (vx_bckE_req.rs1 != 0));
-	wire rs2_rename_qual = ((rs2_rename) && (vx_bckE_req.rs2 != 0 && using_rs2));
-	wire  rd_rename_qual = ((rd_rename ) && (vx_bckE_req.rd  != 0));
+	wire rs1_rename_qual = ((rs1_rename) && (bckE_req_if.rs1 != 0));
+	wire rs2_rename_qual = ((rs2_rename) && (bckE_req_if.rs2 != 0 && using_rs2));
+	wire  rd_rename_qual = ((rd_rename ) && (bckE_req_if.rd  != 0));
 
 	wire rename_valid = rs1_rename_qual || rs2_rename_qual || rd_rename_qual;
 
-	assign schedule_delay = ((rename_valid) && (|vx_bckE_req.valid))
+	assign schedule_delay = ((rename_valid) && (|bckE_req_if.valid))
 				         || (memory_delay && is_mem)
 					     || (gpr_stage_delay && (is_mem || is_exec))
 						 || (exec_delay && is_exec);
@@ -59,15 +59,15 @@ module VX_scheduler (
 			end
 		end else begin
 			if (valid_wb) begin
-				rename_table[vx_writeback_if.wb_warp_num][vx_writeback_if.rd] <= rename_table[vx_writeback_if.wb_warp_num][vx_writeback_if.rd] & (~vx_writeback_if.wb_valid);
+				rename_table[writeback_if.wb_warp_num][writeback_if.rd] <= rename_table[writeback_if.wb_warp_num][writeback_if.rd] & (~writeback_if.wb_valid);
 			end
 
 			if (!schedule_delay && wb_inc) begin
-				rename_table[vx_bckE_req.warp_num][vx_bckE_req.rd] <= vx_bckE_req.valid;
+				rename_table[bckE_req_if.warp_num][bckE_req_if.rd] <= bckE_req_if.valid;
 			end
 		
 			if (valid_wb 
-			 && (0 == (rename_table[vx_writeback_if.wb_warp_num][vx_writeback_if.rd] & ~vx_writeback_if.wb_valid))) begin
+			 && (0 == (rename_table[writeback_if.wb_warp_num][writeback_if.rd] & ~writeback_if.wb_valid))) begin
 			   	count_valid <= count_valid - 1;
 			end
 

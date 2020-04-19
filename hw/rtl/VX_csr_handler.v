@@ -1,7 +1,7 @@
 module VX_csr_handler (
 	input wire        clk,
 	input wire[`CSR_ADDR_SIZE-1:0] in_decode_csr_address, // done
-	VX_csr_write_request_if vx_csr_w_req,
+	VX_csr_write_request_if csr_w_req_if,
 	input wire        in_wb_valid,
 	output wire[31:0] out_decode_csr_data // done
 );
@@ -9,9 +9,9 @@ module VX_csr_handler (
 	wire[`CSR_ADDR_SIZE-1:0] in_mem_csr_address;
 	wire[31:0] in_mem_csr_result;
 
-	assign in_mem_is_csr      = vx_csr_w_req.is_csr;
-	assign in_mem_csr_address = vx_csr_w_req.csr_address;
-	assign in_mem_csr_result  = vx_csr_w_req.csr_result;
+	assign in_mem_is_csr      = csr_w_req_if.is_csr;
+	assign in_mem_csr_address = csr_w_req_if.csr_address;
+	assign in_mem_csr_result  = csr_w_req_if.csr_result;
 
 	reg [`CSR_WIDTH-1:0] csr [`NUM_CSRS-1:0];
 	

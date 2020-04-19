@@ -449,7 +449,7 @@ module VX_bank #(
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
-     ) vx_tag_data_access (
+     ) tag_data_access (
 		.clk           (clk),
 		.reset         (reset),
 		.stall         (stall_bank_pipe),
@@ -477,7 +477,7 @@ module VX_bank #(
 		.miss_st1e     (miss_st1e),
 		.dirty_st1e    (dirty_st1e),
 		.fill_saw_dirty_st1e(fill_saw_dirty_st1e)
-		);
+	);
 
 	wire qual_valid_st1e_2 = valid_st1[STAGE_1_CYCLES-1] && !is_fill_st1[STAGE_1_CYCLES-1];
 
@@ -581,7 +581,7 @@ module VX_bank #(
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
-    ) vx_fill_invalidator (
+    ) fill_invalidator (
 		.clk               (clk),
 		.reset             (reset),
 		.possible_fill     (possible_fill),

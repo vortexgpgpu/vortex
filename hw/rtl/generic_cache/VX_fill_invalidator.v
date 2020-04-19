@@ -86,7 +86,7 @@ module VX_fill_invalidator
 
 		VX_generic_priority_encoder #(
 			.N(FILL_INVALIDAOR_SIZE)
-		) vx_sel_bank (
+		) sel_bank (
 			.valids(~fills_active),
 			.index (enqueue_index),
 			.found (enqueue_found)
@@ -136,7 +136,7 @@ module VX_fill_invalidator
 		// wire [(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0] enqueue_index;
 		// wire                                          enqueue_found;
 
-		// VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) vx_sel_bank(
+		// VX_generic_priority_encoder #(.N(FILL_INVALIDAOR_SIZE)) sel_bank(
 		// 	.valids(~fills_active),
 		// 	.index (enqueue_index),
 		// 	.found (enqueue_found)

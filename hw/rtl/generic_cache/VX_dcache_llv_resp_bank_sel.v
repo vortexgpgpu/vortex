@@ -1,7 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_dcache_llv_resp_bank_sel
-	#(
+module VX_dcache_llv_resp_bank_sel #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -15,8 +14,7 @@ module VX_dcache_llv_resp_bank_sel
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+	// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -26,7 +24,7 @@ module VX_dcache_llv_resp_bank_sel
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -39,12 +37,9 @@ module VX_dcache_llv_resp_bank_sel
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+	// Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
+) (
     output reg [NUM_BANKS-1:0]                             per_bank_llvq_pop,
     input  wire[NUM_BANKS-1:0]                             per_bank_llvq_valid,
     input  wire[NUM_BANKS-1:0][31:0]                       per_bank_llvq_rsp_addr,
@@ -55,19 +50,18 @@ module VX_dcache_llv_resp_bank_sel
     output reg[NUM_REQUESTS-1:0]                             llvq_valid,
     output reg[NUM_REQUESTS-1:0][31:0]                       llvq_rsp_addr,
     output reg[NUM_REQUESTS-1:0][`BANK_LINE_WORDS-1:0][31:0] llvq_rsp_data
-
-
 );
 
 	wire [(`LOG2UP(NUM_BANKS))-1:0] main_bank_index;
-	wire                                  found_bank;
+	wire                            found_bank;
 
-	VX_generic_priority_encoder #(.N(NUM_BANKS)) vx_sel_bank(
-	.valids(per_bank_llvq_valid),
-	.index (main_bank_index),
-	.found (found_bank)
+	VX_generic_priority_encoder #(
+		.N(NUM_BANKS)
+	) sel_bank(
+		.valids(per_bank_llvq_valid),
+		.index (main_bank_index),
+		.found (found_bank)
 	);
-
 
 	always @(*) begin
 		llvq_valid = 0;

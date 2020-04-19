@@ -1,21 +1,21 @@
 `include "VX_define.vh"
 
 module VX_execute_unit (
-	input wire               clk,
-	input wire               reset,
+	input wire            clk,
+	input wire            reset,
 		// Request
-	VX_exec_unit_req_if   vx_exec_unit_req,
+	VX_exec_unit_req_if   exec_unit_req_if,
 
 	// Output
 		// Writeback
-	VX_inst_exec_wb_if    vx_inst_exec_wb,
+	VX_inst_exec_wb_if    inst_exec_wb_if,
 		// JAL Response
-	VX_jal_response_if    vx_jal_rsp,
+	VX_jal_response_if    jal_rsp_if,
 		// Branch Response
-	VX_branch_response_if vx_branch_rsp,
+	VX_branch_response_if branch_rsp_if,
 
-	input wire no_slot_exec,
-	output wire out_delay
+	input wire 			  no_slot_exec,
+	output wire 		  out_delay
 );
 
 	wire[`NUM_THREADS-1:0][31:0] in_a_reg_data;
@@ -31,23 +31,23 @@ module VX_execute_unit (
 	wire[31:0]           in_jal_offset;
 	wire[31:0]           in_curr_PC;
 
-	assign in_a_reg_data  = vx_exec_unit_req.a_reg_data;
-	assign in_b_reg_data  = vx_exec_unit_req.b_reg_data;
-	assign in_alu_op      = vx_exec_unit_req.alu_op;
-	assign in_rs2_src     = vx_exec_unit_req.rs2_src;
-	assign in_itype_immed = vx_exec_unit_req.itype_immed;
-	assign in_branch_type = vx_exec_unit_req.branch_type;
-	assign in_upper_immed = vx_exec_unit_req.upper_immed;
-	assign in_jal         = vx_exec_unit_req.jal;
-	assign in_jal_offset  = vx_exec_unit_req.jal_offset;
-	assign in_curr_PC     = vx_exec_unit_req.curr_PC;
+	assign in_a_reg_data  = exec_unit_req_if.a_reg_data;
+	assign in_b_reg_data  = exec_unit_req_if.b_reg_data;
+	assign in_alu_op      = exec_unit_req_if.alu_op;
+	assign in_rs2_src     = exec_unit_req_if.rs2_src;
+	assign in_itype_immed = exec_unit_req_if.itype_immed;
+	assign in_branch_type = exec_unit_req_if.branch_type;
+	assign in_upper_immed = exec_unit_req_if.upper_immed;
+	assign in_jal         = exec_unit_req_if.jal;
+	assign in_jal_offset  = exec_unit_req_if.jal_offset;
+	assign in_curr_PC     = exec_unit_req_if.curr_PC;
 
 	wire[`NUM_THREADS-1:0][31:0]  alu_result;
 	wire[`NUM_THREADS-1:0]  alu_stall;
 	genvar index_out_reg;
 	generate
 		for (index_out_reg = 0; index_out_reg < `NUM_THREADS; index_out_reg = index_out_reg + 1) begin : alu_defs
-			VX_alu vx_alu(
+			VX_alu alu(
 				.clk(clk),
 				.reset(reset),
 				// .in_reg_data   (in_reg_data[1:0]),
@@ -77,17 +77,17 @@ module VX_execute_unit (
 	VX_generic_priority_encoder #(
 		.N(`NUM_THREADS)
 	) choose_alu_result (
-		.valids(vx_exec_unit_req.valid),
+		.valids(exec_unit_req_if.valid),
 		.index (jal_branch_use_index),
 		.found (jal_branch_found_valid)
-		);
+	);
 
 	wire[31:0] branch_use_alu_result = alu_result[jal_branch_use_index];
 
 	reg temp_branch_dir;
 	always @(*)
 	begin
-		case (vx_exec_unit_req.branch_type)
+		case (exec_unit_req_if.branch_type)
 			`BEQ:       temp_branch_dir = (branch_use_alu_result     == 0) ? `TAKEN     : `NOT_TAKEN;
 			`BNE:       temp_branch_dir = (branch_use_alu_result     == 0) ? `NOT_TAKEN : `TAKEN;
 			`BLT:       temp_branch_dir = (branch_use_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;
@@ -104,35 +104,35 @@ module VX_execute_unit (
 	genvar i;
 	generate
 		for (i = 0; i < `NUM_THREADS; i=i+1) begin : pc_data_setup
-			assign duplicate_PC_data[i] = vx_exec_unit_req.PC_next;
+			assign duplicate_PC_data[i] = exec_unit_req_if.PC_next;
 		end
 	endgenerate
 
 
-	// VX_inst_exec_wb_if    vx_inst_exec_wb_temp();
+	// VX_inst_exec_wb_if    inst_exec_wb_temp_if();
 		// JAL Response
-	VX_jal_response_if    vx_jal_rsp_temp();
+	VX_jal_response_if    jal_rsp_temp_if();
 		// Branch Response
-	VX_branch_response_if vx_branch_rsp_temp();
+	VX_branch_response_if branch_rsp_temp_if();
 
 	// Actual Writeback
-	assign vx_inst_exec_wb.rd          = vx_exec_unit_req.rd;
-	assign vx_inst_exec_wb.wb          = vx_exec_unit_req.wb;
-	assign vx_inst_exec_wb.wb_valid    = vx_exec_unit_req.valid & {`NUM_THREADS{!internal_stall}};
-	assign vx_inst_exec_wb.wb_warp_num = vx_exec_unit_req.warp_num;
-	assign vx_inst_exec_wb.alu_result  = vx_exec_unit_req.jal ? duplicate_PC_data : alu_result;
+	assign inst_exec_wb_if.rd          = exec_unit_req_if.rd;
+	assign inst_exec_wb_if.wb          = exec_unit_req_if.wb;
+	assign inst_exec_wb_if.wb_valid    = exec_unit_req_if.valid & {`NUM_THREADS{!internal_stall}};
+	assign inst_exec_wb_if.wb_warp_num = exec_unit_req_if.warp_num;
+	assign inst_exec_wb_if.alu_result  = exec_unit_req_if.jal ? duplicate_PC_data : alu_result;
 
-	assign vx_inst_exec_wb.exec_wb_pc  = in_curr_PC;
+	assign inst_exec_wb_if.exec_wb_pc  = in_curr_PC;
 	// Jal rsp
-	assign vx_jal_rsp_temp.jal           = in_jal;
-	assign vx_jal_rsp_temp.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
-	assign vx_jal_rsp_temp.jal_warp_num  = vx_exec_unit_req.warp_num;
+	assign jal_rsp_temp_if.jal           = in_jal;
+	assign jal_rsp_temp_if.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
+	assign jal_rsp_temp_if.jal_warp_num  = exec_unit_req_if.warp_num;
 
 	// Branch rsp
-	assign vx_branch_rsp_temp.valid_branch    = (vx_exec_unit_req.branch_type != `NO_BRANCH) && (|vx_exec_unit_req.valid);
-	assign vx_branch_rsp_temp.branch_dir      = temp_branch_dir;
-	assign vx_branch_rsp_temp.branch_warp_num = vx_exec_unit_req.warp_num;
-	assign vx_branch_rsp_temp.branch_dest     = $signed(vx_exec_unit_req.curr_PC) + ($signed(vx_exec_unit_req.itype_immed) << 1); // itype_immed = branch_offset
+	assign branch_rsp_temp_if.valid_branch    = (exec_unit_req_if.branch_type != `NO_BRANCH) && (|exec_unit_req_if.valid);
+	assign branch_rsp_temp_if.branch_dir      = temp_branch_dir;
+	assign branch_rsp_temp_if.branch_warp_num = exec_unit_req_if.warp_num;
+	assign branch_rsp_temp_if.branch_dest     = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
 
 
 	wire zero = 0;
@@ -142,8 +142,8 @@ module VX_execute_unit (
 	// 	.reset(reset),
 	// 	.stall(zero),
 	// 	.flush(zero),
-	// 	.in   ({vx_inst_exec_wb_temp.rd, vx_inst_exec_wb_temp.wb, vx_inst_exec_wb_temp.wb_valid, vx_inst_exec_wb_temp.wb_warp_num, vx_inst_exec_wb_temp.alu_result, vx_inst_exec_wb_temp.exec_wb_pc}),
-	// 	.out  ({vx_inst_exec_wb.rd     , vx_inst_exec_wb.wb     , vx_inst_exec_wb.wb_valid     , vx_inst_exec_wb.wb_warp_num     , vx_inst_exec_wb.alu_result     , vx_inst_exec_wb.exec_wb_pc     })
+	// 	.in   ({inst_exec_wb_temp_if.rd, inst_exec_wb_temp_if.wb, inst_exec_wb_temp_if.wb_valid, inst_exec_wb_temp_if.wb_warp_num, inst_exec_wb_temp_if.alu_result, inst_exec_wb_temp_if.exec_wb_pc}),
+	// 	.out  ({inst_exec_wb_if.rd     , inst_exec_wb_if.wb     , inst_exec_wb_if.wb_valid     , inst_exec_wb_if.wb_warp_num     , inst_exec_wb_if.alu_result     , inst_exec_wb_if.exec_wb_pc     })
 	// 	);
 
 	VX_generic_register #(
@@ -153,8 +153,8 @@ module VX_execute_unit (
 		.reset(reset),
 		.stall(zero),
 		.flush(zero),
-		.in   ({vx_jal_rsp_temp.jal, vx_jal_rsp_temp.jal_dest, vx_jal_rsp_temp.jal_warp_num}),
-		.out  ({vx_jal_rsp.jal     , vx_jal_rsp.jal_dest     , vx_jal_rsp.jal_warp_num})
+		.in   ({jal_rsp_temp_if.jal, jal_rsp_temp_if.jal_dest, jal_rsp_temp_if.jal_warp_num}),
+		.out  ({jal_rsp_if.jal     , jal_rsp_if.jal_dest     , jal_rsp_if.jal_warp_num})
 	);
 
 	VX_generic_register #(
@@ -164,8 +164,8 @@ module VX_execute_unit (
 		.reset(reset),
 		.stall(zero),
 		.flush(zero),
-		.in   ({vx_branch_rsp_temp.valid_branch, vx_branch_rsp_temp.branch_dir, vx_branch_rsp_temp.branch_warp_num, vx_branch_rsp_temp.branch_dest}),
-		.out  ({vx_branch_rsp.valid_branch     , vx_branch_rsp.branch_dir     , vx_branch_rsp.branch_warp_num     , vx_branch_rsp.branch_dest     })
+		.in   ({branch_rsp_temp_if.valid_branch, branch_rsp_temp_if.branch_dir, branch_rsp_temp_if.branch_warp_num, branch_rsp_temp_if.branch_dest}),
+		.out  ({branch_rsp_if.valid_branch     , branch_rsp_if.branch_dir     , branch_rsp_if.branch_warp_num     , branch_rsp_if.branch_dest     })
 	);
 
 	// always @(*) begin
@@ -178,7 +178,7 @@ module VX_execute_unit (
 	
 	// end
 
-	// assign out_is_csr        = vx_exec_unit_req.is_csr;
-	// assign out_csr_address   = vx_exec_unit_req.csr_address;
+	// assign out_is_csr        = exec_unit_req_if.is_csr;
+	// assign out_csr_address   = exec_unit_req_if.csr_address;
 
 endmodule : VX_execute_unit

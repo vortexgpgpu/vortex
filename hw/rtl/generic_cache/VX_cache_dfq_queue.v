@@ -94,7 +94,7 @@ module VX_cache_dfq_queue #(
 
 	VX_generic_priority_encoder #(
 		.N(NUM_BANKS)
-	) vx_sel_bank (
+	) sel_bank (
 		.valids(qual_bank_dram_fill_req),
 		.index (qual_request_index),
 		.found (qual_has_request)
