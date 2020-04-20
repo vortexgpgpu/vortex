@@ -8,7 +8,7 @@ interface VX_gpu_snp_req_rsp_if ();
 	// Snoop request
 	wire        snp_req_valid;
 	wire [31:0] snp_req_addr;	
-	wire        snp_req_full;
+	wire        snp_req_ready;
 
 	// Snoop Response
 	// TODO:

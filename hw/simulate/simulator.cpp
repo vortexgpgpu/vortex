@@ -277,7 +277,7 @@ void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
         break;
       vortex_->llc_snp_req_addr += GLOBAL_BLOCK_SIZE_BYTES;
     }    
-    if (!vortex_->llc_snp_req_full) {
+    if (vortex_->llc_snp_req_ready) {
       vortex_->llc_snp_req_valid = true;      
     }
   }

@@ -41,7 +41,7 @@ module Vortex #(
 	// LLC Snooping
 	input  wire             			llc_snp_req_valid,
 	input  wire [31:0]      			llc_snp_req_addr,
-	output wire             			llc_snp_req_full,
+	output wire             			llc_snp_req_ready,
 
 	output wire          			    out_ebreak
 );
@@ -122,7 +122,7 @@ module Vortex #(
 	generate
 		for (j = 0; j < `IBANK_LINE_WORDS; j = j + 1) begin
 			assign gpu_icache_dram_res_if.dram_rsp_data[j] = I_dram_rsp_data[j * 32 +: 32];
-			assign I_dram_req_data[j * 32 +: 32]                = gpu_icache_dram_req_if.dram_req_data[j];
+			assign I_dram_req_data[j * 32 +: 32]           = gpu_icache_dram_req_if.dram_req_data[j];
 		end
 	endgenerate
 
@@ -144,7 +144,7 @@ VX_gpu_snp_req_rsp_if   gpu_icache_snp_req_if();
 VX_gpu_snp_req_rsp_if   gpu_dcache_snp_req_if();
 assign gpu_dcache_snp_req_if.snp_req_valid  = llc_snp_req_valid;
 assign gpu_dcache_snp_req_if.snp_req_addr   = llc_snp_req_addr;
-assign llc_snp_req_full                     = gpu_dcache_snp_req_if.snp_req_full;
+assign llc_snp_req_ready                    = gpu_dcache_snp_req_if.snp_req_ready;
 
 VX_front_end front_end (
 	.clk       			(clk),
