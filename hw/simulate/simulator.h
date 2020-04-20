@@ -19,7 +19,7 @@
 #include <ostream>
 #include <vector>
 
-#define ENABLE_DRAM_STALLS
+//#define ENABLE_DRAM_STALLS
 #define DRAM_LATENCY 200
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
@@ -55,7 +55,7 @@ private:
   void send_snoops(uint32_t mem_addr, uint32_t size);
   void wait(uint32_t cycles);
 
-  int64_t total_cycles_;
+  uint64_t total_cycles_;
   bool dram_stalled_;
   bool I_dram_stalled_;
   std::vector<dram_req_t> dram_req_vec_;

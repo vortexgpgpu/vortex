@@ -39,7 +39,7 @@ module VX_icache_stage (
 	assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
 
 	// Cache can't accept request
-	assign icache_stage_delay = icache_rsp_if.delay_req;
+	assign icache_stage_delay = ~icache_rsp_if.core_req_ready;
 
 	// Core can't accept response
 	assign icache_req_if.core_no_wb_slot = total_freeze;

@@ -52,44 +52,46 @@ module VX_cache #(
 	input wire clk,
 	input wire reset,
 
-    // Req Info    
+    // Core request    
     input wire [NUM_REQUESTS-1:0]                 core_req_valid,
-    input wire [NUM_REQUESTS-1:0][31:0]           core_req_addr,
-    input wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_req_writedata,
     input wire [NUM_REQUESTS-1:0][2:0]            core_req_mem_read,
     input wire [NUM_REQUESTS-1:0][2:0]            core_req_mem_write,
+    input wire [NUM_REQUESTS-1:0][31:0]           core_req_addr,
+    input wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_req_writedata,
+    output wire                                   core_req_ready,
 
-    // Req meta
+    // Core request meta data
     input wire [4:0]                         core_req_rd,
     input wire [NUM_REQUESTS-1:0][1:0]       core_req_wb,
     input wire [`NW_BITS-1:0]                core_req_warp_num,
     input wire [31:0]                        core_req_pc,
-    output wire                              delay_req,
+    
 
-    // Core Writeback
-    input  wire                              core_no_wb_slot,
+    // Core response
     output wire [NUM_REQUESTS-1:0]           core_wb_valid,
     output wire [4:0]                        core_wb_req_rd,
     output wire [1:0]                        core_wb_req_wb,
-    output wire [`NW_BITS-1:0]               core_wb_warp_num,
-    output wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_wb_readdata,
-    output wire [NUM_REQUESTS-1:0][31:0]     core_wb_pc,
     output wire [NUM_REQUESTS-1:0][31:0]     core_wb_address,
+    output wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_wb_readdata,
+    input  wire                              core_no_wb_slot,    
 
-    // Dram Fill Response
+    // Core response meta data
+    output wire [`NW_BITS-1:0]               core_wb_warp_num,    
+    output wire [NUM_REQUESTS-1:0][31:0]     core_wb_pc,
+    
+    // DRAM request
+    output wire                              dram_req_read,
+    output wire                              dram_req_write,    
+    output wire [31:0]                       dram_req_addr,
+    output wire [`IBANK_LINE_WORDS-1:0][31:0] dram_req_data,
+    input  wire                              dram_req_ready,
+    
+    // DRAM response
     input  wire                              dram_rsp_valid,
     input  wire [31:0]                       dram_rsp_addr,
     input  wire [`IBANK_LINE_WORDS-1:0][31:0] dram_rsp_data,
     output wire                              dram_rsp_ready,    
 
-    // Dram request
-    output wire                              dram_req_read,
-    output wire                              dram_req_write,    
-    output wire [31:0]                       dram_req_addr,
-    output wire [`IBANK_LINE_WORDS-1:0][31:0] dram_req_data,
-    input  wire                              dram_req_full,
-
-    
     // Snoop Req
     input wire                               snp_req_valid,
     input wire [31:0]                        snp_req_addr,
@@ -132,7 +134,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][31:0]                            per_bank_snp_fwd_addr;
     wire [NUM_BANKS-1:0]                                  per_bank_snp_fwd_pop;
 
-    assign delay_req = (|per_bank_reqq_full);
+    assign core_req_ready = ~(|per_bank_reqq_full);
     assign snp_req_full = (|per_bank_snrq_full);
 
     // assign dram_rsp_ready = (NUM_BANKS == 1) ? per_bank_dram_rsp_ready[0] : per_bank_dram_rsp_ready[dram_rsp_addr[`BANK_SELECT_ADDR_RNG]];
@@ -171,7 +173,7 @@ module VX_cache #(
         .dram_req_write              (dram_req_write),        
         .dram_req_addr               (dram_req_addr),
         .dram_req_data               (dram_req_data),  
-        .dram_req_full               (dram_req_full)
+        .dram_req_ready              (dram_req_ready)
     );
 
     VX_cache_core_req_bank_sel  #(
@@ -372,7 +374,7 @@ module VX_cache #(
                 .clk                     (clk),
                 .reset                   (reset),
                 // Core req
-                .delay_req               (delay_req),
+                .req_ready               (core_req_ready),
                 .bank_valids             (curr_bank_valids),
                 .bank_addr               (curr_bank_addr),
                 .bank_writedata          (curr_bank_writedata),

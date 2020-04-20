@@ -11,16 +11,15 @@ module VX_decode(
 	VX_join_if            join_if,
 
 	output wire           terminate_sim
-
 );
 
-	wire[31:0]      in_instruction     = fd_inst_meta_de.instruction;
-	wire[31:0]      in_curr_PC         = fd_inst_meta_de.inst_pc;
-	wire[`NW_BITS-1:0]  in_warp_num    = fd_inst_meta_de.warp_num;
+	wire[31:0]      in_instruction      = fd_inst_meta_de.instruction;
+	wire[31:0]      in_curr_PC          = fd_inst_meta_de.inst_pc;
+	wire[`NW_BITS-1:0]  in_warp_num     = fd_inst_meta_de.warp_num;
 
-	assign frE_to_bckE_req_if.curr_PC  = in_curr_PC;
+	assign frE_to_bckE_req_if.curr_PC   = in_curr_PC;
 
-	wire[`NUM_THREADS-1:0]  in_valid = fd_inst_meta_de.valid;
+	wire[`NUM_THREADS-1:0]  in_valid 	= fd_inst_meta_de.valid;
 
 	wire[6:0]  curr_opcode;
 
@@ -122,27 +121,21 @@ module VX_decode(
 	assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
 	assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
 
-
 	assign join_if.is_join       = is_join;
 	assign join_if.join_warp_num = in_warp_num;
-
 
 	assign frE_to_bckE_req_if.is_wspawn  = is_wspawn;
 	assign frE_to_bckE_req_if.is_tmc     = is_tmc;
 	assign frE_to_bckE_req_if.is_split   = is_split;
 	assign frE_to_bckE_req_if.is_barrier = is_barrier;
 
-
-
 	assign frE_to_bckE_req_if.csr_immed = is_csr_immed;
 	assign frE_to_bckE_req_if.is_csr    = is_csr;
-
 
 	assign frE_to_bckE_req_if.wb       = (is_jal || is_jalr || is_e_inst) ? `WB_JAL :
 											is_linst ? `WB_MEM :
 												(is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
 													`NO_WB;
-
 
 	assign frE_to_bckE_req_if.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
 
@@ -161,7 +154,6 @@ module VX_decode(
 
 	assign frE_to_bckE_req_if.upper_immed = temp_upper_immed;
 
-
 	assign jal_b_19_to_12      = in_instruction[19:12];
 	assign jal_b_11            = in_instruction[20];
 	assign jal_b_10_to_1       = in_instruction[30:21];
@@ -170,10 +162,8 @@ module VX_decode(
 	assign jal_unsigned_offset = {jal_b_20, jal_b_19_to_12, jal_b_11, jal_b_10_to_1, jal_b_0};
 	assign jal_1_offset        = {{11{jal_b_20}}, jal_unsigned_offset};
 
-
 	assign jalr_immed   = {func7, frE_to_bckE_req_if.rs2};
 	assign jal_2_offset = {{20{jalr_immed[11]}}, jalr_immed};
-
 
 	assign jal_sys_cond1 = func3 == 3'h0;
 	assign jal_sys_cond2 = u_12  < 12'h2;
@@ -214,12 +204,10 @@ module VX_decode(
 
 	// wire is_ebreak;
 
-
 	// assign is_ebreak = is_e_inst;
 	wire ebreak = (curr_opcode == `SYS_INST) && (jal_sys_jal && (|in_valid));
 	assign frE_to_bckE_req_if.ebreak = ebreak;
 	assign terminate_sim = is_e_inst;
-
 
 	// CSR
 
@@ -228,12 +216,10 @@ module VX_decode(
 
 	assign frE_to_bckE_req_if.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
 
-
 	// ITYPE IMEED
 	assign alu_shift_i       = (func3 == 3'h1) || (func3 == 3'h5);
 	assign alu_shift_i_immed = {{7{1'b0}}, frE_to_bckE_req_if.rs2};
 	assign alu_tempp = alu_shift_i ? alu_shift_i_immed : u_12;
-
 
 	always @(*) begin
 		case(curr_opcode)
@@ -331,11 +317,11 @@ module VX_decode(
 	wire[4:0] temp_final_alu;
 
 	assign temp_final_alu = is_btype ? ((frE_to_bckE_req_if.branch_type < `BLTU) ? `SUB : `SUBU) :
-									is_lui ? `LUI_ALU :
-										is_auipc ? `AUIPC_ALU :
-											is_csr ? csr_alu :
-												(is_stype || is_linst) ? `ADD :
-													alu_op;
+								is_lui ? `LUI_ALU :
+									is_auipc ? `AUIPC_ALU :
+										is_csr ? csr_alu :
+											(is_stype || is_linst) ? `ADD :
+						              			alu_op;
 
 	assign frE_to_bckE_req_if.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
 

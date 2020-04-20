@@ -135,6 +135,9 @@
 
 `define ZERO_REG 5'h0
 
+// IO BUS
+`define IO_BUS_ADDR 32'h00010000
+
 // ======================= Dcache Configurable Knobs ==========================
 
 // Function ID

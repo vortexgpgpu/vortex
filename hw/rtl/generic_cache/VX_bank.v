@@ -48,7 +48,7 @@ module VX_bank #(
 	input wire reset,
 
 	// Input Core Request
-	input wire                                    delay_req,
+	input wire                                    req_ready,
 	input wire [NUM_REQUESTS-1:0]                 bank_valids,
 	input wire [NUM_REQUESTS-1:0][31:0]           bank_addr,
 	input wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] bank_writedata,
@@ -168,7 +168,7 @@ module VX_bank #(
 	wire [2:0]                            reqq_req_mem_write_st0;
 	wire [31:0]                           reqq_req_pc_st0;
 
-	assign reqq_push = !delay_req && (|bank_valids);
+	assign reqq_push = req_ready && (|bank_valids);
 
 	VX_cache_req_queue  #(
         .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),

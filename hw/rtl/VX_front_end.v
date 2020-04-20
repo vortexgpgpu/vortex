@@ -1,22 +1,22 @@
 `include "VX_define.vh"
 
 module VX_front_end (
-	input wire clk,
-	input wire reset,
+	input wire 				clk,
+	input wire 				reset,
 
-	input wire           schedule_delay,
+	input wire            	schedule_delay,
 
-	VX_warp_ctl_if        warp_ctl_if,
+	VX_warp_ctl_if        	warp_ctl_if,
 
-	VX_gpu_dcache_rsp_if  icache_rsp_if,
-	VX_gpu_dcache_req_if  icache_req_if,
+	VX_gpu_dcache_rsp_if  	icache_rsp_if,
+	VX_gpu_dcache_req_if  	icache_req_if,
 
-	VX_jal_response_if    jal_rsp_if,
-	VX_branch_response_if branch_rsp_if,
+	VX_jal_response_if    	jal_rsp_if,
+	VX_branch_response_if 	branch_rsp_if,
 
-	VX_frE_to_bckE_req_if bckE_req_if,
+	VX_frE_to_bckE_req_if 	bckE_req_if,
 
-	output wire fetch_ebreak
+	output wire 			fetch_ebreak
 );
 
 	VX_inst_meta_if        fe_inst_meta_fi();
@@ -35,16 +35,7 @@ module VX_front_end (
 	wire[`NW_BITS-1:0] icache_stage_wid;
 	wire[`NUM_THREADS-1:0]  icache_stage_valids;
 
-	reg old_ebreak; // This should be eventually removed
-	always @(posedge clk) begin
-		if (reset) begin
-			old_ebreak <= 0;
-		end else begin
-			old_ebreak <= old_ebreak || fetch_ebreak;
-		end
-	end
-
-	assign fetch_ebreak = vortex_ebreak || terminate_sim || old_ebreak;
+	assign fetch_ebreak = vortex_ebreak || terminate_sim;
 
 	VX_wstall_if          wstall_if();
 	VX_join_if            join_if();

@@ -7,18 +7,19 @@ interface VX_gpu_dcache_rsp_if #(
     parameter NUM_REQUESTS = 32
 ) ();
 
-	// Cache WB
+	// Core response
     wire [NUM_REQUESTS-1:0]        core_wb_valid;
 `IGNORE_WARNINGS_BEGIN
     wire [4:0]                     core_wb_req_rd;
     wire [1:0]                     core_wb_req_wb;
-`IGNORE_WARNINGS_END
-    wire [`NW_BITS-1:0]            core_wb_warp_num;
+`IGNORE_WARNINGS_END    
+    wire [NUM_REQUESTS-1:0][31:0]  core_wb_pc;    
     wire [NUM_REQUESTS-1:0][31:0]  core_wb_readdata;
-    wire [NUM_REQUESTS-1:0][31:0]  core_wb_pc;
+    
+    // Core response meta data
+    wire [`NW_BITS-1:0]            core_wb_warp_num;  
 
-    // Cache Full
-    wire                           delay_req;
+    wire                           core_req_ready;
 
 endinterface
 

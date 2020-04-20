@@ -23,8 +23,6 @@
 `define NUM_BARRIERS 4
 `endif
 
-// `define SINGLE_CORE_BENCH
-
 `ifndef GLOBAL_BLOCK_SIZE_BYTES
 `define GLOBAL_BLOCK_SIZE_BYTES 16
 `endif

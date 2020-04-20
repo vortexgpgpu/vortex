@@ -347,15 +347,15 @@ logic vortex_enabled;
 
 always_comb 
 begin
-  vortex_enabled = (STATE_RUN == state) || (STATE_CLFLUSH == state);
-  vx_dram_req_full = !vortex_enabled || avs_waitrequest || avs_raq_full || avs_rdq_full;
+  vortex_enabled    = (STATE_RUN == state) || (STATE_CLFLUSH == state);
+  vx_dram_req_ready = vortex_enabled && !avs_waitrequest && !avs_raq_full && !avs_rdq_full;
 end
 
 // Vortex DRAM fill response
 
 always_comb 
 begin
-  vx_dram_rsp_valid            = vortex_enabled && !avs_rdq_empty && vx_dram_rsp_ready;
+  vx_dram_rsp_valid      = vortex_enabled && !avs_rdq_empty && vx_dram_rsp_ready;
   vx_dram_rsp_addr       = (avs_raq_dout << 6);
   {>>{vx_dram_rsp_data}} = avs_rdq_dout;
 end
@@ -531,7 +531,7 @@ begin
 
     if ((STATE_CLFLUSH == state)
      && vx_snoop_ctr < csr_data_size
-     && !vx_snp_req_full)
+     && vx_snp_req_ready)
     begin
       vx_snp_req_addr <= (csr_mem_addr + vx_snoop_ctr) << 6;
       vx_snp_req      <= 1;
@@ -556,7 +556,7 @@ Vortex_Socket #() vx_socket (
   .dram_req_read 			(vx_dram_req_read),
   .dram_req_addr 			(vx_dram_req_addr),
   .dram_req_data			(vx_dram_req_data),
-  .dram_req_full      (vx_dram_req_full),
+  .dram_req_ready     (vx_dram_req_ready),
 
   // DRAM Rsp
   .out_dram_rsp_ready (vx_dram_rsp_ready),
@@ -567,7 +567,7 @@ Vortex_Socket #() vx_socket (
   // Cache Snooping Req
   .llc_snp_req_valid 	(vx_snp_req),
   .llc_snp_req_addr   (vx_snp_req_addr),
-  .llc_snp_req_full   (vx_snp_req_full),
+  .llc_snp_req_ready  (vx_snp_req_ready),
  
   // program exit signal
   .out_ebreak 				(vx_ebreak)
