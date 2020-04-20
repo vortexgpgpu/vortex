@@ -258,7 +258,7 @@ void Simulator::wait(uint32_t cycles) {
 }
 
 bool Simulator::is_busy() {
-  return (0 == vortex_->out_ebreak);
+  return (0 == vortex_->ebreak);
 }
 
 void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
@@ -295,7 +295,7 @@ bool Simulator::run() {
   this->reset();
 
   // execute program
-  while (!vortex_->out_ebreak) {
+  while (!vortex_->ebreak) {
     this->step();
   }
 

@@ -40,10 +40,10 @@ module VX_prefetcher #(
 		.reset   (reset),
 
 		.push    (dram_req && !current_full && !pref_pop),
-		.in_data (dram_req_addr & `BASE_ADDR_MASK),
+		.data_i (dram_req_addr & `BASE_ADDR_MASK),
 
 		.pop     (update_use),
-		.out_data(current_addr),
+		.data_o(current_addr),
 
 		.empty   (current_empty),
 		.full    (current_full)

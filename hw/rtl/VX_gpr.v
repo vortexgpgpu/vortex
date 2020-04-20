@@ -1,19 +1,19 @@
 `include "VX_define.vh"
 
 module VX_gpr (
-	input wire          clk,
-	input wire          reset,
-	input wire          valid_write_request,
+	input wire      clk,
+	input wire      reset,
+	input wire      valid_write_request_i,
 	VX_gpr_read_if	gpr_read_if,
-	VX_wb_if         writeback_if,
+	VX_wb_if        writeback_if,
 
-	output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] out_a_reg_data,
-	output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] out_b_reg_data
+	output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] a_reg_data_o,
+	output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] b_reg_data_o
 );
 	wire write_enable;
 	
 	`ifndef ASIC
-		assign write_enable = valid_write_request && ((writeback_if.wb != 0)) && (writeback_if.rd != 0);
+		assign write_enable = valid_write_request_i && ((writeback_if.wb != 0)) && (writeback_if.rd != 0);
 
 		byte_enabled_simple_dual_port_ram first_ram(
 			.we    (write_enable),
@@ -24,11 +24,11 @@ module VX_gpr (
 			.raddr2(gpr_read_if.rs2),
 			.be    (writeback_if.wb_valid),
 			.wdata (writeback_if.write_data),
-			.q1    (out_a_reg_data),
-			.q2    (out_b_reg_data)
+			.q1    (a_reg_data_o),
+			.q2    (b_reg_data_o)
 		);
 	`else 
-		assign write_enable = valid_write_request && ((writeback_if.wb != 0));
+		assign write_enable = valid_write_request_i && ((writeback_if.wb != 0));
 		wire going_to_write = write_enable & (|writeback_if.wb_valid);
 		wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] write_bit_mask;
 
@@ -56,13 +56,13 @@ module VX_gpr (
 		begin
 			for (curr_bit = 0; curr_bit < `NUM_GPRS; curr_bit=curr_bit+1)
 			begin
-				assign out_a_reg_data[thread][curr_bit] = ((temp_a[thread][curr_bit] === 1'dx) || cena_1 )? 1'b0 : temp_a[thread][curr_bit];
-				assign out_b_reg_data[thread][curr_bit] = ((temp_b[thread][curr_bit] === 1'dx) || cena_2) ? 1'b0 : temp_b[thread][curr_bit];
+				assign a_reg_data_o[thread][curr_bit] = ((temp_a[thread][curr_bit] === 1'dx) || cena_1 )? 1'b0 : temp_a[thread][curr_bit];
+				assign b_reg_data_o[thread][curr_bit] = ((temp_b[thread][curr_bit] === 1'dx) || cena_2) ? 1'b0 : temp_b[thread][curr_bit];
 			end
 		end
 	`else
-		assign out_a_reg_data = temp_a;
-		assign out_b_reg_data = temp_b;
+		assign a_reg_data_o = temp_a;
+		assign b_reg_data_o = temp_b;
 	`endif
 
 		wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = (writeback_if.rd != 0) ? writeback_if.write_data : 0;

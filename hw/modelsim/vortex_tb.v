@@ -116,7 +116,7 @@ reg[31:0]  io_data;
 		.o_m_read_or_write_i          (o_m_read_or_write_i),
 		.i_m_readdata_i               (i_m_readdata_i),
 		.i_m_ready_i                  (i_m_ready_i),
-		.out_ebreak                   (out_ebreak)
+		.ebreak_o                   (out_ebreak)
 	);
 
 	always @(negedge clk) begin

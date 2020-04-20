@@ -27,10 +27,10 @@ module cache_simX (
 	//////////////////// ICACHE ///////////////////
 	VX_icache_request_if  VX_icache_req;
 	assign VX_icache_req.pc_address                    = in_icache_pc_addr;
-	assign VX_icache_req.out_cache_driver_in_mem_read  = (in_icache_valid_pc_addr) ? `LW_MEM_READ : `NO_MEM_READ;
-	assign VX_icache_req.out_cache_driver_in_mem_write = `NO_MEM_WRITE;
-	assign VX_icache_req.out_cache_driver_in_valid     = in_icache_valid_pc_addr;
-	assign VX_icache_req.out_cache_driver_in_data      = 0;
+	assign VX_icache_req.cache_driver_in_mem_read_o  = (in_icache_valid_pc_addr) ? `LW_MEM_READ : `NO_MEM_READ;
+	assign VX_icache_req.cache_driver_in_mem_write_o = `NO_MEM_WRITE;
+	assign VX_icache_req.cache_driver_in_valid_o     = in_icache_valid_pc_addr;
+	assign VX_icache_req.cache_driver_in_data_o      = 0;
 
 
 	VX_icache_response_if VX_icache_rsp;
@@ -53,15 +53,15 @@ module cache_simX (
 	//////////////////// DCACHE ///////////////////
 
 	VX_dcache_request_if  VX_dcache_req;
-	assign VX_dcache_req.out_cache_driver_in_mem_read  = in_dcache_mem_read;
-	assign VX_dcache_req.out_cache_driver_in_mem_write = in_dcache_mem_write;
-	assign VX_dcache_req.out_cache_driver_in_data      = 0;
+	assign VX_dcache_req.cache_driver_in_mem_read_o  = in_dcache_mem_read;
+	assign VX_dcache_req.cache_driver_in_mem_write_o = in_dcache_mem_write;
+	assign VX_dcache_req.cache_driver_in_data_o      = 0;
 
 	genvar curr_t;
 	for (curr_t = 0; curr_t < `NT; curr_t=curr_t+1)
 	begin
-		assign VX_dcache_req.out_cache_driver_in_address[curr_t]   = in_dcache_in_address[curr_t];
-		assign VX_dcache_req.out_cache_driver_in_valid[curr_t]     = in_dcache_in_valid[curr_t];
+		assign VX_dcache_req.cache_driver_in_address_o[curr_t]   = in_dcache_in_address[curr_t];
+		assign VX_dcache_req.cache_driver_in_valid_o[curr_t]     = in_dcache_in_valid[curr_t];
 	end
 
 	VX_dcache_response_if VX_dcache_rsp;

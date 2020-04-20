@@ -55,7 +55,7 @@ module VX_warp_scheduler (
 	output wire[`NUM_THREADS-1:0] thread_mask,
 	output wire[`NW_BITS-1:0] warp_num,
 	output wire[31:0]     warp_pc,
-	output wire           out_ebreak,
+	output wire           ebreak_o,
 	output wire           scheduled_warp,
 
 	input  wire[`NW_BITS-1:0]    icache_stage_wid,
@@ -333,7 +333,7 @@ module VX_warp_scheduler (
 
 
 	wire ebreak = (warp_active == 0);
-	assign out_ebreak = ebreak;
+	assign ebreak_o = ebreak;
 
 	/* verilator lint_on WIDTH */
 

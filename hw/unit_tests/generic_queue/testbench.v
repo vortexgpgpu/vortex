@@ -17,10 +17,10 @@ module testbench();
   VX_generic_queue #(.DATAW(4), .SIZE(4)) dut (
                                 .clk(clk), 
                                 .reset(reset), 
-                                .in_data(in_data), 
+                                .data_i(in_data), 
                                 .push(push), 
                                 .pop(pop), 
-                                .out_data(out_data), 
+                                .data_o(out_data), 
                                 .empty(empty), 
                                 .full(full));
 

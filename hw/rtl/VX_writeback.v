@@ -12,9 +12,9 @@ module VX_writeback (
 
 	// Actual WB to GPR
 	VX_wb_if            writeback_if,
-	output wire         no_slot_mem,
-	output wire 		no_slot_exec,
-	output wire         no_slot_csr
+	output wire         no_slot_mem_o,
+	output wire 		no_slot_exec_o,
+	output wire         no_slot_csr_o
 );
 
 	VX_wb_if	writeback_tempp_if();
@@ -24,9 +24,9 @@ module VX_writeback (
 	wire csr_wb  = (csr_wb_if.wb       != 0) && (|csr_wb_if.valid);
 
 
-	assign no_slot_mem = mem_wb && (exec_wb || csr_wb);
-	assign no_slot_csr = csr_wb && (exec_wb);
-	assign no_slot_exec = 0;
+	assign no_slot_mem_o  = mem_wb && (exec_wb || csr_wb);
+	assign no_slot_csr_o  = csr_wb && (exec_wb);
+	assign no_slot_exec_o = 0;
 
 	assign writeback_tempp_if.write_data  = exec_wb ? inst_exec_wb_if.alu_result :
 											csr_wb  ? csr_wb_if.csr_result       :

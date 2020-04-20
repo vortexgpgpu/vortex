@@ -30,7 +30,7 @@ module Vortex_Cluster #(
     input  wire[31:0]                   llc_snp_req_addr,
     output wire                         llc_snp_req_ready,
 
-    output wire                         out_ebreak
+    output wire                         ebreak
 );
     // DRAM Dcache Req
     wire[`NUM_CORES-1:0]                              per_core_dram_req_read;
@@ -57,7 +57,7 @@ module Vortex_Cluster #(
     wire[`NUM_CORES-1:0]                              per_core_I_dram_rsp_ready;
 
     // Out ebreak
-    wire[`NUM_CORES-1:0]                              per_core_out_ebreak;
+    wire[`NUM_CORES-1:0]                              per_core_ebreak;
 
     wire[`NUM_CORES-1:0]                              per_core_io_valid;
     wire[`NUM_CORES-1:0][31:0]                        per_core_io_data;
@@ -68,7 +68,7 @@ module Vortex_Cluster #(
     wire[31:0]                                        snp_fwd_addr;
     wire[`NUM_CORES-1:0]                              snp_fwd_ready;
 
-    assign out_ebreak = (&per_core_out_ebreak);
+    assign ebreak = (&per_core_ebreak);
 
     genvar curr_core;
     generate
@@ -109,7 +109,7 @@ module Vortex_Cluster #(
                 .llc_snp_req_valid          (snp_fwd_valid),
                 .llc_snp_req_addr           (snp_fwd_addr),
                 .llc_snp_req_ready          (snp_fwd_ready                [curr_core]),
-                .out_ebreak                 (per_core_out_ebreak          [curr_core])
+                .ebreak                     (per_core_ebreak              [curr_core])
             );
 
             assign per_core_dram_req_data  [curr_core] = curr_core_dram_req_data;

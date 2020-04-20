@@ -3,7 +3,7 @@
 module VX_lsu (
 	input wire              clk,
 	input wire              reset,
-	input wire              no_slot_mem,
+	input wire              no_slot_mem_i,
 	VX_lsu_req_if         	lsu_req_if,
 
 	// Write back to GPR
@@ -11,7 +11,7 @@ module VX_lsu (
 
 	VX_gpu_dcache_rsp_if  	dcache_rsp_if,
 	VX_gpu_dcache_req_if  	dcache_req_if,
-	output wire             out_delay
+	output wire             delay_o
 );
 	// Generate Addresses
 	wire[`NUM_THREADS-1:0][31:0] address;
@@ -38,7 +38,7 @@ module VX_lsu (
 	) lsu_buffer(
 		.clk  (clk),
 		.reset(reset),
-		.stall(out_delay),
+		.stall(delay_o),
 		.flush(zero),
 		.in   ({address    , lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.lsu_pc}),
 		.out  ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
@@ -56,10 +56,10 @@ module VX_lsu (
 	assign dcache_req_if.core_req_pc         = use_pc;
 
 	// Core can't accept response
-	assign dcache_rsp_if.core_rsp_ready      = ~no_slot_mem;	
+	assign dcache_rsp_if.core_rsp_ready      = ~no_slot_mem_i;	
 
 	// Cache can't accept request
-	assign out_delay = ~dcache_req_if.core_req_ready;
+	assign delay_o = ~dcache_req_if.core_req_ready;
 
 	// Core Response
 	assign mem_wb_if.rd          = dcache_rsp_if.core_rsp_read;

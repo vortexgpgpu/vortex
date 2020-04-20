@@ -10,8 +10,8 @@ module VX_back_end	#(
 	VX_gpu_dcache_rsp_if   dcache_rsp_if,
 	VX_gpu_dcache_req_if   dcache_req_if,
 
-	output wire            out_mem_delay,
-	output wire            out_exec_delay,
+	output wire            mem_delay_o,
+	output wire            exec_delay_o,
 	output wire            gpr_stage_delay,
 	VX_jal_response_if     jal_rsp_if,
 	VX_branch_response_if  branch_rsp_if,
@@ -65,8 +65,8 @@ VX_gpr_stage gpr_stage (
 	.csr_req_if      	(csr_req_if),
 	.stall_gpr_csr   	(stall_gpr_csr),
 	// End new
-	.memory_delay    	(out_mem_delay),
-	.exec_delay      	(out_exec_delay),
+	.memory_delay    	(mem_delay_o),
+	.exec_delay      	(exec_delay_o),
 	.gpr_stage_delay	(gpr_stage_delay)
 );
 
@@ -77,8 +77,8 @@ VX_lsu load_store_unit (
 	.mem_wb_if    	(mem_wb_if),
 	.dcache_rsp_if	(dcache_rsp_if),
 	.dcache_req_if	(dcache_req_if),
-	.out_delay    	(out_mem_delay),
-	.no_slot_mem  	(no_slot_mem)
+	.delay_o    	(mem_delay_o),
+	.no_slot_mem_i	(no_slot_mem)
 );
 
 VX_execute_unit execUnit (
@@ -88,8 +88,8 @@ VX_execute_unit execUnit (
 	.inst_exec_wb_if (inst_exec_wb_if),
 	.jal_rsp_if      (jal_rsp_if),
 	.branch_rsp_if   (branch_rsp_if),
-	.out_delay       (out_exec_delay),
-	.no_slot_exec    (no_slot_exec)
+	.delay_o         (exec_delay_o),
+	.no_slot_exec_i  (no_slot_exec)
 );
 
 VX_gpgpu_inst gpgpu_inst (
@@ -117,9 +117,9 @@ VX_writeback wb (
 	.csr_wb_if         (csr_wb_if),
 
 	.writeback_if	   (writeback_temp_if),
-	.no_slot_mem       (no_slot_mem),
-	.no_slot_exec      (no_slot_exec),
-	.no_slot_csr       (no_slot_csr)
+	.no_slot_mem_o     (no_slot_mem),
+	.no_slot_exec_o    (no_slot_exec),
+	.no_slot_csr_o     (no_slot_csr)
 );
 
 endmodule
