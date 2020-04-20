@@ -9,8 +9,8 @@ module Vortex_Cluster #(
     input  wire                         reset,
 
     // IO
-    output wire[`NUM_CORES_PER_CLUSTER-1:0]       io_valid,
-    output wire[`NUM_CORES_PER_CLUSTER-1:0][31:0] io_data,
+    output wire[`NUM_CORES-1:0]         io_valid,
+    output wire[`NUM_CORES-1:0][31:0]   io_data,
 
     // DRAM Req
     output wire                         dram_req_read,
@@ -33,47 +33,47 @@ module Vortex_Cluster #(
     output wire                         out_ebreak
 );
     // DRAM Dcache Req
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_req_read;
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_req_write;    
-    wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_dram_req_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_req_data;
+    wire[`NUM_CORES-1:0]                              per_core_dram_req_read;
+    wire[`NUM_CORES-1:0]                              per_core_dram_req_write;    
+    wire[`NUM_CORES-1:0] [31:0]                       per_core_dram_req_addr;
+    wire[`NUM_CORES-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_req_data;
 
     // DRAM Dcache Rsp
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_rsp_valid;    
-    wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_dram_rsp_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_rsp_data;
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_rsp_ready;
+    wire[`NUM_CORES-1:0]                              per_core_dram_rsp_valid;    
+    wire[`NUM_CORES-1:0] [31:0]                       per_core_dram_rsp_addr;
+    wire[`NUM_CORES-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_rsp_data;
+    wire[`NUM_CORES-1:0]                              per_core_dram_rsp_ready;
 
     // DRAM Icache Req
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_req_read;
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_req_write;    
-    wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_req_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`IBANK_LINE_WORDS-1:0][31:0] per_core_I_dram_req_data;
+    wire[`NUM_CORES-1:0]                              per_core_I_dram_req_read;
+    wire[`NUM_CORES-1:0]                              per_core_I_dram_req_write;    
+    wire[`NUM_CORES-1:0] [31:0]                       per_core_I_dram_req_addr;
+    wire[`NUM_CORES-1:0][`IBANK_LINE_WORDS-1:0][31:0] per_core_I_dram_req_data;
 
     // DRAM Icache Rsp    
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_rsp_valid;
-    wire[`NUM_CORES_PER_CLUSTER-1:0] [31:0]                       per_core_I_dram_rsp_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][`IBANK_LINE_WORDS-1:0][31:0] per_core_I_dram_rsp_data;
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_I_dram_rsp_ready;
+    wire[`NUM_CORES-1:0]                              per_core_I_dram_rsp_valid;
+    wire[`NUM_CORES-1:0] [31:0]                       per_core_I_dram_rsp_addr;
+    wire[`NUM_CORES-1:0][`IBANK_LINE_WORDS-1:0][31:0] per_core_I_dram_rsp_data;
+    wire[`NUM_CORES-1:0]                              per_core_I_dram_rsp_ready;
 
     // Out ebreak
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_out_ebreak;
+    wire[`NUM_CORES-1:0]                              per_core_out_ebreak;
 
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_io_valid;
-    wire[`NUM_CORES_PER_CLUSTER-1:0][31:0]                        per_core_io_data;
+    wire[`NUM_CORES-1:0]                              per_core_io_valid;
+    wire[`NUM_CORES-1:0][31:0]                        per_core_io_data;
 
-    wire                                                          l2c_core_req_ready;
+    wire                                              l2c_core_req_ready;
 
-    wire                                                          snp_fwd_valid;
-    wire[31:0]                                                    snp_fwd_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              snp_fwd_ready;
+    wire                                              snp_fwd_valid;
+    wire[31:0]                                        snp_fwd_addr;
+    wire[`NUM_CORES-1:0]                              snp_fwd_ready;
 
     assign out_ebreak = (&per_core_out_ebreak);
 
     genvar curr_core;
     generate
 
-        for (curr_core = 0; curr_core < `NUM_CORES_PER_CLUSTER; curr_core=curr_core+1) begin
+        for (curr_core = 0; curr_core < `NUM_CORES; curr_core=curr_core+1) begin
 
             wire [`IBANK_LINE_WORDS-1:0][31:0] curr_core_I_dram_req_data;
             wire [`DBANK_LINE_WORDS-1:0][31:0] curr_core_dram_req_data ;
@@ -82,7 +82,7 @@ module Vortex_Cluster #(
             assign io_data [curr_core]  = per_core_io_data [curr_core];
 
             Vortex #(
-                .CORE_ID(curr_core + (CLUSTER_ID * `NUM_CORES_PER_CLUSTER))
+                .CORE_ID(curr_core + (CLUSTER_ID * `NUM_CORES))
             ) vortex_core (
                 .clk                        (clk),
                 .reset                      (reset),
