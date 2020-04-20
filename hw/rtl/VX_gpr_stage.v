@@ -55,8 +55,8 @@ module VX_gpr_stage (
 		.gpr_read_if       (gpr_read_if),
 		.gpr_jal_if        (gpr_jal_if),
 
-		.out_a_reg_data (gpr_datf_if.a_reg_data),
-		.out_b_reg_data (gpr_datf_if.b_reg_data)
+		.a_reg_data_o (gpr_datf_if.a_reg_data),
+		.b_reg_data_o (gpr_datf_if.b_reg_data)
 	);
 
 	// assign bckE_req_if.is_csr   = is_csr;

@@ -1,16 +1,16 @@
 `include "../VX_define.vh"
 
 module VX_d_e_reg (
-	input wire              clk,
+	input wire        		clk,
 	input wire              reset,
-	input wire              in_branch_stall,
-	input wire              in_freeze,
+	input wire              branch_stall_i,
+	input wire              freeze_i,
 	VX_frE_to_bckE_req_if 	frE_to_bckE_req_if,
 	VX_frE_to_bckE_req_if	bckE_req_if
 );
 
-	wire stall = in_freeze;
-	wire flush = (in_branch_stall == `STALL);
+	wire stall = freeze_i;
+	wire flush = (branch_stall_i == `STALL);
 
 	VX_generic_register #(
 		.N(233 + `NW_BITS-1 + 1 + `NUM_THREADS)

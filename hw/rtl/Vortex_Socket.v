@@ -28,7 +28,7 @@ module Vortex_Socket (
     input  wire[31:0]                   llc_snp_req_addr,
     output wire                         llc_snp_req_ready,
 
-    output wire                         out_ebreak
+    output wire                         ebreak
 );
     if (`NUM_CLUSTERS == 1) begin
 
@@ -63,7 +63,7 @@ module Vortex_Socket (
             .llc_snp_req_addr   (llc_snp_req_addr),
             .llc_snp_req_ready  (llc_snp_req_ready),
 
-            .out_ebreak         (out_ebreak)
+            .ebreak             (ebreak)
         );
 
     end else begin
@@ -72,9 +72,9 @@ module Vortex_Socket (
         wire[31:0]              snp_fwd_addr;
         wire[`NUM_CLUSTERS-1:0] snp_fwd_ready;
 
-        wire[`NUM_CLUSTERS-1:0] per_cluster_out_ebreak;
+        wire[`NUM_CLUSTERS-1:0] per_cluster_ebreak;
 
-        assign out_ebreak = (&per_cluster_out_ebreak);
+        assign ebreak = (&per_cluster_ebreak);
 
         // // DRAM Dcache Req
         wire[`NUM_CLUSTERS-1:0]                              per_cluster_dram_req_valid;
@@ -133,9 +133,9 @@ module Vortex_Socket (
 
                 .llc_snp_req_valid      (snp_fwd_valid),
                 .llc_snp_req_addr       (snp_fwd_addr),
-                .llc_snp_req_ready      (snp_fwd_ready[curr_cluster]),
+                .llc_snp_req_ready      (snp_fwd_ready                  [curr_cluster]),
 
-                .out_ebreak             (per_cluster_out_ebreak         [curr_cluster])
+                .ebreak                 (per_cluster_ebreak             [curr_cluster])
             );
         end
 

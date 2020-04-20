@@ -79,9 +79,9 @@ module VX_cache_dfq_queue #(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (push_qual),
-		.in_data ({per_bank_dram_fill_req_valid, per_bank_dram_fill_req_addr}),
+		.data_i ({per_bank_dram_fill_req_valid, per_bank_dram_fill_req_addr}),
 		.pop     (pop_qual),
-		.out_data({out_per_bank_dram_fill_req, out_per_bank_dram_fill_req_addr}),
+		.data_o({out_per_bank_dram_fill_req, out_per_bank_dram_fill_req_addr}),
 		.empty   (o_empty),
 		.full    (dfqq_full)
 	);

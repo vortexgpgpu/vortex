@@ -43,7 +43,7 @@ module Vortex #(
 	input  wire [31:0]      			llc_snp_req_addr,
 	output wire             			llc_snp_req_ready,
 
-	output wire          			    out_ebreak
+	output wire          			    ebreak
 );
 `DEBUG_BEGIN
 	wire scheduler_empty;
@@ -156,7 +156,7 @@ VX_front_end front_end (
 	.icache_req_if  	(icache_req_if),
 	.jal_rsp_if       	(jal_rsp_if),
 	.branch_rsp_if      (branch_rsp_if),
-	.fetch_ebreak       (out_ebreak)
+	.fetch_ebreak       (ebreak)
 );
 
 VX_scheduler schedule (
@@ -184,8 +184,8 @@ VX_back_end #(
 	.dcache_rsp_if       (dcache_rsp_if),
 	.dcache_req_if       (dcache_req_if),
 	.writeback_if        (writeback_if),
-	.out_mem_delay       (memory_delay),
-	.out_exec_delay      (exec_delay),
+	.mem_delay_o         (memory_delay),
+	.exec_delay_o        (exec_delay),
 	.gpr_stage_delay     (gpr_stage_delay)
 );
 

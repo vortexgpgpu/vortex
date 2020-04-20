@@ -125,9 +125,9 @@ module VX_bank #(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (snp_req_valid),
-		.in_data (snp_req_addr),
+		.data_i  (snp_req_addr),
 		.pop     (snrq_pop),
-		.out_data(snrq_addr_st0),
+		.data_o  (snrq_addr_st0),
 		.empty   (snrq_empty),
 		.full    (snp_req_full)
 	);
@@ -147,9 +147,9 @@ module VX_bank #(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (dram_fill_rsp_valid),
-		.in_data ({dram_fill_rsp_addr, dram_fill_rsp_data}),
+		.data_i ({dram_fill_rsp_addr, dram_fill_rsp_data}),
 		.pop     (dfpq_pop),
-		.out_data({dfpq_addr_st0, dfpq_filldata_st0}),
+		.data_o({dfpq_addr_st0, dfpq_filldata_st0}),
 		.empty   (dfpq_empty),
 		.full    (dfpq_full)
 	);
@@ -538,10 +538,10 @@ module VX_bank #(
 		.reset   (reset),
 
 		.push    (cwbq_push),
-		.in_data ({cwbq_tid, cwbq_rd, cwbq_wb, cwbq_warp_num, cwbq_data, cwbq_pc, addr_st2}),
+		.data_i ({cwbq_tid, cwbq_rd, cwbq_wb, cwbq_warp_num, cwbq_data, cwbq_pc, addr_st2}),
 
 		.pop     (core_rsp_pop),
-		.out_data({core_rsp_tid, core_rsp_rd, core_rsp_wb, core_rsp_warp_num, core_rsp_data, core_rsp_pc, core_rsp_addr}),
+		.data_o({core_rsp_tid, core_rsp_rd, core_rsp_wb, core_rsp_warp_num, core_rsp_data, core_rsp_pc, core_rsp_addr}),
 		.empty   (cwbq_empty),
 		.full    (cwbq_full)
 	);
@@ -606,10 +606,10 @@ module VX_bank #(
 		.reset   (reset),
 
 		.push    (dwbq_push),
-		.in_data ({dwbq_req_addr, dwbq_req_data}),
+		.data_i ({dwbq_req_addr, dwbq_req_data}),
 
 		.pop     (dram_wb_req_pop),
-		.out_data({dram_wb_req_addr, dram_wb_req_data}),
+		.data_o({dram_wb_req_addr, dram_wb_req_data}),
 		.empty   (dwbq_empty),
 		.full    (dwbq_full)
 	);
@@ -627,9 +627,9 @@ module VX_bank #(
 		.clk     (clk),
 		.reset   (reset),
 		.push    (snp_fwd_push),
-		.in_data ({addr_st2}),
+		.data_i ({addr_st2}),
 		.pop     (snp_fwd_pop),
-		.out_data({snp_fwd_addr}),
+		.data_o({snp_fwd_addr}),
 		.empty   (ffsq_empty),
 		.full    (ffsq_full)
 	);

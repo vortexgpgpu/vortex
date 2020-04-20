@@ -570,7 +570,7 @@ Vortex_Socket #() vx_socket (
   .llc_snp_req_ready  (vx_snp_req_ready),
  
   // program exit signal
-  .out_ebreak 				(vx_ebreak)
+  .ebreak 				    (vx_ebreak)
 );
 
 endmodule

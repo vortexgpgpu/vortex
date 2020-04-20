@@ -40,8 +40,8 @@ module VX_priority_encoder_sm
 		.NB(NB), 
 		.BITS_PER_BANK(BITS_PER_BANK)
 	) bank_valid (
-		.in_valids(use_valid),
-		.in_addr(in_address),
+		.valids_i(use_valid),
+		.addr_i(in_address),
 		.bank_valids(bank_valids)
 	);
 

@@ -31,14 +31,14 @@ module VX_csr_pipe #(
 	wire writeback = |writeback_if.wb_valid;
 	
 	VX_csr_data csr_data(
-		.clk                 (clk),
-		.reset               (reset),
-		.in_read_csr_address (csr_req_if.csr_address),
-		.in_write_valid      (is_csr_s2),
-		.in_write_csr_data   (csr_updated_data_s2[`CSR_WIDTH-1:0]),
-		.in_write_csr_address(csr_address_s2),
-		.out_read_csr_data   (csr_read_data_unqual),
-		.in_writeback_valid  (writeback)
+		.clk                (clk),
+		.reset              (reset),
+		.read_csr_address_i	(csr_req_if.csr_address),
+		.write_valid_i      (is_csr_s2),
+		.write_csr_data_i   (csr_updated_data_s2[`CSR_WIDTH-1:0]),
+		.write_csr_address_i(csr_address_s2),
+		.read_csr_data_o   	(csr_read_data_unqual),
+		.writeback_valid_i  (writeback)
 	);
 
 	reg [31:0] csr_updated_data;

@@ -73,13 +73,13 @@ module VX_shared_memory #(
 	) priority_encoder_sm (
 		.clk(clk),
 		.reset(reset),
-		.in_valid(orig_in_valid),
-		.in_address(in_address),
-		.in_data(in_data),
+		.valid_i(orig_in_valid),
+		.address_i(in_address),
+		.data_i(in_data),
 
-		.out_valid(temp_in_valid),
-		.out_address(temp_address),
-		.out_data(temp_in_data),
+		.valid_o(temp_in_valid),
+		.address_o(temp_address),
+		.data_o(temp_in_data),
 
 		.req_num(req_num),
 		.stall(stall),

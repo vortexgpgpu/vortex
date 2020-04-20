@@ -10,13 +10,13 @@ module VX_generic_queue #(
 	output wire             empty,
 	output wire             full,
 `IGNORE_WARNINGS_END		
-    input  wire [DATAW-1:0] in_data,
-	output wire [DATAW-1:0] out_data
+    input  wire [DATAW-1:0] data_i,
+	output wire [DATAW-1:0] data_o
 ); 
     if (SIZE == 0) begin
 
         assign empty    = 1;
-        assign out_data = in_data;
+        assign data_o = data_i;
         assign full     = 0;
 
     end else begin // (SIZE > 0)
@@ -49,12 +49,12 @@ module VX_generic_queue #(
                     end
 
                     if (writing) begin 
-                        head_r <= in_data;
+                        head_r <= data_i;
                     end
                 end
             end        
 
-            assign out_data = head_r;
+            assign data_o = head_r;
             assign empty    = (size_r == 0);
             assign full     = (size_r != 0) && !pop;
 
@@ -99,7 +99,7 @@ module VX_generic_queue #(
 
             always @(posedge clk) begin
                 if (writing) begin 
-                    data[wr_ctr_r] <= in_data;
+                    data[wr_ctr_r] <= data_i;
                 end
             end
         
@@ -121,12 +121,12 @@ module VX_generic_queue #(
                     end
 
                     bypass_r <= writing && (empty_r || (1 == size_r) && reading);
-                    curr_r <= in_data;
+                    curr_r <= data_i;
                     head_r <= data[reading ? rd_next_ptr_r : rd_ptr_r];
                 end
             end
 
-            assign out_data = bypass_r ? curr_r : head_r;
+            assign data_o = bypass_r ? curr_r : head_r;
             assign empty = empty_r;
             assign full = full_r;
         end
