@@ -1,7 +1,7 @@
 `ifndef VX_F_D_INTER
 `define VX_F_D_INTER
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_inst_meta_if ();
 

@@ -6,9 +6,9 @@ ALL:sim
 SRC = \
   vortex_dpi.cpp  \
   vortex_tb.v \
-../rtl/VX_user_config.vh \
-../rtl/VX_config.vh \
-../rtl/VX_define.vh \
+../rtl/VX_user_config.v \
+../rtl/VX_config.v \
+../rtl/VX_define.v \
 ../rtl/interfaces/VX_branch_response_inter.v \
 ../rtl/interfaces/VX_csr_req_inter.v \
 ../rtl/interfaces/VX_csr_wb_inter.v \

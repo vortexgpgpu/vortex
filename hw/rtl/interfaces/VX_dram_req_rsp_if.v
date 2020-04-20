@@ -2,7 +2,7 @@
 `ifndef VX_DRAM_REQ_RSP_INTER
 `define VX_DRAM_REQ_RSP_INTER
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_dram_req_rsp_if #(
 	parameter NUM_BANKS = 8,

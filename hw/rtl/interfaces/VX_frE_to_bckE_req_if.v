@@ -1,7 +1,7 @@
 `ifndef VX_FrE_to_BE_INTER
 `define VX_FrE_to_BE_INTER
 
-`include "VX_define.vh"
+`include "VX_define.v"
 
 interface VX_frE_to_bckE_req_if ();
 

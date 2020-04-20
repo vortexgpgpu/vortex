@@ -1,7 +1,7 @@
 `ifndef VX_EXE_UNIT_REQ_INTER
 `define VX_EXE_UNIT_REQ_INTER
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_exec_unit_req_if ();
 

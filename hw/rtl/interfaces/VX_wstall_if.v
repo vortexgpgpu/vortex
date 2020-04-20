@@ -1,7 +1,7 @@
 `ifndef VX_WSTALL_INTER
 `define VX_WSTALL_INTER
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_wstall_if();
 

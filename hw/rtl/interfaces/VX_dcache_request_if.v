@@ -1,7 +1,7 @@
 `ifndef VX_DCACHE_REQ
 `define VX_DCACHE_REQ
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_dcache_request_if ();
 

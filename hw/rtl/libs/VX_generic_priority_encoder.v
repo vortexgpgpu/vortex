@@ -1,7 +1,7 @@
 `ifndef VX_GENERIC_PRIORITY_ENCODER
 `define VX_GENERIC_PRIORITY_ENCODER
 
-`include "VX_define.vh"
+`include "VX_define.v"
 
 module VX_generic_priority_encoder
   #(

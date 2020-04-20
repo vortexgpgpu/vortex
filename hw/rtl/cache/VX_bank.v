@@ -1,5 +1,5 @@
 `include "VX_cache_config.vh"
-`include "VX_define.vh"
+`include "VX_define.v"
 module VX_bank #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 

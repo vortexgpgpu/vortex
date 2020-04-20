@@ -1,7 +1,7 @@
 `ifndef VX_GPR_READ
 `define VX_GPR_READ
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_gpr_read_if ();
 
