@@ -23,28 +23,29 @@ module VX_dmem_controller (
 	VX_gpu_dcache_req_if  icache_req_if
 );
 
-	VX_gpu_dcache_rsp_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   dcache_rsp_smem_if();
 	VX_gpu_dcache_req_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   dcache_req_smem_if();
-
-	VX_gpu_dcache_rsp_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   dcache_rsp_dcache_if();
+	VX_gpu_dcache_rsp_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   dcache_rsp_smem_if();
+	
 	VX_gpu_dcache_req_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   dcache_req_dcache_if();
+	VX_gpu_dcache_rsp_if   #(.NUM_REQUESTS(`DNUM_REQUESTS))   dcache_rsp_dcache_if();
 
 	wire to_shm          = dcache_req_if.core_req_addr[0][31:24] == 8'hFF;
     wire dcache_wants_wb = (|dcache_rsp_dcache_if.core_wb_valid);
 
 	// Dcache Request
 	assign dcache_req_dcache_if.core_req_valid       = dcache_req_if.core_req_valid & {`NUM_THREADS{~to_shm}};
-	assign dcache_req_dcache_if.core_req_addr        = dcache_req_if.core_req_addr;
-	assign dcache_req_dcache_if.core_req_writedata   = dcache_req_if.core_req_writedata;
 	assign dcache_req_dcache_if.core_req_mem_read    = dcache_req_if.core_req_mem_read;
 	assign dcache_req_dcache_if.core_req_mem_write   = dcache_req_if.core_req_mem_write;
-    assign dcache_req_dcache_if.core_req_rd          = dcache_req_if.core_req_rd;
+	assign dcache_req_dcache_if.core_req_addr        = dcache_req_if.core_req_addr;	
+	assign dcache_req_dcache_if.core_req_writedata   = dcache_req_if.core_req_writedata;    
+	assign dcache_req_dcache_if.core_req_rd          = dcache_req_if.core_req_rd;
     assign dcache_req_dcache_if.core_req_wb          = dcache_req_if.core_req_wb;
     assign dcache_req_dcache_if.core_req_warp_num    = dcache_req_if.core_req_warp_num;
     assign dcache_req_dcache_if.core_req_pc          = dcache_req_if.core_req_pc;
-    assign dcache_req_dcache_if.core_no_wb_slot      = dcache_req_if.core_no_wb_slot;
 
-    // Shred Memory Request
+	assign dcache_req_dcache_if.core_no_wb_slot      = dcache_req_if.core_no_wb_slot;    
+    
+    // Shared Memory Request
 	assign dcache_req_smem_if.core_req_valid       = dcache_req_if.core_req_valid & {`NUM_THREADS{to_shm}};
 	assign dcache_req_smem_if.core_req_addr        = dcache_req_if.core_req_addr;
 	assign dcache_req_smem_if.core_req_writedata   = dcache_req_if.core_req_writedata;
@@ -54,17 +55,18 @@ module VX_dmem_controller (
     assign dcache_req_smem_if.core_req_wb          = dcache_req_if.core_req_wb;
     assign dcache_req_smem_if.core_req_warp_num    = dcache_req_if.core_req_warp_num;
     assign dcache_req_smem_if.core_req_pc          = dcache_req_if.core_req_pc;
-    assign dcache_req_smem_if.core_no_wb_slot      = dcache_req_if.core_no_wb_slot || dcache_wants_wb;
 
-    // Dcache Response
+    assign dcache_req_smem_if.core_no_wb_slot      = dcache_req_if.core_no_wb_slot || dcache_wants_wb;    
+
+	// Dcache Response
     assign dcache_rsp_if.core_wb_valid     = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_valid    : dcache_rsp_smem_if.core_wb_valid;
     assign dcache_rsp_if.core_wb_req_rd    = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_req_rd   : dcache_rsp_smem_if.core_wb_req_rd;
     assign dcache_rsp_if.core_wb_req_wb    = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_req_wb   : dcache_rsp_smem_if.core_wb_req_wb;
-    assign dcache_rsp_if.core_wb_warp_num  = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_warp_num : dcache_rsp_smem_if.core_wb_warp_num;
+    assign dcache_rsp_if.core_wb_pc        = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_pc       : dcache_rsp_smem_if.core_wb_pc;	
     assign dcache_rsp_if.core_wb_readdata  = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_readdata : dcache_rsp_smem_if.core_wb_readdata;
-    assign dcache_rsp_if.core_wb_pc        = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_pc       : dcache_rsp_smem_if.core_wb_pc;
+	assign dcache_rsp_if.core_wb_warp_num  = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_warp_num : dcache_rsp_smem_if.core_wb_warp_num;
 
-    assign dcache_rsp_if.delay_req         = to_shm          ? dcache_rsp_smem_if.delay_req : dcache_rsp_dcache_if.delay_req;
+    assign dcache_rsp_if.core_req_ready    = to_shm ? dcache_rsp_smem_if.core_req_ready : dcache_rsp_dcache_if.core_req_ready;
 
 	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_req_if();
 	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_res_if();
@@ -105,8 +107,8 @@ module VX_dmem_controller (
 		.core_req_warp_num (dcache_req_smem_if.core_req_warp_num),
 		.core_req_pc       (dcache_req_smem_if.core_req_pc),
 
-		// Delay Core Req
-		.delay_req         (dcache_rsp_smem_if.delay_req),
+		// Can submit core Req
+		.core_req_ready    (dcache_rsp_smem_if.core_req_ready),
 
 		// Core Cache Can't WB
 		.core_no_wb_slot   (dcache_req_smem_if.core_no_wb_slot),
@@ -135,7 +137,7 @@ module VX_dmem_controller (
 		.dram_req_write    	(gpu_smem_dram_req_if.dram_req_write),		
 		.dram_req_addr     	(gpu_smem_dram_req_if.dram_req_addr),
 		.dram_req_data     	(gpu_smem_dram_req_if.dram_req_data),
-		.dram_req_full    	(1),
+		.dram_req_ready    	(0),
 
 		// Snoop Request
 		.snp_req_valid      (0),
@@ -188,8 +190,8 @@ module VX_dmem_controller (
 		.core_req_warp_num (dcache_req_dcache_if.core_req_warp_num),
 		.core_req_pc       (dcache_req_dcache_if.core_req_pc),
 
-		// Delay Core Req
-		.delay_req         (dcache_rsp_dcache_if.delay_req),
+		// Can submit core Req
+		.core_req_ready    (dcache_rsp_dcache_if.core_req_ready),
 
 		// Core Cache Can't WB
 		.core_no_wb_slot   (dcache_req_dcache_if.core_no_wb_slot),
@@ -218,7 +220,7 @@ module VX_dmem_controller (
 		.dram_req_write     (gpu_dcache_dram_req_if.dram_req_write),		
 		.dram_req_addr      (gpu_dcache_dram_req_if.dram_req_addr),
 		.dram_req_data      (gpu_dcache_dram_req_if.dram_req_data),
-		.dram_req_full      (gpu_dcache_dram_req_if.dram_req_full),
+		.dram_req_ready      (gpu_dcache_dram_req_if.dram_req_ready),
 
 		// Snoop Request
 		.snp_req_valid      (gpu_dcache_snp_req_if.snp_req_valid),
@@ -269,8 +271,8 @@ module VX_dmem_controller (
 		.core_req_warp_num 	(icache_req_if.core_req_warp_num),
 		.core_req_pc       	(icache_req_if.core_req_pc),
 
-		// Delay Core Req
-		.delay_req         	(icache_rsp_if.delay_req),
+		// Can submit core Req
+		.core_req_ready    	(icache_rsp_if.core_req_ready),
 
 		// Core Cache Can't WB
 		.core_no_wb_slot   	(icache_req_if.core_no_wb_slot),
@@ -299,7 +301,7 @@ module VX_dmem_controller (
 		.dram_req_write    	(gpu_icache_dram_req_if.dram_req_write),		
 		.dram_req_addr     	(gpu_icache_dram_req_if.dram_req_addr),
 		.dram_req_data     	(gpu_icache_dram_req_if.dram_req_data),
-		.dram_req_full    	(gpu_icache_dram_req_if.dram_req_full),
+		.dram_req_ready    	(gpu_icache_dram_req_if.dram_req_ready),
 
 		// Snoop Request
 		.snp_req_valid     	(gpu_icache_snp_req_if.snp_req_valid),

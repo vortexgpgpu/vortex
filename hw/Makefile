@@ -34,7 +34,7 @@ gen-singlecore-t: build_config
 	verilator $(VF) -cc $(SINGLE_CORE) -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
 
 gen-singlecore-d: build_config
-	verilator $(VF) -cc $(SINGLE_CORE) -CFLAGS '$(CF) -DVCD_OUTPUT' $(DBG)
+	verilator $(VF) -cc $(SINGLE_CORE) -CFLAGS '$(CF) -g -O0 -DVCD_OUTPUT' $(DBG)
 
 gen-multicore: build_config
 	verilator $(VF) -DNDEBUG -cc $(MULTI_CORE) -CFLAGS '$(CF) -DNDEBUG -DUSE_MULTICORE'
@@ -43,7 +43,7 @@ gen-multicore-t: build_config
 	verilator $(VF) -DNDEBUG -cc $(MULTI_CORE) -CFLAGS '$(CF) -DNDEBUG -O2 -DUSE_MULTICORE' --threads $(THREADS)
 
 gen-multicore-d: build_config
-	verilator $(VF) -cc $(MULTI_CORE) -CFLAGS '$(CF) -DVCD_OUTPUT -DUSE_MULTICORE' $(DBG)
+	verilator $(VF) -cc $(MULTI_CORE) -CFLAGS '$(CF) -g -O0 -DVCD_OUTPUT -DUSE_MULTICORE' $(DBG)
 
 singlecore: gen-singlecore
 	(cd obj_dir && make -j -f VVortex.mk)

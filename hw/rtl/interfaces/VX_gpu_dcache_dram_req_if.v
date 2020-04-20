@@ -12,7 +12,7 @@ interface VX_gpu_dcache_dram_req_if #(
     wire                              dram_req_read;
     wire [31:0]                       dram_req_addr;
     wire [BANK_LINE_WORDS-1:0][31:0]  dram_req_data;    
-    wire                              dram_req_full;
+    wire                              dram_req_ready;
 
     wire                              dram_rsp_ready;    
 

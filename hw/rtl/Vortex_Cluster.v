@@ -1,14 +1,12 @@
 `include "VX_define.vh"
 `include "VX_cache_config.vh"
 
-module Vortex_Cluster 
-    #(
-        parameter CLUSTER_ID = 0
-    ) ( 
-
+module Vortex_Cluster #(
+    parameter CLUSTER_ID = 0
+) ( 
     // Clock
-    input  wire             clk,
-    input  wire             reset,
+    input  wire                         clk,
+    input  wire                         reset,
 
     // IO
     output wire[`NUM_CORES_PER_CLUSTER-1:0]       io_valid,
@@ -19,7 +17,7 @@ module Vortex_Cluster
     output wire                         dram_req_write,    
     output wire [31:0]                  dram_req_addr,
     output wire [`DBANK_LINE_SIZE-1:0]  dram_req_data,
-    input  wire                         dram_req_full,
+    input  wire                         dram_req_ready,
 
     // DRAM Rsp    
     input  wire                         dram_rsp_valid,
@@ -28,11 +26,11 @@ module Vortex_Cluster
     output wire                         dram_rsp_ready,
 
     // LLC Snooping
-    input  wire             llc_snp_req_valid,
-    input  wire[31:0]       llc_snp_req_addr,
-    output wire             llc_snp_req_full,
+    input  wire                         llc_snp_req_valid,
+    input  wire[31:0]                   llc_snp_req_addr,
+    output wire                         llc_snp_req_full,
 
-    output wire             out_ebreak
+    output wire                         out_ebreak
 );
     // DRAM Dcache Req
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_dram_req_read;
@@ -64,7 +62,7 @@ module Vortex_Cluster
     wire[`NUM_CORES_PER_CLUSTER-1:0]                              per_core_io_valid;
     wire[`NUM_CORES_PER_CLUSTER-1:0][31:0]                        per_core_io_data;
 
-    wire                                                          l2c_core_accept;
+    wire                                                          l2c_core_req_ready;
 
     wire                                                          snp_fwd_valid;
     wire[31:0]                                                    snp_fwd_addr;
@@ -94,7 +92,7 @@ module Vortex_Cluster
                 .dram_req_write             (per_core_dram_req_write      [curr_core]),                
                 .dram_req_addr              (per_core_dram_req_addr       [curr_core]),
                 .dram_req_data              (curr_core_dram_req_data                 ),
-                .dram_req_full             (l2c_core_accept                         ),                
+                .dram_req_ready             (l2c_core_req_ready                      ),                
                 .dram_rsp_valid             (per_core_dram_rsp_valid      [curr_core]),
                 .dram_rsp_addr              (per_core_dram_rsp_addr       [curr_core]),
                 .dram_rsp_data              (per_core_dram_rsp_data       [curr_core]),
@@ -103,14 +101,14 @@ module Vortex_Cluster
                 .I_dram_req_write           (per_core_I_dram_req_write    [curr_core]),                
                 .I_dram_req_addr            (per_core_I_dram_req_addr     [curr_core]),                
                 .I_dram_req_data            (curr_core_I_dram_req_data               ),
-                .I_dram_req_full           (l2c_core_accept                         ),                
+                .I_dram_req_ready           (l2c_core_req_ready                      ),                
                 .I_dram_rsp_valid           (per_core_I_dram_rsp_valid    [curr_core]),
                 .I_dram_rsp_addr            (per_core_I_dram_rsp_addr     [curr_core]),
                 .I_dram_rsp_data            (per_core_I_dram_rsp_data     [curr_core]),
                 .I_dram_rsp_ready           (per_core_I_dram_rsp_ready    [curr_core]),                                
-                .snp_req_valid              (snp_fwd_valid),
-                .snp_req_addr               (snp_fwd_addr),
-                .snp_req_full              (snp_fwd_full                [curr_core]),
+                .llc_snp_req_valid          (snp_fwd_valid),
+                .llc_snp_req_addr           (snp_fwd_addr),
+                .llc_snp_req_full           (snp_fwd_full                 [curr_core]),
                 .out_ebreak                 (per_core_out_ebreak          [curr_core])
             );
 
@@ -220,7 +218,7 @@ module Vortex_Cluster
         .core_req_pc        (0),
 
         // L2 can't accept Core Request
-        .delay_req          (l2c_core_accept),
+        .core_req_ready     (l2c_core_req_ready),
 
         // Core can't accept L2 Request
         .core_no_wb_slot    (|l2c_core_no_wb_slot),
@@ -249,7 +247,7 @@ module Vortex_Cluster
         .dram_req_write     (dram_req_write),        
         .dram_req_addr      (dram_req_addr),
         .dram_req_data      ({dram_req_data_port}),
-        .dram_req_full      (dram_req_full),
+        .dram_req_ready     (dram_req_ready),
 
         // Snoop Request
         .snp_req_valid      (llc_snp_req_valid),
