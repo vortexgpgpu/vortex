@@ -9,10 +9,10 @@ interface VX_gpu_dcache_req_if #(
 
 	// Core request
 	wire [NUM_REQUESTS-1:0]         core_req_valid;
-	wire [NUM_REQUESTS-1:0][2:0]    core_req_mem_read;
-	wire [NUM_REQUESTS-1:0][2:0]    core_req_mem_write;
+	wire [NUM_REQUESTS-1:0][2:0]    core_req_read;
+	wire [NUM_REQUESTS-1:0][2:0]    core_req_write;
 	wire [NUM_REQUESTS-1:0][31:0]   core_req_addr;
-	wire [NUM_REQUESTS-1:0][31:0]   core_req_writedata;	
+	wire [NUM_REQUESTS-1:0][31:0]   core_req_data;	
 	wire                            core_req_ready;
 
 	// Core request Meta data

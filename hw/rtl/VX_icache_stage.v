@@ -21,15 +21,15 @@ module VX_icache_stage (
 	// Icache Request
 	assign icache_req_if.core_req_valid      = valid_inst && !total_freeze;
 	assign icache_req_if.core_req_addr       = fe_inst_meta_fi.inst_pc;
-	assign icache_req_if.core_req_writedata  = 32'b0;
-	assign icache_req_if.core_req_mem_read   = `LW_MEM_READ;
-	assign icache_req_if.core_req_mem_write  = `NO_MEM_WRITE;
+	assign icache_req_if.core_req_data       = 32'b0;
+	assign icache_req_if.core_req_read       = `LW_MEM_READ;
+	assign icache_req_if.core_req_write      = `NO_MEM_WRITE;
 	assign icache_req_if.core_req_rd         = 5'b0;
 	assign icache_req_if.core_req_wb         = {1{2'b1}};
 	assign icache_req_if.core_req_warp_num   = fe_inst_meta_fi.warp_num;
 	assign icache_req_if.core_req_pc         = fe_inst_meta_fi.inst_pc;
 
-	assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_readdata[0][31:0];
+	assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_data[0][31:0];
 	assign fe_inst_meta_id.inst_pc     = icache_rsp_if.core_rsp_pc[0];
 	assign fe_inst_meta_id.warp_num    = icache_rsp_if.core_rsp_warp_num;
 	

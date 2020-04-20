@@ -209,10 +209,10 @@ module Vortex_Socket (
 
             // Core Req (DRAM Fills/WB) To L2 Request            
             .core_req_valid     (l3c_core_req_valid),
-            .core_req_mem_read  (l3c_core_req_mem_read),
-            .core_req_mem_write (l3c_core_req_mem_write),
+            .core_req_read      (l3c_core_req_mem_read),
+            .core_req_write     (l3c_core_req_mem_write),
             .core_req_addr      (l3c_core_req_addr),
-            .core_req_writedata ({l3c_core_req_data}),
+            .core_req_data      ({l3c_core_req_data}),
             .core_req_rd        (0),
             .core_req_wb        (l3c_core_req_wb),
             .core_req_warp_num  (0),
@@ -227,13 +227,13 @@ module Vortex_Socket (
             // Core Writeback
             .core_rsp_valid     (l3c_wb),
         `IGNORE_WARNINGS_BEGIN
-            .core_rsp_req_rd    (),
-            .core_rsp_req_wb    (),
+            .core_rsp_read      (),
+            .core_rsp_write     (),
             .core_rsp_warp_num  (),
             .core_rsp_pc        (),
         `IGNORE_WARNINGS_END
-            .core_rsp_readdata  ({l3c_wb_data}),
-            .core_rsp_address   (l3c_wb_addr),            
+            .core_rsp_data      ({l3c_wb_data}),
+            .core_rsp_addr      (l3c_wb_addr),            
 
             // L2 Cache DRAM Fill response
             .dram_rsp_valid     (dram_rsp_valid),

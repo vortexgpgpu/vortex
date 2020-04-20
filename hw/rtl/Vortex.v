@@ -82,18 +82,18 @@ module Vortex #(
 
 	wire temp_io_valid = (!memory_delay) 
 					  && (|dcache_req_if.core_req_valid) 
-					  && (dcache_req_if.core_req_mem_write[0] != `NO_MEM_WRITE) 
+					  && (dcache_req_if.core_req_write[0] != `NO_MEM_WRITE) 
 					  && (dcache_req_if.core_req_addr[0] == `IO_BUS_ADDR);
 
-	wire [31:0] temp_io_data = dcache_req_if.core_req_writedata[0];
+	wire [31:0] temp_io_data = dcache_req_if.core_req_data[0];
 	assign io_valid          = temp_io_valid;
 	assign io_data           = temp_io_data;
 
 	assign dcache_req_qual_if.core_req_valid     = dcache_req_if.core_req_valid & {`NUM_THREADS{~io_valid}};		
-	assign dcache_req_qual_if.core_req_mem_read  = dcache_req_if.core_req_mem_read;
-	assign dcache_req_qual_if.core_req_mem_write = dcache_req_if.core_req_mem_write;
+	assign dcache_req_qual_if.core_req_read      = dcache_req_if.core_req_read;
+	assign dcache_req_qual_if.core_req_write     = dcache_req_if.core_req_write;
 	assign dcache_req_qual_if.core_req_addr      = dcache_req_if.core_req_addr;
-	assign dcache_req_qual_if.core_req_writedata = dcache_req_if.core_req_writedata;	
+	assign dcache_req_qual_if.core_req_data      = dcache_req_if.core_req_data;	
 	
 	assign dcache_req_if.core_req_ready = dcache_req_qual_if.core_req_ready;
 

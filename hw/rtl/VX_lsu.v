@@ -47,9 +47,9 @@ module VX_lsu (
 	// Core Request
 	assign dcache_req_if.core_req_valid      = use_valid;
 	assign dcache_req_if.core_req_addr       = use_address;
-	assign dcache_req_if.core_req_writedata  = use_store_data;
-	assign dcache_req_if.core_req_mem_read   = {`NUM_THREADS{use_mem_read}};
-	assign dcache_req_if.core_req_mem_write  = {`NUM_THREADS{use_mem_write}};
+	assign dcache_req_if.core_req_data       = use_store_data;
+	assign dcache_req_if.core_req_read       = {`NUM_THREADS{use_mem_read}};
+	assign dcache_req_if.core_req_write      = {`NUM_THREADS{use_mem_write}};
 	assign dcache_req_if.core_req_rd         = use_rd;
 	assign dcache_req_if.core_req_wb         = {`NUM_THREADS{use_wb}};
 	assign dcache_req_if.core_req_warp_num   = use_warp_num;
@@ -62,11 +62,11 @@ module VX_lsu (
 	assign out_delay = ~dcache_req_if.core_req_ready;
 
 	// Core Response
-	assign mem_wb_if.rd          = dcache_rsp_if.core_rsp_req_rd;
-	assign mem_wb_if.wb          = dcache_rsp_if.core_rsp_req_wb;
+	assign mem_wb_if.rd          = dcache_rsp_if.core_rsp_read;
+	assign mem_wb_if.wb          = dcache_rsp_if.core_rsp_write;
 	assign mem_wb_if.wb_valid    = dcache_rsp_if.core_rsp_valid;
 	assign mem_wb_if.wb_warp_num = dcache_rsp_if.core_rsp_warp_num;
-	assign mem_wb_if.loaded_data = dcache_rsp_if.core_rsp_readdata;
+	assign mem_wb_if.loaded_data = dcache_rsp_if.core_rsp_data;
 	
 	wire[(`LOG2UP(`NUM_THREADS))-1:0] use_pc_index;
 

@@ -54,10 +54,10 @@ module VX_cache #(
 
     // Core request    
     input wire [NUM_REQUESTS-1:0]                 core_req_valid,
-    input wire [NUM_REQUESTS-1:0][2:0]            core_req_mem_read,
-    input wire [NUM_REQUESTS-1:0][2:0]            core_req_mem_write,
+    input wire [NUM_REQUESTS-1:0][2:0]            core_req_read,
+    input wire [NUM_REQUESTS-1:0][2:0]            core_req_write,
     input wire [NUM_REQUESTS-1:0][31:0]           core_req_addr,
-    input wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_req_writedata,
+    input wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_req_data,
     output wire                                   core_req_ready,
 
     // Core request meta data
@@ -69,10 +69,10 @@ module VX_cache #(
 
     // Core response
     output wire [NUM_REQUESTS-1:0]           core_rsp_valid,
-    output wire [4:0]                        core_rsp_req_rd,
-    output wire [1:0]                        core_rsp_req_wb,
-    output wire [NUM_REQUESTS-1:0][31:0]     core_rsp_address,
-    output wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_rsp_readdata,
+    output wire [4:0]                        core_rsp_read,
+    output wire [1:0]                        core_rsp_write,
+    output wire [NUM_REQUESTS-1:0][31:0]     core_rsp_addr,
+    output wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_rsp_data,
     input  wire                              core_rsp_ready,    
 
     // Core response meta data
@@ -230,11 +230,11 @@ module VX_cache #(
 
         .core_rsp_ready      (core_rsp_ready),
         .core_rsp_valid      (core_rsp_valid),
-        .core_rsp_req_rd     (core_rsp_req_rd),
-        .core_rsp_req_wb     (core_rsp_req_wb),
+        .core_rsp_read       (core_rsp_read),
+        .core_rsp_write      (core_rsp_write),
         .core_rsp_warp_num   (core_rsp_warp_num),
-        .core_rsp_readdata   (core_rsp_readdata),
-        .core_rsp_address    (core_rsp_address),
+        .core_rsp_data       (core_rsp_data),
+        .core_rsp_addr       (core_rsp_addr),
         .core_rsp_pc         (core_rsp_pc)
     );
 
@@ -303,13 +303,13 @@ module VX_cache #(
             // Core Req
             assign curr_bank_valids              = per_bank_valids[curr_bank];
             assign curr_bank_addr                = core_req_addr;
-            assign curr_bank_writedata           = core_req_writedata;
+            assign curr_bank_writedata           = core_req_data;
             assign curr_bank_rd                  = core_req_rd;
             assign curr_bank_wb                  = core_req_wb;
             assign curr_bank_pc                  = core_req_pc;
             assign curr_bank_warp_num            = core_req_warp_num;
-            assign curr_bank_mem_read            = core_req_mem_read;
-            assign curr_bank_mem_write           = core_req_mem_write;
+            assign curr_bank_mem_read            = core_req_read;
+            assign curr_bank_mem_write           = core_req_write;
             assign per_bank_reqq_full[curr_bank] = curr_bank_reqq_full;
 
             // Core WB
