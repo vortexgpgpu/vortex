@@ -2,7 +2,7 @@
 `ifndef VX_MEM_WB_INST_INTER
 `define VX_MEM_WB_INST_INTER
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 interface VX_inst_mem_wb_if ();
 

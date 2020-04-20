@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_priority_encoder (
     input  wire[`NUM_WARPS-1:0] valids,

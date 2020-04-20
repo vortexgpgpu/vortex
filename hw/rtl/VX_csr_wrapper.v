@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_csr_wrapper (
 	VX_csr_req_if csr_req_if,

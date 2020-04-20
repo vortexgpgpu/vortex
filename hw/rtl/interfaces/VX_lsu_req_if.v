@@ -2,7 +2,7 @@
 `ifndef VX_LSU_REQ_INTER
 `define VX_LSU_REQ_INTER
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 interface VX_lsu_req_if ();
 

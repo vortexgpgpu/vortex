@@ -1,5 +1,5 @@
 
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module byte_enabled_simple_dual_port_ram
 (

@@ -25,7 +25,7 @@ THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu
 .PHONY: build_config
 
 build_config:
-	./scripts/gen_config.py --outv ./rtl/VX_user_config.v --outc ./simulate/VX_config.h
+	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./simulate/VX_config.h
 
 gen-singlecore: build_config
 	verilator $(VF) -DNDEBUG -cc $(SINGLE_CORE) -CFLAGS '$(CF) -DNDEBUG'
