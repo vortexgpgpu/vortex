@@ -3,12 +3,12 @@
 
 `include "VX_user_config.vh"
 
-`ifndef NUM_CORES
-`define NUM_CORES 1
-`endif
-
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1
+`endif
+
+`ifndef NUM_CORES
+`define NUM_CORES 1
 `endif
 
 `ifndef NUM_WARPS

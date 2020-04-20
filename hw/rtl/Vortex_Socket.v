@@ -7,8 +7,8 @@ module Vortex_Socket (
     input  wire                         reset,
 
     // IO
-    output wire                         io_valid[`NUM_CORES-1:0],
-    output wire[31:0]                   io_data [`NUM_CORES-1:0],
+    output wire                         io_valid[(`NUM_CORES * `NUM_CLUSTERS)-1:0],
+    output wire[31:0]                   io_data [(`NUM_CORES * `NUM_CLUSTERS)-1:0],
 
     // DRAM Req
     output wire                         dram_req_read,
@@ -93,14 +93,14 @@ module Vortex_Socket (
         wire[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_cluster_dram_rsp_data;
         wire[31:0]                                           per_cluster_dram_rsp_data_up[`NUM_CLUSTERS-1:0][`DBANK_LINE_WORDS-1:0];
 
-        wire[`NUM_CLUSTERS-1:0][`NUM_CORES_PER_CLUSTER-1:0]        per_cluster_io_valid;
-        wire[`NUM_CLUSTERS-1:0][`NUM_CORES_PER_CLUSTER-1:0][31:0]  per_cluster_io_data;
+        wire[`NUM_CLUSTERS-1:0][`NUM_CORES-1:0]        per_cluster_io_valid;
+        wire[`NUM_CLUSTERS-1:0][`NUM_CORES-1:0][31:0]  per_cluster_io_data;
 
         genvar curr_c, curr_cc, curr_word;
         for (curr_c = 0; curr_c < `NUM_CLUSTERS; curr_c =curr_c+1) begin
-            for (curr_cc = 0; curr_cc < `NUM_CORES_PER_CLUSTER; curr_cc=curr_cc+1) begin
-                assign io_valid[curr_cc+(curr_c*`NUM_CORES_PER_CLUSTER)] = per_cluster_io_valid[curr_c][curr_cc];
-                assign io_data [curr_cc+(curr_c*`NUM_CORES_PER_CLUSTER)] = per_cluster_io_data [curr_c][curr_cc];
+            for (curr_cc = 0; curr_cc < `NUM_CORES; curr_cc=curr_cc+1) begin
+                assign io_valid[curr_cc+(curr_c*`NUM_CORES)] = per_cluster_io_valid[curr_c][curr_cc];
+                assign io_data [curr_cc+(curr_c*`NUM_CORES)] = per_cluster_io_data [curr_c][curr_cc];
             end
 
             for (curr_word = 0; curr_word < `DBANK_LINE_WORDS; curr_word = curr_word+1) begin
