@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_mult #(
     parameter WIDTHA=1,
     parameter WIDTHB=1,

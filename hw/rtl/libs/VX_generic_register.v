@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_generic_register #( 
 	parameter N, 
 	parameter PassThru = 0
