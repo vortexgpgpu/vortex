@@ -56,17 +56,17 @@ module VX_lsu (
 	assign dcache_req_if.core_req_pc         = use_pc;
 
 	// Core can't accept response
-	assign dcache_rsp_if.core_no_wb_slot     = no_slot_mem;	
+	assign dcache_rsp_if.core_rsp_ready      = ~no_slot_mem;	
 
 	// Cache can't accept request
 	assign out_delay = ~dcache_req_if.core_req_ready;
 
 	// Core Response
-	assign mem_wb_if.rd          = dcache_rsp_if.core_wb_req_rd;
-	assign mem_wb_if.wb          = dcache_rsp_if.core_wb_req_wb;
-	assign mem_wb_if.wb_valid    = dcache_rsp_if.core_wb_valid;
-	assign mem_wb_if.wb_warp_num = dcache_rsp_if.core_wb_warp_num;
-	assign mem_wb_if.loaded_data = dcache_rsp_if.core_wb_readdata;
+	assign mem_wb_if.rd          = dcache_rsp_if.core_rsp_req_rd;
+	assign mem_wb_if.wb          = dcache_rsp_if.core_rsp_req_wb;
+	assign mem_wb_if.wb_valid    = dcache_rsp_if.core_rsp_valid;
+	assign mem_wb_if.wb_warp_num = dcache_rsp_if.core_rsp_warp_num;
+	assign mem_wb_if.loaded_data = dcache_rsp_if.core_rsp_readdata;
 	
 	wire[(`LOG2UP(`NUM_THREADS))-1:0] use_pc_index;
 
@@ -75,12 +75,12 @@ module VX_lsu (
 `DEBUG_END
 
 	VX_generic_priority_encoder #(.N(`NUM_THREADS)) pick_first_pc(
-		.valids(dcache_rsp_if.core_wb_valid),
+		.valids(dcache_rsp_if.core_rsp_valid),
 		.index (use_pc_index),
 		.found (found)
 		);
 
-	assign mem_wb_if.mem_wb_pc   = dcache_rsp_if.core_wb_pc[use_pc_index];
+	assign mem_wb_if.mem_wb_pc   = dcache_rsp_if.core_rsp_pc[use_pc_index];
 	
 endmodule // Memory
 

@@ -68,16 +68,16 @@ module VX_cache #(
     
 
     // Core response
-    output wire [NUM_REQUESTS-1:0]           core_wb_valid,
-    output wire [4:0]                        core_wb_req_rd,
-    output wire [1:0]                        core_wb_req_wb,
-    output wire [NUM_REQUESTS-1:0][31:0]     core_wb_address,
-    output wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_wb_readdata,
-    input  wire                              core_no_wb_slot,    
+    output wire [NUM_REQUESTS-1:0]           core_rsp_valid,
+    output wire [4:0]                        core_rsp_req_rd,
+    output wire [1:0]                        core_rsp_req_wb,
+    output wire [NUM_REQUESTS-1:0][31:0]     core_rsp_address,
+    output wire [NUM_REQUESTS-1:0][`WORD_SIZE_RNG] core_rsp_readdata,
+    input  wire                              core_rsp_ready,    
 
     // Core response meta data
-    output wire [`NW_BITS-1:0]               core_wb_warp_num,    
-    output wire [NUM_REQUESTS-1:0][31:0]     core_wb_pc,
+    output wire [`NW_BITS-1:0]               core_rsp_warp_num,    
+    output wire [NUM_REQUESTS-1:0][31:0]     core_rsp_pc,
     
     // DRAM request
     output wire                              dram_req_read,
@@ -217,7 +217,7 @@ module VX_cache #(
         .LLVQ_SIZE                    (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
-    ) cache_core_wb_sel_merge (
+    ) cache_core_rsp_sel_merge (
         .per_bank_wb_valid   (per_bank_wb_valid),
         .per_bank_wb_tid     (per_bank_wb_tid),
         .per_bank_wb_rd      (per_bank_wb_rd),
@@ -228,14 +228,14 @@ module VX_cache #(
         .per_bank_wb_pop     (per_bank_wb_pop),
         .per_bank_wb_address (per_bank_wb_address),
 
-        .core_no_wb_slot     (core_no_wb_slot),
-        .core_wb_valid       (core_wb_valid),
-        .core_wb_req_rd      (core_wb_req_rd),
-        .core_wb_req_wb      (core_wb_req_wb),
-        .core_wb_warp_num    (core_wb_warp_num),
-        .core_wb_readdata    (core_wb_readdata),
-        .core_wb_address     (core_wb_address),
-        .core_wb_pc          (core_wb_pc)
+        .core_rsp_ready      (core_rsp_ready),
+        .core_rsp_valid      (core_rsp_valid),
+        .core_rsp_req_rd     (core_rsp_req_rd),
+        .core_rsp_req_wb     (core_rsp_req_wb),
+        .core_rsp_warp_num   (core_rsp_warp_num),
+        .core_rsp_readdata   (core_rsp_readdata),
+        .core_rsp_address    (core_rsp_address),
+        .core_rsp_pc         (core_rsp_pc)
     );
 
     // Snoop Forward Logic

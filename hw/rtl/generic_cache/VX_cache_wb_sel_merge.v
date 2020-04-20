@@ -54,18 +54,18 @@ module VX_cache_wb_sel_merge #(
     output wire [NUM_BANKS-1:0]                             per_bank_wb_pop,
 
     // Core Writeback
-    input  wire                                             core_no_wb_slot,
-    output reg  [NUM_REQUESTS-1:0]                          core_wb_valid,
-    output reg  [NUM_REQUESTS-1:0][`WORD_SIZE_RNG]          core_wb_readdata,
-    output reg  [NUM_REQUESTS-1:0][31:0]                    core_wb_pc,
-    output wire [4:0]                                       core_wb_req_rd,
-    output wire [1:0]                                       core_wb_req_wb,
-    output wire [`NW_BITS-1:0]                              core_wb_warp_num,
-    output reg  [NUM_REQUESTS-1:0][31:0]                    core_wb_address	
+    input  wire                                             core_rsp_ready,
+    output reg  [NUM_REQUESTS-1:0]                          core_rsp_valid,
+    output reg  [NUM_REQUESTS-1:0][`WORD_SIZE_RNG]          core_rsp_readdata,
+    output reg  [NUM_REQUESTS-1:0][31:0]                    core_rsp_pc,
+    output wire [4:0]                                       core_rsp_req_rd,
+    output wire [1:0]                                       core_rsp_req_wb,
+    output wire [`NW_BITS-1:0]                              core_rsp_warp_num,
+    output reg  [NUM_REQUESTS-1:0][31:0]                    core_rsp_address	
 );
 
 	reg [NUM_BANKS-1:0] per_bank_wb_pop_unqual;
-	assign per_bank_wb_pop = per_bank_wb_pop_unqual & {NUM_BANKS{~core_no_wb_slot}};
+	assign per_bank_wb_pop = per_bank_wb_pop_unqual & {NUM_BANKS{core_rsp_ready}};
 
 	// wire[NUM_BANKS-1:0] bank_wants_wb;
 	// genvar curr_bank;
@@ -86,47 +86,47 @@ module VX_cache_wb_sel_merge #(
 		.found (found_bank)
 	);
 
-	assign core_wb_req_rd   = per_bank_wb_rd[main_bank_index];
-	assign core_wb_req_wb   = per_bank_wb_wb[main_bank_index];
-	assign core_wb_warp_num = per_bank_wb_warp_num[main_bank_index];
+	assign core_rsp_req_rd   = per_bank_wb_rd[main_bank_index];
+	assign core_rsp_req_wb   = per_bank_wb_wb[main_bank_index];
+	assign core_rsp_warp_num = per_bank_wb_warp_num[main_bank_index];
 
 	integer this_bank;
 	generate
 		always @(*) begin
-			core_wb_valid    = 0;
-			core_wb_readdata = 0;
-			core_wb_pc       = 0;
-			core_wb_address  = 0;
+			core_rsp_valid    = 0;
+			core_rsp_readdata = 0;
+			core_rsp_pc       = 0;
+			core_rsp_address  = 0;
 			for (this_bank = 0; this_bank < NUM_BANKS; this_bank = this_bank + 1) begin
 				if ((FUNC_ID == `L2FUNC_ID) || (FUNC_ID == `L3FUNC_ID)) begin
 					if (found_bank
-					&& !core_wb_valid[per_bank_wb_tid[this_bank]] 
+					&& !core_rsp_valid[per_bank_wb_tid[this_bank]] 
 					&& per_bank_wb_valid[this_bank] 
 					&& ((main_bank_index == `LOG2UP(NUM_BANKS)'(this_bank)) 
 					|| (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index]))) begin
-						core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
-						core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
-						core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
-						core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
-						per_bank_wb_pop_unqual[this_bank]            = 1;
+						core_rsp_valid[per_bank_wb_tid[this_bank]]    = 1;
+						core_rsp_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
+						core_rsp_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
+						core_rsp_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
+						per_bank_wb_pop_unqual[this_bank]             = 1;
 					end else begin
-						per_bank_wb_pop_unqual[this_bank]            = 0;
+						per_bank_wb_pop_unqual[this_bank]             = 0;
 					end
 				end else begin
 					if (((main_bank_index == `LOG2UP(NUM_BANKS)'(this_bank))
 						|| (per_bank_wb_tid[this_bank] != per_bank_wb_tid[main_bank_index])) 
 					&& found_bank 
-					&& !core_wb_valid[per_bank_wb_tid[this_bank]] 
+					&& !core_rsp_valid[per_bank_wb_tid[this_bank]] 
 					&& (per_bank_wb_valid[this_bank]) 
 					&& (per_bank_wb_rd[this_bank] == per_bank_wb_rd[main_bank_index]) 
 					&& (per_bank_wb_warp_num[this_bank] == per_bank_wb_warp_num[main_bank_index])) begin
-						core_wb_valid[per_bank_wb_tid[this_bank]]    = 1;
-						core_wb_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
-						core_wb_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
-						core_wb_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
-						per_bank_wb_pop_unqual[this_bank]            = 1;
+						core_rsp_valid[per_bank_wb_tid[this_bank]]    = 1;
+						core_rsp_readdata[per_bank_wb_tid[this_bank]] = per_bank_wb_data[this_bank];
+						core_rsp_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
+						core_rsp_address[per_bank_wb_tid[this_bank]]  = per_bank_wb_address[this_bank];
+						per_bank_wb_pop_unqual[this_bank]             = 1;
 					end else begin
-						per_bank_wb_pop_unqual[this_bank]            = 0;
+						per_bank_wb_pop_unqual[this_bank]             = 0;
 					end
 				end
 			end

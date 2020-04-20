@@ -29,11 +29,11 @@ module VX_icache_stage (
 	assign icache_req_if.core_req_warp_num   = fe_inst_meta_fi.warp_num;
 	assign icache_req_if.core_req_pc         = fe_inst_meta_fi.inst_pc;
 
-	assign fe_inst_meta_id.instruction = icache_rsp_if.core_wb_readdata[0][31:0];
-	assign fe_inst_meta_id.inst_pc     = icache_rsp_if.core_wb_pc[0];
-	assign fe_inst_meta_id.warp_num    = icache_rsp_if.core_wb_warp_num;
+	assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_readdata[0][31:0];
+	assign fe_inst_meta_id.inst_pc     = icache_rsp_if.core_rsp_pc[0];
+	assign fe_inst_meta_id.warp_num    = icache_rsp_if.core_rsp_warp_num;
 	
-	assign fe_inst_meta_id.valid       = icache_rsp_if.core_wb_valid ? threads_active[icache_rsp_if.core_wb_warp_num] : 0;
+	assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? threads_active[icache_rsp_if.core_rsp_warp_num] : 0;
 
 	assign icache_stage_wid            = fe_inst_meta_id.warp_num;
 	assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
@@ -42,7 +42,7 @@ module VX_icache_stage (
 	assign icache_stage_delay = ~icache_req_if.core_req_ready;
 
 	// Core can't accept response
-	assign icache_rsp_if.core_no_wb_slot = total_freeze;
+	assign icache_rsp_if.core_rsp_ready = ~total_freeze;
 
 	integer curr_w;
 	always @(posedge clk) begin
