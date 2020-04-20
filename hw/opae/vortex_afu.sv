@@ -371,7 +371,7 @@ begin
   avs_raq_push = avs_read;
 end
 
-VX_generic_queue_ll #(
+VX_generic_queue #(
   .DATAW($bits(t_local_mem_addr)),
   .SIZE(AVS_RD_QUEUE_SIZE)
 ) vx_rd_addr_queue (
@@ -394,7 +394,7 @@ begin
   avs_rdq_push = avs_readdatavalid;
 end
 
-VX_generic_queue_ll #(
+VX_generic_queue #(
   .DATAW($bits(t_local_mem_data)),
   .SIZE(AVS_RD_QUEUE_SIZE)
 ) vx_rd_data_queue (

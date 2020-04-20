@@ -32,7 +32,7 @@ module VX_prefetcher #(
 
 	wire update_use = ((use_valid == 0) || ((use_valid-1) == 0)) && current_valid;
 
-	VX_generic_queue_ll #(
+	VX_generic_queue #(
 		.DATAW(32), 
 		.SIZE(PRFQ_SIZE)
 	) pfq_queue (

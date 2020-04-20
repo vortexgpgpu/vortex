@@ -72,7 +72,7 @@ module VX_cache_dfq_queue #(
 	wire push_qual = dfqq_push && !dfqq_full;
 	wire pop_qual  = dfqq_pop  && use_empty && !out_empty;
 
-	VX_generic_queue_ll #(
+	VX_generic_queue #(
 		.DATAW(NUM_BANKS * (1+32)), 
 		.SIZE(DFQQ_SIZE)
 	) dfqq_queue (

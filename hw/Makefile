@@ -4,7 +4,7 @@ CF += -std=c++11 -fms-extensions
 
 VF += -compiler gcc --language 1800-2009 --assert -Wall -Wpedantic
 
-INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cache -I./rtl/shared_memory -I./rtl/simulate
+INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cache -I./rtl/simulate
 
 SINGLE_CORE = Vortex.v
 

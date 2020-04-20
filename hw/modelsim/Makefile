@@ -71,10 +71,6 @@ SRC = \
 ../rtl/cache/VX_cache_data_per_index.v \
 ../rtl/pipe_regs/VX_d_e_reg.v \
 ../rtl/pipe_regs/VX_f_d_reg.v \
-../rtl/shared_memory/VX_bank_valids.v \
-../rtl/shared_memory/VX_priority_encoder_sm.v \
-../rtl/shared_memory/VX_shared_memory.v \
-../rtl/shared_memory/VX_shared_memory_block.v \
 ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v \
 ../models/memory/cln28hpm/rf2_256x128_wm1/rf2_256x128_wm1.v \
 ../models/memory/cln28hpm/rf2_256x19_wm0/rf2_256x19_wm0.v \
