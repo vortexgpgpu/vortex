@@ -43,7 +43,7 @@ module VX_dmem_controller (
     assign dcache_req_dcache_if.core_req_warp_num    = dcache_req_if.core_req_warp_num;
     assign dcache_req_dcache_if.core_req_pc          = dcache_req_if.core_req_pc;
 
-	assign dcache_req_dcache_if.core_no_wb_slot      = dcache_req_if.core_no_wb_slot;    
+	assign dcache_rsp_dcache_if.core_no_wb_slot      = dcache_rsp_if.core_no_wb_slot;    
     
     // Shared Memory Request
 	assign dcache_req_smem_if.core_req_valid       = dcache_req_if.core_req_valid & {`NUM_THREADS{to_shm}};
@@ -56,7 +56,7 @@ module VX_dmem_controller (
     assign dcache_req_smem_if.core_req_warp_num    = dcache_req_if.core_req_warp_num;
     assign dcache_req_smem_if.core_req_pc          = dcache_req_if.core_req_pc;
 
-    assign dcache_req_smem_if.core_no_wb_slot      = dcache_req_if.core_no_wb_slot || dcache_wants_wb;    
+    assign dcache_rsp_smem_if.core_no_wb_slot      = dcache_rsp_if.core_no_wb_slot || dcache_wants_wb;    
 
 	// Dcache Response
     assign dcache_rsp_if.core_wb_valid     = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_valid    : dcache_rsp_smem_if.core_wb_valid;
@@ -66,7 +66,7 @@ module VX_dmem_controller (
     assign dcache_rsp_if.core_wb_readdata  = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_readdata : dcache_rsp_smem_if.core_wb_readdata;
 	assign dcache_rsp_if.core_wb_warp_num  = dcache_wants_wb ? dcache_rsp_dcache_if.core_wb_warp_num : dcache_rsp_smem_if.core_wb_warp_num;
 
-    assign dcache_rsp_if.core_req_ready    = to_shm ? dcache_rsp_smem_if.core_req_ready : dcache_rsp_dcache_if.core_req_ready;
+    assign dcache_req_if.core_req_ready    = to_shm ? dcache_req_smem_if.core_req_ready : dcache_req_dcache_if.core_req_ready;
 
 	VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_req_if();
 	VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_res_if();
@@ -108,10 +108,10 @@ module VX_dmem_controller (
 		.core_req_pc       (dcache_req_smem_if.core_req_pc),
 
 		// Can submit core Req
-		.core_req_ready    (dcache_rsp_smem_if.core_req_ready),
+		.core_req_ready    (dcache_req_smem_if.core_req_ready),
 
 		// Core Cache Can't WB
-		.core_no_wb_slot   (dcache_req_smem_if.core_no_wb_slot),
+		.core_no_wb_slot   (dcache_rsp_smem_if.core_no_wb_slot),
 
 		// Cache CWB
 		.core_wb_valid     	(dcache_rsp_smem_if.core_wb_valid),
@@ -191,10 +191,10 @@ module VX_dmem_controller (
 		.core_req_pc       (dcache_req_dcache_if.core_req_pc),
 
 		// Can submit core Req
-		.core_req_ready    (dcache_rsp_dcache_if.core_req_ready),
+		.core_req_ready    (dcache_req_dcache_if.core_req_ready),
 
 		// Core Cache Can't WB
-		.core_no_wb_slot   (dcache_req_dcache_if.core_no_wb_slot),
+		.core_no_wb_slot   (dcache_rsp_dcache_if.core_no_wb_slot),
 
 		// Cache CWB
 		.core_wb_valid     (dcache_rsp_dcache_if.core_wb_valid),
@@ -272,10 +272,10 @@ module VX_dmem_controller (
 		.core_req_pc       	(icache_req_if.core_req_pc),
 
 		// Can submit core Req
-		.core_req_ready    	(icache_rsp_if.core_req_ready),
+		.core_req_ready    	(icache_req_if.core_req_ready),
 
 		// Core Cache Can't WB
-		.core_no_wb_slot   	(icache_req_if.core_no_wb_slot),
+		.core_no_wb_slot   	(icache_rsp_if.core_no_wb_slot),
 
 		// Cache CWB
 		.core_wb_valid    	(icache_rsp_if.core_wb_valid),
