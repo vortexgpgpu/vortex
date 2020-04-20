@@ -94,12 +94,12 @@ module VX_cache #(
     // Snoop Req
     input wire                               snp_req_valid,
     input wire [31:0]                        snp_req_addr,
-    output wire                              snp_req_full,
+    output wire                              snp_req_ready,
 
     // Snoop Forward
     output wire                              snp_fwd_valid,
     output wire [31:0]                       snp_fwd_addr,
-    input  wire                              snp_fwd_full
+    input  wire                              snp_fwd_ready
 );
 
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]                per_bank_valids;
@@ -128,14 +128,14 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][`BANK_LINE_WORDS-1:0][`WORD_SIZE-1:0] per_bank_dram_wb_req_data;
 
     wire [NUM_BANKS-1:0]                                  per_bank_reqq_full;
-    wire [NUM_BANKS-1:0]                                  per_bank_snrq_full;
+    wire [NUM_BANKS-1:0]                                  per_bank_snp_req_full;
 
-    wire [NUM_BANKS-1:0]                                  per_bank_snp_fwd;
+    wire [NUM_BANKS-1:0]                                  per_bank_snp_fwd_valid;
     wire [NUM_BANKS-1:0][31:0]                            per_bank_snp_fwd_addr;
     wire [NUM_BANKS-1:0]                                  per_bank_snp_fwd_pop;
 
     assign core_req_ready = ~(|per_bank_reqq_full);
-    assign snp_req_full = (|per_bank_snrq_full);
+    assign snp_req_ready  = ~(|per_bank_snp_req_full);
 
     // assign dram_rsp_ready = (NUM_BANKS == 1) ? per_bank_dram_fill_rsp_ready[0] : per_bank_dram_fill_rsp_ready[dram_rsp_addr[`BANK_SELECT_ADDR_RNG]];
     assign dram_rsp_ready = (|per_bank_dram_fill_rsp_ready);
@@ -242,12 +242,12 @@ module VX_cache #(
     VX_snp_fwd_arb #(
         .NUM_BANKS(NUM_BANKS)
     ) snp_fwd_arb(
-        .per_bank_snp_fwd     (per_bank_snp_fwd),
-        .per_bank_snp_fwd_addr(per_bank_snp_fwd_addr),
-        .per_bank_snp_fwd_pop (per_bank_snp_fwd_pop),
-        .snp_fwd_valid        (snp_fwd_valid),
-        .snp_fwd_addr         (snp_fwd_addr),
-        .snp_fwd_full         (snp_fwd_full)
+        .per_bank_snp_fwd_valid (per_bank_snp_fwd_valid),
+        .per_bank_snp_fwd_addr  (per_bank_snp_fwd_addr),
+        .per_bank_snp_fwd_pop   (per_bank_snp_fwd_pop),
+        .snp_fwd_valid          (snp_fwd_valid),
+        .snp_fwd_addr           (snp_fwd_addr),
+        .snp_fwd_ready          (snp_fwd_ready)
     );
 
     // Snoop Forward Logic
@@ -295,7 +295,7 @@ module VX_cache #(
 
             wire                                   curr_bank_reqq_full;
 
-            wire                                   curr_bank_snp_fwd;
+            wire                                   curr_bank_snp_fwd_valid;
             wire[31:0]                             curr_bank_snp_fwd_addr;
             wire                                   curr_bank_snp_fwd_pop;
             wire                                   curr_bank_snp_req_full;            
@@ -342,14 +342,14 @@ module VX_cache #(
             assign per_bank_dram_wb_req_data[curr_bank]    = curr_bank_dram_wb_req_data;
 
             // Snoop Request
-            assign curr_bank_snp_req             = snp_req_valid && (snp_req_addr[`BANK_SELECT_ADDR_RNG] == curr_bank);
-            assign curr_bank_snp_req_addr        = snp_req_addr;
-            assign per_bank_snrq_full[curr_bank] = curr_bank_snp_req_full;
+            assign curr_bank_snp_req                = snp_req_valid && (snp_req_addr[`BANK_SELECT_ADDR_RNG] == curr_bank);
+            assign curr_bank_snp_req_addr           = snp_req_addr;
+            assign per_bank_snp_req_full[curr_bank] = curr_bank_snp_req_full;
 
-            // Snoop Fwd
-            assign curr_bank_snp_fwd_pop            = per_bank_snp_fwd_pop[curr_bank];
-            assign per_bank_snp_fwd[curr_bank]      = curr_bank_snp_fwd;
-            assign per_bank_snp_fwd_addr[curr_bank] = curr_bank_snp_fwd_addr;
+            // Snoop Fwd            
+            assign per_bank_snp_fwd_valid[curr_bank] = curr_bank_snp_fwd_valid;
+            assign per_bank_snp_fwd_addr[curr_bank]  = curr_bank_snp_fwd_addr;
+            assign curr_bank_snp_fwd_pop             = per_bank_snp_fwd_pop[curr_bank];
             
             VX_bank #(
                 .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
@@ -421,7 +421,7 @@ module VX_cache #(
                 .snp_req_full            (curr_bank_snp_req_full),
 
                 // Snoop forwarding
-                .snp_fwd_valid           (curr_bank_snp_fwd),
+                .snp_fwd_valid           (curr_bank_snp_fwd_valid),
                 .snp_fwd_addr            (curr_bank_snp_fwd_addr),
                 .snp_fwd_pop             (curr_bank_snp_fwd_pop)
             );

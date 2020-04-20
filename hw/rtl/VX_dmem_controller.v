@@ -143,7 +143,7 @@ module VX_dmem_controller (
 		.snp_req_valid      (0),
 		.snp_req_addr       (0),
 	`IGNORE_WARNINGS_BEGIN
-		.snp_req_full       (),
+		.snp_req_ready      (),
 	`IGNORE_WARNINGS_END
 
 		// Snoop Forward
@@ -151,7 +151,7 @@ module VX_dmem_controller (
 		.snp_fwd_valid      (),
 		.snp_fwd_addr       (),
 	`IGNORE_WARNINGS_END
-		.snp_fwd_full       (0)
+		.snp_fwd_ready      (0)
 	);
 
 	VX_cache #(
@@ -225,14 +225,14 @@ module VX_dmem_controller (
 		// Snoop Request
 		.snp_req_valid      (gpu_dcache_snp_req_if.snp_req_valid),
 		.snp_req_addr       (gpu_dcache_snp_req_if.snp_req_addr),
-		.snp_req_full       (gpu_dcache_snp_req_if.snp_req_full),
+		.snp_req_ready      (gpu_dcache_snp_req_if.snp_req_ready),
 
 		// Snoop Forward
 	`IGNORE_WARNINGS_BEGIN
 		.snp_fwd_valid      (),
 		.snp_fwd_addr       (),
 	`IGNORE_WARNINGS_END
-		.snp_fwd_full       (0)
+		.snp_fwd_ready      (0)
 	);
 
 	VX_cache #(
@@ -306,14 +306,14 @@ module VX_dmem_controller (
 		// Snoop Request
 		.snp_req_valid     	(gpu_icache_snp_req_if.snp_req_valid),
 		.snp_req_addr       (gpu_icache_snp_req_if.snp_req_addr),
-		.snp_req_full       (gpu_icache_snp_req_if.snp_req_full),
+		.snp_req_ready      (gpu_icache_snp_req_if.snp_req_ready),
 
 		// Snoop Forward
 	`IGNORE_WARNINGS_BEGIN
 		.snp_fwd_valid      (),
 		.snp_fwd_addr       (),
 	`IGNORE_WARNINGS_END
-		.snp_fwd_full       (0)
+		.snp_fwd_ready      (0)
 	);
 
 endmodule

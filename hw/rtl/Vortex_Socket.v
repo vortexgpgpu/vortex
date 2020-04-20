@@ -26,7 +26,7 @@ module Vortex_Socket (
     // LLC Snooping
     input  wire                         llc_snp_req_valid,
     input  wire[31:0]                   llc_snp_req_addr,
-    output wire                         llc_snp_req_full,
+    output wire                         llc_snp_req_ready,
 
     output wire                         out_ebreak
 );
@@ -61,7 +61,7 @@ module Vortex_Socket (
 
             .llc_snp_req_valid  (llc_snp_req_valid),
             .llc_snp_req_addr   (llc_snp_req_addr),
-            .llc_snp_req_full   (llc_snp_req_full),
+            .llc_snp_req_ready  (llc_snp_req_ready),
 
             .out_ebreak         (out_ebreak)
         );
@@ -70,7 +70,7 @@ module Vortex_Socket (
 
         wire                    snp_fwd_valid;
         wire[31:0]              snp_fwd_addr;
-        wire[`NUM_CLUSTERS-1:0] snp_fwd_full;
+        wire[`NUM_CLUSTERS-1:0] snp_fwd_ready;
 
         wire[`NUM_CLUSTERS-1:0] per_cluster_out_ebreak;
 
@@ -114,7 +114,7 @@ module Vortex_Socket (
 
             Vortex_Cluster #(
                 .CLUSTER_ID(curr_cluster)
-            ) Vortex_Cluster(
+            ) Vortex_Cluster (
                 .clk                    (clk),
                 .reset                  (reset),
                 .io_valid               (per_cluster_io_valid           [curr_cluster]),
@@ -133,7 +133,7 @@ module Vortex_Socket (
 
                 .llc_snp_req_valid      (snp_fwd_valid),
                 .llc_snp_req_addr       (snp_fwd_addr),
-                .llc_snp_req_full       (snp_fwd_full[curr_cluster]),
+                .llc_snp_req_ready      (snp_fwd_ready[curr_cluster]),
 
                 .out_ebreak             (per_cluster_out_ebreak         [curr_cluster])
             );
@@ -253,12 +253,12 @@ module Vortex_Socket (
             // Snoop Request
             .snp_req_valid      (llc_snp_req_valid),
             .snp_req_addr       (llc_snp_req_addr),
-            .snp_req_full       (llc_snp_req_full),
+            .snp_req_ready      (llc_snp_req_ready),
 
             // Snoop Forward
             .snp_fwd_valid      (snp_fwd_valid),
             .snp_fwd_addr       (snp_fwd_addr),
-            .snp_fwd_full       (|snp_fwd_full)
+            .snp_fwd_ready      (& snp_fwd_ready)
         );
 
     end

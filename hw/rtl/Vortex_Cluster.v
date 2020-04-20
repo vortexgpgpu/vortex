@@ -28,7 +28,7 @@ module Vortex_Cluster #(
     // LLC Snooping
     input  wire                         llc_snp_req_valid,
     input  wire[31:0]                   llc_snp_req_addr,
-    output wire                         llc_snp_req_full,
+    output wire                         llc_snp_req_ready,
 
     output wire                         out_ebreak
 );
@@ -66,7 +66,7 @@ module Vortex_Cluster #(
 
     wire                                                          snp_fwd_valid;
     wire[31:0]                                                    snp_fwd_addr;
-    wire[`NUM_CORES_PER_CLUSTER-1:0]                              snp_fwd_full;
+    wire[`NUM_CORES_PER_CLUSTER-1:0]                              snp_fwd_ready;
 
     assign out_ebreak = (&per_core_out_ebreak);
 
@@ -83,7 +83,7 @@ module Vortex_Cluster #(
 
             Vortex #(
                 .CORE_ID(curr_core + (CLUSTER_ID * `NUM_CORES_PER_CLUSTER))
-            ) vortex_core(
+            ) vortex_core (
                 .clk                        (clk),
                 .reset                      (reset),
                 .io_valid                   (per_core_io_valid            [curr_core]),
@@ -108,7 +108,7 @@ module Vortex_Cluster #(
                 .I_dram_rsp_ready           (per_core_I_dram_rsp_ready    [curr_core]),                                
                 .llc_snp_req_valid          (snp_fwd_valid),
                 .llc_snp_req_addr           (snp_fwd_addr),
-                .llc_snp_req_full           (snp_fwd_full                 [curr_core]),
+                .llc_snp_req_ready          (snp_fwd_ready                [curr_core]),
                 .out_ebreak                 (per_core_out_ebreak          [curr_core])
             );
 
@@ -252,11 +252,11 @@ module Vortex_Cluster #(
         // Snoop Request
         .snp_req_valid      (llc_snp_req_valid),
         .snp_req_addr       (llc_snp_req_addr),
-        .snp_req_full       (llc_snp_req_full),
+        .snp_req_ready      (llc_snp_req_ready),
 
         .snp_fwd_valid      (snp_fwd_valid),
         .snp_fwd_addr       (snp_fwd_addr),
-        .snp_fwd_full       (|snp_fwd_full)
+        .snp_fwd_ready      (& snp_fwd_ready)
     );
 
 endmodule
