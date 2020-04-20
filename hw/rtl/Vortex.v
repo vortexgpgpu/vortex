@@ -94,12 +94,13 @@ module Vortex #(
 	assign dcache_req_qual_if.core_req_mem_write = dcache_req_if.core_req_mem_write;
 	assign dcache_req_qual_if.core_req_addr      = dcache_req_if.core_req_addr;
 	assign dcache_req_qual_if.core_req_writedata = dcache_req_if.core_req_writedata;	
+	
+	assign dcache_req_if.core_req_ready = dcache_req_qual_if.core_req_ready;
+
 	assign dcache_req_qual_if.core_req_rd        = dcache_req_if.core_req_rd;
 	assign dcache_req_qual_if.core_req_wb        = dcache_req_if.core_req_wb;
 	assign dcache_req_qual_if.core_req_warp_num  = dcache_req_if.core_req_warp_num;
-	assign dcache_req_qual_if.core_req_pc        = dcache_req_if.core_req_pc;
-
-	assign dcache_req_qual_if.core_no_wb_slot    = dcache_req_if.core_no_wb_slot;
+	assign dcache_req_qual_if.core_req_pc        = dcache_req_if.core_req_pc;	
 	
 	VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_rsp_if();
 	VX_gpu_dcache_req_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_req_if();

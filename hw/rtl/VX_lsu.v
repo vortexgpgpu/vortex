@@ -56,10 +56,10 @@ module VX_lsu (
 	assign dcache_req_if.core_req_pc         = use_pc;
 
 	// Core can't accept response
-	assign dcache_req_if.core_no_wb_slot     = no_slot_mem;	
+	assign dcache_rsp_if.core_no_wb_slot     = no_slot_mem;	
 
 	// Cache can't accept request
-	assign out_delay = ~dcache_rsp_if.core_req_ready;
+	assign out_delay = ~dcache_req_if.core_req_ready;
 
 	// Core Response
 	assign mem_wb_if.rd          = dcache_rsp_if.core_wb_req_rd;

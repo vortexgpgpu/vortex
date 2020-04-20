@@ -13,14 +13,13 @@ interface VX_gpu_dcache_req_if #(
 	wire [NUM_REQUESTS-1:0][2:0]    core_req_mem_write;
 	wire [NUM_REQUESTS-1:0][31:0]   core_req_addr;
 	wire [NUM_REQUESTS-1:0][31:0]   core_req_writedata;	
-	
+	wire                            core_req_ready;
+
 	// Core request Meta data
     wire [4:0]                      core_req_rd;
     wire [NUM_REQUESTS-1:0][1:0]    core_req_wb;
     wire [`NW_BITS-1:0]             core_req_warp_num;
-    wire [31:0]                     core_req_pc;
-
-	wire                            core_no_wb_slot;
+    wire [31:0]                     core_req_pc;	
 
 endinterface
 
