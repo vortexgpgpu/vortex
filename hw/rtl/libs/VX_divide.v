@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_divide #(
     parameter WIDTHN=1,
     parameter WIDTHD=1,

@@ -4,28 +4,9 @@
 `include "./VX_config.v"
 
 // `define QUEUE_FORCE_MLAB 1
-
 // `define SYN 1
 // `define ASIC 1
 // `define SYN_FUNC 1
-
-`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
-`define DEBUG_END   /* verilator lint_on UNUSED */     
-
-`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
-                              /* verilator lint_off PINCONNECTEMPTY */ \
-                              /* verilator lint_off DECLFILENAME */
-
-`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
-                              /* verilator lint_on PINCONNECTEMPTY */ \
-                              /* verilator lint_on DECLFILENAME */
-
-`define STRINGIFY(x) `"x`"
-
-`define STATIC_ASSERT(cond, msg)    \
-    generate                        \
-        if (!(cond)) $error(msg);   \
-    endgenerate
 
 `define LOG2UP(x) ((x > 1) ? $clog2(x) : 1)
 
@@ -195,6 +176,26 @@
 
 // Bank Number of words in a line
 `define L3BANK_LINE_WORDS (`L3BANK_LINE_SIZE_BYTES / `L3WORD_SIZE_BYTES)
+
+//=============================================================================
+
+`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
+`define DEBUG_END   /* verilator lint_on UNUSED */     
+
+`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
+                              /* verilator lint_off PINCONNECTEMPTY */ \
+                              /* verilator lint_off DECLFILENAME */
+
+`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
+                              /* verilator lint_on PINCONNECTEMPTY */ \
+                              /* verilator lint_on DECLFILENAME */
+
+`define STRINGIFY(x) `"x`"
+
+`define STATIC_ASSERT(cond, msg)    \
+    generate                        \
+        if (!(cond)) $error(msg);   \
+    endgenerate
 
  // VX_DEFINE
 `endif

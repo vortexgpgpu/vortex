@@ -1,3 +1,5 @@
+`include "VX_define.v"
+
 module VX_generic_queue #(
     parameter DATAW,
     parameter SIZE = 16
