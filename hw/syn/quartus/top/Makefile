@@ -57,7 +57,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc vortex.sdc -inc "..;../libs;../interfaces;../pipe_regs;../cache;../shared_memory"
+	$(QUARTUS_ROOT)/quartus/bin/quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc vortex.sdc -inc "..;../libs;../interfaces;../pipe_regs;../cache"
 	
 syn.chg:
 	$(STAMP) syn.chg

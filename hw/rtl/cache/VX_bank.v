@@ -118,7 +118,7 @@ module VX_bank #(
 
 	assign snrq_valid_st0 = !snrq_empty;
 	
-	VX_generic_queue_ll #(
+	VX_generic_queue #(
 		.DATAW(32), 
 		.SIZE(SNRQ_SIZE)
 	) snr_queue (
@@ -140,8 +140,8 @@ module VX_bank #(
 
 	assign dram_fill_rsp_ready = !dfpq_full;
 
-	VX_generic_queue_ll #(
-		.DATAW(32+(`BANK_LINE_WORDS*`WORD_SIZE)), 
+	VX_generic_queue #(
+		.DATAW(32 + (`BANK_LINE_WORDS*`WORD_SIZE)), 
 		.SIZE(DFPQ_SIZE)
 	) dfp_queue (
 		.clk     (clk),
@@ -530,8 +530,8 @@ module VX_bank #(
 	
 	wire                                   cwbq_empty;
 	assign core_rsp_valid = !cwbq_empty;
-	VX_generic_queue_ll #(
-		.DATAW( `LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS-1+1) + `WORD_SIZE + 32 + 32), 
+	VX_generic_queue #(
+		.DATAW(`LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS-1+1) + `WORD_SIZE + 32 + 32), 
 		.SIZE(CWBQ_SIZE)
 	) cwb_queue(
 		.clk     (clk),
@@ -598,8 +598,8 @@ module VX_bank #(
 
 	assign dram_wb_req_valid = !dwbq_empty;
 
-	VX_generic_queue_ll #(
-		.DATAW( 32 + (`BANK_LINE_WORDS * `WORD_SIZE)), 
+	VX_generic_queue #(
+		.DATAW(32 + (`BANK_LINE_WORDS * `WORD_SIZE)), 
 		.SIZE(DWBQ_SIZE)
 	) dwb_queue (
 		.clk     (clk),
@@ -620,7 +620,7 @@ module VX_bank #(
 	assign snp_fwd_push  = is_snp_st2 && valid_st2 && !ffsq_full && !(((valid_st2 && !miss_st2) && cwbq_full) || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) || (valid_st2 && miss_st2 && mrvq_full) || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_full));
 	assign snp_fwd_valid = !ffsq_empty;
 
-	VX_generic_queue_ll #(
+	VX_generic_queue #(
 		.DATAW(32), 
 		.SIZE(FFSQ_SIZE)
 	) ffs_queue (

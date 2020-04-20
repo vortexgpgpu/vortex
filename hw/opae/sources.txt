@@ -4,12 +4,10 @@ vortex_afu.json
 
 +incdir+.
 +incdir+../rtl
-+incdir+../rtl/shared_memory
-+incdir+../rtl/cache
-+incdir+../rtl/cache
 +incdir+../rtl/interfaces
 +incdir+../rtl/pipe_regs
-+incdir+../rtl/compat
++incdir+../rtl/cache
++incdir+../rtl/libs
 
 ../rtl/VX_user_config.vh
 ../rtl/VX_config.vh
@@ -96,11 +94,6 @@ vortex_afu.json
 ../rtl/cache/VX_tag_data_structure.v
 ../rtl/cache/VX_prefetcher.v
 
-../rtl/shared_memory/VX_shared_memory_block.v
-../rtl/shared_memory/VX_priority_encoder_sm.v
-../rtl/shared_memory/VX_shared_memory.v
-../rtl/shared_memory/VX_bank_valids.v
-
 ../rtl/libs/VX_priority_encoder_w_mask.v
 ../rtl/libs/VX_generic_register.v
 ../rtl/libs/VX_mult.v
@@ -109,7 +102,6 @@ vortex_afu.json
 ../rtl/libs/VX_generic_priority_encoder.v
 ../rtl/libs/VX_priority_encoder.v
 ../rtl/libs/VX_generic_queue.v
-../rtl/libs/VX_generic_queue_ll.v
 
 ccip_interface_reg.sv
 ccip_std_afu.sv
