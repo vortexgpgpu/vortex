@@ -70,7 +70,7 @@ logic        vx_dram_req_read;
 logic        vx_dram_req_write;
 logic [31:0] vx_dram_req_addr;
 logic [31:0] vx_dram_req_data[15:0];
-logic        vx_dram_req_full;
+logic        vx_dram_req_ready;
 
 logic        vx_dram_rsp_ready;
 logic        vx_dram_rsp_valid;
@@ -79,7 +79,7 @@ logic [31:0] vx_dram_rsp_data[15:0];
 
 logic        vx_snp_req;
 logic [31:0] vx_snp_req_addr;
-logic        vx_snp_req_full;
+logic        vx_snp_req_ready;
 
 logic        vx_ebreak;
 
@@ -316,7 +316,7 @@ begin
 
       STATE_RUN, STATE_CLFLUSH: begin
         if (vx_dram_req_read
-         && !vx_dram_req_full) 
+         && vx_dram_req_ready) 
         begin
           avs_address <= (vx_dram_req_addr >> 6);
           avs_read <= 1;
@@ -324,7 +324,7 @@ begin
         end 
         
         if (vx_dram_req_write
-         && !vx_dram_req_full) 
+         && vx_dram_req_ready) 
         begin
           avs_writedata <= {>>{vx_dram_req_data}};
           avs_address <= (vx_dram_req_addr >> 6);
