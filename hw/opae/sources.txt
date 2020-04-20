@@ -60,7 +60,7 @@ vortex_afu.json
 ../rtl/interfaces/VX_csr_wb_if.v
 ../rtl/interfaces/VX_gpu_dcache_req_if.v
 ../rtl/interfaces/VX_lsu_req_if.v
-../rtl/interfaces/VX_gpu_snp_req_rsp.v
+../rtl/interfaces/VX_gpu_snp_req_rsp_if.v
 ../rtl/interfaces/VX_mw_wb_if.v
 ../rtl/interfaces/VX_gpr_jal_if.v
 ../rtl/interfaces/VX_gpu_inst_req_if.v
@@ -85,7 +85,7 @@ vortex_afu.json
 ../rtl/cache/VX_mrv_queue.v
 ../rtl/cache/VX_dcache_llv_resp_bank_sel.v
 ../rtl/cache/VX_tag_data_access.v
-../rtl/cache/cache.v
+../rtl/cache/VX_cache.v
 ../rtl/cache/VX_cache_core_req_bank_sel.v
 ../rtl/cache/VX_cache_req_queue.v
 ../rtl/cache/VX_bank.v
