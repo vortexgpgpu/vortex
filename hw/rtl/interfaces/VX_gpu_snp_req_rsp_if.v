@@ -1,7 +1,7 @@
 `ifndef VX_GPU_SNP_REQ_RSP
 `define VX_GPU_SNP_REQ_RSP
 
-`include "../generic_cache/VX_cache_config.vh"
+`include "../cache/VX_cache_config.vh"
 
 interface VX_gpu_snp_req_rsp_if ();
 

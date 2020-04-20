@@ -21,7 +21,7 @@ endif
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
-RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/interfaces -I../../hw/rtl/cache -I../../hw/rtl/generic_cache -I../../hw/rtl/shared_memory -I../../hw/rtl/pipe_regs -I../../hw/rtl/compat
+RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/cache -I../../hw/rtl/shared_memory -I../../hw/rtl/pipe_regs
 
 VL_FLAGS += -DNDEBUG --assert -Wall -Wpedantic
 

@@ -65,6 +65,7 @@ module VX_cache_wb_sel_merge #(
 );
 
 	reg [NUM_BANKS-1:0] per_bank_wb_pop_unqual;
+	
 	assign per_bank_wb_pop = per_bank_wb_pop_unqual & {NUM_BANKS{core_rsp_ready}};
 
 	// wire[NUM_BANKS-1:0] bank_wants_wb;

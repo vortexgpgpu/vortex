@@ -241,7 +241,7 @@ module VX_cache #(
     // Snoop Forward Logic
     VX_snp_fwd_arb #(
         .NUM_BANKS(NUM_BANKS)
-    ) snp_fwd_arb(
+    ) snp_fwd_arb (
         .per_bank_snp_fwd_valid (per_bank_snp_fwd_valid),
         .per_bank_snp_fwd_addr  (per_bank_snp_fwd_addr),
         .per_bank_snp_fwd_pop   (per_bank_snp_fwd_pop),

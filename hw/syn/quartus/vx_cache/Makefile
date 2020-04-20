@@ -1,6 +1,6 @@
 PROJECT = VX_cache
 TOP_LEVEL_ENTITY = VX_cache
-SRC_FILE = ../../../rtl/generic_cache/VX_cache.v
+SRC_FILE = ../../../rtl/cache/VX_cache.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 QUARTUS_ROOT ?= /tools/reconfig/intel/18.0
