@@ -2,7 +2,7 @@
 `ifndef VX_JOIN_INTER
 `define VX_JOIN_INTER
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 interface VX_join_if ();
 

@@ -9,9 +9,9 @@ vortex_afu.json
 +incdir+../rtl/cache
 +incdir+../rtl/libs
 
-../rtl/VX_user_config.v
-../rtl/VX_config.v
-../rtl/VX_define.v
+../rtl/VX_user_config.vh
+../rtl/VX_config.vh
+../rtl/VX_define.vh
 ../rtl/cache/VX_cache_config.vh
 
 ../rtl/interfaces/VX_exec_unit_req_if.v

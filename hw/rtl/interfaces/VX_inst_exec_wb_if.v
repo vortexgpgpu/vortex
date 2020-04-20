@@ -2,7 +2,7 @@
 `ifndef VX_EXEC_UNIT_WB_INST_INTER
 `define VX_EXEC_UNIT_WB_INST_INTER
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 interface VX_inst_exec_wb_if ();
 

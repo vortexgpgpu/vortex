@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 module VX_csr_data (
 	input wire clk,    // Clock

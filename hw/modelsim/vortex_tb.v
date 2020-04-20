@@ -1,4 +1,4 @@
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 //`define NUM_BANKS 8
 //`define NUM_WORDS_PER_BLOCK 4

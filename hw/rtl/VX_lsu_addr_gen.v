@@ -1,4 +1,4 @@
-`include "VX_define.v"
+`include "VX_define.vh"
 
 module VX_lsu_addr_gen (
 	input  wire[`NUM_THREADS-1:0][31:0] base_address,

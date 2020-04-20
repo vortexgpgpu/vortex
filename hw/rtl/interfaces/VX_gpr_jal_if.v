@@ -1,7 +1,7 @@
 `ifndef VX_GPR_JAL_INTER
 `define VX_GPR_JAL_INTER
 
-`include "../VX_define.v"
+`include "../VX_define.vh"
 
 interface VX_gpr_jal_if ();
 
