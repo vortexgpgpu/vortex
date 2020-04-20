@@ -126,7 +126,7 @@ module Vortex_Cluster #(
     wire[`L2NUM_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]  l2c_core_req_data;
     wire[`L2NUM_REQUESTS-1:0][1:0]                          l2c_core_req_wb;
 
-    wire[`L2NUM_REQUESTS-1:0]                               l2c_core_no_wb_slot;
+    wire[`L2NUM_REQUESTS-1:0]                               l2c_core_rsp_ready;
 
     wire[`L2NUM_REQUESTS-1:0]                               l2c_wb;
     wire[`L2NUM_REQUESTS-1:0] [31:0]                        l2c_wb_addr;
@@ -166,8 +166,8 @@ module Vortex_Cluster #(
             assign l2c_core_req_data      [l2c_curr_core+1] = per_core_I_dram_req_data[(l2c_curr_core/2)];
 
             // Core can't accept Response
-            assign l2c_core_no_wb_slot    [l2c_curr_core]   = ~per_core_dram_rsp_ready  [(l2c_curr_core/2)];
-            assign l2c_core_no_wb_slot    [l2c_curr_core+1] = ~per_core_I_dram_rsp_ready[(l2c_curr_core/2)];       
+            assign l2c_core_rsp_ready     [l2c_curr_core]   = per_core_dram_rsp_ready  [(l2c_curr_core/2)];
+            assign l2c_core_rsp_ready     [l2c_curr_core+1] = per_core_I_dram_rsp_ready[(l2c_curr_core/2)];       
 
             // Cache Fill Response
             assign per_core_dram_rsp_valid      [(l2c_curr_core/2)] = l2c_wb[l2c_curr_core];
@@ -221,18 +221,18 @@ module Vortex_Cluster #(
         .core_req_ready     (l2c_core_req_ready),
 
         // Core can't accept L2 Request
-        .core_no_wb_slot    (|l2c_core_no_wb_slot),
+        .core_rsp_ready     (|l2c_core_rsp_ready),
 
         // Core Writeback
-        .core_wb_valid      (l2c_wb),
+        .core_rsp_valid     (l2c_wb),
     `IGNORE_WARNINGS_BEGIN
-        .core_wb_req_rd     (),
-        .core_wb_req_wb     (),
-        .core_wb_warp_num   (),
-        .core_wb_pc         (),
+        .core_rsp_req_rd    (),
+        .core_rsp_req_wb    (),
+        .core_rsp_warp_num  (),
+        .core_rsp_pc        (),
     `IGNORE_WARNINGS_END
-        .core_wb_readdata   ({l2c_wb_data}),
-        .core_wb_address    (l2c_wb_addr),
+        .core_rsp_readdata  ({l2c_wb_data}),
+        .core_rsp_address   (l2c_wb_addr),
         
         // L2 Cache DRAM Fill response
         .dram_rsp_valid     (dram_rsp_valid),

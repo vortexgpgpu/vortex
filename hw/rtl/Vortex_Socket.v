@@ -148,7 +148,7 @@ module Vortex_Socket (
         wire[`L3NUM_REQUESTS-1:0][`IBANK_LINE_WORDS-1:0][31:0]  l3c_core_req_data;
         wire[`L3NUM_REQUESTS-1:0][1:0]                          l3c_core_req_wb;
 
-        wire[`L3NUM_REQUESTS-1:0]                               l3c_core_no_wb_slot;
+        wire[`L3NUM_REQUESTS-1:0]                               l3c_core_rsp_ready;
 
         wire[`L3NUM_REQUESTS-1:0]                               l3c_wb;
         wire[`L3NUM_REQUESTS-1:0] [31:0]                        l3c_wb_addr;
@@ -174,7 +174,7 @@ module Vortex_Socket (
             assign l3c_core_req_data      [l3c_curr_cluster]   = per_cluster_dram_req_data [l3c_curr_cluster];
 
             // Core can't accept Response
-            assign l3c_core_no_wb_slot    [l3c_curr_cluster]   = ~per_cluster_dram_rsp_ready[l3c_curr_cluster];  
+            assign l3c_core_rsp_ready    [l3c_curr_cluster]   = per_cluster_dram_rsp_ready[l3c_curr_cluster];  
 
             // Cache Fill Response
             assign per_cluster_dram_rsp_valid [l3c_curr_cluster] = l3c_wb      [l3c_curr_cluster];
@@ -222,18 +222,18 @@ module Vortex_Socket (
             .core_req_ready     (l3c_core_req_ready),
 
             // Core can't accept L2 Request
-            .core_no_wb_slot    (|l3c_core_no_wb_slot),
+            .core_rsp_ready     (|l3c_core_rsp_ready),
 
             // Core Writeback
-            .core_wb_valid      (l3c_wb),
+            .core_rsp_valid     (l3c_wb),
         `IGNORE_WARNINGS_BEGIN
-            .core_wb_req_rd     (),
-            .core_wb_req_wb     (),
-            .core_wb_warp_num   (),
-            .core_wb_pc         (),
+            .core_rsp_req_rd    (),
+            .core_rsp_req_wb    (),
+            .core_rsp_warp_num  (),
+            .core_rsp_pc        (),
         `IGNORE_WARNINGS_END
-            .core_wb_readdata   ({l3c_wb_data}),
-            .core_wb_address    (l3c_wb_addr),            
+            .core_rsp_readdata  ({l3c_wb_data}),
+            .core_rsp_address   (l3c_wb_addr),            
 
             // L2 Cache DRAM Fill response
             .dram_rsp_valid     (dram_rsp_valid),
