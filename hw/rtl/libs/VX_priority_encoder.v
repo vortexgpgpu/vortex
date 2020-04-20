@@ -2,9 +2,9 @@
 
 module VX_priority_encoder (
     input  wire[`NUM_WARPS-1:0] valids,
-    output reg[`NW_BITS-1:0] index,
-    output reg           found
-  );
+    output reg[`NW_BITS-1:0] 	index,
+    output reg           		found
+);
 
 	integer i;
 	always @(*) begin

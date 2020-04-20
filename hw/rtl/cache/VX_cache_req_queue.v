@@ -122,9 +122,9 @@ module VX_cache_req_queue #(
 		.clk      (clk),
 		.reset    (reset),
 		.push     (push_qual),
-		.data_i  ({bank_valids   , bank_addr   , bank_writedata   , bank_rd   , bank_wb   , bank_warp_num   , bank_mem_read   , bank_mem_write   , bank_pc}),
+		.data_in  ({bank_valids   , bank_addr   , bank_writedata   , bank_rd   , bank_wb   , bank_warp_num   , bank_mem_read   , bank_mem_write   , bank_pc}),
 		.pop      (pop_qual),
-		.data_o ({out_per_valids, out_per_addr, out_per_writedata, out_per_rd, out_per_wb, out_per_warp_num, out_per_mem_read, out_per_mem_write, out_per_pc}),
+		.data_out ({out_per_valids, out_per_addr, out_per_writedata, out_per_rd, out_per_wb, out_per_warp_num, out_per_mem_read, out_per_mem_write, out_per_pc}),
 		.empty    (o_empty),
 		.full     (reqq_full)
 	);

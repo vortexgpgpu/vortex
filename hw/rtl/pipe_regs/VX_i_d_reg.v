@@ -14,7 +14,9 @@ module VX_i_d_reg (
 	wire stall = freeze_i == 1'b1;
 
 
-	VX_generic_register #( .N( 64 + `NW_BITS-1 + 1 + `NUM_THREADS ) ) i_d_reg (
+	VX_generic_register #(
+		.N(64 + `NW_BITS-1 + 1 + `NUM_THREADS)
+	) i_d_reg (
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall),
