@@ -1,10 +1,8 @@
 
-module VX_generic_stack
-	#(
-		parameter WIDTH = 40,
-		parameter DEPTH = 2
-	)
-	(
+module VX_generic_stack	#(
+	parameter WIDTH = 40,
+	parameter DEPTH = 2
+) (
 	input  wire              clk,
 	input  wire              reset,
 	input  wire              push,
@@ -12,8 +10,7 @@ module VX_generic_stack
 	input  reg [WIDTH - 1:0] q1,
 	input  reg [WIDTH - 1:0] q2,
 	output wire[WIDTH - 1:0] d
-	);
-
+);
 
 	reg [DEPTH - 1:0] ptr;
 	reg [WIDTH - 1:0] stack [0:(1 << DEPTH) - 1];
@@ -30,9 +27,7 @@ module VX_generic_stack
 		end else if (pop) begin
 			ptr <= ptr - 1;
 		end
-
 	end
-
 
 	assign d = stack[ptr - 1];
 

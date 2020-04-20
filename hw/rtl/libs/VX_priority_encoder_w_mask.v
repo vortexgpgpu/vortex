@@ -1,16 +1,14 @@
 `include "VX_define.vh"
-module VX_priority_encoder_w_mask
-  #(
-  	parameter N = 10
-  )
-  (
-    input  wire[N-1:0]        valids,
-    output reg [N-1:0]        mask,
+module VX_priority_encoder_w_mask #(
+	parameter N = 10
+)  (
+    input  wire[N-1:0]        		valids,
+    output reg [N-1:0]        		mask,
     //output reg[$clog2(N)-1:0] index,
-    output reg[(`LOG2UP(N))-1:0] index,
+    output reg[(`LOG2UP(N))-1:0] 	index,
     //output reg[`LOG2UP(N):0] index, // eh
-    output reg                found
-  );
+    output reg                		found
+);
 
 	integer i;
 	always @(valids) begin

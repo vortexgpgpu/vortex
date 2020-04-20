@@ -1,19 +1,21 @@
 `include "../VX_define.vh"
 
 module VX_f_d_reg (
-	input wire          clk,
-	input wire          reset,
-	input wire     		freeze_i,
+	input wire		clk,
+	input wire      reset,
+	input wire    	freeze_i,
 
-	VX_inst_meta_if     fe_inst_meta_fd,
-	VX_inst_meta_if     fd_inst_meta_de
+	VX_inst_meta_if fe_inst_meta_fd,
+	VX_inst_meta_if fd_inst_meta_de
 
 );
 
 	wire flush = 1'b0;
 	wire stall = freeze_i == 1'b1;
 
-	VX_generic_register #( .N(64+`NW_BITS-1+1+`NUM_THREADS) ) f_d_reg (
+	VX_generic_register #( 
+		.N(64+`NW_BITS-1+1+`NUM_THREADS)
+	) f_d_reg (
 		.clk  (clk),
 		.reset(reset),
 		.stall(stall),
