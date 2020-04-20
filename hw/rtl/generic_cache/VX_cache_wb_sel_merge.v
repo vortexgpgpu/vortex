@@ -50,7 +50,7 @@ module VX_cache_wb_sel_merge #(
     input  wire [NUM_BANKS-1:0][`NW_BITS-1:0]               per_bank_wb_warp_num,
     input  wire [NUM_BANKS-1:0][`WORD_SIZE_RNG]             per_bank_wb_data,
     input  wire [NUM_BANKS-1:0][31:0]                       per_bank_wb_pc,
-    input  wire [NUM_BANKS-1:0][31:0]                       per_bank_wb_address,
+    input  wire [NUM_BANKS-1:0][31:0]                       per_bank_wb_addr,
     output wire [NUM_BANKS-1:0]                             per_bank_wb_pop,
 
     // Core Writeback
@@ -107,7 +107,7 @@ module VX_cache_wb_sel_merge #(
 						core_rsp_valid[per_bank_wb_tid[this_bank]]    = 1;
 						core_rsp_data[per_bank_wb_tid[this_bank]]     = per_bank_wb_data[this_bank];
 						core_rsp_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
-						core_rsp_addr[per_bank_wb_tid[this_bank]]     = per_bank_wb_address[this_bank];
+						core_rsp_addr[per_bank_wb_tid[this_bank]]     = per_bank_wb_addr[this_bank];
 						per_bank_wb_pop_unqual[this_bank]             = 1;
 					end else begin
 						per_bank_wb_pop_unqual[this_bank]             = 0;
@@ -123,7 +123,7 @@ module VX_cache_wb_sel_merge #(
 						core_rsp_valid[per_bank_wb_tid[this_bank]]    = 1;
 						core_rsp_data[per_bank_wb_tid[this_bank]]     = per_bank_wb_data[this_bank];
 						core_rsp_pc[per_bank_wb_tid[this_bank]]       = per_bank_wb_pc[this_bank];
-						core_rsp_addr[per_bank_wb_tid[this_bank]]     = per_bank_wb_address[this_bank];
+						core_rsp_addr[per_bank_wb_tid[this_bank]]     = per_bank_wb_addr[this_bank];
 						per_bank_wb_pop_unqual[this_bank]             = 1;
 					end else begin
 						per_bank_wb_pop_unqual[this_bank]             = 0;
