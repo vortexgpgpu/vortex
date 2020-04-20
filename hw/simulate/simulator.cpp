@@ -100,17 +100,17 @@ void Simulator::ibus_driver() {
     vortex_->I_dram_rsp_addr = 0;
   }
 
-#ifdef ENABLE_DRAM_STALLS
-  I_dram_stalled_ = false;
-  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
-    I_dram_stalled_ = true;
-  } else
-  if (I_dram_req_vec_.size() >= DRAM_RQ_SIZE) {
-    I_dram_stalled_ = true;
-  }  
-#endif
+// #ifdef ENABLE_DRAM_STALLS
+//   I_dram_stalled_ = false;
+//   if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
+//     I_dram_stalled_ = true;
+//   } else
+//   if (I_dram_req_vec_.size() >= DRAM_RQ_SIZE) {
+//     I_dram_stalled_ = true;
+//   }  
+// #endif
 
-  vortex_->dram_req_full = I_dram_stalled_;
+//   vortex_->dram_req_delay = I_dram_stalled_;
 }
 
 #endif
@@ -129,16 +129,6 @@ void Simulator::dbus_driver() {
       dequeue_valid = true;
     }
   }
-
-#ifdef ENABLE_DRAM_STALLS
-  dram_stalled_ = false;
-  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
-    dram_stalled_ = true;
-  } else
-  if (dram_req_vec_.size() >= DRAM_RQ_SIZE) {
-    dram_stalled_ = true;
-  }  
-#endif
 
 #ifdef USE_MULTICORE
 
@@ -280,6 +270,16 @@ void Simulator::step() {
   vortex_->clk = 1;
   vortex_->eval();
 
+#ifdef ENABLE_DRAM_STALLS
+  dram_stalled_ = false;
+  if (0 == (total_cycles_ % DRAM_STALLS_MODULO)) { 
+    dram_stalled_ = true;
+  } else
+  if (dram_req_vec_.size() >= DRAM_RQ_SIZE) {
+    dram_stalled_ = true;
+  }  
+#endif
+
 #ifndef USE_MULTICORE
   ibus_driver();
 #endif
@@ -374,7 +374,7 @@ bool Simulator::run() {
   int status = 0;
 #else
   // check riscv-tests PASSED/FAILED status
-  int status = (int)vortex_->Vortex->vx_back_end->vx_wb->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex->back_end->wb->last_data_wb & 0xf;
 #endif
 
   return (status == 1);
