@@ -13,7 +13,7 @@ interface VX_gpu_dcache_rsp_if #(
     wire [4:0]                     core_rsp_read;
     wire [1:0]                     core_rsp_write;
 `IGNORE_WARNINGS_END    
-    //wire [NUM_REQUESTS-1:0][31:0]  core_rsp_pc;    
+    wire [NUM_REQUESTS-1:0][31:0]  core_rsp_pc;    
     wire [NUM_REQUESTS-1:0][31:0]  core_rsp_data;
     wire                           core_rsp_ready;
     
