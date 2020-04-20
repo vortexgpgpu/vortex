@@ -1,4 +1,4 @@
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 module VX_i_d_reg (
 	input wire          clk,
@@ -24,6 +24,5 @@ module VX_i_d_reg (
 		.in   ({fe_inst_meta_fd.instruction, fe_inst_meta_fd.inst_pc, fe_inst_meta_fd.warp_num, fe_inst_meta_fd.valid}),
 		.out  ({fd_inst_meta_de.instruction, fd_inst_meta_de.inst_pc, fd_inst_meta_de.warp_num, fd_inst_meta_de.valid})
 	);
-
 
 endmodule

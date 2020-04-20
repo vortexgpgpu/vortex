@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_define.v"
 
 module VX_csr_pipe #(
 	parameter CORE_ID = 0

@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_define.v"
 `include "VX_cache_config.vh"
 
 module Vortex_Cluster #(

@@ -1,7 +1,7 @@
 `ifndef VX_DCACHE_RSP
 `define VX_DCACHE_RSP
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_dcache_response_if ();
 

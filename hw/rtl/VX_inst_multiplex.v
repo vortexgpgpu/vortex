@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_define.v"
 
 module VX_inst_multiplex (
 	// Inputs

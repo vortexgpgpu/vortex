@@ -1,7 +1,7 @@
 `ifndef VX_CONFIG
 `define VX_CONFIG
 
-`include "VX_user_config.vh"
+`include "VX_user_config.v"
 
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1

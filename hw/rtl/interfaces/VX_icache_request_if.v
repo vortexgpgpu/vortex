@@ -2,7 +2,7 @@
 `ifndef VX_ICACHE_REQ
 `define VX_ICACHE_REQ
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_icache_request_if ();
 

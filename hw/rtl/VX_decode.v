@@ -1,5 +1,5 @@
 
-`include "VX_define.vh"
+`include "VX_define.v"
 
 module VX_decode(
 	// Fetch Inputs

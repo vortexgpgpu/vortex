@@ -1,7 +1,7 @@
 `ifndef VX_MEM_REQ_IN
 `define VX_MEM_REQ_IN
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_mem_req_if ();
 

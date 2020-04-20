@@ -2,7 +2,7 @@
 `ifndef VX_gpr_data_INTER
 `define VX_gpr_data_INTER
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_gpr_data_if ();
 

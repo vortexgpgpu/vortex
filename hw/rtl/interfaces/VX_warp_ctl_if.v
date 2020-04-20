@@ -2,7 +2,7 @@
 `ifndef VX_WARP_CTL_INTER
 `define VX_WARP_CTL_INTER
 
-`include "../VX_define.vh"
+`include "../VX_define.v"
 
 interface VX_warp_ctl_if ();
 
