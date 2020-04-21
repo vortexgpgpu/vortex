@@ -306,7 +306,7 @@ bool Simulator::run() {
   int status = 0;
 #else
   // check riscv-tests PASSED/FAILED status
-  int status = (int)vortex_->Vortex->back_end->wb->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex->back_end->writeback->last_data_wb & 0xf;
 #endif
 
   return (status == 1);
