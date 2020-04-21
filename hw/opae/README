@@ -37,3 +37,10 @@ cd /driver/tests/basic
 make clean
 make
 ./basic
+
+
+ASE build instructions
+
+vcd file vortex.vcd
+vcd add -r /*/Vortex/hw/rtl/* 
+run -all
