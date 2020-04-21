@@ -78,7 +78,7 @@ module VX_csr_data (
 
     assign read_csr_data =  read_cycle    ? cycle[31:0] :
                                 read_cycleh   ? cycle[63:32] :
-                                read_instret  ? instret[31:0] :
-                                read_instreth ? instret[63:32] :
-                                                {{20{1'b0}}, csr[read_addr]};
+                                    read_instret  ? instret[31:0] :
+                                        read_instreth ? instret[63:32] :
+                                            {{20{1'b0}}, csr[read_addr]};
 endmodule : VX_csr_data
