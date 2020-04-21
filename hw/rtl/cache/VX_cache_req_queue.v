@@ -173,7 +173,7 @@ module VX_cache_req_queue #(
 
     always @(posedge clk) begin
         if (reset) begin
-             use_per_valids   <= 0;
+            use_per_valids    <= 0;
             use_per_addr      <= 0;
             use_per_writedata <= 0;
             use_per_rd        <= 0;
