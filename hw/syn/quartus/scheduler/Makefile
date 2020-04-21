@@ -1,6 +1,6 @@
-PROJECT = VX_cache
-TOP_LEVEL_ENTITY = VX_cache
-SRC_FILE = VX_cache.v
+PROJECT = VX_scheduler
+TOP_LEVEL_ENTITY = VX_scheduler
+SRC_FILE = VX_scheduler.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
@@ -49,7 +49,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache"
+	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache"
 	
 syn.chg:
 	$(STAMP) syn.chg

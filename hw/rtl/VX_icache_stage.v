@@ -44,11 +44,11 @@ module VX_icache_stage (
     // Core can't accept response
     assign icache_rsp_if.core_rsp_ready = ~total_freeze;
 
-    integer curr_w;
+    integer w;
     always @(posedge clk) begin
         if (reset) begin
-            for (curr_w = 0; curr_w < `NUM_WARPS; curr_w=curr_w+1) begin
-                threads_active[curr_w] <= 0;
+            for (w = 0; w < `NUM_WARPS; w=w+1) begin
+                threads_active[w] <= 0;
             end
         end else begin
             if (valid_inst && !icache_stage_delay) begin

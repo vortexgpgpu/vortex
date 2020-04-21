@@ -47,8 +47,8 @@ module VX_scheduler (
                          || (gpr_stage_delay && (is_mem || is_exec))
                          || (exec_delay && is_exec);
 
-    integer i;
-    integer w;
+    integer i, w;
+    
     always @(posedge clk) begin
 
         if (reset) begin

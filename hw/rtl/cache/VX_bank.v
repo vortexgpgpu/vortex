@@ -309,11 +309,11 @@ module VX_bank #(
 `DEBUG_END
     wire [31:0]        addr_st1       [STAGE_1_CYCLES-1:0];
 
-    integer p_stage;
+    integer i;
     always @(*) begin
         is_fill_in_pipe = 0;
-        for (p_stage = 0; p_stage < STAGE_1_CYCLES; p_stage=p_stage+1) begin
-            if (is_fill_st1[p_stage]) begin
+        for (i = 0; i < STAGE_1_CYCLES; i=i+1) begin
+            if (is_fill_st1[i]) begin
                 is_fill_in_pipe = 1;
             end
         end

@@ -123,7 +123,8 @@ module VX_alu_unit (
         end
     end
 
-    `ifdef SYN_FUNC
+ `ifdef SYN_FUNC
+ 
     wire which_in2;
     wire[31:0] upper_immed;
 
@@ -205,4 +206,4 @@ module VX_alu_unit (
 
 `endif
 
-endmodule : VX_alu
+endmodule

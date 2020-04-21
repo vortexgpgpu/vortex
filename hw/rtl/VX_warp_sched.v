@@ -87,20 +87,20 @@ module VX_warp_sched (
 
     wire wstall_this_cycle;
 
-    reg[`NUM_THREADS-1:0] thread_masks[`NUM_WARPS-1:0];
-    reg[31:0]     warp_pcs[`NUM_WARPS-1:0];
+    reg [`NUM_THREADS-1:0] thread_masks[`NUM_WARPS-1:0];
+    reg [31:0] warp_pcs[`NUM_WARPS-1:0];
 
     // barriers
-    reg[`NUM_WARPS-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
-    wire         reached_barrier_limit;
-    wire[`NUM_WARPS-1:0] curr_barrier_mask;
-    wire[$clog2(`NUM_WARPS):0] curr_barrier_count;
+    reg [`NUM_WARPS-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
+    wire reached_barrier_limit;
+    wire [`NUM_WARPS-1:0] b_mask;
+    wire [$clog2(`NUM_WARPS):0] b_count;
 
     // wsapwn
-    reg[31:0]    use_wsapwn_pc;
-    reg[`NUM_WARPS-1:0] use_wsapwn;
+    reg [31:0]    use_wsapwn_pc;
+    reg [`NUM_WARPS-1:0] use_wsapwn;
 
-    wire[`NW_BITS-1:0] warp_to_schedule;
+    wire [`NW_BITS-1:0] warp_to_schedule;
     wire           schedule;
 
     wire hazard;
@@ -108,22 +108,22 @@ module VX_warp_sched (
 
     wire real_schedule;
 
-    wire[31:0] new_pc;
+    wire [31:0] new_pc;
 
-    reg[`NUM_WARPS-1:0] total_barrier_stall;
+    reg [`NUM_WARPS-1:0] total_barrier_stall;
 
     reg didnt_split;
 
-    integer curr_w_help;
-    integer curr_barrier;
+    integer w, b;
+    
     always @(posedge clk) begin
         if (reset) begin
-            for (curr_barrier = 0; curr_barrier < `NUM_BARRIERS; curr_barrier=curr_barrier+1) begin
-                barrier_stall_mask[curr_barrier] <= 0;
+            for (b = 0; b < `NUM_BARRIERS; b=b+1) begin
+                barrier_stall_mask[b] <= 0;
             end
             use_wsapwn_pc         <= 0;
             use_wsapwn            <= 0;
-            warp_pcs[0]           <= (32'h80000000 - 4);
+            warp_pcs[0]           <= (`STARTUP_ADDR - 4);
             warp_active[0]        <= 1; // Activating first warp
             visible_active[0]     <= 1; // Activating first warp
             thread_masks[0]       <= 1; // Activating first thread in first warp
@@ -131,11 +131,11 @@ module VX_warp_sched (
             didnt_split           <= 0;
             warp_lock             <= 0;      
             // total_barrier_stall    = 0;
-            for (curr_w_help = 1; curr_w_help < `NUM_WARPS; curr_w_help=curr_w_help+1) begin
-                warp_pcs[curr_w_help]        <= 0;
-                warp_active[curr_w_help]     <= 0; // Activating first warp
-                visible_active[curr_w_help]  <= 0; // Activating first warp
-                thread_masks[curr_w_help]    <= 1; // Activating first thread in first warp
+            for (w = 1; w < `NUM_WARPS; w=w+1) begin
+                warp_pcs[w]        <= 0;
+                warp_active[w]     <= 0; // Activating first warp
+                visible_active[w]  <= 0; // Activating first warp
+                thread_masks[w]    <= 1; // Activating first thread in first warp
             end
 
         end else begin
@@ -228,8 +228,8 @@ module VX_warp_sched (
     VX_countones #(
         .N(`NUM_WARPS)
     ) barrier_count (
-        .valids(curr_barrier_mask),
-        .count (curr_barrier_count)
+        .valids(b_mask),
+        .count (b_count)
     );
 
     wire [$clog2(`NUM_WARPS):0] count_visible_active;
@@ -241,10 +241,10 @@ module VX_warp_sched (
         .count (count_visible_active)
     );
 
-    // assign curr_barrier_count    = $countones(curr_barrier_mask);
+    // assign b_count = $countones(b_mask);
 
-    assign curr_barrier_mask     = barrier_stall_mask[barrier_id][`NUM_WARPS-1:0];
-    assign reached_barrier_limit = curr_barrier_count == (num_warps);
+    assign b_mask = barrier_stall_mask[barrier_id][`NUM_WARPS-1:0];
+    assign reached_barrier_limit = b_count == (num_warps);
 
     assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
 
@@ -260,8 +260,8 @@ module VX_warp_sched (
 
     assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);
 
-    wire[(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
-    wire[(1+32+`NUM_THREADS-1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
+    wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
+    wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
 
     assign {join_fall, join_pc, join_tm} = d[join_warp_num];
 
@@ -285,7 +285,7 @@ module VX_warp_sched (
             .d    (d[curr_warp]),
             .q1   (q1),
             .q2   (q2)
-            );
+        );
     end
     endgenerate
 
@@ -318,9 +318,9 @@ module VX_warp_sched (
     VX_priority_encoder #(
         .N(`NUM_WARPS)
     ) choose_schedule (
-        .valids(use_active),
-        .index (warp_to_schedule),
-        .found (schedule)
+        .valids (use_active),
+        .index  (warp_to_schedule),
+        .found  (schedule)
     );
 
     // always @(*) begin
