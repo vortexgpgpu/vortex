@@ -72,7 +72,7 @@ vortex_afu.json
 ../rtl/VX_dmem_ctrl.v
 ../rtl/VX_alu_unit.v
 ../rtl/VX_csr_data.v
-../rtl/VX_lsu.v
+../rtl/VX_lsu_uint.v
 ../rtl/VX_decode.v
 ../rtl/VX_inst_multiplex.v
 ../rtl/VX_csr_wrapper.v
