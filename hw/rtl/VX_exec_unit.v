@@ -47,7 +47,7 @@ module VX_exec_unit (
     genvar index_out_reg;
     generate
         for (index_out_reg = 0; index_out_reg < `NUM_THREADS; index_out_reg = index_out_reg + 1) begin : alu_defs
-            VX_alu alu(
+            VX_alu_unit alu_unit (
                 .clk            (clk),
                 .reset          (reset),
                 .src_a          (in_a_reg_data[index_out_reg]),

@@ -140,6 +140,9 @@
 // IO BUS
 `define IO_BUS_ADDR 32'h00010000
 
+// Program startup address
+`define STARTUP_ADDR 32'h80000000
+
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
 // Function ID

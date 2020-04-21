@@ -1,6 +1,6 @@
-PROJECT = VX_cache
-TOP_LEVEL_ENTITY = VX_cache
-SRC_FILE = VX_cache.v
+PROJECT = VX_front_end
+TOP_LEVEL_ENTITY = VX_front_end
+SRC_FILE = VX_front_end.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
@@ -49,7 +49,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache"
+	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache"
 	
 syn.chg:
 	$(STAMP) syn.chg
@@ -67,4 +67,4 @@ program: $(PROJECT).sof
 	quartus_pgm --no_banner --mode=jtag -o "P;$(PROJECT).sof"
 	
 clean:
-	rm -rf bin *.rpt *.chg *.qsf *.qpf *.qws smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox
+	rm -rf bin *.rpt *.chg *.qsf *.qpf  *.qws smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

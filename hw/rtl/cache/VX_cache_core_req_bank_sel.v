@@ -50,15 +50,15 @@ module VX_cache_core_req_bank_sel #(
 );
 
     generate
-        integer curr_req;
+        integer i;
         always @(*) begin
             per_bank_valids = 0;
-            for (curr_req = 0; curr_req < NUM_REQUESTS; curr_req = curr_req + 1) begin
+            for (i = 0; i < NUM_REQUESTS; i = i + 1) begin
                 if (NUM_BANKS == 1) begin
                     // If there is only one bank, then only map requests to that bank
-                    per_bank_valids[0][curr_req] = core_req_valid[curr_req];
+                    per_bank_valids[0][i] = core_req_valid[i];
                 end else begin
-                    per_bank_valids[core_req_addr[curr_req][`BANK_SELECT_ADDR_RNG]][curr_req] = core_req_valid[curr_req];
+                    per_bank_valids[core_req_addr[i][`BANK_SELECT_ADDR_RNG]][i] = core_req_valid[i];
                 end
             end
         end

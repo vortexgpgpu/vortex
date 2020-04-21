@@ -82,8 +82,6 @@ reg[31:0]  io_data;
 
 	reg[31:0] hi;
 
-	integer temp;
-
 	initial begin
 		// $fdumpfile("vortex1.vcd");
 		load_file("../../runtime/tests/simple/simple_main_if.hex");
@@ -104,18 +102,18 @@ reg[31:0]  io_data;
 		.io_data                      (io_data),
 		.m_read_addr_d                (o_m_read_addr_d),
 		.m_evict_addr_d               (o_m_evict_addr_d),
-		.m_valid_d                  (o_m_valid_d),
-		.m_writedata_d              (o_m_writedata_d),
-		.m_read_or_write_d          (o_m_read_or_write_d),
-		.m_readdata_d               (i_m_readdata_d),
-		.m_ready_d                  (i_m_ready_d),
-		.m_read_addr                (o_m_read_addr_i),
-		.m_evict_addr               (o_m_evict_addr_i),
-		.m_valid                    (o_m_valid_i),
-		.writedata                (o_m_writedata_i),
-		.m_read_or_write            (o_m_read_or_write_i),
-		.m_readdata                 (i_m_readdata_i),
-		.m_ready                    (i_m_ready_i),
+		.m_valid_d                    (o_m_valid_d),
+		.m_writedata_d                (o_m_writedata_d),
+		.m_read_or_write_d            (o_m_read_or_write_d),
+		.m_readdata_d                 (i_m_readdata_d),
+		.m_ready_d                    (i_m_ready_d),
+		.m_read_addr                  (o_m_read_addr_i),
+		.m_evict_addr                 (o_m_evict_addr_i),
+		.m_valid                      (o_m_valid_i),
+		.writedata                    (o_m_writedata_i),
+		.m_read_or_write              (o_m_read_or_write_i),
+		.m_readdata                   (i_m_readdata_i),
+		.m_ready                      (i_m_ready_i),
 		.ebreak                       (out_ebreak)
 	);
 
