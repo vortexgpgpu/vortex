@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+
 module VX_priority_encoder_w_mask #(
 	parameter N = 10
 )  (
@@ -27,4 +28,5 @@ module VX_priority_encoder_w_mask #(
 	end
 
 	assign mask = found ? (1 << index) : 0;
+	
 endmodule

@@ -1,13 +1,8 @@
-`ifndef VX_GENERIC_PRIORITY_ENCODER
-`define VX_GENERIC_PRIORITY_ENCODER
-
 `include "VX_define.vh"
 
-module VX_generic_priority_encoder
-  #(
-  	parameter N = 1
-  )
-  (
+module VX_generic_priority_encoder #(
+	parameter N = 1
+)  (
     input  wire[N-1:0] valids,
     //output reg[$clog2(N)-1:0] index,
     output reg[(`LOG2UP(N))-1:0] index,
@@ -27,6 +22,5 @@ module VX_generic_priority_encoder
 			end
 		end
 	end
+	
 endmodule
-
-`endif

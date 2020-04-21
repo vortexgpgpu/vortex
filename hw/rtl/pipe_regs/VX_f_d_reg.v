@@ -1,4 +1,4 @@
-`include "../VX_define.vh"
+`include "VX_define.vh"
 
 module VX_f_d_reg (
 	input wire		clk,

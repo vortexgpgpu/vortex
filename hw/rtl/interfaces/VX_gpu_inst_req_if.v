@@ -1,7 +1,7 @@
 `ifndef VX_GPU_INST_REQ_IN
 `define VX_GPU_INST_REQ_IN
 
-`include "../VX_define.vh"
+`include "VX_define.vh"
 
 interface VX_gpu_inst_req_if();
 

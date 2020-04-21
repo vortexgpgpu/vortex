@@ -2,7 +2,7 @@
 `ifndef VX_JAL_RSP
 `define VX_JAL_RSP
 
-`include "../VX_define.vh"
+`include "VX_define.vh"
 
 interface VX_jal_rsp_if ();
 

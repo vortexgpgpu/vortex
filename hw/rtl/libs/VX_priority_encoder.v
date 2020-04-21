@@ -17,4 +17,5 @@ module VX_priority_encoder (
 			end
 		end
 	end
+	
 endmodule

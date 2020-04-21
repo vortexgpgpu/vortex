@@ -255,16 +255,16 @@ void Core::getCacheDelays(trace_inst_t * trace_inst)
         cache_simulator->eval();
         // m_trace->dump(2*curr_cycle);
 
-        cache_simulator->in_icache_pc_addr       = trace_inst->pc;
-        cache_simulator->in_icache_valid_pc_addr = 1;
+        cache_simulator->icache_pc_addr       = trace_inst->pc;
+        cache_simulator->icache_valid_pc_addr = 1;
 
         // DCache start
-        cache_simulator->in_dcache_mem_read  = in_dcache_mem_read;
-        cache_simulator->in_dcache_mem_write = in_dcache_mem_write;
+        cache_simulator->dcache_mem_read  = in_dcache_mem_read;
+        cache_simulator->dcache_mem_write = in_dcache_mem_write;
         for (int cur_t = 0; cur_t < a.getNThds(); cur_t++)
         {
-            cache_simulator->in_dcache_in_valid[cur_t]   = in_dcache_in_valid[cur_t];
-            cache_simulator->in_dcache_in_address[cur_t] = in_dcache_in_address[cur_t];
+            cache_simulator->dcache_in_valid[cur_t]   = in_dcache_in_valid[cur_t];
+            cache_simulator->dcache_in_addr[cur_t] = in_dcache_in_address[cur_t];
         }
         // DCache end
         cache_simulator->clk = 0;
@@ -273,39 +273,39 @@ void Core::getCacheDelays(trace_inst_t * trace_inst)
 
         curr_cycle++;
 
-        while((cache_simulator->out_icache_stall || cache_simulator->out_dcache_stall))
+        while((cache_simulator->icache_stall || cache_simulator->dcache_stall))
         {
 
             ////////// Feed input
-            if (cache_simulator->out_icache_stall)
+            if (cache_simulator->icache_stall)
             {
-                cache_simulator->in_icache_pc_addr       = trace_inst->pc;
-                cache_simulator->in_icache_valid_pc_addr = 1;
+                cache_simulator->icache_pc_addr       = trace_inst->pc;
+                cache_simulator->icache_valid_pc_addr = 1;
                 trace_inst->fetch_stall_cycles++;
             }
             else
             {
-                cache_simulator->in_icache_valid_pc_addr = 0;
+                cache_simulator->icache_valid_pc_addr = 0;
             }
 
-            if (cache_simulator->out_dcache_stall)
+            if (cache_simulator->dcache_stall)
             {
-                cache_simulator->in_dcache_mem_read  = in_dcache_mem_read;
-                cache_simulator->in_dcache_mem_write = in_dcache_mem_write;
+                cache_simulator->dcache_mem_read  = in_dcache_mem_read;
+                cache_simulator->dcache_mem_write = in_dcache_mem_write;
                 for (int cur_t = 0; cur_t < a.getNThds(); cur_t++)
                 {
-                    cache_simulator->in_dcache_in_valid[cur_t]   = in_dcache_in_valid[cur_t];
-                    cache_simulator->in_dcache_in_address[cur_t] = in_dcache_in_address[cur_t];
+                    cache_simulator->dcache_in_valid[cur_t]   = in_dcache_in_valid[cur_t];
+                    cache_simulator->dcache_in_addr[cur_t] = in_dcache_in_address[cur_t];
                 }
                 trace_inst->mem_stall_cycles++;
             }
             else
             {
-                cache_simulator->in_dcache_mem_read  = NO_MEM_READ;
-                cache_simulator->in_dcache_mem_write = NO_MEM_WRITE;
+                cache_simulator->dcache_mem_read  = NO_MEM_READ;
+                cache_simulator->dcache_mem_write = NO_MEM_WRITE;
                 for (int cur_t = 0; cur_t < a.getNThds(); cur_t++)
                 {
-                    cache_simulator->in_dcache_in_valid[cur_t]   = 0;
+                    cache_simulator->dcache_in_valid[cur_t]   = 0;
                 }
             }
 
@@ -314,33 +314,33 @@ void Core::getCacheDelays(trace_inst_t * trace_inst)
             // m_trace->dump(2*curr_cycle);
 
             //////// Feed input
-            if (cache_simulator->out_icache_stall)
+            if (cache_simulator->icache_stall)
             {
-                cache_simulator->in_icache_pc_addr       = trace_inst->pc;
-                cache_simulator->in_icache_valid_pc_addr = 1;
+                cache_simulator->icache_pc_addr       = trace_inst->pc;
+                cache_simulator->icache_valid_pc_addr = 1;
             }
             else
             {
-                cache_simulator->in_icache_valid_pc_addr = 0;
+                cache_simulator->icache_valid_pc_addr = 0;
             }
 
-            if (cache_simulator->out_dcache_stall)
+            if (cache_simulator->dcache_stall)
             {
-                cache_simulator->in_dcache_mem_read  = in_dcache_mem_read;
-                cache_simulator->in_dcache_mem_write = in_dcache_mem_write;
+                cache_simulator->dcache_mem_read  = in_dcache_mem_read;
+                cache_simulator->dcache_mem_write = in_dcache_mem_write;
                 for (int cur_t = 0; cur_t < a.getNThds(); cur_t++)
                 {
-                    cache_simulator->in_dcache_in_valid[cur_t]   = in_dcache_in_valid[cur_t];
-                    cache_simulator->in_dcache_in_address[cur_t] = in_dcache_in_address[cur_t];
+                    cache_simulator->dcache_in_valid[cur_t]   = in_dcache_in_valid[cur_t];
+                    cache_simulator->dcache_in_addr[cur_t] = in_dcache_in_address[cur_t];
                 }
             }
             else
             {
-                cache_simulator->in_dcache_mem_read  = NO_MEM_READ;
-                cache_simulator->in_dcache_mem_write = NO_MEM_WRITE;
+                cache_simulator->dcache_mem_read  = NO_MEM_READ;
+                cache_simulator->dcache_mem_write = NO_MEM_WRITE;
                 for (int cur_t = 0; cur_t < a.getNThds(); cur_t++)
                 {
-                    cache_simulator->in_dcache_in_valid[cur_t]   = 0;
+                    cache_simulator->dcache_in_valid[cur_t]   = 0;
                 }
             }
 
