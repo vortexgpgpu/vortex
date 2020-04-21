@@ -10,12 +10,12 @@ module VX_exec_unit (
 		// Writeback
 	VX_inst_exec_wb_if    inst_exec_wb_if,
 		// JAL Response
-	VX_jal_rsp_if    jal_rsp_if,
+	VX_jal_rsp_if    	  jal_rsp_if,
 		// Branch Response
-	VX_branch_rsp_if branch_rsp_if,
+	VX_branch_rsp_if      branch_rsp_if,
 
-	input wire 			  no_slot_exec_i,
-	output wire 		  delay_o
+	input wire 			  no_slot_exec,
+	output wire 		  delay
 );
 
 	wire[`NUM_THREADS-1:0][31:0] in_a_reg_data;
@@ -50,15 +50,15 @@ module VX_exec_unit (
 			VX_alu alu(
 				.clk			(clk),
 				.reset			(reset),
-				.a_i          	(in_a_reg_data[index_out_reg]),
-				.b_i          	(in_b_reg_data[index_out_reg]),
-				.rs2_src_i   	(in_rs2_src),
-				.itype_immed_i	(in_itype_immed),
-				.upper_immed_i	(in_upper_immed),
-				.alu_op_i     	(in_alu_op),
-				.curr_PC_i    	(in_curr_PC),
-				.alu_result_o	(alu_result[index_out_reg]),
-				.alu_stall_o	(alu_stall[index_out_reg])
+				.src_a         	(in_a_reg_data[index_out_reg]),
+				.src_b         	(in_b_reg_data[index_out_reg]),
+				.src_rs2     	(in_rs2_src),
+				.itype_immed	(in_itype_immed),
+				.upper_immed	(in_upper_immed),
+				.alu_op     	(in_alu_op),
+				.curr_PC    	(in_curr_PC),
+				.alu_result		(alu_result[index_out_reg]),
+				.alu_stall		(alu_stall[index_out_reg])
 			);
 		end
 	endgenerate
@@ -66,7 +66,7 @@ module VX_exec_unit (
 	wire internal_stall;
 	assign internal_stall = |alu_stall;
 
-	assign delay_o = no_slot_exec_i || internal_stall;
+	assign delay = no_slot_exec || internal_stall;
 
 `DEBUG_BEGIN
 	wire [$clog2(`NUM_THREADS)-1:0] jal_branch_use_index;

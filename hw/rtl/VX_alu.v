@@ -3,15 +3,15 @@
 module VX_alu (
 	input wire        clk,
 	input wire        reset,
-	input wire[31:0]  a_i,
-	input wire[31:0]  b_i,
-	input wire        rs2_src_i,
-	input wire[31:0]  itype_immed_i,
-	input wire[19:0]  upper_immed_i,
-	input wire[4:0]   alu_op_i,
-	input wire[31:0]  curr_PC_i,
-	output reg[31:0]  alu_result_o,
-	output reg        alu_stall_o
+	input wire[31:0]  src_a,
+	input wire[31:0]  src_b,
+	input wire        src_rs2,
+	input wire[31:0]  itype_immed,
+	input wire[19:0]  upper_immed,
+	input wire[4:0]   alu_op,
+	input wire[31:0]  curr_PC,
+	output reg[31:0]  alu_result,
+	output reg        alu_stall
 );
 
 	localparam div_pipeline_len = 20;
@@ -79,18 +79,18 @@ module VX_alu (
 	// MUL, MULH (signed*signed), MULHSU (signed*unsigned), MULHU (unsigned*unsigned)
 	wire[63:0] alu_in1_signed = {{32{ALU_in1[31]}}, ALU_in1};
 	wire[63:0] alu_in2_signed = {{32{ALU_in2[31]}}, ALU_in2};
-	assign mul_data_a = (alu_op_i == `MULHU) ? {32'b0, ALU_in1} : alu_in1_signed;
-	assign mul_data_b = (alu_op_i == `MULHU || alu_op_i == `MULHSU) ? {32'b0, ALU_in2} : alu_in2_signed;
+	assign mul_data_a = (alu_op == `MULHU) ? {32'b0, ALU_in1} : alu_in1_signed;
+	assign mul_data_b = (alu_op == `MULHU || alu_op == `MULHSU) ? {32'b0, ALU_in2} : alu_in2_signed;
 
 	reg [15:0] curr_inst_delay;
 	reg [15:0] inst_delay;
 	reg inst_was_stalling;
 
 	wire inst_delay_stall = inst_was_stalling ? inst_delay != 0 : curr_inst_delay != 0;
-	assign alu_stall_o = inst_delay_stall;
+	assign alu_stall = inst_delay_stall;
 
 	always @(*) begin
-		case(alu_op_i)
+		case(alu_op)
 			`DIV,
 			`DIVU,
 			`REM,
@@ -100,7 +100,7 @@ module VX_alu (
 			`MULHSU,
 			`MULHU: curr_inst_delay = mul_pipeline_len;
 			default: curr_inst_delay = 0;
-		endcase // alu_op_i
+		endcase // alu_op
 	end
 
 	always @(posedge clk) begin
@@ -127,80 +127,80 @@ module VX_alu (
 	wire which_in2;
 	wire[31:0] upper_immed;
 
-	assign which_in2  = rs2_src_i == `RS2_IMMED;
+	assign which_in2  = src_rs2 == `RS2_IMMED;
 
-	assign ALU_in1 = a_i;
-	assign ALU_in2 = which_in2 ? itype_immed_i : b_i;
+	assign ALU_in1 = src_a;
+	assign ALU_in2 = which_in2 ? itype_immed : src_b;
 
-	assign upper_immed = {upper_immed_i, {12{1'b0}}};
+	assign upper_immed = {upper_immed, {12{1'b0}}};
 
 	always @(*) begin
-		case(alu_op_i)
-			`ADD:        alu_result_o = $signed(ALU_in1) + $signed(ALU_in2);
-			`SUB:        alu_result_o = $signed(ALU_in1) - $signed(ALU_in2);
-			`SLLA:       alu_result_o = ALU_in1 << ALU_in2[4:0];
-			`SLT:        alu_result_o = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
-			`SLTU:       alu_result_o = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
-			`XOR:        alu_result_o = ALU_in1 ^ ALU_in2;
-			`SRL:        alu_result_o = ALU_in1 >> ALU_in2[4:0];
-			`SRA:        alu_result_o = $signed(ALU_in1)  >>> ALU_in2[4:0];
-			`OR:         alu_result_o = ALU_in1 | ALU_in2;
-			`AND:        alu_result_o = ALU_in2 & ALU_in1;
-			`SUBU:       alu_result_o = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
-			`LUI_ALU:    alu_result_o = upper_immed;
-			`AUIPC_ALU:  alu_result_o = $signed(curr_PC_i) + $signed(upper_immed);
+		case(alu_op)
+			`ADD:        alu_result = $signed(ALU_in1) + $signed(ALU_in2);
+			`SUB:        alu_result = $signed(ALU_in1) - $signed(ALU_in2);
+			`SLLA:       alu_result = ALU_in1 << ALU_in2[4:0];
+			`SLT:        alu_result = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
+			`SLTU:       alu_result = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
+			`XOR:        alu_result = ALU_in1 ^ ALU_in2;
+			`SRL:        alu_result = ALU_in1 >> ALU_in2[4:0];
+			`SRA:        alu_result = $signed(ALU_in1)  >>> ALU_in2[4:0];
+			`OR:         alu_result = ALU_in1 | ALU_in2;
+			`AND:        alu_result = ALU_in2 & ALU_in1;
+			`SUBU:       alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
+			`LUI_ALU:    alu_result = upper_immed;
+			`AUIPC_ALU:  alu_result = $signed(curr_PC) + $signed(upper_immed);
 			// TODO profitable to roll these exceptional cases into inst_delay to avoid pipeline when possible?
-			`MUL:        alu_result_o = mul_result[31:0];
-			`MULH:       alu_result_o = mul_result[63:32];
-			`MULHSU:     alu_result_o = mul_result[63:32];
-			`MULHU:      alu_result_o = mul_result[63:32];
-			`DIV:        alu_result_o = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
-			`DIVU:       alu_result_o = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
-			`REM:        alu_result_o = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
-			`REMU:       alu_result_o = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
-			default: alu_result_o = 32'h0;
-		endcase // alu_op_i
+			`MUL:        alu_result = mul_result[31:0];
+			`MULH:       alu_result = mul_result[63:32];
+			`MULHSU:     alu_result = mul_result[63:32];
+			`MULHU:      alu_result = mul_result[63:32];
+			`DIV:        alu_result = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
+			`DIVU:       alu_result = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
+			`REM:        alu_result = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
+			`REMU:       alu_result = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
+			default: alu_result = 32'h0;
+		endcase // alu_op
 	end
 
 `else
 
 	wire which_in2;		
-	wire[31:0] upper_immed;
+	wire[31:0] upper_immed_s;
 
-	assign which_in2  = rs2_src_i == `RS2_IMMED;
+	assign which_in2  = src_rs2 == `RS2_IMMED;
 
-	assign ALU_in1 = a_i;
+	assign ALU_in1 = src_a;
 
-	assign ALU_in2 = which_in2 ? itype_immed_i : b_i;
+	assign ALU_in2 = which_in2 ? itype_immed : src_b;
 
-	assign upper_immed = {upper_immed_i, {12{1'b0}}};
+	assign upper_immed_s = {upper_immed, {12{1'b0}}};
 
 	always @(*) begin
-		case(alu_op_i)
-			`ADD:        alu_result_o = $signed(ALU_in1) + $signed(ALU_in2);
-			`SUB:        alu_result_o = $signed(ALU_in1) - $signed(ALU_in2);
-			`SLLA:       alu_result_o = ALU_in1 << ALU_in2[4:0];
-			`SLT:        alu_result_o = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
-			`SLTU:       alu_result_o = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
-			`XOR:        alu_result_o = ALU_in1 ^ ALU_in2;
-			`SRL:        alu_result_o = ALU_in1 >> ALU_in2[4:0];
-			`SRA:        alu_result_o = $signed(ALU_in1)  >>> ALU_in2[4:0];
-			`OR:         alu_result_o = ALU_in1 | ALU_in2;
-			`AND:        alu_result_o = ALU_in2 & ALU_in1;
-			`SUBU:       alu_result_o = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
-			`LUI_ALU:    alu_result_o = upper_immed;
-			`AUIPC_ALU:  alu_result_o = $signed(curr_PC_i) + $signed(upper_immed);
+		case(alu_op)
+			`ADD:        alu_result = $signed(ALU_in1) + $signed(ALU_in2);
+			`SUB:        alu_result = $signed(ALU_in1) - $signed(ALU_in2);
+			`SLLA:       alu_result = ALU_in1 << ALU_in2[4:0];
+			`SLT:        alu_result = ($signed(ALU_in1) < $signed(ALU_in2)) ? 32'h1 : 32'h0;
+			`SLTU:       alu_result = ALU_in1 < ALU_in2 ? 32'h1 : 32'h0;
+			`XOR:        alu_result = ALU_in1 ^ ALU_in2;
+			`SRL:        alu_result = ALU_in1 >> ALU_in2[4:0];
+			`SRA:        alu_result = $signed(ALU_in1)  >>> ALU_in2[4:0];
+			`OR:         alu_result = ALU_in1 | ALU_in2;
+			`AND:        alu_result = ALU_in2 & ALU_in1;
+			`SUBU:       alu_result = (ALU_in1 >= ALU_in2) ? 32'h0 : 32'hffffffff;
+			`LUI_ALU:    alu_result = upper_immed_s;
+			`AUIPC_ALU:  alu_result = $signed(curr_PC) + $signed(upper_immed_s);
 			// TODO profitable to roll these exceptional cases into inst_delay to avoid pipeline when possible?
-			`MUL:        alu_result_o = mul_result[31:0];
-			`MULH:       alu_result_o = mul_result[63:32];
-			`MULHSU:     alu_result_o = mul_result[63:32];
-			`MULHU:      alu_result_o = mul_result[63:32];
-			`DIV:        alu_result_o = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
-			`DIVU:       alu_result_o = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
-			`REM:        alu_result_o = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
-			`REMU:       alu_result_o = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
-			default: alu_result_o = 32'h0;
-		endcase // alu_op_i
+			`MUL:        alu_result = mul_result[31:0];
+			`MULH:       alu_result = mul_result[63:32];
+			`MULHSU:     alu_result = mul_result[63:32];
+			`MULHU:      alu_result = mul_result[63:32];
+			`DIV:        alu_result = (ALU_in2 == 0) ? 32'hffffffff : signed_div_result;
+			`DIVU:       alu_result = (ALU_in2 == 0) ? 32'hffffffff : unsigned_div_result;
+			`REM:        alu_result = (ALU_in2 == 0) ? ALU_in1 : signed_rem_result;
+			`REMU:       alu_result = (ALU_in2 == 0) ? ALU_in1 : unsigned_rem_result;
+			default: alu_result = 32'h0;
+		endcase // alu_op
 	end
 
 `endif

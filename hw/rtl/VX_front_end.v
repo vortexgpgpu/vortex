@@ -52,7 +52,7 @@ module VX_front_end (
 		.warp_ctl_if        (warp_ctl_if),
 		.icache_stage_delay (icache_stage_delay),
 		.branch_rsp_if      (branch_rsp_if),
-		.ebreak_o           (vortex_ebreak), // fetch_ebreak
+		.ebreak             (vortex_ebreak), // fetch_ebreak
 		.fe_inst_meta_fi    (fe_inst_meta_fi)
 	);
 
@@ -61,7 +61,7 @@ module VX_front_end (
 	VX_f_d_reg f_i_reg(
 		.clk            (clk),
 		.reset          (reset),
-		.freeze_i      (freeze_fi_reg),
+		.freeze         (freeze_fi_reg),
 		.fe_inst_meta_fd(fe_inst_meta_fi),
 		.fd_inst_meta_de(fe_inst_meta_fi2)
 	);
@@ -82,7 +82,7 @@ module VX_front_end (
 	VX_i_d_reg i_d_reg(
 		.clk            	(clk),
 		.reset          	(reset),
-		.freeze_i      	(total_freeze),
+		.freeze         	(total_freeze),
 		.fe_inst_meta_fd	(fe_inst_meta_id),
 		.fd_inst_meta_de	(fd_inst_meta_de)
 	);
@@ -100,8 +100,8 @@ module VX_front_end (
 	VX_d_e_reg d_e_reg(
 		.clk            	(clk),
 		.reset          	(reset),
-		.branch_stall_i	(no_br_stall),
-		.freeze_i      	(total_freeze),
+		.branch_stall   	(no_br_stall),
+		.freeze          	(total_freeze),
 		.frE_to_bckE_req_if	(frE_to_bckE_req_if),
 		.bckE_req_if       	(bckE_req_if)
 	);

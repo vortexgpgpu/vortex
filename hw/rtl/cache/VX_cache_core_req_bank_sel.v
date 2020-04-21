@@ -1,8 +1,7 @@
 
 `include "VX_cache_config.vh"
 
-module VX_cache_core_req_bank_sel
-	#(
+module VX_cache_core_req_bank_sel #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -18,8 +17,7 @@ module VX_cache_core_req_bank_sel
     // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
     parameter FUNC_ID                       = 0,
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+	// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -29,7 +27,7 @@ module VX_cache_core_req_bank_sel
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -42,12 +40,9 @@ module VX_cache_core_req_bank_sel
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+	// Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
+) (
 	input  wire [NUM_REQUESTS-1:0]                   core_req_valid,
 	input  wire [NUM_REQUESTS-1:0][31:0]             core_req_addr,
 	

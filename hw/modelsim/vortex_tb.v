@@ -102,28 +102,27 @@ reg[31:0]  io_data;
 		.icache_request_pc_address    (icache_request_pc_address),
 		.io_valid                     (io_valid),
 		.io_data                      (io_data),
-		.o_m_read_addr_d              (o_m_read_addr_d),
-		.o_m_evict_addr_d             (o_m_evict_addr_d),
-		.o_m_valid_d                  (o_m_valid_d),
-		.o_m_writedata_d              (o_m_writedata_d),
-		.o_m_read_or_write_d          (o_m_read_or_write_d),
-		.i_m_readdata_d               (i_m_readdata_d),
-		.i_m_ready_d                  (i_m_ready_d),
-		.o_m_read_addr_i              (o_m_read_addr_i),
-		.o_m_evict_addr_i             (o_m_evict_addr_i),
-		.o_m_valid_i                  (o_m_valid_i),
-		.o_m_writedata_i              (o_m_writedata_i),
-		.o_m_read_or_write_i          (o_m_read_or_write_i),
-		.i_m_readdata_i               (i_m_readdata_i),
-		.i_m_ready_i                  (i_m_ready_i),
-		.ebreak_o                   (out_ebreak)
+		.m_read_addr_d                (o_m_read_addr_d),
+		.m_evict_addr_d               (o_m_evict_addr_d),
+		.m_valid_d                  (o_m_valid_d),
+		.m_writedata_d              (o_m_writedata_d),
+		.m_read_or_write_d          (o_m_read_or_write_d),
+		.m_readdata_d               (i_m_readdata_d),
+		.m_ready_d                  (i_m_ready_d),
+		.m_read_addr                (o_m_read_addr_i),
+		.m_evict_addr               (o_m_evict_addr_i),
+		.m_valid                    (o_m_valid_i),
+		.writedata                (o_m_writedata_i),
+		.m_read_or_write            (o_m_read_or_write_i),
+		.m_readdata                 (i_m_readdata_i),
+		.m_ready                    (i_m_ready_i),
+		.ebreak                       (out_ebreak)
 	);
 
 	always @(negedge clk) begin
 		ibus_driver(clk, o_m_read_addr_i, o_m_evict_addr_i, o_m_valid_i, o_m_writedata_i, o_m_read_or_write_i, `ICACHE_BANKS, `ICACHE_NUM_WORDS_PER_BLOCK, i_m_readdata_i, i_m_ready_i);
 		dbus_driver(clk, o_m_read_addr_d, o_m_evict_addr_d, o_m_valid_d, o_m_writedata_d, o_m_read_or_write_d, `DCACHE_BANKS, `DCACHE_NUM_WORDS_PER_BLOCK, i_m_readdata_d, i_m_ready_d);
-		io_handler (clk, io_valid, io_data);
-		
+		io_handler (clk, io_valid, io_data);		
 	end
 
 	always @(posedge clk) begin
