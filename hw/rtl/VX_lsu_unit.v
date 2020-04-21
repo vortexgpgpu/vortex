@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_lsu (
+module VX_lsu_unit (
     input wire              clk,
     input wire              reset,
     input wire              no_slot_mem,
