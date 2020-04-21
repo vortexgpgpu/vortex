@@ -1,7 +1,7 @@
 `ifndef VX_DEFINE
 `define VX_DEFINE
 
-`include "./VX_config.vh"
+`include "VX_config.vh"
 
 // `define QUEUE_FORCE_MLAB 1
 // `define SYN 1

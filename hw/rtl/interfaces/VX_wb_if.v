@@ -1,7 +1,7 @@
 `ifndef VX_WB_INTER
 `define VX_WB_INTER
 
-`include "../VX_define.vh"
+`include "VX_define.vh"
 
 interface VX_wb_if ();
 

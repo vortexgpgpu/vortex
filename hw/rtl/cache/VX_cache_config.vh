@@ -1,7 +1,7 @@
 `ifndef VX_CACHE_CONFIG
 `define VX_CACHE_CONFIG
 
-`include "../VX_define.vh"
+`include "VX_define.vh"
 
 //                                data         tid                   rd  wb    warp_num  read write
 `define MRVQ_METADATA_SIZE      (`WORD_SIZE + `LOG2UP(NUM_REQUESTS) + 5 + 2 + (`NW_BITS) + 3 + 3)
