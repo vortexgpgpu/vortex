@@ -47,10 +47,9 @@ module VX_scheduler (
                          || (gpr_stage_delay && (is_mem || is_exec))
                          || (exec_delay && is_exec);
 
-    integer i;
-    integer w;
-    always @(posedge clk) begin
+    integer i, w;
 
+    always @(posedge clk) begin
         if (reset) begin
             for (w = 0; w < `NUM_WARPS; w=w+1) begin
                 for (i = 0; i < 32; i = i + 1) begin

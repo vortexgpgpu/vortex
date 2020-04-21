@@ -88,7 +88,7 @@ module VX_warp_sched (
     wire wstall_this_cycle;
 
     reg[`NUM_THREADS-1:0] thread_masks[`NUM_WARPS-1:0];
-    reg[31:0]     warp_pcs[`NUM_WARPS-1:0];
+    reg[31:0] warp_pcs[`NUM_WARPS-1:0];
 
     // barriers
     reg[`NUM_WARPS-1:0] barrier_stall_mask[(`NUM_BARRIERS-1):0];
