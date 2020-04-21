@@ -1,12 +1,8 @@
-module VX_countones 
-	#(
-		parameter N = 10
-	)
-	(
-
-	input wire[N-1:0]         valids,
-	output reg[$clog2(N):0] count
-	
+module VX_countones #(
+	parameter N = 10
+) (
+	input wire[N-1:0]       valids,
+	output reg[$clog2(N):0] count	
 );
 
 	integer i;

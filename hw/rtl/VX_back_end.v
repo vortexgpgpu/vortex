@@ -13,8 +13,8 @@ module VX_back_end	#(
 	output wire            mem_delay_o,
 	output wire            exec_delay_o,
 	output wire            gpr_stage_delay,
-	VX_jal_response_if     jal_rsp_if,
-	VX_branch_response_if  branch_rsp_if,
+	VX_jal_rsp_if     jal_rsp_if,
+	VX_branch_rsp_if  branch_rsp_if,
 
 	VX_frE_to_bckE_req_if  bckE_req_if,
 	VX_wb_if               writeback_if,
@@ -81,7 +81,7 @@ VX_lsu load_store_unit (
 	.no_slot_mem_i	(no_slot_mem)
 );
 
-VX_execute_unit execUnit (
+VX_exec_unit exec_unit (
 	.clk             (clk),
 	.reset           (reset),
 	.exec_unit_req_if(exec_unit_req_if),

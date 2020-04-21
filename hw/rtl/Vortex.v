@@ -133,8 +133,8 @@ VX_frE_to_bckE_req_if    bckE_req_if(); 	// New instruction request to EXE/MEM
 
 // Back-end to Front-end
 VX_wb_if                 writeback_if(); 	// Writeback to GPRs
-VX_branch_response_if    branch_rsp_if();   // Branch Resolution to Fetch
-VX_jal_response_if   	 jal_rsp_if();      // Jump resolution to Fetch
+VX_branch_rsp_if    branch_rsp_if();   // Branch Resolution to Fetch
+VX_jal_rsp_if   	 jal_rsp_if();      // Jump resolution to Fetch
 
 // Warp controls
 VX_warp_ctl_if        	warp_ctl_if();
@@ -189,7 +189,7 @@ VX_back_end #(
 	.gpr_stage_delay     (gpr_stage_delay)
 );
 
-VX_dmem_controller dmem_controller (
+VX_dmem_ctrl dmem_controller (
 	.clk                      (clk),
 	.reset                    (reset),
 

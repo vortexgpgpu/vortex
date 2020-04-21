@@ -33,7 +33,7 @@ module cache_simX (
 	assign VX_icache_req.cache_driver_in_data_o      = 0;
 
 
-	VX_icache_response_if VX_icache_rsp;
+	VX_icache_rsp_if VX_icache_rsp;
 	assign out_icache_stall = VX_icache_rsp.delay;
 
 
@@ -79,7 +79,7 @@ module cache_simX (
 	assign VX_dram_req_rsp.i_m_ready = dcache_i_m_ready;
 
 
-	VX_dmem_controller dmem_controller (
+	VX_dmem_ctrl dmem_controller (
 		.clk                   (clk),
 		.reset                 (reset),
 		.VX_dram_req_rsp       (VX_dram_req_rsp),

@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_warp_scheduler (
+module VX_warp_sched (
 	input wire           clk,    // Clock
 	input wire           reset,
 	input wire           stall,

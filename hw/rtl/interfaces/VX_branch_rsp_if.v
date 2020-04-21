@@ -3,7 +3,7 @@
 
 `include "../VX_define.vh"
 
-interface VX_branch_response_if ();
+interface VX_branch_rsp_if ();
 
 	wire           		valid_branch;
 	wire           		branch_dir;
