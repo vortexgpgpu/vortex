@@ -37,8 +37,8 @@ module VX_front_end (
 
     assign fetch_ebreak = vortex_ebreak || terminate_sim;
 
-    VX_wstall_if          wstall_if();
-    VX_join_if            join_if();
+    VX_wstall_if    wstall_if();
+    VX_join_if      join_if();
 
     VX_fetch fetch(
         .clk                (clk),
@@ -59,11 +59,11 @@ module VX_front_end (
     wire freeze_fi_reg = total_freeze || icache_stage_delay;
 
     VX_f_d_reg f_i_reg(
-        .clk            (clk),
-        .reset          (reset),
-        .freeze         (freeze_fi_reg),
-        .fe_inst_meta_fd(fe_inst_meta_fi),
-        .fd_inst_meta_de(fe_inst_meta_fi2)
+        .clk                (clk),
+        .reset              (reset),
+        .freeze             (freeze_fi_reg),
+        .fe_inst_meta_fd    (fe_inst_meta_fi),
+        .fd_inst_meta_de    (fe_inst_meta_fi2)
     );
 
     VX_icache_stage icache_stage(
@@ -88,11 +88,11 @@ module VX_front_end (
     );
 
     VX_decode decode(
-        .fd_inst_meta_de       (fd_inst_meta_de),
-        .frE_to_bckE_req_if    (frE_to_bckE_req_if),
-        .wstall_if             (wstall_if),
-        .join_if               (join_if),
-        .terminate_sim         (terminate_sim)
+        .fd_inst_meta_de    (fd_inst_meta_de),
+        .frE_to_bckE_req_if (frE_to_bckE_req_if),
+        .wstall_if          (wstall_if),
+        .join_if            (join_if),
+        .terminate_sim      (terminate_sim)
     );
 
     wire no_br_stall = 0;
@@ -101,9 +101,9 @@ module VX_front_end (
         .clk                (clk),
         .reset              (reset),
         .branch_stall       (no_br_stall),
-        .freeze              (total_freeze),
-        .frE_to_bckE_req_if    (frE_to_bckE_req_if),
-        .bckE_req_if           (bckE_req_if)
+        .freeze             (total_freeze),
+        .frE_to_bckE_req_if (frE_to_bckE_req_if),
+        .bckE_req_if        (bckE_req_if)
     );
 
 endmodule

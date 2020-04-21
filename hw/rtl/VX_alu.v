@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_alu (
+module VX_alu_unit (
     input wire        clk,
     input wire        reset,
     input wire[31:0]  src_a,

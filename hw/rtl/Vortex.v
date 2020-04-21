@@ -147,28 +147,28 @@ assign gpu_dcache_snp_req_if.snp_req_addr   = llc_snp_req_addr;
 assign llc_snp_req_ready                    = gpu_dcache_snp_req_if.snp_req_ready;
 
 VX_front_end front_end (
-    .clk                   (clk),
+    .clk                (clk),
     .reset              (reset),
     .warp_ctl_if        (warp_ctl_if),
     .bckE_req_if        (bckE_req_if),
     .schedule_delay     (schedule_delay),
     .icache_rsp_if      (icache_rsp_if),
     .icache_req_if      (icache_req_if),
-    .jal_rsp_if           (jal_rsp_if),
+    .jal_rsp_if         (jal_rsp_if),
     .branch_rsp_if      (branch_rsp_if),
     .fetch_ebreak       (ebreak)
 );
 
-VX_scheduler schedule (
+VX_scheduler scheduler (
     .clk                (clk),
-    .reset                 (reset),
-    .memory_delay          (memory_delay),
-    .exec_delay            (exec_delay),
-    .gpr_stage_delay       (gpr_stage_delay),
-    .bckE_req_if           (bckE_req_if),
-    .writeback_if        (writeback_if),
-    .schedule_delay        (schedule_delay),
-    .is_empty              (scheduler_empty)
+    .reset              (reset),
+    .memory_delay       (memory_delay),
+    .exec_delay         (exec_delay),
+    .gpr_stage_delay    (gpr_stage_delay),
+    .bckE_req_if        (bckE_req_if),
+    .writeback_if       (writeback_if),
+    .schedule_delay     (schedule_delay),
+    .is_empty           (scheduler_empty)
 );
 
 VX_back_end #(
@@ -189,7 +189,7 @@ VX_back_end #(
     .gpr_stage_delay     (gpr_stage_delay)
 );
 
-VX_dmem_ctrl dmem_controller (
+VX_dmem_ctrl dmem_ctrl (
     .clk                      (clk),
     .reset                    (reset),
 

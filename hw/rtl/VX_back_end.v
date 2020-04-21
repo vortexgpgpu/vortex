@@ -70,7 +70,7 @@ VX_gpr_stage gpr_stage (
     .gpr_stage_delay     (gpr_stage_delay)
 );
 
-VX_lsu load_store_unit (
+VX_lsu_unit lsu_unit (
     .clk            (clk),
     .reset          (reset),
     .lsu_req_if     (lsu_req_if),
@@ -109,7 +109,7 @@ VX_csr_pipe #(
     .stall_gpr_csr(stall_gpr_csr)
 );
 
-VX_writeback wb (
+VX_writeback writeback (
     .clk               (clk),
     .reset             (reset),
     .mem_wb_if         (mem_wb_if),
