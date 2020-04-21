@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_dmem_controller (
+module VX_dmem_ctrl (
 	input wire               clk,
 	input wire               reset,
 

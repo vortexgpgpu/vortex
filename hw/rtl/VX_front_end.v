@@ -11,8 +11,8 @@ module VX_front_end (
 	VX_gpu_dcache_rsp_if  	icache_rsp_if,
 	VX_gpu_dcache_req_if  	icache_req_if,
 
-	VX_jal_response_if    	jal_rsp_if,
-	VX_branch_response_if 	branch_rsp_if,
+	VX_jal_rsp_if    	jal_rsp_if,
+	VX_branch_rsp_if 	branch_rsp_if,
 
 	VX_frE_to_bckE_req_if 	bckE_req_if,
 

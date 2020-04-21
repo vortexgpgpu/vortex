@@ -11,8 +11,8 @@ module VX_fetch (
 	input  wire[`NUM_THREADS-1:0] icache_stage_valids,
 
 	output wire           ebreak_o,
-	VX_jal_response_if    jal_rsp_if,
-	VX_branch_response_if branch_rsp_if,
+	VX_jal_rsp_if    jal_rsp_if,
+	VX_branch_rsp_if branch_rsp_if,
 	VX_inst_meta_if       fe_inst_meta_fi,
 	VX_warp_ctl_if        warp_ctl_if
 );
@@ -30,7 +30,7 @@ module VX_fetch (
 
 	assign pipe_stall = schedule_delay || icache_stage_delay;
 
-	VX_warp_scheduler warp_scheduler(
+	VX_warp_sched warp_sched (
 		.clk              (clk),
 		.reset            (reset),
 		.stall            (pipe_stall),

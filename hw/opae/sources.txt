@@ -15,7 +15,7 @@ vortex_afu.json
 ../rtl/cache/VX_cache_config.vh
 
 ../rtl/interfaces/VX_exec_unit_req_if.v
-../rtl/interfaces/VX_branch_response_if.v
+../rtl/interfaces/VX_branch_rsp_if.v
 ../rtl/interfaces/VX_inst_meta_if.v
 ../rtl/interfaces/VX_join_if.v
 ../rtl/interfaces/VX_icache_response_if.v

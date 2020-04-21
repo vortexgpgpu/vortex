@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_execute_unit (
+module VX_exec_unit (
 	input wire            clk,
 	input wire            reset,
 		// Request
@@ -10,9 +10,9 @@ module VX_execute_unit (
 		// Writeback
 	VX_inst_exec_wb_if    inst_exec_wb_if,
 		// JAL Response
-	VX_jal_response_if    jal_rsp_if,
+	VX_jal_rsp_if    jal_rsp_if,
 		// Branch Response
-	VX_branch_response_if branch_rsp_if,
+	VX_branch_rsp_if branch_rsp_if,
 
 	input wire 			  no_slot_exec_i,
 	output wire 		  delay_o
@@ -110,9 +110,9 @@ module VX_execute_unit (
 
 	// VX_inst_exec_wb_if    inst_exec_wb_temp_if();
 		// JAL Response
-	VX_jal_response_if    jal_rsp_temp_if();
+	VX_jal_rsp_if    jal_rsp_temp_if();
 		// Branch Response
-	VX_branch_response_if branch_rsp_temp_if();
+	VX_branch_rsp_if branch_rsp_temp_if();
 
 	// Actual Writeback
 	assign inst_exec_wb_if.rd          = exec_unit_req_if.rd;
@@ -180,4 +180,4 @@ module VX_execute_unit (
 	// assign out_is_csr        = exec_unit_req_if.is_csr;
 	// assign out_csr_address   = exec_unit_req_if.csr_address;
 
-endmodule : VX_execute_unit
+endmodule : VX_exec_unit
