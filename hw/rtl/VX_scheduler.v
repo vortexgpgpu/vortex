@@ -50,7 +50,6 @@ module VX_scheduler (
     integer i, w;
     
     always @(posedge clk) begin
-
         if (reset) begin
             for (w = 0; w < `NUM_WARPS; w=w+1) begin
                 for (i = 0; i < 32; i = i + 1) begin
