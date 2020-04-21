@@ -1,7 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_fill_invalidator
-	#(
+module VX_fill_invalidator #(
 	// Size of cache in bytes
 	parameter CACHE_SIZE_BYTES              = 1024, 
 	// Size of line inside a bank in bytes
@@ -15,8 +14,7 @@ module VX_fill_invalidator
 	// Number of cycles to complete stage 1 (read from memory)
 	parameter STAGE_1_CYCLES                = 2, 
 
-// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
+	// Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 	// Core Request Queue Size
 	parameter REQQ_SIZE                     = 8, 
 	// Miss Reserv Queue Knob
@@ -26,7 +24,7 @@ module VX_fill_invalidator
 	// Snoop Req Queue
 	parameter SNRQ_SIZE                     = 8, 
 
-// Queues for writebacks Knobs {1, 2, 4, 8, ...}
+	// Queues for writebacks Knobs {1, 2, 4, 8, ...}
 	// Core Writeback Queue Size
 	parameter CWBQ_SIZE                     = 8, 
 	// Dram Writeback Queue Size
@@ -39,12 +37,9 @@ module VX_fill_invalidator
  	// Fill Invalidator Size {Fill invalidator must be active}
  	parameter FILL_INVALIDAOR_SIZE          = 16, 
 
-// Dram knobs
+	// Dram knobs
 	parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
-
-
-	)
-	(
+) (
 	input  wire       clk,
 	input  wire       reset,
 
@@ -53,10 +48,8 @@ module VX_fill_invalidator
 
 	input  wire[31:0] fill_addr,
 
-	output reg invalidate_fill
-	
+	output reg invalidate_fill	
 );
-
 
 	if (FILL_INVALIDAOR_SIZE == 0) begin
 
@@ -64,11 +57,10 @@ module VX_fill_invalidator
 
 	end else begin 
 
-		reg[FILL_INVALIDAOR_SIZE-1:0]         fills_active;
-		reg[FILL_INVALIDAOR_SIZE-1:0][31:0]   fills_address;
+		reg [FILL_INVALIDAOR_SIZE-1:0]         fills_active;
+		reg [FILL_INVALIDAOR_SIZE-1:0][31:0]   fills_address;
 
-
-		reg[FILL_INVALIDAOR_SIZE-1:0] matched_fill;
+		reg [FILL_INVALIDAOR_SIZE-1:0] matched_fill;
 		wire matched;
 		integer fi;
 		always @(*) begin
@@ -77,9 +69,7 @@ module VX_fill_invalidator
 			end
 		end
 
-
 		assign matched = (|(matched_fill));
-
 
 		wire [(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0]  enqueue_index;
 		wire                                        enqueue_found;
@@ -110,7 +100,7 @@ module VX_fill_invalidator
 			end
 		end
 
-		// reg                                         success_found;
+		// reg                                       success_found;
 		// reg[(`LOG2UP(FILL_INVALIDAOR_SIZE))-1:0]  success_index;
 
 		// integer curr_fill;

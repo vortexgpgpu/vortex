@@ -10,7 +10,7 @@ module VX_fetch (
 	input  wire[`NW_BITS-1:0]   icache_stage_wid,
 	input  wire[`NUM_THREADS-1:0] icache_stage_valids,
 
-	output wire           ebreak_o,
+	output wire           ebreak,
 	VX_jal_rsp_if    jal_rsp_if,
 	VX_branch_rsp_if branch_rsp_if,
 	VX_inst_meta_if       fe_inst_meta_fi,
@@ -86,7 +86,7 @@ module VX_fetch (
 		.thread_mask      (thread_mask),
 		.warp_num         (warp_num),
 		.warp_pc          (warp_pc),
-		.ebreak_o         (ebreak_o),
+		.ebreak         (ebreak),
 		.scheduled_warp   (scheduled_warp)
 	);
 

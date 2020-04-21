@@ -42,7 +42,9 @@ module Vortex_Socket (
             assign io_data [curr_c] = cluster_io_data [curr_c];
         end
 
-        Vortex_Cluster #(.CLUSTER_ID(0)) Vortex_Cluster(
+        Vortex_Cluster #(
+            .CLUSTER_ID(0)
+        ) Vortex_Cluster (
             .clk                (clk),
             .reset              (reset),
             .io_valid           (cluster_io_valid),
@@ -260,7 +262,6 @@ module Vortex_Socket (
             .snp_fwd_addr       (snp_fwd_addr),
             .snp_fwd_ready      (& snp_fwd_ready)
         );
-
     end
 
 endmodule

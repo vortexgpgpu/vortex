@@ -4,19 +4,19 @@ module VX_csr_data (
 	input wire clk,    // Clock
 	input wire reset,
 
-	input wire[`CSR_ADDR_SIZE-1:0]  read_csr_address_i,
-	input wire           			write_valid_i,
-	input wire[`CSR_WIDTH-1:0]      write_csr_data_i,
+	input wire[`CSR_ADDR_SIZE-1:0]  read_csr_address,
+	input wire           			write_valid,
+	input wire[`CSR_WIDTH-1:0]      write_csr_data,
 
 `IGNORE_WARNINGS_BEGIN
     // We use a smaller storage for CSRs than the standard 4KB in RISC-V
-	input wire[`CSR_ADDR_SIZE-1:0]	write_csr_address_i,
+	input wire[`CSR_ADDR_SIZE-1:0]	write_csr_address,
 `IGNORE_WARNINGS_END
 
-	output wire[31:0]    read_csr_data_o,
+	output wire[31:0]    read_csr_data,
 
 	// For instruction retire counting
-	input wire           writeback_valid_i
+	input wire           writeback_valid
 );
 	// wire[`NUM_THREADS-1:0][31:0] thread_ids;
 	// wire[`NUM_THREADS-1:0][31:0] warp_ids;
@@ -41,21 +41,21 @@ module VX_csr_data (
 	wire read_instret;
 	wire read_instreth;
 
-	assign read_cycle       = read_csr_address_i == `CSR_CYCL_L;
-	assign read_cycleh      = read_csr_address_i == `CSR_CYCL_H;
-	assign read_instret     = read_csr_address_i == `CSR_INST_L;
-	assign read_instreth	= read_csr_address_i == `CSR_INST_H;
+	assign read_cycle       = read_csr_address == `CSR_CYCL_L;
+	assign read_cycleh      = read_csr_address == `CSR_CYCL_H;
+	assign read_instret     = read_csr_address == `CSR_INST_L;
+	assign read_instreth	= read_csr_address == `CSR_INST_H;
 
 	wire [$clog2(`NUM_CSRS)-1:0] read_addr, write_addr;
 
 	// cast address to physical CSR range
-	assign read_addr = $size(read_addr)'(read_csr_address_i);
-	assign write_addr = $size(write_addr)'(write_csr_address_i);
+	assign read_addr = $size(read_addr)'(read_csr_address);
+	assign write_addr = $size(write_addr)'(write_csr_address);
 
-	// wire thread_select        = read_csr_address_i == 12'h20;
-	// wire warp_select          = read_csr_address_i == 12'h21;
+	// wire thread_select        = read_csr_address == 12'h20;
+	// wire warp_select          = read_csr_address == 12'h21;
 
-	// assign read_csr_data_o  = thread_select ? thread_ids :
+	// assign read_csr_data  = thread_select ? thread_ids :
 	// 					          warp_select   ? warp_ids   :
 	// 					          0;
 
@@ -67,16 +67,16 @@ module VX_csr_data (
 			instret <= 0;
 		end else begin
 			cycle <= cycle + 1;
-			if (write_valid_i) begin
-				csr[write_addr] <= write_csr_data_i;
+			if (write_valid) begin
+				csr[write_addr] <= write_csr_data;
 			end
-			if (writeback_valid_i) begin
+			if (writeback_valid) begin
 				instret <= instret + 1;
 			end
 		end
 	end
 
-	assign read_csr_data_o =  read_cycle    ? cycle[31:0] :
+	assign read_csr_data =  read_cycle    ? cycle[31:0] :
 								read_cycleh   ? cycle[63:32] :
 								read_instret  ? instret[31:0] :
 								read_instreth ? instret[63:32] :

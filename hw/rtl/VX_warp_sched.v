@@ -55,7 +55,7 @@ module VX_warp_sched (
 	output wire[`NUM_THREADS-1:0] thread_mask,
 	output wire[`NW_BITS-1:0] warp_num,
 	output wire[31:0]     warp_pc,
-	output wire           ebreak_o,
+	output wire           ebreak,
 	output wire           scheduled_warp,
 
 	input  wire[`NW_BITS-1:0]    icache_stage_wid,
@@ -331,10 +331,6 @@ module VX_warp_sched (
 	// 	.ones_found()
 	// 	);
 
-
-	wire ebreak = (warp_active == 0);
-	assign ebreak_o = ebreak;
-
-	/* verilator lint_on WIDTH */
+	assign ebreak = (warp_active == 0);
 
 endmodule

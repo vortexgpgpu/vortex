@@ -49,14 +49,14 @@ module VX_gpr_stage (
 	VX_gpr_data_if           gpr_datf_if();
 
 	VX_gpr_wrapper grp_wrapper (
-		.clk               (clk),
-		.reset             (reset),
-		.writeback_if(writeback_if),
-		.gpr_read_if       (gpr_read_if),
-		.gpr_jal_if        (gpr_jal_if),
+		.clk            (clk),
+		.reset          (reset),
+		.writeback_if	(writeback_if),
+		.gpr_read_if    (gpr_read_if),
+		.gpr_jal_if     (gpr_jal_if),
 
-		.a_reg_data_o (gpr_datf_if.a_reg_data),
-		.b_reg_data_o (gpr_datf_if.b_reg_data)
+		.a_reg_data  	(gpr_datf_if.a_reg_data),
+		.b_reg_data 	(gpr_datf_if.b_reg_data)
 	);
 
 	// assign bckE_req_if.is_csr   = is_csr;

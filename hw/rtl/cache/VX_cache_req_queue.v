@@ -56,21 +56,21 @@ module VX_cache_req_queue #(
 	input wire [31:0]                       bank_pc,
 
 	// Dequeue Data
-	input  wire                                   reqq_pop,
-    output wire                                   reqq_req_st0,
+	input  wire                             reqq_pop,
+    output wire                             reqq_req_st0,
     output wire [`LOG2UP(NUM_REQUESTS)-1:0] reqq_req_tid_st0,
-	output wire [31:0]                            reqq_req_addr_st0,
-	output wire [`WORD_SIZE_RNG]                  reqq_req_writedata_st0,
-	output wire [4:0]                             reqq_req_rd_st0,
-	output wire [1:0]                             reqq_req_wb_st0,
-	output wire [`NW_BITS-1:0]                    reqq_req_warp_num_st0,
-	output wire [2:0]                             reqq_req_mem_read_st0,  
-	output wire [2:0]                             reqq_req_mem_write_st0,
-	output wire [31:0]                            reqq_req_pc_st0,
+	output wire [31:0]                      reqq_req_addr_st0,
+	output wire [`WORD_SIZE_RNG]            reqq_req_writedata_st0,
+	output wire [4:0]                       reqq_req_rd_st0,
+	output wire [1:0]                       reqq_req_wb_st0,
+	output wire [`NW_BITS-1:0]              reqq_req_warp_num_st0,
+	output wire [2:0]                       reqq_req_mem_read_st0,  
+	output wire [2:0]                       reqq_req_mem_write_st0,
+	output wire [31:0]                      reqq_req_pc_st0,
 
 	// State Data
-	output wire                                   reqq_empty,
-	output wire                                   reqq_full
+	output wire                             reqq_empty,
+	output wire                             reqq_full
 );
 
  	wire [NUM_REQUESTS-1:0]        out_per_valids;

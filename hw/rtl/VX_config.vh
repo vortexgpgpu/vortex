@@ -342,7 +342,7 @@
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `ifndef L2NUM_REQUESTS
-`define L2NUM_REQUESTS (2*`NUM_CORES_PER_CLUSTER)
+`define L2NUM_REQUESTS (2*`NUM_CORES)
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)

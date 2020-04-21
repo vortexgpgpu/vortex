@@ -184,8 +184,8 @@ VX_back_end #(
 	.dcache_rsp_if       (dcache_rsp_if),
 	.dcache_req_if       (dcache_req_if),
 	.writeback_if        (writeback_if),
-	.mem_delay_o         (memory_delay),
-	.exec_delay_o        (exec_delay),
+	.mem_delay           (memory_delay),
+	.exec_delay          (exec_delay),
 	.gpr_stage_delay     (gpr_stage_delay)
 );
 

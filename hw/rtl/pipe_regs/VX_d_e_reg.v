@@ -3,14 +3,14 @@
 module VX_d_e_reg (
 	input wire        		clk,
 	input wire              reset,
-	input wire              branch_stall_i,
-	input wire              freeze_i,
+	input wire              branch_stall,
+	input wire              freeze,
 	VX_frE_to_bckE_req_if 	frE_to_bckE_req_if,
 	VX_frE_to_bckE_req_if	bckE_req_if
 );
 
-	wire stall = freeze_i;
-	wire flush = (branch_stall_i == `STALL);
+	wire stall = freeze;
+	wire flush = (branch_stall == `STALL);
 
 	VX_generic_register #(
 		.N(233 + `NW_BITS-1 + 1 + `NUM_THREADS)

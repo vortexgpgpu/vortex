@@ -8,9 +8,30 @@
 // `define ASIC 1
 // `define SYN_FUNC 1
 
+///////////////////////////////////////////////////////////////////////////////
+
+`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
+
+`define DEBUG_END   /* verilator lint_on UNUSED */     
+
+`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
+                              /* verilator lint_off PINCONNECTEMPTY */ \
+                              /* verilator lint_off DECLFILENAME */
+
+`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
+                              /* verilator lint_on PINCONNECTEMPTY */ \
+                              /* verilator lint_on DECLFILENAME */
+
+`define STRINGIFY(x) `"x`"
+
+`define STATIC_ASSERT(cond, msg)    \
+    generate                        \
+        if (!(cond)) $error(msg);   \
+    endgenerate
+
 `define LOG2UP(x) ((x > 1) ? $clog2(x) : 1)
 
-`define NUM_CORES_PER_CLUSTER (`NUM_CORES / `NUM_CLUSTERS)
+///////////////////////////////////////////////////////////////////////////////
 
 `define NW_BITS (`LOG2UP(`NUM_WARPS))
 
@@ -119,7 +140,7 @@
 // IO BUS
 `define IO_BUS_ADDR 32'h00010000
 
-// ======================= Dcache Configurable Knobs ==========================
+////////////////////////// Dcache Configurable Knobs //////////////////////////
 
 // Function ID
 `define DFUNC_ID 0
@@ -133,7 +154,7 @@
 // Word size in bits
 `define DWORD_SIZE_BITS (`DWORD_SIZE_BYTES * 8)
 
-// ======================= Icache Configurable Knobs ==========================
+////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // Function ID
 `define IFUNC_ID 1
@@ -144,7 +165,7 @@
 // Bank Number of words in a line
 `define IBANK_LINE_WORDS (`IBANK_LINE_SIZE_BYTES / `IWORD_SIZE_BYTES)
 
-// ======================= SM Configurable Knobs ==============================
+////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Function ID
 `define SFUNC_ID 2
@@ -155,7 +176,7 @@
 // Bank Number of words in a line
 `define SBANK_LINE_WORDS (`SBANK_LINE_SIZE_BYTES / `SWORD_SIZE_BYTES)
 
-// ======================= L2cache Configurable Knobs =========================
+////////////////////////// L2cache Configurable Knobs /////////////////////////
 
 // Function ID
 `define L2FUNC_ID 3
@@ -166,7 +187,7 @@
 // Bank Number of words in a line
 `define L2BANK_LINE_WORDS (`L2BANK_LINE_SIZE_BYTES / `L2WORD_SIZE_BYTES)
 
-// ======================= L3cache Configurable Knobs =========================
+////////////////////////// L3cache Configurable Knobs /////////////////////////
 
 // Function ID
 `define L3FUNC_ID 3
@@ -176,26 +197,6 @@
 
 // Bank Number of words in a line
 `define L3BANK_LINE_WORDS (`L3BANK_LINE_SIZE_BYTES / `L3WORD_SIZE_BYTES)
-
-//=============================================================================
-
-`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
-`define DEBUG_END   /* verilator lint_on UNUSED */     
-
-`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
-                              /* verilator lint_off PINCONNECTEMPTY */ \
-                              /* verilator lint_off DECLFILENAME */
-
-`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
-                              /* verilator lint_on PINCONNECTEMPTY */ \
-                              /* verilator lint_on DECLFILENAME */
-
-`define STRINGIFY(x) `"x`"
-
-`define STATIC_ASSERT(cond, msg)    \
-    generate                        \
-        if (!(cond)) $error(msg);   \
-    endgenerate
 
  // VX_DEFINE
 `endif

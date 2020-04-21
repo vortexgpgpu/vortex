@@ -3,7 +3,7 @@
 module VX_i_d_reg (
 	input wire          clk,
 	input wire          reset,
-	input wire   		freeze_i,
+	input wire   		freeze,
 
 	VX_inst_meta_if     fe_inst_meta_fd,
 	VX_inst_meta_if     fd_inst_meta_de
@@ -11,7 +11,7 @@ module VX_i_d_reg (
 );
 
 	wire flush = 1'b0;
-	wire stall = freeze_i == 1'b1;
+	wire stall = freeze == 1'b1;
 
 
 	VX_generic_register #(
