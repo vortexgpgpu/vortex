@@ -7,7 +7,7 @@ interface VX_gpu_dcache_rsp_if #(
     parameter NUM_REQUESTS = 32
 ) ();
 
-	// Core response
+    // Core response
     wire [NUM_REQUESTS-1:0]        core_rsp_valid;
 `IGNORE_WARNINGS_BEGIN
     wire [4:0]                     core_rsp_read;

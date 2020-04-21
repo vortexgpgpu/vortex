@@ -42,23 +42,23 @@ module VX_tag_data_structure #(
     // Dram knobs
     parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
 ) (
-	input  wire                             clk,
-	input  wire                             reset,
+    input  wire                             clk,
+    input  wire                             reset,
     input  wire                             stall_bank_pipe,
 
-	input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
-	output wire                             read_valid,
-	output wire                             read_dirty,
-	output wire[`TAG_SELECT_BITS-1:0]       read_tag,
-	output wire[`DBANK_LINE_WORDS-1:0][31:0] read_data,
+    input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
+    output wire                             read_valid,
+    output wire                             read_dirty,
+    output wire[`TAG_SELECT_BITS-1:0]       read_tag,
+    output wire[`DBANK_LINE_WORDS-1:0][31:0] read_data,
 
     input  wire                             invalidate,
-	input  wire[`DBANK_LINE_WORDS-1:0][3:0] write_enable,
-	input  wire                             write_fill,
-	input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
+    input  wire[`DBANK_LINE_WORDS-1:0][3:0] write_enable,
+    input  wire                             write_fill,
+    input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
     input  wire[`TAG_SELECT_BITS-1:0]       tag_index,
-	input  wire[`DBANK_LINE_WORDS-1:0][31:0] write_data,
-    input  wire                             fill_sent	
+    input  wire[`DBANK_LINE_WORDS-1:0][31:0] write_data,
+    input  wire                             fill_sent    
 );
 
     reg [`DBANK_LINE_WORDS-1:0][3:0][7:0]  data  [`BANK_LINE_COUNT-1:0];
@@ -84,15 +84,15 @@ module VX_tag_data_structure #(
                 // data [l] <= 0;
             end
         end else if (!stall_bank_pipe) begin
-        	if (going_to_write) begin
-        		valid[write_addr] <= 1;
-        		tag  [write_addr] <= tag_index;
-        		if (write_fill) begin
-        			dirty[write_addr] <= 0;
-        		end else begin
-        			dirty[write_addr] <= 1;
-        		end
-        	end else if (fill_sent) begin
+            if (going_to_write) begin
+                valid[write_addr] <= 1;
+                tag  [write_addr] <= tag_index;
+                if (write_fill) begin
+                    dirty[write_addr] <= 0;
+                end else begin
+                    dirty[write_addr] <= 1;
+                end
+            end else if (fill_sent) begin
                 dirty[write_addr] <= 0;
                 // valid[write_addr] <= 0;
             end
@@ -101,12 +101,12 @@ module VX_tag_data_structure #(
                 valid[write_addr] <= 0;
             end
 
-    		for (f = 0; f < `DBANK_LINE_WORDS; f = f + 1) begin
-    			if (write_enable[f][0]) data[write_addr][f][0] <= write_data[f][7 :0 ];
-    			if (write_enable[f][1]) data[write_addr][f][1] <= write_data[f][15:8 ];
-    			if (write_enable[f][2]) data[write_addr][f][2] <= write_data[f][23:16];
-    			if (write_enable[f][3]) data[write_addr][f][3] <= write_data[f][31:24];
-    		end
+            for (f = 0; f < `DBANK_LINE_WORDS; f = f + 1) begin
+                if (write_enable[f][0]) data[write_addr][f][0] <= write_data[f][7 :0 ];
+                if (write_enable[f][1]) data[write_addr][f][1] <= write_data[f][15:8 ];
+                if (write_enable[f][2]) data[write_addr][f][2] <= write_data[f][23:16];
+                if (write_enable[f][3]) data[write_addr][f][3] <= write_data[f][31:24];
+            end
         end
     end
 

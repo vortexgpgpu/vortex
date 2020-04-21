@@ -49,8 +49,8 @@ module VX_cache #(
     // Dram knobs
     parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
  ) (
-	input wire clk,
-	input wire reset,
+    input wire clk,
+    input wire reset,
 
     // Core request    
     input wire [NUM_REQUESTS-1:0]                 core_req_valid,

@@ -7,7 +7,7 @@ interface VX_gpu_dcache_dram_req_if #(
     parameter BANK_LINE_WORDS = 2
 ) ();
 
-	// DRAM Request
+    // DRAM Request
     wire                              dram_req_write;
     wire                              dram_req_read;
     wire [31:0]                       dram_req_addr;
