@@ -5,9 +5,9 @@
 
 interface VX_gpr_jal_if ();
 
-	wire       is_jal;
-	wire[31:0] curr_PC;
-	
+    wire       is_jal;
+    wire[31:0] curr_PC;
+    
 endinterface
 
 `endif

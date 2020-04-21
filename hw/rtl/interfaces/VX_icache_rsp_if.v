@@ -5,10 +5,10 @@
 
 interface VX_icache_rsp_if ();
 
-	// wire ready;
-	// wire stall;
-	wire [31:0]	instruction;
-	wire       	delay;
+    // wire ready;
+    // wire stall;
+    wire [31:0]    instruction;
+    wire           delay;
 
 endinterface
 

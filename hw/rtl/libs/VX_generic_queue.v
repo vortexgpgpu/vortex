@@ -5,15 +5,15 @@ module VX_generic_queue #(
     parameter SIZE = 16
 ) (
 `IGNORE_WARNINGS_BEGIN  
-	input  wire             clk,
-	input  wire             reset,
-	input  wire             push,
+    input  wire             clk,
+    input  wire             reset,
+    input  wire             push,
     input  wire             pop,    
-	output wire             empty,
-	output wire             full,
-`IGNORE_WARNINGS_END		
+    output wire             empty,
+    output wire             full,
+`IGNORE_WARNINGS_END        
     input  wire [DATAW-1:0] data_in,
-	output wire [DATAW-1:0] data_out
+    output wire [DATAW-1:0] data_out
 ); 
     if (SIZE == 0) begin
 
