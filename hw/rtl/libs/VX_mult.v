@@ -9,9 +9,9 @@ module VX_mult #(
     parameter PIPELINE=0,
     parameter FORCE_LE="NO"
 ) (
-    input               clock;
-    input               aclr;
-    input               clken;
+    input               clock,
+    input               aclr,
+    input               clken,
 
     input [WIDTHA-1:0]  dataa,
     input [WIDTHB-1:0]  datab,
