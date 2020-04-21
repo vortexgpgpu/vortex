@@ -69,13 +69,13 @@ state_t state;
 logic        vx_dram_req_read;
 logic        vx_dram_req_write;
 logic [31:0] vx_dram_req_addr;
-logic [31:0] vx_dram_req_data[15:0];
+logic [`GLOBAL_BLOCK_SIZE_BYTES-1:0] vx_dram_req_data;
 logic        vx_dram_req_ready;
 
 logic        vx_dram_rsp_ready;
 logic        vx_dram_rsp_valid;
 logic [31:0] vx_dram_rsp_addr;
-logic [31:0] vx_dram_rsp_data[15:0];
+logic [`GLOBAL_BLOCK_SIZE_BYTES-1:0] vx_dram_rsp_data;
 
 logic        vx_snp_req;
 logic [31:0] vx_snp_req_addr;
@@ -326,7 +326,7 @@ begin
         if (vx_dram_req_write
          && vx_dram_req_ready) 
         begin
-          avs_writedata <= {>>{vx_dram_req_data}};
+          avs_writedata <= vx_dram_req_data;
           avs_address <= (vx_dram_req_addr >> 6);
           avs_write <= 1;
           $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr >> 6);
@@ -355,9 +355,9 @@ end
 
 always_comb 
 begin
-  vx_dram_rsp_valid      = vortex_enabled && !avs_rdq_empty && vx_dram_rsp_ready;
-  vx_dram_rsp_addr       = (avs_raq_dout << 6);
-  {>>{vx_dram_rsp_data}} = avs_rdq_dout;
+  vx_dram_rsp_valid = vortex_enabled && !avs_rdq_empty && vx_dram_rsp_ready;
+  vx_dram_rsp_addr  = (avs_raq_dout << 6);
+  vx_dram_rsp_data  = avs_rdq_dout;
 end
 
 // AVS address read request queue /////////////////////////////////////////////
@@ -378,9 +378,9 @@ VX_generic_queue #(
   .clk      (clk),
   .reset    (SoftReset),
   .push     (avs_raq_push),
-  .in_data  (avs_raq_din),
+  .data_in  (avs_raq_din),
   .pop      (avs_raq_pop),
-  .out_data (avs_raq_dout),
+  .data_out (avs_raq_dout),
   .empty    (avs_raq_empty),
   .full     (avs_raq_full)
 );
@@ -401,9 +401,9 @@ VX_generic_queue #(
   .clk      (clk),
   .reset    (SoftReset),
   .push     (avs_rdq_push),
-  .in_data  (avs_rdq_din),
+  .data_in  (avs_rdq_din),
   .pop      (avs_rdq_pop),
-  .out_data (avs_rdq_dout),
+  .data_out (avs_rdq_dout),
   .empty    (avs_rdq_empty),
   .full     (avs_rdq_full)
 );
@@ -558,11 +558,11 @@ Vortex_Socket #() vx_socket (
   .dram_req_data			(vx_dram_req_data),
   .dram_req_ready     (vx_dram_req_ready),
 
-  // DRAM Rsp
-  .out_dram_rsp_ready (vx_dram_rsp_ready),
+  // DRAM Rsp  
   .dram_rsp_valid 		(vx_dram_rsp_valid),
-  .out_dram_rsp_addr  (vx_dram_rsp_addr),
-  .out_dram_rsp_data	(vx_dram_rsp_data),
+  .dram_rsp_addr      (vx_dram_rsp_addr),
+  .dram_rsp_data	    (vx_dram_rsp_data),
+  .dram_rsp_ready     (vx_dram_rsp_ready),
 
   // Cache Snooping Req
   .llc_snp_req_valid 	(vx_snp_req),
