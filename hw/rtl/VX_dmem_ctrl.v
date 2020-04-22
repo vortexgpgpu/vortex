@@ -176,19 +176,19 @@ module VX_dmem_ctrl (
         .FILL_INVALIDAOR_SIZE         (`DFILL_INVALIDAOR_SIZE),
         .SIMULATED_DRAM_LATENCY_CYCLES(`DSIMULATED_DRAM_LATENCY_CYCLES)
     ) gpu_dcache (
-        .clk                   (clk),
-        .reset                 (reset),
+        .clk                (clk),
+        .reset              (reset),
 
         // Core req
-        .core_req_valid        (dcache_req_dcache_if.core_req_valid),
-        .core_req_read         (dcache_req_dcache_if.core_req_read),
-        .core_req_write        (dcache_req_dcache_if.core_req_write),
-        .core_req_addr         (dcache_req_dcache_if.core_req_addr),
-        .core_req_data         (dcache_req_dcache_if.core_req_data),        
-        .core_req_rd           (dcache_req_dcache_if.core_req_rd),
-        .core_req_wb           (dcache_req_dcache_if.core_req_wb),
-        .core_req_warp_num     (dcache_req_dcache_if.core_req_warp_num),
-        .core_req_pc           (dcache_req_dcache_if.core_req_pc),
+        .core_req_valid     (dcache_req_dcache_if.core_req_valid),
+        .core_req_read      (dcache_req_dcache_if.core_req_read),
+        .core_req_write     (dcache_req_dcache_if.core_req_write),
+        .core_req_addr      (dcache_req_dcache_if.core_req_addr),
+        .core_req_data      (dcache_req_dcache_if.core_req_data),        
+        .core_req_rd        (dcache_req_dcache_if.core_req_rd),
+        .core_req_wb        (dcache_req_dcache_if.core_req_wb),
+        .core_req_warp_num  (dcache_req_dcache_if.core_req_warp_num),
+        .core_req_pc        (dcache_req_dcache_if.core_req_pc),
 
         // Can submit core Req
         .core_req_ready     (dcache_req_dcache_if.core_req_ready),
