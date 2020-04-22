@@ -15,7 +15,7 @@ module VX_lsu_unit (
 );
     // Generate Addresses
     wire[`NUM_THREADS-1:0][31:0] address;
-    VX_lsu_addr_gen VX_lsu_addr_gen    (
+    VX_lsu_addr_gen VX_lsu_addr_gen  (
         .base_address (lsu_req_if.base_address),
         .offset       (lsu_req_if.offset),
         .address      (address)
@@ -35,7 +35,7 @@ module VX_lsu_unit (
 
     VX_generic_register #(
         .N(45 + `NW_BITS-1 + 1 + `NUM_THREADS*65)
-    ) lsu_buffer(
+    ) lsu_buffer (
         .clk  (clk),
         .reset(reset),
         .stall(delay),

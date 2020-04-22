@@ -133,11 +133,11 @@ VX_frE_to_bckE_req_if    bckE_req_if();     // New instruction request to EXE/ME
 
 // Back-end to Front-end
 VX_wb_if                 writeback_if();     // Writeback to GPRs
-VX_branch_rsp_if    branch_rsp_if();   // Branch Resolution to Fetch
-VX_jal_rsp_if        jal_rsp_if();      // Jump resolution to Fetch
+VX_branch_rsp_if         branch_rsp_if();   // Branch Resolution to Fetch
+VX_jal_rsp_if            jal_rsp_if();      // Jump resolution to Fetch
 
 // Warp controls
-VX_warp_ctl_if            warp_ctl_if();
+VX_warp_ctl_if           warp_ctl_if();
 
 // Cache snooping
 VX_gpu_snp_req_rsp_if   gpu_icache_snp_req_if();

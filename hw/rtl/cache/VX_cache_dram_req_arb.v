@@ -36,17 +36,17 @@ module VX_cache_dram_req_arb #(
     parameter LLVQ_SIZE                     = 16, 
 
      // Fill Invalidator Size {Fill invalidator must be active}
-     parameter FILL_INVALIDAOR_SIZE          = 16, 
+     parameter FILL_INVALIDAOR_SIZE         = 16, 
 
      // Prefetcher
     parameter PRFQ_SIZE                     = 64,
     parameter PRFQ_STRIDE                   = 2,
 
-// Dram knobs
+    // Dram knobs
     parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
 ) (
-    input  wire clk,
-    input  wire reset,
+    input  wire                                 clk,
+    input  wire                                 reset,
 
     // Fill Request
     output wire                                 dfqq_full,
@@ -72,7 +72,7 @@ module VX_cache_dram_req_arb #(
     wire       pref_valid;
     wire[31:0] pref_addr;
     
-    wire        dwb_valid;
+    wire       dwb_valid;
     wire       dfqq_req;
 
     assign pref_pop = !dwb_valid && !dfqq_req && dram_req_ready && pref_valid;
