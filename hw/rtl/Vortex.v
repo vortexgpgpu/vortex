@@ -13,17 +13,17 @@ module Vortex #(
     output wire [31:0]                  io_data,
 
     // DRAM Dcache Req
-    output wire                         dram_req_read,
-    output wire                         dram_req_write,    
-    output wire [31:0]                  dram_req_addr,
-    output wire [`DBANK_LINE_SIZE-1:0]  dram_req_data,
-    input  wire                         dram_req_ready,
+    output wire                         D_dram_req_read,
+    output wire                         D_dram_req_write,    
+    output wire [31:0]                  D_dram_req_addr,
+    output wire [`DBANK_LINE_SIZE-1:0]  D_dram_req_data,
+    input  wire                         D_dram_req_ready,
 
     // DRAM Dcache Rsp    
-    input  wire                         dram_rsp_valid,
-    input  wire [31:0]                  dram_rsp_addr,
-    input  wire [`DBANK_LINE_SIZE-1:0]  dram_rsp_data,
-    output wire                         dram_rsp_ready,
+    input  wire                         D_dram_rsp_valid,
+    input  wire [31:0]                  D_dram_rsp_addr,
+    input  wire [`DBANK_LINE_SIZE-1:0]  D_dram_rsp_data,
+    output wire                         D_dram_rsp_ready,
 
     // DRAM Icache Req
     output wire                         I_dram_req_read,
@@ -66,24 +66,24 @@ module Vortex #(
     VX_cache_core_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_core_req_if();
     VX_cache_core_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_core_req_qual_if();
 
-    VX_cache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) cache_dram_req_if();
-    VX_cache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) cache_dram_rsp_if();
+    VX_cache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) dcache_dram_req_if();
+    VX_cache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) dcache_dram_rsp_if();
 
-    assign cache_dram_rsp_if.dram_rsp_valid = dram_rsp_valid;
-    assign cache_dram_rsp_if.dram_rsp_addr  = dram_rsp_addr;
+    assign dcache_dram_rsp_if.dram_rsp_valid = D_dram_rsp_valid;
+    assign dcache_dram_rsp_if.dram_rsp_addr  = D_dram_rsp_addr;
 
-    assign dram_req_write  = cache_dram_req_if.dram_req_write;
-    assign dram_req_read   = cache_dram_req_if.dram_req_read;
-    assign dram_req_addr   = cache_dram_req_if.dram_req_addr;
-    assign dram_rsp_ready  = cache_dram_req_if.dram_rsp_ready;
+    assign D_dram_req_write  = dcache_dram_req_if.dram_req_write;
+    assign D_dram_req_read   = dcache_dram_req_if.dram_req_read;
+    assign D_dram_req_addr   = dcache_dram_req_if.dram_req_addr;
+    assign D_dram_rsp_ready  = dcache_dram_req_if.dram_rsp_ready;
 
-    assign cache_dram_req_if.dram_req_ready = dram_req_ready;
+    assign dcache_dram_req_if.dram_req_ready = D_dram_req_ready;
 
     genvar i;
     generate
         for (i = 0; i < `DBANK_LINE_WORDS; i=i+1) begin
-            assign cache_dram_rsp_if.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
-            assign dram_req_data[i * 32 +: 32]        = cache_dram_req_if.dram_req_data[i];
+            assign dcache_dram_rsp_if.dram_rsp_data[i] = D_dram_rsp_data[i * 32 +: 32];
+            assign D_dram_req_data[i * 32 +: 32]       = dcache_dram_req_if.dram_req_data[i];
         end
     endgenerate
 
@@ -115,8 +115,8 @@ module Vortex #(
     VX_cache_dram_req_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) icache_dram_req_if();
     VX_cache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) icache_dram_rsp_if();
 
-    assign icache_dram_rsp_if.dram_rsp_valid      = I_dram_rsp_valid;
-    assign icache_dram_rsp_if.dram_rsp_addr = I_dram_rsp_addr;
+    assign icache_dram_rsp_if.dram_rsp_valid  = I_dram_rsp_valid;
+    assign icache_dram_rsp_if.dram_rsp_addr   = I_dram_rsp_addr;
 
     assign I_dram_req_write  = icache_dram_req_if.dram_req_write;
     assign I_dram_req_read   = icache_dram_req_if.dram_req_read;
@@ -129,7 +129,7 @@ module Vortex #(
     generate
         for (j = 0; j < `IBANK_LINE_WORDS; j = j + 1) begin
             assign icache_dram_rsp_if.dram_rsp_data[j] = I_dram_rsp_data[j * 32 +: 32];
-            assign I_dram_req_data[j * 32 +: 32]           = icache_dram_req_if.dram_req_data[j];
+            assign I_dram_req_data[j * 32 +: 32]       = icache_dram_req_if.dram_req_data[j];
         end
     endgenerate
 
@@ -201,8 +201,8 @@ VX_dmem_ctrl dmem_ctrl (
     .reset                  (reset),
 
     // Dram <-> Dcache
-    .dcache_dram_req_if     (cache_dram_req_if),
-    .dcache_dram_rsp_if     (cache_dram_rsp_if),
+    .dcache_dram_req_if     (dcache_dram_req_if),
+    .dcache_dram_rsp_if     (dcache_dram_rsp_if),
     .dcache_snp_req_if      (dcache_snp_req_if),
 
     // Dram <-> Icache
