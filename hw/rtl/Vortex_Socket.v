@@ -35,7 +35,6 @@ module Vortex_Socket (
         wire[`NUM_CORES-1:0]       cluster_io_valid;
         wire[`NUM_CORES-1:0][31:0] cluster_io_data;
 
-
         genvar curr_c;
         for (curr_c = 0; curr_c < `NUM_CORES; curr_c=curr_c+1) begin
             assign io_valid[curr_c] = cluster_io_valid[curr_c];
