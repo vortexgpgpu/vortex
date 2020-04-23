@@ -6,12 +6,12 @@ module VX_dmem_ctrl (
 
     // Dram <-> Dcache
     VX_gpu_dcache_dram_req_if gpu_dcache_dram_req_if,
-    VX_gpu_dcache_dram_rsp_if gpu_dcache_dram_res_if,
+    VX_gpu_dcache_dram_rsp_if gpu_dcache_dram_rsp_if,
     VX_gpu_snp_req_rsp_if     gpu_dcache_snp_req_if,
 
     // Dram <-> Icache
     VX_gpu_dcache_dram_req_if gpu_icache_dram_req_if,
-    VX_gpu_dcache_dram_rsp_if gpu_icache_dram_res_if,
+    VX_gpu_dcache_dram_rsp_if gpu_icache_dram_rsp_if,
     VX_gpu_snp_req_rsp_if     gpu_icache_snp_req_if,
 
     // Core <-> Dcache
@@ -69,7 +69,7 @@ module VX_dmem_ctrl (
     assign dcache_req_if.core_req_ready     = to_shm ? dcache_req_smem_if.core_req_ready : dcache_req_dcache_if.core_req_ready;
 
     VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_req_if();
-    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_res_if();
+    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_smem_dram_rsp_if();
 
     VX_cache #(
         .CACHE_SIZE_BYTES             (`SCACHE_SIZE_BYTES),
@@ -125,9 +125,9 @@ module VX_dmem_ctrl (
     `IGNORE_WARNINGS_END
 
         // DRAM response
-        .dram_rsp_valid     (gpu_smem_dram_res_if.dram_rsp_valid),
-        .dram_rsp_addr      (gpu_smem_dram_res_if.dram_rsp_addr),
-        .dram_rsp_data      (gpu_smem_dram_res_if.dram_rsp_data),
+        .dram_rsp_valid     (gpu_smem_dram_rsp_if.dram_rsp_valid),
+        .dram_rsp_addr      (gpu_smem_dram_rsp_if.dram_rsp_addr),
+        .dram_rsp_data      (gpu_smem_dram_rsp_if.dram_rsp_data),
 
         // DRAM accept response
         .dram_rsp_ready     (gpu_smem_dram_req_if.dram_rsp_ready),
@@ -208,9 +208,9 @@ module VX_dmem_ctrl (
     `IGNORE_WARNINGS_END
 
         // DRAM response
-        .dram_rsp_valid     (gpu_dcache_dram_res_if.dram_rsp_valid),
-        .dram_rsp_addr      (gpu_dcache_dram_res_if.dram_rsp_addr),
-        .dram_rsp_data      (gpu_dcache_dram_res_if.dram_rsp_data),
+        .dram_rsp_valid     (gpu_dcache_dram_rsp_if.dram_rsp_valid),
+        .dram_rsp_addr      (gpu_dcache_dram_rsp_if.dram_rsp_addr),
+        .dram_rsp_data      (gpu_dcache_dram_rsp_if.dram_rsp_data),
 
         // DRAM accept response
         .dram_rsp_ready     (gpu_dcache_dram_req_if.dram_rsp_ready),
@@ -289,9 +289,9 @@ module VX_dmem_ctrl (
     `IGNORE_WARNINGS_END
 
         // DRAM response
-        .dram_rsp_valid        (gpu_icache_dram_res_if.dram_rsp_valid),
-        .dram_rsp_addr         (gpu_icache_dram_res_if.dram_rsp_addr),
-        .dram_rsp_data         (gpu_icache_dram_res_if.dram_rsp_data),
+        .dram_rsp_valid        (gpu_icache_dram_rsp_if.dram_rsp_valid),
+        .dram_rsp_addr         (gpu_icache_dram_rsp_if.dram_rsp_addr),
+        .dram_rsp_data         (gpu_icache_dram_rsp_if.dram_rsp_data),
 
         // DRAM accept response
         .dram_rsp_ready        (gpu_icache_dram_req_if.dram_rsp_ready),

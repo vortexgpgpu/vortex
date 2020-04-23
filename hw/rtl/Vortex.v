@@ -69,10 +69,10 @@ module Vortex #(
     VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_qual_if();
 
     VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_req_if();
-    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_res_if();
+    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_rsp_if();
 
-    assign gpu_dcache_dram_res_if.dram_rsp_valid = dram_rsp_valid;
-    assign gpu_dcache_dram_res_if.dram_rsp_addr  = dram_rsp_addr;
+    assign gpu_dcache_dram_rsp_if.dram_rsp_valid = dram_rsp_valid;
+    assign gpu_dcache_dram_rsp_if.dram_rsp_addr  = dram_rsp_addr;
 
     assign dram_req_write  = gpu_dcache_dram_req_if.dram_req_write;
     assign dram_req_read   = gpu_dcache_dram_req_if.dram_req_read;
@@ -84,7 +84,7 @@ module Vortex #(
     genvar i;
     generate
         for (i = 0; i < `DBANK_LINE_WORDS; i=i+1) begin
-            assign gpu_dcache_dram_res_if.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
+            assign gpu_dcache_dram_rsp_if.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
             assign dram_req_data[i * 32 +: 32]             = gpu_dcache_dram_req_if.dram_req_data[i];
         end
     endgenerate
@@ -115,10 +115,10 @@ module Vortex #(
     VX_gpu_dcache_req_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_req_if();
 
     VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_req_if();
-    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_res_if();
+    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_rsp_if();
 
-    assign gpu_icache_dram_res_if.dram_rsp_valid      = I_dram_rsp_valid;
-    assign gpu_icache_dram_res_if.dram_rsp_addr = I_dram_rsp_addr;
+    assign gpu_icache_dram_rsp_if.dram_rsp_valid      = I_dram_rsp_valid;
+    assign gpu_icache_dram_rsp_if.dram_rsp_addr = I_dram_rsp_addr;
 
     assign I_dram_req_write  = gpu_icache_dram_req_if.dram_req_write;
     assign I_dram_req_read   = gpu_icache_dram_req_if.dram_req_read;
@@ -130,7 +130,7 @@ module Vortex #(
     genvar j;
     generate
         for (j = 0; j < `IBANK_LINE_WORDS; j = j + 1) begin
-            assign gpu_icache_dram_res_if.dram_rsp_data[j] = I_dram_rsp_data[j * 32 +: 32];
+            assign gpu_icache_dram_rsp_if.dram_rsp_data[j] = I_dram_rsp_data[j * 32 +: 32];
             assign I_dram_req_data[j * 32 +: 32]           = gpu_icache_dram_req_if.dram_req_data[j];
         end
     endgenerate
@@ -204,12 +204,12 @@ VX_dmem_ctrl dmem_ctrl (
 
     // Dram <-> Dcache
     .gpu_dcache_dram_req_if   (gpu_dcache_dram_req_if),
-    .gpu_dcache_dram_res_if   (gpu_dcache_dram_res_if),
+    .gpu_dcache_dram_rsp_if   (gpu_dcache_dram_rsp_if),
     .gpu_dcache_snp_req_if    (gpu_dcache_snp_req_if),
 
     // Dram <-> Icache
     .gpu_icache_dram_req_if   (gpu_icache_dram_req_if),
-    .gpu_icache_dram_res_if   (gpu_icache_dram_res_if),
+    .gpu_icache_dram_rsp_if   (gpu_icache_dram_rsp_if),
     .gpu_icache_snp_req_if    (gpu_icache_snp_req_if),
 
     // Core <-> Icache
