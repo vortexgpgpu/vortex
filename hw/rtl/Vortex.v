@@ -64,28 +64,28 @@ module Vortex #(
     wire schedule_delay;
 
     // Dcache Interface
-    VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_rsp_if();
-    VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_if();
-    VX_gpu_dcache_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_qual_if();
+    VX_cache_core_rsp_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_rsp_if();
+    VX_cache_core_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_if();
+    VX_cache_core_req_if #(.NUM_REQUESTS(`DNUM_REQUESTS))  dcache_req_qual_if();
 
-    VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_req_if();
-    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) gpu_dcache_dram_rsp_if();
+    VX_cache_dram_req_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) cache_dram_req_if();
+    VX_cache_dram_rsp_if #(.BANK_LINE_WORDS(`DBANK_LINE_WORDS)) cache_dram_rsp_if();
 
-    assign gpu_dcache_dram_rsp_if.dram_rsp_valid = dram_rsp_valid;
-    assign gpu_dcache_dram_rsp_if.dram_rsp_addr  = dram_rsp_addr;
+    assign cache_dram_rsp_if.dram_rsp_valid = dram_rsp_valid;
+    assign cache_dram_rsp_if.dram_rsp_addr  = dram_rsp_addr;
 
-    assign dram_req_write  = gpu_dcache_dram_req_if.dram_req_write;
-    assign dram_req_read   = gpu_dcache_dram_req_if.dram_req_read;
-    assign dram_req_addr   = gpu_dcache_dram_req_if.dram_req_addr;
-    assign dram_rsp_ready  = gpu_dcache_dram_req_if.dram_rsp_ready;
+    assign dram_req_write  = cache_dram_req_if.dram_req_write;
+    assign dram_req_read   = cache_dram_req_if.dram_req_read;
+    assign dram_req_addr   = cache_dram_req_if.dram_req_addr;
+    assign dram_rsp_ready  = cache_dram_req_if.dram_rsp_ready;
 
-    assign gpu_dcache_dram_req_if.dram_req_ready = dram_req_ready;
+    assign cache_dram_req_if.dram_req_ready = dram_req_ready;
 
     genvar i;
     generate
         for (i = 0; i < `DBANK_LINE_WORDS; i=i+1) begin
-            assign gpu_dcache_dram_rsp_if.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
-            assign dram_req_data[i * 32 +: 32]             = gpu_dcache_dram_req_if.dram_req_data[i];
+            assign cache_dram_rsp_if.dram_rsp_data[i] = dram_rsp_data[i * 32 +: 32];
+            assign dram_req_data[i * 32 +: 32]             = cache_dram_req_if.dram_req_data[i];
         end
     endgenerate
 
@@ -111,11 +111,11 @@ module Vortex #(
     assign dcache_req_qual_if.core_req_warp_num  = dcache_req_if.core_req_warp_num;
     assign dcache_req_qual_if.core_req_pc        = dcache_req_if.core_req_pc;    
     
-    VX_gpu_dcache_rsp_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_rsp_if();
-    VX_gpu_dcache_req_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_req_if();
+    VX_cache_core_rsp_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_rsp_if();
+    VX_cache_core_req_if #(.NUM_REQUESTS(`INUM_REQUESTS))  icache_req_if();
 
-    VX_gpu_dcache_dram_req_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_req_if();
-    VX_gpu_dcache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_rsp_if();
+    VX_cache_dram_req_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_req_if();
+    VX_cache_dram_rsp_if #(.BANK_LINE_WORDS(`IBANK_LINE_WORDS)) gpu_icache_dram_rsp_if();
 
     assign gpu_icache_dram_rsp_if.dram_rsp_valid      = I_dram_rsp_valid;
     assign gpu_icache_dram_rsp_if.dram_rsp_addr = I_dram_rsp_addr;
@@ -149,8 +149,8 @@ VX_jal_rsp_if            jal_rsp_if();      // Jump resolution to Fetch
 VX_warp_ctl_if           warp_ctl_if();
 
 // Cache snooping
-VX_gpu_snp_req_rsp_if   gpu_icache_snp_req_if();
-VX_gpu_snp_req_rsp_if   gpu_dcache_snp_req_if();
+VX_cache_snp_req_rsp_if   gpu_icache_snp_req_if();
+VX_cache_snp_req_rsp_if   gpu_dcache_snp_req_if();
 assign gpu_dcache_snp_req_if.snp_req_valid  = llc_snp_req_valid;
 assign gpu_dcache_snp_req_if.snp_req_addr   = llc_snp_req_addr;
 assign llc_snp_req_ready                    = gpu_dcache_snp_req_if.snp_req_ready;
@@ -203,8 +203,8 @@ VX_dmem_ctrl dmem_ctrl (
     .reset                    (reset),
 
     // Dram <-> Dcache
-    .gpu_dcache_dram_req_if   (gpu_dcache_dram_req_if),
-    .gpu_dcache_dram_rsp_if   (gpu_dcache_dram_rsp_if),
+    .cache_dram_req_if   (cache_dram_req_if),
+    .cache_dram_rsp_if   (cache_dram_rsp_if),
     .gpu_dcache_snp_req_if    (gpu_dcache_snp_req_if),
 
     // Dram <-> Icache

@@ -1,5 +1,5 @@
-`ifndef VX_FrE_to_BE_INTER
-`define VX_FrE_to_BE_INTER
+`ifndef VX_FrE_to_BCKBE_REQ_IF
+`define VX_FrE_to_BCKBE_REQ_IF
 
 `include "VX_define.vh"
 

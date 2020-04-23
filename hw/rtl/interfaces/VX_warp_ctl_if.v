@@ -1,6 +1,6 @@
 
-`ifndef VX_WARP_CTL_INTER
-`define VX_WARP_CTL_INTER
+`ifndef VX_WARP_CTL_IF
+`define VX_WARP_CTL_IF
 
 `include "VX_define.vh"
 

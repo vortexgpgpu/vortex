@@ -4,6 +4,7 @@ module VX_warp_sched (
     input wire                       clk,    // Clock
     input wire                       reset,
     input wire                       stall,
+
     // Wspawn
     input wire                       wspawn,
     input wire[31:0]                 wsapwn_pc,
@@ -72,13 +73,13 @@ module VX_warp_sched (
 
 `DEBUG_BEGIN
     wire in_wspawn = wspawn;
-    wire in_ctm = ctm;
-    wire in_whalt = whalt;
+    wire in_ctm    = ctm;
+    wire in_whalt  = whalt;
     wire in_wstall = wstall;
 `DEBUG_END
 
-    reg[`NUM_WARPS-1:0] warp_active;
-    reg[`NUM_WARPS-1:0] warp_stalled;
+    reg[`NUM_WARPS-1:0]   warp_active;
+    reg[`NUM_WARPS-1:0]   warp_stalled;
 
     reg [`NUM_WARPS-1:0]  visible_active;
     wire[`NUM_WARPS-1:0]  use_active;
@@ -97,11 +98,11 @@ module VX_warp_sched (
     wire [$clog2(`NUM_WARPS):0] b_count;
 
     // wsapwn
-    reg [31:0]    use_wsapwn_pc;
+    reg [31:0]           use_wsapwn_pc;
     reg [`NUM_WARPS-1:0] use_wsapwn;
 
     wire [`NW_BITS-1:0] warp_to_schedule;
-    wire           schedule;
+    wire                schedule;
 
     wire hazard;
     wire global_stall;
@@ -249,6 +250,7 @@ module VX_warp_sched (
     assign wstall_this_cycle = wstall && (wstall_warp_num == warp_to_schedule); // Maybe bug
 
     assign total_barrier_stall = barrier_stall_mask[0] | barrier_stall_mask[1] | barrier_stall_mask[2] | barrier_stall_mask[3];
+
     // integer curr_b;
     // always @(*) begin
     //     total_barrier_stall = 0;
@@ -260,8 +262,8 @@ module VX_warp_sched (
 
     assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);
 
-    wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0                   , thread_masks[split_warp_num]};
-    wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, split_save_pc           , split_later_mask};
+    wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0, thread_masks[split_warp_num]};
+    wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, split_save_pc, split_later_mask};
 
     assign {join_fall, join_pc, join_tm} = d[join_warp_num];
 
@@ -327,14 +329,6 @@ module VX_warp_sched (
     //     $display("WarpPC: %h",warp_pc);
     //     $display("real_schedule: %d, schedule: %d, warp_stalled: %d, warp_to_schedule: %d, total_barrier_stall: %d",real_schedule, schedule, warp_stalled[warp_to_schedule], warp_to_schedule,  total_barrier_stall[warp_to_schedule]);
     // end
-
-
-    // Valid counter
-    // assign num_active = $countones(visible_active);
-    // VX_one_counter valid_counter(
-    //     .valids(visible_active),
-    //     .ones_found()
-    //     );
 
     assign ebreak = (warp_active == 0);
 

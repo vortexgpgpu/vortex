@@ -1,9 +1,9 @@
-`ifndef VX_GPU_SNP_REQ_RSP
-`define VX_GPU_SNP_REQ_RSP
+`ifndef VX_CACHE_SNP_REQ_RSP_IF
+`define VX_CACHE_SNP_REQ_RSP_IF
 
 `include "../cache/VX_cache_config.vh"
 
-interface VX_gpu_snp_req_rsp_if ();
+interface VX_cache_snp_req_rsp_if ();
 
     // Snoop request
     wire        snp_req_valid;

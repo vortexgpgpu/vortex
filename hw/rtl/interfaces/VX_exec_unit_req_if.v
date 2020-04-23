@@ -1,5 +1,5 @@
-`ifndef VX_EXE_UNIT_REQ_INTER
-`define VX_EXE_UNIT_REQ_INTER
+`ifndef VX_EXE_UNIT_REQ_IF
+`define VX_EXE_UNIT_REQ_IF
 
 `include "VX_define.vh"
 

@@ -10,8 +10,8 @@ module VX_icache_stage (
     VX_inst_meta_if         fe_inst_meta_fi,
     VX_inst_meta_if         fe_inst_meta_id,
 
-    VX_gpu_dcache_rsp_if    icache_rsp_if,
-    VX_gpu_dcache_req_if    icache_req_if
+    VX_cache_core_rsp_if    icache_rsp_if,
+    VX_cache_core_req_if    icache_req_if
 );
 
     reg[`NUM_THREADS-1:0] threads_active[`NUM_WARPS-1:0];

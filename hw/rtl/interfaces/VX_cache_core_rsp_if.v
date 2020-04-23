@@ -1,9 +1,9 @@
-`ifndef VX_GPU_DCACHE_RSP
-`define VX_GPU_DCACHE_RSP
+`ifndef VX_CACHE_CORE_RSP_IF
+`define VX_CACHE_CORE_RSP_IF
 
 `include "../cache/VX_cache_config.vh"
 
-interface VX_gpu_dcache_rsp_if #(
+interface VX_cache_core_rsp_if #(
     parameter NUM_REQUESTS = 32
 ) ();
 

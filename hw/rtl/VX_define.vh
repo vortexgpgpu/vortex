@@ -48,8 +48,6 @@
 
 `define CSR_ADDR_SIZE 12
 
-`define NUM_CSRS 1024
-
 `define CSR_WIDTH 12
 
 `define CSR_CYCL_L 12'hC00;
@@ -141,12 +139,6 @@
 `define NOT_TAKEN 1'h0
 
 `define ZERO_REG 5'h0
-
-// IO BUS
-`define IO_BUS_ADDR 32'h00010000
-
-// Program startup address
-`define STARTUP_ADDR 32'h80000000
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 

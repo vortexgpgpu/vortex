@@ -27,6 +27,18 @@
 `define GLOBAL_BLOCK_SIZE_BYTES 16
 `endif
 
+`ifndef NUM_CSRS
+`define NUM_CSRS 1024
+`endif
+
+`ifndef IO_BUS_ADDR
+`define IO_BUS_ADDR 32'h00010000
+`endif
+
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR 32'h80000000
+`endif
+
 // ========================= Dcache Configurable Knobs ========================
 
 // Size of cache in bytes

@@ -1,6 +1,6 @@
 
-`ifndef VX_JAL_RSP
-`define VX_JAL_RSP
+`ifndef VX_JAL_RSP_IF
+`define VX_JAL_RSP_IF
 
 `include "VX_define.vh"
 

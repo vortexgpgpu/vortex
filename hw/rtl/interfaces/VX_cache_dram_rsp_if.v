@@ -1,9 +1,9 @@
-`ifndef VX_GPU_DRAM_DCACHE_RSP
-`define VX_GPU_DRAM_DCACHE_RSP
+`ifndef VX_CACHE_DRAM_RSP_IF
+`define VX_CACHE_DRAM_RSP_IF
 
 `include "../cache/VX_cache_config.vh"
 
-interface VX_gpu_dcache_dram_rsp_if #(
+interface VX_cache_dram_rsp_if #(
     parameter BANK_LINE_WORDS = 2
 ) ();
     // DRAM Response

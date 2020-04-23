@@ -1,5 +1,5 @@
-`ifndef VX_GPR_READ
-`define VX_GPR_READ
+`ifndef VX_GPR_READ_IF
+`define VX_GPR_READ_IF
 
 `include "VX_define.vh"
 

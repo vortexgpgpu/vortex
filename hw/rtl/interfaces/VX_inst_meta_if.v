@@ -1,5 +1,5 @@
-`ifndef VX_F_D_INTER
-`define VX_F_D_INTER
+`ifndef VX_INST_META_IF
+`define VX_INST_META_IF
 
 `include "VX_define.vh"
 
