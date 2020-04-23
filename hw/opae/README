@@ -38,9 +38,13 @@ make clean
 make
 ./basic
 
-
-ASE build instructions
-
+#ASE build instructions
 vcd file vortex.vcd
 vcd add -r /*/Vortex/hw/rtl/* 
 run -all
+
+#compress
+tar -zcvf vortex.vcd.tar.gz work/vortex.vcd
+
+# decompress
+tar -zxvf vortex.vcd.tar.gz vortex.vcd

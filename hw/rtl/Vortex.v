@@ -43,6 +43,15 @@ module Vortex #(
     input  wire [31:0]                  llc_snp_req_addr,
     output wire                         llc_snp_req_ready,
 
+
+    // CSR request
+    //input  wire                        csr_read_valid;
+    //input  wire                        csr_write_valid;    
+    //input  wire [`CSR_WIDTH-1:0        csr_index;
+    //input  wire                        csr_data_in;
+    //output wire [15:0]                 csr_data_out;    
+    
+
     output wire                         ebreak
 );
 `DEBUG_BEGIN

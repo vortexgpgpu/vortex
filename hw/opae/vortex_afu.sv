@@ -1,12 +1,7 @@
-// Interface between CSR and FSM
-// All the MMIOs read/write are done from CSR and passed to the FSM for state transitions
-
-// To be done:
-// Change address size to buffer's address size and data size based on IO address size. Check from hello_world
-
 `include "platform_if.vh"
 import local_mem_cfg_pkg::*;
 `include "afu_json_info.vh"
+`include "VX_define.vh"
 
 module vortex_afu #(
   parameter NUM_LOCAL_MEM_BANKS = 2
@@ -35,6 +30,9 @@ module vortex_afu #(
 
 localparam AVS_RD_QUEUE_SIZE  = 16;
 
+localparam CCI_RD_WINDOW_SIZE = 8;
+localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
+
 localparam VX_SNOOP_DELAY     = 300;
 localparam VX_SNOOP_LEVELS    = 2;
 
@@ -61,6 +59,9 @@ typedef enum logic[3:0] {
   STATE_RUN, 
   STATE_CLFLUSH
 } state_t;
+
+typedef logic [`LOG2UP(CCI_RD_WINDOW_SIZE)-1:0]  t_cci_rdq_tag;
+typedef logic [$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:0] t_cci_rdq_data;
 
 state_t state;
 
@@ -117,8 +118,7 @@ end
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) 
-  begin
+  if (SoftReset) begin
     af2cp_sTxPort.c2.hdr         <= 0;
     af2cp_sTxPort.c2.data        <= 0;
     af2cp_sTxPort.c2.mmioRdValid <= 0;
@@ -152,12 +152,17 @@ begin
           csr_cmd <= $bits(csr_cmd)'(cp2af_sRxPort.c0.data);
           $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
         end
+        default: begin
+           // user-defined CSRs
+           //if (mmioHdr.addres >= MMIO_CSR_USER) begin
+             // write Vortex CRS
+           //end
+        end 
       endcase
     end
 
     // serve MMIO read requests
-    if (cp2af_sRxPort.c0.mmioRdValid)
-    begin
+    if (cp2af_sRxPort.c0.mmioRdValid) begin
       af2cp_sTxPort.c2.hdr.tid <= mmioHdr.tid; // copy TID
       case (mmioHdr.address)
         // AFU header
@@ -176,8 +181,9 @@ begin
         16'h0006: af2cp_sTxPort.c2.data <= 64'h0; // next AFU
         16'h0008: af2cp_sTxPort.c2.data <= 64'h0; // reserved
         MMIO_CSR_STATUS: begin
-          if (state != af2cp_sTxPort.c2.data) 
+          if (state != af2cp_sTxPort.c2.data) begin
             $display("%t: STATUS: state=%0d", $time, state);
+          end
           af2cp_sTxPort.c2.data <= state;
         end  
         default: af2cp_sTxPort.c2.data <= 64'h0;
@@ -198,8 +204,7 @@ logic        vx_reset;
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) 
-  begin
+  if (SoftReset) begin
     state     <= STATE_IDLE;    
     vx_reset  <= 0;    
   end
@@ -217,7 +222,7 @@ begin
           CMD_TYPE_WRITE: begin      
             $display("%t: STATE WRITE: ia=%h da=%h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
             state <= STATE_WRITE;
-          end 
+          end
           CMD_TYPE_RUN: begin        
             $display("%t: STATE START", $time);
             vx_reset <= 1;
@@ -231,29 +236,25 @@ begin
       end      
 
       STATE_READ: begin
-        if (cci_write_ctr >= csr_data_size) 
-        begin
+        if (cci_write_ctr >= csr_data_size) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_WRITE: begin
-        if (avs_write_ctr >= csr_data_size) 
-        begin
+        if (avs_write_ctr >= csr_data_size) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_RUN: begin
-        if (vx_ebreak)
-        begin
+        if (vx_ebreak) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_CLFLUSH: begin
-        if (vx_snoop_delay >= VX_SNOOP_DELAY) 
-        begin
+        if (vx_snoop_delay >= VX_SNOOP_DELAY) begin
           state <= STATE_IDLE;
         end
       end
@@ -263,6 +264,20 @@ begin
 end
 
 // AVS Controller /////////////////////////////////////////////////////////////
+
+logic cci_rdq_empty;
+t_cci_rdq_data cci_rdq_dout;
+logic cci_rdq_pop;
+
+t_ccip_clAddr next_avs_address;
+always_comb 
+begin
+  next_avs_address = csr_mem_addr + {avs_write_ctr[31:$bits(t_cci_rdq_tag)], t_cci_rdq_tag'(cci_rdq_dout)};
+  cci_rdq_pop = (state == STATE_WRITE
+              && !cci_rdq_empty 
+              && !avs_waitrequest
+              && avs_write_ctr < csr_data_size);
+end
 
 always_ff @(posedge clk) 
 begin
@@ -295,22 +310,21 @@ begin
          && !avs_waitrequest 
          && avs_read_ctr < csr_data_size) 
         begin
-          avs_address <= csr_mem_addr + avs_read_ctr;
-          avs_read <= 1;
+          avs_address  <= csr_mem_addr + avs_read_ctr;          
           avs_read_ctr <= avs_read_ctr + 1;
+          avs_read     <= 1;
           $display("%t: AVS Rd Req: addr=%h", $time, csr_mem_addr + avs_read_ctr);
         end        
       end
 
       STATE_WRITE: begin
-        if (cp2af_sRxPort.c0.rspValid 
-         && avs_write_ctr < csr_data_size) 
-        begin
-          avs_writedata <= cp2af_sRxPort.c0.data;
-          avs_address <= csr_mem_addr + avs_write_ctr;
-          avs_write <= 1;
+        if (cci_rdq_pop) 
+        begin          
+          avs_writedata <= cci_rdq_dout[$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:$bits(t_cci_rdq_tag)];
+          avs_address   <= next_avs_address;          
           avs_write_ctr <= avs_write_ctr + 1;
-          $display("%t: AVS Wr Req: addr=%h (%0d/%0d)", $time, csr_mem_addr + avs_write_ctr, avs_write_ctr + 1, csr_data_size);
+          avs_write     <= 1;
+          $display("%t: AVS Wr Req: addr=%h (%0d/%0d)", $time, next_avs_address, avs_write_ctr + 1, csr_data_size);
         end
       end
 
@@ -319,7 +333,7 @@ begin
          && vx_dram_req_ready) 
         begin
           avs_address <= (vx_dram_req_addr >> 6);
-          avs_read <= 1;
+          avs_read    <= 1;
           $display("%t: AVS Rd Req: addr=%h", $time, vx_dram_req_addr >> 6);
         end 
         
@@ -327,8 +341,8 @@ begin
          && vx_dram_req_ready) 
         begin
           avs_writedata <= vx_dram_req_data;
-          avs_address <= (vx_dram_req_addr >> 6);
-          avs_write <= 1;
+          avs_address   <= (vx_dram_req_addr >> 6);
+          avs_write     <= 1;
           $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr >> 6);
         end
       end
@@ -362,11 +376,11 @@ end
 
 // AVS address read request queue /////////////////////////////////////////////
 
-logic cci_write_req;
+logic cci_wr_req;
 
 always_comb 
 begin
-  avs_raq_pop  = vx_dram_rsp_valid || cci_write_req;
+  avs_raq_pop  = vx_dram_rsp_valid || cci_wr_req;
   avs_raq_din  = avs_address;
   avs_raq_push = avs_read;
 end
@@ -374,7 +388,7 @@ end
 VX_generic_queue #(
   .DATAW($bits(t_local_mem_addr)),
   .SIZE(AVS_RD_QUEUE_SIZE)
-) vx_rd_addr_queue (
+) avs_rd_req_queue (
   .clk      (clk),
   .reset    (SoftReset),
   .push     (avs_raq_push),
@@ -397,7 +411,7 @@ end
 VX_generic_queue #(
   .DATAW($bits(t_local_mem_data)),
   .SIZE(AVS_RD_QUEUE_SIZE)
-) vx_rd_data_queue (
+) avs_rd_rsp_queue (
   .clk      (clk),
   .reset    (SoftReset),
   .push     (avs_rdq_push),
@@ -410,101 +424,134 @@ VX_generic_queue #(
 
 // CCI Read Request ///////////////////////////////////////////////////////////
 
-t_ccip_c0_ReqMemHdr rd_hdr;
+t_ccip_c0_ReqMemHdr cci_read_hdr;
 
-logic cci_read_pending;
+logic [31:0] cci_read_ctr;
+t_cci_rdq_tag cci_rdq_ctr;
+
+logic cci_rdq_full;
+logic cci_rdq_push;
+t_cci_rdq_data cci_rdq_din;
+
+logic cci_read_wait;
 
 always_comb 
 begin
-  rd_hdr = t_ccip_c0_ReqMemHdr'(0);
-  rd_hdr.address = csr_io_addr + avs_write_ctr;  
+  cci_read_hdr = t_ccip_c0_ReqMemHdr'(0);
+  cci_read_hdr.address = csr_io_addr + cci_read_ctr;  
+  cci_read_hdr.mdata = t_cci_rdq_tag'(cci_read_ctr);
+
+  cci_rdq_push = (STATE_WRITE == state) && cp2af_sRxPort.c0.rspValid;
+  cci_rdq_din  = {cp2af_sRxPort.c0.data, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata)};
 end
 
 // Send read requests to CCI
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) 
-  begin
+  if (SoftReset) begin
     af2cp_sTxPort.c0.hdr   <= 0;
     af2cp_sTxPort.c0.valid <= 0;
-    cci_read_pending       <= 0;
+    cci_read_ctr           <= 0;
+    cci_rdq_ctr            <= 0;
+    cci_read_wait          <= 0;
   end 
   else begin      
     af2cp_sTxPort.c0.valid <= 0;
 
-    if (STATE_WRITE == state 
-     && !cp2af_sRxPort.c0TxAlmFull      // ensure read queue not full
-     && !avs_waitrequest                // ensure AVS write queue not full
-     && !cci_read_pending               // ensure no read pending
-     && avs_write_ctr < csr_data_size)  // ensure not done
-    begin
-      af2cp_sTxPort.c0.hdr <= rd_hdr;
-      af2cp_sTxPort.c0.valid <= 1;      
-      cci_read_pending <= 1;
-      $display("%t: CCI Rd Req: addr=%h", $time, rd_hdr.address);
+    if (STATE_IDLE == state) begin
+      cci_read_ctr  <= 0;
+      cci_rdq_ctr   <= 0;
+      cci_read_wait <= 0;
     end
 
-    if (cci_read_pending
-     && cp2af_sRxPort.c0.rspValid) 
+    if (STATE_WRITE == state 
+     && !cp2af_sRxPort.c0TxAlmFull      // ensure read queue not full
+     && !cci_rdq_full                   // ensure destination queue not full
+     && !cci_read_wait                  // ensure the last batch has arrived
+     && cci_read_ctr < csr_data_size)   // ensure not done
     begin
-      $display("%t: CCI Rd Rsp", $time);
-      cci_read_pending <= 0;
-    end    
+      af2cp_sTxPort.c0.hdr   <= cci_read_hdr;
+      af2cp_sTxPort.c0.valid <= 1;      
+      cci_read_ctr           <= cci_read_ctr + 1;
+      if (cci_read_ctr == (CCI_RD_WINDOW_SIZE-1)) begin
+        cci_read_wait <= 1;             // end current request batch
+      end 
+      $display("%t: CCI Rd Req: addr=%h", $time, cci_read_hdr.address);
+    end
+
+    if (cci_rdq_push) begin
+      cci_rdq_ctr <= cci_rdq_ctr + 1;
+      if (cci_rdq_ctr == (CCI_RD_WINDOW_SIZE-1)) begin
+        cci_read_wait <= 0;             // restart new request batch
+      end 
+      $display("%t: CCI Rd Rsp: idx=%d, ctr=%d", $time, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata), cci_rdq_ctr);
+    end        
   end
 end
 
+VX_generic_queue #(
+  .DATAW($bits(t_ccip_clData) + $bits(t_cci_rdq_tag)),
+  .SIZE(CCI_RD_QUEUE_SIZE)
+) cci_rd_req_queue (
+  .clk      (clk),
+  .reset    (SoftReset),
+  .push     (cci_rdq_push),
+  .data_in  (cci_rdq_din),
+  .pop      (cci_rdq_pop),
+  .data_out (cci_rdq_dout),
+  .empty    (cci_rdq_empty),
+  .full     (cci_rdq_full)
+);
+
 // CCI Write Request //////////////////////////////////////////////////////////
 
-t_ccip_c1_ReqMemHdr wr_hdr;
+t_ccip_c1_ReqMemHdr cci_write_hdr;
 
-logic cci_write_pending;
+logic cci_write_wait;
 
 always_comb 
 begin
-  cci_write_req = (STATE_READ == state) 
-               && !avs_rdq_empty 
-               && !cp2af_sRxPort.c1TxAlmFull
-               && !cci_write_pending
-               && cci_write_ctr < csr_data_size;
+  cci_wr_req = (STATE_READ == state) 
+            && !avs_rdq_empty 
+            && !cp2af_sRxPort.c1TxAlmFull
+            && !cci_write_wait
+            && cci_write_ctr < csr_data_size;
 
-  wr_hdr = t_ccip_c1_ReqMemHdr'(0);
-  wr_hdr.address = csr_io_addr + cci_write_ctr;
-  wr_hdr.sop = 1; // single line write mode
+  cci_write_hdr = t_ccip_c1_ReqMemHdr'(0);
+  cci_write_hdr.address = csr_io_addr + cci_write_ctr;
+  cci_write_hdr.sop = 1; // single line write mode
 end
 
 // Send write requests to CCI
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) 
-  begin
+  if (SoftReset) begin
     af2cp_sTxPort.c1.hdr   <= 0;
     af2cp_sTxPort.c1.data  <= 0;
     af2cp_sTxPort.c1.valid <= 0;
     cci_write_ctr          <= 0;
-    cci_write_pending      <= 0;
+    cci_write_wait         <= 0;
   end
   else begin
     af2cp_sTxPort.c1.valid <= 0;
 
-    if (STATE_IDLE == state) 
-    begin
+    if (STATE_IDLE == state) begin
       cci_write_ctr <= 0;
     end
 
-    if (cci_write_req)
-    begin
-      af2cp_sTxPort.c1.hdr   <= wr_hdr;
+    if (cci_wr_req) begin
+      af2cp_sTxPort.c1.hdr   <= cci_write_hdr;
       af2cp_sTxPort.c1.data  <= t_ccip_clData'(avs_rdq_dout);
       af2cp_sTxPort.c1.valid <= 1;      
-      cci_write_pending      <= 1;
-      $display("%t: CCI Wr Req: addr=%h", $time, wr_hdr.address);
+      cci_write_wait         <= 1;
+      $display("%t: CCI Wr Req: addr=%h", $time, cci_write_hdr.address);
     end
 
-    if (cci_write_pending
+    if (cci_write_wait
      && cp2af_sRxPort.c1.rspValid) 
     begin
-      cci_write_ctr     <= cci_write_ctr + 1;
-      cci_write_pending <= 0;
+      cci_write_ctr  <= cci_write_ctr + 1;
+      cci_write_wait <= 0;
       $display("%t: CCI Wr Rsp (%0d/%0d)", $time, cci_write_ctr + 1, csr_data_size);      
     end
   end
@@ -514,15 +561,13 @@ end
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) 
-  begin
+  if (SoftReset) begin
     vx_snp_req      <= 0;
     vx_snoop_ctr    <= 0;
     vx_snoop_delay  <= 0;
   end
   else begin
-    if (STATE_IDLE == state) 
-    begin
+    if (STATE_IDLE == state) begin
       vx_snoop_ctr   <= 0;
       vx_snoop_delay <= 0;
     end
@@ -532,14 +577,13 @@ begin
     if ((STATE_CLFLUSH == state)
      && vx_snoop_ctr < csr_data_size
      && vx_snp_req_ready)
-    begin
+     begin
       vx_snp_req_addr <= (csr_mem_addr + vx_snoop_ctr) << 6;
       vx_snp_req      <= 1;
       vx_snoop_ctr    <= vx_snoop_ctr + 1;
     end
 
-    if (vx_snoop_ctr == csr_data_size)
-    begin 
+    if (vx_snoop_ctr == csr_data_size) begin 
       vx_snoop_delay <= vx_snoop_delay + 1;
     end
   end
