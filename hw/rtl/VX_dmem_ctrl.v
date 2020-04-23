@@ -5,14 +5,14 @@ module VX_dmem_ctrl (
     input wire              reset,
 
     // Dram <-> Dcache
-    VX_cache_dram_req_if    cache_dram_req_if,
-    VX_cache_dram_rsp_if    cache_dram_rsp_if,
-    VX_cache_snp_req_if dcache_snp_req_if,
+    VX_cache_dram_req_if    dcache_dram_req_if,
+    VX_cache_dram_rsp_if    dcache_dram_rsp_if,
+    VX_cache_snp_req_if     dcache_snp_req_if,
 
     // Dram <-> Icache
     VX_cache_dram_req_if    icache_dram_req_if,
     VX_cache_dram_rsp_if    icache_dram_rsp_if,
-    VX_cache_snp_req_if icache_snp_req_if,
+    VX_cache_snp_req_if     icache_snp_req_if,
 
     // Core <-> Dcache
     VX_cache_core_rsp_if    dcache_core_rsp_if,
@@ -208,19 +208,19 @@ module VX_dmem_ctrl (
     `IGNORE_WARNINGS_END
 
         // DRAM response
-        .dram_rsp_valid     (cache_dram_rsp_if.dram_rsp_valid),
-        .dram_rsp_addr      (cache_dram_rsp_if.dram_rsp_addr),
-        .dram_rsp_data      (cache_dram_rsp_if.dram_rsp_data),
+        .dram_rsp_valid     (dcache_dram_rsp_if.dram_rsp_valid),
+        .dram_rsp_addr      (dcache_dram_rsp_if.dram_rsp_addr),
+        .dram_rsp_data      (dcache_dram_rsp_if.dram_rsp_data),
 
         // DRAM accept response
-        .dram_rsp_ready     (cache_dram_req_if.dram_rsp_ready),
+        .dram_rsp_ready     (dcache_dram_req_if.dram_rsp_ready),
 
         // DRAM Req
-        .dram_req_read      (cache_dram_req_if.dram_req_read),
-        .dram_req_write     (cache_dram_req_if.dram_req_write),        
-        .dram_req_addr      (cache_dram_req_if.dram_req_addr),
-        .dram_req_data      (cache_dram_req_if.dram_req_data),
-        .dram_req_ready     (cache_dram_req_if.dram_req_ready),
+        .dram_req_read      (dcache_dram_req_if.dram_req_read),
+        .dram_req_write     (dcache_dram_req_if.dram_req_write),        
+        .dram_req_addr      (dcache_dram_req_if.dram_req_addr),
+        .dram_req_data      (dcache_dram_req_if.dram_req_data),
+        .dram_req_ready     (dcache_dram_req_if.dram_req_ready),
 
         // Snoop Request
         .snp_req_valid      (dcache_snp_req_if.snp_req_valid),
