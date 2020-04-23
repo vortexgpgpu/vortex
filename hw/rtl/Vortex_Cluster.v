@@ -33,16 +33,16 @@ module Vortex_Cluster #(
     output wire                         ebreak
 );
     // DRAM Dcache Req
-    wire[`NUM_CORES-1:0]                              per_core_dram_req_read;
-    wire[`NUM_CORES-1:0]                              per_core_dram_req_write;    
-    wire[`NUM_CORES-1:0] [31:0]                       per_core_dram_req_addr;
-    wire[`NUM_CORES-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_req_data;
+    wire[`NUM_CORES-1:0]                              per_core_D_dram_req_read;
+    wire[`NUM_CORES-1:0]                              per_core_D_dram_req_write;    
+    wire[`NUM_CORES-1:0] [31:0]                       per_core_D_dram_req_addr;
+    wire[`NUM_CORES-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_D_dram_req_data;
 
     // DRAM Dcache Rsp
-    wire[`NUM_CORES-1:0]                              per_core_dram_rsp_valid;    
-    wire[`NUM_CORES-1:0] [31:0]                       per_core_dram_rsp_addr;
-    wire[`NUM_CORES-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_dram_rsp_data;
-    wire[`NUM_CORES-1:0]                              per_core_dram_rsp_ready;
+    wire[`NUM_CORES-1:0]                              per_core_D_dram_rsp_valid;    
+    wire[`NUM_CORES-1:0] [31:0]                       per_core_D_dram_rsp_addr;
+    wire[`NUM_CORES-1:0][`DBANK_LINE_WORDS-1:0][31:0] per_core_D_dram_rsp_data;
+    wire[`NUM_CORES-1:0]                              per_core_D_dram_rsp_ready;
 
     // DRAM Icache Req
     wire[`NUM_CORES-1:0]                              per_core_I_dram_req_read;
@@ -75,8 +75,8 @@ module Vortex_Cluster #(
 
         for (curr_core = 0; curr_core < `NUM_CORES; curr_core=curr_core+1) begin
 
-            wire [`IBANK_LINE_WORDS-1:0][31:0] curr_core_I_dram_req_data;
-            wire [`DBANK_LINE_WORDS-1:0][31:0] curr_core_dram_req_data ;
+            wire [`IBANK_LINE_WORDS-1:0][31:0] curr_core_D_dram_req_data;
+            wire [`DBANK_LINE_WORDS-1:0][31:0] curr_core_I_dram_req_data ;
 
             assign io_valid[curr_core]  = per_core_io_valid[curr_core];
             assign io_data [curr_core]  = per_core_io_data [curr_core];
@@ -88,15 +88,15 @@ module Vortex_Cluster #(
                 .reset                      (reset),
                 .io_valid                   (per_core_io_valid            [curr_core]),
                 .io_data                    (per_core_io_data             [curr_core]),
-                .dram_req_read              (per_core_dram_req_read       [curr_core]),
-                .dram_req_write             (per_core_dram_req_write      [curr_core]),                
-                .dram_req_addr              (per_core_dram_req_addr       [curr_core]),
-                .dram_req_data              (curr_core_dram_req_data                 ),
-                .dram_req_ready             (l2c_core_req_ready                      ),                
-                .dram_rsp_valid             (per_core_dram_rsp_valid      [curr_core]),
-                .dram_rsp_addr              (per_core_dram_rsp_addr       [curr_core]),
-                .dram_rsp_data              (per_core_dram_rsp_data       [curr_core]),
-                .dram_rsp_ready             (per_core_dram_rsp_ready      [curr_core]),
+                .D_dram_req_read            (per_core_D_dram_req_read     [curr_core]),
+                .D_dram_req_write           (per_core_D_dram_req_write    [curr_core]),                
+                .D_dram_req_addr            (per_core_D_dram_req_addr     [curr_core]),
+                .D_dram_req_data            (curr_core_D_dram_req_data                 ),
+                .D_dram_req_ready           (l2c_core_req_ready                      ),                
+                .D_dram_rsp_valid           (per_core_D_dram_rsp_valid    [curr_core]),
+                .D_dram_rsp_addr            (per_core_D_dram_rsp_addr     [curr_core]),
+                .D_dram_rsp_data            (per_core_D_dram_rsp_data     [curr_core]),
+                .D_dram_rsp_ready           (per_core_D_dram_rsp_ready    [curr_core]),
                 .I_dram_req_read            (per_core_I_dram_req_read     [curr_core]),
                 .I_dram_req_write           (per_core_I_dram_req_write    [curr_core]),                
                 .I_dram_req_addr            (per_core_I_dram_req_addr     [curr_core]),                
@@ -112,8 +112,8 @@ module Vortex_Cluster #(
                 .ebreak                     (per_core_ebreak              [curr_core])
             );
 
-            assign per_core_dram_req_data  [curr_core] = curr_core_dram_req_data;
-            assign per_core_I_dram_req_data[curr_core] = curr_core_I_dram_req_data;
+            assign per_core_D_dram_req_data [curr_core] = curr_core_D_dram_req_data;
+            assign per_core_I_dram_req_data [curr_core] = curr_core_I_dram_req_data;
         end
     endgenerate
 
@@ -147,36 +147,36 @@ module Vortex_Cluster #(
     generate
         for (l2c_curr_core = 0; l2c_curr_core < `L2NUM_REQUESTS; l2c_curr_core=l2c_curr_core+2) begin
             // Core Request
-            assign l2c_core_req_valid     [l2c_curr_core]   = (per_core_dram_req_read[(l2c_curr_core/2)] | per_core_dram_req_write[(l2c_curr_core/2)]);
+            assign l2c_core_req_valid     [l2c_curr_core]   = (per_core_D_dram_req_read[(l2c_curr_core/2)] | per_core_D_dram_req_write[(l2c_curr_core/2)]);
             assign l2c_core_req_valid     [l2c_curr_core+1] = (per_core_I_dram_req_read[(l2c_curr_core/2)] | per_core_I_dram_req_write[(l2c_curr_core/2)]);
             
-            assign l2c_core_req_mem_write [l2c_curr_core]   = per_core_dram_req_write[(l2c_curr_core/2)] ? `SW_MEM_WRITE : `NO_MEM_WRITE;
+            assign l2c_core_req_mem_write [l2c_curr_core]   = per_core_D_dram_req_write[(l2c_curr_core/2)] ? `SW_MEM_WRITE : `NO_MEM_WRITE;
             assign l2c_core_req_mem_write [l2c_curr_core+1] = `NO_MEM_WRITE; // I caches don't write
 
-            assign l2c_core_req_mem_read  [l2c_curr_core]   = per_core_dram_req_read[(l2c_curr_core/2)] ? `LW_MEM_READ : `NO_MEM_READ;
+            assign l2c_core_req_mem_read  [l2c_curr_core]   = per_core_D_dram_req_read[(l2c_curr_core/2)] ? `LW_MEM_READ : `NO_MEM_READ;
             assign l2c_core_req_mem_read  [l2c_curr_core+1] = `LW_MEM_READ; // I caches don't write
 
-            assign l2c_core_req_wb        [l2c_curr_core]   = per_core_dram_req_read[(l2c_curr_core/2)] ? 1 : 0;
+            assign l2c_core_req_wb        [l2c_curr_core]   = per_core_D_dram_req_read[(l2c_curr_core/2)] ? 1 : 0;
             assign l2c_core_req_wb        [l2c_curr_core+1] = 1; // I caches don't write
 
-            assign l2c_core_req_addr      [l2c_curr_core]   = per_core_dram_req_addr  [(l2c_curr_core/2)];
+            assign l2c_core_req_addr      [l2c_curr_core]   = per_core_D_dram_req_addr  [(l2c_curr_core/2)];
             assign l2c_core_req_addr      [l2c_curr_core+1] = per_core_I_dram_req_addr[(l2c_curr_core/2)];
 
-            assign l2c_core_req_data      [l2c_curr_core]   = per_core_dram_req_data  [(l2c_curr_core/2)];
+            assign l2c_core_req_data      [l2c_curr_core]   = per_core_D_dram_req_data  [(l2c_curr_core/2)];
             assign l2c_core_req_data      [l2c_curr_core+1] = per_core_I_dram_req_data[(l2c_curr_core/2)];
 
             // Core can't accept Response
-            assign l2c_core_rsp_ready     [l2c_curr_core]   = per_core_dram_rsp_ready  [(l2c_curr_core/2)];
+            assign l2c_core_rsp_ready     [l2c_curr_core]   = per_core_D_dram_rsp_ready  [(l2c_curr_core/2)];
             assign l2c_core_rsp_ready     [l2c_curr_core+1] = per_core_I_dram_rsp_ready[(l2c_curr_core/2)];       
 
             // Cache Fill Response
-            assign per_core_dram_rsp_valid      [(l2c_curr_core/2)] = l2c_wb[l2c_curr_core];
+            assign per_core_D_dram_rsp_valid    [(l2c_curr_core/2)] = l2c_wb[l2c_curr_core];
             assign per_core_I_dram_rsp_valid    [(l2c_curr_core/2)] = l2c_wb[l2c_curr_core+1];
 
-            assign per_core_dram_rsp_data       [(l2c_curr_core/2)] = l2c_wb_data[l2c_curr_core];
+            assign per_core_D_dram_rsp_data     [(l2c_curr_core/2)] = l2c_wb_data[l2c_curr_core];
             assign per_core_I_dram_rsp_data     [(l2c_curr_core/2)] = l2c_wb_data[l2c_curr_core+1];
 
-            assign per_core_dram_rsp_addr       [(l2c_curr_core/2)] = l2c_wb_addr[l2c_curr_core];
+            assign per_core_D_dram_rsp_addr     [(l2c_curr_core/2)] = l2c_wb_addr[l2c_curr_core];
             assign per_core_I_dram_rsp_addr     [(l2c_curr_core/2)] = l2c_wb_addr[l2c_curr_core+1];
         end
     endgenerate
