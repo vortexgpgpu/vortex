@@ -10,16 +10,16 @@ module VX_generic_queue #(
     input  wire             push,
     input  wire             pop,    
     output wire             empty,
-    output wire             full,
+    output wire             full,    
 `IGNORE_WARNINGS_END        
     input  wire [DATAW-1:0] data_in,
     output wire [DATAW-1:0] data_out
 ); 
     if (SIZE == 0) begin
 
-        assign empty    = 1;
-        assign data_out = data_in;
-        assign full     = 0;
+        assign empty        = 1;
+        assign data_out     = data_in;
+        assign full         = 0;
 
     end else begin // (SIZE > 0)
     
@@ -56,10 +56,9 @@ module VX_generic_queue #(
                 end
             end        
 
-            assign data_out = head_r;
-            assign empty    = (size_r == 0);
-            assign full     = (size_r != 0) && !pop;
-
+            assign data_out     = head_r;
+            assign empty        = (size_r == 0);
+            assign full         = (size_r != 0);
         end else begin // (SIZE > 1)
 
             reg [DATAW-1:0]         curr_r;
@@ -82,18 +81,21 @@ module VX_generic_queue #(
             always @(posedge clk) begin
                 if (reset) begin
                     size_r  <= 0;
-                    empty_r <= 1;
+                    empty_r <= 1;                   
                     full_r  <= 0;
                 end else begin
                     if (writing && !reading) begin
                         size_r <= size_r + 1;
                         empty_r <= 0;
-                        if (size_r == SIZE-1) 
+                        if (size_r == SIZE-1) begin
                             full_r <= 1;
-                    end else if (reading && !writing) begin
+                        end
+                    end else 
+                    if (reading && !writing) begin
                         size_r <= size_r - 1;
-                        if (size_r == 1) 
-                            empty_r <= 1;                   
+                        if (size_r == 1) begin
+                            empty_r <= 1;  
+                        end;                
                         full_r <= 0;
                     end
                 end
@@ -133,5 +135,5 @@ module VX_generic_queue #(
             assign full = full_r;
         end
     end
-        
+
 endmodule
