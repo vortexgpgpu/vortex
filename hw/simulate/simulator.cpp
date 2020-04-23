@@ -59,6 +59,55 @@ void Simulator::dbus_driver() {
   }  
 #endif
 
+#ifdef USE_MULTICORE
+
+    if (!dram_stalled_) {
+    if (vortex_->dram_req_read) {
+      // Need to add an element
+      dram_req_t dram_req;
+      dram_req.cycles_left = DRAM_LATENCY;
+      dram_req.base_addr = vortex_->dram_req_addr;
+      dram_req.data = (unsigned *)malloc(GLOBAL_BLOCK_SIZE_BYTES);
+
+      for (int i = 0; i < (GLOBAL_BLOCK_SIZE_BYTES / 4); i++) {
+        unsigned curr_addr = dram_req.base_addr + (i * 4);
+        unsigned data_rd;
+        ram_->getWord(curr_addr, &data_rd);
+        dram_req.data[i] = data_rd;
+      }
+      dram_req_vec_.push_back(dram_req);
+    }
+
+    if (vortex_->dram_req_write) {
+      unsigned base_addr = vortex_->dram_req_addr;
+
+      for (int i = 0; i < (GLOBAL_BLOCK_SIZE_BYTES / 4); i++) {
+        unsigned curr_addr = base_addr + (i * 4);
+        unsigned data_wr = vortex_->dram_req_data[i];
+        ram_->writeWord(curr_addr, &data_wr);
+      }
+    }
+  }
+
+  if (vortex_->dram_rsp_ready && dequeue_valid) {
+    vortex_->dram_rsp_valid = 1;
+    vortex_->dram_rsp_addr = dram_req_vec_[dequeue_index].base_addr;
+
+    for (int i = 0; i < (GLOBAL_BLOCK_SIZE_BYTES / 4); i++) {
+      vortex_->dram_rsp_data[i] = dram_req_vec_[dequeue_index].data[i];
+    }
+    free(dram_req_vec_[dequeue_index].data);
+
+    dram_req_vec_.erase(dram_req_vec_.begin() + dequeue_index);
+  } else {
+    vortex_->dram_rsp_valid = 0;
+    vortex_->dram_rsp_addr = 0;
+  }
+
+  vortex_->dram_req_ready = ~dram_stalled_;
+
+#else
+
   if (!dram_stalled_) {
     if (vortex_->D_dram_req_read) {
       // Need to add an element
@@ -103,6 +152,8 @@ void Simulator::dbus_driver() {
   }
 
   vortex_->D_dram_req_ready = ~dram_stalled_;
+
+#endif
 }
 
 #ifndef USE_MULTICORE
