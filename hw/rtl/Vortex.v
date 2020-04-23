@@ -201,8 +201,8 @@ VX_dmem_ctrl dmem_ctrl (
     .reset                  (reset),
 
     // Dram <-> Dcache
-    .cache_dram_req_if      (cache_dram_req_if),
-    .cache_dram_rsp_if      (cache_dram_rsp_if),
+    .dcache_dram_req_if     (cache_dram_req_if),
+    .dcache_dram_rsp_if     (cache_dram_rsp_if),
     .dcache_snp_req_if      (dcache_snp_req_if),
 
     // Dram <-> Icache
