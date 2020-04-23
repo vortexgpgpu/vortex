@@ -18,27 +18,24 @@ vortex_afu.json
 ../rtl/interfaces/VX_branch_rsp_if.v
 ../rtl/interfaces/VX_inst_meta_if.v
 ../rtl/interfaces/VX_join_if.v
-../rtl/interfaces/VX_icache_rsp_if.v
 ../rtl/interfaces/VX_inst_exec_wb_if.v
-../rtl/interfaces/VX_gpu_dcache_dram_req_if.v
-../rtl/interfaces/VX_csr_req_if.v
-../rtl/interfaces/VX_gpu_dcache_rsp_if.v
+../rtl/interfaces/VX_cache_dram_req_if.v
+../rtl/interfaces/VX_cache_dram_rsp_if.v
+../rtl/interfaces/VX_cache_core_req_if.v
+../rtl/interfaces/VX_cache_core_rsp_if.v
 ../rtl/interfaces/VX_frE_to_bckE_req_if.v
 ../rtl/interfaces/VX_gpr_data_if.v
 ../rtl/interfaces/VX_csr_wb_if.v
-../rtl/interfaces/VX_gpu_dcache_req_if.v
+../rtl/interfaces/VX_csr_req_if.v
 ../rtl/interfaces/VX_lsu_req_if.v
-../rtl/interfaces/VX_gpu_snp_req_rsp_if.v
-../rtl/interfaces/VX_mw_wb_if.v
+../rtl/interfaces/VX_cache_snp_req_rsp_if.v
 ../rtl/interfaces/VX_gpr_jal_if.v
-../rtl/interfaces/VX_gpu_inst_req_if.v
+../rtl/interfaces/VX_gpgpu_inst_req_if.v
 ../rtl/interfaces/VX_wstall_if.v
 ../rtl/interfaces/VX_wb_if.v
 ../rtl/interfaces/VX_gpr_read_if.v
 ../rtl/interfaces/VX_jal_rsp_if.v
 ../rtl/interfaces/VX_warp_ctl_if.v
-../rtl/interfaces/VX_gpu_dcache_snp_req_if.v
-../rtl/interfaces/VX_gpu_dcache_dram_rsp_if.v
 ../rtl/interfaces/VX_inst_mem_wb_if.v
 
 ../rtl/libs/VX_priority_encoder_w_mask.v
@@ -49,7 +46,6 @@ vortex_afu.json
 ../rtl/libs/VX_generic_priority_encoder.v
 ../rtl/libs/VX_priority_encoder.v
 ../rtl/libs/VX_generic_queue.v
-../rtl/libs/VX_byte_enabled_dual_port_ram.v
 ../rtl/libs/VX_countones.v
 
 ../rtl/Vortex_Socket.v
@@ -68,6 +64,7 @@ vortex_afu.json
 ../rtl/VX_csr_pipe.v
 ../rtl/VX_warp_sched.v
 ../rtl/VX_gpr.v
+../rtl/VX_gpr_ram.v
 ../rtl/VX_gpr_stage.v
 ../rtl/VX_dmem_ctrl.v
 ../rtl/VX_alu_unit.v

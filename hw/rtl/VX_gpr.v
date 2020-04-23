@@ -15,7 +15,7 @@ module VX_gpr (
     `ifndef ASIC
         assign write_enable = valid_write_request && ((writeback_if.wb != 0)) && (writeback_if.rd != 0);
 
-        VX_byte_enabled_dual_port_ram be_dp_ram (
+        VX_gpr_ram gpr_ram (
             .we    (write_enable),
             .clk   (clk),
             .reset (reset),
