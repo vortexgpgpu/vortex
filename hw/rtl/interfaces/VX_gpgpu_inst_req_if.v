@@ -1,9 +1,9 @@
-`ifndef VX_GPU_INST_REQ_IN
-`define VX_GPU_INST_REQ_IN
+`ifndef VX_GPGPU_INST_REQ_IF
+`define VX_GPGPU_INST_REQ_IF
 
 `include "VX_define.vh"
 
-interface VX_gpu_inst_req_if();
+interface VX_gpgpu_inst_req_if();
 
     wire [`NUM_THREADS-1:0]  valid;
     wire [`NW_BITS-1:0]      warp_num;

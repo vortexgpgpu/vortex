@@ -7,8 +7,8 @@ module VX_back_end    #(
     input wire reset, 
     input wire schedule_delay,
 
-    VX_gpu_dcache_rsp_if   dcache_rsp_if,
-    VX_gpu_dcache_req_if   dcache_req_if,
+    VX_cache_core_rsp_if   dcache_rsp_if,
+    VX_cache_core_req_if   dcache_req_if,
 
     output wire            mem_delay,
     output wire            exec_delay,
@@ -44,7 +44,7 @@ VX_exec_unit_req_if exec_unit_req_if();
 VX_inst_exec_wb_if  inst_exec_wb_if();
 
 // GPU unit input
-VX_gpu_inst_req_if  gpu_inst_req_if();
+VX_gpgpu_inst_req_if  gpgpu_inst_req_if();
 
 // CSR unit inputs
 VX_csr_req_if        csr_req_if();
@@ -61,7 +61,7 @@ VX_gpr_stage gpr_stage (
     // New
     .exec_unit_req_if    (exec_unit_req_if),
     .lsu_req_if          (lsu_req_if),
-    .gpu_inst_req_if     (gpu_inst_req_if),
+    .gpgpu_inst_req_if     (gpgpu_inst_req_if),
     .csr_req_if          (csr_req_if),
     .stall_gpr_csr       (stall_gpr_csr),
     // End new
@@ -93,7 +93,7 @@ VX_exec_unit exec_unit (
 );
 
 VX_gpgpu_inst gpgpu_inst (
-    .gpu_inst_req_if(gpu_inst_req_if),
+    .gpgpu_inst_req_if(gpgpu_inst_req_if),
     .warp_ctl_if    (warp_ctl_if)
 );
 

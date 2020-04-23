@@ -1,6 +1,6 @@
 
-`ifndef VX_JOIN_INTER
-`define VX_JOIN_INTER
+`ifndef VX_JOIN_IF
+`define VX_JOIN_IF
 
 `include "VX_define.vh"
 

@@ -44,13 +44,16 @@ module VX_fetch (
         .wspawn           (warp_ctl_if.wspawn),
         .wsapwn_pc        (warp_ctl_if.wspawn_pc),
         .wspawn_new_active(warp_ctl_if.wspawn_new_active),
+        
         // CTM
         .ctm              (warp_ctl_if.change_mask),
         .ctm_mask         (warp_ctl_if.thread_mask),
         .ctm_warp_num     (warp_ctl_if.warp_num),
+
         // WHALT
         .whalt            (warp_ctl_if.ebreak),
         .whalt_warp_num   (warp_ctl_if.warp_num),
+
         // Wstall
         .wstall           (wstall_if.wstall),
         .wstall_warp_num  (wstall_if.warp_num),

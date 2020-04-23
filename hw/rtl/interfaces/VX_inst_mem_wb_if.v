@@ -1,6 +1,6 @@
 
-`ifndef VX_MEM_WB_INST_INTER
-`define VX_MEM_WB_INST_INTER
+`ifndef VX_INST_MEM_WB_IF
+`define VX_INST_MEM_WB_IF
 
 `include "VX_define.vh"
 

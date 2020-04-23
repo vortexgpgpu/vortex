@@ -1,9 +1,9 @@
-`ifndef VX_GPU_DCACHE_REQ
-`define VX_GPU_DCACHE_REQ
+`ifndef VX_CACHE_CORE_REQ_IF
+`define VX_CACHE_CORE_REQ_IF
 
 `include "../cache/VX_cache_config.vh"
 
-interface VX_gpu_dcache_req_if #(
+interface VX_cache_core_req_if #(
     parameter NUM_REQUESTS = 32
 ) ();
 

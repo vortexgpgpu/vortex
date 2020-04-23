@@ -9,8 +9,8 @@ module VX_lsu_unit (
     // Write back to GPR
     VX_inst_mem_wb_if       mem_wb_if,
 
-    VX_gpu_dcache_rsp_if    dcache_rsp_if,
-    VX_gpu_dcache_req_if    dcache_req_if,
+    VX_cache_core_rsp_if    dcache_rsp_if,
+    VX_cache_core_req_if    dcache_req_if,
     output wire             delay
 );
     // Generate Addresses

@@ -8,7 +8,7 @@ module VX_inst_multiplex (
     // Outputs
     VX_exec_unit_req_if   exec_unit_req_if,
     VX_lsu_req_if         lsu_req_if,
-    VX_gpu_inst_req_if    gpu_inst_req_if,
+    VX_gpgpu_inst_req_if    gpgpu_inst_req_if,
     VX_csr_req_if         csr_req_if
 );
 
@@ -68,15 +68,15 @@ module VX_inst_multiplex (
 
 
     // GPR Req
-    assign gpu_inst_req_if.valid       = bckE_req_if.valid & is_gpu_mask;
-    assign gpu_inst_req_if.warp_num    = bckE_req_if.warp_num;
-    assign gpu_inst_req_if.is_wspawn   = bckE_req_if.is_wspawn;
-    assign gpu_inst_req_if.is_tmc      = bckE_req_if.is_tmc;
-    assign gpu_inst_req_if.is_split    = bckE_req_if.is_split;
-    assign gpu_inst_req_if.is_barrier  = bckE_req_if.is_barrier;
-    assign gpu_inst_req_if.a_reg_data  = gpr_data_if.a_reg_data;
-    assign gpu_inst_req_if.rd2         = gpr_data_if.b_reg_data[0];
-    assign gpu_inst_req_if.pc_next     = bckE_req_if.PC_next;
+    assign gpgpu_inst_req_if.valid       = bckE_req_if.valid & is_gpu_mask;
+    assign gpgpu_inst_req_if.warp_num    = bckE_req_if.warp_num;
+    assign gpgpu_inst_req_if.is_wspawn   = bckE_req_if.is_wspawn;
+    assign gpgpu_inst_req_if.is_tmc      = bckE_req_if.is_tmc;
+    assign gpgpu_inst_req_if.is_split    = bckE_req_if.is_split;
+    assign gpgpu_inst_req_if.is_barrier  = bckE_req_if.is_barrier;
+    assign gpgpu_inst_req_if.a_reg_data  = gpr_data_if.a_reg_data;
+    assign gpgpu_inst_req_if.rd2         = gpr_data_if.b_reg_data[0];
+    assign gpgpu_inst_req_if.pc_next     = bckE_req_if.PC_next;
 
 
     // CSR Req

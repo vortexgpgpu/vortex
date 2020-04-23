@@ -1,5 +1,5 @@
-`ifndef VX_WB_INTER
-`define VX_WB_INTER
+`ifndef VX_WB_IF
+`define VX_WB_IF
 
 `include "VX_define.vh"
 

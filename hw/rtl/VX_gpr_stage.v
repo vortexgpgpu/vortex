@@ -20,7 +20,7 @@ module VX_gpr_stage (
     // Outputs
     VX_exec_unit_req_if     exec_unit_req_if,
     VX_lsu_req_if           lsu_req_if,
-    VX_gpu_inst_req_if      gpu_inst_req_if,
+    VX_gpgpu_inst_req_if      gpgpu_inst_req_if,
     VX_csr_req_if           csr_req_if
 );
 `DEBUG_BEGIN
@@ -65,7 +65,7 @@ module VX_gpr_stage (
     // Outputs
     VX_exec_unit_req_if   exec_unit_req_temp_if();
     VX_lsu_req_if         lsu_req_temp_if();
-    VX_gpu_inst_req_if    gpu_inst_req_temp_if();
+    VX_gpgpu_inst_req_if    gpu_inst_req_temp_if();
     VX_csr_req_if         csr_req_temp_if();
 
     VX_inst_multiplex inst_mult(
@@ -73,7 +73,7 @@ module VX_gpr_stage (
         .gpr_data_if     (gpr_datf_if),
         .exec_unit_req_if(exec_unit_req_temp_if),
         .lsu_req_if      (lsu_req_temp_if),
-        .gpu_inst_req_if (gpu_inst_req_temp_if),
+        .gpgpu_inst_req_if (gpu_inst_req_temp_if),
         .csr_req_if      (csr_req_temp_if)
     );
 `DEBUG_BEGIN
@@ -164,11 +164,11 @@ module VX_gpr_stage (
             .stall(stall_rest),
             .flush(flush_rest),
             .in   ({gpu_inst_req_temp_if.valid, gpu_inst_req_temp_if.warp_num, gpu_inst_req_temp_if.is_wspawn, gpu_inst_req_temp_if.is_tmc, gpu_inst_req_temp_if.is_split, gpu_inst_req_temp_if.is_barrier, gpu_inst_req_temp_if.pc_next}),
-            .out  ({gpu_inst_req_if.valid     , gpu_inst_req_if.warp_num     , gpu_inst_req_if.is_wspawn     , gpu_inst_req_if.is_tmc     , gpu_inst_req_if.is_split     , gpu_inst_req_if.is_barrier     , gpu_inst_req_if.pc_next     })
+            .out  ({gpgpu_inst_req_if.valid     , gpgpu_inst_req_if.warp_num     , gpgpu_inst_req_if.is_wspawn     , gpgpu_inst_req_if.is_tmc     , gpgpu_inst_req_if.is_split     , gpgpu_inst_req_if.is_barrier     , gpgpu_inst_req_if.pc_next     })
         );
 
-        assign gpu_inst_req_if.a_reg_data = real_base_address;
-        assign gpu_inst_req_if.rd2        = real_store_data;
+        assign gpgpu_inst_req_if.a_reg_data = real_base_address;
+        assign gpgpu_inst_req_if.rd2        = real_store_data;
 
         VX_generic_register #(
             .N(`NW_BITS-1  + 1 + `NUM_THREADS + 58)
@@ -214,7 +214,7 @@ module VX_gpr_stage (
         .stall(stall_rest),
         .flush(flush_rest),
         .in   ({gpu_inst_req_temp_if.valid, gpu_inst_req_temp_if.warp_num, gpu_inst_req_temp_if.is_wspawn, gpu_inst_req_temp_if.is_tmc, gpu_inst_req_temp_if.is_split, gpu_inst_req_temp_if.is_barrier, gpu_inst_req_temp_if.pc_next, gpu_inst_req_temp_if.a_reg_data, gpu_inst_req_temp_if.rd2}),
-        .out  ({gpu_inst_req_if.valid     , gpu_inst_req_if.warp_num     , gpu_inst_req_if.is_wspawn     , gpu_inst_req_if.is_tmc     , gpu_inst_req_if.is_split     , gpu_inst_req_if.is_barrier     , gpu_inst_req_if.pc_next     , gpu_inst_req_if.a_reg_data     , gpu_inst_req_if.rd2     })
+        .out  ({gpgpu_inst_req_if.valid     , gpgpu_inst_req_if.warp_num     , gpgpu_inst_req_if.is_wspawn     , gpgpu_inst_req_if.is_tmc     , gpgpu_inst_req_if.is_split     , gpgpu_inst_req_if.is_barrier     , gpgpu_inst_req_if.pc_next     , gpgpu_inst_req_if.a_reg_data     , gpgpu_inst_req_if.rd2     })
     );
 
     VX_generic_register #(

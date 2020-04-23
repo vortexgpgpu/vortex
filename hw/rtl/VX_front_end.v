@@ -8,8 +8,8 @@ module VX_front_end (
 
     VX_warp_ctl_if            warp_ctl_if,
 
-    VX_gpu_dcache_rsp_if      icache_rsp_if,
-    VX_gpu_dcache_req_if      icache_req_if,
+    VX_cache_core_rsp_if      icache_rsp_if,
+    VX_cache_core_req_if      icache_req_if,
 
     VX_jal_rsp_if             jal_rsp_if,
     VX_branch_rsp_if          branch_rsp_if,
@@ -58,7 +58,7 @@ module VX_front_end (
 
     wire freeze_fi_reg = total_freeze || icache_stage_delay;
 
-    VX_f_d_reg f_i_reg(
+    VX_f_d_reg f_i_reg (
         .clk                (clk),
         .reset              (reset),
         .freeze             (freeze_fi_reg),
@@ -66,7 +66,7 @@ module VX_front_end (
         .fd_inst_meta_de    (fe_inst_meta_fi2)
     );
 
-    VX_icache_stage icache_stage(
+    VX_icache_stage icache_stage (
         .clk                (clk),
         .reset              (reset),
         .total_freeze       (total_freeze),
@@ -79,7 +79,7 @@ module VX_front_end (
         .icache_req_if      (icache_req_if)
     );
 
-    VX_i_d_reg i_d_reg(
+    VX_i_d_reg i_d_reg (
         .clk                (clk),
         .reset              (reset),
         .freeze             (total_freeze),
@@ -87,7 +87,7 @@ module VX_front_end (
         .fd_inst_meta_de    (fd_inst_meta_de)
     );
 
-    VX_decode decode(
+    VX_decode decode (
         .fd_inst_meta_de    (fd_inst_meta_de),
         .frE_to_bckE_req_if (frE_to_bckE_req_if),
         .wstall_if          (wstall_if),
@@ -97,7 +97,7 @@ module VX_front_end (
 
     wire no_br_stall = 0;
 
-    VX_d_e_reg d_e_reg(
+    VX_d_e_reg d_e_reg (
         .clk                (clk),
         .reset              (reset),
         .branch_stall       (no_br_stall),

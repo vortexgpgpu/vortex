@@ -1,5 +1,5 @@
-`ifndef VX_BRANCH_RSP
-`define VX_BRANCH_RSP
+`ifndef VX_BRANCH_RSP_IF
+`define VX_BRANCH_RSP_IF
 
 `include "VX_define.vh"
 

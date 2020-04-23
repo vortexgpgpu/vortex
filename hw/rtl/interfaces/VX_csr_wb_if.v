@@ -1,5 +1,5 @@
-`ifndef VX_CSR_WB_REQ
-`define VX_CSR_WB_REQ
+`ifndef VX_CSR_WB_IF
+`define VX_CSR_WB_IF
 
 `include "VX_define.vh"
 

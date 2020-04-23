@@ -1,5 +1,5 @@
-`ifndef VX_GPR_JAL_INTER
-`define VX_GPR_JAL_INTER
+`ifndef VX_GPR_JAL_IF
+`define VX_GPR_JAL_IF
 
 `include "VX_define.vh"
 

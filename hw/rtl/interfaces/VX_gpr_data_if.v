@@ -1,6 +1,6 @@
 
-`ifndef VX_gpr_data_INTER
-`define VX_gpr_data_INTER
+`ifndef VX_GPR_DATA_IF
+`define VX_GPR_DATA_IF
 
 `include "VX_define.vh"
 

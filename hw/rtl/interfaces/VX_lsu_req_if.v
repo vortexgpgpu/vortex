@@ -1,6 +1,6 @@
 
-`ifndef VX_LSU_REQ_INTER
-`define VX_LSU_REQ_INTER
+`ifndef VX_LSU_REQ_IF
+`define VX_LSU_REQ_IF
 
 `include "VX_define.vh"
 
