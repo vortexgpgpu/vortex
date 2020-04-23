@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_byte_enabled_dual_port_ram (
+module VX_gpr_ram (
     input wire                          clk,
     input wire                          reset,
 	input wire                          we,
