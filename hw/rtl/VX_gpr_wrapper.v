@@ -50,7 +50,7 @@ module VX_gpr_wrapper (
     generate
         
         for (warp_index = 0; warp_index < `NUM_WARPS; warp_index = warp_index + 1) begin : warp_gprs
-            wire valid_write_request = warp_index == writeback_if.wb_warp_num;
+            wire valid_write_request = warp_index == writeback_if.warp_num;
             VX_gpr gpr(
                 .clk                    (clk),
                 .reset                  (reset),

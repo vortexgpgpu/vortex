@@ -1,7 +1,7 @@
 
 #include "../../intrinsics/vx_intrinsics.h"
 #include "../../io/vx_io.h"
-#include "../common/tests.h"
+#include "tests.h"
 #include "../../vx_api/vx_api.h"
 
 

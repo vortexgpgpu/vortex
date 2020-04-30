@@ -23,12 +23,12 @@ module VX_back_end    #(
 );
 
 VX_wb_if writeback_temp_if();
-assign writeback_if.wb           = writeback_temp_if.wb;
-assign writeback_if.rd           = writeback_temp_if.rd;
-assign writeback_if.write_data   = writeback_temp_if.write_data;
-assign writeback_if.wb_valid     = writeback_temp_if.wb_valid;
-assign writeback_if.wb_warp_num  = writeback_temp_if.wb_warp_num;
-assign writeback_if.wb_pc        = writeback_temp_if.wb_pc;
+assign writeback_if.wb        = writeback_temp_if.wb;
+assign writeback_if.rd        = writeback_temp_if.rd;
+assign writeback_if.data      = writeback_temp_if.data;
+assign writeback_if.valid     = writeback_temp_if.valid;
+assign writeback_if.warp_num  = writeback_temp_if.warp_num;
+assign writeback_if.pc        = writeback_temp_if.pc;
 
 // assign VX_writeback_if(writeback_temp_if);
 
@@ -37,18 +37,18 @@ wire                no_slot_exec;
 
 // LSU input + output
 VX_lsu_req_if       lsu_req_if();
-VX_inst_mem_wb_if   mem_wb_if();
+VX_wb_if   mem_wb_if();
 
 // Exec unit input + output
 VX_exec_unit_req_if exec_unit_req_if();
-VX_inst_exec_wb_if  inst_exec_wb_if();
+VX_wb_if  inst_exec_wb_if();
 
 // GPU unit input
-VX_gpgpu_inst_req_if  gpgpu_inst_req_if();
+VX_gpu_inst_req_if  gpu_inst_req_if();
 
 // CSR unit inputs
 VX_csr_req_if        csr_req_if();
-VX_csr_wb_if         csr_wb_if();
+VX_wb_if             csr_wb_if();
 wire                 no_slot_csr;
 wire                 stall_gpr_csr;
 
@@ -61,7 +61,7 @@ VX_gpr_stage gpr_stage (
     // New
     .exec_unit_req_if    (exec_unit_req_if),
     .lsu_req_if          (lsu_req_if),
-    .gpgpu_inst_req_if     (gpgpu_inst_req_if),
+    .gpu_inst_req_if   (gpu_inst_req_if),
     .csr_req_if          (csr_req_if),
     .stall_gpr_csr       (stall_gpr_csr),
     // End new
@@ -92,8 +92,8 @@ VX_exec_unit exec_unit (
     .no_slot_exec    (no_slot_exec)
 );
 
-VX_gpgpu_inst gpgpu_inst (
-    .gpgpu_inst_req_if(gpgpu_inst_req_if),
+VX_gpu_inst gpu_inst (
+    .gpu_inst_req_if(gpu_inst_req_if),
     .warp_ctl_if    (warp_ctl_if)
 );
 

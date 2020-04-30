@@ -4,21 +4,15 @@
 `include "../cache/VX_cache_config.vh"
 
 interface VX_cache_core_rsp_if #(
-    parameter NUM_REQUESTS = 32
+    parameter NUM_REQUESTS   = 1,
+    parameter WORD_SIZE      = 1,
+    parameter CORE_TAG_WIDTH = 1
 ) ();
 
-    // Core response
-    wire [NUM_REQUESTS-1:0]        core_rsp_valid;
-`IGNORE_WARNINGS_BEGIN
-    wire [4:0]                     core_rsp_read;
-    wire [1:0]                     core_rsp_write;
-`IGNORE_WARNINGS_END    
-    wire [NUM_REQUESTS-1:0][31:0]  core_rsp_pc;    
-    wire [NUM_REQUESTS-1:0][31:0]  core_rsp_data;
-    wire                           core_rsp_ready;
-    
-    // Core response meta data
-    wire [`NW_BITS-1:0]            core_rsp_warp_num;      
+    wire [NUM_REQUESTS-1:0]                     core_rsp_valid;
+    wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    core_rsp_data;
+    wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag;    
+    wire                                        core_rsp_ready;      
 
 endinterface
 

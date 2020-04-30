@@ -29,7 +29,7 @@
         if (!(cond)) $error(msg);   \
     endgenerate
 
-`define CLOG2(x)    $clog2(x);
+`define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > x) ? 1 : 0))
 `define LOG2UP(x)   ((x > 1) ? $clog2(x) : 1)
 
@@ -50,10 +50,18 @@
 
 `define CSR_WIDTH 12
 
-`define CSR_CYCL_L 12'hC00;
-`define CSR_CYCL_H 12'hC80;
-`define CSR_INST_L 12'hC02;
-`define CSR_INST_H 12'hC82;
+///////////////////////////////////////////////////////////////////////////////
+    
+`define CSR_THREAD      12'h020
+`define CSR_WARP        12'h021
+`define CSR_WARP_ID     12'h022
+
+`define CSR_CYCL_L      12'hC00;
+`define CSR_CYCL_H      12'hC80;
+`define CSR_INST_L      12'hC02;
+`define CSR_INST_H      12'hC82;
+
+///////////////////////////////////////////////////////////////////////////////
 
 `define R_INST 7'd51
 `define L_INST 7'd3
@@ -67,6 +75,8 @@
 `define SYS_INST 7'd115
 `define GPGPU_INST 7'h6b
 
+///////////////////////////////////////////////////////////////////////////////
+
 `define WB_ALU 2'h1
 `define WB_MEM 2'h2
 `define WB_JAL 2'h3
@@ -74,18 +84,6 @@
 
 `define RS2_IMMED 1
 `define RS2_REG 0
-
-`define NO_MEM_READ  3'h7
-`define LB_MEM_READ  3'h0
-`define LH_MEM_READ  3'h1
-`define LW_MEM_READ  3'h2
-`define LBU_MEM_READ 3'h4
-`define LHU_MEM_READ 3'h5
-
-`define NO_MEM_WRITE 3'h7
-`define SB_MEM_WRITE 3'h0
-`define SH_MEM_WRITE 3'h1
-`define SW_MEM_WRITE 3'h2
 
 `define NO_BRANCH 3'h0
 `define BEQ 3'h1
@@ -145,58 +143,70 @@
 // Function ID
 `define DFUNC_ID 0
 
-// Size of line inside a bank in bits
-`define DBANK_LINE_SIZE (`DBANK_LINE_SIZE_BYTES * 8)
+// DRAM request data bits
+`define DDRAM_LINE_WIDTH (`DBANK_LINE_SIZE * 8)
 
-// Bank Number of words in a line
-`define DBANK_LINE_WORDS (`DBANK_LINE_SIZE_BYTES / `DWORD_SIZE_BYTES)
+// DRAM request address bits
+`define DDRAM_ADDR_WIDTH (32 - `CLOG2(`DBANK_LINE_SIZE))
 
-// Word size in bits
-`define DWORD_SIZE_BITS (`DWORD_SIZE_BYTES * 8)
+// DRAM request tag bits
+`define DDRAM_TAG_WIDTH `DDRAM_ADDR_WIDTH
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // Function ID
 `define IFUNC_ID 1
 
-// Size of line inside a bank in bits
-`define IBANK_LINE_SIZE (`IBANK_LINE_SIZE_BYTES * 8)
+// DRAM request data bits
+`define IDRAM_LINE_WIDTH (`IBANK_LINE_SIZE * 8)
 
-// Bank Number of words in a line
-`define IBANK_LINE_WORDS (`IBANK_LINE_SIZE_BYTES / `IWORD_SIZE_BYTES)
+// DRAM request address bits
+`define IDRAM_ADDR_WIDTH (32 - `CLOG2(`IBANK_LINE_SIZE))
+
+// DRAM request tag bits
+`define IDRAM_TAG_WIDTH `IDRAM_ADDR_WIDTH
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Function ID
 `define SFUNC_ID 2
 
-// Size of line inside a bank in bits
-`define SBANK_LINE_SIZE (`SBANK_LINE_SIZE_BYTES * 8)
+// DRAM request data bits
+`define SDRAM_LINE_WIDTH (`SBANK_LINE_SIZE * 8)
 
-// Bank Number of words in a line
-`define SBANK_LINE_WORDS (`SBANK_LINE_SIZE_BYTES / `SWORD_SIZE_BYTES)
+// DRAM request address bits
+`define SDRAM_ADDR_WIDTH (32 - `CLOG2(`SBANK_LINE_SIZE))
+
+// DRAM request tag bits
+`define SDRAM_TAG_WIDTH `SDRAM_ADDR_WIDTH
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
 // Function ID
 `define L2FUNC_ID 3
 
-// Size of line inside a bank in bits
-`define L2BANK_LINE_SIZE (`L2BANK_LINE_SIZE_BYTES * 8)
+// DRAM request data bits
+`define L2DRAM_LINE_WIDTH (`L2BANK_LINE_SIZE * 8)
 
-// Bank Number of words in a line
-`define L2BANK_LINE_WORDS (`L2BANK_LINE_SIZE_BYTES / `L2WORD_SIZE_BYTES)
+// DRAM request address bits
+`define L2DRAM_ADDR_WIDTH (32 - `CLOG2(`L2BANK_LINE_SIZE))
+
+// DRAM request tag bits
+`define L2DRAM_TAG_WIDTH ((`NUM_CORES > 1) ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+1))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
 // Function ID
 `define L3FUNC_ID 3
 
-// Size of line inside a bank in bits
-`define L3BANK_LINE_SIZE (`L3BANK_LINE_SIZE_BYTES * 8)
+// DRAM request data bits
+`define L3DRAM_LINE_WIDTH (`L3BANK_LINE_SIZE * 8)
 
-// Bank Number of words in a line
-`define L3BANK_LINE_WORDS (`L3BANK_LINE_SIZE_BYTES / `L3WORD_SIZE_BYTES)
+// DRAM request address bits
+`define L3DRAM_ADDR_WIDTH (32 - `CLOG2(`L3BANK_LINE_SIZE))
+
+// DRAM request tag bits
+`define L3DRAM_TAG_WIDTH ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
 
  // VX_DEFINE
 `endif

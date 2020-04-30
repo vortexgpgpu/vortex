@@ -8,7 +8,7 @@ module VX_exec_unit (
 
     // Output
         // Writeback
-    VX_inst_exec_wb_if    inst_exec_wb_if,
+    VX_wb_if    inst_exec_wb_if,
         // JAL Response
     VX_jal_rsp_if         jal_rsp_if,
         // Branch Response
@@ -108,31 +108,30 @@ module VX_exec_unit (
     endgenerate
 
 
-    // VX_inst_exec_wb_if    inst_exec_wb_temp_if();
+    // VX_wb_if    inst_exec_wb_temp_if();
         // JAL Response
     VX_jal_rsp_if    jal_rsp_temp_if();
         // Branch Response
     VX_branch_rsp_if branch_rsp_temp_if();
 
     // Actual Writeback
-    assign inst_exec_wb_if.rd          = exec_unit_req_if.rd;
-    assign inst_exec_wb_if.wb          = exec_unit_req_if.wb;
-    assign inst_exec_wb_if.wb_valid    = exec_unit_req_if.valid & {`NUM_THREADS{!internal_stall}};
-    assign inst_exec_wb_if.wb_warp_num = exec_unit_req_if.warp_num;
-    assign inst_exec_wb_if.alu_result  = exec_unit_req_if.jal ? duplicate_PC_data : alu_result;
+    assign inst_exec_wb_if.rd       = exec_unit_req_if.rd;
+    assign inst_exec_wb_if.wb       = exec_unit_req_if.wb;
+    assign inst_exec_wb_if.valid    = exec_unit_req_if.valid & {`NUM_THREADS{!internal_stall}};
+    assign inst_exec_wb_if.warp_num = exec_unit_req_if.warp_num;
+    assign inst_exec_wb_if.data     = exec_unit_req_if.jal ? duplicate_PC_data : alu_result;
+    assign inst_exec_wb_if.pc       = in_curr_PC;
 
-    assign inst_exec_wb_if.exec_wb_pc  = in_curr_PC;
     // Jal rsp
-    assign jal_rsp_temp_if.jal           = in_jal;
-    assign jal_rsp_temp_if.jal_dest      = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
-    assign jal_rsp_temp_if.jal_warp_num  = exec_unit_req_if.warp_num;
+    assign jal_rsp_temp_if.jal          = in_jal;
+    assign jal_rsp_temp_if.jal_dest     = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
+    assign jal_rsp_temp_if.jal_warp_num = exec_unit_req_if.warp_num;
 
     // Branch rsp
     assign branch_rsp_temp_if.valid_branch    = (exec_unit_req_if.branch_type != `NO_BRANCH) && (|exec_unit_req_if.valid);
     assign branch_rsp_temp_if.branch_dir      = temp_branch_dir;
     assign branch_rsp_temp_if.branch_warp_num = exec_unit_req_if.warp_num;
     assign branch_rsp_temp_if.branch_dest     = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
-
 
     wire zero = 0;
 
@@ -143,7 +142,7 @@ module VX_exec_unit (
     //     .flush(zero),
     //     .in   ({inst_exec_wb_temp_if.rd, inst_exec_wb_temp_if.wb, inst_exec_wb_temp_if.wb_valid, inst_exec_wb_temp_if.wb_warp_num, inst_exec_wb_temp_if.alu_result, inst_exec_wb_temp_if.exec_wb_pc}),
     //     .out  ({inst_exec_wb_if.rd     , inst_exec_wb_if.wb     , inst_exec_wb_if.wb_valid     , inst_exec_wb_if.wb_warp_num     , inst_exec_wb_if.alu_result     , inst_exec_wb_if.exec_wb_pc     })
-    //     );
+    // );
 
     VX_generic_register #(
         .N(33 + `NW_BITS-1 + 1)

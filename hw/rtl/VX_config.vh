@@ -23,8 +23,8 @@
 `define NUM_BARRIERS 4
 `endif
 
-`ifndef GLOBAL_BLOCK_SIZE_BYTES
-`define GLOBAL_BLOCK_SIZE_BYTES 16
+`ifndef GLOBAL_BLOCK_SIZE
+`define GLOBAL_BLOCK_SIZE 16
 `endif
 
 `ifndef NUM_CSRS
@@ -39,20 +39,21 @@
 `define STARTUP_ADDR 32'h80000000
 `endif
 
+`ifndef SHARED_MEM_ADDR_MATCH
+`define SHARED_MEM_ADDR_MATCH(x) (x[31:24] == 8'hFF)
+`endif
+
 // ========================= Dcache Configurable Knobs ========================
 
 // Size of cache in bytes
-`ifndef DCACHE_SIZE_BYTES
-`define DCACHE_SIZE_BYTES 2048
+`ifndef DCACHE_SIZE
+`define DCACHE_SIZE 2048
 `endif
 
 // Size of line inside a bank in bytes
-`ifndef DBANK_LINE_SIZE_BYTES
-`define DBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+`ifndef DBANK_LINE_SIZE
+`define DBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
 `endif
-
-// Size of line inside a bank in bits
-`define DBANK_LINE_SIZE (`DBANK_LINE_SIZE_BYTES * 8)
 
 // Number of banks {1, 2, 4, 8,...}
 `ifndef DNUM_BANKS
@@ -60,8 +61,8 @@
 `endif
 
 // Size of a word in bytes
-`ifndef DWORD_SIZE_BYTES
-`define DWORD_SIZE_BYTES 4
+`ifndef DWORD_SIZE
+`define DWORD_SIZE 4
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
@@ -133,21 +134,16 @@
 `define DFILL_INVALIDAOR_SIZE 32
 `endif
 
-// Dram knobs
-`ifndef DSIMULATED_DRAM_LATENCY_CYCLES
-`define DSIMULATED_DRAM_LATENCY_CYCLES 2
-`endif
-
 // ========================== Icache Configurable Knobs =======================
 
 // Size of cache in bytes
-`ifndef ICACHE_SIZE_BYTES
-`define ICACHE_SIZE_BYTES 4096
+`ifndef ICACHE_SIZE
+`define ICACHE_SIZE 2048
 `endif
 
 // Size of line inside a bank in bytes
-`ifndef IBANK_LINE_SIZE_BYTES
-`define IBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+`ifndef IBANK_LINE_SIZE
+`define IBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
@@ -156,8 +152,8 @@
 `endif
 
 // Size of a word in bytes
-`ifndef IWORD_SIZE_BYTES
-`define IWORD_SIZE_BYTES 4
+`ifndef IWORD_SIZE
+`define IWORD_SIZE 4
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
@@ -229,21 +225,16 @@
 `define IFILL_INVALIDAOR_SIZE 32
 `endif
 
-// Dram knobs
-`ifndef ISIMULATED_DRAM_LATENCY_CYCLES
-`define ISIMULATED_DRAM_LATENCY_CYCLES 2
-`endif
-
 // =========================== SM Configurable Knobs ==========================
 
 // Size of cache in bytes
-`ifndef SCACHE_SIZE_BYTES
-`define SCACHE_SIZE_BYTES 1024
+`ifndef SCACHE_SIZE
+`define SCACHE_SIZE 1024
 `endif
 
 // Size of line inside a bank in bytes
-`ifndef SBANK_LINE_SIZE_BYTES
-`define SBANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+`ifndef SBANK_LINE_SIZE
+`define SBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
@@ -252,8 +243,8 @@
 `endif
 
 // Size of a word in bytes
-`ifndef SWORD_SIZE_BYTES
-`define SWORD_SIZE_BYTES 4
+`ifndef SWORD_SIZE
+`define SWORD_SIZE 4
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
@@ -325,21 +316,16 @@
 `define SFILL_INVALIDAOR_SIZE 32
 `endif
 
-// Dram knobs
-`ifndef SSIMULATED_DRAM_LATENCY_CYCLES
-`define SSIMULATED_DRAM_LATENCY_CYCLES 2
-`endif
-
 // ======================== L2cache Configurable Knobs ========================
 
 // Size of cache in bytes
-`ifndef L2CACHE_SIZE_BYTES
-`define L2CACHE_SIZE_BYTES 4096
+`ifndef L2CACHE_SIZE
+`define L2CACHE_SIZE 4096
 `endif
 
 // Size of line inside a bank in bytes
-`ifndef L2BANK_LINE_SIZE_BYTES
-`define L2BANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+`ifndef L2BANK_LINE_SIZE
+`define L2BANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
@@ -348,8 +334,8 @@
 `endif
 
 // Size of a word in bytes
-`ifndef L2WORD_SIZE_BYTES
-`define L2WORD_SIZE_BYTES (`L2BANK_LINE_SIZE_BYTES)
+`ifndef L2WORD_SIZE
+`define L2WORD_SIZE `L2BANK_LINE_SIZE
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
@@ -421,21 +407,16 @@
 `define L2FILL_INVALIDAOR_SIZE 32
 `endif
 
-// Dram knobs
-`ifndef L2SIMULATED_DRAM_LATENCY_CYCLES
-`define L2SIMULATED_DRAM_LATENCY_CYCLES 2
-`endif
-
 // ======================== L3cache Configurable Knobs ========================
 
 // Size of cache in bytes
-`ifndef L3CACHE_SIZE_BYTES
-`define L3CACHE_SIZE_BYTES 8192
+`ifndef L3CACHE_SIZE
+`define L3CACHE_SIZE 8192
 `endif
 
 // Size of line inside a bank in bytes
-`ifndef L3BANK_LINE_SIZE_BYTES
-`define L3BANK_LINE_SIZE_BYTES `GLOBAL_BLOCK_SIZE_BYTES
+`ifndef L3BANK_LINE_SIZE
+`define L3BANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
 `endif
 
 // Number of banks {1, 2, 4, 8,...}
@@ -444,13 +425,13 @@
 `endif
 
 // Size of a word in bytes
-`ifndef L3WORD_SIZE_BYTES
-`define L3WORD_SIZE_BYTES (`L3BANK_LINE_SIZE_BYTES)
+`ifndef L3WORD_SIZE
+`define L3WORD_SIZE `L3BANK_LINE_SIZE
 `endif
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `ifndef L3NUM_REQUESTS
-`define L3NUM_REQUESTS (`NUM_CLUSTERS)
+`define L3NUM_REQUESTS `NUM_CLUSTERS
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)
@@ -515,11 +496,6 @@
 // Fill Invalidator Size {Fill invalidator must be active}
 `ifndef L3FILL_INVALIDAOR_SIZE
 `define L3FILL_INVALIDAOR_SIZE 32
-`endif
-
-// Dram knobs
-`ifndef L3SIMULATED_DRAM_LATENCY_CYCLES
-`define L3SIMULATED_DRAM_LATENCY_CYCLES 2
 `endif
 
  // VX_CONFIG

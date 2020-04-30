@@ -1,12 +1,7 @@
 #pragma once
 
-#ifdef USE_MULTICORE
 #include "VVortex_Socket.h"
 #include "VVortex_Socket__Syms.h"
-#else
-#include "VVortex.h"
-#include "VVortex__Syms.h"
-#endif
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
@@ -26,9 +21,9 @@
 #define PIPELINE_FLUSH_LATENCY 300
 
 typedef struct {
-  int cycles_left;
-  unsigned base_addr;
+  int cycles_left;  
   unsigned *data;
+  unsigned tag;
 } dram_req_t;
 
 class Simulator {
@@ -46,26 +41,18 @@ public:
 
 private:  
 
-#ifndef USE_MULTICORE
-  void ibus_driver();
-#endif
+  void eval();
+  void wait(uint32_t cycles);
 
   void dbus_driver();
   void io_handler();  
   void send_snoops(uint32_t mem_addr, uint32_t size);
-  void wait(uint32_t cycles);
-
-  uint64_t total_cycles_;
+  
   bool dram_stalled_;
-  bool I_dram_stalled_;
   std::vector<dram_req_t> dram_req_vec_;
-  std::vector<dram_req_t> I_dram_req_vec_;
+
   RAM *ram_;
-#ifdef USE_MULTICORE
   VVortex_Socket *vortex_;
-#else
-  VVortex *vortex_;
-#endif
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif

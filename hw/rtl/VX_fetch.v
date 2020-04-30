@@ -22,13 +22,7 @@ module VX_fetch (
     wire[31:0]             warp_pc;
     wire                   scheduled_warp;
 
-    wire pipe_stall;
-
-    // Only reason this is there is because there is a hidden assumption that decode is exactly after fetch
-
-    // Locals
-
-    assign pipe_stall = schedule_delay || icache_stage_delay;
+    wire pipe_stall = schedule_delay || icache_stage_delay;
 
     VX_warp_sched warp_sched (
         .clk              (clk),
@@ -97,6 +91,7 @@ module VX_fetch (
     assign fe_inst_meta_fi.valid       = thread_mask;
     assign fe_inst_meta_fi.instruction = 32'h0;
     assign fe_inst_meta_fi.inst_pc     = warp_pc;
+
 `DEBUG_BEGIN
     wire start_mat_add = scheduled_warp && (warp_pc == 32'h80000ed8) && (warp_num == 0);
     wire end_mat_add   = scheduled_warp && (warp_pc == 32'h80000fbc) && (warp_num == 0);

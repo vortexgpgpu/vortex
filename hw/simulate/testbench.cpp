@@ -3,8 +3,6 @@
 #include <fstream>
 #include <iomanip>
 
-#define NUM_TESTS 46
-
 int main(int argc, char **argv)
 {
 
@@ -14,9 +12,9 @@ int main(int argc, char **argv)
 
 //#define ALL_TESTS
 #ifdef ALL_TESTS
-  bool passed = true;
+	bool passed = true;
 
-  std::string tests[NUM_TESTS] = {
+  std::string tests[] = {
 	 	"../../benchmarks/riscv_tests/rv32ui-p-add.hex",
 	 	"../../benchmarks/riscv_tests/rv32ui-p-addi.hex",
 	 	"../../benchmarks/riscv_tests/rv32ui-p-and.hex",
@@ -29,7 +27,7 @@ int main(int argc, char **argv)
 	 	"../../benchmarks/riscv_tests/rv32ui-p-bltu.hex",
 	 	"../../benchmarks/riscv_tests/rv32ui-p-bne.hex",
 	 	"../../benchmarks/riscv_tests/rv32ui-p-jal.hex",
-	 	"../../benchmarks/riscv_tests/rv32ui-p-jalr.hex",
+	 	"../../benchmarks/riscv_tests/rv32ui-p-jalr.hex",		
 	 	"../../benchmarks/riscv_tests/rv32ui-p-lb.hex",
 	 	"../../benchmarks/riscv_tests/rv32ui-p-lbu.hex",
 	 	"../../benchmarks/riscv_tests/rv32ui-p-lh.hex",

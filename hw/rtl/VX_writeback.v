@@ -3,12 +3,15 @@
 module VX_writeback (
     input wire          clk,
     input wire          reset,
+
     // Mem WB info
-    VX_inst_mem_wb_if   mem_wb_if,
+    VX_wb_if            mem_wb_if,
+
     // EXEC Unit WB info
-    VX_inst_exec_wb_if  inst_exec_wb_if,
+    VX_wb_if            inst_exec_wb_if,
+
     // CSR Unit WB info
-    VX_csr_wb_if        csr_wb_if,
+    VX_wb_if            csr_wb_if,
 
     // Actual WB to GPR
     VX_wb_if            writeback_if,
@@ -17,45 +20,45 @@ module VX_writeback (
     output wire         no_slot_csr
 );
 
-    VX_wb_if    writeback_tempp_if();
+    VX_wb_if    writeback_tmp_if();
 
-    wire exec_wb = (inst_exec_wb_if.wb != 0) && (|inst_exec_wb_if.wb_valid);
-    wire mem_wb  = (mem_wb_if.wb       != 0) && (|mem_wb_if.wb_valid);
+    wire exec_wb = (inst_exec_wb_if.wb != 0) && (|inst_exec_wb_if.valid);
+    wire mem_wb  = (mem_wb_if.wb       != 0) && (|mem_wb_if.valid);
     wire csr_wb  = (csr_wb_if.wb       != 0) && (|csr_wb_if.valid);
 
     assign no_slot_mem  = mem_wb && (exec_wb || csr_wb);
     assign no_slot_csr  = csr_wb && (exec_wb);
     assign no_slot_exec = 0;
 
-    assign writeback_tempp_if.write_data  = exec_wb ? inst_exec_wb_if.alu_result :
-                                            csr_wb  ? csr_wb_if.csr_result       :
-                                            mem_wb  ? mem_wb_if.loaded_data      :
-                                            0;
+    assign writeback_tmp_if.data     = exec_wb ? inst_exec_wb_if.data :
+                                       csr_wb  ? csr_wb_if.data       :
+                                       mem_wb  ? mem_wb_if.data      :
+                                                 0;
 
-    assign writeback_tempp_if.wb_valid    = exec_wb ? inst_exec_wb_if.wb_valid :
-                                            csr_wb  ? csr_wb_if.valid          :
-                                            mem_wb  ? mem_wb_if.wb_valid       :
-                                            0;    
+    assign writeback_tmp_if.valid    = exec_wb ? inst_exec_wb_if.valid :
+                                       csr_wb  ? csr_wb_if.valid          :
+                                       mem_wb  ? mem_wb_if.valid       :
+                                                 0;    
 
-    assign writeback_tempp_if.rd          = exec_wb ? inst_exec_wb_if.rd :
-                                            csr_wb  ? csr_wb_if.rd       :
-                                            mem_wb  ? mem_wb_if.rd       :
-                                            0;
+    assign writeback_tmp_if.rd       = exec_wb ? inst_exec_wb_if.rd :
+                                       csr_wb  ? csr_wb_if.rd       :
+                                       mem_wb  ? mem_wb_if.rd       :
+                                                 0;
 
-    assign writeback_tempp_if.wb          = exec_wb ? inst_exec_wb_if.wb :
-                                            csr_wb  ? csr_wb_if.wb       :
-                                            mem_wb  ? mem_wb_if.wb       :
-                                            0;   
+    assign writeback_tmp_if.wb       = exec_wb ? inst_exec_wb_if.wb :
+                                       csr_wb  ? csr_wb_if.wb       :
+                                       mem_wb  ? mem_wb_if.wb       :
+                                                 0;   
 
-    assign writeback_tempp_if.wb_warp_num = exec_wb ? inst_exec_wb_if.wb_warp_num :
-                                            csr_wb  ? csr_wb_if.warp_num          :
-                                            mem_wb  ? mem_wb_if.wb_warp_num       :
-                                            0;   
+    assign writeback_tmp_if.warp_num = exec_wb ? inst_exec_wb_if.warp_num :
+                                       csr_wb  ? csr_wb_if.warp_num          :
+                                       mem_wb  ? mem_wb_if.warp_num       :
+                                                 0;   
 
-    assign writeback_tempp_if.wb_pc       = exec_wb ? inst_exec_wb_if.exec_wb_pc  :
-                                            csr_wb  ? 32'hdeadbeef                :
-                                            mem_wb  ? mem_wb_if.mem_wb_pc         :
-                                            32'hdeadbeef;
+    assign writeback_tmp_if.pc       = exec_wb ? inst_exec_wb_if.pc  :
+                                       csr_wb  ? 32'hdeadbeef                :
+                                       mem_wb  ? mem_wb_if.pc         :
+                                                 32'hdeadbeef;
 
     wire zero = 0;
 
@@ -68,19 +71,19 @@ module VX_writeback (
         .reset(reset),
         .stall(zero),
         .flush(zero),
-        .in   ({writeback_tempp_if.write_data, writeback_tempp_if.wb_valid, writeback_tempp_if.rd, writeback_tempp_if.wb, writeback_tempp_if.wb_warp_num, writeback_tempp_if.wb_pc}),
-        .out  ({use_wb_data                  , writeback_if.wb_valid, writeback_if.rd, writeback_if.wb, writeback_if.wb_warp_num, writeback_if.wb_pc})
+        .in   ({writeback_tmp_if.data, writeback_tmp_if.valid, writeback_tmp_if.rd, writeback_tmp_if.wb, writeback_tmp_if.warp_num, writeback_tmp_if.pc}),
+        .out  ({use_wb_data,           writeback_if.valid,     writeback_if.rd,     writeback_if.wb,     writeback_if.warp_num,     writeback_if.pc})
     );
 
     reg [31:0] last_data_wb /* verilator public */;
 
     always @(posedge clk) begin
-        if ((|writeback_if.wb_valid) && (writeback_if.wb != 0) && (writeback_if.rd == 28)) begin
+        if ((|writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd == 28)) begin
             last_data_wb <= use_wb_data[0];
         end
     end
 
-    assign writeback_if.write_data = use_wb_data;
+    assign writeback_if.data = use_wb_data;
 
 endmodule : VX_writeback
 

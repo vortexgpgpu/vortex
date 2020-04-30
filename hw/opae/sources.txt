@@ -38,7 +38,6 @@ vortex_afu.json
 ../rtl/interfaces/VX_warp_ctl_if.v
 ../rtl/interfaces/VX_inst_mem_wb_if.v
 
-../rtl/libs/VX_priority_encoder_w_mask.v
 ../rtl/libs/VX_generic_register.v
 ../rtl/libs/VX_mult.v
 ../rtl/libs/VX_divide.v
