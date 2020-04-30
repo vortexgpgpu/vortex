@@ -5,7 +5,7 @@
 .type   _start, @function
 _start:
     la a1, vx_set_sp
-    li a0, NW    # activate all warps
+    li a0, NUM_WARPS    # activate all warps
     .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
     jal vx_set_sp
     li a0, 1
@@ -29,7 +29,7 @@ _start:
 .type vx_set_sp, @function
 .global vx_set_sp
 vx_set_sp:
-  li a0, NT
+  li a0, NUM_THREADS
   .word 0x0005006b    # activate all threads
   
   .option push

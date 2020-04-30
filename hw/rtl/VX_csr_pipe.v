@@ -8,18 +8,18 @@ module VX_csr_pipe #(
     input wire      no_slot_csr,
     VX_csr_req_if   csr_req_if,
     VX_wb_if        writeback_if,
-    VX_csr_wb_if    csr_wb_if,
+    VX_wb_if        csr_wb_if,
     output wire     stall_gpr_csr    
 );
 
     wire[`NUM_THREADS-1:0] valid_s2;
     wire[`NW_BITS-1:0] warp_num_s2;
-    wire[4:0]      rd_s2;
-    wire[1:0]      wb_s2;
-    wire           is_csr_s2;
+    wire[4:0]       rd_s2;
+    wire[1:0]       wb_s2;
+    wire            is_csr_s2;
     wire[`CSR_ADDR_SIZE-1:0] csr_address_s2;
-    wire[31:0]     csr_read_data_s2;
-    wire[31:0]     csr_updated_data_s2;
+    wire[31:0]      csr_read_data_s2;
+    wire[31:0]      csr_updated_data_s2;
 
     wire[31:0] csr_read_data_unqual;
     wire[31:0] csr_read_data;
@@ -28,7 +28,7 @@ module VX_csr_pipe #(
 
     assign csr_read_data = (csr_address_s2 == csr_req_if.csr_address) ? csr_updated_data_s2 : csr_read_data_unqual;
 
-    wire writeback = |writeback_if.wb_valid;
+    wire writeback = |writeback_if.valid;
     
     VX_csr_data csr_data(
         .clk                (clk),
@@ -88,9 +88,9 @@ module VX_csr_pipe #(
         assign csr_vec_read_data_s2[cur_v] = csr_read_data_s2;
     end
 
-    wire thread_select        = csr_address_s2 == 12'h20;
-    wire warp_select          = csr_address_s2 == 12'h21;
-    wire warp_id_select       = csr_address_s2 == 12'h22;
+    wire thread_select        = (csr_address_s2 == `CSR_THREAD);
+    wire warp_select          = (csr_address_s2 == `CSR_WARP);
+    wire warp_id_select       = (csr_address_s2 == `CSR_WARP_ID);
 
     assign final_csr_data     = thread_select  ? thread_ids :
                                 warp_select    ? warp_ids   :
@@ -101,6 +101,6 @@ module VX_csr_pipe #(
     assign csr_wb_if.warp_num   = warp_num_s2;
     assign csr_wb_if.rd         = rd_s2;
     assign csr_wb_if.wb         = wb_s2;
-    assign csr_wb_if.csr_result = final_csr_data;
+    assign csr_wb_if.data       = final_csr_data;
 
 endmodule

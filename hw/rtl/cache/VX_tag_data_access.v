@@ -2,13 +2,13 @@
 
 module VX_tag_data_access #(
     // Size of cache in bytes
-    parameter CACHE_SIZE_BYTES              = 1024, 
+    parameter CACHE_SIZE                    = 1024, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE_BYTES          = 16, 
+    parameter BANK_LINE_SIZE                = 16, 
     // Number of banks {1, 2, 4, 8,...}
     parameter NUM_BANKS                     = 8, 
     // Size of a word in bytes
-    parameter WORD_SIZE_BYTES               = 4, 
+    parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
     parameter NUM_REQUESTS                  = 2, 
     // Number of cycles to complete stage 1 (read from memory)
@@ -37,85 +37,86 @@ module VX_tag_data_access #(
     parameter LLVQ_SIZE                     = 16, 
 
      // Fill Invalidator Size {Fill invalidator must be active}
-     parameter FILL_INVALIDAOR_SIZE          = 16, 
-
-    // Dram knobs
-    parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
+     parameter FILL_INVALIDAOR_SIZE         = 16
 ) (
-    input  wire                            clk,
-    input  wire                            reset,
-    input  wire                            stall,
-    input  wire                            is_snp_st1e,
-    input  wire                            stall_bank_pipe,
-    // Initial Reading
-`IGNORE_WARNINGS_BEGIN
-    // TODO: should fix this
-    input  wire[31:0]                      readaddr_st10, 
-    input  wire[31:0]                      writeaddr_st1e,
-`IGNORE_WARNINGS_END
-    input  wire                            valid_req_st1e,
-    input  wire                            writefill_st1e,
-    input  wire[`WORD_SIZE_RNG]            writeword_st1e,
-    input  wire[`DBANK_LINE_WORDS-1:0][31:0] writedata_st1e,
-    input  wire[2:0]                       mem_write_st1e,
-    input  wire[2:0]                       mem_read_st1e, 
+    input wire                          clk,
+    input wire                          reset,
+    input wire                          stall,
+    input wire                          is_snp_st1e,
+    input wire                          stall_bank_pipe,
 
-    output wire[`WORD_SIZE_RNG]            readword_st1e,
-    output wire[`DBANK_LINE_WORDS-1:0][31:0] readdata_st1e,
-    output wire[`TAG_SELECT_BITS-1:0]      readtag_st1e,
-    output wire                            miss_st1e,
-    output wire                            dirty_st1e,
-    output wire                            fill_saw_dirty_st1e    
+    input wire[`LINE_SELECT_BITS-1:0]   readaddr_st10, 
+    input wire[`LINE_ADDR_WIDTH-1:0]    writeaddr_st1e,
+    
+    input wire                          valid_req_st1e,
+    input wire                          writefill_st1e,
+    input wire[`WORD_WIDTH-1:0]         writeword_st1e,
+    input wire[`BANK_LINE_WIDTH-1:0]    writedata_st1e,
+
+`IGNORE_WARNINGS_BEGIN
+    input wire[`WORD_SELECT_ADDR_END:0] writewsel_st1e,
+    input wire[`WORD_SEL_BITS-1:0]      mem_write_st1e,
+    input wire[`WORD_SEL_BITS-1:0]      mem_read_st1e, 
+`IGNORE_WARNINGS_END
+
+    output wire[`WORD_WIDTH-1:0]        readword_st1e,
+    output wire[`BANK_LINE_WIDTH-1:0]   readdata_st1e,
+    output wire[`TAG_SELECT_BITS-1:0]   readtag_st1e,
+    output wire                         miss_st1e,
+    output wire                         dirty_st1e,
+    output wire                         fill_saw_dirty_st1e    
 );
 
-    reg                            read_valid_st1c[STAGE_1_CYCLES-1:0];
-    reg                            read_dirty_st1c[STAGE_1_CYCLES-1:0];
-    reg[`TAG_SELECT_BITS-1:0]      read_tag_st1c  [STAGE_1_CYCLES-1:0];
-    reg[`DBANK_LINE_WORDS-1:0][31:0] read_data_st1c [STAGE_1_CYCLES-1:0];
+    reg                         read_valid_st1c[STAGE_1_CYCLES-1:0];
+    reg                         read_dirty_st1c[STAGE_1_CYCLES-1:0];
+    reg[`TAG_SELECT_BITS-1:0]   read_tag_st1c  [STAGE_1_CYCLES-1:0];
+    reg[`BANK_LINE_WIDTH-1:0]   read_data_st1c [STAGE_1_CYCLES-1:0];
 
-    wire                            qual_read_valid_st1;
-    wire                            qual_read_dirty_st1;
-    wire[`TAG_SELECT_BITS-1:0]      qual_read_tag_st1;
-    wire[`DBANK_LINE_WORDS-1:0][31:0] qual_read_data_st1;
+    wire                        qual_read_valid_st1;
+    wire                        qual_read_dirty_st1;
+    wire[`TAG_SELECT_BITS-1:0]  qual_read_tag_st1;
+    wire[`BANK_LINE_WIDTH-1:0]  qual_read_data_st1;
 
-    wire                            use_read_valid_st1e;
-    wire                            use_read_dirty_st1e;
-    wire[`TAG_SELECT_BITS-1:0]      use_read_tag_st1e;
-    wire[`DBANK_LINE_WORDS-1:0][31:0] use_read_data_st1e;
-    wire[`DBANK_LINE_WORDS-1:0][3:0]  use_write_enable;
-    wire[`DBANK_LINE_WORDS-1:0][31:0] use_write_data;
-
-    wire sw, sb, sh;
-
-    wire real_writefill = writefill_st1e && ((valid_req_st1e && !use_read_valid_st1e) || (valid_req_st1e && use_read_valid_st1e && (writeaddr_st1e[`TAG_SELECT_ADDR_RNG] != use_read_tag_st1e)));
+    wire                        use_read_valid_st1e;
+    wire                        use_read_dirty_st1e;
+    wire[`TAG_SELECT_BITS-1:0]  use_read_tag_st1e;
+    wire[`BANK_LINE_WIDTH-1:0]  use_read_data_st1e;
+    wire[`BANK_LINE_WORDS-1:0][3:0] use_write_enable;
+    wire[`BANK_LINE_WIDTH-1:0]  use_write_data;
 
     wire fill_sent;
     wire invalidate_line;
 
-    VX_tag_data_structure  #(
-        .CACHE_SIZE_BYTES             (CACHE_SIZE_BYTES),
-        .BANK_LINE_SIZE_BYTES         (BANK_LINE_SIZE_BYTES),
-        .NUM_BANKS                    (NUM_BANKS),
-        .WORD_SIZE_BYTES              (WORD_SIZE_BYTES),
-        .NUM_REQUESTS                 (NUM_REQUESTS),
-        .STAGE_1_CYCLES               (STAGE_1_CYCLES),
-        .FUNC_ID                      (FUNC_ID),
-        .REQQ_SIZE                    (REQQ_SIZE),
-        .MRVQ_SIZE                    (MRVQ_SIZE),
-        .DFPQ_SIZE                    (DFPQ_SIZE),
-        .SNRQ_SIZE                    (SNRQ_SIZE),
-        .CWBQ_SIZE                    (CWBQ_SIZE),
-        .DWBQ_SIZE                    (DWBQ_SIZE),
-        .DFQQ_SIZE                    (DFQQ_SIZE),
-        .LLVQ_SIZE                    (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE         (FILL_INVALIDAOR_SIZE),
-        .SIMULATED_DRAM_LATENCY_CYCLES(SIMULATED_DRAM_LATENCY_CYCLES)
+    wire real_writefill = writefill_st1e
+                       && ((valid_req_st1e 
+                         && !use_read_valid_st1e) 
+                        || (valid_req_st1e 
+                         && use_read_valid_st1e 
+                         && (writeaddr_st1e[`TAG_LINE_ADDR_RNG] != use_read_tag_st1e)));    
+
+    VX_tag_data_structure #(
+        .CACHE_SIZE             (CACHE_SIZE),
+        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
+        .NUM_BANKS              (NUM_BANKS),
+        .WORD_SIZE              (WORD_SIZE),
+        .NUM_REQUESTS           (NUM_REQUESTS),
+        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
+        .FUNC_ID                (FUNC_ID),
+        .REQQ_SIZE              (REQQ_SIZE),
+        .MRVQ_SIZE              (MRVQ_SIZE),
+        .DFPQ_SIZE              (DFPQ_SIZE),
+        .SNRQ_SIZE              (SNRQ_SIZE),
+        .CWBQ_SIZE              (CWBQ_SIZE),
+        .DWBQ_SIZE              (DWBQ_SIZE),
+        .DFQQ_SIZE              (DFQQ_SIZE),
+        .LLVQ_SIZE              (LLVQ_SIZE),
+        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE)
     ) tag_data_structure (
         .clk         (clk),
         .reset       (reset),
         .stall_bank_pipe(stall_bank_pipe),
 
-        .read_addr   (readaddr_st10[`LINE_SELECT_ADDR_RNG]),
+        .read_addr   (readaddr_st10),
         .read_valid  (qual_read_valid_st1),
         .read_dirty  (qual_read_dirty_st1),
         .read_tag    (qual_read_tag_st1),
@@ -124,15 +125,14 @@ module VX_tag_data_access #(
         .invalidate  (invalidate_line),
         .write_enable(use_write_enable),
         .write_fill  (real_writefill),
-        .write_addr  (writeaddr_st1e[`LINE_SELECT_ADDR_RNG]),
-        .tag_index   (writeaddr_st1e[`TAG_SELECT_ADDR_RNG]),
+        .write_addr  (writeaddr_st1e[`LINE_SELECT_BITS-1:0]),
+        .tag_index   (writeaddr_st1e[`TAG_LINE_ADDR_RNG]),
         .write_data  (use_write_data),
         .fill_sent   (fill_sent)
     );
 
-    // VX_generic_register #(.N( 1 + 1 + `TAG_SELECT_BITS + (`DBANK_LINE_WORDS*32) )) s0_1_c0 (
     VX_generic_register #(
-        .N( 1 + 1 + `TAG_SELECT_BITS + (`DBANK_LINE_WORDS*32) ), 
+        .N(1 + 1 + `TAG_SELECT_BITS + `BANK_LINE_WIDTH), 
         .PassThru(1)
     ) s0_1_c0 (
         .clk  (clk),
@@ -140,134 +140,120 @@ module VX_tag_data_access #(
         .stall(stall),
         .flush(0),
         .in   ({qual_read_valid_st1, qual_read_dirty_st1, qual_read_tag_st1, qual_read_data_st1}),
-        .out  ({read_valid_st1c[0] , read_dirty_st1c[0] , read_tag_st1c[0] , read_data_st1c[0]})
+        .out  ({read_valid_st1c[0],  read_dirty_st1c[0],  read_tag_st1c[0],  read_data_st1c[0]})
     );
 
-    genvar curr_stage;
-    generate
-        for (curr_stage = 1; curr_stage < STAGE_1_CYCLES-1; curr_stage = curr_stage + 1) begin
-            VX_generic_register #(
-                .N( 1 + 1 + `TAG_SELECT_BITS + (`DBANK_LINE_WORDS*32))
-            ) s0_1_cc (
-                .clk  (clk),
-                .reset(reset),
-                .stall(stall),
-                .flush(0),
-                .in   ({read_valid_st1c[curr_stage-1] , read_dirty_st1c[curr_stage-1] , read_tag_st1c[curr_stage-1] , read_data_st1c[curr_stage-1]}),
-                .out  ({read_valid_st1c[curr_stage]   , read_dirty_st1c[curr_stage]   , read_tag_st1c[curr_stage]   , read_data_st1c[curr_stage]  })
-            );
-        end
-    endgenerate
+    genvar i;
+    for (i = 1; i < STAGE_1_CYCLES-1; i = i + 1) begin
+        VX_generic_register #(
+            .N( 1 + 1 + `TAG_SELECT_BITS + `BANK_LINE_WIDTH)
+        ) s0_1_cc (
+            .clk  (clk),
+            .reset(reset),
+            .stall(stall),
+            .flush(0),
+            .in   ({read_valid_st1c[i-1], read_dirty_st1c[i-1], read_tag_st1c[i-1], read_data_st1c[i-1]}),
+            .out  ({read_valid_st1c[i],   read_dirty_st1c[i],   read_tag_st1c[i],   read_data_st1c[i]})
+        );
+    end
 
     assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-1] || (FUNC_ID == `SFUNC_ID); // If shared memory, always valid
     assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-1] && (FUNC_ID != `SFUNC_ID); // Dirty only applies in Dcache
-    assign use_read_tag_st1e   = (FUNC_ID == `SFUNC_ID) ? writeaddr_st1e[`TAG_SELECT_ADDR_RNG] : read_tag_st1c  [STAGE_1_CYCLES-1]; // Tag is always the same in SM
+    assign use_read_tag_st1e   = (FUNC_ID == `SFUNC_ID) ? writeaddr_st1e[`TAG_LINE_ADDR_RNG] : read_tag_st1c[STAGE_1_CYCLES-1]; // Tag is always the same in SM
 
-    genvar curr_w;
-    for (curr_w = 0; curr_w < `DBANK_LINE_WORDS; curr_w = curr_w+1) assign use_read_data_st1e[curr_w][31:0]  = read_data_st1c[STAGE_1_CYCLES-1][curr_w][31:0];
-    // assign use_read_data_st1e  = read_data_st1c [STAGE_1_CYCLES-1];
+    for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+        assign use_read_data_st1e[i * `WORD_WIDTH +: `WORD_WIDTH]  = read_data_st1c[STAGE_1_CYCLES-1][i * `WORD_WIDTH +: `WORD_WIDTH];
+    end
 
-/////////////////////// LOAD LOGIC ///////////////////
-
-    wire[`OFFSET_SIZE_RNG]      byte_select  = writeaddr_st1e[`OFFSET_ADDR_RNG];
-    wire[`WORD_SELECT_BITS-1:0] block_offset = writeaddr_st1e[`WORD_SELECT_ADDR_RNG];
-
-`IGNORE_WARNINGS_BEGIN
-    wire lw  = valid_req_st1e && (mem_read_st1e == `LW_MEM_READ);
-    wire lb  = valid_req_st1e && (mem_read_st1e == `LB_MEM_READ);
-    wire lh  = valid_req_st1e && (mem_read_st1e == `LH_MEM_READ);
-    wire lhu = valid_req_st1e && (mem_read_st1e == `LHU_MEM_READ);
-    wire lbu = valid_req_st1e && (mem_read_st1e == `LBU_MEM_READ);
-
-    wire b0 = (byte_select == 0);
-    wire b1 = (byte_select == 1);
-    wire b2 = (byte_select == 2);
-    wire b3 = (byte_select == 3);
-`IGNORE_WARNINGS_END
-
-`DEBUG_BEGIN
-    wire[31:0] w0 = read_data_st1c[STAGE_1_CYCLES-1][0][31:0];
-    wire[31:0] w1 = read_data_st1c[STAGE_1_CYCLES-1][1][31:0];
-    wire[31:0] w2 = read_data_st1c[STAGE_1_CYCLES-1][2][31:0];
-    wire[31:0] w3 = read_data_st1c[STAGE_1_CYCLES-1][3][31:0];
-`DEBUG_END   
-
-/////////////////////// STORE LOGIC ///////////////////
-
-    assign sw  = valid_req_st1e && (mem_write_st1e == `SW_MEM_WRITE);
-    assign sb  = valid_req_st1e && (mem_write_st1e == `SB_MEM_WRITE);
-    assign sh  = valid_req_st1e && (mem_write_st1e == `SH_MEM_WRITE);
-
-    wire[3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
-    wire[3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
-
-    wire should_write = (sw || sb || sh) && valid_req_st1e && use_read_valid_st1e && !miss_st1e && !is_snp_st1e;
     wire force_write  = real_writefill;
 
-    wire[`DBANK_LINE_WORDS-1:0][3:0]  we;
-    wire[`DBANK_LINE_WORDS-1:0][31:0] data_write;
+    wire [`BANK_LINE_WORDS-1:0][3:0] we;
+    wire [`BANK_LINE_WIDTH-1:0] data_write;
 
-    genvar g; 
-    generate
-        for (g = 0; g < `DBANK_LINE_WORDS; g = g + 1) begin : write_enables
-            wire normal_write = (block_offset == g[`WORD_SELECT_BITS-1:0]) && should_write && !real_writefill;
+    if (WORD_SIZE == 4) begin
 
-            assign we[g]      = (force_write)        ? 4'b1111  : 
-                             (should_write && !real_writefill && (FUNC_ID == `L2FUNC_ID)) ? 4'b1111  :
-                                (normal_write && sw) ? 4'b1111  :
-                                (normal_write && sb) ? sb_mask  :
-                                (normal_write && sh) ? sh_mask  :
-                                4'b0000;
+        wire[`OFFSET_ADDR_BITS-1:0] byte_select  = writewsel_st1e[`OFFSET_ADDR_RNG];
+        wire[`WORD_SELECT_BITS-1:0] block_offset = writewsel_st1e[`WORD_SELECT_ADDR_RNG];
 
-            if (FUNC_ID != `L2FUNC_ID) begin                
-                wire[31:0] sb_data       = b1 ? {{16{1'b0}}, writeword_st1e[7:0], { 8{1'b0}}} :
-                                           b2 ? {{ 8{1'b0}}, writeword_st1e[7:0], {16{1'b0}}} :
-                                           b3 ? {{ 0{1'b0}}, writeword_st1e[7:0], {24{1'b0}}} :
-                                                writeword_st1e[31:0];
-                wire[31:0] sw_data       = writeword_st1e[31:0];
-                wire[31:0] sh_data       = b2 ? {writeword_st1e[15:0], {16{1'b0}}} : writeword_st1e[31:0];
-                wire[31:0] use_write_dat = sb ? sb_data : sh ? sh_data : sw_data;
-                assign data_write[g]     = force_write ? writedata_st1e[g] : use_write_dat;
-            end
+        wire lb  = valid_req_st1e && (mem_read_st1e == `WORD_SEL_LB);
+        wire lh  = valid_req_st1e && (mem_read_st1e == `WORD_SEL_LH);        
+        wire lbu = valid_req_st1e && (mem_read_st1e == `WORD_SEL_HB);
+        wire lhu = valid_req_st1e && (mem_read_st1e == `WORD_SEL_HH);
+        wire lw  = valid_req_st1e && (mem_read_st1e == `WORD_SEL_LW);
+
+        wire b0 = (byte_select == 0);
+        wire b1 = (byte_select == 1);
+        wire b2 = (byte_select == 2);
+        wire b3 = (byte_select == 3);
+
+        wire sb = valid_req_st1e && (mem_write_st1e == `WORD_SEL_LB);
+        wire sh = valid_req_st1e && (mem_write_st1e == `WORD_SEL_LH);
+        wire sw = valid_req_st1e && (mem_write_st1e == `WORD_SEL_LW);
+
+        wire [3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
+        wire [3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
+
+        wire should_write = (sw || sb || sh) && valid_req_st1e && use_read_valid_st1e && !miss_st1e && !is_snp_st1e;
+
+        wire[`WORD_WIDTH-1:0] data_unmod  = read_data_st1c[STAGE_1_CYCLES-1][block_offset * 32 +: 32];
+        wire[`WORD_WIDTH-1:0] data_unQual = (b0 || lw) ? (data_unmod)      :
+                                                    b1 ? (data_unmod >> 8)  :
+                                                    b2 ? (data_unmod >> 16) :
+                                                         (data_unmod >> 24);
+
+        wire[`WORD_WIDTH-1:0] lb_data   = (data_unQual[7] ) ? (data_unQual | 32'hFFFFFF00) : (data_unQual & 32'hFF);
+        wire[`WORD_WIDTH-1:0] lh_data   = (data_unQual[15]) ? (data_unQual | 32'hFFFF0000) : (data_unQual & 32'hFFFF);
+        wire[`WORD_WIDTH-1:0] lbu_data  = (data_unQual & 32'hFF);
+        wire[`WORD_WIDTH-1:0] lhu_data  = (data_unQual & 32'hFFFF);
+        wire[`WORD_WIDTH-1:0] lw_data   = (data_unQual); 
+        wire[`WORD_WIDTH-1:0] data_Qual = lb  ? lb_data  : 
+                                          lh  ? lh_data  :
+                                          lhu ? lhu_data :
+                                          lbu ? lbu_data :
+                                                lw_data;
+
+        assign readword_st1e = data_Qual;
+
+        for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+            wire normal_write = (block_offset == i[`WORD_SELECT_BITS-1:0]) && should_write && !real_writefill;
+
+            assign we[i] = (force_write)        ? 4'b1111 : 
+                           (normal_write && sw) ? 4'b1111 :
+                           (normal_write && sb) ? sb_mask :
+                           (normal_write && sh) ? sh_mask :
+                                                  4'b0000;
+                        
+            wire [`WORD_WIDTH-1:0] sb_data = b1 ? {{16{1'b0}}, writeword_st1e[7:0], { 8{1'b0}}} :
+                                             b2 ? {{ 8{1'b0}}, writeword_st1e[7:0], {16{1'b0}}} :
+                                             b3 ? {{ 0{1'b0}}, writeword_st1e[7:0], {24{1'b0}}} :
+                                                  writeword_st1e[31:0];
+
+            wire [`WORD_WIDTH-1:0] sw_data       = writeword_st1e[31:0];
+            wire [`WORD_WIDTH-1:0] sh_data       = b2 ? {writeword_st1e[15:0], {16{1'b0}}} : writeword_st1e[31:0];
+            wire [`WORD_WIDTH-1:0] use_write_dat = sb ? sb_data : sh ? sh_data : sw_data;
+
+            assign data_write[i * `WORD_WIDTH +: `WORD_WIDTH] = force_write ? writedata_st1e[i * `WORD_WIDTH +: `WORD_WIDTH] : use_write_dat;
         end
-        if (FUNC_ID == `L2FUNC_ID) begin
-            assign data_write = force_write ? writedata_st1e : writeword_st1e;
-        end
-    endgenerate
+    end else begin
+        wire should_write = ((mem_write_st1e != `WORD_SEL_NO)) && valid_req_st1e && use_read_valid_st1e && !miss_st1e && !is_snp_st1e;
+        for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+            assign we[i] = (force_write || (should_write && !real_writefill)) ? 4'b1111 : 4'b0000;
+        end                                          
+        assign readword_st1e = read_data_st1c[STAGE_1_CYCLES-1];
+        assign data_write = force_write ? writedata_st1e : writeword_st1e;
+    end
 
     assign use_write_enable = (writefill_st1e && !real_writefill) ? 0 : we;
     assign use_write_data   = data_write;
 
-    if (FUNC_ID == `L2FUNC_ID) begin
-        assign readword_st1e = read_data_st1c[STAGE_1_CYCLES-1];
-    end else begin
-        wire[31:0] data_unmod  = read_data_st1c[STAGE_1_CYCLES-1][block_offset][31:0];
-        wire[31:0] data_unQual = (b0 || lw) ? (data_unmod)       :
-                                         b1 ? (data_unmod >> 8)  :
-                                         b2 ? (data_unmod >> 16) :
-                                              (data_unmod >> 24);
-        wire[31:0] lb_data   = (data_unQual[7] ) ? (data_unQual | 32'hFFFFFF00) : (data_unQual & 32'hFF);
-        wire[31:0] lh_data   = (data_unQual[15]) ? (data_unQual | 32'hFFFF0000) : (data_unQual & 32'hFFFF);
-        wire[31:0] lbu_data  = (data_unQual & 32'hFF);
-        wire[31:0] lhu_data  = (data_unQual & 32'hFFFF);
-        wire[31:0] lw_data   = (data_unQual); 
-        wire[31:0] data_Qual = lb  ? lb_data  :
-                               lh  ? lh_data  :
-                               lhu ? lhu_data :
-                               lbu ? lbu_data :
-                                     lw_data;
-
-        assign readword_st1e = data_Qual;
-    end
-
-    wire[`TAG_SELECT_ADDR_RNG] writeaddr_tag = writeaddr_st1e[`TAG_SELECT_ADDR_RNG];
+    wire[`TAG_SELECT_BITS-1:0] writeaddr_tag = writeaddr_st1e[`TAG_LINE_ADDR_RNG];
 
     wire tags_mismatch = writeaddr_tag != use_read_tag_st1e;
     wire tags_match    = writeaddr_tag == use_read_tag_st1e;
 
-    wire snoop_hit    = valid_req_st1e &&  is_snp_st1e && use_read_valid_st1e && tags_match && use_read_dirty_st1e;
-    wire req_invalid  = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
-    wire req_miss     = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && tags_mismatch;
+    wire snoop_hit   = valid_req_st1e &&  is_snp_st1e && use_read_valid_st1e && tags_match && use_read_dirty_st1e;
+    wire req_invalid = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
+    wire req_miss    = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && tags_mismatch;
     
     assign miss_st1e           = snoop_hit || req_invalid || req_miss;
     assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;

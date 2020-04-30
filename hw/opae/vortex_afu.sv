@@ -70,13 +70,13 @@ state_t state;
 logic        vx_dram_req_read;
 logic        vx_dram_req_write;
 logic [31:0] vx_dram_req_addr;
-logic [`GLOBAL_BLOCK_SIZE_BYTES-1:0] vx_dram_req_data;
+logic [`GLOBAL_BLOCK_SIZE-1:0] vx_dram_req_data;
 logic        vx_dram_req_ready;
 
 logic        vx_dram_rsp_ready;
 logic        vx_dram_rsp_valid;
 logic [31:0] vx_dram_rsp_addr;
-logic [`GLOBAL_BLOCK_SIZE_BYTES-1:0] vx_dram_rsp_data;
+logic [`GLOBAL_BLOCK_SIZE-1:0] vx_dram_rsp_data;
 
 logic        vx_snp_req;
 logic [31:0] vx_snp_req_addr;

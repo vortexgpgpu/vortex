@@ -3,7 +3,7 @@
 
 module VX_csr_wrapper (
     VX_csr_req_if csr_req_if,
-    VX_csr_wb_if  csr_wb_if
+    VX_wb_if  csr_wb_if
 );
 
     wire[`NUM_THREADS-1:0][31:0] thread_ids;

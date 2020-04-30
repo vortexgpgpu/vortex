@@ -22,8 +22,8 @@ module VX_gpr (
             .waddr (writeback_if.rd),
             .raddr1(gpr_read_if.rs1),
             .raddr2(gpr_read_if.rs2),
-            .be    (writeback_if.wb_valid),
-            .wdata (writeback_if.write_data),
+            .be    (writeback_if.valid),
+            .wdata (writeback_if.data),
             .q1    (a_reg_data),
             .q2    (b_reg_data)
         );

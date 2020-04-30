@@ -124,7 +124,7 @@ module VX_warp_sched (
             end
             use_wsapwn_pc         <= 0;
             use_wsapwn            <= 0;
-            warp_pcs[0]           <= (`STARTUP_ADDR - 4);
+            warp_pcs[0]           <= `STARTUP_ADDR;
             warp_active[0]        <= 1; // Activating first warp
             visible_active[0]     <= 1; // Activating first warp
             thread_masks[0]       <= 1; // Activating first thread in first warp

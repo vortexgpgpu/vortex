@@ -1,14 +1,15 @@
 `include "VX_cache_config.vh"
 
 module VX_snp_fwd_arb #(
-    parameter NUM_BANKS = 8
+    parameter NUM_BANKS = 1,
+    parameter BANK_LINE_SIZE = 1
 ) (
     input  wire [NUM_BANKS-1:0]         per_bank_snp_fwd_valid,
-    input  wire [NUM_BANKS-1:0][31:0]   per_bank_snp_fwd_addr,
+    input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0]   per_bank_snp_fwd_addr,
     output reg  [NUM_BANKS-1:0]         per_bank_snp_fwd_pop,
 
     output wire                         snp_fwd_valid,
-    output wire [31:0]                  snp_fwd_addr,
+    output wire [`DRAM_ADDR_WIDTH-1:0]  snp_fwd_addr,
     input  wire                         snp_fwd_ready    
 );
 

@@ -8,7 +8,7 @@ int tmc_array[4] = {5,5,5,5};
 
 void test_tmc()
 {
-	vx_print_str("testing_tmc\n");
+	//vx_print_str("testing_tmc\n");
 
 	vx_tmc(4);
 

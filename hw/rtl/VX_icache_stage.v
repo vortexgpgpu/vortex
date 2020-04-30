@@ -19,21 +19,22 @@ module VX_icache_stage (
     wire   valid_inst = (|fe_inst_meta_fi.valid);
 
     // Icache Request
-    assign icache_req_if.core_req_valid      = valid_inst && !total_freeze;
-    assign icache_req_if.core_req_addr       = fe_inst_meta_fi.inst_pc;
-    assign icache_req_if.core_req_data       = 32'b0;
-    assign icache_req_if.core_req_read       = `LW_MEM_READ;
-    assign icache_req_if.core_req_write      = `NO_MEM_WRITE;
-    assign icache_req_if.core_req_rd         = 5'b0;
-    assign icache_req_if.core_req_wb         = {1{2'b1}};
-    assign icache_req_if.core_req_warp_num   = fe_inst_meta_fi.warp_num;
-    assign icache_req_if.core_req_pc         = fe_inst_meta_fi.inst_pc;
+    assign icache_req_if.core_req_valid = valid_inst && !total_freeze;
+    assign icache_req_if.core_req_addr  = fe_inst_meta_fi.inst_pc;
+    assign icache_req_if.core_req_data  = 32'b0;
+    assign icache_req_if.core_req_read  = `WORD_SEL_LW;
+    assign icache_req_if.core_req_write = `WORD_SEL_NO;
+    assign icache_req_if.core_req_tag   = {fe_inst_meta_fi.inst_pc, 2'b1, 5'b0, fe_inst_meta_fi.warp_num};
+
+`IGNORE_WARNINGS_BEGIN
+    wire[4:0] rsp_rd;    
+    wire[1:0] rsp_wb;
+`IGNORE_WARNINGS_END
+
+    assign {fe_inst_meta_id.inst_pc, rsp_wb, rsp_rd, fe_inst_meta_id.warp_num} = icache_rsp_if.core_rsp_tag;
 
     assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_data[0][31:0];
-    assign fe_inst_meta_id.inst_pc     = icache_rsp_if.core_rsp_pc[0];
-    assign fe_inst_meta_id.warp_num    = icache_rsp_if.core_rsp_warp_num;
-    
-    assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? threads_active[icache_rsp_if.core_rsp_warp_num] : 0;
+    assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? threads_active[fe_inst_meta_id.warp_num] : 0;
 
     assign icache_stage_wid            = fe_inst_meta_id.warp_num;
     assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
@@ -47,14 +48,23 @@ module VX_icache_stage (
     integer w;
     always @(posedge clk) begin
         if (reset) begin
-            for (w = 0; w < `NUM_WARPS; w=w+1) begin
+            for (w = 0; w < `NUM_WARPS; w = w + 1) begin
                 threads_active[w] <= 0;
             end
         end else begin
             if (valid_inst && !icache_stage_delay) begin
-                threads_active[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;
+                threads_active[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
             end
         end
     end
+
+    /*always_comb begin
+        if (1'($time & 1) && icache_req_if.core_req_ready && icache_req_if.core_req_valid) begin
+            $display("*** %t: I$ req: pc=%0h, warp=%d", $time, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
+        end
+        if (1'($time & 1) && icache_rsp_if.core_rsp_ready && icache_rsp_if.core_rsp_valid) begin
+            $display("*** %t: I$ rsp: pc=%0h, warp=%d, instr=%0h", $time, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
+        end
+    end*/
 
 endmodule

@@ -2,13 +2,13 @@
 
 module VX_tag_data_structure #(
     // Size of cache in bytes
-    parameter CACHE_SIZE_BYTES              = 1024, 
+    parameter CACHE_SIZE                    = 1024, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE_BYTES          = 16, 
+    parameter BANK_LINE_SIZE                = 16, 
     // Number of banks {1, 2, 4, 8,...} 
     parameter NUM_BANKS                     = 8, 
     // Size of a word in bytes
-    parameter WORD_SIZE_BYTES               = 4, 
+    parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
     parameter NUM_REQUESTS                  = 2, 
     // Number of cycles to complete stage 1 (read from memory)
@@ -37,10 +37,7 @@ module VX_tag_data_structure #(
     parameter LLVQ_SIZE                     = 16, 
 
     // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 16, 
-
-    // Dram knobs
-    parameter SIMULATED_DRAM_LATENCY_CYCLES = 10
+    parameter FILL_INVALIDAOR_SIZE          = 16
 ) (
     input  wire                             clk,
     input  wire                             reset,
@@ -50,21 +47,21 @@ module VX_tag_data_structure #(
     output wire                             read_valid,
     output wire                             read_dirty,
     output wire[`TAG_SELECT_BITS-1:0]       read_tag,
-    output wire[`DBANK_LINE_WORDS-1:0][31:0] read_data,
+    output wire[`BANK_LINE_WIDTH-1:0]       read_data,
 
     input  wire                             invalidate,
-    input  wire[`DBANK_LINE_WORDS-1:0][3:0] write_enable,
+    input  wire[`BANK_LINE_WORDS-1:0][3:0]  write_enable,
     input  wire                             write_fill,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
     input  wire[`TAG_SELECT_BITS-1:0]       tag_index,
-    input  wire[`DBANK_LINE_WORDS-1:0][31:0] write_data,
+    input  wire[`BANK_LINE_WIDTH-1:0]       write_data,
     input  wire                             fill_sent    
 );
 
-    reg [`DBANK_LINE_WORDS-1:0][3:0][7:0]  data  [`BANK_LINE_COUNT-1:0];
-    reg [`TAG_SELECT_BITS-1:0]             tag   [`BANK_LINE_COUNT-1:0];
-    reg                                    valid [`BANK_LINE_COUNT-1:0];
-    reg                                    dirty [`BANK_LINE_COUNT-1:0];   
+    reg [`BANK_LINE_WORDS-1:0][3:0][`BYTE_WIDTH-1:0] data [`BANK_LINE_COUNT-1:0];
+    reg [`TAG_SELECT_BITS-1:0]                        tag [`BANK_LINE_COUNT-1:0];
+    reg                                             valid [`BANK_LINE_COUNT-1:0];
+    reg                                             dirty [`BANK_LINE_COUNT-1:0];   
 
     assign read_valid = valid [read_addr];
     assign read_dirty = dirty [read_addr];
@@ -73,15 +70,12 @@ module VX_tag_data_structure #(
 
     wire   going_to_write = (|write_enable);
 
-    integer f;
-    integer l;
+    integer i;
     always @(posedge clk) begin
         if (reset) begin
-            for (l = 0; l < `BANK_LINE_COUNT; l=l+1) begin
-                valid[l] <= 0;
-                // tag  [l] <= 0;
-                dirty[l] <= 0;
-                // data [l] <= 0;
+            for (i = 0; i < `BANK_LINE_COUNT; i = i + 1) begin
+                valid[i] <= 0;
+                dirty[i] <= 0;
             end
         end else if (!stall_bank_pipe) begin
             if (going_to_write) begin
@@ -94,18 +88,17 @@ module VX_tag_data_structure #(
                 end
             end else if (fill_sent) begin
                 dirty[write_addr] <= 0;
-                // valid[write_addr] <= 0;
             end
 
             if (invalidate) begin
                 valid[write_addr] <= 0;
             end
 
-            for (f = 0; f < `DBANK_LINE_WORDS; f = f + 1) begin
-                if (write_enable[f][0]) data[write_addr][f][0] <= write_data[f][7 :0 ];
-                if (write_enable[f][1]) data[write_addr][f][1] <= write_data[f][15:8 ];
-                if (write_enable[f][2]) data[write_addr][f][2] <= write_data[f][23:16];
-                if (write_enable[f][3]) data[write_addr][f][3] <= write_data[f][31:24];
+            for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+                if (write_enable[i][0]) data[write_addr][i][0] <= write_data[i * `WORD_WIDTH + 0 * `BYTE_WIDTH +: `BYTE_WIDTH];
+                if (write_enable[i][1]) data[write_addr][i][1] <= write_data[i * `WORD_WIDTH + 1 * `BYTE_WIDTH +: `BYTE_WIDTH];
+                if (write_enable[i][2]) data[write_addr][i][2] <= write_data[i * `WORD_WIDTH + 2 * `BYTE_WIDTH +: `BYTE_WIDTH];
+                if (write_enable[i][3]) data[write_addr][i][3] <= write_data[i * `WORD_WIDTH + 3 * `BYTE_WIDTH +: `BYTE_WIDTH];
             end
         end
     end

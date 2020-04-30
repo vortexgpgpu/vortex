@@ -140,8 +140,8 @@ module VX_decode(
     assign frE_to_bckE_req_if.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
 
     // MEM signals 
-    assign frE_to_bckE_req_if.mem_read  = (is_linst) ? func3 : `NO_MEM_READ;
-    assign frE_to_bckE_req_if.mem_write = (is_stype) ? func3 : `NO_MEM_WRITE;
+    assign frE_to_bckE_req_if.mem_read  = (is_linst) ? func3 : `WORD_SEL_NO;
+    assign frE_to_bckE_req_if.mem_write = (is_stype) ? func3 : `WORD_SEL_NO;
 
     // UPPER IMMEDIATE
     always @(*) begin
@@ -211,8 +211,8 @@ module VX_decode(
 
     // CSR
 
-    assign csr_cond1  = func3 != 3'h0;
-    assign csr_cond2  = u_12  >= 12'h2;
+    assign csr_cond1 = func3 != 3'h0;
+    assign csr_cond2 = u_12  >= 12'h2;
 
     assign frE_to_bckE_req_if.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
 
@@ -324,6 +324,12 @@ module VX_decode(
                                                   alu_op;
 
     assign frE_to_bckE_req_if.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
+
+    /*always_comb begin
+        if (1'($time & 1) && |fd_inst_meta_de.valid) begin
+            $display("*** %t: decode: opcode=%h", $time, curr_opcode);
+        end
+    end*/
 
 endmodule
 

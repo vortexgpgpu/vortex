@@ -18,15 +18,15 @@ module VX_scheduler (
 
     reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
 
-    wire valid_wb  = (writeback_if.wb != 0) && (|writeback_if.wb_valid) && (writeback_if.rd != 0);
+    wire valid_wb  = (writeback_if.wb != 0) && (|writeback_if.valid) && (writeback_if.rd != 0);
     wire wb_inc    = (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
 
     wire rs1_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs1] != 0;
     wire rs2_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs2] != 0;
     wire rd_rename  = rename_table[bckE_req_if.warp_num][bckE_req_if.rd ] != 0;
 
-    wire is_store = (bckE_req_if.mem_write != `NO_MEM_WRITE);
-    wire is_load  = (bckE_req_if.mem_read  != `NO_MEM_READ);
+    wire is_store = (bckE_req_if.mem_write != `WORD_SEL_NO);
+    wire is_load  = (bckE_req_if.mem_read  != `WORD_SEL_NO);
 
     // classify our next instruction.
     wire is_mem  = is_store || is_load;
@@ -58,7 +58,7 @@ module VX_scheduler (
             end
         end else begin
             if (valid_wb) begin
-                rename_table[writeback_if.wb_warp_num][writeback_if.rd] <= rename_table[writeback_if.wb_warp_num][writeback_if.rd] & (~writeback_if.wb_valid);
+                rename_table[writeback_if.warp_num][writeback_if.rd] <= rename_table[writeback_if.warp_num][writeback_if.rd] & (~writeback_if.valid);
             end
 
             if (!schedule_delay && wb_inc) begin
@@ -66,7 +66,7 @@ module VX_scheduler (
             end
         
             if (valid_wb 
-             && (0 == (rename_table[writeback_if.wb_warp_num][writeback_if.rd] & ~writeback_if.wb_valid))) begin
+             && (0 == (rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid))) begin
                    count_valid <= count_valid - 1;
             end
 
