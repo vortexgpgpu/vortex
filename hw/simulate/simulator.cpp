@@ -98,19 +98,13 @@ void Simulator::dbus_driver() {
   vortex_->dram_req_ready = ~dram_stalled_;
 }
 
-void Simulator::io_handler() {
-  bool io_valid = false;
-  for (int c = 0; c < NUM_CORES; c++) {
-    if (vortex_->io_valid[c]) {
-      uint32_t data_write = (uint32_t)vortex_->io_data[c];
-      char c = (char)data_write;
-      std::cerr << c;      
-      io_valid = true;
-    }
+void Simulator::io_driver() {
+  if (vortex_->io_valid) {
+    uint32_t data_write = (uint32_t)vortex_->io_data;
+    char c = (char)data_write;
+    std::cerr << c;      
   }
-  if (io_valid) {
-    std::cout << std::flush;
-  }
+  vortex_->io_ready = true;
 }
 
 void Simulator::reset() {  
@@ -128,7 +122,7 @@ void Simulator::step() {
   this->eval();
 
   dbus_driver();
-  io_handler();
+  io_driver();
 }
 
 void Simulator::eval() {
@@ -149,7 +143,9 @@ bool Simulator::is_busy() {
   return (0 == vortex_->ebreak);
 }
 
-void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
+void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
+  // send snoop requests to the caches
+  printf("[sim] total cycles: %ld\n", time_stamp/2);
   // align address to LLC block boundaries
   auto aligned_addr_start = mem_addr / GLOBAL_BLOCK_SIZE;
   auto aligned_addr_end = (mem_addr + size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE;
@@ -169,12 +165,6 @@ void Simulator::send_snoops(uint32_t mem_addr, uint32_t size) {
       vortex_->llc_snp_req_valid = true;      
     }
   }
-}
-
-void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
-  // send snoop requests to the caches
-  printf("[sim] total cycles: %ld\n", time_stamp/2);
-  this->send_snoops(mem_addr, size);
   this->wait(PIPELINE_FLUSH_LATENCY);
 }
 
@@ -192,12 +182,12 @@ bool Simulator::run() {
 
   // check riscv-tests PASSED/FAILED status
 #if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
-  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
 #else
 #if (NUM_CLUSTERS == 1)
-  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk2__DOT__genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
 #else
-  int status = (int)vortex_->Vortex_Socket->genblk2__DOT__genblk2__BRA__0__KET____DOT__Vortex_Cluster->genblk2__DOT__genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex_Socket->genblk2__DOT__genblk1__BRA__0__KET____DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
 #endif
 #endif
 

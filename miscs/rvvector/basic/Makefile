@@ -15,10 +15,10 @@ CPY  = /home/fares/dev/riscv-gnu-toolchain-vector/drops/bin/riscv32-unknown-elf-
 
 NEWLIB  = $(LIB_PATH)/newlib/newlib.c
 VX_STR  = $(LIB_PATH)/startup/vx_start.S
-VX_INT  = $(LIB_PATH)/intrinsics/vx_intrinsics.s
-VX_IO   = $(LIB_PATH)/io/vx_io.s $(LIB_PATH)/io/vx_io.c
+VX_INT  = $(LIB_PATH)/intrinsics/vx_intrinsics.S
+VX_IO   = $(LIB_PATH)/io/vx_io.S $(LIB_PATH)/io/vx_io.c
 VX_API  = $(LIB_PATH)/vx_api/vx_api.c
-VX_FIO  = $(LIB_PATH)/fileio/fileio.s
+VX_FIO  = $(LIB_PATH)/fileio/fileio.S
 VX_VEC  = vx_vec.s
 LIBS    = /home/fares/dev/riscv-gnu-toolchain-vector/drops/riscv32-unknown-elf/lib/libc.a /home/fares/dev/riscv-gnu-toolchain-vector/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 

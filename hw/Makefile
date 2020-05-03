@@ -2,11 +2,11 @@ all: singlecore
 
 CF += -std=c++11 -fms-extensions
 
-VF += -compiler gcc --language 1800-2009 --assert -Wall -Wpedantic
+VF += --language 1800-2009 --assert -Wall -Wpedantic
 
 VF += -exe $(SRCS) $(INCLUDE)
 
-MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
+MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
 INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cache -I./rtl/simulate
 
@@ -21,58 +21,59 @@ THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu
 build_config:
 	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./simulate/VX_config.h
 
-gen-singlecore: build_config
+gen-s: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG'
 
-gen-singlecore-t: build_config
-	verilator $(VF) -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
-
-gen-singlecore-d: build_config
+gen-sd: build_config
 	verilator $(VF) -cc Vortex_Socket.v -CFLAGS '$(CF) -g -O0 -DVCD_OUTPUT' $(DBG)
 
-gen-multicore: build_config
+gen-st: build_config
+	verilator $(VF) -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
+
+gen-m: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
-gen-multicore-t: build_config
-	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
-
-gen-multicore-d: build_config
+gen-md: build_config
 	verilator $(VF) -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -g -O0 -DVCD_OUTPUT $(MULTICORE)' $(DBG)
 
-singlecore: gen-singlecore
+gen-mt: build_config
+	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
+
+build-s: gen-s
 	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-singlecore-t: gen-singlecore-t
+build-sd: gen-sd
 	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-singlecore-d: gen-singlecore-d
+build-st: gen-st
 	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-multicore: gen-multicore
+build-m: gen-m
 	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-multicore-t: gen-multicore-t
+build-md: gen-md
 	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-multicore-d: gen-multicore-d
+build-mt: gen-mt
 	(cd obj_dir && make -j -f VVortex_Socket.mk)
 
-run: singlecore
+run: run-s
+run-s: build-s
 	(cd obj_dir && ./VVortex_Socket)
 
-run-d: singlecore-d
+run-sd: build-sd
 	(cd obj_dir && ./VVortex_Socket)
 
-run-t: singlecore-t
+run-st: build-st
 	(cd obj_dir && ./VVortex_Socket)
 
-run-m: multicore
+run-m: build-m
 	(cd obj_dir && ./VVortex_Socket)
 
-run-md: multicore-d
+run-md: build-md
 	(cd obj_dir && ./VVortex_Socket)
 
-run-mt: multicore-t
+run-mt: build-mt
 	(cd obj_dir && ./VVortex_Socket)
 
 clean:

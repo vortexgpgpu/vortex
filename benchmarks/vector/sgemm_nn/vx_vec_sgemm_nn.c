@@ -50,8 +50,8 @@ int main()
     int vsize = 32;
 
 
-  int startCycles = vx_getCycles();
-  int startInst = vx_getInst();
+  int startCycles = vx_num_cycles();
+  int startInst = vx_num_instrs();
   for (int r = 0; r < m; r++) {
        for (int c = 0; c < n; c++) {
            for (int i = 0; i < k;) {
@@ -61,8 +61,8 @@ int main()
            }
        }
     }
-    int endCycles = vx_getCycles();
-    int endInst = vx_getInst();
+    int endCycles = vx_num_cycles();
+    int endInst = vx_num_instrs();
 
     int totalInst = (endInst - startInst);
     int totalCycles = (endCycles - startCycles);

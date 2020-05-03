@@ -500,7 +500,7 @@ Disassembly of section .text:
 80000718:	00112623          	sw	ra,12(sp)
 8000071c:	00812423          	sw	s0,8(sp)
 80000720:	01010413          	addi	s0,sp,16
-80000724:	0e8000ef          	jal	ra,8000080c <vx_threadID>
+80000724:	0e8000ef          	jal	ra,8000080c <vx_thread_id>
 80000728:	00050793          	mv	a5,a0
 8000072c:	00078513          	mv	a0,a5
 80000730:	00c12083          	lw	ra,12(sp)
@@ -573,15 +573,15 @@ Disassembly of section .text:
 800007fc:	0000306b          	0x306b
 80000800:	00008067          	ret
 
-80000804 <vx_warpID>:
+80000804 <vx_warp_id>:
 80000804:	02102573          	csrr	a0,0x21
 80000808:	00008067          	ret
 
-8000080c <vx_threadID>:
+8000080c <vx_thread_id>:
 8000080c:	02002573          	csrr	a0,0x20
 80000810:	00008067          	ret
 
-80000814 <vx_resetStack>:
+80000814 <vx_reset_stack>:
 80000814:	00400513          	li	a0,4
 80000818:	0005006b          	0x5006b
 8000081c:	021026f3          	csrr	a3,0x21

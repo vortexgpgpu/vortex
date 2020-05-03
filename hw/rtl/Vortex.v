@@ -8,10 +8,6 @@ module Vortex #(
     input  wire                         clk,
     input  wire                         reset,
 
-    // IO
-    output wire                         io_valid,
-    output wire [31:0]                  io_data,
-
     // DRAM Dcache Req
     output wire                         D_dram_req_read,
     output wire                         D_dram_req_write,    
@@ -40,11 +36,17 @@ module Vortex #(
     input  wire [`IDRAM_TAG_WIDTH-1:0]  I_dram_rsp_tag,
     output wire                         I_dram_rsp_ready,
 
-    // LLC Snooping
+    // Cache Snooping
     input  wire                         llc_snp_req_valid,
     input  wire [`DDRAM_ADDR_WIDTH-1:0] llc_snp_req_addr,
     output wire                         llc_snp_req_ready,
 
+    // I/O
+    output wire                         io_valid,
+    output wire [31:0]                  io_data,
+    input wire                          io_ready,
+
+    // Debug
     output wire                         ebreak
 );
 `DEBUG_BEGIN
@@ -98,20 +100,17 @@ module Vortex #(
     assign dcache_dram_rsp_if.dram_rsp_tag   = D_dram_rsp_tag;
     assign D_dram_rsp_ready = dcache_dram_rsp_if.dram_rsp_ready;
 
-    assign io_valid = (!memory_delay) 
-                   && (|dcache_core_req_if.core_req_valid) 
-                   && (dcache_core_req_if.core_req_write[0] != `WORD_SEL_NO) 
-                   && (dcache_core_req_if.core_req_addr[0] == `IO_BUS_ADDR);
+    wire to_io_bus  = (dcache_core_req_if.core_req_addr[0] == `IO_BUS_ADDR);    
+    assign io_valid = |dcache_core_req_if.core_req_valid && to_io_bus;
+    assign io_data  = dcache_core_req_if.core_req_data[0];
 
-    assign io_data = dcache_core_req_if.core_req_data[0];
-
-    assign dcache_core_req_qual_if.core_req_valid = dcache_core_req_if.core_req_valid & {`NUM_THREADS{~io_valid}};        
+    assign dcache_core_req_qual_if.core_req_valid = dcache_core_req_if.core_req_valid & {`NUM_THREADS{~to_io_bus}};        
     assign dcache_core_req_qual_if.core_req_read  = dcache_core_req_if.core_req_read;
     assign dcache_core_req_qual_if.core_req_write = dcache_core_req_if.core_req_write;
     assign dcache_core_req_qual_if.core_req_addr  = dcache_core_req_if.core_req_addr;
     assign dcache_core_req_qual_if.core_req_data  = dcache_core_req_if.core_req_data;
     assign dcache_core_req_qual_if.core_req_tag   = dcache_core_req_if.core_req_tag;    
-    assign dcache_core_req_if.core_req_ready = dcache_core_req_qual_if.core_req_ready;
+    assign dcache_core_req_if.core_req_ready = to_io_bus ? io_ready : dcache_core_req_qual_if.core_req_ready;
     
     // Icache interfaces
     VX_cache_core_req_if #(

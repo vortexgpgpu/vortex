@@ -77,23 +77,23 @@ Disassembly of section .text:
 800000cc:	0000306b          	0x306b
 800000d0:	00008067          	ret
 
-800000d4 <vx_warpID>:
+800000d4 <vx_warp_id>:
 800000d4:	02102573          	csrr	a0,0x21
 800000d8:	00008067          	ret
 
-800000dc <vx_threadID>:
+800000dc <vx_thread_id>:
 800000dc:	02002573          	csrr	a0,0x20
 800000e0:	00008067          	ret
 
-800000e4 <vx_getCycles>:
+800000e4 <vx_num_cycles>:
 800000e4:	02602573          	csrr	a0,0x26
 800000e8:	00008067          	ret
 
-800000ec <vx_getInst>:
+800000ec <vx_num_instrs>:
 800000ec:	02502573          	csrr	a0,0x25
 800000f0:	00008067          	ret
 
-800000f4 <vx_resetStack>:
+800000f4 <vx_reset_stack>:
 800000f4:	00400513          	li	a0,4
 800000f8:	0005006b          	0x5006b
 800000fc:	021026f3          	csrr	a3,0x21
@@ -219,7 +219,7 @@ Disassembly of section .text:
 8000029c:	3a01a783          	lw	a5,928(gp) # 80016ba8 <global_argument_struct>
 800002a0:	00078513          	mv	a0,a5
 800002a4:	000700e7          	jalr	a4
-800002a8:	e2dff0ef          	jal	ra,800000d4 <vx_warpID>
+800002a8:	e2dff0ef          	jal	ra,800000d4 <vx_warp_id>
 800002ac:	fea42623          	sw	a0,-20(s0)
 800002b0:	fec42783          	lw	a5,-20(s0)
 800002b4:	00078863          	beqz	a5,800002c4 <setup_call+0x48>
@@ -234,7 +234,7 @@ Disassembly of section .text:
 800002d8:	02010113          	addi	sp,sp,32
 800002dc:	00008067          	ret
 
-800002e0 <vx_spawnWarps>:
+800002e0 <vx_spawn_warps>:
 800002e0:	fe010113          	addi	sp,sp,-32
 800002e4:	00112e23          	sw	ra,28(sp)
 800002e8:	00812c23          	sw	s0,24(sp)
@@ -269,10 +269,10 @@ Disassembly of section .text:
 80000354:	3b01a783          	lw	a5,944(gp) # 80016bb8 <pocl_threads>
 80000358:	00078513          	mv	a0,a5
 8000035c:	d59ff0ef          	jal	ra,800000b4 <vx_tmc>
-80000360:	d7dff0ef          	jal	ra,800000dc <vx_threadID>
+80000360:	d7dff0ef          	jal	ra,800000dc <vx_thread_id>
 80000364:	00050793          	mv	a5,a0
 80000368:	fef42023          	sw	a5,-32(s0)
-8000036c:	d69ff0ef          	jal	ra,800000d4 <vx_warpID>
+8000036c:	d69ff0ef          	jal	ra,800000d4 <vx_warp_id>
 80000370:	00050793          	mv	a5,a0
 80000374:	fcf42e23          	sw	a5,-36(s0)
 80000378:	fe042623          	sw	zero,-20(s0)
@@ -389,14 +389,14 @@ Disassembly of section .text:
 8000052c:	00078593          	mv	a1,a5
 80000530:	00070513          	mv	a0,a4
 80000534:	b79ff0ef          	jal	ra,800000ac <vx_wspawn>
-80000538:	badff0ef          	jal	ra,800000e4 <vx_getCycles>
+80000538:	badff0ef          	jal	ra,800000e4 <vx_num_cycles>
 8000053c:	fea42623          	sw	a0,-20(s0)
-80000540:	badff0ef          	jal	ra,800000ec <vx_getInst>
+80000540:	badff0ef          	jal	ra,800000ec <vx_num_instrs>
 80000544:	fea42423          	sw	a0,-24(s0)
 80000548:	dfdff0ef          	jal	ra,80000344 <pocl_spawn_real>
-8000054c:	b99ff0ef          	jal	ra,800000e4 <vx_getCycles>
+8000054c:	b99ff0ef          	jal	ra,800000e4 <vx_num_cycles>
 80000550:	fea42223          	sw	a0,-28(s0)
-80000554:	b99ff0ef          	jal	ra,800000ec <vx_getInst>
+80000554:	b99ff0ef          	jal	ra,800000ec <vx_num_instrs>
 80000558:	fea42023          	sw	a0,-32(s0)
 8000055c:	fe442703          	lw	a4,-28(s0)
 80000560:	fec42783          	lw	a5,-20(s0)
@@ -424,7 +424,7 @@ Disassembly of section .text:
 800005b0:	b85ff0ef          	jal	ra,80000134 <vx_print_str>
 800005b4:	00400513          	li	a0,4
 800005b8:	afdff0ef          	jal	ra,800000b4 <vx_tmc>
-800005bc:	b21ff0ef          	jal	ra,800000dc <vx_threadID>
+800005bc:	b21ff0ef          	jal	ra,800000dc <vx_thread_id>
 800005c0:	fea42623          	sw	a0,-20(s0)
 800005c4:	fec42703          	lw	a4,-20(s0)
 800005c8:	88418693          	addi	a3,gp,-1916 # 8001608c <tmc_array>
@@ -473,7 +473,7 @@ Disassembly of section .text:
 8000066c:	00112e23          	sw	ra,28(sp)
 80000670:	00812c23          	sw	s0,24(sp)
 80000674:	02010413          	addi	s0,sp,32
-80000678:	a65ff0ef          	jal	ra,800000dc <vx_threadID>
+80000678:	a65ff0ef          	jal	ra,800000dc <vx_thread_id>
 8000067c:	fea42623          	sw	a0,-20(s0)
 80000680:	fec42783          	lw	a5,-20(s0)
 80000684:	0027b793          	sltiu	a5,a5,2
@@ -568,7 +568,7 @@ Disassembly of section .text:
 800007e0:	00112e23          	sw	ra,28(sp)
 800007e4:	00812c23          	sw	s0,24(sp)
 800007e8:	02010413          	addi	s0,sp,32
-800007ec:	8e9ff0ef          	jal	ra,800000d4 <vx_warpID>
+800007ec:	8e9ff0ef          	jal	ra,800000d4 <vx_warp_id>
 800007f0:	fea42623          	sw	a0,-20(s0)
 800007f4:	3c418713          	addi	a4,gp,964 # 80016bcc <wsapwn_arr>
 800007f8:	fec42783          	lw	a5,-20(s0)
@@ -664,9 +664,9 @@ Disassembly of section .text:
 80000948:	fca42623          	sw	a0,-52(s0)
 8000094c:	fcc42783          	lw	a5,-52(s0)
 80000950:	fef42623          	sw	a5,-20(s0)
-80000954:	f80ff0ef          	jal	ra,800000d4 <vx_warpID>
+80000954:	f80ff0ef          	jal	ra,800000d4 <vx_warp_id>
 80000958:	fea42423          	sw	a0,-24(s0)
-8000095c:	f80ff0ef          	jal	ra,800000dc <vx_threadID>
+8000095c:	f80ff0ef          	jal	ra,800000dc <vx_thread_id>
 80000960:	fea42223          	sw	a0,-28(s0)
 80000964:	fec42783          	lw	a5,-20(s0)
 80000968:	0107a783          	lw	a5,16(a5)
@@ -808,7 +808,7 @@ Disassembly of section .text:
 80000b78:	800017b7          	lui	a5,0x80001
 80000b7c:	93878613          	addi	a2,a5,-1736 # 80000938 <__BSS_END__+0xfffe9d48>
 80000b80:	00070513          	mv	a0,a4
-80000b84:	f5cff0ef          	jal	ra,800002e0 <vx_spawnWarps>
+80000b84:	f5cff0ef          	jal	ra,800002e0 <vx_spawn_warps>
 80000b88:	fe442783          	lw	a5,-28(s0)
 80000b8c:	00078713          	mv	a4,a5
 80000b90:	fe042783          	lw	a5,-32(s0)
@@ -833,7 +833,7 @@ Disassembly of section .text:
 80000bdc:	800017b7          	lui	a5,0x80001
 80000be0:	93878613          	addi	a2,a5,-1736 # 80000938 <__BSS_END__+0xfffe9d48>
 80000be4:	00070513          	mv	a0,a4
-80000be8:	ef8ff0ef          	jal	ra,800002e0 <vx_spawnWarps>
+80000be8:	ef8ff0ef          	jal	ra,800002e0 <vx_spawn_warps>
 80000bec:	fe442783          	lw	a5,-28(s0)
 80000bf0:	00078713          	mv	a4,a5
 80000bf4:	fe042783          	lw	a5,-32(s0)

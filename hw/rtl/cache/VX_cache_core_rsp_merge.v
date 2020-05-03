@@ -85,7 +85,7 @@ module VX_cache_core_rsp_merge #(
                      && per_bank_core_rsp_valid[i] 
                      && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
                      && ((main_bank_index == `LOG2UP(NUM_BANKS)'(i)) 
-                     || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))) begin
+                      || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))) begin
                         core_rsp_valid[per_bank_core_rsp_tid[i]]    = 1;
                         core_rsp_data[per_bank_core_rsp_tid[i]]     = per_bank_core_rsp_data[i];
                         core_rsp_tag[per_bank_core_rsp_tid[i]]      = per_bank_core_rsp_tag[i];

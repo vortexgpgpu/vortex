@@ -51,17 +51,6 @@
 `define CSR_WIDTH 12
 
 ///////////////////////////////////////////////////////////////////////////////
-    
-`define CSR_THREAD      12'h020
-`define CSR_WARP        12'h021
-`define CSR_WARP_ID     12'h022
-
-`define CSR_CYCL_L      12'hC00;
-`define CSR_CYCL_H      12'hC80;
-`define CSR_INST_L      12'hC02;
-`define CSR_INST_H      12'hC82;
-
-///////////////////////////////////////////////////////////////////////////////
 
 `define R_INST 7'd51
 `define L_INST 7'd3
@@ -192,7 +181,7 @@
 `define L2DRAM_ADDR_WIDTH (32 - `CLOG2(`L2BANK_LINE_SIZE))
 
 // DRAM request tag bits
-`define L2DRAM_TAG_WIDTH ((`NUM_CORES > 1) ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+1))
+`define L2DRAM_TAG_WIDTH (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 

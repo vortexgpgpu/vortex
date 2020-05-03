@@ -24,24 +24,23 @@ module VX_csr_pipe #(
     wire[31:0] csr_read_data_unqual;
     wire[31:0] csr_read_data;
 
-    assign stall_gpr_csr = no_slot_csr && csr_req_if.is_csr && |(csr_req_if.valid);
-
-    assign csr_read_data = (csr_address_s2 == csr_req_if.csr_address) ? csr_updated_data_s2 : csr_read_data_unqual;
-
-    wire writeback = |writeback_if.valid;
-    
-    VX_csr_data csr_data(
-        .clk                (clk),
-        .reset              (reset),
-        .read_csr_address   (csr_req_if.csr_address),
-        .write_valid        (is_csr_s2),
-        .write_csr_data     (csr_updated_data_s2[`CSR_WIDTH-1:0]),
-        .write_csr_address  (csr_address_s2),
-        .read_csr_data      (csr_read_data_unqual),
-        .writeback_valid    (writeback)
+    VX_csr_data #(
+        .CORE_ID(CORE_ID)
+    ) csr_data (
+        .clk            (clk),
+        .reset          (reset),
+        .read_addr      (csr_req_if.csr_address),
+        .read_data      (csr_read_data_unqual),
+        .write_enable   (is_csr_s2),
+        .write_data     (csr_updated_data_s2[`CSR_WIDTH-1:0]),
+        .write_addr     (csr_address_s2), 
+        .warp_num       (csr_req_if.warp_num),
+        .wb_valid       (| writeback_if.valid)
     );
 
-    reg [31:0] csr_updated_data;
+    assign csr_read_data = (csr_address_s2 == csr_req_if.csr_address) ? csr_updated_data_s2 : csr_read_data_unqual; 
+
+    reg [31:0] csr_updated_data;   
 
     always @(*) begin
         case (csr_req_if.alu_op)
@@ -52,55 +51,29 @@ module VX_csr_pipe #(
         endcase
     end    
 
-    wire zero = 0;
-
     VX_generic_register #(
         .N(32 + 32 + 12 + 1 + 2 + 5 + (`NW_BITS-1+1) + `NUM_THREADS)
     ) csr_reg_s2 (
         .clk  (clk),
         .reset(reset),
         .stall(no_slot_csr),
-        .flush(zero),
+        .flush(0),
         .in   ({csr_req_if.valid, csr_req_if.warp_num, csr_req_if.rd, csr_req_if.wb, csr_req_if.is_csr, csr_req_if.csr_address, csr_read_data   , csr_updated_data   }),
         .out  ({valid_s2        , warp_num_s2        , rd_s2        , wb_s2        , is_csr_s2        , csr_address_s2        , csr_read_data_s2, csr_updated_data_s2})
     );
 
-    wire [`NUM_THREADS-1:0][31:0] final_csr_data;
+    assign csr_wb_if.valid     = valid_s2;
+    assign csr_wb_if.warp_num  = warp_num_s2;
+    assign csr_wb_if.rd        = rd_s2;
+    assign csr_wb_if.wb        = wb_s2;
 
-    wire [`NUM_THREADS-1:0][31:0] thread_ids;
-    wire [`NUM_THREADS-1:0][31:0] warp_ids;
-    wire [`NUM_THREADS-1:0][31:0] warp_idz;
-    wire [`NUM_THREADS-1:0][31:0] csr_vec_read_data_s2;
+    genvar i;
+    for (i = 0; i < `NUM_THREADS; i = i + 1) begin
+        assign csr_wb_if.data[i] = (csr_address_s2 == `CSR_LTID) ? i : 
+                                   (csr_address_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
+                                                                   csr_read_data_s2;
+    end     
 
-    genvar cur_t;
-    for (cur_t = 0; cur_t < `NUM_THREADS; cur_t = cur_t + 1) begin
-        assign thread_ids[cur_t] = cur_t;
-    end
-
-    genvar cur_tw;
-    for (cur_tw = 0; cur_tw < `NUM_THREADS; cur_tw = cur_tw + 1) begin
-        assign warp_ids[cur_tw] = 32'(warp_num_s2);
-        assign warp_idz[cur_tw] = 32'(warp_num_s2) + (CORE_ID * `NUM_WARPS);
-    end
-
-    genvar cur_v;
-    for (cur_v = 0; cur_v < `NUM_THREADS; cur_v = cur_v + 1) begin
-        assign csr_vec_read_data_s2[cur_v] = csr_read_data_s2;
-    end
-
-    wire thread_select        = (csr_address_s2 == `CSR_THREAD);
-    wire warp_select          = (csr_address_s2 == `CSR_WARP);
-    wire warp_id_select       = (csr_address_s2 == `CSR_WARP_ID);
-
-    assign final_csr_data     = thread_select  ? thread_ids :
-                                warp_select    ? warp_ids   :
-                                warp_id_select ? warp_idz   :
-                                csr_vec_read_data_s2;
-
-    assign csr_wb_if.valid      = valid_s2;
-    assign csr_wb_if.warp_num   = warp_num_s2;
-    assign csr_wb_if.rd         = rd_s2;
-    assign csr_wb_if.wb         = wb_s2;
-    assign csr_wb_if.data       = final_csr_data;
+    assign stall_gpr_csr = no_slot_csr && csr_req_if.is_csr && (| csr_req_if.valid);   
 
 endmodule

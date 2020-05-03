@@ -24,7 +24,7 @@ unsigned y[] = {1, 1, 1, 1,
                 1, 1, 1, 1,
                 1, 1, 1, 1,
                 1, 1, 1, 1};
-
+F
 unsigned z[] = {0, 0, 0, 0,
                 0, 0, 0, 0,
                 0, 0, 0, 0,
@@ -34,8 +34,8 @@ void mat_add_kernel(void * void_arguments)
 {
 	mat_add_args_t * arguments = (mat_add_args_t *) void_arguments;
 
-	unsigned wid = vx_warpID();
-	unsigned tid = vx_threadID();
+	unsigned wid = vx_warp_id();
+	unsigned tid = vx_thread_id();
 
 	bool valid = (wid < arguments->numRows) && (tid < arguments->numColums);
 
@@ -50,7 +50,7 @@ void mat_add_kernel(void * void_arguments)
 
 int main()
 {
-	// Main is called with all threads active of warp 0
+	// ensure single thread
 	vx_tmc(1);
 
 	vx_print_str("Let's start... (This might take a while)\n");
@@ -84,11 +84,9 @@ int main()
 		vx_print_str("Wr->read and repeat(Wr) tests passed!\n");
 	}
 
-
 	vx_print_str("Simple Main\n");
 
-
-	// // TMC test
+	// TMC test
 	test_tmc();
 
 	// Control Divergence Test
@@ -118,7 +116,7 @@ int main()
 
 	}
 
-	vx_print_str("vx_spawnWarps mat_add_kernel\n");
+	vx_print_str("vx_spawn_warps mat_add_kernel\n");
 
 	mat_add_args_t arguments;
 	arguments.x         = x;
@@ -131,7 +129,7 @@ int main()
 	int numWarps   = 4;
 	int numThreads = 4;
 
-	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_spawn_warps(numWarps, numThreads, mat_add_kernel, &arguments);
 
 	vx_print_str("Waiting to ensure other warps are done... (Takes a while)\n");
 	for (int i = 0; i < 5000; i++) {}

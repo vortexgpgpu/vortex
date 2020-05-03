@@ -10,10 +10,10 @@ void kernel_body(void* arg) {
 	int* y = (int*)_arg->src1_ptr;
 	int* z = (int*)_arg->dst_ptr;
 
-	unsigned wNo = vx_warpNum();
-	unsigned tid = vx_threadID();
+	unsigned wid = vx_warp_gid();
+	unsigned tid = vx_thread_id();
 
-	unsigned i = ((wNo * _arg->num_threads) + tid) * _arg->stride;
+	unsigned i = ((wid * _arg->num_threads) + tid) * _arg->stride;
 
 	for (unsigned j = 0; j < _arg->stride; ++j) {
 		z[i+j] = x[i+j] + y[i+j];
@@ -28,5 +28,5 @@ void main() {
 	printf("src0_ptr=0x%x\n", arg->src0_ptr);
 	printf("src1_ptr=0x%x\n", arg->src1_ptr);
 	printf("dst_ptr=0x%x\n", arg->dst_ptr);*/
-	vx_spawnWarps(arg->num_warps, arg->num_threads, kernel_body, arg);
+	vx_spawn_warps(arg->num_warps, arg->num_threads, kernel_body, arg);
 }

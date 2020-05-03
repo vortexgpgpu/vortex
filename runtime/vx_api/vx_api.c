@@ -19,12 +19,12 @@ void spawn_warp_runonce() {
 	global_function_pointer(global_argument_struct);
 
 	// resume single-thread execution on exit
-	unsigned wid = vx_warpID();
+	unsigned wid = vx_warp_id();
 	unsigned tmask = (0 == wid) ? 0x1 : 0x0; 
 	vx_tmc(tmask);
 }
 
-void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void * args) {
+void vx_spawn_warps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void * args) {
 	global_function_pointer = func_ptr;
 	global_argument_struct  = args;
 	global_num_threads      = numThreads;
@@ -43,15 +43,15 @@ void pocl_spawn_warp_runonce() {
 	// active all threads
 	vx_tmc(pocl_threads);
 
-	int x = vx_threadID();
-	int y = vx_warpNum();
+	int x = vx_thread_id();
+	int y = vx_warp_gid();
 
 	// call kernel routine
 	(pocl_pfn)(pocl_args, pocl_ctx, x, y, 0);
 
 	// resume single-thread execution on exit
-	int wid = vx_warpID();
-	unsigned tmask = (0 == wid) ? 0x1 : 0x0; 
+	int wid = vx_warp_id();
+	unsigned tmask = (0 == wid) ? 0x1 : 0x0;
 	vx_tmc(tmask);
 }
 
