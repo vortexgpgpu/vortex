@@ -313,7 +313,7 @@ void _kill()
 
 unsigned _getpid()
 {
-	return vx_threadID();
+	return vx_thread_id();
 }
 
 void _unlink()

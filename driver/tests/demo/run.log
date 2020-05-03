@@ -1730,13 +1730,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000094
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002673 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 00000000  00000000  00000000  00000000 (0)
@@ -1789,13 +1789,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000094
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002673 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 00000000  00000000  00000000  00000000 (0)
@@ -1848,13 +1848,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000094
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002673 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 00000000  00000000  00000000  00000000 (0)
@@ -2127,13 +2127,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000094
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002673 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r12 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r12=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r12=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 80000014  00000000  00000000  00000000 (0)
@@ -3286,13 +3286,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x800000b0
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x21026f3 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=1
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 00000000  00000000  00000000  00000000 (0)
@@ -3345,13 +3345,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x800000b0
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x21026f3 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=2
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 00000000  00000000  00000000  00000000 (0)
@@ -3404,13 +3404,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x800000b0
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x21026f3 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=3
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=3
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=3
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 00000000  00000000  00000000  00000000 (0)
@@ -3683,13 +3683,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 1 1 1
 DEBUG ../../../../simX/core.cpp:750: current PC=0x800000b0
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x21026f3 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r13 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r13=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r13=0
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 80000014  00000000  00000000  00000000 (0)
@@ -22160,13 +22160,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 1 0 1 1
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000758
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 800009d0  800009d0  800009d0  800009d0 (0)
@@ -22219,13 +22219,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 1 0 0 1
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000758
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 800009d0  800009d0  800009d0  800009d0 (0)
@@ -22278,13 +22278,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 1 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000758
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 800009d0  800009d0  800009d0  800009d0 (0)
@@ -22337,13 +22337,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000758
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2002573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=0
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=1
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=2
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=32
-DEBUG ../../../../simX/instruction.cpp:788: vx_threadID: r10=3
+DEBUG ../../../../simX/instruction.cpp:788: vx_thread_id: r10=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 800009d0  800009d0  800009d0  800009d0 (0)
@@ -39870,13 +39870,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 1 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000748
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2102573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=2
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=2
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=2
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 80000810  80000810  80000810  80000810 (0)
@@ -39929,13 +39929,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 1 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000748
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2102573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=3
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=3
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=3
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=3
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=3
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 80000810  80000810  80000810  80000810 (0)
@@ -39988,13 +39988,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 1 0 0 0
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000748
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2102573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=1
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=1
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=1
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 80000810  80000810  80000810  80000810 (0)
@@ -40159,13 +40159,13 @@ DEBUG ../../../../simX/core.cpp:176: stalled warps: 0 0 1 1
 DEBUG ../../../../simX/core.cpp:750: current PC=0x80000748
 DEBUG ../../../../simX/enc.cpp:324: Decoded instr 0x2102573 into: SYS
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=0
 DEBUG ../../../../simX/instruction.cpp:781: SYS_INST: r10 <- r0, imm=33
-DEBUG ../../../../simX/instruction.cpp:792: vx_warpID: r10=0
+DEBUG ../../../../simX/instruction.cpp:792: vx_warp_id: r10=0
 DEBUG ../../../../simX/core.cpp:781: Register state:
   %r 0: 00000000  00000000  00000000  00000000 (0)
   %r 1: 800008c4  800008c4  800008c4  800008c4 (0)

@@ -38,20 +38,18 @@ vx_set_sp:
     addi  gp, gp, %pcrel_lo(1b)
   .option pop
 
-  csrr a3, 0x22        # get global warp number
-  slli a3, a3, 0x1a    # shift by wid
-  csrr a2, 0x20        # get tid
-  slli a1, a2, 10      # multiply tid by 1024
+  csrr a1, CSR_GTID    # get gtid
+  slli a1, a1, 10      # multiply tid by 1024
+  csrr a2, CSR_LTID    # get tid  
   slli a2, a2, 2       # multiply tid by 4
-  lui  sp, 0x6ffff     # load base sp
-  sub  sp, sp, a1      # sub sp - (1024*tid)
-  sub  sp, sp, a3      # shoft per warp
-  add  sp, sp, a2      # shift sp for better performance
+  lui  sp, STACK_BASE_ADDR # load base sp
+  sub  sp, sp, a1      # sub thread block
+  add  sp, sp, a2      # reduce addr collision for perf
 
-  csrr a3, 0x21        # get wid
+  csrr a3, CSR_LWID    # get wid
   beqz a3, RETURN
   li a0, 0
-  .word 0x0005006b    # tmc 0
+  .word 0x0005006b     # tmc 0
 RETURN:
   ret
 

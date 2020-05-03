@@ -13,9 +13,9 @@ GDB = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gdb
 
 VX_SRCS =  $(VX_RT_PATH)/newlib/newlib.c
 VX_SRCS += $(VX_RT_PATH)/startup/vx_start.S
-VX_SRCS += $(VX_RT_PATH)/intrinsics/vx_intrinsics.s
-VX_SRCS += $(VX_RT_PATH)/io/vx_io.s $(VX_RT_PATH)/io/vx_io.c
-VX_SRCS += $(VX_RT_PATH)/fileio/fileio.s
+VX_SRCS += $(VX_RT_PATH)/intrinsics/vx_intrinsics.S
+VX_SRCS += $(VX_RT_PATH)/io/vx_io.S $(VX_RT_PATH)/io/vx_io.c
+VX_SRCS += $(VX_RT_PATH)/fileio/fileio.S
 VX_SRCS += $(VX_RT_PATH)/tests/tests.c
 VX_SRCS += $(VX_RT_PATH)/vx_api/vx_api.c
 

@@ -484,7 +484,7 @@ Disassembly of section .text:
 800006e0:	00112623          	sw	ra,12(sp)
 800006e4:	00812423          	sw	s0,8(sp)
 800006e8:	01010413          	addi	s0,sp,16
-800006ec:	0d4000ef          	jal	ra,800007c0 <vx_threadID>
+800006ec:	0d4000ef          	jal	ra,800007c0 <vx_thread_id>
 800006f0:	00050793          	mv	a5,a0
 800006f4:	00078513          	mv	a0,a5
 800006f8:	00c12083          	lw	ra,12(sp)
@@ -552,23 +552,23 @@ Disassembly of section .text:
 800007b0:	0000306b          	0x306b
 800007b4:	00008067          	ret
 
-800007b8 <vx_warpID>:
+800007b8 <vx_warp_id>:
 800007b8:	02102573          	csrr	a0,0x21
 800007bc:	00008067          	ret
 
-800007c0 <vx_threadID>:
+800007c0 <vx_thread_id>:
 800007c0:	02002573          	csrr	a0,0x20
 800007c4:	00008067          	ret
 
-800007c8 <vx_getCycles>:
+800007c8 <vx_num_cycles>:
 800007c8:	02602573          	csrr	a0,0x26
 800007cc:	00008067          	ret
 
-800007d0 <vx_getInst>:
+800007d0 <vx_num_instrs>:
 800007d0:	02502573          	csrr	a0,0x25
 800007d4:	00008067          	ret
 
-800007d8 <vx_resetStack>:
+800007d8 <vx_reset_stack>:
 800007d8:	00400513          	li	a0,4
 800007dc:	0005006b          	0x5006b
 800007e0:	021026f3          	csrr	a3,0x21
@@ -731,10 +731,10 @@ Disassembly of section .text:
 80000a24:	fe842703          	lw	a4,-24(s0)
 80000a28:	fe042783          	lw	a5,-32(s0)
 80000a2c:	fcf744e3          	blt	a4,a5,800009f4 <main+0x1a0>
-80000a30:	d99ff0ef          	jal	ra,800007c8 <vx_getCycles>
+80000a30:	d99ff0ef          	jal	ra,800007c8 <vx_num_cycles>
 80000a34:	00050793          	mv	a5,a0
 80000a38:	fcf42623          	sw	a5,-52(s0)
-80000a3c:	d95ff0ef          	jal	ra,800007d0 <vx_getInst>
+80000a3c:	d95ff0ef          	jal	ra,800007d0 <vx_num_instrs>
 80000a40:	00050793          	mv	a5,a0
 80000a44:	fcf42423          	sw	a5,-56(s0)
 80000a48:	fd842683          	lw	a3,-40(s0)
@@ -742,10 +742,10 @@ Disassembly of section .text:
 80000a50:	fd042583          	lw	a1,-48(s0)
 80000a54:	fe042503          	lw	a0,-32(s0)
 80000a58:	e54ff0ef          	jal	ra,800000ac <vx_vec_saxpy>
-80000a5c:	d6dff0ef          	jal	ra,800007c8 <vx_getCycles>
+80000a5c:	d6dff0ef          	jal	ra,800007c8 <vx_num_cycles>
 80000a60:	00050793          	mv	a5,a0
 80000a64:	fcf42223          	sw	a5,-60(s0)
-80000a68:	d69ff0ef          	jal	ra,800007d0 <vx_getInst>
+80000a68:	d69ff0ef          	jal	ra,800007d0 <vx_num_instrs>
 80000a6c:	00050793          	mv	a5,a0
 80000a70:	fcf42023          	sw	a5,-64(s0)
 80000a74:	fc042703          	lw	a4,-64(s0)

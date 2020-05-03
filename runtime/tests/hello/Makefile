@@ -9,7 +9,7 @@ CPY  = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 
 NEWLIB  = ../../newlib/newlib.c ../../newlib/newlib_notimp.c ../../newlib/newlib.s
 VX_STR  = 
-VX_INT  = ../../intrinsics/vx_intrinsics.s
+VX_INT  = ../../intrinsics/vx_intrinsics.S
 VX_IO   = 
 VX_API  = 
 VX_FIO  = 

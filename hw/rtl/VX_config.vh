@@ -28,20 +28,38 @@
 `endif
 
 `ifndef NUM_CSRS
-`define NUM_CSRS 1024
-`endif
-
-`ifndef IO_BUS_ADDR
-`define IO_BUS_ADDR 32'h00010000
+`define NUM_CSRS 2
 `endif
 
 `ifndef STARTUP_ADDR
 `define STARTUP_ADDR 32'h80000000
 `endif
 
-`ifndef SHARED_MEM_ADDR_MATCH
-`define SHARED_MEM_ADDR_MATCH(x) (x[31:24] == 8'hFF)
+`ifndef SHARED_MEM_TOP_ADDR
+`define SHARED_MEM_TOP_ADDR 8'hFF
 `endif
+
+`ifndef IO_BUS_ADDR
+`define IO_BUS_ADDR 32'h00010000
+`endif
+
+`ifndef STACK_BASE_ADDR
+`define STACK_BASE_ADDR 20'h6ffff
+`endif
+
+`ifndef L2_ENABLE
+`define L2_ENABLE (`NUM_CORES > 1)
+`endif
+
+`define CSR_LTID    12'h020
+`define CSR_LWID    12'h021
+`define CSR_GWID    12'h022
+`define CSR_GTID    12'h023
+
+`define CSR_CYCLL   12'hC00
+`define CSR_CYCLH   12'hC80
+`define CSR_INSTL   12'hC02
+`define CSR_INSTH   12'hC82
 
 // ========================= Dcache Configurable Knobs ========================
 

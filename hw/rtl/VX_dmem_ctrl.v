@@ -46,7 +46,7 @@ module VX_dmem_ctrl (
         .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH)
     ) dcache_rsp_dcache_if();
 
-    wire to_shm          = `SHARED_MEM_ADDR_MATCH(dcache_core_req_if.core_req_addr[0]);
+    wire to_shm          = (dcache_core_req_if.core_req_addr[0][31:24] == `SHARED_MEM_TOP_ADDR);
     wire dcache_wants_wb = (|dcache_rsp_dcache_if.core_rsp_valid);
 
     // Dcache Request

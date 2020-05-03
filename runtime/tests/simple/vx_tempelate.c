@@ -2,7 +2,7 @@
 
 
 #include "io/io.h" // Printing functions
-#include "intrinsics/instrinsics.h" // vx_threadID and vx_WarpID
+#include "intrinsics/instrinsics.h" // vx_thread_id and vx_WarpID
 
 struct args
 {
@@ -14,7 +14,7 @@ void function(void * arg)
 {
 	struct args * real_arg = (struct args *) arg;
 
-	unsigned tid = vx_threadID();
+	unsigned tid = vx_thread_id();
 	unsigned wid = vx_WarpID();
 
 	__if(something) // Control divergent if
@@ -36,7 +36,7 @@ int main()
 	struct args arg;
 	arg.data = data;
 
-	vx_spawnWarps(numWarps, numThreads, function, &data);
+	vx_spawn_warps(numWarps, numThreads, function, &data);
 
 
 }

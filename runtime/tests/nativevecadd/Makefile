@@ -13,10 +13,10 @@ CPY  = ../../../../riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 
 NEWLIB  = ../../newlib/newlib.c
 VX_STR  = ../../startup/vx_start.S
-VX_INT  = ../../intrinsics/vx_intrinsics.s
-VX_IO   = ../../io/vx_io.s ../../io/vx_io.c
+VX_INT  = ../../intrinsics/vx_intrinsics.S
+VX_IO   = ../../io/vx_io.S ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
-VX_FIO  = ../../fileio/fileio.s
+VX_FIO  = ../../fileio/fileio.S
 LIBS    = -Wl,--whole-archive ./libs/libvecadd.a -Wl,--no-whole-archive ./libs/libOpenCL.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_pocl_main

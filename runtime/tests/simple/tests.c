@@ -6,15 +6,19 @@
 
 int tmc_array[4] = {5,5,5,5};
 
+void test_tmc_impl()
+{
+	unsigned tid = vx_thread_id(); // Get TID
+	tmc_array[tid] = tid;
+}
+
 void test_tmc()
 {
-	//vx_print_str("testing_tmc\n");
+	vx_print_str("testing_tmc\n");
 
 	vx_tmc(4);
 
-	unsigned tid = vx_threadID(); // Get TID
-
-	tmc_array[tid] = tid;
+	test_tmc_impl();
 
 	vx_tmc(1);
 
@@ -34,7 +38,7 @@ int div_arr[4];
 
 void test_divergence()
 {
-	unsigned tid = vx_threadID(); // Get TID
+	unsigned tid = vx_thread_id(); // Get TID
 
 	bool b = tid < 2;
 	__if (b)
@@ -73,20 +77,16 @@ void test_divergence()
 	vx_print_str("\n");
 	vx_print_hex(div_arr[3]);
 	vx_print_str("\n");
-
 }
-
 
 unsigned wsapwn_arr[4];
 
-
 void simple_kernel()
 {
-	unsigned wid = vx_warpID();
+	unsigned wid = vx_warp_id();
 
 	wsapwn_arr[wid] = wid;
 
-	wid = vx_warpID();
 	if (wid != 0)
 	{
 		vx_tmc(0);

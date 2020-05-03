@@ -41,8 +41,8 @@ void mat_add_kernel(void * void_arguments)
 {
 	mat_add_args_t * arguments = (mat_add_args_t *) void_arguments;
 
-	unsigned wid = vx_warpID();
-	unsigned tid = vx_threadID();
+	unsigned wid = vx_warp_id();
+	unsigned tid = vx_thread_id();
 
 	bool valid = (wid < arguments->numRows) && (tid < arguments->numColums);
 
@@ -77,7 +77,7 @@ int main()
 	// void * hellp = malloc(4);
 	vx_print_str("Confirm Dev Main\n");
 
-	vx_print_str("vx_spawnWarps\n");
+	vx_print_str("vx_spawn_warps\n");
 
 	mat_add_args_t arguments;
 	arguments.x         = x;
@@ -91,7 +91,7 @@ int main()
 	int numThreads = 4;
 
 	// First kernel call
-	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_spawn_warps(numWarps, numThreads, mat_add_kernel, &arguments);
 	vx_print_mat(z, arguments.numRows, arguments.numColums);
 
 
@@ -102,7 +102,7 @@ int main()
 	arguments.numRows   = 4;
 
 	// Second Kernel Call
-	vx_spawnWarps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_spawn_warps(numWarps, numThreads, mat_add_kernel, &arguments);
 	vx_print_mat(z, arguments.numRows, arguments.numColums);
 
 

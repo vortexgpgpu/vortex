@@ -549,7 +549,7 @@ Disassembly of section .text:
 800007e4:	00112623          	sw	ra,12(sp)
 800007e8:	00812423          	sw	s0,8(sp)
 800007ec:	01010413          	addi	s0,sp,16
-800007f0:	0d4000ef          	jal	ra,800008c4 <vx_threadID>
+800007f0:	0d4000ef          	jal	ra,800008c4 <vx_thread_id>
 800007f4:	00050793          	mv	a5,a0
 800007f8:	00078513          	mv	a0,a5
 800007fc:	00c12083          	lw	ra,12(sp)
@@ -617,23 +617,23 @@ Disassembly of section .text:
 800008b4:	0000306b          	0x306b
 800008b8:	00008067          	ret
 
-800008bc <vx_warpID>:
+800008bc <vx_warp_id>:
 800008bc:	02102573          	csrr	a0,0x21
 800008c0:	00008067          	ret
 
-800008c4 <vx_threadID>:
+800008c4 <vx_thread_id>:
 800008c4:	02002573          	csrr	a0,0x20
 800008c8:	00008067          	ret
 
-800008cc <vx_getCycles>:
+800008cc <vx_num_cycles>:
 800008cc:	02602573          	csrr	a0,0x26
 800008d0:	00008067          	ret
 
-800008d4 <vx_getInst>:
+800008d4 <vx_num_instrs>:
 800008d4:	02502573          	csrr	a0,0x25
 800008d8:	00008067          	ret
 
-800008dc <vx_resetStack>:
+800008dc <vx_reset_stack>:
 800008dc:	00400513          	li	a0,4
 800008e0:	0005006b          	0x5006b
 800008e4:	021026f3          	csrr	a3,0x21
@@ -734,10 +734,10 @@ Disassembly of section .text:
 80000a30:	faf746e3          	blt	a4,a5,800009dc <main+0x84>
 80000a34:	00400793          	li	a5,4
 80000a38:	fcf42023          	sw	a5,-64(s0)
-80000a3c:	e91ff0ef          	jal	ra,800008cc <vx_getCycles>
+80000a3c:	e91ff0ef          	jal	ra,800008cc <vx_num_cycles>
 80000a40:	00050793          	mv	a5,a0
 80000a44:	faf42e23          	sw	a5,-68(s0)
-80000a48:	e8dff0ef          	jal	ra,800008d4 <vx_getInst>
+80000a48:	e8dff0ef          	jal	ra,800008d4 <vx_num_instrs>
 80000a4c:	00050793          	mv	a5,a0
 80000a50:	faf42c23          	sw	a5,-72(s0)
 80000a54:	00100793          	li	a5,1
@@ -767,10 +767,10 @@ Disassembly of section .text:
 80000ab4:	fe842703          	lw	a4,-24(s0)
 80000ab8:	04000793          	li	a5,64
 80000abc:	fae7d2e3          	bge	a5,a4,80000a60 <main+0x108>
-80000ac0:	e0dff0ef          	jal	ra,800008cc <vx_getCycles>
+80000ac0:	e0dff0ef          	jal	ra,800008cc <vx_num_cycles>
 80000ac4:	00050793          	mv	a5,a0
 80000ac8:	faf42a23          	sw	a5,-76(s0)
-80000acc:	e09ff0ef          	jal	ra,800008d4 <vx_getInst>
+80000acc:	e09ff0ef          	jal	ra,800008d4 <vx_num_instrs>
 80000ad0:	00050793          	mv	a5,a0
 80000ad4:	faf42823          	sw	a5,-80(s0)
 80000ad8:	fb042703          	lw	a4,-80(s0)

@@ -7,35 +7,38 @@
 extern "C" {
 #endif
 
-// Spawns Warps
+// Spawn warps
 void vx_wspawn(unsigned numWarps, unsigned PC_spawn);
 
-// Changes thread mask (activated/deactivates threads)
+// Set thread mask
 void vx_tmc(unsigned numThreads);
 
 // Warp Barrier
 void vx_barrier(unsigned barriedID, unsigned numWarps);
 
-// split on a predicate
+// Split on a predicate
 void vx_split(unsigned predicate);
 
 // Join
 void vx_join(void);
 
-// Get Hardware thread ID
-unsigned vx_threadID(void);
+// Return the warp thread index
+unsigned vx_thread_id(void);
 
-// Get hardware warp ID
-unsigned vx_warpID(void);
+// Return the core warp index
+unsigned vx_warp_id(void);
 
-// Get global warp number
-unsigned vx_warpNum(void);
+// Return processsor unique thread id
+unsigned vx_thread_gid(void);
 
-// Get Number cycles/Inst
-unsigned vx_getCycles(void);
-unsigned vx_getInst(void);
+// Return processsor unique warp id
+unsigned vx_warp_gid(void);
 
-void vx_resetStack(void);
+// Return number cycles
+unsigned vx_num_cycles(void);
+
+// Return number instructions
+unsigned vx_num_instrs(void);
 
 #define __if(b) vx_split(b); \
                 if (b) 

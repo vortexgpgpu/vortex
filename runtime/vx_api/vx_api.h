@@ -11,7 +11,7 @@ extern "C" {
 
 typedef void (*func_t)(void *);
 
-void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr , void * args);
+void vx_spawn_warps(unsigned numWarps, unsigned numThreads, func_t func_ptr , void * args);
 
 struct context_t {
   uint32_t num_groups[3];

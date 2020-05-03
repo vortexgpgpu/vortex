@@ -3,7 +3,7 @@ CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
 
 CFLAGS += -I../../include -I../../../hw/simulate -I../../../runtime
 
-MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=2
+MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 #DEBUG = 1
 
 CFLAGS += -fPIC
@@ -16,7 +16,7 @@ SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
 RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/pipe_regs -I../../hw/rtl/cache
 
-VL_FLAGS += --assert -Wall -Wpedantic $(MULTICORE)
+VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(MULTICORE)
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')

@@ -35,18 +35,16 @@ public:
   bool is_busy();  
   void reset();
   void step();
+  void wait(uint32_t cycles);
   void flush_caches(uint32_t mem_addr, uint32_t size);  
-  bool run();
+  bool run();  
   void print_stats(std::ostream& out);
 
 private:  
 
-  void eval();
-  void wait(uint32_t cycles);
-
+  void eval();  
   void dbus_driver();
-  void io_handler();  
-  void send_snoops(uint32_t mem_addr, uint32_t size);
+  void io_driver();
   
   bool dram_stalled_;
   std::vector<dram_req_t> dram_req_vec_;
