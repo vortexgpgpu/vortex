@@ -99,12 +99,13 @@ void Simulator::dbus_driver() {
 }
 
 void Simulator::io_driver() {
-  if (vortex_->io_valid) {
-    uint32_t data_write = (uint32_t)vortex_->io_data;
+  if (vortex_->io_req_write 
+   && vortex_->io_req_addr == IO_BUS_ADDR_COUT) {
+    uint32_t data_write = (uint32_t)vortex_->io_req_data;
     char c = (char)data_write;
     std::cerr << c;      
   }
-  vortex_->io_ready = true;
+  vortex_->io_req_ready = true;
 }
 
 void Simulator::reset() {  

@@ -10,11 +10,9 @@
 
 import local_mem_cfg_pkg::*;
 
-module ccip_std_afu
-  #(
+module ccip_std_afu #(
     parameter NUM_LOCAL_MEM_BANKS = 2
-    )
-   (
+) (
     // CCI-P Clocks and Resets
     input  logic        pClk,                 // Primary CCI-P interface clock.
     input  logic        pClkDiv2,             // Aligned, pClk divided by 2.
@@ -104,12 +102,9 @@ module ccip_std_afu
     // choose which memory bank to test
     logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select;
 
-    vortex_afu
-      #(
+    vortex_afu #(
         .NUM_LOCAL_MEM_BANKS(NUM_LOCAL_MEM_BANKS)
-        )
-      vortex_afu_inst
-       (
+    ) vortex_afu_inst (
         .clk                 (clk),
         .SoftReset           (reset_T1),
 

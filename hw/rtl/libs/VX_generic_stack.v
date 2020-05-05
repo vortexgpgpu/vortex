@@ -1,5 +1,5 @@
 
-module VX_generic_stack    #(
+module VX_generic_stack #(
     parameter WIDTH = 40,
     parameter DEPTH = 2
 ) (

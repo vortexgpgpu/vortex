@@ -13,8 +13,6 @@ module VX_cache_core_rsp_merge #(
     parameter NUM_REQUESTS                  = 2, 
     // Number of cycles to complete stage 1 (read from memory)
     parameter STAGE_1_CYCLES                = 2, 
-    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
-    parameter FUNC_ID                       = 0,
 
     // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
     // Core Request Queue Size
@@ -39,8 +37,12 @@ module VX_cache_core_rsp_merge #(
      // Fill Invalidator Size {Fill invalidator must be active}
      parameter FILL_INVALIDAOR_SIZE         = 16,
 
-    // caceh requests tag size
-    parameter CORE_TAG_WIDTH                = 1,
+    // core request tag size
+    parameter CORE_TAG_WIDTH                = 1,    
+    // size of tag id in core request tag
+    parameter CORE_TAG_ID_BITS              = 0,
+    
+    // dram request tag size
     parameter DRAM_TAG_WIDTH                = 1
 ) (
     // Per Bank WB
@@ -53,7 +55,7 @@ module VX_cache_core_rsp_merge #(
     // Core Writeback
     output reg  [NUM_REQUESTS-1:0]                          core_rsp_valid,
     output reg  [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]         core_rsp_data,  
-    output reg  [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0]      core_rsp_tag,
+    output reg  [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     input  wire                                             core_rsp_ready
 );
 
@@ -73,43 +75,48 @@ module VX_cache_core_rsp_merge #(
     );
 
     integer i;
-    generate
+
+    if (CORE_TAG_ID_BITS != 0) begin            
+        assign core_rsp_tag = per_bank_core_rsp_tag[main_bank_index];        
         always @(*) begin
             core_rsp_valid = 0;
             core_rsp_data  = 0;
             core_rsp_tag   = 0;
-            for (i = 0; i < NUM_BANKS; i = i + 1) begin
-                if ((FUNC_ID == `L2FUNC_ID) 
-                 || (FUNC_ID == `L3FUNC_ID)) begin
-                    if (found_bank
-                     && per_bank_core_rsp_valid[i] 
-                     && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
-                     && ((main_bank_index == `LOG2UP(NUM_BANKS)'(i)) 
-                      || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))) begin
-                        core_rsp_valid[per_bank_core_rsp_tid[i]]    = 1;
-                        core_rsp_data[per_bank_core_rsp_tid[i]]     = per_bank_core_rsp_data[i];
-                        core_rsp_tag[per_bank_core_rsp_tid[i]]      = per_bank_core_rsp_tag[i];
-                        per_bank_core_rsp_pop_unqual[i]             = 1;
-                    end else begin
-                        per_bank_core_rsp_pop_unqual[i]             = 0;
-                    end
+            for (i = 0; i < NUM_BANKS; i = i + 1) begin 
+                if (found_bank
+                 && per_bank_core_rsp_valid[i] 
+                 && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
+                 && ((main_bank_index == `LOG2UP(NUM_BANKS)'(i)) 
+                  || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))
+                 && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == per_bank_core_rsp_tag[main_bank_index][CORE_TAG_ID_BITS-1:0])) begin            
+                    core_rsp_valid[per_bank_core_rsp_tid[i]] = 1;     
+                    core_rsp_data[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
+                    per_bank_core_rsp_pop_unqual[i] = 1;
                 end else begin
-                    if (found_bank 
-                    &&  per_bank_core_rsp_valid[i]
-                    && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
-                    &&  ((main_bank_index == `LOG2UP(NUM_BANKS)'(i))
-                      || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))                     
-                    && (`CORE_REQ_TAG_WARP(per_bank_core_rsp_tag[i]) == `CORE_REQ_TAG_WARP(per_bank_core_rsp_tag[main_bank_index]))) begin
-                        core_rsp_valid[per_bank_core_rsp_tid[i]]    = 1;
-                        core_rsp_data[per_bank_core_rsp_tid[i]]     = per_bank_core_rsp_data[i];
-                        core_rsp_tag[per_bank_core_rsp_tid[i]]      = per_bank_core_rsp_tag[i];
-                        per_bank_core_rsp_pop_unqual[i]             = 1;
-                    end else begin
-                        per_bank_core_rsp_pop_unqual[i]             = 0;
-                    end
+                    per_bank_core_rsp_pop_unqual[i] = 0;
                 end
-            end
+            end    
         end
-    endgenerate
+    end else begin
+        always @(*) begin
+            core_rsp_valid = 0;
+            core_rsp_data  = 0;
+            core_rsp_tag   = 0;
+            for (i = 0; i < NUM_BANKS; i = i + 1) begin 
+                if (found_bank
+                 && per_bank_core_rsp_valid[i] 
+                 && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
+                 && ((main_bank_index == `LOG2UP(NUM_BANKS)'(i)) 
+                  || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))) begin            
+                    core_rsp_valid[per_bank_core_rsp_tid[i]] = 1;     
+                    core_rsp_data[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
+                    core_rsp_tag[per_bank_core_rsp_tid[i]]   = per_bank_core_rsp_tag[i];
+                    per_bank_core_rsp_pop_unqual[i] = 1;
+                end else begin
+                    per_bank_core_rsp_pop_unqual[i] = 0;
+                end
+            end    
+        end
+    end   
 
 endmodule

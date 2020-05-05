@@ -29,5 +29,5 @@ vx_printc:
 
 .section .data
 print_addr:
-    .word IO_BUS_ADDR 
+    .word IO_BUS_ADDR_COUT 
 

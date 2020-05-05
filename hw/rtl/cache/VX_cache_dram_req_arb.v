@@ -79,7 +79,7 @@ module VX_cache_dram_req_arb #(
         .PRFQ_STRIDE   (PRFQ_STRIDE),
         .BANK_LINE_SIZE(BANK_LINE_SIZE),
         .WORD_SIZE     (WORD_SIZE)
-    )  prfqq (
+    ) prfqq (
         .clk          (clk),
         .reset        (reset),
 

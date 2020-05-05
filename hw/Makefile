@@ -1,4 +1,4 @@
-all: singlecore
+all: build-s
 
 CF += -std=c++11 -fms-extensions
 

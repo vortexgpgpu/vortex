@@ -25,8 +25,8 @@ module VX_scheduler (
     wire rs2_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs2] != 0;
     wire rd_rename  = rename_table[bckE_req_if.warp_num][bckE_req_if.rd ] != 0;
 
-    wire is_store = (bckE_req_if.mem_write != `WORD_SEL_NO);
-    wire is_load  = (bckE_req_if.mem_read  != `WORD_SEL_NO);
+    wire is_store = (bckE_req_if.mem_write != `BYTE_EN_NO);
+    wire is_load  = (bckE_req_if.mem_read  != `BYTE_EN_NO);
 
     // classify our next instruction.
     wire is_mem  = is_store || is_load;

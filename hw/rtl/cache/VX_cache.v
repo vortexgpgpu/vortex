@@ -12,9 +12,7 @@ module VX_cache #(
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
     parameter NUM_REQUESTS                  = 2, 
     // Number of cycles to complete stage 1 (read from memory)
-    parameter STAGE_1_CYCLES                = 2, 
-    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
-    parameter FUNC_ID                       = 3,
+    parameter STAGE_1_CYCLES                = 2,
 
     // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
@@ -40,14 +38,28 @@ module VX_cache #(
     parameter FFSQ_SIZE                     = 8,
 
     // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 16, 
+    parameter FILL_INVALIDAOR_SIZE          = 16,
+
+    // Enable cache writeable
+    parameter WRITE_ENABLE                  = 1,
+
+    // Enable dram update
+    parameter DRAM_ENABLE                   = 1,
+
+    // Enable snoop forwarding
+    parameter SNOOP_FORWARDING_ENABLE       = 0,
 
     // Prefetcher
     parameter PRFQ_SIZE                     = 64,
     parameter PRFQ_STRIDE                   = 0,
 
-    // caceh requests tag size
+    // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
+
+    // size of tag id in core request tag
+    parameter CORE_TAG_ID_BITS              = 0,
+
+    // dram request tag size
     parameter DRAM_TAG_WIDTH                = 1
  ) (
     input wire clk,
@@ -55,17 +67,17 @@ module VX_cache #(
 
     // Core request    
     input wire [NUM_REQUESTS-1:0]                       core_req_valid,
-    input wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0]   core_req_read,
-    input wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0]   core_req_write,
+    input wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]    core_req_read,
+    input wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]    core_req_write,
     input wire [NUM_REQUESTS-1:0][31:0]                 core_req_addr,
     input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]      core_req_data,
-    input wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0]   core_req_tag,
+    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
     output wire                                         core_req_ready,
 
     // Core response
     output wire [NUM_REQUESTS-1:0]                      core_rsp_valid,    
     output wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]     core_rsp_data,
-    output wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0]  core_rsp_tag,
+    output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     input  wire                                         core_rsp_ready,   
     
     // DRAM request
@@ -127,7 +139,7 @@ module VX_cache #(
     assign snp_req_ready  = ~(|per_bank_snp_req_full);    
     assign dram_rsp_ready = (|per_bank_dram_fill_rsp_ready);    
 
-    VX_cache_core_req_bank_sel  #(
+    VX_cache_core_req_bank_sel #(
         .CACHE_SIZE              (CACHE_SIZE),
         .BANK_LINE_SIZE          (BANK_LINE_SIZE),
         .NUM_BANKS               (NUM_BANKS),
@@ -154,10 +166,10 @@ module VX_cache #(
         for (i = 0; i < NUM_BANKS; i = i + 1) begin
             wire [NUM_REQUESTS-1:0]                curr_bank_core_req_valids;
             wire [NUM_REQUESTS-1:0][31:0]          curr_bank_core_req_addr;
-            wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
+            wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
             wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
-            wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] curr_bank_core_req_read;  
-            wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] curr_bank_core_req_write;
+            wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0] curr_bank_core_req_read;  
+            wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0] curr_bank_core_req_write;
 
             wire                                   curr_bank_core_rsp_pop;
             wire                                   curr_bank_core_rsp_valid;
@@ -241,7 +253,6 @@ module VX_cache #(
                 .WORD_SIZE              (WORD_SIZE),
                 .NUM_REQUESTS           (NUM_REQUESTS),
                 .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-                .FUNC_ID                (FUNC_ID),
                 .REQQ_SIZE              (REQQ_SIZE),
                 .MRVQ_SIZE              (MRVQ_SIZE),
                 .DFPQ_SIZE              (DFPQ_SIZE),
@@ -252,7 +263,11 @@ module VX_cache #(
                 .LLVQ_SIZE              (LLVQ_SIZE),
                 .FFSQ_SIZE              (FFSQ_SIZE),
                 .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
-                .CORE_TAG_WIDTH         (CORE_TAG_WIDTH)
+                .DRAM_ENABLE            (DRAM_ENABLE),
+                .WRITE_ENABLE           (WRITE_ENABLE),
+                .SNOOP_FORWARDING_ENABLE(SNOOP_FORWARDING_ENABLE),
+                .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),                
+                .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
             ) bank (
                 .clk                     (clk),
                 .reset                   (reset),                
@@ -304,14 +319,13 @@ module VX_cache #(
         end   
     endgenerate   
 
-    VX_cache_core_rsp_merge  #(
+    VX_cache_core_rsp_merge #(
         .CACHE_SIZE             (CACHE_SIZE),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
         .NUM_REQUESTS           (NUM_REQUESTS),
         .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .FUNC_ID                (FUNC_ID),
         .REQQ_SIZE              (REQQ_SIZE),
         .MRVQ_SIZE              (MRVQ_SIZE),
         .DFPQ_SIZE              (DFPQ_SIZE),
@@ -321,7 +335,8 @@ module VX_cache #(
         .DFQQ_SIZE              (DFQQ_SIZE),
         .LLVQ_SIZE              (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
-        .CORE_TAG_WIDTH         (CORE_TAG_WIDTH) 
+        .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),        
+        .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
     ) cache_core_rsp_merge (
         .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),                
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   

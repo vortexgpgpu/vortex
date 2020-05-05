@@ -37,8 +37,11 @@ module VX_cache_req_queue #(
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE         = 16,
 
-    // caceh requests tag size
-    parameter CORE_TAG_WIDTH                = 1
+    // core request tag size
+    parameter CORE_TAG_WIDTH                = 1,
+
+    // size of tag id in core request tag
+    parameter CORE_TAG_ID_BITS              = 0
 ) (
     input  wire clk,
     input  wire reset,
@@ -46,18 +49,18 @@ module VX_cache_req_queue #(
     // Enqueue Data
     input wire                                        reqq_push,
     input wire [NUM_REQUESTS-1:0]                     bank_valids,
-    input wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] bank_mem_read,  
-    input wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] bank_mem_write,    
+    input wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  bank_mem_read,  
+    input wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  bank_mem_write,    
     input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    bank_writedata,
     input wire [NUM_REQUESTS-1:0][31:0]               bank_addr,
-    input wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0] bank_tag,    
+    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] bank_tag,    
 
     // Dequeue Data
     input  wire                             reqq_pop,
     output wire                             reqq_req_st0,
     output wire [`LOG2UP(NUM_REQUESTS)-1:0] reqq_req_tid_st0,    
-    output wire [`WORD_SEL_BITS-1:0]        reqq_req_mem_read_st0,  
-    output wire [`WORD_SEL_BITS-1:0]        reqq_req_mem_write_st0,
+    output wire [`BYTE_EN_BITS-1:0]         reqq_req_mem_read_st0,  
+    output wire [`BYTE_EN_BITS-1:0]         reqq_req_mem_write_st0,
     output wire [`WORD_WIDTH-1:0]           reqq_req_writedata_st0,
     output wire [31:0]                      reqq_req_addr_st0,
     output wire [CORE_TAG_WIDTH-1:0]        reqq_req_tag_st0,    
@@ -70,23 +73,23 @@ module VX_cache_req_queue #(
     wire [NUM_REQUESTS-1:0]                     out_per_valids;
     wire [NUM_REQUESTS-1:0][31:0]               out_per_addr;
     wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    out_per_writedata;    
-    wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] out_per_mem_read;  
-    wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] out_per_mem_write;
-    wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0] out_per_tag;
+    wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  out_per_mem_read;  
+    wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  out_per_mem_write;
+    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] out_per_tag;
 
     reg [NUM_REQUESTS-1:0]                     use_per_valids;
     reg [NUM_REQUESTS-1:0][31:0]               use_per_addr;
     reg [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    use_per_writedata;    
-    reg [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] use_per_mem_read;  
-    reg [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] use_per_mem_write;
-    reg [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0] use_per_tag;
+    reg [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  use_per_mem_read;  
+    reg [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  use_per_mem_write;
+    reg [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] use_per_tag;
 
     wire [NUM_REQUESTS-1:0]                     qual_valids;
     wire [NUM_REQUESTS-1:0][31:0]               qual_addr;
     wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    qual_writedata;    
-    wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] qual_mem_read;  
-    wire [NUM_REQUESTS-1:0][`WORD_SEL_BITS-1:0] qual_mem_write;
-    wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0] qual_tag;
+    wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  qual_mem_read;  
+    wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  qual_mem_write;
+    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] qual_tag;
 
 `DEBUG_BEGIN
     reg [NUM_REQUESTS-1:0] updated_valids;
@@ -123,8 +126,8 @@ module VX_cache_req_queue #(
     assign qual_mem_read   = use_per_mem_read;
     assign qual_mem_write  = use_per_mem_write;
 
-    wire[`LOG2UP(NUM_REQUESTS)-1:0]qual_request_index;
-    wire                           qual_has_request;
+    wire[`LOG2UP(NUM_REQUESTS)-1:0] qual_request_index;
+    wire                            qual_has_request;
 
     VX_generic_priority_encoder #(
         .N(NUM_REQUESTS)
@@ -139,9 +142,15 @@ module VX_cache_req_queue #(
     assign reqq_req_tid_st0        = qual_request_index;
     assign reqq_req_addr_st0       = qual_addr[qual_request_index];
     assign reqq_req_writedata_st0  = qual_writedata[qual_request_index];
-    assign reqq_req_tag_st0        = qual_tag[qual_request_index];
-    assign reqq_req_mem_read_st0   = qual_mem_read [qual_request_index];
-    assign reqq_req_mem_write_st0  = qual_mem_write[qual_request_index];
+    
+    if (CORE_TAG_ID_BITS != 0) begin
+        assign reqq_req_tag_st0 = qual_tag;
+    end else begin
+        assign reqq_req_tag_st0  = qual_tag[qual_request_index];
+    end
+
+    assign reqq_req_mem_read_st0  = qual_mem_read [qual_request_index];
+    assign reqq_req_mem_write_st0 = qual_mem_write[qual_request_index];
 
     always @(*) begin
         updated_valids = qual_valids;

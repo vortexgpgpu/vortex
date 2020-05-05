@@ -127,75 +127,68 @@
 
 `define ZERO_REG 5'h0
 
+///////////////////////////////////////////////////////////////////////////////
+
+// Core request tag width    pc,  wb, rd,  warp_num
+`define CORE_REQ_TAG_WIDTH  (32 + 2 + 5 + `NW_BITS)
+
+// TAG sharing enable        rd,  warp_num
+`define CORE_TAG_ID_BITS    (5 + `NW_BITS)
+
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
-// Function ID
-`define DFUNC_ID 0
-
 // DRAM request data bits
-`define DDRAM_LINE_WIDTH (`DBANK_LINE_SIZE * 8)
+`define DDRAM_LINE_WIDTH    (`DBANK_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define DDRAM_ADDR_WIDTH (32 - `CLOG2(`DBANK_LINE_SIZE))
+`define DDRAM_ADDR_WIDTH    (32 - `CLOG2(`DBANK_LINE_SIZE))
 
 // DRAM request tag bits
-`define DDRAM_TAG_WIDTH `DDRAM_ADDR_WIDTH
+`define DDRAM_TAG_WIDTH     `DDRAM_ADDR_WIDTH
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
-// Function ID
-`define IFUNC_ID 1
-
 // DRAM request data bits
-`define IDRAM_LINE_WIDTH (`IBANK_LINE_SIZE * 8)
+`define IDRAM_LINE_WIDTH    (`IBANK_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define IDRAM_ADDR_WIDTH (32 - `CLOG2(`IBANK_LINE_SIZE))
+`define IDRAM_ADDR_WIDTH    (32 - `CLOG2(`IBANK_LINE_SIZE))
 
 // DRAM request tag bits
-`define IDRAM_TAG_WIDTH `IDRAM_ADDR_WIDTH
+`define IDRAM_TAG_WIDTH     `IDRAM_ADDR_WIDTH
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
-// Function ID
-`define SFUNC_ID 2
-
 // DRAM request data bits
-`define SDRAM_LINE_WIDTH (`SBANK_LINE_SIZE * 8)
+`define SDRAM_LINE_WIDTH    (`SBANK_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define SDRAM_ADDR_WIDTH (32 - `CLOG2(`SBANK_LINE_SIZE))
+`define SDRAM_ADDR_WIDTH    (32 - `CLOG2(`SBANK_LINE_SIZE))
 
 // DRAM request tag bits
-`define SDRAM_TAG_WIDTH `SDRAM_ADDR_WIDTH
+`define SDRAM_TAG_WIDTH     `SDRAM_ADDR_WIDTH
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
-// Function ID
-`define L2FUNC_ID 3
-
 // DRAM request data bits
-`define L2DRAM_LINE_WIDTH (`L2BANK_LINE_SIZE * 8)
+`define L2DRAM_LINE_WIDTH   (`L2BANK_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define L2DRAM_ADDR_WIDTH (32 - `CLOG2(`L2BANK_LINE_SIZE))
+`define L2DRAM_ADDR_WIDTH   (32 - `CLOG2(`L2BANK_LINE_SIZE))
 
 // DRAM request tag bits
-`define L2DRAM_TAG_WIDTH (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
+`define L2DRAM_TAG_WIDTH    (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
-// Function ID
-`define L3FUNC_ID 3
-
 // DRAM request data bits
-`define L3DRAM_LINE_WIDTH (`L3BANK_LINE_SIZE * 8)
+`define L3DRAM_LINE_WIDTH   (`L3BANK_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define L3DRAM_ADDR_WIDTH (32 - `CLOG2(`L3BANK_LINE_SIZE))
+`define L3DRAM_ADDR_WIDTH   (32 - `CLOG2(`L3BANK_LINE_SIZE))
 
 // DRAM request tag bits
-`define L3DRAM_TAG_WIDTH ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
+`define L3DRAM_TAG_WIDTH    ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
 
  // VX_DEFINE
 `endif
