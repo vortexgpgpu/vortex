@@ -1,4 +1,3 @@
-
 `include "VX_cache_config.vh"
 
 module VX_cache_miss_resrv #(
@@ -51,8 +50,8 @@ module VX_cache_miss_resrv #(
     input wire[`WORD_WIDTH-1:0]                  miss_add_data,
     input wire[`LOG2UP(NUM_REQUESTS)-1:0]        miss_add_tid,
     input wire[CORE_TAG_WIDTH-1:0]               miss_add_tag,
-    input wire[`WORD_SEL_BITS-1:0]               miss_add_mem_read,
-    input wire[`WORD_SEL_BITS-1:0]               miss_add_mem_write,
+    input wire[`BYTE_EN_BITS-1:0]                miss_add_mem_read,
+    input wire[`BYTE_EN_BITS-1:0]                miss_add_mem_write,
     output wire                                  miss_resrv_full,
     output wire                                  miss_resrv_stop,
 
@@ -72,8 +71,8 @@ module VX_cache_miss_resrv #(
     output wire[`WORD_WIDTH-1:0]                 miss_resrv_data_st0,
     output wire[`LOG2UP(NUM_REQUESTS)-1:0]       miss_resrv_tid_st0,
     output wire[CORE_TAG_WIDTH-1:0]              miss_resrv_tag_st0,
-    output wire[`WORD_SEL_BITS-1:0]              miss_resrv_mem_read_st0,
-    output wire[`WORD_SEL_BITS-1:0]              miss_resrv_mem_write_st0    
+    output wire[`BYTE_EN_BITS-1:0]               miss_resrv_mem_read_st0,
+    output wire[`BYTE_EN_BITS-1:0]               miss_resrv_mem_write_st0    
 );
     reg [`MRVQ_METADATA_WIDTH-1:0]  metadata_table[MRVQ_SIZE-1:0];
     reg [MRVQ_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table;

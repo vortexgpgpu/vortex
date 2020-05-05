@@ -36,15 +36,19 @@
 `endif
 
 `ifndef SHARED_MEM_TOP_ADDR
-`define SHARED_MEM_TOP_ADDR 8'hFF
-`endif
-
-`ifndef IO_BUS_ADDR
-`define IO_BUS_ADDR 32'h00010000
+`define SHARED_MEM_TOP_ADDR 8'hFE
 `endif
 
 `ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 20'h6ffff
+`define STACK_BASE_ADDR 20'h6FFFF
+`endif
+
+`ifndef IO_BUS_BASE_ADDR
+`define IO_BUS_BASE_ADDR 32'hFFFFFF00
+`endif
+
+`ifndef IO_BUS_ADDR_COUT
+`define IO_BUS_ADDR_COUT 32'hFFFFFFFC
 `endif
 
 `ifndef L2_ENABLE

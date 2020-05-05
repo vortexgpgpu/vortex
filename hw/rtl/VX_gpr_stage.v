@@ -26,8 +26,8 @@ module VX_gpr_stage (
 `DEBUG_BEGIN
     wire[31:0] curr_PC = bckE_req_if.curr_PC;
     wire[2:0] branchType = bckE_req_if.branch_type;
-    wire is_store = (bckE_req_if.mem_write != `WORD_SEL_NO);
-    wire is_load  = (bckE_req_if.mem_read  != `WORD_SEL_NO);
+    wire is_store = (bckE_req_if.mem_write != `BYTE_EN_NO);
+    wire is_load  = (bckE_req_if.mem_read  != `BYTE_EN_NO);
     wire jalQual = bckE_req_if.jalQual;
 `DEBUG_END
 

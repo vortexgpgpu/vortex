@@ -16,7 +16,7 @@ module VX_inst_multiplex (
     wire[`NUM_THREADS-1:0] is_gpu_mask;
     wire[`NUM_THREADS-1:0] is_csr_mask;
 
-    wire is_mem = (bckE_req_if.mem_write != `WORD_SEL_NO) || (bckE_req_if.mem_read != `WORD_SEL_NO);
+    wire is_mem = (bckE_req_if.mem_write != `BYTE_EN_NO) || (bckE_req_if.mem_read != `BYTE_EN_NO);
     wire is_gpu = (bckE_req_if.is_wspawn || bckE_req_if.is_tmc || bckE_req_if.is_barrier || bckE_req_if.is_split);
     wire is_csr = bckE_req_if.is_csr;
     // wire is_gpu = 0;

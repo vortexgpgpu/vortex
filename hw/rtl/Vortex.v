@@ -41,10 +41,20 @@ module Vortex #(
     input  wire [`DDRAM_ADDR_WIDTH-1:0] llc_snp_req_addr,
     output wire                         llc_snp_req_ready,
 
-    // I/O
-    output wire                         io_valid,
-    output wire [31:0]                  io_data,
-    input wire                          io_ready,
+    // I/O request
+    output wire                         io_req_read,
+    output wire                         io_req_write,    
+    output wire[31:0]                   io_req_addr,
+    output wire[31:0]                   io_req_data,
+    output wire[`BYTE_EN_BITS-1:0]      io_req_byteen,
+    output wire[`CORE_REQ_TAG_WIDTH-1:0] io_req_tag,  
+    input wire                          io_req_ready,
+
+    // I/O response
+    input wire                          io_rsp_valid,
+    input wire[31:0]                    io_rsp_data,
+    input wire[`CORE_REQ_TAG_WIDTH-1:0] io_rsp_tag,
+    output wire                         io_rsp_ready,
 
     // Debug
     output wire                         ebreak
@@ -62,20 +72,16 @@ module Vortex #(
     VX_cache_core_req_if #(
         .NUM_REQUESTS(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH)
-    )  dcache_core_req_if();
-
-    VX_cache_core_req_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH)
-    )  dcache_core_req_qual_if();
+        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`CORE_TAG_ID_BITS)
+    ) dcache_core_req_if(), io_core_req_if(), dcache_io_core_req_if();
 
     VX_cache_core_rsp_if #(
         .NUM_REQUESTS(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH)
-    )  dcache_core_rsp_if();
+        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`CORE_TAG_ID_BITS)
+    ) dcache_core_rsp_if(), io_core_rsp_if(), dcache_io_core_rsp_if();
 
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
@@ -100,29 +106,32 @@ module Vortex #(
     assign dcache_dram_rsp_if.dram_rsp_tag   = D_dram_rsp_tag;
     assign D_dram_rsp_ready = dcache_dram_rsp_if.dram_rsp_ready;
 
-    wire to_io_bus  = (dcache_core_req_if.core_req_addr[0] == `IO_BUS_ADDR);    
-    assign io_valid = |dcache_core_req_if.core_req_valid && to_io_bus;
-    assign io_data  = dcache_core_req_if.core_req_data[0];
+    assign io_req_read   = (io_core_req_if.core_req_read[0] != `BYTE_EN_NO);
+    assign io_req_write  = (io_core_req_if.core_req_write[0] != `BYTE_EN_NO);
+    assign io_req_addr   = io_core_req_if.core_req_addr[0];
+    assign io_req_data   = io_core_req_if.core_req_data[0];
+    assign io_req_byteen = io_req_read ? io_core_req_if.core_req_read[0] : io_core_req_if.core_req_write[0];
+    assign io_req_tag    = io_core_req_if.core_req_tag[0];
+    assign io_core_req_if.core_req_ready = io_req_ready;
 
-    assign dcache_core_req_qual_if.core_req_valid = dcache_core_req_if.core_req_valid & {`NUM_THREADS{~to_io_bus}};        
-    assign dcache_core_req_qual_if.core_req_read  = dcache_core_req_if.core_req_read;
-    assign dcache_core_req_qual_if.core_req_write = dcache_core_req_if.core_req_write;
-    assign dcache_core_req_qual_if.core_req_addr  = dcache_core_req_if.core_req_addr;
-    assign dcache_core_req_qual_if.core_req_data  = dcache_core_req_if.core_req_data;
-    assign dcache_core_req_qual_if.core_req_tag   = dcache_core_req_if.core_req_tag;    
-    assign dcache_core_req_if.core_req_ready = to_io_bus ? io_ready : dcache_core_req_qual_if.core_req_ready;
+    assign io_core_rsp_if.core_rsp_valid[0] = io_rsp_valid;
+    assign io_core_rsp_if.core_rsp_data[0]  = io_rsp_data;
+    assign io_core_rsp_if.core_rsp_tag      = io_rsp_tag;    
+    assign io_rsp_ready  = io_core_rsp_if.core_rsp_ready;
     
     // Icache interfaces
     VX_cache_core_req_if #(
         .NUM_REQUESTS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH)
+        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`CORE_TAG_ID_BITS)
     )  icache_core_req_if();
 
     VX_cache_core_rsp_if #(
         .NUM_REQUESTS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH)
+        .CORE_TAG_WIDTH(`CORE_REQ_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`CORE_TAG_ID_BITS)
     )  icache_core_rsp_if();
     
     VX_cache_dram_req_if #(
@@ -162,7 +171,6 @@ VX_jal_rsp_if            jal_rsp_if();      // Jump resolution to Fetch
 VX_warp_ctl_if           warp_ctl_if();
 
 // Cache snooping
-VX_cache_snp_req_if #(.DRAM_ADDR_WIDTH(`IDRAM_ADDR_WIDTH)) icache_snp_req_if();
 VX_cache_snp_req_if #(.DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH)) dcache_snp_req_if();
 
 assign dcache_snp_req_if.snp_req_valid  = llc_snp_req_valid;
@@ -203,9 +211,9 @@ VX_back_end #(
     .warp_ctl_if     (warp_ctl_if),
     .bckE_req_if     (bckE_req_if),
     .jal_rsp_if      (jal_rsp_if),
-    .branch_rsp_if   (branch_rsp_if),
-    .dcache_rsp_if   (dcache_core_rsp_if),
-    .dcache_req_if   (dcache_core_req_if),
+    .branch_rsp_if   (branch_rsp_if),    
+    .dcache_req_if   (dcache_io_core_req_if),
+    .dcache_rsp_if   (dcache_io_core_rsp_if),
     .writeback_if    (writeback_if),
     .mem_delay       (memory_delay),
     .exec_delay      (exec_delay),
@@ -216,23 +224,32 @@ VX_dmem_ctrl dmem_ctrl (
     .clk                (clk),
     .reset              (reset),
 
+    // Core <-> Dcache
+    .dcache_core_req_if (dcache_core_req_if),
+    .dcache_core_rsp_if (dcache_core_rsp_if),
+
     // Dram <-> Dcache
     .dcache_dram_req_if (dcache_dram_req_if),
     .dcache_dram_rsp_if (dcache_dram_rsp_if),
     .dcache_snp_req_if  (dcache_snp_req_if),
 
-    // Dram <-> Icache
-    .icache_dram_req_if (icache_dram_req_if),
-    .icache_dram_rsp_if (icache_dram_rsp_if),
-    .icache_snp_req_if  (icache_snp_req_if),
-
     // Core <-> Icache
     .icache_core_req_if (icache_core_req_if),
     .icache_core_rsp_if (icache_core_rsp_if),
 
-    // Core <-> Dcache
-    .dcache_core_req_if (dcache_core_req_qual_if),
-    .dcache_core_rsp_if (dcache_core_rsp_if)
+    // Dram <-> Icache
+    .icache_dram_req_if (icache_dram_req_if),
+    .icache_dram_rsp_if (icache_dram_rsp_if)
+);
+
+VX_dcache_io_arb dcache_io_arb (
+    .io_select          (dcache_io_core_req_if.core_req_addr[0] >= `IO_BUS_BASE_ADDR),
+    .core_req_if        (dcache_io_core_req_if),
+    .dcache_core_req_if (dcache_core_req_if),
+    .io_core_req_if     (io_core_req_if),  
+    .dcache_core_rsp_if (dcache_core_rsp_if),
+    .io_core_rsp_if     (io_core_rsp_if),    
+    .core_rsp_if        (dcache_io_core_rsp_if)
 );
 
 endmodule // Vortex

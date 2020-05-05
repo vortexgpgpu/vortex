@@ -16,14 +16,14 @@ module VX_icache_stage (
 
     reg[`NUM_THREADS-1:0] threads_active[`NUM_WARPS-1:0];
 
-    wire   valid_inst = (|fe_inst_meta_fi.valid);
+    wire valid_inst = (|fe_inst_meta_fi.valid);
 
     // Icache Request
     assign icache_req_if.core_req_valid = valid_inst && !total_freeze;
     assign icache_req_if.core_req_addr  = fe_inst_meta_fi.inst_pc;
     assign icache_req_if.core_req_data  = 32'b0;
-    assign icache_req_if.core_req_read  = `WORD_SEL_LW;
-    assign icache_req_if.core_req_write = `WORD_SEL_NO;
+    assign icache_req_if.core_req_read  = `BYTE_EN_LW;
+    assign icache_req_if.core_req_write = `BYTE_EN_NO;
     assign icache_req_if.core_req_tag   = {fe_inst_meta_fi.inst_pc, 2'b1, 5'b0, fe_inst_meta_fi.warp_num};
 
 `IGNORE_WARNINGS_BEGIN

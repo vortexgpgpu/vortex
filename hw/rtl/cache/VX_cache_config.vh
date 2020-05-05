@@ -3,19 +3,19 @@
 
 `include "VX_define.vh"
 
-`define WORD_SEL_NO     3'h7 
-`define WORD_SEL_LB     3'h0 
-`define WORD_SEL_LH     3'h1
-`define WORD_SEL_LW     3'h2
-`define WORD_SEL_HB     3'h4
-`define WORD_SEL_HH     3'h5
-`define WORD_SEL_BITS   3
+`define BYTE_EN_NO      3'h7 
+`define BYTE_EN_LB      3'h0 
+`define BYTE_EN_LH      3'h1
+`define BYTE_EN_LW      3'h2
+`define BYTE_EN_HB      3'h4
+`define BYTE_EN_HH      3'h5
+`define BYTE_EN_BITS    3
 
 //                               data           tid                    tag              read             write             base addr 
-`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `LOG2UP(NUM_REQUESTS) + CORE_TAG_WIDTH + `WORD_SEL_BITS + `WORD_SEL_BITS + `BASE_ADDR_BITS)
+`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `LOG2UP(NUM_REQUESTS) + CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS)
 
 //                               tag               read             write            reqs
-`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + `WORD_SEL_BITS + `WORD_SEL_BITS + `LOG2UP(NUM_REQUESTS))
+`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `LOG2UP(NUM_REQUESTS))
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 `define BYTE_WIDTH              (`WORD_WIDTH / 4)
@@ -66,13 +66,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Core request tag width        pc,  wb,  rd,   warp_num
-`define CORE_REQ_TAG_WIDTH      (32 + 2  + 5  + `NW_BITS)
+`define CORE_REQ_TAG_COUNT      ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQUESTS)
 
-// Core request tag info           rd + warp_num
-`define CORE_REQ_TAG_WARP(x)    x[(5 + `NW_BITS)-1:0]
-
-// DRAM response tag bank info
 `define DRAM_ADDR_BANK(x)       x[`BANK_SELECT_BITS-1:0]
 
 `define DRAM_TO_LINE_ADDR(x)    x[`DRAM_ADDR_WIDTH-1:`BANK_SELECT_BITS]

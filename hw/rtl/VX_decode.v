@@ -140,8 +140,8 @@ module VX_decode(
     assign frE_to_bckE_req_if.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
 
     // MEM signals 
-    assign frE_to_bckE_req_if.mem_read  = (is_linst) ? func3 : `WORD_SEL_NO;
-    assign frE_to_bckE_req_if.mem_write = (is_stype) ? func3 : `WORD_SEL_NO;
+    assign frE_to_bckE_req_if.mem_read  = (is_linst) ? func3 : `BYTE_EN_NO;
+    assign frE_to_bckE_req_if.mem_write = (is_stype) ? func3 : `BYTE_EN_NO;
 
     // UPPER IMMEDIATE
     always @(*) begin
