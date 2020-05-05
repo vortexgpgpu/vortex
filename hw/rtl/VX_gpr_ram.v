@@ -20,13 +20,13 @@ module VX_gpr_ram (
             //--
         end else begin
             if (we) begin
-                integer t;
-                for (t = 0; t < `NUM_THREADS; t = t + 1) begin
-                    if (be[t]) begin
-                        ram[waddr][t][0] <= wdata[t][7:0];
-                        ram[waddr][t][1] <= wdata[t][15:8];
-                        ram[waddr][t][2] <= wdata[t][23:16];
-                        ram[waddr][t][3] <= wdata[t][31:24];
+                integer i;
+                for (i = 0; i < `NUM_THREADS; i = i + 1) begin
+                    if (be[i]) begin
+                        ram[waddr][i][0] <= wdata[i][7:0];
+                        ram[waddr][i][1] <= wdata[i][15:8];
+                        ram[waddr][i][2] <= wdata[i][23:16];
+                        ram[waddr][i][3] <= wdata[i][31:24];
                     end
                 end
             end    

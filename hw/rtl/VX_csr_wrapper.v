@@ -9,14 +9,14 @@ module VX_csr_wrapper (
     wire[`NUM_THREADS-1:0][31:0] thread_ids;
     wire[`NUM_THREADS-1:0][31:0] warp_ids;
 
-    genvar cur_t, cur_tw;
+    genvar i;
     generate
-    for (cur_t = 0; cur_t < `NUM_THREADS; cur_t = cur_t + 1) begin : thread_ids_init
-        assign thread_ids[cur_t] = cur_t;
+    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : thread_ids_init
+        assign thread_ids[i] = i;
     end
 
-    for (cur_tw = 0; cur_tw < `NUM_THREADS; cur_tw = cur_tw + 1) begin : warp_ids_init
-        assign warp_ids[cur_tw] = {{(31-`NW_BITS-1){1'b0}}, csr_req_if.warp_num};
+    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : warp_ids_init
+        assign warp_ids[i] = {{(31-`NW_BITS-1){1'b0}}, csr_req_if.warp_num};
     end
     endgenerate
 

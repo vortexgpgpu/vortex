@@ -40,7 +40,8 @@ module Vortex_Socket (
     input wire[`CORE_REQ_TAG_WIDTH-1:0] io_rsp_tag,
     output wire                         io_rsp_ready,
 
-    // Debug
+    // Status
+    output wire                         busy, 
     output wire                         ebreak
 );
     if (`NUM_CLUSTERS == 1) begin
@@ -80,6 +81,7 @@ module Vortex_Socket (
             .io_rsp_tag         (io_rsp_tag),
             .io_rsp_ready       (io_rsp_ready),
 
+            .busy               (busy),
             .ebreak             (ebreak)
         );
 
@@ -112,6 +114,7 @@ module Vortex_Socket (
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_ready;
     `IGNORE_WARNINGS_END
 
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_busy;
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_ebreak;
 
         genvar i;
@@ -151,6 +154,7 @@ module Vortex_Socket (
                 .io_rsp_tag         (io_rsp_tag),
                 .io_rsp_ready       (per_cluster_io_rsp_ready   [i]),
 
+                .busy               (per_cluster_busy           [i]),
                 .ebreak             (per_cluster_ebreak         [i])
             );
         end        
@@ -164,6 +168,7 @@ module Vortex_Socket (
 
         assign io_rsp_ready  = per_cluster_io_rsp_ready[0];
 
+        assign busy   = (| per_cluster_busy);
         assign ebreak = (& per_cluster_ebreak);
 
         // L3 Cache ///////////////////////////////////////////////////////////
@@ -219,7 +224,7 @@ module Vortex_Socket (
             .FILL_INVALIDAOR_SIZE   (`L3FILL_INVALIDAOR_SIZE),
             .DRAM_ENABLE            (1),
             .WRITE_ENABLE           (1),
-            .SNOOP_FORWARDING_ENABLE(1),
+            .SNOOP_FORWARDING       (1),
             .CORE_TAG_WIDTH         (`L2DRAM_TAG_WIDTH),
             .CORE_TAG_ID_BITS       (0),
             .DRAM_TAG_WIDTH         (`L3DRAM_TAG_WIDTH)

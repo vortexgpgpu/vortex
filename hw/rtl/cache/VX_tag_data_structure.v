@@ -68,7 +68,7 @@ module VX_tag_data_structure #(
     assign read_tag   = tag   [read_addr];
     assign read_data  = data  [read_addr];
 
-    wire   going_to_write = (|write_enable);
+    wire   going_to_write = (| write_enable);
 
     integer i;
     always @(posedge clk) begin

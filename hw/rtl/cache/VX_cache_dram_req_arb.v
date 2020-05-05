@@ -98,7 +98,7 @@ module VX_cache_dram_req_arb #(
 `DEBUG_END
 
     wire dfqq_pop  = !dwb_valid && dfqq_req && dram_req_ready; // If no dwb, and dfqq has valids, then pop
-    wire dfqq_push = (|per_bank_dram_fill_req_valid);
+    wire dfqq_push = (| per_bank_dram_fill_req_valid);
 
     VX_cache_dfq_queue cache_dfq_queue(
         .clk                            (clk),

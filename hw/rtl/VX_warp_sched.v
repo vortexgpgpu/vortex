@@ -56,7 +56,7 @@ module VX_warp_sched (
     output wire[`NUM_THREADS-1:0]     thread_mask,
     output wire[`NW_BITS-1:0]         warp_num,
     output wire[31:0]                 warp_pc,
-    output wire                       ebreak,
+    output wire                       busy,
     output wire                       scheduled_warp,
 
     input  wire[`NW_BITS-1:0]         icache_stage_wid,
@@ -162,14 +162,14 @@ module VX_warp_sched (
                     warp_pcs[join_warp_num] <= join_pc;
                 end
                 thread_masks[join_warp_num] <= join_tm;
-                didnt_split                 <= 0;
+                didnt_split                    <= 0;
             end else if (is_split) begin
-                warp_stalled[split_warp_num] <= 0;
+                warp_stalled[split_warp_num]   <= 0;
                 if (!dont_split) begin
                     thread_masks[split_warp_num] <= split_new_mask;
-                    didnt_split                  <= 0;
+                    didnt_split                <= 0;
                 end else begin
-                    didnt_split                  <= 1;
+                    didnt_split                <= 1;
                 end
             end
             
@@ -218,7 +218,7 @@ module VX_warp_sched (
                 warp_lock[warp_num] <= 1'b1;
                 // warp_lock <= {`NUM_WARPS{1'b1}};
             end
-            if (|icache_stage_valids && !stall) begin
+            if ((| icache_stage_valids) && !stall) begin
                 warp_lock[icache_stage_wid] <= 1'b0;
                 // warp_lock <= {`NUM_WARPS{1'b0}};
             end
@@ -251,15 +251,6 @@ module VX_warp_sched (
 
     assign total_barrier_stall = barrier_stall_mask[0] | barrier_stall_mask[1] | barrier_stall_mask[2] | barrier_stall_mask[3];
 
-    // integer curr_b;
-    // always @(*) begin
-    //     total_barrier_stall = 0;
-    //     for (curr_b = 0; curr_b < `NUM_BARRIERS; curr_b=curr_b+1)
-    //     begin
-    //         total_barrier_stall[`NUM_WARPS-1:0] = total_barrier_stall[`NUM_WARPS-1:0] | barrier_stall_mask[curr_b];
-    //     end
-    // end
-
     assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);
 
     wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0, thread_masks[split_warp_num]};
@@ -267,11 +258,11 @@ module VX_warp_sched (
 
     assign {join_fall, join_pc, join_tm} = d[join_warp_num];
 
-    genvar curr_warp;
+    genvar i;
     generate
-    for (curr_warp = 0; curr_warp < `NUM_WARPS; curr_warp = curr_warp + 1) begin : stacks
-        wire correct_warp_s = (curr_warp == split_warp_num);
-        wire correct_warp_j = (curr_warp == join_warp_num);
+    for (i = 0; i < `NUM_WARPS; i = i + 1) begin : stacks
+        wire correct_warp_s = (i == split_warp_num);
+        wire correct_warp_j = (i == join_warp_num);
 
         wire push = (is_split && !dont_split) && correct_warp_s;
         wire pop  = is_join  && correct_warp_j;
@@ -284,7 +275,7 @@ module VX_warp_sched (
             .reset(reset),
             .push (push),
             .pop  (pop),
-            .d    (d[curr_warp]),
+            .d    (d[i]),
             .q1   (q1),
             .q2   (q2)
         );
@@ -330,6 +321,6 @@ module VX_warp_sched (
     //     $display("real_schedule: %d, schedule: %d, warp_stalled: %d, warp_to_schedule: %d, total_barrier_stall: %d",real_schedule, schedule, warp_stalled[warp_to_schedule], warp_to_schedule,  total_barrier_stall[warp_to_schedule]);
     // end
 
-    assign ebreak = (warp_active == 0);
+    assign busy = (warp_active != 0);
 
 endmodule

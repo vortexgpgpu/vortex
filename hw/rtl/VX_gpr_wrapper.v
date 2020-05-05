@@ -15,10 +15,10 @@ module VX_gpr_wrapper (
     wire[`NUM_WARPS-1:0][`NUM_THREADS-1:0][31:0] temp_b_reg_data;
 
     wire[`NUM_THREADS-1:0][31:0] jal_data;
-    genvar index;
+    genvar i;
     generate 
-    for (index = 0; index < `NUM_THREADS; index = index + 1) begin : jal_data_assign
-        assign jal_data[index] = gpr_jal_if.curr_PC;
+    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : jal_data_assign
+        assign jal_data[i] = gpr_jal_if.curr_PC;
     end
     endgenerate
 
@@ -46,22 +46,19 @@ module VX_gpr_wrapper (
         
     `endif
 
-    genvar warp_index;
-    generate
-        
-        for (warp_index = 0; warp_index < `NUM_WARPS; warp_index = warp_index + 1) begin : warp_gprs
-            wire valid_write_request = warp_index == writeback_if.warp_num;
+    generate        
+        for (i = 0; i < `NUM_WARPS; i = i + 1) begin : warp_gprs
+            wire valid_write_request = i == writeback_if.warp_num;
             VX_gpr gpr(
                 .clk                    (clk),
                 .reset                  (reset),
                 .valid_write_request    (valid_write_request),
                 .gpr_read_if            (gpr_read_if),
                 .writeback_if           (writeback_if),
-                .a_reg_data             (temp_a_reg_data[warp_index]),
-                .b_reg_data             (temp_b_reg_data[warp_index])
+                .a_reg_data             (temp_a_reg_data[i]),
+                .b_reg_data             (temp_b_reg_data[i])
             );
         end
-
     endgenerate    
 
 endmodule

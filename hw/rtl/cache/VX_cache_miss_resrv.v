@@ -90,10 +90,10 @@ module VX_cache_miss_resrv #(
     wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
 
     reg [MRVQ_SIZE-1:0] make_ready;
-    genvar curr_e;
+    genvar i;
     generate
-        for (curr_e = 0; curr_e < MRVQ_SIZE; curr_e=curr_e+1) begin
-            assign make_ready[curr_e] = is_fill_st1 && valid_table[curr_e] && (addr_table[curr_e] == fill_addr_st1);
+        for (i = 0; i < MRVQ_SIZE; i=i+1) begin
+            assign make_ready[i] = is_fill_st1 && valid_table[i] && (addr_table[i] == fill_addr_st1);
         end
     endgenerate
 
@@ -107,7 +107,7 @@ module VX_cache_miss_resrv #(
     wire mrvq_push = miss_add && enqueue_possible && (MRVQ_SIZE != 2);
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
 
-    wire update_ready = (|make_ready);
+    wire update_ready = (| make_ready);
 
     always @(posedge clk) begin
         if (reset) begin

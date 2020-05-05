@@ -9,8 +9,7 @@ module VX_fetch (
     input  wire                   icache_stage_delay,
     input  wire[`NW_BITS-1:0]     icache_stage_wid,
     input  wire[`NUM_THREADS-1:0] icache_stage_valids,
-
-    output wire           ebreak,
+    output wire                   busy,
     VX_jal_rsp_if         jal_rsp_if,
     VX_branch_rsp_if      branch_rsp_if,
     VX_inst_meta_if       fe_inst_meta_fi,
@@ -45,7 +44,7 @@ module VX_fetch (
         .ctm_warp_num     (warp_ctl_if.warp_num),
 
         // WHALT
-        .whalt            (warp_ctl_if.ebreak),
+        .whalt            (warp_ctl_if.whalt),
         .whalt_warp_num   (warp_ctl_if.warp_num),
 
         // Wstall
@@ -83,7 +82,7 @@ module VX_fetch (
         .thread_mask      (thread_mask),
         .warp_num         (warp_num),
         .warp_pc          (warp_pc),
-        .ebreak           (ebreak),
+        .busy             (busy),
         .scheduled_warp   (scheduled_warp)
     );
 

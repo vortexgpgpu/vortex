@@ -15,8 +15,7 @@ module VX_front_end (
     VX_branch_rsp_if          branch_rsp_if,
 
     VX_frE_to_bckE_req_if     bckE_req_if,
-
-    output wire               fetch_ebreak
+    output wire               busy
 );
 
     VX_inst_meta_if        fe_inst_meta_fi();
@@ -29,18 +28,13 @@ module VX_front_end (
     wire total_freeze = schedule_delay;
     wire icache_stage_delay;
 
-    wire vortex_ebreak;
-    wire terminate_sim;
-
     wire[`NW_BITS-1:0] icache_stage_wid;
-    wire[`NUM_THREADS-1:0]  icache_stage_valids;
+    wire[`NUM_THREADS-1:0] icache_stage_valids;
 
-    assign fetch_ebreak = vortex_ebreak || terminate_sim;
+    VX_wstall_if wstall_if();
+    VX_join_if   join_if();
 
-    VX_wstall_if    wstall_if();
-    VX_join_if      join_if();
-
-    VX_fetch fetch(
+    VX_fetch fetch (
         .clk                (clk),
         .reset              (reset),
         .icache_stage_wid   (icache_stage_wid),
@@ -52,7 +46,7 @@ module VX_front_end (
         .warp_ctl_if        (warp_ctl_if),
         .icache_stage_delay (icache_stage_delay),
         .branch_rsp_if      (branch_rsp_if),
-        .ebreak             (vortex_ebreak), // fetch_ebreak
+        .busy               (busy),
         .fe_inst_meta_fi    (fe_inst_meta_fi)
     );
 
@@ -91,9 +85,8 @@ module VX_front_end (
         .fd_inst_meta_de    (fd_inst_meta_de),
         .frE_to_bckE_req_if (frE_to_bckE_req_if),
         .wstall_if          (wstall_if),
-        .join_if            (join_if),
-        .terminate_sim      (terminate_sim)
-    );
+        .join_if            (join_if)
+    );    
 
     wire no_br_stall = 0;
 

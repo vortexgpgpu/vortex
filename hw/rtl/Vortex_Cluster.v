@@ -42,7 +42,8 @@ module Vortex_Cluster #(
     input wire[`CORE_REQ_TAG_WIDTH-1:0] io_rsp_tag,    
     output wire                         io_rsp_ready,
 
-    // Debug
+    // Status
+    output wire                         busy, 
     output wire                         ebreak
 );    
     wire[`NUM_CORES-1:0]                        per_core_D_dram_req_read;
@@ -83,6 +84,7 @@ module Vortex_Cluster #(
     wire[`NUM_CORES-1:0]                        per_core_io_rsp_ready;
 `IGNORE_WARNINGS_END
 
+    wire[`NUM_CORES-1:0]                        per_core_busy;
     wire[`NUM_CORES-1:0]                        per_core_ebreak;
 
     genvar i;
@@ -92,48 +94,49 @@ module Vortex_Cluster #(
         ) vortex_core (
             .clk                (clk),
             .reset              (reset),
-            .D_dram_req_read    (per_core_D_dram_req_read     [i]),
-            .D_dram_req_write   (per_core_D_dram_req_write    [i]),                
-            .D_dram_req_addr    (per_core_D_dram_req_addr     [i]),
-            .D_dram_req_data    (per_core_D_dram_req_data     [i]),
-            .D_dram_req_tag     (per_core_D_dram_req_tag      [i]),
-            .D_dram_req_ready   (per_core_D_dram_req_ready    [i]),         
-            .D_dram_rsp_valid   (per_core_D_dram_rsp_valid    [i]),                
-            .D_dram_rsp_data    (per_core_D_dram_rsp_data     [i]),
-            .D_dram_rsp_tag     (per_core_D_dram_rsp_tag      [i]),
-            .D_dram_rsp_ready   (per_core_D_dram_rsp_ready    [i]),                
-            .I_dram_req_read    (per_core_I_dram_req_read     [i]),
+            .D_dram_req_read    (per_core_D_dram_req_read   [i]),
+            .D_dram_req_write   (per_core_D_dram_req_write  [i]),                
+            .D_dram_req_addr    (per_core_D_dram_req_addr   [i]),
+            .D_dram_req_data    (per_core_D_dram_req_data   [i]),
+            .D_dram_req_tag     (per_core_D_dram_req_tag    [i]),
+            .D_dram_req_ready   (per_core_D_dram_req_ready  [i]),         
+            .D_dram_rsp_valid   (per_core_D_dram_rsp_valid  [i]),                
+            .D_dram_rsp_data    (per_core_D_dram_rsp_data   [i]),
+            .D_dram_rsp_tag     (per_core_D_dram_rsp_tag    [i]),
+            .D_dram_rsp_ready   (per_core_D_dram_rsp_ready  [i]),                
+            .I_dram_req_read    (per_core_I_dram_req_read   [i]),
 
         `IGNORE_WARNINGS_BEGIN
             .I_dram_req_write   (),                
         `IGNORE_WARNINGS_END
-            .I_dram_req_addr    (per_core_I_dram_req_addr     [i]),                
-            .I_dram_req_data    (per_core_I_dram_req_data     [i]),
-            .I_dram_req_tag     (per_core_I_dram_req_tag      [i]),                
-            .I_dram_req_ready   (per_core_I_dram_req_ready    [i]),          
-            .I_dram_rsp_valid   (per_core_I_dram_rsp_valid    [i]),
-            .I_dram_rsp_tag     (per_core_I_dram_rsp_tag      [i]),
-            .I_dram_rsp_data    (per_core_I_dram_rsp_data     [i]),
-            .I_dram_rsp_ready   (per_core_I_dram_rsp_ready    [i]),   
+            .I_dram_req_addr    (per_core_I_dram_req_addr   [i]),                
+            .I_dram_req_data    (per_core_I_dram_req_data   [i]),
+            .I_dram_req_tag     (per_core_I_dram_req_tag    [i]),                
+            .I_dram_req_ready   (per_core_I_dram_req_ready  [i]),          
+            .I_dram_rsp_valid   (per_core_I_dram_rsp_valid  [i]),
+            .I_dram_rsp_tag     (per_core_I_dram_rsp_tag    [i]),
+            .I_dram_rsp_data    (per_core_I_dram_rsp_data   [i]),
+            .I_dram_rsp_ready   (per_core_I_dram_rsp_ready  [i]),   
 
             .llc_snp_req_valid  (snp_fwd_valid),
             .llc_snp_req_addr   (snp_fwd_addr),
-            .llc_snp_req_ready  (per_core_snp_fwd_ready       [i]),
+            .llc_snp_req_ready  (per_core_snp_fwd_ready     [i]),
 
-            .io_req_read        (per_core_io_req_read    [i]),
-            .io_req_write       (per_core_io_req_write   [i]),
-            .io_req_addr        (per_core_io_req_addr    [i]),
-            .io_req_data        (per_core_io_req_data    [i]),
-            .io_req_byteen      (per_core_io_req_byteen  [i]),
-            .io_req_tag         (per_core_io_req_tag     [i]),
+            .io_req_read        (per_core_io_req_read       [i]),
+            .io_req_write       (per_core_io_req_write      [i]),
+            .io_req_addr        (per_core_io_req_addr       [i]),
+            .io_req_data        (per_core_io_req_data       [i]),
+            .io_req_byteen      (per_core_io_req_byteen     [i]),
+            .io_req_tag         (per_core_io_req_tag        [i]),
             .io_req_ready       (io_req_ready),
 
             .io_rsp_valid       (io_rsp_valid),            
             .io_rsp_data        (io_rsp_data),
             .io_rsp_tag         (io_rsp_tag),
-            .io_rsp_ready       (per_core_io_rsp_ready   [i]),
+            .io_rsp_ready       (per_core_io_rsp_ready      [i]),
 
-            .ebreak             (per_core_ebreak              [i])
+            .busy               (per_core_busy              [i]),
+            .ebreak             (per_core_ebreak            [i])
         );
     end   
 
@@ -145,7 +148,8 @@ module Vortex_Cluster #(
     assign io_req_tag    = per_core_io_req_tag[0];
 
     assign io_rsp_ready  = per_core_io_rsp_ready[0];
-
+    
+    assign busy = (| per_core_busy);
     assign ebreak = (& per_core_ebreak);
 
     if (`L2_ENABLE) begin
@@ -184,8 +188,8 @@ module Vortex_Cluster #(
             assign l2_core_req_tag   [i]   = per_core_D_dram_req_tag[(i/2)];
             assign l2_core_req_tag   [i+1] = per_core_I_dram_req_tag[(i/2)];
 
-            assign per_core_D_dram_req_ready[(i/2)] = l2_core_req_ready;
-            assign per_core_I_dram_req_ready[(i/2)] = l2_core_req_ready;
+            assign per_core_D_dram_req_ready [(i/2)] = l2_core_req_ready;
+            assign per_core_I_dram_req_ready [(i/2)] = l2_core_req_ready;
 
             assign per_core_D_dram_rsp_valid [(i/2)] = l2_core_rsp_valid[i];
             assign per_core_I_dram_rsp_valid [(i/2)] = l2_core_rsp_valid[i+1];
@@ -221,7 +225,7 @@ module Vortex_Cluster #(
             .FILL_INVALIDAOR_SIZE   (`L2FILL_INVALIDAOR_SIZE),            
             .DRAM_ENABLE            (1),
             .WRITE_ENABLE           (1),
-            .SNOOP_FORWARDING_ENABLE(1),
+            .SNOOP_FORWARDING       (1),
             .CORE_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
             .CORE_TAG_ID_BITS       (0),
             .DRAM_TAG_WIDTH         (`L2DRAM_TAG_WIDTH)

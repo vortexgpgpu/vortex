@@ -83,16 +83,16 @@ module VX_mult #(
                 reg [WIDTHA-1:0] dataa_pipe [0:PIPELINE-1];
                 reg [WIDTHB-1:0] datab_pipe [0:PIPELINE-1];
 
-                genvar pipe_stage;
-                for (pipe_stage = 0; pipe_stage < PIPELINE-1; pipe_stage = pipe_stage+1) begin : pipe_stages
+                genvar i;
+                for (i = 0; i < PIPELINE-1; i = i+1) begin : pipe_stages
                     always @(posedge clock or posedge aclr) begin
                         if (aclr) begin
-                            dataa_pipe[pipe_stage+1] <= 0;
-                            datab_pipe[pipe_stage+1] <= 0;
+                            dataa_pipe[i+1] <= 0;
+                            datab_pipe[i+1] <= 0;
                         end
                         else if (clken) begin
-                            dataa_pipe[pipe_stage+1] <= dataa_pipe[pipe_stage];
-                            datab_pipe[pipe_stage+1] <= datab_pipe[pipe_stage];
+                            dataa_pipe[i+1] <= dataa_pipe[i];
+                            datab_pipe[i+1] <= datab_pipe[i];
                         end
                     end
                 end

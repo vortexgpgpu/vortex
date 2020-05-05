@@ -47,7 +47,7 @@ module VX_cache #(
     parameter DRAM_ENABLE                   = 1,
 
     // Enable snoop forwarding
-    parameter SNOOP_FORWARDING_ENABLE       = 0,
+    parameter SNOOP_FORWARDING              = 0,
 
     // Prefetcher
     parameter PRFQ_SIZE                     = 64,
@@ -135,9 +135,9 @@ module VX_cache #(
 `DEBUG_END
 
     assign dram_req_tag   = dram_req_addr;
-    assign core_req_ready = ~(|per_bank_reqq_full);    
-    assign snp_req_ready  = ~(|per_bank_snp_req_full);    
-    assign dram_rsp_ready = (|per_bank_dram_fill_rsp_ready);    
+    assign core_req_ready = ~(| per_bank_reqq_full);    
+    assign snp_req_ready  = ~(| per_bank_snp_req_full);    
+    assign dram_rsp_ready = (| per_bank_dram_fill_rsp_ready);    
 
     VX_cache_core_req_bank_sel #(
         .CACHE_SIZE              (CACHE_SIZE),
@@ -265,7 +265,7 @@ module VX_cache #(
                 .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
                 .DRAM_ENABLE            (DRAM_ENABLE),
                 .WRITE_ENABLE           (WRITE_ENABLE),
-                .SNOOP_FORWARDING_ENABLE(SNOOP_FORWARDING_ENABLE),
+                .SNOOP_FORWARDING       (SNOOP_FORWARDING),
                 .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),                
                 .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
             ) bank (

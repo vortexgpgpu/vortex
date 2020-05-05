@@ -25,12 +25,12 @@ module VX_warp (
     reg [`NUM_THREADS-1:0] valid_t;
     reg [`NUM_THREADS-1:0] valid_zero;
 
-    integer ti;
+    integer i;
     initial begin
         real_PC = 0;
-        for (ti = 1; ti < `NUM_THREADS; ti=ti+1) begin
-            valid_t[ti]    = 0; // Thread 1 active
-            valid_zero[ti] = 0;
+        for (i = 1; i < `NUM_THREADS; i=i+1) begin
+            valid_t[i]    = 0; // Thread 1 active
+            valid_zero[i] = 0;
         end
         valid_t       = 1;
         valid_zero[0] = 0;
@@ -44,10 +44,10 @@ module VX_warp (
         end
     end
 
-    genvar tv;
+    genvar i;
     generate
-        for (tv = 0; tv < `NUM_THREADS; tv = tv+1) begin : valid_assign
-            assign valid[tv] = change_mask ? thread_mask[tv] : stall ? 1'b0  : valid_t[tv];
+        for (i = 0; i < `NUM_THREADS; i = i+1) begin : valid_assign
+            assign valid[i] = change_mask ? thread_mask[i] : stall ? 1'b0  : valid_t[i];
         end
     endgenerate
 

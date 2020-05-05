@@ -90,7 +90,7 @@ module VX_alu_unit (
     assign alu_stall = inst_delay_stall;
 
     always @(*) begin
-        case(alu_op)
+        case (alu_op)
             `DIV,
             `DIVU,
             `REM,
@@ -136,7 +136,7 @@ module VX_alu_unit (
     assign upper_immed = {upper_immed, {12{1'b0}}};
 
     always @(*) begin
-        case(alu_op)
+        case (alu_op)
             `ADD:        alu_result = $signed(ALU_in1) + $signed(ALU_in2);
             `SUB:        alu_result = $signed(ALU_in1) - $signed(ALU_in2);
             `SLLA:       alu_result = ALU_in1 << ALU_in2[4:0];
@@ -177,7 +177,7 @@ module VX_alu_unit (
     assign upper_immed_s = {upper_immed, {12{1'b0}}};
 
     always @(*) begin
-        case(alu_op)
+        case (alu_op)
             `ADD:        alu_result = $signed(ALU_in1) + $signed(ALU_in2);
             `SUB:        alu_result = $signed(ALU_in1) - $signed(ALU_in2);
             `SLLA:       alu_result = ALU_in1 << ALU_in2[4:0];

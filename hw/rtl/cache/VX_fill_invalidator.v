@@ -60,10 +60,10 @@ module VX_fill_invalidator #(
         reg [FILL_INVALIDAOR_SIZE-1:0] matched_fill;
         wire matched;
 
-        integer fi;
+        integer i;
         always @(*) begin
-            for (fi = 0; fi < FILL_INVALIDAOR_SIZE; fi+=1) begin
-                matched_fill[fi] = fills_active[fi] && (fills_address[fi] == fill_addr);
+            for (i = 0; i < FILL_INVALIDAOR_SIZE; i+=1) begin
+                matched_fill[i] = fills_active[i] && (fills_address[i] == fill_addr);
             end
         end
 

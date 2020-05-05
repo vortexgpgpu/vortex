@@ -20,7 +20,9 @@ module VX_back_end #(
     VX_frE_to_bckE_req_if  bckE_req_if,
     VX_wb_if               writeback_if,
 
-    VX_warp_ctl_if         warp_ctl_if
+    VX_warp_ctl_if         warp_ctl_if,
+
+    output wire            ebreak
 );
 
     VX_wb_if wb_temp_if();
@@ -69,6 +71,8 @@ module VX_back_end #(
         .gpr_stage_delay    (gpr_stage_delay)
     );
 
+    assign ebreak = exec_unit_req_if.is_etype && (| exec_unit_req_if.valid);
+
     VX_lsu_unit lsu_unit (
         .clk            (clk),
         .reset          (reset),
@@ -81,14 +85,14 @@ module VX_back_end #(
     );
 
     VX_exec_unit exec_unit (
-        .clk             (clk),
-        .reset           (reset),
+        .clk            (clk),
+        .reset          (reset),
         .exec_unit_req_if(exec_unit_req_if),
-        .inst_exec_wb_if (inst_exec_wb_if),
-        .jal_rsp_if      (jal_rsp_if),
-        .branch_rsp_if   (branch_rsp_if),
-        .delay           (exec_delay),
-        .no_slot_exec    (no_slot_exec)
+        .inst_exec_wb_if(inst_exec_wb_if),
+        .jal_rsp_if     (jal_rsp_if),
+        .branch_rsp_if  (branch_rsp_if),
+        .delay          (exec_delay),
+        .no_slot_exec   (no_slot_exec)
     );
 
     VX_gpu_inst gpu_inst (
@@ -119,6 +123,6 @@ module VX_back_end #(
         .no_slot_mem    (no_slot_mem),
         .no_slot_exec   (no_slot_exec),
         .no_slot_csr    (no_slot_csr)
-    );
+    );   
 
 endmodule

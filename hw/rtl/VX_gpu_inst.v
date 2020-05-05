@@ -13,31 +13,29 @@ module VX_gpu_inst (
     wire[`NUM_THREADS-1:0] tmc_new_mask;
     wire all_threads = `NUM_THREADS < gpu_inst_req_if.a_reg_data[0];
     
-    genvar curr_t;
+    genvar i;
     generate
-    for (curr_t = 0; curr_t < `NUM_THREADS; curr_t=curr_t+1) begin : tmc_new_mask_init
-        assign tmc_new_mask[curr_t] = all_threads ? 1 : curr_t < gpu_inst_req_if.a_reg_data[0];
+    for (i = 0; i < `NUM_THREADS; i=i+1) begin : tmc_new_mask_init
+        assign tmc_new_mask[i] = all_threads ? 1 : i < gpu_inst_req_if.a_reg_data[0];
     end
     endgenerate
 
-    wire valid_inst = (|curr_valids);
+    wire valid_inst = (| curr_valids);
 
     assign warp_ctl_if.warp_num    = gpu_inst_req_if.warp_num;
     assign warp_ctl_if.change_mask = (gpu_inst_req_if.is_tmc) && valid_inst;
     assign warp_ctl_if.thread_mask = gpu_inst_req_if.is_tmc ? tmc_new_mask : 0;
 
-    // assign warp_ctl_if.ebreak = (gpu_inst_req_if.a_reg_data[0] == 0) && valid_inst;
-    assign warp_ctl_if.ebreak = warp_ctl_if.change_mask && (warp_ctl_if.thread_mask == 0);
+    assign warp_ctl_if.whalt = warp_ctl_if.change_mask && (warp_ctl_if.thread_mask == 0);
 
     wire       wspawn     = gpu_inst_req_if.is_wspawn;
     wire[31:0] wspawn_pc  = gpu_inst_req_if.rd2;
     wire       all_active = `NUM_WARPS < gpu_inst_req_if.a_reg_data[0];
     wire[`NUM_WARPS-1:0] wspawn_new_active;
 
-    genvar curr_w;
     generate
-    for (curr_w = 0; curr_w < `NUM_WARPS; curr_w=curr_w+1) begin : wspawn_new_active_init
-        assign wspawn_new_active[curr_w] = all_active ? 1 : curr_w < gpu_inst_req_if.a_reg_data[0];
+    for (i = 0; i < `NUM_WARPS; i=i+1) begin : wspawn_new_active_init
+        assign wspawn_new_active[i] = all_active ? 1 : i < gpu_inst_req_if.a_reg_data[0];
     end
     endgenerate
 
@@ -57,14 +55,11 @@ module VX_gpu_inst (
     wire[`NUM_THREADS-1:0] split_new_use_mask;
     wire[`NUM_THREADS-1:0] split_new_later_mask;
 
-    // VX_gpu_inst_req.pc
-    genvar curr_s_t;
     generate
-    for (curr_s_t = 0; curr_s_t < `NUM_THREADS; curr_s_t=curr_s_t+1) begin : masks_init
-        wire curr_bool = (gpu_inst_req_if.a_reg_data[curr_s_t] == 32'b1);
-
-        assign split_new_use_mask[curr_s_t]   = curr_valids[curr_s_t] & (curr_bool);
-        assign split_new_later_mask[curr_s_t] = curr_valids[curr_s_t] & (!curr_bool);
+    for (i = 0; i < `NUM_THREADS; i=i+1) begin : masks_init
+        wire curr_bool = (gpu_inst_req_if.a_reg_data[i] == 32'b1);
+        assign split_new_use_mask[i]   = curr_valids[i] & (curr_bool);
+        assign split_new_later_mask[i] = curr_valids[i] & (!curr_bool);
     end
     endgenerate
 

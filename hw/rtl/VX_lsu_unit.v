@@ -61,10 +61,10 @@ module VX_lsu_unit (
     assign {mem_wb_if.pc, mem_wb_if.wb, mem_wb_if.rd, mem_wb_if.warp_num} = dcache_rsp_if.core_rsp_tag;
 
     /*always_comb begin
-        if (1'($time & 1) && dcache_req_if.core_req_ready && |dcache_req_if.core_req_valid) begin
+        if (1'($time & 1) && dcache_req_if.core_req_ready && (| dcache_req_if.core_req_valid)) begin
             $display("*** %t: D$ req: valid=%b, addr=%0h, r=%d, w=%d, pc=%0h, rd=%d, warp=%d, data=%0h", $time, use_valid, use_address, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, use_store_data);
         end
-        if (1'($time & 1) && dcache_rsp_if.core_rsp_ready && |dcache_rsp_if.core_rsp_valid) begin
+        if (1'($time & 1) && dcache_rsp_if.core_rsp_ready && (| dcache_rsp_if.core_rsp_valid)) begin
             $display("*** %t: D$ rsp: valid=%b, pc=%0h, rd=%d, warp=%d, data=%0h", $time, mem_wb_if.valid, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end*/

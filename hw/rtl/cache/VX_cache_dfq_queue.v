@@ -63,8 +63,8 @@ module VX_cache_dfq_queue #(
 
     wire o_empty;
 
-    wire use_empty = !(|use_per_bank_dram_fill_req_valid);
-    wire out_empty = !(|out_per_bank_dram_fill_req_valid) || o_empty;
+    wire use_empty = !(| use_per_bank_dram_fill_req_valid);
+    wire out_empty = !(| out_per_bank_dram_fill_req_valid) || o_empty;
 
     wire push_qual = dfqq_push && !dfqq_full;
     wire pop_qual  = dfqq_pop && use_empty && !out_empty;
