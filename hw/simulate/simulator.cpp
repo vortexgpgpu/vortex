@@ -8,8 +8,7 @@ double sc_time_stamp() {
   return time_stamp;
 }
 
-Simulator::Simulator(RAM *ram)
-    : dram_stalled_(false) {
+Simulator::Simulator(RAM *ram) {
   ram_ = ram;
   vortex_ = new VVortex_Socket();
 
@@ -34,31 +33,45 @@ void Simulator::print_stats(std::ostream& out) {
 }
 
 void Simulator::dbus_driver() {
+  // handle DRAM response cycle
   int dequeue_index = -1;
-  for (int i = 0; i < dram_req_vec_.size(); i++) {
-    if (dram_req_vec_[i].cycles_left > 0) {
-      dram_req_vec_[i].cycles_left -= 1;
+  for (int i = 0; i < dram_rsp_vec_.size(); i++) {
+    if (dram_rsp_vec_[i].cycles_left > 0) {
+      dram_rsp_vec_[i].cycles_left -= 1;
     }
     if ((dequeue_index == -1) 
-     && (dram_req_vec_[i].cycles_left == 0)) {
+     && (dram_rsp_vec_[i].cycles_left == 0)) {
       dequeue_index = i;
     }
   }
 
+  // handle DRAM response message
   if ((dequeue_index != -1) 
    && vortex_->dram_rsp_ready) {
     vortex_->dram_rsp_valid = 1;
     for (int i = 0; i < (GLOBAL_BLOCK_SIZE / 4); i++) {
-      vortex_->dram_rsp_data[i] = dram_req_vec_[dequeue_index].data[i];
+      vortex_->dram_rsp_data[i] = dram_rsp_vec_[dequeue_index].data[i];
     }
-    vortex_->dram_rsp_tag = dram_req_vec_[dequeue_index].tag;
-    free(dram_req_vec_[dequeue_index].data);
-    dram_req_vec_.erase(dram_req_vec_.begin() + dequeue_index);
+    vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;
+    free(dram_rsp_vec_[dequeue_index].data);
+    dram_rsp_vec_.erase(dram_rsp_vec_.begin() + dequeue_index);
   } else {
     vortex_->dram_rsp_valid = 0;
   }
 
-  if (!dram_stalled_) {
+  // handle DRAM stalls
+  bool dram_stalled = false;
+#ifdef ENABLE_DRAM_STALLS
+  if (0 == ((time_stamp/2) % DRAM_STALLS_MODULO)) { 
+    dram_stalled = true;
+  } else
+  if (dram_rsp_vec_.size() >= DRAM_RQ_SIZE) {
+    dram_stalled = true;
+  }
+#endif
+
+  // handle DRAM requests
+  if (!dram_stalled) {
     if (vortex_->dram_req_read) {
       dram_req_t dram_req;
       dram_req.cycles_left = DRAM_LATENCY;     
@@ -72,7 +85,7 @@ void Simulator::dbus_driver() {
         ram_->getWord(curr_addr, &data_rd);
         dram_req.data[i] = data_rd;
       }
-      dram_req_vec_.push_back(dram_req);
+      dram_rsp_vec_.push_back(dram_req);
     }
 
     if (vortex_->dram_req_write) {
@@ -85,17 +98,7 @@ void Simulator::dbus_driver() {
     }
   }
 
-#ifdef ENABLE_DRAM_STALLS
-  dram_stalled_ = false;
-  if (0 == ((time_stamp/2) % DRAM_STALLS_MODULO)) { 
-    dram_stalled_ = true;
-  } else
-  if (dram_req_vec_.size() >= DRAM_RQ_SIZE) {
-    dram_stalled_ = true;
-  }  
-#endif
-
-  vortex_->dram_req_ready = ~dram_stalled_;
+  vortex_->dram_req_ready = ~dram_stalled;
 }
 
 void Simulator::io_driver() {
