@@ -10,7 +10,7 @@ module VX_d_e_reg (
 );
 
     wire stall = freeze;
-    wire flush = (branch_stall == `STALL);
+    wire flush = (branch_stall != 0);
 
     VX_generic_register #(
         .N(233 + `NW_BITS-1 + 1 + `NUM_THREADS)

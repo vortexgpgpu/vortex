@@ -95,19 +95,19 @@ module VX_decode(
     assign frE_to_bckE_req_if.PC_next = in_curr_PC + 32'h4;
 
     // Write Back sigal
-    assign is_rtype     = (curr_opcode == `R_INST);
-    assign is_linst     = (curr_opcode == `L_INST);
-    assign is_itype     = (curr_opcode == `ALU_INST) || is_linst; 
-    assign is_stype     = (curr_opcode == `S_INST);
-    assign is_btype     = (curr_opcode == `B_INST);
-    assign is_jal       = (curr_opcode == `JAL_INST);
-    assign is_jalr      = (curr_opcode == `JALR_INST);
-    assign is_lui       = (curr_opcode == `LUI_INST);
-    assign is_auipc     = (curr_opcode == `AUIPC_INST);
-    assign is_csr       = (curr_opcode == `SYS_INST) && (func3 != 0);
+    assign is_rtype     = (curr_opcode == `INST_R);
+    assign is_linst     = (curr_opcode == `INST_L);
+    assign is_itype     = (curr_opcode == `INST_ALU) || is_linst; 
+    assign is_stype     = (curr_opcode == `INST_S);
+    assign is_btype     = (curr_opcode == `INST_B);
+    assign is_jal       = (curr_opcode == `INST_JAL);
+    assign is_jalr      = (curr_opcode == `INST_JALR);
+    assign is_lui       = (curr_opcode == `INST_LUI);
+    assign is_auipc     = (curr_opcode == `INST_AUIPC);
+    assign is_csr       = (curr_opcode == `INST_SYS) && (func3 != 0);
     assign is_csr_immed = (is_csr) && (func3[2] == 1);
 
-    assign is_gpgpu     = (curr_opcode == `GPGPU_INST);
+    assign is_gpgpu     = (curr_opcode == `INST_GPGPU);
 
     assign is_tmc       = is_gpgpu && (func3 == 0); // Goes to BE
     assign is_wspawn    = is_gpgpu && (func3 == 1); // Goes to BE
@@ -129,7 +129,7 @@ module VX_decode(
     assign frE_to_bckE_req_if.wb = (is_jal || is_jalr || is_etype) ? `WB_JAL :
                                         is_linst ? `WB_MEM :
                                             (is_itype || is_rtype || is_lui || is_auipc || is_csr) ?  `WB_ALU :
-                                                `NO_WB;
+                                                `WB_NO;
 
     assign frE_to_bckE_req_if.rs2_src   = (is_itype || is_stype) ? `RS2_IMMED : `RS2_REG;
 
@@ -140,8 +140,8 @@ module VX_decode(
     // UPPER IMMEDIATE
     always @(*) begin
         case (curr_opcode)
-            `LUI_INST:   temp_upper_immed  = {func7, frE_to_bckE_req_if.rs2, frE_to_bckE_req_if.rs1, func3};
-            `AUIPC_INST: temp_upper_immed  = {func7, frE_to_bckE_req_if.rs2, frE_to_bckE_req_if.rs1, func3};
+            `INST_LUI:   temp_upper_immed  = {func7, frE_to_bckE_req_if.rs2, frE_to_bckE_req_if.rs1, func3};
+            `INST_AUIPC: temp_upper_immed  = {func7, frE_to_bckE_req_if.rs2, frE_to_bckE_req_if.rs1, func3};
             default:     temp_upper_immed  = 20'h0;
         endcase // curr_opcode
     end
@@ -168,17 +168,17 @@ module VX_decode(
     // JAL 
     always @(*) begin
         case (curr_opcode)
-            `JAL_INST:
+            `INST_JAL:
                 begin
                     temp_jal        = 1'b1 && (| in_valid);
                     temp_jal_offset = jal_1_offset;
                 end
-            `JALR_INST:
+            `INST_JALR:
                 begin
                     temp_jal        = 1'b1 && (| in_valid);
                     temp_jal_offset = jal_2_offset;
                 end
-            `SYS_INST:
+            `INST_SYS:
                 begin
                     // $display("SYS EBREAK %h", (jal_sys_jal && (| in_valid)));
                     temp_jal        = jal_sys_jal && (| in_valid);
@@ -197,7 +197,7 @@ module VX_decode(
     assign frE_to_bckE_req_if.jal_offset = temp_jal_offset;
 
     // ecall/ebreak
-    assign is_etype = (curr_opcode == `SYS_INST) && jal_sys_jal;
+    assign is_etype = (curr_opcode == `INST_SYS) && jal_sys_jal;
     assign frE_to_bckE_req_if.is_etype   = is_etype;
 
     // CSR
@@ -214,10 +214,10 @@ module VX_decode(
 
     always @(*) begin
         case (curr_opcode)
-            `ALU_INST: temp_itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
-            `S_INST:   temp_itype_immed = {{20{func7[6]}}, func7, frE_to_bckE_req_if.rd};
-            `L_INST:   temp_itype_immed = {{20{u_12[11]}}, u_12};
-            `B_INST:   temp_itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
+            `INST_ALU: temp_itype_immed = {{20{alu_tempp[11]}}, alu_tempp};
+            `INST_S:   temp_itype_immed = {{20{func7[6]}}, func7, frE_to_bckE_req_if.rd};
+            `INST_L:   temp_itype_immed = {{20{u_12[11]}}, u_12};
+            `INST_B:   temp_itype_immed = {{20{in_instruction[31]}}, in_instruction[31], in_instruction[7], in_instruction[30:25], in_instruction[11:8]};
             default:   temp_itype_immed = 32'hdeadbeef;
         endcase
     end
@@ -226,29 +226,29 @@ module VX_decode(
 
     always @(*) begin
         case (curr_opcode)
-            `B_INST: begin
+            `INST_B: begin
                 // $display("BRANCH IN DECODE");
                 temp_branch_stall = 1'b1 && (| in_valid);
                 case (func3)
-                    3'h0: temp_branch_type = `BEQ;
-                    3'h1: temp_branch_type = `BNE;
-                    3'h4: temp_branch_type = `BLT;
-                    3'h5: temp_branch_type = `BGT;
-                    3'h6: temp_branch_type = `BLTU;
-                    3'h7: temp_branch_type = `BGTU;
-                    default: temp_branch_type = `NO_BRANCH; 
+                    3'h0: temp_branch_type = `BR_EQ;
+                    3'h1: temp_branch_type = `BR_NE;
+                    3'h4: temp_branch_type = `BR_LT;
+                    3'h5: temp_branch_type = `BR_GT;
+                    3'h6: temp_branch_type = `BR_LTU;
+                    3'h7: temp_branch_type = `BR_GTU;
+                    default: temp_branch_type = `BR_NO; 
                 endcase
             end
-            `JAL_INST: begin
-                temp_branch_type  = `NO_BRANCH;
+            `INST_JAL: begin
+                temp_branch_type  = `BR_NO;
                 temp_branch_stall = 1'b1 && (| in_valid);
             end
-            `JALR_INST: begin
-                temp_branch_type  = `NO_BRANCH;
+            `INST_JALR: begin
+                temp_branch_type  = `BR_NO;
                 temp_branch_stall = 1'b1 && (| in_valid);
             end
             default: begin
-                temp_branch_type  = `NO_BRANCH;
+                temp_branch_type  = `BR_NO;
                 temp_branch_stall = 1'b0 && (| in_valid);
             end
         endcase
@@ -262,30 +262,30 @@ module VX_decode(
     always @(*) begin
         // ALU OP
         case (func3)
-            3'h0:    alu_op = (curr_opcode == `ALU_INST) ? `ADD : (func7 == 7'h0 ? `ADD : `SUB);
-            3'h1:    alu_op = `SLLA;
-            3'h2:    alu_op = `SLT;
-            3'h3:    alu_op = `SLTU;
-            3'h4:    alu_op = `XOR;
-            3'h5:    alu_op = (func7 == 7'h0) ? `SRL : `SRA;
-            3'h6:    alu_op = `OR;
-            3'h7:    alu_op = `AND;
-            default: alu_op = `NO_ALU; 
+            3'h0:    alu_op = (curr_opcode == `INST_ALU) ? `ALU_ADD : (func7 == 7'h0 ? `ALU_ADD : `ALU_SUB);
+            3'h1:    alu_op = `ALU_SLLA;
+            3'h2:    alu_op = `ALU_SLT;
+            3'h3:    alu_op = `ALU_SLTU;
+            3'h4:    alu_op = `ALU_XOR;
+            3'h5:    alu_op = (func7 == 7'h0) ? `ALU_SRL : `ALU_SRA;
+            3'h6:    alu_op = `ALU_OR;
+            3'h7:    alu_op = `ALU_AND;
+            default: alu_op = `ALU_NO; 
         endcase
     end
 
     always @(*) begin
         // ALU OP
         case (func3)
-            3'h0:    mul_alu = `MUL;
-            3'h1:    mul_alu = `MULH;
-            3'h2:    mul_alu = `MULHSU;
-            3'h3:    mul_alu = `MULHU;
-            3'h4:    mul_alu = `DIV;
-            3'h5:    mul_alu = `DIVU;
-            3'h6:    mul_alu = `REM;
-            3'h7:    mul_alu = `REMU;
-            default: mul_alu = `NO_ALU; 
+            3'h0:    mul_alu = `ALU_MUL;
+            3'h1:    mul_alu = `ALU_MULH;
+            3'h2:    mul_alu = `ALU_MULHSU;
+            3'h3:    mul_alu = `ALU_MULHU;
+            3'h4:    mul_alu = `ALU_DIV;
+            3'h5:    mul_alu = `ALU_DIVU;
+            3'h6:    mul_alu = `ALU_REM;
+            3'h7:    mul_alu = `ALU_REMU;
+            default: mul_alu = `ALU_NO; 
         endcase
     end
 
@@ -293,20 +293,20 @@ module VX_decode(
 
     always @(*) begin
         case (csr_type)
-            2'h1:     csr_alu = `CSR_ALU_RW;
-            2'h2:     csr_alu = `CSR_ALU_RS;
-            2'h3:     csr_alu = `CSR_ALU_RC;
-            default:  csr_alu = `NO_ALU;
+            2'h1:     csr_alu = `ALU_CSR_RW;
+            2'h2:     csr_alu = `ALU_CSR_RS;
+            2'h3:     csr_alu = `ALU_CSR_RC;
+            default:  csr_alu = `ALU_NO;
         endcase
     end
 
     wire[4:0] temp_final_alu;
 
-    assign temp_final_alu = is_btype ? ((frE_to_bckE_req_if.branch_type < `BLTU) ? `SUB : `SUBU) :
-                                is_lui ? `LUI_ALU :
-                                    is_auipc ? `AUIPC_ALU :
+    assign temp_final_alu = is_btype ? ((frE_to_bckE_req_if.branch_type < `BR_LTU) ? `ALU_SUB : `ALU_SUBU) :
+                                is_lui ? `ALU_LUI :
+                                    is_auipc ? `ALU_AUIPC :
                                         is_csr ? csr_alu :
-                                            (is_stype || is_linst) ? `ADD :
+                                            (is_stype || is_linst) ? `ALU_ADD :
                                                   alu_op;
 
     assign frE_to_bckE_req_if.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;

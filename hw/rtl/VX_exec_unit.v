@@ -88,14 +88,14 @@ module VX_exec_unit (
     always @(*)
     begin
         case (exec_unit_req_if.branch_type)
-            `BEQ:       temp_branch_dir = (branch_use_alu_result     == 0) ? `TAKEN     : `NOT_TAKEN;
-            `BNE:       temp_branch_dir = (branch_use_alu_result     == 0) ? `NOT_TAKEN : `TAKEN;
-            `BLT:       temp_branch_dir = (branch_use_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN;
-            `BGT:       temp_branch_dir = (branch_use_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
-            `BLTU:      temp_branch_dir = (branch_use_alu_result[31] == 0) ? `NOT_TAKEN : `TAKEN; 
-            `BGTU:      temp_branch_dir = (branch_use_alu_result[31] == 0) ? `TAKEN     : `NOT_TAKEN;
-            `NO_BRANCH: temp_branch_dir = `NOT_TAKEN;
-            default:    temp_branch_dir = `NOT_TAKEN;
+            `BR_EQ:  temp_branch_dir = (branch_use_alu_result     == 0);
+            `BR_NE:  temp_branch_dir = (branch_use_alu_result     != 0);
+            `BR_LT:  temp_branch_dir = (branch_use_alu_result[31] != 0);
+            `BR_GT:  temp_branch_dir = (branch_use_alu_result[31] == 0);
+            `BR_LTU: temp_branch_dir = (branch_use_alu_result[31] != 0); 
+            `BR_GTU: temp_branch_dir = (branch_use_alu_result[31] == 0);
+            `BR_NO:  temp_branch_dir = 0;
+            default: temp_branch_dir = 0;
         endcase // in_branch_type
     end
 
@@ -128,7 +128,7 @@ module VX_exec_unit (
     assign jal_rsp_temp_if.jal_warp_num = exec_unit_req_if.warp_num;
 
     // Branch rsp
-    assign branch_rsp_temp_if.valid_branch    = (exec_unit_req_if.branch_type != `NO_BRANCH) && (| exec_unit_req_if.valid);
+    assign branch_rsp_temp_if.valid_branch    = (exec_unit_req_if.branch_type != `BR_NO) && (| exec_unit_req_if.valid);
     assign branch_rsp_temp_if.branch_dir      = temp_branch_dir;
     assign branch_rsp_temp_if.branch_warp_num = exec_unit_req_if.warp_num;
     assign branch_rsp_temp_if.branch_dest     = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
@@ -168,9 +168,9 @@ module VX_exec_unit (
 
     // always @(*) begin
     //     case (in_alu_op)
-    //         `CSR_ALU_RW: out_csr_result = in_csr_mask;
-    //         `CSR_ALU_RS: out_csr_result = in_csr_data | in_csr_mask;
-    //         `CSR_ALU_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
+    //         `ALU_CSR_RW: out_csr_result = in_csr_mask;
+    //         `ALU_CSR_RS: out_csr_result = in_csr_data | in_csr_mask;
+    //         `ALU_CSR_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
     //         default:     out_csr_result = 32'hdeadbeef;
     //     endcase
     

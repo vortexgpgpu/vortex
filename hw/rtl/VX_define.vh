@@ -52,80 +52,59 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define R_INST 7'd51
-`define L_INST 7'd3
-`define ALU_INST 7'd19
-`define S_INST 7'd35
-`define B_INST 7'd99
-`define LUI_INST 7'd55
-`define AUIPC_INST 7'd23
-`define JAL_INST 7'd111
-`define JALR_INST 7'd103
-`define SYS_INST 7'd115
-`define GPGPU_INST 7'h6b
+`define INST_R      7'd051
+`define INST_L      7'd003
+`define INST_ALU    7'd019
+`define INST_S      7'd035
+`define INST_B      7'd099
+`define INST_LUI    7'd055
+`define INST_AUIPC  7'd023
+`define INST_JAL    7'd111
+`define INST_JALR   7'd103
+`define INST_SYS    7'd115
+`define INST_GPGPU  7'h06b
 
-///////////////////////////////////////////////////////////////////////////////
+`define RS2_IMMED   1
+`define RS2_REG     0
 
-`define WB_ALU 2'h1
-`define WB_MEM 2'h2
-`define WB_JAL 2'h3
-`define NO_WB  2'h0
+`define BR_NO       3'h0
+`define BR_EQ       3'h1
+`define BR_NE       3'h2
+`define BR_LT       3'h3
+`define BR_GT       3'h4
+`define BR_LTU      3'h5
+`define BR_GTU      3'h6
 
-`define RS2_IMMED 1
-`define RS2_REG 0
+`define ALU_NO      5'd15
+`define ALU_ADD     5'd00
+`define ALU_SUB     5'd01
+`define ALU_SLLA    5'd02
+`define ALU_SLT     5'd03
+`define ALU_SLTU    5'd04
+`define ALU_XOR     5'd05
+`define ALU_SRL     5'd06
+`define ALU_SRA     5'd07
+`define ALU_OR      5'd08
+`define ALU_AND     5'd09
+`define ALU_SUBU    5'd10
+`define ALU_LUI     5'd11
+`define ALU_AUIPC   5'd12
+`define ALU_CSR_RW  5'd13
+`define ALU_CSR_RS  5'd14
+`define ALU_CSR_RC  5'd15
+`define ALU_MUL     5'd16
+`define ALU_MULH    5'd17
+`define ALU_MULHSU  5'd18
+`define ALU_MULHU   5'd19
+`define ALU_DIV     5'd20
+`define ALU_DIVU    5'd21
+`define ALU_REM     5'd22
+`define ALU_REMU    5'd23
 
-`define NO_BRANCH 3'h0
-`define BEQ 3'h1
-`define BNE 3'h2
-`define BLT 3'h3
-`define BGT 3'h4
-`define BLTU 3'h5
-`define BGTU 3'h6
-
-`define NO_ALU 5'd15
-`define ADD 5'd0
-`define SUB 5'd1
-`define SLLA 5'd2
-`define SLT 5'd3
-`define SLTU 5'd4
-`define XOR 5'd5
-`define SRL 5'd6
-`define SRA 5'd7
-`define OR 5'd8
-`define AND 5'd9
-`define SUBU 5'd10
-`define LUI_ALU 5'd11
-`define AUIPC_ALU 5'd12
-`define CSR_ALU_RW 5'd13
-`define CSR_ALU_RS 5'd14
-`define CSR_ALU_RC 5'd15
-`define MUL 5'd16
-`define MULH 5'd17
-`define MULHSU 5'd18
-`define MULHU 5'd19
-`define DIV 5'd20
-`define DIVU 5'd21
-`define REM 5'd22
-`define REMU 5'd23
-
-// WRITEBACK
-`define WB_ALU 2'h1
-`define WB_MEM 2'h2
-`define WB_JAL 2'h3
-`define NO_WB  2'h0
-
-// JAL
-`define JUMP 1'h1
-`define NO_JUMP 1'h0
-
-// STALLS
-`define STALL 1'h1
-`define NO_STALL 1'h0
-
-`define TAKEN 1'h1
-`define NOT_TAKEN 1'h0
-
-`define ZERO_REG 5'h0
+`define WB_NO       2'h0
+`define WB_ALU      2'h1
+`define WB_MEM      2'h2
+`define WB_JAL      2'h3
 
 ///////////////////////////////////////////////////////////////////////////////
 

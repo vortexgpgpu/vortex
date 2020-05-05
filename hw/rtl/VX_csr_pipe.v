@@ -44,9 +44,9 @@ module VX_csr_pipe #(
 
     always @(*) begin
         case (csr_req_if.alu_op)
-            `CSR_ALU_RW: csr_updated_data = csr_req_if.csr_mask;
-            `CSR_ALU_RS: csr_updated_data = csr_read_data | csr_req_if.csr_mask;
-            `CSR_ALU_RC: csr_updated_data = csr_read_data & (32'hFFFFFFFF - csr_req_if.csr_mask);
+            `ALU_CSR_RW: csr_updated_data = csr_req_if.csr_mask;
+            `ALU_CSR_RS: csr_updated_data = csr_read_data | csr_req_if.csr_mask;
+            `ALU_CSR_RC: csr_updated_data = csr_read_data & (32'hFFFFFFFF - csr_req_if.csr_mask);
             default:     csr_updated_data = 32'hdeadbeef;
         endcase
     end    
