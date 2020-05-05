@@ -44,27 +44,28 @@ module VX_exec_unit (
 
     wire[`NUM_THREADS-1:0][31:0]  alu_result;
     wire[`NUM_THREADS-1:0]  alu_stall;
-    genvar index_out_reg;
+
+    genvar i;
     generate
-        for (index_out_reg = 0; index_out_reg < `NUM_THREADS; index_out_reg = index_out_reg + 1) begin : alu_defs
+        for (i = 0; i < `NUM_THREADS; i = i + 1) begin : alu_defs
             VX_alu_unit alu_unit (
                 .clk            (clk),
                 .reset          (reset),
-                .src_a          (in_a_reg_data[index_out_reg]),
-                .src_b          (in_b_reg_data[index_out_reg]),
+                .src_a          (in_a_reg_data[i]),
+                .src_b          (in_b_reg_data[i]),
                 .src_rs2        (in_rs2_src),
                 .itype_immed    (in_itype_immed),
                 .upper_immed    (in_upper_immed),
                 .alu_op         (in_alu_op),
                 .curr_PC        (in_curr_PC),
-                .alu_result     (alu_result[index_out_reg]),
-                .alu_stall      (alu_stall[index_out_reg])
+                .alu_result     (alu_result[i]),
+                .alu_stall      (alu_stall[i])
             );
         end
     endgenerate
 
     wire internal_stall;
-    assign internal_stall = |alu_stall;
+    assign internal_stall = (| alu_stall);
 
     assign delay = no_slot_exec || internal_stall;
 
@@ -98,11 +99,10 @@ module VX_exec_unit (
         endcase // in_branch_type
     end
 
-
     wire[`NUM_THREADS-1:0][31:0] duplicate_PC_data;
-    genvar i;
+
     generate
-        for (i = 0; i < `NUM_THREADS; i=i+1) begin : pc_data_setup
+        for (i = 0; i < `NUM_THREADS; i=i+1) begin
             assign duplicate_PC_data[i] = exec_unit_req_if.PC_next;
         end
     endgenerate
@@ -128,7 +128,7 @@ module VX_exec_unit (
     assign jal_rsp_temp_if.jal_warp_num = exec_unit_req_if.warp_num;
 
     // Branch rsp
-    assign branch_rsp_temp_if.valid_branch    = (exec_unit_req_if.branch_type != `NO_BRANCH) && (|exec_unit_req_if.valid);
+    assign branch_rsp_temp_if.valid_branch    = (exec_unit_req_if.branch_type != `NO_BRANCH) && (| exec_unit_req_if.valid);
     assign branch_rsp_temp_if.branch_dir      = temp_branch_dir;
     assign branch_rsp_temp_if.branch_warp_num = exec_unit_req_if.warp_num;
     assign branch_rsp_temp_if.branch_dest     = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
@@ -167,7 +167,7 @@ module VX_exec_unit (
     );
 
     // always @(*) begin
-    //     case(in_alu_op)
+    //     case (in_alu_op)
     //         `CSR_ALU_RW: out_csr_result = in_csr_mask;
     //         `CSR_ALU_RS: out_csr_result = in_csr_data | in_csr_mask;
     //         `CSR_ALU_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);

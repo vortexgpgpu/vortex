@@ -14,7 +14,7 @@ interface VX_warp_ctl_if ();
     wire [31:0]             wspawn_pc;
     wire [`NUM_WARPS-1:0]   wspawn_new_active;
 
-    wire                    ebreak;
+    wire                    whalt;
 
     // barrier
     wire                    is_barrier;

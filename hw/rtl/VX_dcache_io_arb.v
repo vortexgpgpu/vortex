@@ -37,7 +37,7 @@ module VX_dcache_io_arb (
 
     assign core_req_if.core_req_ready = io_select ? io_core_req_if.core_req_ready : dcache_core_req_if.core_req_ready;
 
-    wire dcache_rsp_valid = (|dcache_core_rsp_if.core_rsp_valid);
+    wire dcache_rsp_valid = (| dcache_core_rsp_if.core_rsp_valid);
 
     assign core_rsp_if.core_rsp_valid = dcache_rsp_valid ? dcache_core_rsp_if.core_rsp_valid : io_core_rsp_if.core_rsp_valid;
     assign core_rsp_if.core_rsp_data  = dcache_rsp_valid ? dcache_core_rsp_if.core_rsp_data : io_core_rsp_if.core_rsp_data;

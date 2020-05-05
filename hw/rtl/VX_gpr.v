@@ -29,13 +29,13 @@ module VX_gpr (
         );
     `else 
         assign write_enable = valid_write_request && ((writeback_if.wb != 0));
-        wire going_to_write = write_enable & (|writeback_if.wb_valid);
+        wire going_to_write = write_enable & (| writeback_if.wb_valid);
         wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] write_bit_mask;
 
-        genvar curr_t;
-        for (curr_t = 0; curr_t < `NUM_THREADS; curr_t=curr_t+1) begin
-            wire local_write = write_enable & writeback_if.wb_valid[curr_t];
-            assign write_bit_mask[curr_t] = {`NUM_GPRS{~local_write}};
+        genvar i;
+        for (i = 0; i < `NUM_THREADS; i=i+1) begin
+            wire local_write = write_enable & writeback_if.wb_valid[i];
+            assign write_bit_mask[i] = {`NUM_GPRS{~local_write}};
         end
 
         // wire cenb    = !going_to_write;
@@ -50,14 +50,11 @@ module VX_gpr (
         wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] temp_b;
 
     `ifndef SYN
-        genvar thread;
-        genvar curr_bit;
-        for (thread = 0; thread < `NUM_THREADS; thread = thread + 1)
-        begin
-            for (curr_bit = 0; curr_bit < `NUM_GPRS; curr_bit=curr_bit+1)
-            begin
-                assign a_reg_data[thread][curr_bit] = ((temp_a[thread][curr_bit] === 1'dx) || cena_1 )? 1'b0 : temp_a[thread][curr_bit];
-                assign b_reg_data[thread][curr_bit] = ((temp_b[thread][curr_bit] === 1'dx) || cena_2) ? 1'b0 : temp_b[thread][curr_bit];
+        genvar j;
+        for (i = 0; i < `NUM_THREADS; i = i + 1) begin
+            for (j = 0; j < `NUM_GPRS; j=j+1) begin
+                assign a_reg_data[i][j] = ((temp_a[i][j] === 1'dx) || cena_1 )? 1'b0 : temp_a[i][j];
+                assign b_reg_data[i][j] = ((temp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : temp_b[i][j];
             end
         end
     `else
@@ -67,8 +64,7 @@ module VX_gpr (
 
         wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = (writeback_if.rd != 0) ? writeback_if.write_data : 0;
 
-        genvar curr_base_thread;
-        for (curr_base_thread = 0; curr_base_thread < 'NT; curr_base_thread=curr_base_thread+4)
+        for (i = 0; i < 'NT; i=i+4)
         begin
             `IGNORE_WARNINGS_BEGIN
            rf2_32x128_wm1 first_ram (
@@ -77,17 +73,17 @@ module VX_gpr (
                 .CENYB(),
                 .WENYB(),
                 .AYB(),
-                .QA(temp_a[(curr_base_thread+3):(curr_base_thread)]),
+                .QA(temp_a[(i+3):(i)]),
                 .SOA(),
                 .SOB(),
                 .CLKA(clk),
                 .CENA(cena_1),
-                .AA(gpr_read_if.rs1[(curr_base_thread+3):(curr_base_thread)]),
+                .AA(gpr_read_if.rs1[(i+3):(i)]),
                 .CLKB(clk),
                 .CENB(cenb),
-                .WENB(write_bit_mask[(curr_base_thread+3):(curr_base_thread)]),
-                .AB(writeback_if.rd[(curr_base_thread+3):(curr_base_thread)]),
-                .DB(to_write[(curr_base_thread+3):(curr_base_thread)]),
+                .WENB(write_bit_mask[(i+3):(i)]),
+                .AB(writeback_if.rd[(i+3):(i)]),
+                .DB(to_write[(i+3):(i)]),
                 .EMAA(3'b011),
                 .EMASA(1'b0),
                 .EMAB(3'b011),
@@ -116,17 +112,17 @@ module VX_gpr (
                 .CENYB(),
                 .WENYB(),
                 .AYB(),
-                .QA(temp_b[(curr_base_thread+3):(curr_base_thread)]),
+                .QA(temp_b[(i+3):(i)]),
                 .SOA(),
                 .SOB(),
                 .CLKA(clk),
                 .CENA(cena_2),
-                .AA(gpr_read_if.rs2[(curr_base_thread+3):(curr_base_thread)]),
+                .AA(gpr_read_if.rs2[(i+3):(i)]),
                 .CLKB(clk),
                 .CENB(cenb),
-                .WENB(write_bit_mask[(curr_base_thread+3):(curr_base_thread)]),
-                .AB(writeback_if.rd[(curr_base_thread+3):(curr_base_thread)]),
-                .DB(to_write[(curr_base_thread+3):(curr_base_thread)]),
+                .WENB(write_bit_mask[(i+3):(i)]),
+                .AB(writeback_if.rd[(i+3):(i)]),
+                .DB(to_write[(i+3):(i)]),
                 .EMAA(3'b011),
                 .EMASA(1'b0),
                 .EMAB(3'b011),

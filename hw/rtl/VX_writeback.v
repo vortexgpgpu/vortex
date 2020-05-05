@@ -22,9 +22,9 @@ module VX_writeback (
 
     VX_wb_if    writeback_tmp_if();
 
-    wire exec_wb = (inst_exec_wb_if.wb != 0) && (|inst_exec_wb_if.valid);
-    wire mem_wb  = (mem_wb_if.wb       != 0) && (|mem_wb_if.valid);
-    wire csr_wb  = (csr_wb_if.wb       != 0) && (|csr_wb_if.valid);
+    wire exec_wb = (inst_exec_wb_if.wb != 0) && (| inst_exec_wb_if.valid);
+    wire mem_wb  = (mem_wb_if.wb       != 0) && (| mem_wb_if.valid);
+    wire csr_wb  = (csr_wb_if.wb       != 0) && (| csr_wb_if.valid);
 
     assign no_slot_mem  = mem_wb && (exec_wb || csr_wb);
     assign no_slot_csr  = csr_wb && (exec_wb);
@@ -78,7 +78,7 @@ module VX_writeback (
     reg [31:0] last_data_wb /* verilator public */;
 
     always @(posedge clk) begin
-        if ((|writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd == 28)) begin
+        if ( (| writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd == 28)) begin
             last_data_wb <= use_wb_data[0];
         end
     end

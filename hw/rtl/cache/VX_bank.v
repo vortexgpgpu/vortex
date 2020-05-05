@@ -11,7 +11,7 @@ module VX_bank #(
     parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
     parameter NUM_REQUESTS                  = 2, 
-    // Number of cycles to complete stage 1 (read from memory)
+    // Number of cycles to complete i 1 (read from memory)
     parameter STAGE_1_CYCLES                = 2,
 
     // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
@@ -46,7 +46,7 @@ module VX_bank #(
      parameter DRAM_ENABLE                  = 1,
 
     // Enable snoop forwarding
-    parameter SNOOP_FORWARDING_ENABLE       = 0,
+    parameter SNOOP_FORWARDING              = 0,
 
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
@@ -108,7 +108,7 @@ module VX_bank #(
         if (reset) begin
             snoop_state <= 0;
         end else begin
-            snoop_state <= (snoop_state | snp_req_valid) && SNOOP_FORWARDING_ENABLE;
+            snoop_state <= (snoop_state | snp_req_valid) && SNOOP_FORWARDING;
         end
     end
 
@@ -169,7 +169,7 @@ module VX_bank #(
     wire [`BYTE_EN_BITS-1:0]              reqq_req_mem_read_st0;  
     wire [`BYTE_EN_BITS-1:0]              reqq_req_mem_write_st0;
 
-    assign reqq_push = core_req_ready && (|core_req_valids);
+    assign reqq_push = core_req_ready && (| core_req_valids);
 
     VX_cache_req_queue #(
         .CACHE_SIZE             (CACHE_SIZE),
@@ -241,16 +241,16 @@ module VX_bank #(
     wire stall_bank_pipe;
     reg  is_fill_in_pipe;
     
-    wire            is_fill_st1       [STAGE_1_CYCLES-1:0];
+    wire is_fill_st1 [STAGE_1_CYCLES-1:0];
 `DEBUG_BEGIN
-    wire            going_to_write_st1[STAGE_1_CYCLES-1:0];    
+    wire going_to_write_st1 [STAGE_1_CYCLES-1:0];    
 `DEBUG_END
     
-    integer i;
+    integer j;
     always @(*) begin
         is_fill_in_pipe = 0;
-        for (i = 0; i < STAGE_1_CYCLES; i=i+1) begin
-            if (is_fill_st1[i]) begin
+        for (j = 0; j < STAGE_1_CYCLES; j=j+1) begin
+            if (is_fill_st1[j]) begin
                 is_fill_in_pipe = 1;
             end
         end
@@ -327,8 +327,8 @@ module VX_bank #(
         .out   ({is_snp_st1[0], going_to_write_st1[0],   valid_st1[0],   addr_st1[0],   wsel_st1[0],   writeword_st1[0],   inst_meta_st1[0],   is_fill_st1[0],   writedata_st1[0]})
     );
 
-    genvar stage;
-    for (stage = 1; stage < STAGE_1_CYCLES; stage = stage + 1) begin
+    genvar i;
+    for (i = 1; i < STAGE_1_CYCLES; i = i + 1) begin
         VX_generic_register #(
             .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + (`BANK_LINE_WORDS*`WORD_WIDTH))
         ) s0_1_cc (
@@ -336,8 +336,8 @@ module VX_bank #(
             .reset(reset),
             .stall(stall_bank_pipe),
             .flush(0),
-            .in  ({is_snp_st1[stage-1], going_to_write_st1[stage-1], valid_st1[stage-1], addr_st1[stage-1],   wsel_st1[stage-1], writeword_st1[stage-1], inst_meta_st1[stage-1], is_fill_st1[stage-1], writedata_st1[stage-1]}),
-            .out ({is_snp_st1[stage],   going_to_write_st1[stage],   valid_st1[stage],   addr_st1[stage],     wsel_st1[stage],   writeword_st1[stage],   inst_meta_st1[stage],   is_fill_st1[stage],   writedata_st1[stage]})
+            .in  ({is_snp_st1[i-1], going_to_write_st1[i-1], valid_st1[i-1], addr_st1[i-1],   wsel_st1[i-1], writeword_st1[i-1], inst_meta_st1[i-1], is_fill_st1[i-1], writedata_st1[i-1]}),
+            .out ({is_snp_st1[i],   going_to_write_st1[i],   valid_st1[i],   addr_st1[i],     wsel_st1[i],   writeword_st1[i],   inst_meta_st1[i],   is_fill_st1[i],   writedata_st1[i]})
         );
     end
 
@@ -506,9 +506,10 @@ module VX_bank #(
     );
 
     // Enqueue to CWB Queue
+    // TODO: should investigae the need for "SNOOP_FORWARDING" here
     wire cwbq_push = (valid_st2 && !miss_st2) 
                    && !cwbq_full 
-                   && !(SNOOP_FORWARDING_ENABLE && (miss_add_mem_write == `BYTE_EN_NO)) 
+                   && !(SNOOP_FORWARDING && (miss_add_mem_write == `BYTE_EN_NO)) 
                    && !((is_snp_st2 && valid_st2 && ffsq_full) 
                      || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) 
                      || (valid_st2 && miss_st2 && mrvq_full) 
@@ -554,7 +555,7 @@ module VX_bank #(
 
     wire[`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] dwbq_req_data;
 
-    if (SNOOP_FORWARDING_ENABLE) begin
+    if (SNOOP_FORWARDING) begin
         assign dwbq_req_data = (should_flush && dwbq_push) ? writeword_st2 : readdata_st2;
         assign dwbq_req_addr = (should_flush && dwbq_push) ? addr_st2 : {readtag_st2, addr_st2[`LINE_SELECT_BITS-1:0]};
     end else begin

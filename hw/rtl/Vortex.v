@@ -56,7 +56,8 @@ module Vortex #(
     input wire[`CORE_REQ_TAG_WIDTH-1:0] io_rsp_tag,
     output wire                         io_rsp_ready,
 
-    // Debug
+    // Status
+    output wire                         busy, 
     output wire                         ebreak
 );
 `DEBUG_BEGIN
@@ -157,100 +158,101 @@ module Vortex #(
     assign icache_dram_rsp_if.dram_rsp_tag   = I_dram_rsp_tag;
     assign I_dram_rsp_ready = icache_dram_rsp_if.dram_rsp_ready;    
 
-///////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
 
-// Front-end to Back-end
-VX_frE_to_bckE_req_if    bckE_req_if();     // New instruction request to EXE/MEM
+    // Front-end to Back-end
+    VX_frE_to_bckE_req_if    bckE_req_if();     // New instruction request to EXE/MEM
 
-// Back-end to Front-end
-VX_wb_if                 writeback_if();    // Writeback to GPRs
-VX_branch_rsp_if         branch_rsp_if();   // Branch Resolution to Fetch
-VX_jal_rsp_if            jal_rsp_if();      // Jump resolution to Fetch
+    // Back-end to Front-end
+    VX_wb_if                 writeback_if();    // Writeback to GPRs
+    VX_branch_rsp_if         branch_rsp_if();   // Branch Resolution to Fetch
+    VX_jal_rsp_if            jal_rsp_if();      // Jump resolution to Fetch
 
-// Warp controls
-VX_warp_ctl_if           warp_ctl_if();
+    // Warp controls
+    VX_warp_ctl_if           warp_ctl_if();
 
-// Cache snooping
-VX_cache_snp_req_if #(.DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH)) dcache_snp_req_if();
+    // Cache snooping
+    VX_cache_snp_req_if #(.DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH)) dcache_snp_req_if();
 
-assign dcache_snp_req_if.snp_req_valid  = llc_snp_req_valid;
-assign dcache_snp_req_if.snp_req_addr   = llc_snp_req_addr;
-assign llc_snp_req_ready                = dcache_snp_req_if.snp_req_ready;
+    assign dcache_snp_req_if.snp_req_valid = llc_snp_req_valid;
+    assign dcache_snp_req_if.snp_req_addr  = llc_snp_req_addr;
+    assign llc_snp_req_ready               = dcache_snp_req_if.snp_req_ready;
 
-VX_front_end front_end (
-    .clk            (clk),
-    .reset          (reset),
-    .warp_ctl_if    (warp_ctl_if),
-    .bckE_req_if    (bckE_req_if),
-    .schedule_delay (schedule_delay),
-    .icache_rsp_if  (icache_core_rsp_if),
-    .icache_req_if  (icache_core_req_if),
-    .jal_rsp_if     (jal_rsp_if),
-    .branch_rsp_if  (branch_rsp_if),
-    .fetch_ebreak   (ebreak)
-);
+    VX_front_end front_end (
+        .clk            (clk),
+        .reset          (reset),
+        .warp_ctl_if    (warp_ctl_if),
+        .bckE_req_if    (bckE_req_if),
+        .schedule_delay (schedule_delay),
+        .icache_rsp_if  (icache_core_rsp_if),
+        .icache_req_if  (icache_core_req_if),
+        .jal_rsp_if     (jal_rsp_if),
+        .branch_rsp_if  (branch_rsp_if),
+        .busy           (busy)
+    );
 
-VX_scheduler scheduler (
-    .clk            (clk),
-    .reset          (reset),
-    .memory_delay   (memory_delay),
-    .exec_delay     (exec_delay),
-    .gpr_stage_delay(gpr_stage_delay),
-    .bckE_req_if    (bckE_req_if),
-    .writeback_if   (writeback_if),
-    .schedule_delay (schedule_delay),
-    .is_empty       (scheduler_empty)
-);
+    VX_scheduler scheduler (
+        .clk            (clk),
+        .reset          (reset),
+        .memory_delay   (memory_delay),
+        .exec_delay     (exec_delay),
+        .gpr_stage_delay(gpr_stage_delay),
+        .bckE_req_if    (bckE_req_if),
+        .writeback_if   (writeback_if),
+        .schedule_delay (schedule_delay),
+        .is_empty       (scheduler_empty)
+    );
 
-VX_back_end #(
-    .CORE_ID(CORE_ID)
-) back_end (
-    .clk             (clk),
-    .reset           (reset),
-    .schedule_delay  (schedule_delay),
-    .warp_ctl_if     (warp_ctl_if),
-    .bckE_req_if     (bckE_req_if),
-    .jal_rsp_if      (jal_rsp_if),
-    .branch_rsp_if   (branch_rsp_if),    
-    .dcache_req_if   (dcache_io_core_req_if),
-    .dcache_rsp_if   (dcache_io_core_rsp_if),
-    .writeback_if    (writeback_if),
-    .mem_delay       (memory_delay),
-    .exec_delay      (exec_delay),
-    .gpr_stage_delay (gpr_stage_delay)
-);
+    VX_back_end #(
+        .CORE_ID(CORE_ID)
+    ) back_end (
+        .clk             (clk),
+        .reset           (reset),
+        .schedule_delay  (schedule_delay),
+        .warp_ctl_if     (warp_ctl_if),
+        .bckE_req_if     (bckE_req_if),
+        .jal_rsp_if      (jal_rsp_if),
+        .branch_rsp_if   (branch_rsp_if),    
+        .dcache_req_if   (dcache_io_core_req_if),
+        .dcache_rsp_if   (dcache_io_core_rsp_if),
+        .writeback_if    (writeback_if),
+        .mem_delay       (memory_delay),
+        .exec_delay      (exec_delay),
+        .gpr_stage_delay (gpr_stage_delay),        
+        .ebreak          (ebreak)
+    );
 
-VX_dmem_ctrl dmem_ctrl (
-    .clk                (clk),
-    .reset              (reset),
+    VX_dmem_ctrl dmem_ctrl (
+        .clk                (clk),
+        .reset              (reset),
 
-    // Core <-> Dcache
-    .dcache_core_req_if (dcache_core_req_if),
-    .dcache_core_rsp_if (dcache_core_rsp_if),
+        // Core <-> Dcache
+        .dcache_core_req_if (dcache_core_req_if),
+        .dcache_core_rsp_if (dcache_core_rsp_if),
 
-    // Dram <-> Dcache
-    .dcache_dram_req_if (dcache_dram_req_if),
-    .dcache_dram_rsp_if (dcache_dram_rsp_if),
-    .dcache_snp_req_if  (dcache_snp_req_if),
+        // Dram <-> Dcache
+        .dcache_dram_req_if (dcache_dram_req_if),
+        .dcache_dram_rsp_if (dcache_dram_rsp_if),
+        .dcache_snp_req_if  (dcache_snp_req_if),
 
-    // Core <-> Icache
-    .icache_core_req_if (icache_core_req_if),
-    .icache_core_rsp_if (icache_core_rsp_if),
+        // Core <-> Icache
+        .icache_core_req_if (icache_core_req_if),
+        .icache_core_rsp_if (icache_core_rsp_if),
 
-    // Dram <-> Icache
-    .icache_dram_req_if (icache_dram_req_if),
-    .icache_dram_rsp_if (icache_dram_rsp_if)
-);
+        // Dram <-> Icache
+        .icache_dram_req_if (icache_dram_req_if),
+        .icache_dram_rsp_if (icache_dram_rsp_if)
+    );
 
-VX_dcache_io_arb dcache_io_arb (
-    .io_select          (dcache_io_core_req_if.core_req_addr[0] >= `IO_BUS_BASE_ADDR),
-    .core_req_if        (dcache_io_core_req_if),
-    .dcache_core_req_if (dcache_core_req_if),
-    .io_core_req_if     (io_core_req_if),  
-    .dcache_core_rsp_if (dcache_core_rsp_if),
-    .io_core_rsp_if     (io_core_rsp_if),    
-    .core_rsp_if        (dcache_io_core_rsp_if)
-);
+    VX_dcache_io_arb dcache_io_arb (
+        .io_select          (dcache_io_core_req_if.core_req_addr[0] >= `IO_BUS_BASE_ADDR),
+        .core_req_if        (dcache_io_core_req_if),
+        .dcache_core_req_if (dcache_core_req_if),
+        .io_core_req_if     (io_core_req_if),  
+        .dcache_core_rsp_if (dcache_core_rsp_if),
+        .io_core_rsp_if     (io_core_rsp_if),    
+        .core_rsp_if        (dcache_io_core_rsp_if)
+    );
 
 endmodule // Vortex
 

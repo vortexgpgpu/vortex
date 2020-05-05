@@ -21,12 +21,12 @@ module VX_inst_multiplex (
     wire is_csr = bckE_req_if.is_csr;
     // wire is_gpu = 0;
 
-    genvar currT;
+    genvar i;
     generate
-    for (currT = 0; currT < `NUM_THREADS; currT = currT + 1) begin : mask_init
-        assign is_mem_mask[currT] = is_mem;
-        assign is_gpu_mask[currT] = is_gpu;
-        assign is_csr_mask[currT] = is_csr;
+    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : mask_init
+        assign is_mem_mask[i] = is_mem;
+        assign is_gpu_mask[i] = is_gpu;
+        assign is_csr_mask[i] = is_csr;
     end
     endgenerate
 
@@ -64,7 +64,7 @@ module VX_inst_multiplex (
     assign exec_unit_req_if.jalQual     = bckE_req_if.jalQual;
     assign exec_unit_req_if.jal         = bckE_req_if.jal;
     assign exec_unit_req_if.jal_offset  = bckE_req_if.jal_offset;
-    assign exec_unit_req_if.ebreak      = bckE_req_if.ebreak;
+    assign exec_unit_req_if.is_etype    = bckE_req_if.is_etype;
 
 
     // GPR Req

@@ -18,7 +18,7 @@ module VX_scheduler (
 
     reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
 
-    wire valid_wb  = (writeback_if.wb != 0) && (|writeback_if.valid) && (writeback_if.rd != 0);
+    wire valid_wb  = (writeback_if.wb != 0) && (| writeback_if.valid) && (writeback_if.rd != 0);
     wire wb_inc    = (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
 
     wire rs1_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs1] != 0;
@@ -42,7 +42,7 @@ module VX_scheduler (
 
     wire rename_valid = rs1_rename_qual || rs2_rename_qual || rd_rename_qual;
 
-    assign schedule_delay = ((rename_valid) && (|bckE_req_if.valid))
+    assign schedule_delay = ((rename_valid) && (| bckE_req_if.valid))
                          || (memory_delay && is_mem)
                          || (gpr_stage_delay && (is_mem || is_exec))
                          || (exec_delay && is_exec);

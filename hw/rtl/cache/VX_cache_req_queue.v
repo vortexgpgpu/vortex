@@ -97,8 +97,8 @@ module VX_cache_req_queue #(
 
     wire o_empty;
 
-    wire use_empty = !(|use_per_valids);
-    wire out_empty = !(|out_per_valids) || o_empty;
+    wire use_empty = !(| use_per_valids);
+    wire out_empty = !(| out_per_valids) || o_empty;
 
     wire push_qual = reqq_push && !reqq_full;
     wire pop_qual  = !out_empty && use_empty;

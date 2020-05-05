@@ -33,10 +33,8 @@ interface VX_exec_unit_req_if ();
     wire                jal;
     wire [31:0]         jal_offset;
 
-`IGNORE_WARNINGS_BEGIN
-    wire                ebreak;
+    wire                is_etype;
     wire                wspawn;
-`IGNORE_WARNINGS_END
 
     // CSR info
     wire                is_csr;

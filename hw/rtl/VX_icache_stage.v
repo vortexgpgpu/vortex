@@ -16,7 +16,7 @@ module VX_icache_stage (
 
     reg[`NUM_THREADS-1:0] threads_active[`NUM_WARPS-1:0];
 
-    wire valid_inst = (|fe_inst_meta_fi.valid);
+    wire valid_inst = (| fe_inst_meta_fi.valid);
 
     // Icache Request
     assign icache_req_if.core_req_valid = valid_inst && !total_freeze;
@@ -45,11 +45,12 @@ module VX_icache_stage (
     // Core can't accept response
     assign icache_rsp_if.core_rsp_ready = ~total_freeze;
 
-    integer w;
+    integer i;
+
     always @(posedge clk) begin
         if (reset) begin
-            for (w = 0; w < `NUM_WARPS; w = w + 1) begin
-                threads_active[w] <= 0;
+            for (i = 0; i < `NUM_WARPS; i = i + 1) begin
+                threads_active[i] <= 0;
             end
         end else begin
             if (valid_inst && !icache_stage_delay) begin
