@@ -14,7 +14,7 @@
 #include <ostream>
 #include <vector>
 
-//#define ENABLE_DRAM_STALLS
+#define ENABLE_DRAM_STALLS
 #define DRAM_LATENCY 100
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
@@ -46,8 +46,7 @@ private:
   void dbus_driver();
   void io_driver();
   
-  bool dram_stalled_;
-  std::vector<dram_req_t> dram_req_vec_;
+  std::vector<dram_req_t> dram_rsp_vec_;
 
   RAM *ram_;
   VVortex_Socket *vortex_;
