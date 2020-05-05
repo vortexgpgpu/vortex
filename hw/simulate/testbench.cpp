@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 
 	Verilated::commandArgs(argc, argv);
 
-//#define ALL_TESTS
+#define ALL_TESTS
 #ifdef ALL_TESTS
 	bool passed = true;
 

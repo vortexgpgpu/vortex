@@ -15,7 +15,7 @@
 #include <vector>
 
 //#define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 200
+#define DRAM_LATENCY 100
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
 #define PIPELINE_FLUSH_LATENCY 300
