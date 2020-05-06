@@ -224,12 +224,6 @@ int main(int argc, char *argv[]) {
     cleanup();
     return ret;
   }
-  
-  ret = run_test(device, buffer, kernel_arg, buf_size, num_points);
-  if (ret != 0) {
-    cleanup();
-    return ret;
-  }
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
