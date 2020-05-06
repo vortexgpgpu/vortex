@@ -37,9 +37,9 @@ module Vortex #(
     output wire                         I_dram_rsp_ready,
 
     // Cache Snooping
-    input  wire                         llc_snp_req_valid,
-    input  wire [`DDRAM_ADDR_WIDTH-1:0] llc_snp_req_addr,
-    output wire                         llc_snp_req_ready,
+    input  wire                         snp_req_valid,
+    input  wire [`DDRAM_ADDR_WIDTH-1:0] snp_req_addr,
+    output wire                         snp_req_ready,
 
     // I/O request
     output wire                         io_req_read,
@@ -174,9 +174,9 @@ module Vortex #(
     // Cache snooping
     VX_cache_snp_req_if #(.DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH)) dcache_snp_req_if();
 
-    assign dcache_snp_req_if.snp_req_valid = llc_snp_req_valid;
-    assign dcache_snp_req_if.snp_req_addr  = llc_snp_req_addr;
-    assign llc_snp_req_ready               = dcache_snp_req_if.snp_req_ready;
+    assign dcache_snp_req_if.snp_req_valid = snp_req_valid;
+    assign dcache_snp_req_if.snp_req_addr  = snp_req_addr;
+    assign snp_req_ready                   = dcache_snp_req_if.snp_req_ready;
 
     VX_front_end front_end (
         .clk            (clk),

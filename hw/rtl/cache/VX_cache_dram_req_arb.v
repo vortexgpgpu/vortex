@@ -113,7 +113,7 @@ module VX_cache_dram_req_arb #(
         .dfqq_full                      (dfqq_full)
     );
 
-    wire [`LOG2UP(NUM_BANKS)-1:0] dwb_bank;
+    wire [`BANK_BITS-1:0] dwb_bank;
 
     wire [NUM_BANKS-1:0] use_wb_valid = per_bank_dram_wb_req_valid;
     

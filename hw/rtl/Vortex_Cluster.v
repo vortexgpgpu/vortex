@@ -23,9 +23,9 @@ module Vortex_Cluster #(
     output wire                         dram_rsp_ready,
 
     // Cache Snooping
-    input  wire                         llc_snp_req_valid,
-    input  wire[`L2DRAM_ADDR_WIDTH-1:0] llc_snp_req_addr,
-    output wire                         llc_snp_req_ready,
+    input  wire                         snp_req_valid,
+    input  wire[`L2DRAM_ADDR_WIDTH-1:0] snp_req_addr,
+    output wire                         snp_req_ready,
 
     // I/O request
     output wire                         io_req_read,
@@ -69,8 +69,8 @@ module Vortex_Cluster #(
     wire[`NUM_CORES-1:0][`IDRAM_TAG_WIDTH-1:0]  per_core_I_dram_rsp_tag;
     wire[`NUM_CORES-1:0]                        per_core_I_dram_rsp_ready;
 
-    wire                                        snp_fwd_valid;
-    wire[`DDRAM_ADDR_WIDTH-1:0]                 snp_fwd_addr;
+    wire[`NUM_CORES-1:0]                        per_core_snp_fwd_valid;
+    wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0] per_core_snp_fwd_addr;
     wire[`NUM_CORES-1:0]                        per_core_snp_fwd_ready;
 
 `IGNORE_WARNINGS_BEGIN
@@ -118,9 +118,9 @@ module Vortex_Cluster #(
             .I_dram_rsp_data    (per_core_I_dram_rsp_data   [i]),
             .I_dram_rsp_ready   (per_core_I_dram_rsp_ready  [i]),   
 
-            .llc_snp_req_valid  (snp_fwd_valid),
-            .llc_snp_req_addr   (snp_fwd_addr),
-            .llc_snp_req_ready  (per_core_snp_fwd_ready     [i]),
+            .snp_req_valid      (per_core_snp_fwd_valid     [i]),
+            .snp_req_addr       (per_core_snp_fwd_addr      [i]),
+            .snp_req_ready      (per_core_snp_fwd_ready     [i]),
 
             .io_req_read        (per_core_io_req_read       [i]),
             .io_req_write       (per_core_io_req_write      [i]),
@@ -167,7 +167,11 @@ module Vortex_Cluster #(
         wire[`L2NUM_REQUESTS-1:0]                           l2_core_rsp_valid;        
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0]    l2_core_rsp_data;
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]     l2_core_rsp_tag;
-        wire[`L2NUM_REQUESTS-1:0]                           l2_core_rsp_ready;
+        wire                                                l2_core_rsp_ready;
+
+        wire                                                l2_snp_fwd_valid;
+        wire[`L3DRAM_ADDR_WIDTH-1:0]                        l2_snp_fwd_addr;
+        wire                                                l2_snp_fwd_ready;    
 
         for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
             assign l2_core_req_valid [i]   = (per_core_D_dram_req_read[(i/2)] | per_core_D_dram_req_write[(i/2)]);
@@ -191,18 +195,21 @@ module Vortex_Cluster #(
             assign per_core_D_dram_req_ready [(i/2)] = l2_core_req_ready;
             assign per_core_I_dram_req_ready [(i/2)] = l2_core_req_ready;
 
-            assign per_core_D_dram_rsp_valid [(i/2)] = l2_core_rsp_valid[i];
-            assign per_core_I_dram_rsp_valid [(i/2)] = l2_core_rsp_valid[i+1];
+            assign per_core_D_dram_rsp_valid [(i/2)] = l2_core_rsp_valid[i] && l2_core_rsp_ready;
+            assign per_core_I_dram_rsp_valid [(i/2)] = l2_core_rsp_valid[i+1] && l2_core_rsp_ready;
 
             assign per_core_D_dram_rsp_data  [(i/2)] = l2_core_rsp_data[i];
             assign per_core_I_dram_rsp_data  [(i/2)] = l2_core_rsp_data[i+1];
 
             assign per_core_D_dram_rsp_tag   [(i/2)] = l2_core_rsp_tag[i];
-            assign per_core_I_dram_rsp_tag   [(i/2)] = l2_core_rsp_tag[i+1];
+            assign per_core_I_dram_rsp_tag   [(i/2)] = l2_core_rsp_tag[i+1];  
 
-            assign l2_core_rsp_ready         [i]   = per_core_D_dram_rsp_ready  [(i/2)];
-            assign l2_core_rsp_ready         [i+1] = per_core_I_dram_rsp_ready[(i/2)];       
+            assign per_core_snp_fwd_valid [(i/2)] = l2_snp_fwd_valid && l2_snp_fwd_ready;
+            assign per_core_snp_fwd_addr  [(i/2)] = l2_snp_fwd_addr;    
         end
+
+        assign l2_core_rsp_ready = (& per_core_D_dram_rsp_ready) && (& per_core_I_dram_rsp_ready);
+        assign l2_snp_fwd_ready  = (& per_core_snp_fwd_ready);
 
         VX_cache #(
             .CACHE_SIZE             (`L2CACHE_SIZE),
@@ -246,7 +253,7 @@ module Vortex_Cluster #(
             .core_rsp_valid     (l2_core_rsp_valid),
             .core_rsp_data      (l2_core_rsp_data),
             .core_rsp_tag       (l2_core_rsp_tag),
-            .core_rsp_ready     (& l2_core_rsp_ready),
+            .core_rsp_ready     (l2_core_rsp_ready),
 
             // DRAM request
             .dram_req_read      (dram_req_read),
@@ -263,61 +270,74 @@ module Vortex_Cluster #(
             .dram_rsp_ready     (dram_rsp_ready),           
 
             // Snoop request
-            .snp_req_valid      (llc_snp_req_valid),
-            .snp_req_addr       (llc_snp_req_addr),
-            .snp_req_ready      (llc_snp_req_ready),
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_ready      (snp_req_ready),
 
             // Snoop forwarding    
-            .snp_fwd_valid      (snp_fwd_valid),
-            .snp_fwd_addr       (snp_fwd_addr),
-            .snp_fwd_ready      (& per_core_snp_fwd_ready)
+            .snp_fwd_valid      (l2_snp_fwd_valid),
+            .snp_fwd_addr       (l2_snp_fwd_addr),
+            .snp_fwd_ready      (l2_snp_fwd_ready)
         );
 
     end else begin
     
-        wire[`L2NUM_REQUESTS-1:0]                        per_core_req_read;
-        wire[`L2NUM_REQUESTS-1:0]                        per_core_req_write;
-        wire[`L2NUM_REQUESTS-1:0][`DDRAM_ADDR_WIDTH-1:0] per_core_req_addr;
-        wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]  per_core_req_tag;
-        wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0] per_core_req_data;
-        wire[`L2NUM_REQUESTS-1:0]                        per_core_req_ready;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_read;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_write;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_ADDR_WIDTH-1:0] arb_core_req_addr;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]  arb_core_req_tag;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0] arb_core_req_data;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_ready;
 
-        wire[`L2NUM_REQUESTS-1:0]                        per_core_rsp_valid;        
-        wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0] per_core_rsp_data;
-        wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]  per_core_rsp_tag;
-        wire[`L2NUM_REQUESTS-1:0]                        per_core_rsp_ready;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_rsp_valid;        
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0] arb_core_rsp_data;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]  arb_core_rsp_tag;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_rsp_ready;
+
+        wire                                             arb_snp_fwd_valid;
+        wire[`L3DRAM_ADDR_WIDTH-1:0]                     arb_snp_fwd_addr;
+        wire                                             arb_snp_fwd_ready;    
 
         for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin            
-            assign per_core_req_read  [i]   = per_core_D_dram_req_read[(i/2)];
-            assign per_core_req_read  [i+1] = per_core_I_dram_req_read[(i/2)];
+            assign arb_core_req_read  [i]   = per_core_D_dram_req_read[(i/2)];
+            assign arb_core_req_read  [i+1] = per_core_I_dram_req_read[(i/2)];
 
-            assign per_core_req_write [i]   = per_core_D_dram_req_write[(i/2)];
-            assign per_core_req_write [i+1] = 0;
+            assign arb_core_req_write [i]   = per_core_D_dram_req_write[(i/2)];
+            assign arb_core_req_write [i+1] = 0;
 
-            assign per_core_req_addr  [i]   = per_core_D_dram_req_addr[(i/2)];
-            assign per_core_req_addr  [i+1] = per_core_I_dram_req_addr[(i/2)];
+            assign arb_core_req_addr  [i]   = per_core_D_dram_req_addr[(i/2)];
+            assign arb_core_req_addr  [i+1] = per_core_I_dram_req_addr[(i/2)];
 
-            assign per_core_req_data  [i]   = per_core_D_dram_req_data[(i/2)];
-            assign per_core_req_data  [i+1] = per_core_I_dram_req_data[(i/2)];
+            assign arb_core_req_data  [i]   = per_core_D_dram_req_data[(i/2)];
+            assign arb_core_req_data  [i+1] = per_core_I_dram_req_data[(i/2)];
 
-            assign per_core_req_tag   [i]   = per_core_D_dram_req_tag[(i/2)];
-            assign per_core_req_tag   [i+1] = per_core_I_dram_req_tag[(i/2)];
+            assign arb_core_req_tag   [i]   = per_core_D_dram_req_tag[(i/2)];
+            assign arb_core_req_tag   [i+1] = per_core_I_dram_req_tag[(i/2)];
 
-            assign per_core_D_dram_req_ready [(i/2)] = per_core_req_ready[i];
-            assign per_core_I_dram_req_ready [(i/2)] = per_core_req_ready[i+1];
+            assign per_core_D_dram_req_ready [(i/2)] = arb_core_req_ready[i];
+            assign per_core_I_dram_req_ready [(i/2)] = arb_core_req_ready[i+1];
 
-            assign per_core_D_dram_rsp_valid [(i/2)] = per_core_rsp_valid[i];
-            assign per_core_I_dram_rsp_valid [(i/2)] = per_core_rsp_valid[i+1];
+            assign per_core_D_dram_rsp_valid [(i/2)] = arb_core_rsp_valid[i];
+            assign per_core_I_dram_rsp_valid [(i/2)] = arb_core_rsp_valid[i+1];
 
-            assign per_core_D_dram_rsp_data  [(i/2)] = per_core_rsp_data[i];
-            assign per_core_I_dram_rsp_data  [(i/2)] = per_core_rsp_data[i+1];
+            assign per_core_D_dram_rsp_data  [(i/2)] = arb_core_rsp_data[i];
+            assign per_core_I_dram_rsp_data  [(i/2)] = arb_core_rsp_data[i+1];
 
-            assign per_core_D_dram_rsp_tag   [(i/2)] = per_core_rsp_tag[i];
-            assign per_core_I_dram_rsp_tag   [(i/2)] = per_core_rsp_tag[i+1];
+            assign per_core_D_dram_rsp_tag   [(i/2)] = arb_core_rsp_tag[i];
+            assign per_core_I_dram_rsp_tag   [(i/2)] = arb_core_rsp_tag[i+1];
 
-            assign per_core_rsp_ready        [i]   = per_core_D_dram_rsp_ready[(i/2)];
-            assign per_core_rsp_ready        [i+1] = per_core_I_dram_rsp_ready[(i/2)];       
+            assign arb_core_rsp_ready [i]   = per_core_D_dram_rsp_ready[(i/2)];
+            assign arb_core_rsp_ready [i+1] = per_core_I_dram_rsp_ready[(i/2)];  
+
+            assign per_core_snp_fwd_valid [(i/2)] = arb_snp_fwd_valid && arb_snp_fwd_ready;
+            assign per_core_snp_fwd_addr  [(i/2)] = arb_snp_fwd_addr;         
         end
+        
+        assign arb_snp_fwd_valid = snp_req_valid;
+        assign arb_snp_fwd_addr  = snp_req_addr;
+        assign arb_snp_fwd_ready = (& per_core_snp_fwd_ready);
+
+        assign snp_req_ready = arb_snp_fwd_ready;
 
         VX_dram_arb #(
             .BANK_LINE_SIZE (`L2BANK_LINE_SIZE),
@@ -329,18 +349,18 @@ module Vortex_Cluster #(
             .reset              (reset),
 
             // Core request
-            .core_req_read      (per_core_req_read),
-            .core_req_write     (per_core_req_write),
-            .core_req_addr      (per_core_req_addr),
-            .core_req_data      (per_core_req_data),  
-            .core_req_tag       (per_core_req_tag),  
-            .core_req_ready     (per_core_req_ready),
+            .core_req_read      (arb_core_req_read),
+            .core_req_write     (arb_core_req_write),
+            .core_req_addr      (arb_core_req_addr),
+            .core_req_data      (arb_core_req_data),  
+            .core_req_tag       (arb_core_req_tag),  
+            .core_req_ready     (arb_core_req_ready),
 
             // Core response
-            .core_rsp_valid     (per_core_rsp_valid),
-            .core_rsp_data      (per_core_rsp_data),
-            .core_rsp_tag       (per_core_rsp_tag),
-            .core_rsp_ready     (per_core_rsp_ready),
+            .core_rsp_valid     (arb_core_rsp_valid),
+            .core_rsp_data      (arb_core_rsp_data),
+            .core_rsp_tag       (arb_core_rsp_tag),
+            .core_rsp_ready     (arb_core_rsp_ready),
 
             // DRAM request
             .dram_req_read      (dram_req_read),
@@ -356,11 +376,7 @@ module Vortex_Cluster #(
             .dram_rsp_data      (dram_rsp_data),
             .dram_rsp_ready     (dram_rsp_ready)
         );
-        
-        // Cache snooping
-        assign snp_fwd_valid = llc_snp_req_valid;
-        assign snp_fwd_addr  = llc_snp_req_addr;
-        assign llc_snp_req_ready = & per_core_snp_fwd_ready;
+
     end
 
 endmodule

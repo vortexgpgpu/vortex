@@ -116,9 +116,9 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  uint32_t block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
-  uint32_t max_cores = vx_dev_caps(VX_CAPS_MAX_CORES);
-  uint32_t max_warps = vx_dev_caps(VX_CAPS_MAX_WARPS);
+  uint32_t block_size  = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+  uint32_t max_cores   = vx_dev_caps(VX_CAPS_MAX_CORES);
+  uint32_t max_warps   = vx_dev_caps(VX_CAPS_MAX_WARPS);
   uint32_t max_threads = vx_dev_caps(VX_CAPS_MAX_THREADS);
 
   if (data_stride == 0xffffffff) {
@@ -204,9 +204,9 @@ int main(int argc, char *argv[]) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    kernel_arg.num_warps = max_warps;
+    kernel_arg.num_warps   = max_warps;
     kernel_arg.num_threads = max_threads;
-    kernel_arg.stride = data_stride;
+    kernel_arg.stride      = data_stride;
 
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));

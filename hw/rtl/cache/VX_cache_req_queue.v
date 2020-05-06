@@ -58,7 +58,7 @@ module VX_cache_req_queue #(
     // Dequeue Data
     input  wire                             reqq_pop,
     output wire                             reqq_req_st0,
-    output wire [`LOG2UP(NUM_REQUESTS)-1:0] reqq_req_tid_st0,    
+    output wire [`REQS_BITS-1:0]            reqq_req_tid_st0,    
     output wire [`BYTE_EN_BITS-1:0]         reqq_req_mem_read_st0,  
     output wire [`BYTE_EN_BITS-1:0]         reqq_req_mem_write_st0,
     output wire [`WORD_WIDTH-1:0]           reqq_req_writedata_st0,
@@ -126,8 +126,8 @@ module VX_cache_req_queue #(
     assign qual_mem_read   = use_per_mem_read;
     assign qual_mem_write  = use_per_mem_write;
 
-    wire[`LOG2UP(NUM_REQUESTS)-1:0] qual_request_index;
-    wire                            qual_has_request;
+    wire[`REQS_BITS-1:0] qual_request_index;
+    wire                 qual_has_request;
 
     VX_generic_priority_encoder #(
         .N(NUM_REQUESTS)

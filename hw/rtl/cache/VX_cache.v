@@ -109,7 +109,7 @@ module VX_cache #(
     
     wire [NUM_BANKS-1:0]                                  per_bank_core_rsp_pop;
     wire [NUM_BANKS-1:0]                                  per_bank_core_rsp_valid;
-    wire [NUM_BANKS-1:0][`LOG2UP(NUM_REQUESTS)-1:0]       per_bank_core_rsp_tid; 
+    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]                  per_bank_core_rsp_tid; 
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]                 per_bank_core_rsp_data;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]              per_bank_core_rsp_tag;    
 
@@ -173,7 +173,7 @@ module VX_cache #(
 
             wire                                   curr_bank_core_rsp_pop;
             wire                                   curr_bank_core_rsp_valid;
-            wire [`LOG2UP(NUM_REQUESTS)-1:0]       curr_bank_core_rsp_tid;
+            wire [`REQS_BITS-1:0]                  curr_bank_core_rsp_tid;
             wire [`WORD_WIDTH-1:0]                 curr_bank_core_rsp_data;
             wire [CORE_TAG_WIDTH-1:0]              curr_bank_core_rsp_tag;
 

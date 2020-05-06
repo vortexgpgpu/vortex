@@ -4,6 +4,9 @@ CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 CFLAGS += -I../../include -I../../../hw/simulate -I../../../runtime
 
 #MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=2
+#MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
+MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
+
 DEBUG = 1
 
 CFLAGS += -fPIC

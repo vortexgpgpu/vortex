@@ -69,7 +69,7 @@ module VX_bank #(
 
     // Core Response    
     output wire                                   core_rsp_valid,
-    output wire [`LOG2UP(NUM_REQUESTS)-1:0]       core_rsp_tid,
+    output wire [`REQS_BITS-1:0]                  core_rsp_tid,
     output wire [`WORD_WIDTH-1:0]                 core_rsp_data,
     output wire [CORE_TAG_WIDTH-1:0]              core_rsp_tag,
     input  wire                                   core_rsp_pop,
@@ -156,18 +156,18 @@ module VX_bank #(
         .full    (dfpq_full)
     );
 
-    wire                                  reqq_pop;
-    wire                                  reqq_push;
-    wire                                  reqq_empty;
-    wire                                  reqq_req_st0;
-    wire[`LOG2UP(NUM_REQUESTS)-1:0]       reqq_req_tid_st0;
+    wire                        reqq_pop;
+    wire                        reqq_push;
+    wire                        reqq_empty;
+    wire                        reqq_req_st0;
+    wire[`REQS_BITS-1:0]        reqq_req_tid_st0;
 `IGNORE_WARNINGS_BEGIN
-    wire [31:0]                           reqq_req_addr_st0;
+    wire [31:0]                 reqq_req_addr_st0;
 `IGNORE_WARNINGS_END    
-    wire [`WORD_WIDTH-1:0]                reqq_req_writeword_st0;
-    wire [CORE_TAG_WIDTH-1:0]             reqq_req_tag_st0;
-    wire [`BYTE_EN_BITS-1:0]              reqq_req_mem_read_st0;  
-    wire [`BYTE_EN_BITS-1:0]              reqq_req_mem_write_st0;
+    wire [`WORD_WIDTH-1:0]      reqq_req_writeword_st0;
+    wire [CORE_TAG_WIDTH-1:0]   reqq_req_tag_st0;
+    wire [`BYTE_EN_BITS-1:0]    reqq_req_mem_read_st0;  
+    wire [`BYTE_EN_BITS-1:0]    reqq_req_mem_write_st0;
 
     assign reqq_push = core_req_ready && (| core_req_valids);
 
@@ -218,7 +218,7 @@ module VX_bank #(
     wire                                  mrvq_full;
     wire                                  mrvq_stop;
     wire                                  mrvq_valid_st0;
-    wire[`LOG2UP(NUM_REQUESTS)-1:0]       mrvq_tid_st0;
+    wire[`REQS_BITS-1:0]                  mrvq_tid_st0;
     wire [`LINE_ADDR_WIDTH-1:0]           mrvq_addr_st0;
     wire [`BASE_ADDR_BITS-1:0]            mrvq_wsel_st0;
     wire [`WORD_WIDTH-1:0]                mrvq_writeword_st0;
@@ -230,7 +230,7 @@ module VX_bank #(
     wire[`LINE_ADDR_WIDTH-1:0]            miss_add_addr;
     wire[`BASE_ADDR_BITS-1:0]             miss_add_wsel;
     wire[`WORD_WIDTH-1:0]                 miss_add_data;
-    wire[`LOG2UP(NUM_REQUESTS)-1:0]       miss_add_tid;
+    wire[`REQS_BITS-1:0]                  miss_add_tid;
     wire[CORE_TAG_WIDTH-1:0]              miss_add_tag;
     wire[`BYTE_EN_BITS-1:0]               miss_add_mem_read;
     wire[`BYTE_EN_BITS-1:0]               miss_add_mem_write;
@@ -348,7 +348,7 @@ module VX_bank #(
     wire                                   dirty_st1e;
 `DEBUG_BEGIN
     wire [CORE_TAG_WIDTH-1:0]              tag_st1e;
-    wire [`LOG2UP(NUM_REQUESTS)-1:0]       tid_st1e;
+    wire [`REQS_BITS-1:0]                  tid_st1e;
 `DEBUG_END
     wire [`BYTE_EN_BITS-1:0]               mem_read_st1e;  
     wire [`BYTE_EN_BITS-1:0]               mem_write_st1e;    
@@ -515,14 +515,15 @@ module VX_bank #(
                      || (valid_st2 && miss_st2 && mrvq_full) 
                      || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_full));
 
-    wire [`WORD_WIDTH-1:0]            cwbq_data = readword_st2;
-    wire [`LOG2UP(NUM_REQUESTS)-1:0]  cwbq_tid  = miss_add_tid;
-    wire [CORE_TAG_WIDTH-1:0]         cwbq_tag  = miss_add_tag;
+    wire [`WORD_WIDTH-1:0]      cwbq_data = readword_st2;
+    wire [`REQS_BITS-1:0]       cwbq_tid  = miss_add_tid;
+    wire [CORE_TAG_WIDTH-1:0]   cwbq_tag  = miss_add_tag;
     
-    wire                              cwbq_empty;
+    wire cwbq_empty;
     assign core_rsp_valid = !cwbq_empty;
+
     VX_generic_queue #(
-        .DATAW(`LOG2UP(NUM_REQUESTS) + CORE_TAG_WIDTH + `WORD_WIDTH), 
+        .DATAW(`REQS_BITS + CORE_TAG_WIDTH + `WORD_WIDTH), 
         .SIZE(CWBQ_SIZE)
     ) cwb_queue (
         .clk     (clk),

@@ -125,6 +125,9 @@
 // DRAM request tag bits
 `define DDRAM_TAG_WIDTH     `DDRAM_ADDR_WIDTH
 
+// Number of Word requests per cycle {1, 2, 4, 8, ...}
+`define DNUM_REQUESTS       `NUM_THREADS
+
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // DRAM request data bits
@@ -135,6 +138,9 @@
 
 // DRAM request tag bits
 `define IDRAM_TAG_WIDTH     `IDRAM_ADDR_WIDTH
+
+// Number of Word requests per cycle {1, 2, 4, 8, ...}
+`define INUM_REQUESTS       1
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
@@ -147,6 +153,9 @@
 // DRAM request tag bits
 `define SDRAM_TAG_WIDTH     `SDRAM_ADDR_WIDTH
 
+// Number of Word requests per cycle {1, 2, 4, 8, ...}
+`define SNUM_REQUESTS       `NUM_THREADS
+
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
 // DRAM request data bits
@@ -158,6 +167,9 @@
 // DRAM request tag bits
 `define L2DRAM_TAG_WIDTH    (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
 
+// Number of Word requests per cycle {1, 2, 4, 8, ...}
+`define L2NUM_REQUESTS      (2*`NUM_CORES)
+
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
 // DRAM request data bits
@@ -168,6 +180,9 @@
 
 // DRAM request tag bits
 `define L3DRAM_TAG_WIDTH    ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
+
+// Number of Word requests per cycle {1, 2, 4, 8, ...}
+`define L3NUM_REQUESTS      `NUM_CLUSTERS
 
  // VX_DEFINE
 `endif

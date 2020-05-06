@@ -37,33 +37,32 @@ module VX_dram_arb #(
     input  wire [DRAM_TAG_WIDTH-1:0]   dram_rsp_tag,
     output wire                        dram_rsp_ready
 );
-    reg [`LOG2UP(NUM_REQUESTS)-1:0] bus_sel;
+    reg [`REQS_BITS-1:0] bus_req_idx;
 
     always @(posedge clk) begin
         if (reset) begin      
-            bus_sel <= 0;
+            bus_req_idx <= 0;
         end else begin
-            bus_sel <= bus_sel + 1;
+            bus_req_idx <= bus_req_idx + 1;
         end
     end
 
     integer i;
-
     generate 
         always @(*) begin
-            dram_req_read  = 'z;
-            dram_req_write = 'z;
+            dram_req_read  = 0;
+            dram_req_write = 0;
             dram_req_addr  = 'z;
             dram_req_data  = 'z;
             dram_req_tag   = 'z;
 
             for (i = 0; i < NUM_REQUESTS; i++) begin
-                if (bus_sel == (`LOG2UP(NUM_REQUESTS))'(i)) begin
+                if (bus_req_idx == (`REQS_BITS)'(i)) begin
                     dram_req_read     = core_req_read[i];
                     dram_req_write    = core_req_write[i];
                     dram_req_addr     = core_req_addr[i];
                     dram_req_data     = core_req_data[i];
-                    dram_req_tag      = {core_req_tag[i], (`LOG2UP(NUM_REQUESTS))'(i)};
+                    dram_req_tag      = {core_req_tag[i], (`REQS_BITS)'(i)};
                     core_req_ready[i] = dram_req_ready;
                 end else begin
                     core_req_ready[i] = 0;
@@ -72,24 +71,13 @@ module VX_dram_arb #(
         end
     endgenerate
 
-    reg is_valid;
-
-    generate 
-        always @(*) begin
-            dram_rsp_ready = 0;
-            
-            for (i = 0; i < NUM_REQUESTS; i++) begin
-                is_valid = (dram_rsp_tag[`LOG2UP(NUM_REQUESTS)-1:0] == (`LOG2UP(NUM_REQUESTS))'(i));
-                
-                core_rsp_valid[i] = dram_rsp_valid & is_valid;
-                core_rsp_data[i]  = dram_rsp_data;
-                core_rsp_tag[i]   = dram_rsp_tag[`LOG2UP(NUM_REQUESTS) +: CORE_TAG_WIDTH];      
-
-                if (is_valid) begin      
-                    dram_rsp_ready = core_rsp_ready[i];
-                end
-            end
-        end
-    endgenerate    
+    genvar j;
+    wire [`REQS_BITS-1:0] bus_rsp_idx = dram_rsp_tag[`REQS_BITS-1:0];
+    for (j = 0; j < NUM_REQUESTS; j++) begin                
+        assign core_rsp_valid[j] = dram_rsp_valid && (bus_rsp_idx == (`REQS_BITS)'(j));
+        assign core_rsp_data[j]  = dram_rsp_data;
+        assign core_rsp_tag[j]   = dram_rsp_tag[`REQS_BITS +: CORE_TAG_WIDTH];              
+    end
+    assign dram_rsp_ready = core_rsp_ready[bus_rsp_idx];
 
 endmodule
