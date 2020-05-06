@@ -111,11 +111,12 @@ void Simulator::io_driver() {
   vortex_->io_req_ready = true;
 }
 
-void Simulator::reset() {  
-  time_stamp = 0;
+void Simulator::reset() {      
   vortex_->reset = 1;
-  this->step();
+  this->step();  
   vortex_->reset = 0;
+
+  dram_rsp_vec_.clear();
 }
 
 void Simulator::step() {
@@ -150,6 +151,7 @@ bool Simulator::is_busy() {
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
   // send snoop requests to the caches
   printf("[sim] total cycles: %ld\n", time_stamp/2);
+  
   // align address to LLC block boundaries
   auto aligned_addr_start = mem_addr / GLOBAL_BLOCK_SIZE;
   auto aligned_addr_end = (mem_addr + size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE;

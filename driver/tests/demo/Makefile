@@ -6,12 +6,12 @@ VX_CXX = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-g++
 VX_DMP = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CPY = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_NEWLIB = $(VX_RT_PATH)/newlib/newlib.c
+#VX_NEWLIB = $(VX_RT_PATH)/newlib/newlib.c
 VX_STR = $(VX_RT_PATH)/startup/vx_start.S
 VX_INT = $(VX_RT_PATH)/intrinsics/vx_intrinsics.S
-VX_IO  = $(VX_RT_PATH)/io/vx_io.S $(VX_RT_PATH)/io/vx_io.c
+#VX_IO  = $(VX_RT_PATH)/io/vx_io.S $(VX_RT_PATH)/io/vx_io.c
 VX_API = $(VX_RT_PATH)/vx_api/vx_api.c
-VX_FIO = $(VX_RT_PATH)/fileio/fileio.S
+#VX_FIO = $(VX_RT_PATH)/fileio/fileio.S
 
 VX_CFLAGS = -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VX_RT_PATH)/startup/vx_link.ld -ffreestanding -nostartfiles -Wl,--gc-sections
 

@@ -274,14 +274,6 @@ void * _sbrk (int nbytes)
  //    }
 }       /* _sbrk () */
 
-
-void _exit(int val)
-{
-	// vx_print_str("Hello from exit\n");
-	vx_tmc(0);
-}
-
-
 int _open(const char *name, int flags, int mode)
 {
 	// char * write_buffer = (char *) FILE_IO_WRITE;

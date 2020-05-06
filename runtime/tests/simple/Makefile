@@ -1,8 +1,8 @@
 
 COMP     = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-g++
-#COMP     = /opt/riscv-new/drops/bin/riscv32-unknown-elf-g++
 
-CC_FLAGS = -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,../../startup/vx_link.ld -ffreestanding -nostdlib
+CC_FLAGS = -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,../../startup/vx_link.ld 
+CC_FLAGS += -nostartfiles -ffreestanding -fno-rtti -fno-exceptions -Wl,--gc-sections 
 
 DMP  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
 CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
@@ -17,8 +17,9 @@ VX_FIO  = ../../fileio/fileio.S
 
 VX_MAIN = vx_simple_main
 
-LIBS    = ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
-#LIBS    = /opt/riscv-new/drops/riscv32-unknown-elf/lib/libc.a /opt/riscv-new/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+#LIBS  += ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a 
+#LIBS  += ~/dev/riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a 
+#LIBS  += -static-libgcc -lgcc
 
 VX_SRCS = vx_simple_main.c tests.c
 

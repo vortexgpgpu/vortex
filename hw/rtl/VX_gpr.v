@@ -7,13 +7,18 @@ module VX_gpr (
     VX_gpr_read_if  gpr_read_if,
     VX_wb_if        writeback_if,
 
-    output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] a_reg_data,
-    output reg[`NUM_THREADS-1:0][`NUM_GPRS-1:0] b_reg_data
+    output wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] a_reg_data,
+    output wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] b_reg_data
 );
-    wire write_enable;
+    wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] a_reg_data_uqual;
+    wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] b_reg_data_uqual;
+
+    assign a_reg_data = (gpr_read_if.rs1 != 0) ? a_reg_data_uqual : 0;
+    assign b_reg_data = (gpr_read_if.rs2 != 0) ? b_reg_data_uqual : 0;
+
+    wire write_enable = valid_write_request && ((writeback_if.wb != 0));
     
     `ifndef ASIC
-        assign write_enable = valid_write_request && ((writeback_if.wb != 0)) && (writeback_if.rd != 0);
 
         VX_gpr_ram gpr_ram (
             .we    (write_enable),
@@ -24,16 +29,17 @@ module VX_gpr (
             .raddr2(gpr_read_if.rs2),
             .be    (writeback_if.valid),
             .wdata (writeback_if.data),
-            .q1    (a_reg_data),
-            .q2    (b_reg_data)
+            .q1    (a_reg_data_uqual),
+            .q2    (b_reg_data_uqual)
         );
+
     `else 
-        assign write_enable = valid_write_request && ((writeback_if.wb != 0));
+
         wire going_to_write = write_enable & (| writeback_if.wb_valid);
         wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] write_bit_mask;
 
         genvar i;
-        for (i = 0; i < `NUM_THREADS; i=i+1) begin
+        for (i = 0; i < `NUM_THREADS; i = i + 1) begin
             wire local_write = write_enable & writeback_if.wb_valid[i];
             assign write_bit_mask[i] = {`NUM_GPRS{~local_write}};
         end
@@ -52,17 +58,17 @@ module VX_gpr (
     `ifndef SYN
         genvar j;
         for (i = 0; i < `NUM_THREADS; i = i + 1) begin
-            for (j = 0; j < `NUM_GPRS; j=j+1) begin
-                assign a_reg_data[i][j] = ((temp_a[i][j] === 1'dx) || cena_1 )? 1'b0 : temp_a[i][j];
-                assign b_reg_data[i][j] = ((temp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : temp_b[i][j];
+            for (j = 0; j < `NUM_GPRS; j = j + 1) begin
+                assign a_reg_data_uqual[i][j] = ((temp_a[i][j] === 1'dx) || cena_1 )? 1'b0 : temp_a[i][j];
+                assign b_reg_data_uqual[i][j] = ((temp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : temp_b[i][j];
             end
         end
     `else
-        assign a_reg_data = temp_a;
-        assign b_reg_data = temp_b;
+        assign a_reg_data_uqual = temp_a;
+        assign b_reg_data_uqual = temp_b;
     `endif
 
-        wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = (writeback_if.rd != 0) ? writeback_if.write_data : 0;
+        wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = writeback_if.write_data;
 
         for (i = 0; i < 'NT; i=i+4)
         begin
