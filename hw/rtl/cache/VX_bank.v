@@ -509,15 +509,15 @@ module VX_bank #(
     // TODO: should investigae the need for "SNOOP_FORWARDING" here
     wire cwbq_push = (valid_st2 && !miss_st2) 
                    && !cwbq_full 
-                   && !(SNOOP_FORWARDING && (miss_add_mem_write == `BYTE_EN_NO)) 
+                   && (miss_add_mem_write == `BYTE_EN_NO) 
                    && !((is_snp_st2 && valid_st2 && ffsq_full) 
                      || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) 
                      || (valid_st2 && miss_st2 && mrvq_full) 
                      || (valid_st2 && miss_st2 && !invalidate_fill && dram_fill_req_full));
 
-    wire [`WORD_WIDTH-1:0]      cwbq_data = readword_st2;
-    wire [`REQS_BITS-1:0]       cwbq_tid  = miss_add_tid;
-    wire [CORE_TAG_WIDTH-1:0]   cwbq_tag  = miss_add_tag;
+    wire [`WORD_WIDTH-1:0]    cwbq_data = readword_st2;
+    wire [`REQS_BITS-1:0]     cwbq_tid  = miss_add_tid;
+    wire [CORE_TAG_WIDTH-1:0] cwbq_tag  = miss_add_tag;
     
     wire cwbq_empty;
     assign core_rsp_valid = !cwbq_empty;
@@ -589,7 +589,6 @@ module VX_bank #(
         .possible_fill     (possible_fill),
         .success_fill      (is_fill_st2),
         .fill_addr         (fill_invalidator_addr),
-
         .invalidate_fill   (invalidate_fill)
     );
 

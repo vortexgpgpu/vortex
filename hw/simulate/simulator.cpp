@@ -158,17 +158,15 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
 
   // submit snoop requests for the needed blocks
   vortex_->snp_req_addr = aligned_addr_start;
-  vortex_->snp_req_valid = false;
+  vortex_->snp_req_valid = true;
   for (;;) {
     this->step();
-    if (vortex_->snp_req_valid) {
-      vortex_->snp_req_valid = false;
-      if (vortex_->snp_req_addr >= aligned_addr_end)
-        break;
+    if (vortex_->snp_req_valid && vortex_->snp_req_ready) {
       vortex_->snp_req_addr += 1;
-    }    
-    if (vortex_->snp_req_ready) {
-      vortex_->snp_req_valid = true;      
+      if (vortex_->snp_req_addr >= aligned_addr_end) {
+        vortex_->snp_req_valid = false;
+        break;
+      }
     }
   }
   this->wait(PIPELINE_FLUSH_LATENCY);
