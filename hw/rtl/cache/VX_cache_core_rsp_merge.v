@@ -46,7 +46,7 @@ module VX_cache_core_rsp_merge #(
     parameter DRAM_TAG_WIDTH                = 1
 ) (
     // Per Bank WB
-    input  wire [NUM_BANKS-1:0][`LOG2UP(NUM_REQUESTS)-1:0]  per_bank_core_rsp_tid,
+    input  wire [NUM_BANKS-1:0][`REQS_BITS-1:0]             per_bank_core_rsp_tid,
     input  wire [NUM_BANKS-1:0]                             per_bank_core_rsp_valid,    
     input  wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]            per_bank_core_rsp_data,
     input  wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]         per_bank_core_rsp_tag,    
@@ -63,8 +63,8 @@ module VX_cache_core_rsp_merge #(
     
     assign per_bank_core_rsp_pop = per_bank_core_rsp_pop_unqual & {NUM_BANKS{core_rsp_ready}};
 
-    wire [`LOG2UP(NUM_BANKS)-1:0] main_bank_index;
-    wire                          found_bank;
+    wire [`BANK_BITS-1:0] main_bank_index;
+    wire                  found_bank;
 
     VX_generic_priority_encoder #(
         .N(NUM_BANKS)
@@ -86,7 +86,7 @@ module VX_cache_core_rsp_merge #(
                 if (found_bank
                  && per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
-                 && ((main_bank_index == `LOG2UP(NUM_BANKS)'(i)) 
+                 && ((main_bank_index == `BANK_BITS'(i)) 
                   || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))
                  && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == per_bank_core_rsp_tag[main_bank_index][CORE_TAG_ID_BITS-1:0])) begin            
                     core_rsp_valid[per_bank_core_rsp_tid[i]] = 1;     
@@ -106,7 +106,7 @@ module VX_cache_core_rsp_merge #(
                 if (found_bank
                  && per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
-                 && ((main_bank_index == `LOG2UP(NUM_BANKS)'(i)) 
+                 && ((main_bank_index == `BANK_BITS'(i)) 
                   || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))) begin            
                     core_rsp_valid[per_bank_core_rsp_tid[i]] = 1;     
                     core_rsp_data[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];

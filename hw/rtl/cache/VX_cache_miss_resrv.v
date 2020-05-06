@@ -48,7 +48,7 @@ module VX_cache_miss_resrv #(
     input wire[`LINE_ADDR_WIDTH-1:0]             miss_add_addr,
     input wire[`BASE_ADDR_BITS-1:0]              miss_add_wsel,
     input wire[`WORD_WIDTH-1:0]                  miss_add_data,
-    input wire[`LOG2UP(NUM_REQUESTS)-1:0]        miss_add_tid,
+    input wire[`REQS_BITS-1:0]                   miss_add_tid,
     input wire[CORE_TAG_WIDTH-1:0]               miss_add_tag,
     input wire[`BYTE_EN_BITS-1:0]                miss_add_mem_read,
     input wire[`BYTE_EN_BITS-1:0]                miss_add_mem_write,
@@ -69,7 +69,7 @@ module VX_cache_miss_resrv #(
     output wire[`LINE_ADDR_WIDTH-1:0]            miss_resrv_addr_st0,
     output wire[`BASE_ADDR_BITS-1:0]             miss_resrv_wsel_st0,
     output wire[`WORD_WIDTH-1:0]                 miss_resrv_data_st0,
-    output wire[`LOG2UP(NUM_REQUESTS)-1:0]       miss_resrv_tid_st0,
+    output wire[`REQS_BITS-1:0]                  miss_resrv_tid_st0,
     output wire[CORE_TAG_WIDTH-1:0]              miss_resrv_tag_st0,
     output wire[`BYTE_EN_BITS-1:0]               miss_resrv_mem_read_st0,
     output wire[`BYTE_EN_BITS-1:0]               miss_resrv_mem_write_st0    

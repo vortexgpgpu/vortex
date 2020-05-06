@@ -12,10 +12,14 @@
 `define BYTE_EN_BITS    3
 
 //                               data           tid                    tag              read             write             base addr 
-`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `LOG2UP(NUM_REQUESTS) + CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS)
+`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQS_BITS + CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS)
 
 //                               tag               read             write            reqs
-`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `LOG2UP(NUM_REQUESTS))
+`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `REQS_BITS)
+
+`define REQS_BITS               `LOG2UP(NUM_REQUESTS)
+
+`define BANK_BITS               `LOG2UP(NUM_BANKS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 `define BYTE_WIDTH              (`WORD_WIDTH / 4)

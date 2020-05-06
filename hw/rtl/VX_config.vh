@@ -87,11 +87,6 @@
 `define DWORD_SIZE 4
 `endif
 
-// Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef DNUM_REQUESTS
-`define DNUM_REQUESTS `NUM_THREADS
-`endif
-
 // Number of cycles to complete stage 1 (read from memory)
 `ifndef DSTAGE_1_CYCLES
 `define DSTAGE_1_CYCLES 1
@@ -176,11 +171,6 @@
 // Size of a word in bytes
 `ifndef IWORD_SIZE
 `define IWORD_SIZE 4
-`endif
-
-// Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef INUM_REQUESTS
-`define INUM_REQUESTS 1
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)
@@ -269,11 +259,6 @@
 `define SWORD_SIZE 4
 `endif
 
-// Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef SNUM_REQUESTS
-`define SNUM_REQUESTS `NUM_THREADS
-`endif
-
 // Number of cycles to complete stage 1 (read from memory)
 `ifndef SSTAGE_1_CYCLES
 `define SSTAGE_1_CYCLES 1
@@ -360,11 +345,6 @@
 `define L2WORD_SIZE `L2BANK_LINE_SIZE
 `endif
 
-// Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef L2NUM_REQUESTS
-`define L2NUM_REQUESTS (2*`NUM_CORES)
-`endif
-
 // Number of cycles to complete stage 1 (read from memory)
 `ifndef L2STAGE_1_CYCLES
 `define L2STAGE_1_CYCLES 1
@@ -449,11 +429,6 @@
 // Size of a word in bytes
 `ifndef L3WORD_SIZE
 `define L3WORD_SIZE `L3BANK_LINE_SIZE
-`endif
-
-// Number of Word requests per cycle {1, 2, 4, 8, ...}
-`ifndef L3NUM_REQUESTS
-`define L3NUM_REQUESTS `NUM_CLUSTERS
 `endif
 
 // Number of cycles to complete stage 1 (read from memory)

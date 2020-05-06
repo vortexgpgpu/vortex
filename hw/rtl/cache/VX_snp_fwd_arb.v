@@ -15,8 +15,8 @@ module VX_snp_fwd_arb #(
 
     wire [NUM_BANKS-1:0] qual_per_bank_snp_fwd = per_bank_snp_fwd_valid & {NUM_BANKS{snp_fwd_ready}};
 
-    wire [`LOG2UP(NUM_BANKS)-1:0] fsq_bank;
-    wire                          fsq_valid;
+    wire [`BANK_BITS-1:0] fsq_bank;
+    wire                  fsq_valid;
 
     VX_generic_priority_encoder #(
         .N(NUM_BANKS)

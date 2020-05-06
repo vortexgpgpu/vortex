@@ -86,8 +86,8 @@ module VX_cache_dfq_queue #(
     assign use_per_bqual_bank_dram_fill_req_valid = use_empty ? (out_per_bank_dram_fill_req_valid & {NUM_BANKS{!o_empty}}) : (use_per_bank_dram_fill_req_valid & {NUM_BANKS{!use_empty}}); 
     assign qual_bank_dram_fill_req_addr = use_empty ? out_per_bank_dram_fill_req_addr : use_per_bank_dram_fill_req_addr;
 
-    wire[`LOG2UP(NUM_BANKS)-1:0] qual_request_index;
-    wire                         qual_has_request;
+    wire[`BANK_BITS-1:0] qual_request_index;
+    wire                 qual_has_request;
 
     VX_generic_priority_encoder #(
         .N(NUM_BANKS)

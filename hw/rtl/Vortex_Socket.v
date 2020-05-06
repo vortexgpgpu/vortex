@@ -21,9 +21,9 @@ module Vortex_Socket (
     output wire                         dram_rsp_ready,
 
     // Cache snooping
-    input  wire                         llc_snp_req_valid,
-    input  wire[`L3DRAM_ADDR_WIDTH-1:0] llc_snp_req_addr,
-    output wire                         llc_snp_req_ready, 
+    input  wire                         snp_req_valid,
+    input  wire[`L3DRAM_ADDR_WIDTH-1:0] snp_req_addr,
+    output wire                         snp_req_ready, 
 
     // I/O request
     output wire                         io_req_read,
@@ -64,9 +64,9 @@ module Vortex_Socket (
             .dram_rsp_tag       (dram_rsp_tag),
             .dram_rsp_ready     (dram_rsp_ready),
 
-            .llc_snp_req_valid  (llc_snp_req_valid),
-            .llc_snp_req_addr   (llc_snp_req_addr),
-            .llc_snp_req_ready  (llc_snp_req_ready),
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_ready      (snp_req_ready),
 
             .io_req_read        (io_req_read),
             .io_req_write       (io_req_write),
@@ -99,8 +99,8 @@ module Vortex_Socket (
         wire[`NUM_CLUSTERS-1:0][`L3DRAM_TAG_WIDTH-1:0]  per_cluster_dram_rsp_tag; 
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_ready;
 
-        wire                                            snp_fwd_valid;
-        wire[`L3DRAM_ADDR_WIDTH-1:0]                    snp_fwd_addr;
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_snp_fwd_valid;
+        wire[`NUM_CLUSTERS-1:0][`L3DRAM_ADDR_WIDTH-1:0] per_cluster_snp_fwd_addr;
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_snp_fwd_ready;
 
     `IGNORE_WARNINGS_BEGIN
@@ -137,9 +137,9 @@ module Vortex_Socket (
                 .dram_rsp_tag       (per_cluster_dram_rsp_tag   [i]),
                 .dram_rsp_ready     (per_cluster_dram_rsp_ready [i]),
 
-                .llc_snp_req_valid  (snp_fwd_valid),
-                .llc_snp_req_addr   (snp_fwd_addr),
-                .llc_snp_req_ready  (per_cluster_snp_fwd_ready  [i]),
+                .snp_req_valid      (per_cluster_snp_fwd_valid  [i]),
+                .snp_req_addr       (per_cluster_snp_fwd_addr   [i]),
+                .snp_req_ready      (per_cluster_snp_fwd_ready  [i]),
 
                 .io_req_read        (per_cluster_io_req_read    [i]),
                 .io_req_write       (per_cluster_io_req_write   [i]),
@@ -183,7 +183,11 @@ module Vortex_Socket (
         wire[`L3NUM_REQUESTS-1:0]                           l3_core_rsp_valid;        
         wire[`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   l3_core_rsp_data;
         wire[`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    l3_core_rsp_tag;
-        wire[`L3NUM_REQUESTS-1:0]                           l3_core_rsp_ready;
+        wire                                                l3_core_rsp_ready;    
+
+        wire                                                l3_snp_fwd_valid;
+        wire[`L3DRAM_ADDR_WIDTH-1:0]                        l3_snp_fwd_addr;
+        wire                                                l3_snp_fwd_ready;    
 
         for (i = 0; i < `L3NUM_REQUESTS; i=i+1) begin
             // Core Request
@@ -192,16 +196,20 @@ module Vortex_Socket (
             assign l3_core_req_write [i] = per_cluster_dram_req_write [i] ? `BYTE_EN_LW : `BYTE_EN_NO;
             assign l3_core_req_addr  [i] = {per_cluster_dram_req_addr [i], {`LOG2UP(`L2BANK_LINE_SIZE){1'b0}}};
             assign l3_core_req_tag   [i] = per_cluster_dram_req_tag   [i];
-            assign l3_core_req_data  [i] = per_cluster_dram_req_data  [i];
+            assign l3_core_req_data  [i] = per_cluster_dram_req_data  [i];            
 
-            // Core  Response
-            assign l3_core_rsp_ready [i] = per_cluster_dram_rsp_ready[i];  
-
-            // Cache Fill Response
-            assign per_cluster_dram_rsp_valid [i] = l3_core_rsp_valid [i];
+            // Core Response
+            assign per_cluster_dram_rsp_valid [i] = l3_core_rsp_valid [i] && l3_core_rsp_ready;
             assign per_cluster_dram_rsp_data  [i] = l3_core_rsp_data [i];
             assign per_cluster_dram_rsp_tag   [i] = l3_core_rsp_tag [i];
+
+            // Snoop Forwarding
+            assign per_cluster_snp_fwd_valid [i] = l3_snp_fwd_valid && l3_snp_fwd_ready;
+            assign per_cluster_snp_fwd_addr  [i] = l3_snp_fwd_addr;
         end
+
+        assign l3_core_rsp_ready = (& per_cluster_dram_rsp_ready);
+        assign l3_snp_fwd_ready = (& per_cluster_snp_fwd_ready);
 
         VX_cache #(
             .CACHE_SIZE             (`L3CACHE_SIZE),
@@ -245,7 +253,7 @@ module Vortex_Socket (
             .core_rsp_valid     (l3_core_rsp_valid),
             .core_rsp_data      (l3_core_rsp_data),
             .core_rsp_tag       (l3_core_rsp_tag),              
-            .core_rsp_ready     (& l3_core_rsp_ready),
+            .core_rsp_ready     (l3_core_rsp_ready),
 
             // DRAM request
             .dram_req_write     (dram_req_write),
@@ -262,14 +270,14 @@ module Vortex_Socket (
             .dram_rsp_ready     (dram_rsp_ready),
 
             // Snoop request
-            .snp_req_valid      (llc_snp_req_valid),
-            .snp_req_addr       (llc_snp_req_addr),
-            .snp_req_ready      (llc_snp_req_ready),
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_ready      (snp_req_ready),
 
             // Snoop forwarding
-            .snp_fwd_valid      (snp_fwd_valid),
-            .snp_fwd_addr       (snp_fwd_addr),
-            .snp_fwd_ready      (& per_cluster_snp_fwd_ready)
+            .snp_fwd_valid      (l3_snp_fwd_valid),
+            .snp_fwd_addr       (l3_snp_fwd_addr),
+            .snp_fwd_ready      (l3_snp_fwd_ready)
         );
     end
 
