@@ -84,7 +84,7 @@ module VX_mult #(
                 reg [WIDTHB-1:0] datab_pipe [0:PIPELINE-1];
 
                 genvar i;
-                for (i = 0; i < PIPELINE-1; i = i+1) begin : pipe_stages
+                for (i = 0; i < PIPELINE-1; i++) begin : pipe_stages
                     always @(posedge clock or posedge aclr) begin
                         if (aclr) begin
                             dataa_pipe[i+1] <= 0;

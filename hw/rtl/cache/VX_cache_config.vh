@@ -3,14 +3,6 @@
 
 `include "VX_define.vh"
 
-`define BYTE_EN_NO      3'h7 
-`define BYTE_EN_LB      3'h0 
-`define BYTE_EN_LH      3'h1
-`define BYTE_EN_LW      3'h2
-`define BYTE_EN_HB      3'h4
-`define BYTE_EN_HH      3'h5
-`define BYTE_EN_BITS    3
-
 //                               data           tid                    tag              read             write             base addr 
 `define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQS_BITS + CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS)
 

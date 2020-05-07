@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
+#include <cmath>
 #include <uuid/uuid.h>
 #include <opae/fpga.h>
 #include <vortex.h>
@@ -46,9 +47,14 @@ typedef struct vx_buffer_ {
     size_t size;
 } vx_buffer_t;
 
-static size_t align_size(size_t size) {
-    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);    
-    return cache_block_size * ((size + cache_block_size - 1) / cache_block_size);
+inline size_t align_size(size_t size, size_t alignment) {        
+    assert(0 == (alignment & (alignment - 1)));
+    return (size + alignment - 1) & ~(alignment - 1);
+}
+
+inline bool is_aligned(size_t addr, size_t alignment) {
+    assert(0 == (alignment & (alignment - 1)));
+    return 0 == (addr & (alignment - 1));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -132,9 +138,11 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
         return -1;
 
     vx_device_t *device = ((vx_device_t*)hdevice);
-    
-    size_t asize = align_size(size);
+
+    int line_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);    
     size_t dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
+
+    size_t asize = align_size(size, line_size);
     if (device->mem_allocation + asize > dev_mem_size)
         return -1;   
 
@@ -158,7 +166,9 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
 
     vx_device_t *device = ((vx_device_t*)hdevice);
 
-    size_t asize = align_size(size);
+    int line_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
+
+    size_t asize = align_size(size, line_size);
 
     res = fpgaPrepareBuffer(device->fpga, asize, &host_ptr, &wsid, 0);
     if (FPGA_OK != res) {
@@ -249,20 +259,35 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
      || 0 >= size)
         return -1;
 
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
+    vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
     vx_device_t *device = ((vx_device_t*)buffer->hdevice);
 
+    int line_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);   
+    size_t dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE); 
+
+    // check alignment
+    if (!is_aligned(dev_maddr, line_size))
+        return -1;
+    if (!is_aligned(size, line_size))
+        return -1;
+    if (!is_aligned(buffer->io_addr + src_offset, line_size))
+        return -1;
+    
     // bound checking
     if (size + src_offset > buffer->size)
+        return -1;
+    if (dev_maddr + size > dev_mem_size)
         return -1;
 
     // Ensure ready for new command
     if (vx_ready_wait(buffer->hdevice, -1) != 0)
         return -1;
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, buffer->io_addr + src_offset));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
+    auto ls_shift = (int)std::log2(line_size);
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, (buffer->io_addr + src_offset) >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, (dev_maddr >> ls_shift) ));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_WRITE));
 
     // Wait for the write operation to finish
@@ -277,20 +302,35 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
      || 0 >= size)
         return -1;
 
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
+    vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
     vx_device_t *device = ((vx_device_t*)buffer->hdevice);
+
+    int line_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE); 
+    size_t dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);  
+
+    // check alignment
+    if (!is_aligned(dev_maddr, line_size))
+        return -1;
+    if (!is_aligned(size, line_size))
+        return -1;
+    if (!is_aligned(buffer->io_addr + dest_offset, line_size))
+        return -1; 
 
     // bound checking
     if (size + dest_offset > buffer->size)
+        return -1;
+    if (dev_maddr + size > dev_mem_size)
         return -1;
 
     // Ensure ready for new command
     if (vx_ready_wait(buffer->hdevice, -1) != 0)
         return -1;
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, buffer->io_addr + dest_offset));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));    
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
+    auto ls_shift = (int)std::log2(line_size);
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, (buffer->io_addr + dest_offset) >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, (dev_maddr) >> ls_shift));    
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_READ));
 
     // Wait for the write operation to finish
@@ -307,12 +347,22 @@ extern int vx_flush_caches(vx_device_h hdevice, size_t dev_maddr, size_t size) {
 
     vx_device_t* device = ((vx_device_t*)hdevice);
 
+    int line_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);   
+
+    // check alignment
+    if (!is_aligned(dev_maddr, line_size))
+        return -1;
+    if (!is_aligned(size, line_size))
+        return -1;
+
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size));   
+    auto ls_shift = (int)std::log2(line_size);
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, size >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_CLFLUSH));
 
     // Wait for the write operation to finish

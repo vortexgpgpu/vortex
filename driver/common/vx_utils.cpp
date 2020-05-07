@@ -15,7 +15,7 @@ extern int vx_dev_caps(int caps_id) {
   case VX_CAPS_MAX_THREADS:
     return NUM_THREADS;
   case VX_CAPS_CACHE_LINESIZE:
-    return GLOBAL_BLOCK_SIZE;
+    return 64;
   case VX_CAPS_LOCAL_MEM_SIZE:
     return 0xffffffff;
   case VX_CAPS_ALLOC_BASE_ADDR:

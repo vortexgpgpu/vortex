@@ -19,7 +19,7 @@ module VX_tb_divide();
 
     genvar i;
     generate
-        for (i = 0; i < 8; i = i+1) begin : div_loop
+        for (i = 0; i < 8; i++) begin : div_loop
             VX_divide#(
                 .WIDTHN(32),
                 .WIDTHD(32),

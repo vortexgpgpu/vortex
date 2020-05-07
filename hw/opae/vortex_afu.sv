@@ -28,12 +28,14 @@ module vortex_afu #(
   output logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select
 );
 
+localparam DRAM_ADDR_WIDTH    = (32 - `CLOG2(`GLOBAL_BLOCK_SIZE));
+
 localparam AVS_RD_QUEUE_SIZE  = 16;
 
 localparam CCI_RD_WINDOW_SIZE = 8;
 localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
 
-localparam VX_SNOOP_DELAY     = 300;
+localparam VX_SNOOP_DELAY     = 1000;
 localparam VX_SNOOP_LEVELS    = 2;
 
 localparam AFU_ID_L           = 16'h0002;      // AFU ID Lower
@@ -60,38 +62,39 @@ typedef enum logic[3:0] {
   STATE_CLFLUSH
 } state_t;
 
-typedef logic [`LOG2UP(CCI_RD_WINDOW_SIZE)-1:0]  t_cci_rdq_tag;
+typedef logic [`LOG2UP(CCI_RD_WINDOW_SIZE)-1:0] t_cci_rdq_tag;
 typedef logic [$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:0] t_cci_rdq_data;
 
 state_t state;
 
-// Vortex signals /////////////////////////////////////////////////////////////
+// Vortex ports ///////////////////////////////////////////////////////////////
 
-logic        vx_dram_req_read;
-logic        vx_dram_req_write;
-logic [31:0] vx_dram_req_addr;
+logic vx_dram_req_read;
+logic vx_dram_req_write;
+logic [DRAM_ADDR_WIDTH-1:0] vx_dram_req_addr;
 logic [`GLOBAL_BLOCK_SIZE-1:0] vx_dram_req_data;
-logic        vx_dram_req_ready;
+logic [`L3DRAM_TAG_WIDTH-1:0] vx_dram_req_tag;
+logic vx_dram_req_ready;
 
-logic        vx_dram_rsp_ready;
-logic        vx_dram_rsp_valid;
-logic [31:0] vx_dram_rsp_addr;
+logic vx_dram_rsp_valid;
 logic [`GLOBAL_BLOCK_SIZE-1:0] vx_dram_rsp_data;
+logic [`L3DRAM_TAG_WIDTH-1:0] vx_dram_rsp_tag;
+logic vx_dram_rsp_ready;
 
-logic        vx_snp_req;
-logic [31:0] vx_snp_req_addr;
-logic        vx_snp_req_ready;
+logic vx_snp_req_valid;
+logic [DRAM_ADDR_WIDTH-1:0] vx_snp_req_addr;
+logic vx_snp_req_ready;
 
-logic        vx_ebreak;
+logic vx_busy;
 
 // AVS Queues /////////////////////////////////////////////////////////////////
 
-logic avs_raq_push;
-t_local_mem_addr avs_raq_din;
-logic avs_raq_pop;
-t_local_mem_addr avs_raq_dout;
-logic avs_raq_empty;
-logic avs_raq_full;
+logic avs_rtq_push;
+t_local_mem_addr avs_rtq_din;
+logic avs_rtq_pop;
+t_local_mem_addr avs_rtq_dout;
+logic avs_rtq_empty;
+logic avs_rtq_full;
 
 logic avs_rdq_push;
 t_local_mem_data avs_rdq_din;
@@ -105,7 +108,7 @@ logic avs_rdq_full;
 logic [2:0]       csr_cmd;
 t_ccip_clAddr     csr_io_addr;
 t_local_mem_addr  csr_mem_addr;
-logic [31:0]      csr_data_size;
+logic [DRAM_ADDR_WIDTH-1:0] csr_data_size;
 
 // MMIO controller ////////////////////////////////////////////////////////////
 
@@ -137,16 +140,16 @@ begin
     begin
       case (mmioHdr.address)
         MMIO_CSR_IO_ADDR: begin                     
-          csr_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data >> 6);          
-          $display("%t: CSR_IO_ADDR: 0x%h", $time, t_ccip_clAddr'(cp2af_sRxPort.c0.data >> 6));
+          csr_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);          
+          $display("%t: CSR_IO_ADDR: 0x%h", $time, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
         end
         MMIO_CSR_MEM_ADDR: begin          
-          csr_mem_addr <= t_local_mem_addr'(cp2af_sRxPort.c0.data >> 6);                  
-          $display("%t: CSR_MEM_ADDR: 0x%h", $time, t_local_mem_addr'(cp2af_sRxPort.c0.data >> 6));
+          csr_mem_addr <= t_local_mem_addr'(cp2af_sRxPort.c0.data);                  
+          $display("%t: CSR_MEM_ADDR: 0x%h", $time, t_local_mem_addr'(cp2af_sRxPort.c0.data));
         end
         MMIO_CSR_DATA_SIZE: begin          
-          csr_data_size <= $bits(csr_data_size)'((cp2af_sRxPort.c0.data + 63) >> 6);          
-          $display("%t: CSR_DATA_SIZE: %0d", $time, $bits(csr_data_size)'((cp2af_sRxPort.c0.data + 63) >> 6));
+          csr_data_size <= $bits(csr_data_size)'(cp2af_sRxPort.c0.data);          
+          $display("%t: CSR_DATA_SIZE: %0d", $time, $bits(csr_data_size)'(cp2af_sRxPort.c0.data));
         end
         MMIO_CSR_CMD: begin          
           csr_cmd <= $bits(csr_cmd)'(cp2af_sRxPort.c0.data);
@@ -195,12 +198,12 @@ end
 
 // COMMAND FSM ////////////////////////////////////////////////////////////////
 
-logic [31:0] cci_write_ctr;
-logic [31:0] avs_read_ctr;
-logic [31:0] avs_write_ctr;
-logic [31:0] vx_snoop_ctr;
-logic [9:0]  vx_snoop_delay;
-logic        vx_reset;
+logic [DRAM_ADDR_WIDTH-1:0] cci_write_ctr;
+logic [DRAM_ADDR_WIDTH-1:0] avs_read_ctr;
+logic [DRAM_ADDR_WIDTH-1:0] avs_write_ctr;
+logic [DRAM_ADDR_WIDTH-1:0] snp_req_ctr;
+logic [9:0] snp_req_delay;
+logic       vx_reset;
 
 always_ff @(posedge clk) 
 begin
@@ -248,13 +251,13 @@ begin
       end
 
       STATE_RUN: begin
-        if (vx_ebreak) begin
+        if (!vx_busy) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_CLFLUSH: begin
-        if (vx_snoop_delay >= VX_SNOOP_DELAY) begin
+        if (snp_req_delay >= VX_SNOOP_DELAY) begin
           state <= STATE_IDLE;
         end
       end
@@ -268,11 +271,12 @@ end
 logic cci_rdq_empty;
 t_cci_rdq_data cci_rdq_dout;
 logic cci_rdq_pop;
+logic [`L3DRAM_TAG_WIDTH-1:0] dram_req_tag;
 
 t_ccip_clAddr next_avs_address;
 always_comb 
 begin
-  next_avs_address = csr_mem_addr + {avs_write_ctr[31:$bits(t_cci_rdq_tag)], t_cci_rdq_tag'(cci_rdq_dout)};
+  next_avs_address = csr_mem_addr + {avs_write_ctr[DRAM_ADDR_WIDTH-1:$bits(t_cci_rdq_tag)], t_cci_rdq_tag'(cci_rdq_dout)};
   cci_rdq_pop = (state == STATE_WRITE
               && !cci_rdq_empty 
               && !avs_waitrequest
@@ -285,9 +289,7 @@ begin
   begin    
     mem_bank_select <= 0;
     avs_burstcount  <= 1;
-    avs_byteenable  <= 64'hffffffffffffffff;    
-    avs_address     <= 0;
-    avs_writedata   <= 0;    
+    avs_byteenable  <= 64'hffffffffffffffff; 
     avs_read        <= 0;
     avs_write       <= 0;
     avs_read_ctr    <= 0;
@@ -305,7 +307,7 @@ begin
       end
 
       STATE_READ: begin
-        if (!avs_raq_full 
+        if (!avs_rtq_full 
          && !avs_rdq_full
          && !avs_waitrequest 
          && avs_read_ctr < csr_data_size) 
@@ -332,18 +334,19 @@ begin
         if (vx_dram_req_read
          && vx_dram_req_ready) 
         begin
-          avs_address <= (vx_dram_req_addr >> 6);
-          avs_read    <= 1;
-          $display("%t: AVS Rd Req: addr=%h", $time, vx_dram_req_addr >> 6);
+          avs_address  <= vx_dram_req_addr;
+          dram_req_tag <= vx_dram_req_tag;
+          avs_read     <= 1;
+          $display("%t: AVS Rd Req: addr=%h", $time, vx_dram_req_addr);
         end 
         
         if (vx_dram_req_write
          && vx_dram_req_ready) 
         begin
-          avs_writedata <= vx_dram_req_data;
-          avs_address   <= (vx_dram_req_addr >> 6);
+          avs_address   <= vx_dram_req_addr;
+          avs_writedata <= vx_dram_req_data;          
           avs_write     <= 1;
-          $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr >> 6);
+          $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr);
         end
       end
     endcase
@@ -362,7 +365,7 @@ logic vortex_enabled;
 always_comb 
 begin
   vortex_enabled    = (STATE_RUN == state) || (STATE_CLFLUSH == state);
-  vx_dram_req_ready = vortex_enabled && !avs_waitrequest && !avs_raq_full && !avs_rdq_full;
+  vx_dram_req_ready = vortex_enabled && !avs_waitrequest && !avs_rtq_full && !avs_rdq_full;
 end
 
 // Vortex DRAM fill response
@@ -370,7 +373,7 @@ end
 always_comb 
 begin
   vx_dram_rsp_valid = vortex_enabled && !avs_rdq_empty && vx_dram_rsp_ready;
-  vx_dram_rsp_addr  = (avs_raq_dout << 6);
+  vx_dram_rsp_tag   = avs_rtq_dout;
   vx_dram_rsp_data  = avs_rdq_dout;
 end
 
@@ -380,9 +383,9 @@ logic cci_wr_req;
 
 always_comb 
 begin
-  avs_raq_pop  = vx_dram_rsp_valid || cci_wr_req;
-  avs_raq_din  = avs_address;
-  avs_raq_push = avs_read;
+  avs_rtq_pop  = vx_dram_rsp_valid || cci_wr_req;
+  avs_rtq_din  = dram_req_tag;
+  avs_rtq_push = avs_read;
 end
 
 VX_generic_queue #(
@@ -391,19 +394,19 @@ VX_generic_queue #(
 ) avs_rd_req_queue (
   .clk      (clk),
   .reset    (SoftReset),
-  .push     (avs_raq_push),
-  .data_in  (avs_raq_din),
-  .pop      (avs_raq_pop),
-  .data_out (avs_raq_dout),
-  .empty    (avs_raq_empty),
-  .full     (avs_raq_full)
+  .push     (avs_rtq_push),
+  .data_in  (avs_rtq_din),
+  .pop      (avs_rtq_pop),
+  .data_out (avs_rtq_dout),
+  .empty    (avs_rtq_empty),
+  .full     (avs_rtq_full)
 );
 
 // AVS data read response queue ///////////////////////////////////////////////
 
 always_comb 
 begin
-  avs_rdq_pop  = avs_raq_pop;
+  avs_rdq_pop  = avs_rtq_pop;
   avs_rdq_din  = avs_readdata;
   avs_rdq_push = avs_readdatavalid;
 end
@@ -426,7 +429,7 @@ VX_generic_queue #(
 
 t_ccip_c0_ReqMemHdr cci_read_hdr;
 
-logic [31:0] cci_read_ctr;
+logic [DRAM_ADDR_WIDTH-1:0] cci_read_ctr;
 t_cci_rdq_tag cci_rdq_ctr;
 
 logic cci_rdq_full;
@@ -562,29 +565,29 @@ end
 always_ff @(posedge clk) 
 begin
   if (SoftReset) begin
-    vx_snp_req      <= 0;
-    vx_snoop_ctr    <= 0;
-    vx_snoop_delay  <= 0;
+    vx_snp_req_valid <= 0;
+    snp_req_ctr      <= 0;
+    snp_req_delay    <= 0;
   end
   else begin
     if (STATE_IDLE == state) begin
-      vx_snoop_ctr   <= 0;
-      vx_snoop_delay <= 0;
+      snp_req_ctr   <= 0;
+      snp_req_delay <= 0;
     end
 
-    vx_snp_req <= 0;
+    vx_snp_req_valid <= 0;
 
     if ((STATE_CLFLUSH == state)
-     && vx_snoop_ctr < csr_data_size
+     && (snp_req_ctr < csr_data_size)
      && vx_snp_req_ready)
-     begin
-      vx_snp_req_addr <= (csr_mem_addr + vx_snoop_ctr) << 6;
-      vx_snp_req      <= 1;
-      vx_snoop_ctr    <= vx_snoop_ctr + 1;
+    begin
+      vx_snp_req_addr  <= csr_mem_addr + snp_req_ctr;
+      vx_snp_req_valid <= 1;
+      snp_req_ctr      <= snp_req_ctr + 1;
     end
 
-    if (vx_snoop_ctr == csr_data_size) begin 
-      vx_snoop_delay <= vx_snoop_delay + 1;
+    if (snp_req_ctr == csr_data_size) begin 
+      snp_req_delay <= snp_req_delay + 1;
     end
   end
 end
@@ -600,21 +603,22 @@ Vortex_Socket #() vx_socket (
   .dram_req_read 			(vx_dram_req_read),
   .dram_req_addr 			(vx_dram_req_addr),
   .dram_req_data			(vx_dram_req_data),
+  .dram_req_tag       (vx_dram_req_tag),
   .dram_req_ready     (vx_dram_req_ready),
 
   // DRAM Rsp  
   .dram_rsp_valid 		(vx_dram_rsp_valid),
-  .dram_rsp_addr      (vx_dram_rsp_addr),
   .dram_rsp_data	    (vx_dram_rsp_data),
+  .dram_rsp_tag       (vx_dram_rsp_tag),
   .dram_rsp_ready     (vx_dram_rsp_ready),
 
   // Cache Snooping Req
-  .llc_snp_req_valid 	(vx_snp_req),
-  .llc_snp_req_addr   (vx_snp_req_addr),
-  .llc_snp_req_ready  (vx_snp_req_ready),
+  .snp_req_valid 	    (vx_snp_req_valid),
+  .snp_req_addr       (vx_snp_req_addr),
+  .snp_req_ready      (vx_snp_req_ready),
  
-  // program exit signal
-  .ebreak 				    (vx_ebreak)
+  // status
+  .busy 				    (vx_busy)
 );
 
 endmodule

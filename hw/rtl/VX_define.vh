@@ -52,6 +52,16 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`define BYTE_EN_NO      3'h7 
+`define BYTE_EN_LB      3'h0 
+`define BYTE_EN_LH      3'h1
+`define BYTE_EN_LW      3'h2
+`define BYTE_EN_HB      3'h4
+`define BYTE_EN_HH      3'h5
+`define BYTE_EN_BITS    3
+
+///////////////////////////////////////////////////////////////////////////////
+
 `define INST_R      7'd051
 `define INST_L      7'd003
 `define INST_ALU    7'd019
@@ -62,7 +72,7 @@
 `define INST_JAL    7'd111
 `define INST_JALR   7'd103
 `define INST_SYS    7'd115
-`define INST_GPGPU  7'h06b
+`define INST_GPGPU  7'd107
 
 `define RS2_IMMED   1
 `define RS2_REG     0
