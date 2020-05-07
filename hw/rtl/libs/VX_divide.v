@@ -66,7 +66,7 @@ module VX_divide #(
                 reg [WIDTHD-1:0] denom_pipe [0:PIPELINE-1];
 
                 genvar i;
-                for (i = 0; i < PIPELINE-1; i = i+1) begin : pipe_stages
+                for (i = 0; i < PIPELINE-1; i++) begin : pipe_stages
                     always @(posedge clock or posedge aclr) begin
                         if (aclr) begin
                             numer_pipe[i+1] <= 0;

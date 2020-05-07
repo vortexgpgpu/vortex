@@ -53,9 +53,9 @@ module VX_cache_core_rsp_merge #(
     output wire [NUM_BANKS-1:0]                             per_bank_core_rsp_pop,
 
     // Core Writeback
-    output reg  [NUM_REQUESTS-1:0]                          core_rsp_valid,
-    output reg  [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]         core_rsp_data,  
-    output reg  [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
+    output reg [NUM_REQUESTS-1:0]                           core_rsp_valid,
+    output reg [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]          core_rsp_data,  
+    output reg [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     input  wire                                             core_rsp_ready
 );
 
@@ -81,7 +81,6 @@ module VX_cache_core_rsp_merge #(
         always @(*) begin
             core_rsp_valid = 0;
             core_rsp_data  = 0;
-            core_rsp_tag   = 0;
             for (i = 0; i < NUM_BANKS; i = i + 1) begin 
                 if (found_bank
                  && per_bank_core_rsp_valid[i] 
