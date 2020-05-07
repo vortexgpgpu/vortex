@@ -113,7 +113,6 @@ module VX_cache_miss_resrv #(
         if (reset) begin
             valid_table <= 0;
             ready_table <= 0;
-            addr_table  <= 0;
             size        <= 0;
             head_ptr    <= 0;
             tail_ptr    <= 0;

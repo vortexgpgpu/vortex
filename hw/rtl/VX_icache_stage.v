@@ -14,7 +14,7 @@ module VX_icache_stage (
     VX_cache_core_req_if    icache_req_if
 );
 
-    reg[`NUM_THREADS-1:0] threads_active[`NUM_WARPS-1:0];
+    reg[`NUM_THREADS-1:0] pending_threads[`NUM_WARPS-1:0];
 
     wire valid_inst = (| fe_inst_meta_fi.valid);
 
@@ -34,7 +34,7 @@ module VX_icache_stage (
     assign {fe_inst_meta_id.inst_pc, rsp_wb, rsp_rd, fe_inst_meta_id.warp_num} = icache_rsp_if.core_rsp_tag;
 
     assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_data[0][31:0];
-    assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? threads_active[fe_inst_meta_id.warp_num] : 0;
+    assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? pending_threads[fe_inst_meta_id.warp_num] : 0;
 
     assign icache_stage_wid            = fe_inst_meta_id.warp_num;
     assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
@@ -50,11 +50,11 @@ module VX_icache_stage (
     always @(posedge clk) begin
         if (reset) begin
             for (i = 0; i < `NUM_WARPS; i = i + 1) begin
-                threads_active[i] <= 0;
+                pending_threads[i] <= 0;
             end
         end else begin
-            if (valid_inst && !icache_stage_delay) begin
-                threads_active[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
+            if (icache_req_if.core_req_valid && icache_req_if.core_req_ready) begin
+                pending_threads[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
             end
         end
     end

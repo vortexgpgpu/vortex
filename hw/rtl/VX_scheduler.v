@@ -67,7 +67,7 @@ module VX_scheduler (
         
             if (valid_wb 
              && (0 == (rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid))) begin
-                   count_valid <= count_valid - 1;
+                count_valid <= count_valid - 1;
             end
 
             if (!schedule_delay && wb_inc) begin
