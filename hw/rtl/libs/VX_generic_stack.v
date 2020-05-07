@@ -15,11 +15,9 @@ module VX_generic_stack #(
     reg [DEPTH - 1:0] ptr;
     reg [WIDTH - 1:0] stack [0:(1 << DEPTH) - 1];
 
-    integer i;
     always @(posedge clk) begin
         if (reset) begin
             ptr <= 0;
-            for (i = 0; i < (1 << DEPTH); i=i+1) stack[i] <= 0;
         end else if (push) begin
             stack[ptr]   <= q1;
             stack[ptr+1] <= q2;
