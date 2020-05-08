@@ -8,12 +8,8 @@ module VX_back_end #(
 
     input wire             schedule_delay,
 
-    VX_cache_core_rsp_if   dcache_rsp_if,
     VX_cache_core_req_if   dcache_req_if,
-
-    output wire            mem_delay,
-    output wire            exec_delay,
-    output wire            gpr_stage_delay,
+    VX_cache_core_rsp_if   dcache_rsp_if,
     VX_jal_rsp_if          jal_rsp_if,
     VX_branch_rsp_if       branch_rsp_if,
 
@@ -21,6 +17,10 @@ module VX_back_end #(
     VX_wb_if               writeback_if,
 
     VX_warp_ctl_if         warp_ctl_if,
+
+    output wire            mem_delay,
+    output wire            exec_delay,
+    output wire            gpr_stage_delay,
 
     output wire            ebreak
 );
@@ -78,8 +78,8 @@ module VX_back_end #(
         .reset          (reset),
         .lsu_req_if     (lsu_req_if),
         .mem_wb_if      (mem_wb_if),
-        .dcache_rsp_if  (dcache_rsp_if),
         .dcache_req_if  (dcache_req_if),
+        .dcache_rsp_if  (dcache_rsp_if),
         .delay          (mem_delay),
         .no_slot_mem    (no_slot_mem)
     );

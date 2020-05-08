@@ -244,8 +244,11 @@ module Vortex #(
         .icache_dram_rsp_if (icache_dram_rsp_if)
     );
 
+    // use "case equality" to handle uninitialized address value
+    wire io_select = ((dcache_io_core_req_if.core_req_addr[0] >= `IO_BUS_BASE_ADDR) === 1'b1);
+
     VX_dcache_io_arb dcache_io_arb (
-        .io_select          (dcache_io_core_req_if.core_req_addr[0] >= `IO_BUS_BASE_ADDR),
+        .io_select          (io_select),
         .core_req_if        (dcache_io_core_req_if),
         .dcache_core_req_if (dcache_core_req_if),
         .io_core_req_if     (io_core_req_if),  

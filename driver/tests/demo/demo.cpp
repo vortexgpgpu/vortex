@@ -4,6 +4,16 @@
 #include <vortex.h>
 #include "common.h"
 
+#define RT_CHECK(_expr)                                         \
+   do {                                                         \
+     int _ret = _expr;                                           \
+     if (0 == _ret)                                             \
+       break;                                                   \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
+	 cleanup();			                                              \
+     exit(-1);                                                  \
+   } while (false)
+
 const char* program_file = "kernel.bin";
 uint32_t data_stride = 0xffffffff;
 
@@ -39,40 +49,38 @@ static void parse_args(int argc, char **argv) {
   }
 }
 
+vx_device_h device = nullptr;
+vx_buffer_h buffer = nullptr;
+
+void cleanup() {
+  if (buffer) {
+    vx_buf_release(buffer);
+  }
+  if (device) {
+    vx_dev_close(device);
+  }
+}
+
 int run_test(vx_device_h device, 
              vx_buffer_h buffer, 
              const kernel_arg_t& kernel_arg,
              uint32_t buf_size, 
              uint32_t num_points) {
-  int ret;
-
   // start device
   std::cout << "start device" << std::endl;
-  ret = vx_start(device);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_start(device));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  ret = vx_ready_wait(device, -1);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_ready_wait(device, -1));
 
   // flush the destination buffer caches
   std::cout << "flush the destination buffer caches" << std::endl;
-  ret = vx_flush_caches(device, kernel_arg.dst_ptr, buf_size);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_flush_caches(device, kernel_arg.dst_ptr, buf_size));
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  ret = vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
 
   // verify result
   std::cout << "verify result" << std::endl;  
@@ -96,20 +104,7 @@ int run_test(vx_device_h device,
   return 0;
 }
 
-vx_device_h device = nullptr;
-vx_buffer_h buffer = nullptr;
-
-void cleanup() {
-  if (buffer) {
-    vx_buf_release(buffer);
-  }
-  if (device) {
-    vx_dev_close(device);
-  }
-}
-
 int main(int argc, char *argv[]) {
-  int ret;
   size_t value; 
   kernel_arg_t kernel_arg;
   
@@ -132,50 +127,28 @@ int main(int argc, char *argv[]) {
 
   // open device connection
   std::cout << "open device connection" << std::endl;  
-  ret = vx_dev_open(&device);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_dev_open(&device));
 
   // upload program
   std::cout << "upload program" << std::endl;  
-  ret = vx_upload_kernel_file(device, program_file);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
+  RT_CHECK(vx_upload_kernel_file(device, program_file));
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
 
-  ret = vx_alloc_dev_mem(device, buf_size, &value);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
+  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
   kernel_arg.src0_ptr = value;
 
-  ret = vx_alloc_dev_mem(device, buf_size, &value);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
+  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
   kernel_arg.src1_ptr = value;
 
-  ret = vx_alloc_dev_mem(device, buf_size, &value);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
+  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
   kernel_arg.dst_ptr = value;
 
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
-  ret = vx_alloc_shared_mem(device, alloc_size, &buffer);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
+  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
 
   // populate source buffer values
   std::cout << "populate source buffer values" << std::endl;    
@@ -187,19 +160,9 @@ int main(int argc, char *argv[]) {
   }
 
   // upload source buffers
-  std::cout << "upload source buffers" << std::endl;    
-  
-  ret = vx_copy_to_dev(buffer, kernel_arg.src0_ptr, buf_size, 0);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
-
-  ret = vx_copy_to_dev(buffer, kernel_arg.src1_ptr, buf_size, 0);
-  if (ret != 0) {
-    cleanup();
-    return ret;  
-  }
+  std::cout << "upload source buffers" << std::endl;      
+  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src0_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src1_ptr, buf_size, 0));
 
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -210,20 +173,12 @@ int main(int argc, char *argv[]) {
 
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    ret = vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0);
-    if (ret != 0) {
-      cleanup();
-      return ret;  
-    }
+    RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // run tests
   std::cout << "run tests" << std::endl;
-  ret = run_test(device, buffer, kernel_arg, buf_size, num_points);
-  if (ret != 0) {
-    cleanup();
-    return ret;
-  }
+  RT_CHECK(run_test(device, buffer, kernel_arg, buf_size, num_points));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  

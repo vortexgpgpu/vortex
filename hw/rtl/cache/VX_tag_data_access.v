@@ -90,13 +90,11 @@ module VX_tag_data_access #(
 
     wire fill_sent;
     wire invalidate_line;
+    wire tags_match;
 
     wire real_writefill = writefill_st1e
-                       && ((valid_req_st1e 
-                         && !use_read_valid_st1e) 
-                        || (valid_req_st1e 
-                         && use_read_valid_st1e 
-                         && (writeaddr_st1e[`TAG_LINE_ADDR_RNG] != use_read_tag_st1e)));    
+                       && ((valid_req_st1e && !use_read_valid_st1e) 
+                        || (valid_req_st1e && use_read_valid_st1e && !tags_match)); 
 
     VX_tag_data_structure #(
         .CACHE_SIZE             (CACHE_SIZE),
@@ -256,14 +254,14 @@ module VX_tag_data_access #(
 
             assign data_write[i * `WORD_WIDTH +: `WORD_WIDTH] = force_write ? writedata_st1e[i * `WORD_WIDTH +: `WORD_WIDTH] : use_write_dat;
         end
+        
     end
 
     assign use_write_enable = (writefill_st1e && !real_writefill) ? 0 : we;
     assign use_write_data   = data_write;
 
-    wire[`TAG_SELECT_BITS-1:0] writeaddr_tag = writeaddr_st1e[`TAG_LINE_ADDR_RNG];
-
-    wire tags_match  = writeaddr_tag == use_read_tag_st1e;
+    // use "case equality" to handle uninitialized tag when block entry is not valid
+    assign tags_match = ((writeaddr_st1e[`TAG_LINE_ADDR_RNG] == use_read_tag_st1e) === 1'b1);
 
     wire snoop_hit   = valid_req_st1e &&  is_snp_st1e && use_read_valid_st1e && tags_match && use_read_dirty_st1e;
     wire req_invalid = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;

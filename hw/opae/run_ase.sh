@@ -14,17 +14,19 @@ rm -rf $ASE_WORKDIR/.app_lock.pid $ASE_WORKDIR/.ase_ready.pid
 
 # Start Simulator in background
 pushd $SCRIPT_DIR/build_ase 
-make sim &
+echo "  [DBG]  starting ASE simnulator"
+nohup make sim  & 
 popd
 
 # Wait for simulator readiness
 # When .ase_ready is created in the $ASE_WORKDIR, ASE is ready for simulation
-while [! -f $ASE_WORKDIR/.ase_ready.pid]
+while [ ! -f $ASE_WORKDIR/.ase_ready.pid ]
 do
   sleep 1
 done
 
 # run application
 pushd $PROGRAM_DIR
+echo "  [DBG]  running ./$PROGRAM $*"
 ASE_LOG=0 LD_LIBRARY_PATH=../../opae/ase:$LD_LIBRARY_PATH ./$PROGRAM $*
 popd
