@@ -24,7 +24,7 @@ module VX_icache_stage (
 `DEBUG_END
 
     // Icache Request
-    assign icache_req_if.core_req_valid = valid_inst && !total_freeze;
+    assign icache_req_if.core_req_valid = valid_inst;
     assign icache_req_if.core_req_addr  = fe_inst_meta_fi.inst_pc;
     assign icache_req_if.core_req_data  = 'z;
     assign icache_req_if.core_req_read  = `BYTE_EN_LW;
