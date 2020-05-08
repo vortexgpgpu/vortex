@@ -28,7 +28,12 @@ module vortex_afu #(
   output logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select
 );
 
-localparam DRAM_ADDR_WIDTH    = (32 - `CLOG2(`GLOBAL_BLOCK_SIZE));
+localparam DRAM_ADDR_WIDTH    = $bits(t_local_mem_addr);
+localparam DRAM_LINE_WIDTH    = $bits(t_local_mem_data);
+localparam DRAM_TAG_WIDTH     = `L3DRAM_TAG_WIDTH;
+
+`STATIC_ASSERT(DRAM_ADDR_WIDTH == `L3DRAM_ADDR_WIDTH, "invalid vortex dram bus!")
+`STATIC_ASSERT(DRAM_LINE_WIDTH == `L3DRAM_LINE_WIDTH, "invalid vortex dram bus!")
 
 localparam AVS_RD_QUEUE_SIZE  = 16;
 
@@ -58,6 +63,7 @@ typedef enum logic[3:0] {
   STATE_IDLE,
   STATE_READ,
   STATE_WRITE,
+  STATE_START,
   STATE_RUN, 
   STATE_CLFLUSH
 } state_t;
@@ -72,13 +78,13 @@ state_t state;
 logic vx_dram_req_read;
 logic vx_dram_req_write;
 logic [DRAM_ADDR_WIDTH-1:0] vx_dram_req_addr;
-logic [`GLOBAL_BLOCK_SIZE-1:0] vx_dram_req_data;
-logic [`L3DRAM_TAG_WIDTH-1:0] vx_dram_req_tag;
+logic [DRAM_LINE_WIDTH-1:0] vx_dram_req_data;
+logic [DRAM_TAG_WIDTH-1:0]  vx_dram_req_tag;
 logic vx_dram_req_ready;
 
 logic vx_dram_rsp_valid;
-logic [`GLOBAL_BLOCK_SIZE-1:0] vx_dram_rsp_data;
-logic [`L3DRAM_TAG_WIDTH-1:0] vx_dram_rsp_tag;
+logic [DRAM_LINE_WIDTH-1:0] vx_dram_rsp_data;
+logic [DRAM_TAG_WIDTH-1:0]  vx_dram_rsp_tag;
 logic vx_dram_rsp_ready;
 
 logic vx_snp_req_valid;
@@ -90,9 +96,9 @@ logic vx_busy;
 // AVS Queues /////////////////////////////////////////////////////////////////
 
 logic avs_rtq_push;
-t_local_mem_addr avs_rtq_din;
+logic [DRAM_TAG_WIDTH-1:0] avs_rtq_din;
 logic avs_rtq_pop;
-t_local_mem_addr avs_rtq_dout;
+logic [DRAM_TAG_WIDTH-1:0] avs_rtq_dout;
 logic avs_rtq_empty;
 logic avs_rtq_full;
 
@@ -229,7 +235,7 @@ begin
           CMD_TYPE_RUN: begin        
             $display("%t: STATE START", $time);
             vx_reset <= 1;
-            state <= STATE_RUN;                    
+            state <= STATE_START;                    
           end
           CMD_TYPE_CLFLUSH: begin
             $display("%t: STATE CFLUSH: da=%h sz=%0d", $time, csr_mem_addr, csr_data_size);
@@ -248,6 +254,10 @@ begin
         if (avs_write_ctr >= csr_data_size) begin
           state <= STATE_IDLE;
         end
+      end
+
+      STATE_START: begin // vortex reset cycle
+        state <= STATE_RUN; 
       end
 
       STATE_RUN: begin
@@ -271,7 +281,7 @@ end
 logic cci_rdq_empty;
 t_cci_rdq_data cci_rdq_dout;
 logic cci_rdq_pop;
-logic [`L3DRAM_TAG_WIDTH-1:0] dram_req_tag;
+logic [DRAM_TAG_WIDTH-1:0] dram_req_tag;
 
 t_ccip_clAddr next_avs_address;
 always_comb 
@@ -372,7 +382,7 @@ end
 
 always_comb 
 begin
-  vx_dram_rsp_valid = vortex_enabled && !avs_rdq_empty && vx_dram_rsp_ready;
+  vx_dram_rsp_valid = vortex_enabled && !avs_rdq_empty;
   vx_dram_rsp_tag   = avs_rtq_dout;
   vx_dram_rsp_data  = avs_rdq_dout;
 end
@@ -389,7 +399,7 @@ begin
 end
 
 VX_generic_queue #(
-  .DATAW($bits(t_local_mem_addr)),
+  .DATAW(DRAM_TAG_WIDTH),
   .SIZE(AVS_RD_QUEUE_SIZE)
 ) avs_rd_req_queue (
   .clk      (clk),
@@ -412,7 +422,7 @@ begin
 end
 
 VX_generic_queue #(
-  .DATAW($bits(t_local_mem_data)),
+  .DATAW(DRAM_LINE_WIDTH),
   .SIZE(AVS_RD_QUEUE_SIZE)
 ) avs_rd_rsp_queue (
   .clk      (clk),
@@ -595,30 +605,46 @@ end
 // Vortex binding /////////////////////////////////////////////////////////////
 
 Vortex_Socket #() vx_socket (
-  .clk                (clk),
-  .reset              (SoftReset || vx_reset),
+  .clk              (clk),
+  .reset            (vx_reset),
 
-  // DRAM Req 
-  .dram_req_write 		(vx_dram_req_write),
-  .dram_req_read 			(vx_dram_req_read),
-  .dram_req_addr 			(vx_dram_req_addr),
-  .dram_req_data			(vx_dram_req_data),
-  .dram_req_tag       (vx_dram_req_tag),
-  .dram_req_ready     (vx_dram_req_ready),
+  // DRAM request 
+  .dram_req_write   (vx_dram_req_write),
+  .dram_req_read 	  (vx_dram_req_read),
+  .dram_req_addr 		(vx_dram_req_addr),
+  .dram_req_data		(vx_dram_req_data),
+  .dram_req_tag     (vx_dram_req_tag),
+  .dram_req_ready   (vx_dram_req_ready),
 
-  // DRAM Rsp  
-  .dram_rsp_valid 		(vx_dram_rsp_valid),
-  .dram_rsp_data	    (vx_dram_rsp_data),
-  .dram_rsp_tag       (vx_dram_rsp_tag),
-  .dram_rsp_ready     (vx_dram_rsp_ready),
+  // DRAM response  
+  .dram_rsp_valid 	(vx_dram_rsp_valid),
+  .dram_rsp_data	  (vx_dram_rsp_data),
+  .dram_rsp_tag     (vx_dram_rsp_tag),
+  .dram_rsp_ready   (vx_dram_rsp_ready),
 
-  // Cache Snooping Req
-  .snp_req_valid 	    (vx_snp_req_valid),
-  .snp_req_addr       (vx_snp_req_addr),
-  .snp_req_ready      (vx_snp_req_ready),
+  // Cache snooping
+  .snp_req_valid 	  (vx_snp_req_valid),
+  .snp_req_addr     (vx_snp_req_addr),
+  .snp_req_ready    (vx_snp_req_ready),
+
+  // I/O request
+  .io_req_read      (),
+  .io_req_write     (),    
+  .io_req_addr      (),
+  .io_req_data      (),
+  .io_req_byteen    (),
+  .io_req_tag       (),    
+  .io_req_ready     (0),
+
+  // I/O response
+  .io_rsp_valid     (0),
+  .io_rsp_data      (0),
+  .io_rsp_tag       (0),
+  .io_rsp_ready     (),
  
   // status
-  .busy 				    (vx_busy)
+  .busy 				    (vx_busy),
+  .ebreak           ()
 );
 
 endmodule

@@ -4,6 +4,16 @@
 
 int test = -1;
 
+#define RT_CHECK(_expr)                                         \
+   do {                                                         \
+     int _ret = _expr;                                           \
+     if (0 == _ret)                                             \
+       break;                                                   \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
+	 cleanup();			                                              \
+     exit(-1);                                                  \
+   } while (false)
+
 static void parse_args(int argc, char **argv) {
   int c;
   while ((c = getopt(argc, argv, "t:h?")) != -1) {
@@ -27,12 +37,27 @@ uint64_t shuffle(int i, uint64_t value) {
   return (value << i) | (value & ((1 << i)-1));;
 }
 
+vx_device_h device = nullptr;
+vx_buffer_h sbuf = nullptr;
+vx_buffer_h dbuf = nullptr;
+
+void cleanup() {
+  if (sbuf) {
+    vx_buf_release(sbuf);
+  }
+  if (dbuf) {
+    vx_buf_release(dbuf);
+  }
+  if (device) {
+    vx_dev_close(device);
+  }
+}
+
 int run_memcopy_test(vx_buffer_h sbuf, 
                      vx_buffer_h dbuf, 
                      uint32_t address, 
                      uint64_t value, 
                      int num_blocks) {
-  int ret;
   int errors = 0;
 
   // write sbuf data
@@ -42,15 +67,11 @@ int run_memcopy_test(vx_buffer_h sbuf,
 
   // write buffer to local memory
   std::cout << "write buffer to local memory" << std::endl;
-  ret = vx_copy_to_dev(sbuf, address, 64 * num_blocks, 0);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_copy_to_dev(sbuf, address, 64 * num_blocks, 0));
 
   // read buffer from local memory
   std::cout << "read buffer from local memory" << std::endl;
-  ret = vx_copy_from_dev(dbuf, address, 64 * num_blocks, 0);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_copy_from_dev(dbuf, address, 64 * num_blocks, 0));
 
   // verify result
   std::cout << "verify result" << std::endl;
@@ -77,7 +98,6 @@ int run_kernel_test(vx_device_h device,
                     vx_buffer_h sbuf, 
                     vx_buffer_h dbuf, 
                     const char* program) {
-  int ret;
   int errors = 0;
 
   uint64_t seed = 0x0badf00d40ff40ff;
@@ -93,43 +113,27 @@ int run_kernel_test(vx_device_h device,
 
   // write buffer to local memory
   std::cout << "write buffer to local memory" << std::endl;
-  ret = vx_copy_to_dev(sbuf, src_dev_addr, 64 * num_blocks, 0);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_copy_to_dev(sbuf, src_dev_addr, 64 * num_blocks, 0));
   
   // upload program
   std::cout << "upload program" << std::endl;  
-  ret = vx_upload_kernel_file(device, program);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_upload_kernel_file(device, program));
 
   // start device
   std::cout << "start device" << std::endl;
-  ret = vx_start(device);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_start(device));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  ret = vx_ready_wait(device, -1);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_ready_wait(device, -1));
 
   // flush the caches
   std::cout << "flush the caches" << std::endl;
-  ret = vx_flush_caches(device, dest_dev_addr, 64 * num_blocks);
-  if (ret != 0) {
-    return ret;  
-  }
+  RT_CHECK(vx_flush_caches(device, dest_dev_addr, 64 * num_blocks));
 
   // read buffer from local memory
   std::cout << "read buffer from local memory" << std::endl;
-  ret = vx_copy_from_dev(dbuf, dest_dev_addr, 64 * num_blocks, 0);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_copy_from_dev(dbuf, dest_dev_addr, 64 * num_blocks, 0));
 
   // verify result
   std::cout << "verify result" << std::endl;
@@ -152,75 +156,33 @@ int run_kernel_test(vx_device_h device,
   return 0;
 }
 
-vx_device_h device = nullptr;
-vx_buffer_h sbuf = nullptr;
-vx_buffer_h dbuf = nullptr;
-
-void cleanup() {
-  if (sbuf) {
-    vx_buf_release(sbuf);
-  }
-  if (dbuf) {
-    vx_buf_release(dbuf);
-  }
-  if (device) {
-    vx_dev_close(device);
-  }
-}
-
 int main(int argc, char *argv[]) {
-  int ret;
-
   // parse command arguments
   parse_args(argc, argv);
 
   // open device connection
   std::cout << "open device connection" << std::endl;
   vx_device_h device;
-  ret = vx_dev_open(&device);
-  if (ret != 0)
-    return ret;
+  RT_CHECK(vx_dev_open(&device));
 
   // create source buffer
   std::cout << "create source buffer" << std::endl;
-  ret = vx_alloc_shared_mem(device, 4096, &sbuf);
-  if (ret != 0) {
-    cleanup();
-    return ret;
-  }
+  RT_CHECK(vx_alloc_shared_mem(device, 4096, &sbuf));
   
   // create destination buffer
   std::cout << "create destination buffer" << std::endl;
-  ret = vx_alloc_shared_mem(device, 4096, &dbuf);
-  if (ret != 0) {
-    cleanup();
-    return ret;
-  }
+  RT_CHECK(vx_alloc_shared_mem(device, 4096, &dbuf));
 
   // run tests  
-  if (0 == test || -1 == test) {
+  /*9if (0 == test || -1 == test) {
     std::cout << "run memcopy test" << std::endl;
-
-    ret = run_memcopy_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1);
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
-
-    ret = run_memcopy_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8);
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
-  }
+    RT_CHECK(run_memcopy_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1));
+    RT_CHECK(run_memcopy_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8));
+  }*/
 
   if (1 == test || -1 == test) {
     std::cout << "run kernel test" << std::endl;
-    ret = run_kernel_test(device, sbuf, dbuf, "kernel.bin");
-    if (ret != 0) {
-      cleanup();
-      return ret;
-    }
+    RT_CHECK(run_kernel_test(device, sbuf, dbuf, "kernel.bin"));
   }
 
   // cleanup

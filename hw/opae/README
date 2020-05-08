@@ -42,6 +42,8 @@ make
 # ASE build instructions
 #
 
+source /export/fpga/bin/setup-fpga-env fpga-pac-a10
+
 # Acquire a sever node for running ASE simulations
 qsub-sim
 
@@ -51,7 +53,17 @@ vcd add -r /*/Vortex/hw/rtl/*
 run -all
 
 # compress VCD trace
-tar -zcvf vortex.vcd.tar.gz work/vortex.vcd
+tar -zcvf vortex.vcd.tar.gz ./build_ase/work/vortex.vcd
 
 # decompress VCD trace
-tar -zxvf vortex.vcd.tar.gz vortex.vcd
+tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
+
+# launch Gtkwave
+gtkwave ./build_ase/work/vortex.vcd &
+
+# test
+./run_ase.sh ../../driver/tests/basic/basic
+
+# kill process by Users
+ps -u tinebp
+kill -9 <pid>

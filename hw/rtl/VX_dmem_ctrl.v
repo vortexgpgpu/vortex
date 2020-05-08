@@ -35,8 +35,11 @@ module VX_dmem_ctrl (
         .CORE_TAG_ID_BITS(`CORE_TAG_ID_BITS)
     ) dcache_core_rsp_qual_if(), smem_core_rsp_if();
 
+    // use "case equality" to handle uninitialized address value
+    wire smem_select = ((dcache_core_req_if.core_req_addr[0][31:24] == `SHARED_MEM_TOP_ADDR) === 1'b1);
+
     VX_dcache_io_arb dcache_io_arb (
-        .io_select          (dcache_core_req_if.core_req_addr[0][31:24] == `SHARED_MEM_TOP_ADDR),
+        .io_select          (smem_select),
         .core_req_if        (dcache_core_req_if),
         .dcache_core_req_if (dcache_core_req_qual_if),
         .io_core_req_if     (smem_core_req_if),    

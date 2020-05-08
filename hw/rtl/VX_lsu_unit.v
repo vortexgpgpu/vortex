@@ -11,8 +11,8 @@ module VX_lsu_unit (
     VX_wb_if                mem_wb_if,
 
    // Dcache interface
-    VX_cache_core_rsp_if    dcache_rsp_if,
     VX_cache_core_req_if    dcache_req_if,
+    VX_cache_core_rsp_if    dcache_rsp_if,
 
     output wire             delay
 );
