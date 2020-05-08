@@ -50,12 +50,10 @@ module VX_front_end (
         .fe_inst_meta_fi    (fe_inst_meta_fi)
     );
 
-    wire freeze_fi_reg = total_freeze || icache_stage_delay;
-
     VX_f_d_reg f_i_reg (
         .clk                (clk),
         .reset              (reset),
-        .freeze             (freeze_fi_reg),
+        .freeze             (icache_stage_delay),
         .fe_inst_meta_fd    (fe_inst_meta_fi),
         .fd_inst_meta_de    (fe_inst_meta_fi2)
     );

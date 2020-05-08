@@ -100,7 +100,9 @@ module VX_cache_dram_req_arb #(
     wire dfqq_pop  = !dwb_valid && dfqq_req && dram_req_ready; // If no dwb, and dfqq has valids, then pop
     wire dfqq_push = (| per_bank_dram_fill_req_valid);
 
-    VX_cache_dfq_queue cache_dfq_queue(
+    VX_cache_dfq_queue #(
+
+    ) cache_dfq_queue (
         .clk                            (clk),
         .reset                          (reset),
         .dfqq_push                      (dfqq_push),
@@ -128,9 +130,10 @@ module VX_cache_dram_req_arb #(
     assign per_bank_dram_wb_queue_pop = dram_req_ready ? (use_wb_valid & ((1 << dwb_bank))) : 0;
 
     wire   dram_req_valid  = dwb_valid || dfqq_req || pref_pop;
+
     assign dram_req_read   = ((dfqq_req && !dwb_valid) || pref_pop) && dram_req_valid;
     assign dram_req_write  = dwb_valid && dram_req_valid;    
     assign dram_req_addr   = dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : (dfqq_req ? dfqq_req_addr : pref_addr);
-    assign {dram_req_data} = dwb_valid ? {per_bank_dram_wb_req_data[dwb_bank] }: 0;
+    assign {dram_req_data} = dwb_valid ? per_bank_dram_wb_req_data[dwb_bank] : 0;
 
 endmodule
