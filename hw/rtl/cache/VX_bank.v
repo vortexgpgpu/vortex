@@ -2,54 +2,54 @@
 `include "VX_define.vh"
 module VX_bank #(
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1024, 
+    parameter CACHE_SIZE                    = 0, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 16, 
+    parameter BANK_LINE_SIZE                = 0, 
     // Number of banks {1, 2, 4, 8,...}
-    parameter NUM_BANKS                     = 8, 
+    parameter NUM_BANKS                     = 0, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 4, 
+    parameter WORD_SIZE                     = 0, 
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 2, 
+    parameter NUM_REQUESTS                  = 0, 
     // Number of cycles to complete i 1 (read from memory)
-    parameter STAGE_1_CYCLES                = 2,
+    parameter STAGE_1_CYCLES                = 0,
 
     // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
     // Core Request Queue Size
-    parameter REQQ_SIZE                     = 8, 
+    parameter REQQ_SIZE                     = 0, 
     // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 8, 
+    parameter MRVQ_SIZE                     = 0, 
     // Dram Fill Rsp Queue Size
-    parameter DFPQ_SIZE                     = 2, 
+    parameter DFPQ_SIZE                     = 0, 
     // Snoop Req Queue
-    parameter SNRQ_SIZE                     = 8, 
+    parameter SNRQ_SIZE                     = 0, 
 
     // Queues for writebacks Knobs {1, 2, 4, 8, ...}
     // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 8, 
+    parameter CWBQ_SIZE                     = 0, 
     // Dram Writeback Queue Size
-    parameter DWBQ_SIZE                     = 4, 
+    parameter DWBQ_SIZE                     = 0, 
     // Dram Fill Req Queue Size
-    parameter DFQQ_SIZE                     = 8, 
+    parameter DFQQ_SIZE                     = 0, 
     // Lower Level Cache Hit Queue Size
-    parameter LLVQ_SIZE                     = 16, 
+    parameter LLVQ_SIZE                     = 0, 
     // Fill Forward SNP Queue
-    parameter FFSQ_SIZE                     = 8,
+    parameter FFSQ_SIZE                     = 0,
 
     // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 16,
+    parameter FILL_INVALIDAOR_SIZE          = 0,
 
     // Enable cache writeable
-     parameter WRITE_ENABLE                 = 1,
+     parameter WRITE_ENABLE                 = 0,
 
      // Enable dram update
-     parameter DRAM_ENABLE                  = 1,
+     parameter DRAM_ENABLE                  = 0,
 
     // Enable snoop forwarding
     parameter SNOOP_FORWARDING              = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 1,
+    parameter CORE_TAG_WIDTH                = 0,
 
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS              = 0
@@ -172,21 +172,9 @@ module VX_bank #(
     assign reqq_push = core_req_ready && (| core_req_valids);
 
     VX_cache_req_queue #(
-        .CACHE_SIZE             (CACHE_SIZE),
-        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-        .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
         .NUM_REQUESTS           (NUM_REQUESTS),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
         .REQQ_SIZE              (REQQ_SIZE),
-        .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
         .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
     ) req_queue (
@@ -363,17 +351,7 @@ module VX_bank #(
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
-        .NUM_REQUESTS           (NUM_REQUESTS),
         .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .REQQ_SIZE              (REQQ_SIZE),
-        .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
         .DRAM_ENABLE            (DRAM_ENABLE),
         .WRITE_ENABLE           (WRITE_ENABLE)
      ) tag_data_access (
@@ -458,21 +436,11 @@ module VX_bank #(
     assign {miss_add_tag, miss_add_mem_read, miss_add_mem_write, miss_add_tid} = inst_meta_st2;
 
     VX_cache_miss_resrv #(
-        .CACHE_SIZE             (CACHE_SIZE),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
         .NUM_REQUESTS           (NUM_REQUESTS),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .REQQ_SIZE              (REQQ_SIZE),
         .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
         .CORE_TAG_WIDTH         (CORE_TAG_WIDTH)
     ) cache_miss_resrv (
         .clk                     (clk),
@@ -568,20 +536,8 @@ module VX_bank #(
     wire [`LINE_ADDR_WIDTH-1:0] fill_invalidator_addr = addr_st2;
 
     VX_fill_invalidator #(
-        .CACHE_SIZE             (CACHE_SIZE),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
-        .WORD_SIZE              (WORD_SIZE),
-        .NUM_REQUESTS           (NUM_REQUESTS),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .REQQ_SIZE              (REQQ_SIZE),
-        .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
         .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE)
     ) fill_invalidator (
         .clk               (clk),

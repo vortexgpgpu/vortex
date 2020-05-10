@@ -8,8 +8,8 @@ double sc_time_stamp() {
   return time_stamp;
 }
 
-Simulator::Simulator(RAM *ram) {
-  ram_ = ram;
+Simulator::Simulator() {  
+  ram_ = nullptr;
   vortex_ = new VVortex_Socket();
 
 #ifdef VCD_OUTPUT
@@ -27,12 +27,20 @@ Simulator::~Simulator() {
   delete vortex_;
 }
 
+void Simulator::attach_ram(RAM* ram) {
+  ram_ = ram;
+  dram_rsp_vec_.clear();
+}
+
 void Simulator::print_stats(std::ostream& out) {
   out << std::left;
   out << std::setw(24) << "# of total cycles:" << std::dec << time_stamp/2 << std::endl;
 }
 
 void Simulator::dbus_driver() {
+  if (ram_ == nullptr)
+    return;
+
   // handle DRAM response cycle
   int dequeue_index = -1;
   for (int i = 0; i < dram_rsp_vec_.size(); i++) {
@@ -149,9 +157,6 @@ bool Simulator::is_busy() {
 }
 
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
-  // send snoop requests to the caches
-  printf("[sim] total cycles: %ld\n", time_stamp/2);
-  
   // align address to LLC block boundaries
   auto aligned_addr_start = mem_addr / GLOBAL_BLOCK_SIZE;
   auto aligned_addr_end = (mem_addr + size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE;

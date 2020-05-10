@@ -2,42 +2,13 @@
 
 module VX_tag_data_structure #(
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1024, 
+    parameter CACHE_SIZE                    = 0, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 16, 
+    parameter BANK_LINE_SIZE                = 0, 
     // Number of banks {1, 2, 4, 8,...} 
-    parameter NUM_BANKS                     = 8, 
+    parameter NUM_BANKS                     = 0, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 4, 
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 2, 
-    // Number of cycles to complete stage 1 (read from memory)
-    parameter STAGE_1_CYCLES                = 2, 
-    // Function ID, {Dcache=0, Icache=1, Sharedmemory=2}
-    parameter FUNC_ID                       = 0,
-    
-    // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-    // Core Request Queue Size
-    parameter REQQ_SIZE                     = 8, 
-    // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 8, 
-    // Dram Fill Rsp Queue Size
-    parameter DFPQ_SIZE                     = 2, 
-    // Snoop Req Queue
-    parameter SNRQ_SIZE                     = 8, 
-
-    // Queues for writebacks Knobs {1, 2, 4, 8, ...}
-    // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 8, 
-    // Dram Writeback Queue Size
-    parameter DWBQ_SIZE                     = 4, 
-    // Dram Fill Req Queue Size
-    parameter DFQQ_SIZE                     = 8, 
-    // Lower Level Cache Hit Queue Size
-    parameter LLVQ_SIZE                     = 16, 
-
-    // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 16
+    parameter WORD_SIZE                     = 0
 ) (
     input  wire                             clk,
     input  wire                             reset,

@@ -71,7 +71,8 @@ int main(int argc, char **argv)
 		RAM ram;
 		loadHexImpl(s.c_str(), &ram);
 
-		Simulator simulator(&ram);
+		Simulator simulator;
+		simulator.attach_ram(&ram);
 		bool curr = simulator.run();
 
 		if (curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
@@ -106,7 +107,8 @@ int main(int argc, char **argv)
   RAM ram;
 	loadHexImpl(testing, &ram);
 
-	Simulator simulator(&ram);
+	Simulator simulator;
+	simulator.attach_ram(&ram);
 	bool curr = simulator.run();
 
 	if (curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;

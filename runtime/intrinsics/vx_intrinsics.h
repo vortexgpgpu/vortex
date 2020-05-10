@@ -8,37 +8,49 @@ extern "C" {
 #endif
 
 // Spawn warps
-void vx_wspawn(unsigned numWarps, unsigned PC_spawn);
+void vx_wspawn(int numWarps, int PC_spawn);
 
 // Set thread mask
-void vx_tmc(unsigned numThreads);
+void vx_tmc(int numThreads);
 
 // Warp Barrier
-void vx_barrier(unsigned barriedID, unsigned numWarps);
+void vx_barrier(int barriedID, int numWarps);
 
 // Split on a predicate
-void vx_split(unsigned predicate);
+void vx_split(int predicate);
 
 // Join
-void vx_join(void);
+void vx_join();
 
-// Return the warp thread index
-unsigned vx_thread_id(void);
+// Return the warp's unique thread id 
+int vx_thread_id();
 
-// Return the core warp index
-unsigned vx_warp_id(void);
+// Return the core's unique warp id
+int vx_warp_id();
 
-// Return processsor unique thread id
-unsigned vx_thread_gid(void);
+// Return processsor unique core id
+int vx_core_id();
 
-// Return processsor unique warp id
-unsigned vx_warp_gid(void);
+// Return processsor global thread id
+int vx_thread_gid();
 
-// Return number cycles
-unsigned vx_num_cycles(void);
+// Return processsor global warp id
+int vx_warp_gid();
 
-// Return number instructions
-unsigned vx_num_instrs(void);
+// Return the number of threads in a warp
+int vx_num_threads();
+
+// Return the number of warps in a core
+int vx_num_warps();
+
+// Return the number of cores in the processsor
+int vx_num_cores();
+
+// Return the number of cycles
+int vx_num_cycles();
+
+// Return the number of instructions
+int vx_num_instrs();
 
 #define __if(b) vx_split(b); \
                 if (b) 

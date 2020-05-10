@@ -140,21 +140,10 @@ module VX_cache #(
     assign dram_rsp_ready = (| per_bank_dram_fill_rsp_ready);    
 
     VX_cache_core_req_bank_sel #(
-        .CACHE_SIZE              (CACHE_SIZE),
         .BANK_LINE_SIZE          (BANK_LINE_SIZE),
         .NUM_BANKS               (NUM_BANKS),
         .WORD_SIZE               (WORD_SIZE),
-        .NUM_REQUESTS            (NUM_REQUESTS),
-        .STAGE_1_CYCLES          (STAGE_1_CYCLES),
-        .REQQ_SIZE               (REQQ_SIZE),
-        .MRVQ_SIZE               (MRVQ_SIZE),
-        .DFPQ_SIZE               (DFPQ_SIZE),
-        .SNRQ_SIZE               (SNRQ_SIZE),
-        .CWBQ_SIZE               (CWBQ_SIZE),
-        .DWBQ_SIZE               (DWBQ_SIZE),
-        .DFQQ_SIZE               (DFQQ_SIZE),
-        .LLVQ_SIZE               (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE    (FILL_INVALIDAOR_SIZE)
+        .NUM_REQUESTS            (NUM_REQUESTS)
     ) cache_core_req_bank_sell (
         .core_req_valid  (core_req_valid),
         .core_req_addr   (core_req_addr),
@@ -320,21 +309,9 @@ module VX_cache #(
     endgenerate   
 
     VX_cache_core_rsp_merge #(
-        .CACHE_SIZE             (CACHE_SIZE),
-        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
         .NUM_REQUESTS           (NUM_REQUESTS),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .REQQ_SIZE              (REQQ_SIZE),
-        .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
         .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
     ) cache_core_rsp_merge (
@@ -351,21 +328,10 @@ module VX_cache #(
     );
 
     VX_cache_dram_req_arb #(
-        .CACHE_SIZE             (CACHE_SIZE),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
-        .NUM_REQUESTS           (NUM_REQUESTS),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .REQQ_SIZE              (REQQ_SIZE),
-        .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
         .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
         .PRFQ_SIZE              (PRFQ_SIZE),
         .PRFQ_STRIDE            (PRFQ_STRIDE)
     ) cache_dram_req_arb (

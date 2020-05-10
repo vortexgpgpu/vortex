@@ -1,6 +1,8 @@
 `include "VX_define.vh"
 
-module VX_front_end (
+module VX_front_end #(
+    parameter CORE_ID = 0
+) (
     input wire                clk,
     input wire                reset,
 
@@ -58,7 +60,9 @@ module VX_front_end (
         .fd_inst_meta_de    (fe_inst_meta_fi2)
     );
 
-    VX_icache_stage icache_stage (
+    VX_icache_stage #(
+        .CORE_ID(CORE_ID)
+    ) icache_stage (
         .clk                (clk),
         .reset              (reset),
         .total_freeze       (total_freeze),

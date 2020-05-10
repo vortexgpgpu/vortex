@@ -1,6 +1,8 @@
 `include "VX_define.vh"
 
-module VX_lsu_unit (
+module VX_lsu_unit #(
+    parameter CORE_ID = 0
+) (
     input wire              clk,
     input wire              reset,
 
@@ -62,10 +64,10 @@ module VX_lsu_unit (
 
     /*always_comb begin
         if (1'($time & 1) && dcache_req_if.core_req_ready && (| dcache_req_if.core_req_valid)) begin
-            $display("*** %t: D$ req: valid=%b, addr=%0h, r=%d, w=%d, pc=%0h, rd=%d, warp=%d, data=%0h", $time, use_valid, use_address, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, use_store_data);
+            $display("*** %t: D%01d$ req: valid=%b, addr=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, use_valid, use_address, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, use_store_data);
         end
         if (1'($time & 1) && dcache_rsp_if.core_rsp_ready && (| dcache_rsp_if.core_rsp_valid)) begin
-            $display("*** %t: D$ rsp: valid=%b, pc=%0h, rd=%d, warp=%d, data=%0h", $time, mem_wb_if.valid, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
+            $display("*** %t: D%01d$ rsp: valid=%b, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end*/
     

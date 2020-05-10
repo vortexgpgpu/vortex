@@ -1,7 +1,7 @@
 `include "VX_cache_config.vh"
 
 module VX_snp_fwd_arb #(
-    parameter NUM_BANKS = 1,
+    parameter NUM_BANKS      = 1,
     parameter BANK_LINE_SIZE = 1
 ) (
     input  wire [NUM_BANKS-1:0]         per_bank_snp_fwd_valid,
