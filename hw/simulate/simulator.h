@@ -29,7 +29,7 @@ typedef struct {
 class Simulator {
 public:
   
-  Simulator(RAM *ram);
+  Simulator();
   virtual ~Simulator();
 
   bool is_busy();  
@@ -37,6 +37,9 @@ public:
   void step();
   void wait(uint32_t cycles);
   void flush_caches(uint32_t mem_addr, uint32_t size);  
+
+  void attach_ram(RAM* ram);
+
   bool run();  
   void print_stats(std::ostream& out);
 

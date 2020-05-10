@@ -178,7 +178,9 @@ module Vortex #(
     assign dcache_snp_req_if.snp_req_addr  = snp_req_addr;
     assign snp_req_ready                   = dcache_snp_req_if.snp_req_ready;
 
-    VX_front_end front_end (
+    VX_front_end #(
+        .CORE_ID(CORE_ID)
+    ) front_end (
         .clk            (clk),
         .reset          (reset),
         .warp_ctl_if    (warp_ctl_if),

@@ -1,12 +1,12 @@
 `include "VX_cache_config.vh"
 
 module VX_prefetcher #(
-    parameter PRFQ_SIZE               = 64,
-    parameter PRFQ_STRIDE             = 2,
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE          = 16,
+    parameter BANK_LINE_SIZE          = 0,
     // Size of a word in bytes
-    parameter WORD_SIZE               = 4
+    parameter WORD_SIZE               = 0,    
+    parameter PRFQ_SIZE               = 0,
+    parameter PRFQ_STRIDE             = 0
 ) (
     input wire                          clk,
     input wire                          reset,

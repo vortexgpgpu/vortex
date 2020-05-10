@@ -60,9 +60,7 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : is_done_(false)
-        , simulator_(&ram_) {
-        simulator_.reset();
+        : is_done_(false) {
         thread_ = new std::thread(__thread_proc__, this);        
         mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
     } 
@@ -95,7 +93,7 @@ public:
 
         /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
         for (int i = 0; i < size; i += 4) {
-            printf("mem-write: 0x%x <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
+            printf("mem-write: 0x%x <- 0x%x\n", uint32_t(dest_addr + i), *(uint32_t*)((uint8_t*)src + src_offset + i));
         }*/
         
         ram_.write(dest_addr, asize, (uint8_t*)src + src_offset);
@@ -111,7 +109,7 @@ public:
         
         /*printf("VXDRV: download %d bytes from 0x%x\n", size, src_addr);
         for (int i = 0; i < size; i += 4) {
-            printf("mem-read: 0x%x -> 0x%x\n", src_addr + i, *(uint32_t*)((uint8_t*)dest + dest_offset + i));
+            printf("mem-read: 0x%x -> 0x%x\n", uint32_t(src_addr + i), *(uint32_t*)((uint8_t*)dest + dest_offset + i));
         }*/
         
         return 0;
@@ -120,7 +118,9 @@ public:
     int flush_caches(size_t dev_maddr, size_t size) {
         
         mutex_.lock();     
+        simulator_.attach_ram(&ram_);
         simulator_.flush_caches(dev_maddr, size);
+        simulator_.attach_ram(nullptr);
         mutex_.unlock();
 
         return 0;
@@ -130,7 +130,8 @@ public:
 
         mutex_.lock();     
         simulator_.reset();
-        mutex_.unlock();
+        simulator_.attach_ram(&ram_);
+        mutex_.unlock();       
 
         return 0;
     }
@@ -142,8 +143,14 @@ public:
             bool is_busy = simulator_.is_busy();
             mutex_.unlock();
 
-            if (!is_busy || 0 == timeout_sec--)
+            if (!is_busy || 0 == timeout_sec--) {
+                if (!is_busy) {
+                    mutex_.lock();
+                    simulator_.attach_ram(nullptr);
+                    mutex_.unlock();
+                }
                 break;
+            }
 
             std::this_thread::sleep_for(std::chrono::seconds(1));            
         }

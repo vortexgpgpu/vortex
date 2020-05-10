@@ -2,46 +2,22 @@
 
 module VX_tag_data_access #(
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1024, 
+    parameter CACHE_SIZE                    = 0, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 16, 
+    parameter BANK_LINE_SIZE                = 0, 
     // Number of banks {1, 2, 4, 8,...}
-    parameter NUM_BANKS                     = 8, 
+    parameter NUM_BANKS                     = 0, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 4, 
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 2, 
+    parameter WORD_SIZE                     = 0, 
+
     // Number of cycles to complete stage 1 (read from memory)
-    parameter STAGE_1_CYCLES                = 2, 
-
-    // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-    // Core Request Queue Size
-    parameter REQQ_SIZE                     = 8, 
-    // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 8, 
-    // Dram Fill Rsp Queue Size
-    parameter DFPQ_SIZE                     = 2, 
-    // Snoop Req Queue
-    parameter SNRQ_SIZE                     = 8, 
-
-    // Queues for writebacks Knobs {1, 2, 4, 8, ...}
-    // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 8, 
-    // Dram Writeback Queue Size
-    parameter DWBQ_SIZE                     = 4, 
-    // Dram Fill Req Queue Size
-    parameter DFQQ_SIZE                     = 8, 
-    // Lower Level Cache Hit Queue Size
-    parameter LLVQ_SIZE                     = 16, 
-
-     // Fill Invalidator Size {Fill invalidator must be active}
-     parameter FILL_INVALIDAOR_SIZE         = 16,
+    parameter STAGE_1_CYCLES                = 0, 
 
      // Enable cache writeable
-     parameter WRITE_ENABLE                 = 1,
+     parameter WRITE_ENABLE                 = 0,
 
      // Enable dram update
-     parameter DRAM_ENABLE                  = 1
+     parameter DRAM_ENABLE                  = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -100,18 +76,7 @@ module VX_tag_data_access #(
         .CACHE_SIZE             (CACHE_SIZE),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
-        .WORD_SIZE              (WORD_SIZE),
-        .NUM_REQUESTS           (NUM_REQUESTS),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .REQQ_SIZE              (REQQ_SIZE),
-        .MRVQ_SIZE              (MRVQ_SIZE),
-        .DFPQ_SIZE              (DFPQ_SIZE),
-        .SNRQ_SIZE              (SNRQ_SIZE),
-        .CWBQ_SIZE              (CWBQ_SIZE),
-        .DWBQ_SIZE              (DWBQ_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .LLVQ_SIZE              (LLVQ_SIZE),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE)
+        .WORD_SIZE              (WORD_SIZE)
     ) tag_data_structure (
         .clk         (clk),
         .reset       (reset),

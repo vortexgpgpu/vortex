@@ -5,7 +5,7 @@
 .type   _start, @function
 _start:
   la a1, vx_set_sp
-  li a0, NUM_WARPS    # activate all warps
+  csrr a0, CSR_NW  # get num warps
   .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
   jal vx_set_sp
   li a0, 1
@@ -32,12 +32,11 @@ _exit:
   li a0, 0
   .word 0x0005006b    # disable all threads
 
-
 .section .text
 .type vx_set_sp, @function
 .global vx_set_sp
 vx_set_sp:
-  li a0, NUM_THREADS
+  csrr a0, CSR_NT     # get num threads
   .word 0x0005006b    # activate all threads
   
   .option push
@@ -46,10 +45,10 @@ vx_set_sp:
     addi  gp, gp, %pcrel_lo(1b)
   .option pop
 
-  csrr a1, CSR_GTID    # get gtid
-  slli a1, a1, 10      # multiply tid by 1024
-  csrr a2, CSR_LTID    # get tid  
-  slli a2, a2, 2       # multiply tid by 4
+  csrr a1, CSR_GTID    # get global thread id
+  slli a1, a1, 10      # multiply by 1024
+  csrr a2, CSR_LTID    # get local thread id  
+  slli a2, a2, 2       # multiply by 4
   lui  sp, STACK_BASE_ADDR # load base sp
   sub  sp, sp, a1      # sub thread block
   add  sp, sp, a2      # reduce addr collision for perf

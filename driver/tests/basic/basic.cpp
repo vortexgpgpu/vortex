@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <vortex.h>
+#include "common.h"
 
 int test = -1;
 
@@ -61,7 +62,7 @@ int run_memcopy_test(vx_buffer_h sbuf,
   int errors = 0;
 
   // write sbuf data
-  for (int i = 0; i < 8 * num_blocks; ++i) {
+  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
     ((uint64_t*)vx_host_ptr(sbuf))[i] = shuffle(i, value);
   }
 
@@ -75,12 +76,12 @@ int run_memcopy_test(vx_buffer_h sbuf,
 
   // verify result
   std::cout << "verify result" << std::endl;
-  for (int i = 0; i < 8 * num_blocks; ++i) {
+  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
     auto curr = ((uint64_t*)vx_host_ptr(dbuf))[i];
     auto ref = shuffle(i, value);
     if (curr != ref) {
-      std::cout << "error @ " << std::hex << (address + 64 * i)
-                << ": actual " << curr << ", expected " << ref << std::endl;
+      std::cout << "error at 0x" << std::hex << (address + 8 * i)
+                << ": actual 0x" << curr << ", expected 0x" << ref << std::endl;
       ++errors;
     }
   } 
@@ -101,13 +102,13 @@ int run_kernel_test(vx_device_h device,
   int errors = 0;
 
   uint64_t seed = 0x0badf00d40ff40ff;
-  int num_blocks = 4;
-
-  unsigned src_dev_addr = 0x10000000;
-  unsigned dest_dev_addr = 0x20000000;
+  
+  int src_dev_addr  = DEV_MEM_SRC_ADDR;
+  int dest_dev_addr = DEV_MEM_DST_ADDR;
+  int num_blocks    = NUM_BLOCKS;
 
   // write sbuf data
-  for (int i = 0; i < 8 * num_blocks; ++i) {
+  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
     ((uint64_t*)vx_host_ptr(sbuf))[i] = shuffle(i, seed);
   }
 
@@ -137,12 +138,12 @@ int run_kernel_test(vx_device_h device,
 
   // verify result
   std::cout << "verify result" << std::endl;
-  for (int i = 0; i < 8 * num_blocks; ++i) {
+  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
     auto curr = ((uint64_t*)vx_host_ptr(dbuf))[i];
     auto ref = shuffle(i, seed);
     if (curr != ref) {
-      std::cout << "error @ " << std::hex << (dest_dev_addr + 64 * i)
-                << ": actual " << curr << ", expected " << ref << std::endl;
+      std::cout << "error at 0x" << std::hex << (dest_dev_addr + 8 * i)
+                << ": actual 0x" << curr << ", expected 0x" << ref << std::endl;
       ++errors;
     }
   } 
@@ -174,10 +175,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_alloc_shared_mem(device, 4096, &dbuf));
 
   // run tests  
-  /*9if (0 == test || -1 == test) {
+  /*if (0 == test || -1 == test) {
     std::cout << "run memcopy test" << std::endl;
-    RT_CHECK(run_memcopy_test(sbuf, dbuf, 0x10000000, 0x0badf00d00ff00ff, 1));
-    RT_CHECK(run_memcopy_test(sbuf, dbuf, 0x20000000, 0x0badf00d40ff40ff, 8));
+    RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_SRC_ADDR, 0x0badf00d00ff00ff, 1));
+    RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_DST_ADDR, 0x0badf00d40ff40ff, 8));
   }*/
 
   if (1 == test || -1 == test) {

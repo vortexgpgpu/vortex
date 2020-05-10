@@ -57,8 +57,12 @@
 
 `define CSR_LTID    12'h020
 `define CSR_LWID    12'h021
-`define CSR_GWID    12'h022
-`define CSR_GTID    12'h023
+`define CSR_GTID    12'h022
+`define CSR_GWID    12'h023
+`define CSR_GCID    12'h024
+`define CSR_NT      12'h025
+`define CSR_NW      12'h026
+`define CSR_NC      12'h027
 
 `define CSR_CYCLL   12'hC00
 `define CSR_CYCLH   12'hC80

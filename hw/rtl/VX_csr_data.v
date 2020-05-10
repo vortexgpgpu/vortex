@@ -46,6 +46,10 @@ module VX_csr_data #(
             `CSR_LWID  : read_data = 32'(warp_num);
             `CSR_GTID  ,
             `CSR_GWID  : read_data = CORE_ID * `NUM_WARPS + 32'(warp_num);
+            `CSR_GCID  : read_data = CORE_ID;
+            `CSR_NT    : read_data = `NUM_THREADS;
+            `CSR_NW    : read_data = `NUM_WARPS;
+            `CSR_NC    : read_data = `NUM_CORES * `NUM_CLUSTERS;
             `CSR_CYCLL : read_data = num_cycles[31:0];
             `CSR_CYCLH : read_data = num_cycles[63:32];
             `CSR_INSTL : read_data = num_instrs[31:0];

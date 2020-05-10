@@ -35,26 +35,50 @@ vx_join:
 .type vx_warp_id, @function
 .global vx_warp_id
 vx_warp_id:
-	csrr a0, CSR_LWID # read warp index
+	csrr a0, CSR_LWID
 	ret
 
 .type vx_warp_gid, @function
 .global vx_warp_gid
 vx_warp_gid:
-	csrr a0, CSR_GWID # read warp index
+	csrr a0, CSR_GWID
 	ret
 
 .type vx_thread_id, @function
 .global vx_thread_id
 vx_thread_id:
-	csrr a0, CSR_LTID # read thread index
+	csrr a0, CSR_LTID
 	ret
 
 .type vx_thread_gid, @function
 .global vx_thread_gid
 vx_thread_gid:
-	csrr a0, CSR_GTID # read thread index
+	csrr a0, CSR_GTID
 	ret
+
+.type vx_core_id, @function
+.global vx_core_id
+vx_core_id:
+	csrr a0, CSR_GCID
+	ret
+
+.type vx_num_threads, @function
+.global vx_num_threads
+vx_num_threads:
+    csrr a0, CSR_NT
+    ret
+
+.type vx_num_warps, @function
+.global vx_num_warps
+vx_num_warps:
+    csrr a0, CSR_NW
+    ret
+
+.type vx_num_cores, @function
+.global vx_num_cores
+vx_num_cores:
+    csrr a0, CSR_NC
+    ret
 	
 .type vx_num_cycles, @function
 .global vx_num_cycles

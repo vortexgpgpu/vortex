@@ -73,7 +73,9 @@ module VX_back_end #(
 
     assign ebreak = exec_unit_req_if.is_etype && (| exec_unit_req_if.valid);
 
-    VX_lsu_unit lsu_unit (
+    VX_lsu_unit #(
+        .CORE_ID(CORE_ID)
+    ) lsu_unit (
         .clk            (clk),
         .reset          (reset),
         .lsu_req_if     (lsu_req_if),

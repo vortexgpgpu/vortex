@@ -6,6 +6,10 @@ VF += --language 1800-2009 --assert -Wall -Wpedantic
 
 VF += -exe $(SRCS) $(INCLUDE)
 
+# Use 64 bytes DRAM blocks
+CF += -DGLOBAL_BLOCK_SIZE=64
+VF += -DGLOBAL_BLOCK_SIZE=64
+
 MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
 #MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
