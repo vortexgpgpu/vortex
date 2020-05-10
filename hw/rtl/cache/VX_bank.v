@@ -82,14 +82,14 @@ module VX_bank #(
 
     // Dram Fill Response
     input  wire                                   dram_fill_rsp_valid,    
-    input  wire [`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] dram_fill_rsp_data,
+    input  wire [`BANK_LINE_WIDTH-1:0]            dram_fill_rsp_data,
     input  wire [`LINE_ADDR_WIDTH-1:0]            dram_fill_rsp_addr,
     output wire                                   dram_fill_rsp_ready,
 
     // Dram WB Requests    
     output wire                                   dram_wb_req_valid,
     output wire [`LINE_ADDR_WIDTH-1:0]            dram_wb_req_addr,
-    output wire [`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] dram_wb_req_data,
+    output wire [`BANK_LINE_WIDTH-1:0]            dram_wb_req_data,
     input  wire                                   dram_wb_req_pop,
 
     // Snp Request
@@ -121,7 +121,7 @@ module VX_bank #(
     assign snrq_valid_st0 = !snrq_empty;
     
     VX_generic_queue #(
-        .DATAW($bits(snp_req_addr)), 
+        .DATAW(`LINE_ADDR_WIDTH), 
         .SIZE(SNRQ_SIZE)
     ) snr_queue (
         .clk     (clk),
@@ -138,12 +138,12 @@ module VX_bank #(
     wire                      dfpq_empty;
     wire                      dfpq_full;
     wire [`LINE_ADDR_WIDTH-1:0] dfpq_addr_st0;
-    wire [`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] dfpq_filldata_st0;
+    wire [`BANK_LINE_WIDTH-1:0] dfpq_filldata_st0;
 
     assign dram_fill_rsp_ready = !dfpq_full;
 
     VX_generic_queue #(
-        .DATAW($bits(dram_fill_rsp_addr) + $bits(dram_fill_rsp_data)), 
+        .DATAW(`LINE_ADDR_WIDTH + $bits(dram_fill_rsp_data)), 
         .SIZE(DFPQ_SIZE)
     ) dfp_queue (
         .clk     (clk),
@@ -259,7 +259,7 @@ module VX_bank #(
     wire [`WORD_SELECT_ADDR_END:0]        qual_wsel_st0;
 
     wire [`WORD_WIDTH-1:0]                qual_writeword_st0;
-    wire [`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] qual_writedata_st0;
+    wire [`BANK_LINE_WIDTH-1:0]           qual_writedata_st0;
     wire [`REQ_INST_META_WIDTH-1:0]       qual_inst_meta_st0;
     wire                                  qual_going_to_write_st0;
     wire                                  qual_is_snp;
@@ -269,7 +269,7 @@ module VX_bank #(
     wire [`WORD_SELECT_ADDR_END:0]        wsel_st1          [STAGE_1_CYCLES-1:0];
     wire [`WORD_WIDTH-1:0]                writeword_st1     [STAGE_1_CYCLES-1:0];
     wire [`REQ_INST_META_WIDTH-1:0]       inst_meta_st1     [STAGE_1_CYCLES-1:0];    
-    wire [`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] writedata_st1[STAGE_1_CYCLES-1:0];
+    wire [`BANK_LINE_WIDTH-1:0]           writedata_st1     [STAGE_1_CYCLES-1:0];
     wire                                  is_snp_st1        [STAGE_1_CYCLES-1:0];
 
     assign qual_is_fill_st0 = dfpq_pop;
@@ -305,7 +305,7 @@ module VX_bank #(
                                 0;
 
     VX_generic_register #(
-        .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + (`BANK_LINE_WORDS*`WORD_WIDTH))
+        .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
     ) s0_1_c0 (
         .clk   (clk),
         .reset (reset),
@@ -318,7 +318,7 @@ module VX_bank #(
     genvar i;
     for (i = 1; i < STAGE_1_CYCLES; i = i + 1) begin
         VX_generic_register #(
-            .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + (`BANK_LINE_WORDS*`WORD_WIDTH))
+            .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
         ) s0_1_cc (
             .clk  (clk),
             .reset(reset),
@@ -329,19 +329,19 @@ module VX_bank #(
         );
     end
 
-    wire[`WORD_WIDTH-1:0]                  readword_st1e;
-    wire[`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] readdata_st1e;
-    wire[`TAG_SELECT_BITS-1:0]             readtag_st1e;
-    wire                                   miss_st1e;
-    wire                                   dirty_st1e;
+    wire[`WORD_WIDTH-1:0]       readword_st1e;
+    wire[`BANK_LINE_WIDTH-1:0]  readdata_st1e;
+    wire[`TAG_SELECT_BITS-1:0]  readtag_st1e;
+    wire                        miss_st1e;
+    wire                        dirty_st1e;
 `DEBUG_BEGIN
-    wire [CORE_TAG_WIDTH-1:0]              tag_st1e;
-    wire [`REQS_BITS-1:0]                  tid_st1e;
+    wire [CORE_TAG_WIDTH-1:0]   tag_st1e;
+    wire [`REQS_BITS-1:0]       tid_st1e;
 `DEBUG_END
-    wire [`BYTE_EN_BITS-1:0]               mem_read_st1e;  
-    wire [`BYTE_EN_BITS-1:0]               mem_write_st1e;    
-    wire                                   fill_saw_dirty_st1e;
-    wire                                   is_snp_st1e;
+    wire [`BYTE_EN_BITS-1:0]    mem_read_st1e;  
+    wire [`BYTE_EN_BITS-1:0]    mem_write_st1e;    
+    wire                        fill_saw_dirty_st1e;
+    wire                        is_snp_st1e;
 
     assign is_snp_st1e = is_snp_st1[STAGE_1_CYCLES-1];
     assign {tag_st1e, mem_read_st1e, mem_write_st1e, tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
@@ -391,7 +391,7 @@ module VX_bank #(
     wire [`BASE_ADDR_BITS-1:0]      wsel_st2;
     wire [`WORD_WIDTH-1:0]          writeword_st2;
     wire [`WORD_WIDTH-1:0]          readword_st2;
-    wire [`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] readdata_st2;
+    wire [`BANK_LINE_WIDTH-1:0]     readdata_st2;
     wire                            miss_st2;
     wire                            dirty_st2;
     wire [`REQ_INST_META_WIDTH-1:0] inst_meta_st2;
@@ -400,7 +400,7 @@ module VX_bank #(
     wire                            is_snp_st2;
 
     VX_generic_register #(
-        .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `WORD_WIDTH + (`BANK_LINE_WORDS * `WORD_WIDTH) + `TAG_SELECT_BITS + 1 + 1 + `REQ_INST_META_WIDTH)
+        .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + `REQ_INST_META_WIDTH)
     ) st_1e_2 (
         .clk  (clk),
         .reset(reset),
@@ -522,7 +522,7 @@ module VX_bank #(
     wire[`LINE_ADDR_WIDTH-1:0] dwbq_req_addr;
     wire       dwbq_empty;
 
-    wire[`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] dwbq_req_data;
+    wire[`BANK_LINE_WIDTH-1:0] dwbq_req_data;
 
     if (SNOOP_FORWARDING) begin
         assign dwbq_req_data = (should_flush && dwbq_push) ? writeword_st2 : readdata_st2;
@@ -556,7 +556,7 @@ module VX_bank #(
     assign dram_wb_req_valid = !dwbq_empty;
 
     VX_generic_queue #(
-        .DATAW(`LINE_ADDR_WIDTH + (`BANK_LINE_WORDS * `WORD_WIDTH)), 
+        .DATAW(`LINE_ADDR_WIDTH + `BANK_LINE_WIDTH), 
         .SIZE(DWBQ_SIZE)
     ) dwb_queue (
         .clk     (clk),

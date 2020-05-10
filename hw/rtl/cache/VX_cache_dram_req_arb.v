@@ -24,7 +24,7 @@ module VX_cache_dram_req_arb #(
     // Writeback Request    
     input  wire [NUM_BANKS-1:0]                 per_bank_dram_wb_req_valid,
     input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] per_bank_dram_wb_req_addr,
-    input  wire [NUM_BANKS-1:0][`BANK_LINE_WORDS-1:0][`WORD_WIDTH-1:0] per_bank_dram_wb_req_data,
+    input  wire [NUM_BANKS-1:0][`BANK_LINE_WIDTH-1:0] per_bank_dram_wb_req_data,
     output wire [NUM_BANKS-1:0]                 per_bank_dram_wb_queue_pop,
     
     // Merged Request
