@@ -5,7 +5,7 @@ module VX_snp_fwd_arb #(
     parameter BANK_LINE_SIZE = 1
 ) (
     input  wire [NUM_BANKS-1:0]         per_bank_snp_fwd_valid,
-    input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0]   per_bank_snp_fwd_addr,
+    input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] per_bank_snp_fwd_addr,
     output reg  [NUM_BANKS-1:0]         per_bank_snp_fwd_pop,
 
     output wire                         snp_fwd_valid,
