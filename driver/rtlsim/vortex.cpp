@@ -3,8 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <iostream>
-#include <thread>
-#include <mutex>
+#include <future>
 #include <chrono>
 
 #include <vortex.h>
@@ -59,20 +58,14 @@ private:
 
 class vx_device {    
 public:
-    vx_device() 
-        : is_done_(false) {
-        thread_ = new std::thread(__thread_proc__, this);        
+    vx_device() {        
         mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
+        simulator_.attach_ram(&ram_);
     } 
 
-    ~vx_device() {        
-        if (thread_) {
-            mutex_.lock();
-            is_done_ = true;
-            mutex_.unlock();
-
-            thread_->join();
-            delete thread_;
+    ~vx_device() {     
+        if (future_.valid()) {
+            future_.wait();
         }
     }
 
@@ -115,79 +108,48 @@ public:
         return 0;
     }
 
-    int flush_caches(size_t dev_maddr, size_t size) {
-        
-        mutex_.lock();     
-        simulator_.attach_ram(&ram_);
-        simulator_.flush_caches(dev_maddr, size);
-        simulator_.attach_ram(nullptr);
-        mutex_.unlock();
-
-        return 0;
-    }
-
     int start() {   
-
-        mutex_.lock();     
-        simulator_.reset();
-        simulator_.attach_ram(&ram_);
-        mutex_.unlock();       
-
+        if (future_.valid()) {
+            future_.wait(); // ensure prior run completed
+        }
+        future_ = std::async(std::launch::async, [&]{             
+            simulator_.reset();        
+            while (simulator_.is_busy()) {
+                simulator_.step();
+            }
+        });
         return 0;
     }
 
     int wait(long long timeout) {
+        if (!future_.valid())
+            return 0;
         auto timeout_sec = (timeout < 0) ? timeout : (timeout / 1000);
+        std::chrono::seconds wait_time(1);
         for (;;) {
-            mutex_.lock();
-            bool is_busy = simulator_.is_busy();
-            mutex_.unlock();
-
-            if (!is_busy || 0 == timeout_sec--) {
-                if (!is_busy) {
-                    mutex_.lock();
-                    simulator_.attach_ram(nullptr);
-                    mutex_.unlock();
-                }
+            auto status = future_.wait_for(wait_time); // wait for 1 sec and check status
+            if (status == std::future_status::ready 
+             || 0 == timeout_sec--)
                 break;
-            }
-
-            std::this_thread::sleep_for(std::chrono::seconds(1));            
         }
         return 0;
     }
 
+    int flush_caches(size_t dev_maddr, size_t size) {
+        if (future_.valid()) {
+            future_.wait(); // ensure prior run completed
+        }
+        simulator_.flush_caches(dev_maddr, size);
+        return 0;
+    }
+
+
 private:
 
-    void thread_proc() {
-        std::cout << "Device ready..." << std::endl;
-
-        for (;;) {
-            mutex_.lock();
-            bool is_done = is_done_;
-            mutex_.unlock();
-
-            if (is_done)
-                break;
-
-            mutex_.lock();
-            simulator_.step();
-            mutex_.unlock();
-        }
-
-        std::cout << "Device shutdown..." << std::endl;
-    }
-
-    static void __thread_proc__(vx_device* device) {
-        device->thread_proc();
-    }
-
-    bool is_done_; 
     size_t mem_allocation_;     
     RAM ram_;
     Simulator simulator_;
-    std::thread* thread_;   
-    std::mutex mutex_;
+    std::future<void> future_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

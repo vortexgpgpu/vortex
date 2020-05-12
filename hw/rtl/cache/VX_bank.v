@@ -407,10 +407,9 @@ module VX_bank #(
         .out ({is_snp_st2 , snrq_tag_st2,                   fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
     );
 
-    wire should_flush;
-    wire dwbq_push;
-
     wire cwbq_full;
+    wire dwbq_push;
+    wire dwbq_empty;    
     wire dwbq_full;
     wire srpq_full;
     wire invalidate_fill;
@@ -420,7 +419,6 @@ module VX_bank #(
                    && !is_snp_st2 
                    && miss_st2 
                    && !mrvq_full 
-                   && !(should_flush && dwbq_push) 
                    && !((is_snp_st2 && valid_st2 && srpq_full) 
                      || ((valid_st2 && !miss_st2) && cwbq_full) 
                      || (((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) && dwbq_full) 
@@ -443,7 +441,7 @@ module VX_bank #(
         .clk                     (clk),
         .reset                   (reset),
         // Enqueue
-        .miss_add                (miss_add), // Need to do all 
+        .miss_add                (miss_add),
         .miss_add_addr           (miss_add_addr),
         .miss_add_wsel           (miss_add_wsel),
         .miss_add_data           (miss_add_data),
@@ -505,30 +503,16 @@ module VX_bank #(
         .full    (cwbq_full)
     );
 
-    assign should_flush = valid_st2 
-                       && (miss_add_mem_write != `BYTE_EN_NO) 
-                       && !is_snp_st2 
-                       && !is_fill_st2;
-
     // Enqueue to DWB Queue
-    assign dwbq_push = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2 || should_flush) 
+    assign dwbq_push = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2) 
                     && !dwbq_full 
                     && !((is_snp_st2 && valid_st2 && srpq_full) 
                       || ((valid_st2 && !miss_st2) && cwbq_full) 
                       || (valid_st2 && miss_st2 && mrvq_full) 
                       || (valid_st2 && miss_st2 && !invalidate_fill && ~dram_fill_req_ready));
 
-    wire[`LINE_ADDR_WIDTH-1:0] dwbq_req_addr;
-    wire[`BANK_LINE_WIDTH-1:0] dwbq_req_data;
-    wire       dwbq_empty;
-
-    if (SNOOP_FORWARDING) begin
-        assign dwbq_req_data = (should_flush && dwbq_push) ? writeword_st2 : readdata_st2;
-        assign dwbq_req_addr = (should_flush && dwbq_push) ? addr_st2 : {readtag_st2, addr_st2[`LINE_SELECT_BITS-1:0]};
-    end else begin
-        assign dwbq_req_data = readdata_st2;
-        assign dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_BITS-1:0]};
-    end
+    wire [`BANK_LINE_WIDTH-1:0] dwbq_req_data = readdata_st2;
+    wire [`LINE_ADDR_WIDTH-1:0] dwbq_req_addr = {readtag_st2, addr_st2[`LINE_SELECT_BITS-1:0]};
 
     wire possible_fill = valid_st2 && miss_st2 && dram_fill_req_ready && ~is_snp_st2;
     wire [`LINE_ADDR_WIDTH-1:0] fill_invalidator_addr = addr_st2;
@@ -544,7 +528,7 @@ module VX_bank #(
         .success_fill      (is_fill_st2),
         .fill_addr         (fill_invalidator_addr),
         .invalidate_fill   (invalidate_fill)
-    );
+    );    
 
     // Enqueue in dram_fill_req
     assign dram_fill_req_valid = possible_fill && !invalidate_fill;

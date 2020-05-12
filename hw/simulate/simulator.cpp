@@ -2,13 +2,13 @@
 #include <iostream>
 #include <iomanip>
 
-uint64_t time_stamp = 0;
+uint64_t timestamp = 0;
 
 double sc_time_stamp() { 
-  return time_stamp;
+  return timestamp;
 }
 
-Simulator::Simulator() {  
+Simulator::Simulator() {    
   ram_ = nullptr;
   vortex_ = new VVortex_Socket();
 
@@ -28,18 +28,23 @@ Simulator::~Simulator() {
 }
 
 void Simulator::attach_ram(RAM* ram) {
+#ifndef NDEBUG
+  std::cout << timestamp << ": [sim] attach_ram" << std::endl;
+#endif
   ram_ = ram;
   dram_rsp_vec_.clear();
 }
 
 void Simulator::print_stats(std::ostream& out) {
   out << std::left;
-  out << std::setw(24) << "# of total cycles:" << std::dec << time_stamp/2 << std::endl;
+  out << std::setw(24) << "# of total cycles:" << std::dec << timestamp/2 << std::endl;
 }
 
 void Simulator::dbus_driver() {
-  if (ram_ == nullptr)
+  if (ram_ == nullptr) {
+    vortex_->dram_req_ready = false;
     return;
+  }
 
   // handle DRAM response cycle
   int dequeue_index = -1;
@@ -70,7 +75,7 @@ void Simulator::dbus_driver() {
   // handle DRAM stalls
   bool dram_stalled = false;
 #ifdef ENABLE_DRAM_STALLS
-  if (0 == ((time_stamp/2) % DRAM_STALLS_MODULO)) { 
+  if (0 == ((timestamp/2) % DRAM_STALLS_MODULO)) { 
     dram_stalled = true;
   } else
   if (dram_rsp_vec_.size() >= DRAM_RQ_SIZE) {
@@ -114,12 +119,15 @@ void Simulator::io_driver() {
    && vortex_->io_req_addr == IO_BUS_ADDR_COUT) {
     uint32_t data_write = (uint32_t)vortex_->io_req_data;
     char c = (char)data_write;
-    std::cerr << c;      
+    std::cout << c;      
   }
   vortex_->io_req_ready = true;
 }
 
-void Simulator::reset() {      
+void Simulator::reset() {     
+#ifndef NDEBUG
+  std::cout << timestamp << ": [sim] reset()" << std::endl;
+#endif 
   vortex_->reset = 1;
   this->step();  
   vortex_->reset = 0;
@@ -141,9 +149,9 @@ void Simulator::step() {
 void Simulator::eval() {
   vortex_->eval();
 #ifdef VCD_OUTPUT
-  trace_->dump(time_stamp);
+  trace_->dump(timestamp);
 #endif
-  ++time_stamp;
+  ++timestamp;
 }
 
 void Simulator::wait(uint32_t cycles) {
@@ -157,6 +165,9 @@ bool Simulator::is_busy() {
 }
 
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
+#ifndef NDEBUG
+  std::cout << timestamp << ": [sim] flush_caches()" << std::endl;
+#endif
   // align address to LLC block boundaries
   auto aligned_addr_start = mem_addr / GLOBAL_BLOCK_SIZE;
   auto aligned_addr_end = (mem_addr + size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE;
@@ -186,6 +197,10 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
 }
 
 bool Simulator::run() {
+#ifndef NDEBUG
+  std::cout << timestamp << ": [sim] run()" << std::endl;
+#endif 
+
   // reset the device
   this->reset();
 
