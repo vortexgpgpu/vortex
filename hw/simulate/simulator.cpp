@@ -28,9 +28,6 @@ Simulator::~Simulator() {
 }
 
 void Simulator::attach_ram(RAM* ram) {
-#ifndef NDEBUG
-  std::cout << timestamp << ": [sim] attach_ram" << std::endl;
-#endif
   ram_ = ram;
   dram_rsp_vec_.clear();
 }
