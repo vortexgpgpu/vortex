@@ -12,6 +12,7 @@ module VX_dmem_ctrl (
     VX_cache_dram_req_if    dcache_dram_req_if,
     VX_cache_dram_rsp_if    dcache_dram_rsp_if,
     VX_cache_snp_req_if     dcache_snp_req_if,
+    VX_cache_snp_rsp_if     dcache_snp_rsp_if,
 
     // Core <-> Icache    
     VX_cache_core_req_if    icache_core_req_if,  
@@ -63,7 +64,7 @@ module VX_dmem_ctrl (
         .DWBQ_SIZE              (`SDWBQ_SIZE),
         .DFQQ_SIZE              (`SDFQQ_SIZE),
         .LLVQ_SIZE              (`SLLVQ_SIZE),
-        .FFSQ_SIZE              (`SFFSQ_SIZE),
+        .SRPQ_SIZE              (`SSRPQ_SIZE),
         .PRFQ_SIZE              (`SPRFQ_SIZE),
         .PRFQ_STRIDE            (`SPRFQ_STRIDE),
         .FILL_INVALIDAOR_SIZE   (`SFILL_INVALIDAOR_SIZE),
@@ -110,12 +111,24 @@ module VX_dmem_ctrl (
         // Snoop request
         .snp_req_valid      (0),
         .snp_req_addr       (0),
+        .snp_req_tag        (0),
         .snp_req_ready      (),
 
-        // Snoop forwarding
-        .snp_fwd_valid      (),
-        .snp_fwd_addr       (),
-        .snp_fwd_ready      (0)
+        // Snoop response
+        .snp_rsp_valid      (),
+        .snp_rsp_tag        (),
+        .snp_rsp_ready      (0),
+
+        // Snoop forward out
+        .snp_fwdout_valid   (),
+        .snp_fwdout_addr    (),    
+        .snp_fwdout_tag     (),    
+        .snp_fwdout_ready   (0),
+
+         // Snoop forward in
+        .snp_fwdin_valid    (0),
+        .snp_fwdin_tag      (0),    
+        .snp_fwdin_ready    ()
     `IGNORE_WARNINGS_END
     );
 
@@ -134,7 +147,7 @@ module VX_dmem_ctrl (
         .DWBQ_SIZE              (`DDWBQ_SIZE),
         .DFQQ_SIZE              (`DDFQQ_SIZE),
         .LLVQ_SIZE              (`DLLVQ_SIZE),
-        .FFSQ_SIZE              (`DFFSQ_SIZE),
+        .SRPQ_SIZE              (`DSRPQ_SIZE),
         .PRFQ_SIZE              (`DPRFQ_SIZE),
         .PRFQ_STRIDE            (`DPRFQ_STRIDE),
         .FILL_INVALIDAOR_SIZE   (`DFILL_INVALIDAOR_SIZE),
@@ -143,7 +156,8 @@ module VX_dmem_ctrl (
         .WRITE_ENABLE           (1),
         .CORE_TAG_WIDTH         (`CORE_REQ_TAG_WIDTH),
         .CORE_TAG_ID_BITS       (`CORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH)
+        .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
+        .SNP_REQ_TAG_WIDTH      (`DSNP_TAG_WIDTH)
     ) gpu_dcache (
         .clk                (clk),
         .reset              (reset),
@@ -177,16 +191,28 @@ module VX_dmem_ctrl (
         .dram_rsp_tag       (dcache_dram_rsp_if.dram_rsp_tag),
         .dram_rsp_ready     (dcache_dram_rsp_if.dram_rsp_ready),
 
-        // Snoop Request
+        // Snoop request
         .snp_req_valid      (dcache_snp_req_if.snp_req_valid),
         .snp_req_addr       (dcache_snp_req_if.snp_req_addr),
+        .snp_req_tag        (dcache_snp_req_if.snp_req_tag),
         .snp_req_ready      (dcache_snp_req_if.snp_req_ready),
+
+        // Snoop response
+        .snp_rsp_valid      (dcache_snp_rsp_if.snp_rsp_valid),
+        .snp_rsp_tag        (dcache_snp_rsp_if.snp_rsp_tag),
+        .snp_rsp_ready      (dcache_snp_rsp_if.snp_rsp_ready),
         
     `IGNORE_WARNINGS_BEGIN
-        // Snoop Forward
-        .snp_fwd_valid      (),
-        .snp_fwd_addr       (),
-        .snp_fwd_ready      (0)
+        // Snoop forward out
+        .snp_fwdout_valid   (),
+        .snp_fwdout_addr    (),    
+        .snp_fwdout_tag     (),    
+        .snp_fwdout_ready   (0),
+
+         // Snoop forward in
+        .snp_fwdin_valid    (0),
+        .snp_fwdin_tag      (0),    
+        .snp_fwdin_ready    ()
     `IGNORE_WARNINGS_END
     );
 
@@ -205,7 +231,7 @@ module VX_dmem_ctrl (
         .DWBQ_SIZE              (`IDWBQ_SIZE),
         .DFQQ_SIZE              (`IDFQQ_SIZE),
         .LLVQ_SIZE              (`ILLVQ_SIZE),
-        .FFSQ_SIZE              (`IFFSQ_SIZE),
+        .SRPQ_SIZE              (`ISRPQ_SIZE),
         .PRFQ_SIZE              (`IPRFQ_SIZE),
         .PRFQ_STRIDE            (`IPRFQ_STRIDE),
         .FILL_INVALIDAOR_SIZE   (`IFILL_INVALIDAOR_SIZE),
@@ -249,15 +275,27 @@ module VX_dmem_ctrl (
         .dram_rsp_ready        (icache_dram_rsp_if.dram_rsp_ready),
 
     `IGNORE_WARNINGS_BEGIN
-        // Snoop Request
+        // Snoop request
         .snp_req_valid         (0),
         .snp_req_addr          (0),
+        .snp_req_tag           (0),
         .snp_req_ready         (),
 
-        // Snoop Forward
-        .snp_fwd_valid         (),
-        .snp_fwd_addr          (),    
-        .snp_fwd_ready         (0)
+        // Snoop response
+        .snp_rsp_valid         (),
+        .snp_rsp_tag           (),
+        .snp_rsp_ready         (0),
+
+        // Snoop forward out
+        .snp_fwdout_valid      (),
+        .snp_fwdout_addr       (),    
+        .snp_fwdout_tag        (),    
+        .snp_fwdout_ready      (0),
+
+         // Snoop forward in
+        .snp_fwdin_valid       (0),
+        .snp_fwdin_tag         (0),    
+        .snp_fwdin_ready       ()
     `IGNORE_WARNINGS_END
     );
 

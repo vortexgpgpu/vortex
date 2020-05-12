@@ -15,7 +15,7 @@ module VX_gpu_inst (
     
     genvar i;
     generate
-    for (i = 0; i < `NUM_THREADS; i=i+1) begin : tmc_new_mask_init
+    for (i = 0; i < `NUM_THREADS; i++) begin : tmc_new_mask_init
         assign tmc_new_mask[i] = all_threads ? 1 : i < gpu_inst_req_if.a_reg_data[0];
     end
     endgenerate
@@ -34,7 +34,7 @@ module VX_gpu_inst (
     wire[`NUM_WARPS-1:0] wspawn_new_active;
 
     generate
-    for (i = 0; i < `NUM_WARPS; i=i+1) begin : wspawn_new_active_init
+    for (i = 0; i < `NUM_WARPS; i++) begin : wspawn_new_active_init
         assign wspawn_new_active[i] = all_active ? 1 : i < gpu_inst_req_if.a_reg_data[0];
     end
     endgenerate
@@ -56,7 +56,7 @@ module VX_gpu_inst (
     wire[`NUM_THREADS-1:0] split_new_later_mask;
 
     generate
-    for (i = 0; i < `NUM_THREADS; i=i+1) begin : masks_init
+    for (i = 0; i < `NUM_THREADS; i++) begin : masks_init
         wire curr_bool = (gpu_inst_req_if.a_reg_data[i] == 32'b1);
         assign split_new_use_mask[i]   = curr_valids[i] & (curr_bool);
         assign split_new_later_mask[i] = curr_valids[i] & (!curr_bool);

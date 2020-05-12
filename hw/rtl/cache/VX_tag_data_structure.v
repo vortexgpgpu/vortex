@@ -44,7 +44,7 @@ module VX_tag_data_structure #(
     integer i;
     always @(posedge clk) begin
         if (reset) begin
-            for (i = 0; i < `BANK_LINE_COUNT; i = i + 1) begin
+            for (i = 0; i < `BANK_LINE_COUNT; i++) begin
                 valid[i] <= 0;
                 dirty[i] <= 0;
             end
@@ -65,7 +65,7 @@ module VX_tag_data_structure #(
                 valid[write_addr] <= 0;
             end
 
-            for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+            for (i = 0; i < `BANK_LINE_WORDS; i++) begin
                 if (write_enable[i][0]) data[write_addr][i][0] <= write_data[i * `WORD_WIDTH + 0 * `BYTE_WIDTH +: `BYTE_WIDTH];
                 if (write_enable[i][1]) data[write_addr][i][1] <= write_data[i * `WORD_WIDTH + 1 * `BYTE_WIDTH +: `BYTE_WIDTH];
                 if (write_enable[i][2]) data[write_addr][i][2] <= write_data[i * `WORD_WIDTH + 2 * `BYTE_WIDTH +: `BYTE_WIDTH];

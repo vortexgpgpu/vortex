@@ -29,6 +29,11 @@
         if (!(cond)) $error(msg);   \
     endgenerate
 
+`define UNUSED(x)               \
+    `IGNORE_WARNINGS_BEGIN      \
+        if (x != 0) begin end   \
+    `IGNORE_WARNINGS_END
+
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > x) ? 1 : 0))
 `define LOG2UP(x)   ((x > 1) ? $clog2(x) : 1)
@@ -138,6 +143,9 @@
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define DNUM_REQUESTS       `NUM_THREADS
 
+// Snoop request tag bits
+`define DSNP_TAG_WIDTH      `LOG2UP(`L2SNRQ_SIZE)
+
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // DRAM request data bits
@@ -177,6 +185,9 @@
 // DRAM request tag bits
 `define L2DRAM_TAG_WIDTH    (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
 
+// Snoop request tag bits
+`define L2SNP_TAG_WIDTH     ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SNRQ_SIZE) : 1)
+
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define L2NUM_REQUESTS      (2*`NUM_CORES)
 
@@ -190,6 +201,9 @@
 
 // DRAM request tag bits
 `define L3DRAM_TAG_WIDTH    ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
+
+// Snoop request tag bits
+`define L3SNP_TAG_WIDTH     1 
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define L3NUM_REQUESTS      `NUM_CLUSTERS

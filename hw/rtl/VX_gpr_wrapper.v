@@ -17,7 +17,7 @@ module VX_gpr_wrapper (
     wire[`NUM_THREADS-1:0][31:0] jal_data;
     genvar i;
     generate 
-    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : jal_data_assign
+    for (i = 0; i < `NUM_THREADS; i++) begin : jal_data_assign
         assign jal_data[i] = gpr_jal_if.curr_PC;
     end
     endgenerate
@@ -47,7 +47,7 @@ module VX_gpr_wrapper (
     `endif
 
     generate        
-        for (i = 0; i < `NUM_WARPS; i = i + 1) begin : warp_gprs
+        for (i = 0; i < `NUM_WARPS; i++) begin : warp_gprs
             wire valid_write_request = i == writeback_if.warp_num;
             VX_gpr gpr(
                 .clk                    (clk),

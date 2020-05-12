@@ -260,7 +260,7 @@ module VX_warp_sched (
 
     genvar i;
     generate
-    for (i = 0; i < `NUM_WARPS; i = i + 1) begin : stacks
+    for (i = 0; i < `NUM_WARPS; i++) begin : stacks
         wire correct_warp_s = (i == split_warp_num);
         wire correct_warp_j = (i == join_warp_num);
 

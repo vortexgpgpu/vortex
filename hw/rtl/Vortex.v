@@ -8,7 +8,7 @@ module Vortex #(
     input  wire                         clk,
     input  wire                         reset,
 
-    // DRAM Dcache Req
+    // DRAM Dcache request
     output wire                         D_dram_req_read,
     output wire                         D_dram_req_write,    
     output wire [`DDRAM_ADDR_WIDTH-1:0] D_dram_req_addr,
@@ -16,13 +16,13 @@ module Vortex #(
     output wire [`DDRAM_TAG_WIDTH-1:0]  D_dram_req_tag,
     input  wire                         D_dram_req_ready,
 
-    // DRAM Dcache Rsp    
+    // DRAM Dcache reponse    
     input  wire                         D_dram_rsp_valid,
     input  wire [`DDRAM_LINE_WIDTH-1:0] D_dram_rsp_data,
     input  wire [`DDRAM_TAG_WIDTH-1:0]  D_dram_rsp_tag,
     output wire                         D_dram_rsp_ready,
 
-    // DRAM Icache Req
+    // DRAM Icache request
     output wire                         I_dram_req_read,
     output wire                         I_dram_req_write,    
     output wire [`IDRAM_ADDR_WIDTH-1:0] I_dram_req_addr,
@@ -30,16 +30,21 @@ module Vortex #(
     output wire [`IDRAM_TAG_WIDTH-1:0]  I_dram_req_tag,
     input  wire                         I_dram_req_ready,
 
-    // DRAM Icache Rsp    
+    // DRAM Icache response    
     input  wire                         I_dram_rsp_valid,
     input  wire [`IDRAM_LINE_WIDTH-1:0] I_dram_rsp_data,
     input  wire [`IDRAM_TAG_WIDTH-1:0]  I_dram_rsp_tag,
     output wire                         I_dram_rsp_ready,
 
-    // Cache Snooping
+    // Snoop request
     input  wire                         snp_req_valid,
     input  wire [`DDRAM_ADDR_WIDTH-1:0] snp_req_addr,
+    input  wire [`DSNP_TAG_WIDTH-1:0]   snp_req_tag,
     output wire                         snp_req_ready,
+
+    output wire                         snp_rsp_valid,
+    output wire [`DSNP_TAG_WIDTH-1:0]   snp_rsp_tag,
+    input  wire                         snp_rsp_ready,
 
     // I/O request
     output wire                         io_req_read,
@@ -172,11 +177,23 @@ module Vortex #(
     VX_warp_ctl_if           warp_ctl_if();
 
     // Cache snooping
-    VX_cache_snp_req_if #(.DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH)) dcache_snp_req_if();
+    VX_cache_snp_req_if #(
+        .DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH),
+        .SNP_TAG_WIDTH(`DSNP_TAG_WIDTH)
+    ) dcache_snp_req_if();
+
+    VX_cache_snp_rsp_if #(
+        .SNP_TAG_WIDTH(`DSNP_TAG_WIDTH)
+    ) dcache_snp_rsp_if();
 
     assign dcache_snp_req_if.snp_req_valid = snp_req_valid;
     assign dcache_snp_req_if.snp_req_addr  = snp_req_addr;
+    assign dcache_snp_req_if.snp_req_tag   = snp_req_tag;
     assign snp_req_ready                   = dcache_snp_req_if.snp_req_ready;
+
+    assign snp_rsp_valid = dcache_snp_rsp_if.snp_rsp_valid;
+    assign snp_rsp_tag   = dcache_snp_rsp_if.snp_rsp_tag;
+    assign dcache_snp_rsp_if.snp_rsp_ready = snp_rsp_ready;
 
     VX_front_end #(
         .CORE_ID(CORE_ID)
@@ -236,6 +253,7 @@ module Vortex #(
         .dcache_dram_req_if (dcache_dram_req_if),
         .dcache_dram_rsp_if (dcache_dram_rsp_if),
         .dcache_snp_req_if  (dcache_snp_req_if),
+        .dcache_snp_rsp_if  (dcache_snp_rsp_if),
 
         // Core <-> Icache
         .icache_core_req_if (icache_core_req_if),

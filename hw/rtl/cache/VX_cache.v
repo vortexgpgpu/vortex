@@ -22,7 +22,7 @@ module VX_cache #(
     parameter MRVQ_SIZE                     = 8, 
     // Dram Fill Rsp Queue Size
     parameter DFPQ_SIZE                     = 2, 
-    // Snoop Req Queue
+    // Snoop Req Queue Size
     parameter SNRQ_SIZE                     = 8, 
 
     // Queues for writebacks Knobs {1, 2, 4, 8, ...}
@@ -34,8 +34,8 @@ module VX_cache #(
     parameter DFQQ_SIZE                     = 8, 
     // Lower Level Cache Hit Queue Size
     parameter LLVQ_SIZE                     = 16, 
-    // Fill Forward SNP Queue
-    parameter FFSQ_SIZE                     = 8,
+    // Snoop Rsp Queue Size
+    parameter SRPQ_SIZE                     = 8,
 
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 16,
@@ -60,7 +60,16 @@ module VX_cache #(
     parameter CORE_TAG_ID_BITS              = 0,
 
     // dram request tag size
-    parameter DRAM_TAG_WIDTH                = 1
+    parameter DRAM_TAG_WIDTH                = 1,
+
+    // Number of snoop forwarding requests
+    parameter NUM_SNP_REQUESTS              = 2, 
+
+    // Snooping request tag width
+    parameter SNP_REQ_TAG_WIDTH             = 1,
+
+    // Snooping forward tag width
+    parameter SNP_FWD_TAG_WIDTH             = 1
  ) (
     input wire clk,
     input wire reset,
@@ -94,56 +103,117 @@ module VX_cache #(
     input  wire [DRAM_TAG_WIDTH-1:0]        dram_rsp_tag,
     output wire                             dram_rsp_ready,    
 
-    // Snoop Req
+    // Snoop request
     input wire                              snp_req_valid,
     input wire [`DRAM_ADDR_WIDTH-1:0]       snp_req_addr,
+    input wire [SNP_REQ_TAG_WIDTH-1:0]      snp_req_tag,
     output wire                             snp_req_ready,
 
-    // Snoop Forward
-    output wire                             snp_fwd_valid,
-    output wire [`DRAM_ADDR_WIDTH-1:0]      snp_fwd_addr,
-    input  wire                             snp_fwd_ready
+    // Snoop response
+    output wire                             snp_rsp_valid,    
+    output wire [SNP_REQ_TAG_WIDTH-1:0]     snp_rsp_tag,
+    input  wire                             snp_rsp_ready,
+
+    // Snoop Forwarding out
+    output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdout_valid,
+    output wire [NUM_SNP_REQUESTS-1:0][`DRAM_ADDR_WIDTH-1:0] snp_fwdout_addr,
+    output wire [NUM_SNP_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdout_tag,
+`IGNORE_WARNINGS_BEGIN
+    input wire [NUM_SNP_REQUESTS-1:0]       snp_fwdout_ready,
+
+    // Snoop forwarding in
+    input wire [NUM_SNP_REQUESTS-1:0]       snp_fwdin_valid,    
+    input wire [NUM_SNP_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdin_tag,
+`IGNORE_WARNINGS_END
+    output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdin_ready
 );
 
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valids;
+
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
     
-    wire [NUM_BANKS-1:0]                        per_bank_core_rsp_pop;
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_rsp_tid; 
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]       per_bank_core_rsp_data;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]    per_bank_core_rsp_tag;    
+    wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
-    wire                                        dfqq_full;
     wire [NUM_BANKS-1:0]                        per_bank_dram_fill_req_valid;
     wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0]  per_bank_dram_fill_req_addr;
+    wire                                        dram_fill_req_ready;
+
     wire [NUM_BANKS-1:0]                        per_bank_dram_fill_rsp_ready;
 
-    wire [NUM_BANKS-1:0]                        per_bank_dram_wb_queue_pop;
+    wire [NUM_BANKS-1:0]                        per_bank_dram_wb_req_ready;
     wire [NUM_BANKS-1:0]                        per_bank_dram_wb_req_valid;    
     wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0]  per_bank_dram_wb_req_addr;
     wire [NUM_BANKS-1:0][`BANK_LINE_WIDTH-1:0]  per_bank_dram_wb_req_data;
 
-    wire [NUM_BANKS-1:0]                        per_bank_reqq_full;
-    wire [NUM_BANKS-1:0]                        per_bank_snp_req_full;
+    wire [NUM_BANKS-1:0]                        per_bank_snp_req_ready;
 
-    wire [NUM_BANKS-1:0]                        per_bank_snp_fwd_valid;
-    wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0]  per_bank_snp_fwd_addr;
-    wire [NUM_BANKS-1:0]                        per_bank_snp_fwd_pop;
+    wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_valid;
+    wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag;
+    wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
 
-`DEBUG_BEGIN  
-    wire [NUM_BANKS-1:0]                        per_bank_dram_fill_req_is_snp;
-`DEBUG_END
+    wire                         snp_req_valid_qual;    
+    wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
+    wire [SNP_REQ_TAG_WIDTH-1:0] snp_req_tag_qual;
+    wire                         snp_req_ready_qual;
 
-    assign dram_req_tag   = dram_req_addr;
-    assign core_req_ready = ~(| per_bank_reqq_full);    
-    assign snp_req_ready  = ~(| per_bank_snp_req_full);    
-    assign dram_rsp_ready = (| per_bank_dram_fill_rsp_ready);    
+    if (SNOOP_FORWARDING) begin
+        VX_snp_forwarder #(
+            .BANK_LINE_SIZE    (BANK_LINE_SIZE), 
+            .NUM_REQUESTS      (NUM_SNP_REQUESTS), 
+            .SNRQ_SIZE         (SNRQ_SIZE),
+            .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH),
+            .SNP_FWD_TAG_WIDTH (SNP_FWD_TAG_WIDTH)
+        ) snp_forwarder (
+            .clk                (clk),
+            .reset              (reset),
+
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_tag        (snp_req_tag),
+            .snp_req_ready      (snp_req_ready),
+
+            .snp_rsp_valid      (snp_req_valid_qual),
+            .snp_rsp_addr       (snp_req_addr_qual),
+            .snp_rsp_tag        (snp_req_tag_qual),
+            .snp_rsp_ready      (snp_req_ready_qual),   
+
+            .snp_fwdout_valid   (snp_fwdout_valid),
+            .snp_fwdout_addr    (snp_fwdout_addr),
+            .snp_fwdout_tag     (snp_fwdout_tag),
+            .snp_fwdout_ready   (snp_fwdout_ready),
+
+            .snp_fwdin_valid    (snp_fwdin_valid),
+            .snp_fwdin_tag      (snp_fwdin_tag),
+            .snp_fwdin_ready    (snp_fwdin_ready)      
+        );
+    end else begin
+        assign snp_fwdout_valid = 0;
+        assign snp_fwdout_addr  = 0;
+        assign snp_fwdout_tag   = 0;
+
+        assign snp_fwdin_ready  = 0;
+
+        assign snp_req_valid_qual = snp_req_valid;
+        assign snp_req_addr_qual  = snp_req_addr;
+        assign snp_req_tag_qual   = snp_req_tag;
+        assign snp_req_ready      = snp_req_ready_qual;
+    end
+
+    assign dram_req_tag        = dram_req_addr;
+
+    assign core_req_ready      = (& per_bank_core_req_ready);    
+    assign dram_rsp_ready      = (| per_bank_dram_fill_rsp_ready);    
+    assign snp_req_ready_qual  = (& per_bank_snp_req_ready);
 
     VX_cache_core_req_bank_sel #(
-        .BANK_LINE_SIZE          (BANK_LINE_SIZE),
-        .NUM_BANKS               (NUM_BANKS),
-        .WORD_SIZE               (WORD_SIZE),
-        .NUM_REQUESTS            (NUM_REQUESTS)
+        .BANK_LINE_SIZE (BANK_LINE_SIZE),
+        .NUM_BANKS      (NUM_BANKS),
+        .WORD_SIZE      (WORD_SIZE),
+        .NUM_REQUESTS   (NUM_REQUESTS)
     ) cache_core_req_bank_sell (
         .core_req_valid  (core_req_valid),
         .core_req_addr   (core_req_addr),
@@ -152,7 +222,7 @@ module VX_cache #(
 
     genvar i;
     generate
-        for (i = 0; i < NUM_BANKS; i = i + 1) begin
+        for (i = 0; i < NUM_BANKS; i++) begin
             wire [NUM_REQUESTS-1:0]                curr_bank_core_req_valids;
             wire [NUM_REQUESTS-1:0][31:0]          curr_bank_core_req_addr;
             wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
@@ -160,58 +230,57 @@ module VX_cache #(
             wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0] curr_bank_core_req_read;  
             wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0] curr_bank_core_req_write;
 
-            wire                            curr_bank_core_rsp_pop;
             wire                            curr_bank_core_rsp_valid;
             wire [`REQS_BITS-1:0]           curr_bank_core_rsp_tid;
             wire [`WORD_WIDTH-1:0]          curr_bank_core_rsp_data;
             wire [CORE_TAG_WIDTH-1:0]       curr_bank_core_rsp_tag;
+            wire                            curr_bank_core_rsp_ready;
 
             wire                            curr_bank_dram_fill_rsp_valid;            
             wire [`BANK_LINE_WIDTH-1:0]     curr_bank_dram_fill_rsp_data;
             wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_dram_fill_rsp_addr;
             wire                            curr_bank_dram_fill_rsp_ready;
 
-            wire                            curr_bank_dram_fill_req_full;
             wire                            curr_bank_dram_fill_req_valid;
-            wire                            curr_bank_dram_fill_req_is_snp;
             wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_dram_fill_req_addr;
+            wire                            curr_bank_dram_fill_req_ready;
 
-            wire                            curr_bank_dram_wb_req_pop;
             wire                            curr_bank_dram_wb_req_valid;
             wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_dram_wb_req_addr;
             wire[`BANK_LINE_WIDTH-1:0]      curr_bank_dram_wb_req_data;
+            wire                            curr_bank_dram_wb_req_ready;
 
             wire                            curr_bank_snp_req_valid;
             wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_snp_req_addr;
-            wire                            curr_bank_snp_req_full;    
+            wire [SNP_REQ_TAG_WIDTH-1:0]    curr_bank_snp_req_tag;
+            wire                            curr_bank_snp_req_ready;    
 
-            wire                            curr_bank_snp_fwd_valid;
-            wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_snp_fwd_addr;
-            wire                            curr_bank_snp_fwd_pop;                    
+            wire                            curr_bank_snp_rsp_valid;
+            wire [SNP_REQ_TAG_WIDTH-1:0]    curr_bank_snp_rsp_tag;
+            wire                            curr_bank_snp_rsp_ready;                    
 
-            wire                            curr_bank_reqq_full;
+            wire                            curr_bank_core_req_ready;
 
             // Core Req
-            assign curr_bank_core_req_valids  = per_bank_valids[i];
+            assign curr_bank_core_req_valids  = per_bank_valids[i] & {NUM_REQUESTS{core_req_ready}};
             assign curr_bank_core_req_addr    = core_req_addr;
             assign curr_bank_core_req_data    = core_req_data;
             assign curr_bank_core_req_tag     = core_req_tag;
             assign curr_bank_core_req_read    = core_req_read;
             assign curr_bank_core_req_write   = core_req_write;
-            assign per_bank_reqq_full[i]      = curr_bank_reqq_full;
+            assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
 
             // Core WB
-            assign curr_bank_core_rsp_pop      = per_bank_core_rsp_pop[i];
+            assign curr_bank_core_rsp_ready    = per_bank_core_rsp_ready[i];
             assign per_bank_core_rsp_valid [i] = curr_bank_core_rsp_valid;
             assign per_bank_core_rsp_tid   [i] = curr_bank_core_rsp_tid;
             assign per_bank_core_rsp_tag   [i] = curr_bank_core_rsp_tag;
             assign per_bank_core_rsp_data  [i] = curr_bank_core_rsp_data;
 
-            // Dram fill request
-            assign curr_bank_dram_fill_req_full     = dfqq_full;
+            // Dram fill request            
             assign per_bank_dram_fill_req_valid[i]  = curr_bank_dram_fill_req_valid;
             assign per_bank_dram_fill_req_addr[i]   = `LINE_TO_DRAM_ADDR(curr_bank_dram_fill_req_addr, i);
-            assign per_bank_dram_fill_req_is_snp[i] = curr_bank_dram_fill_req_is_snp;
+            assign curr_bank_dram_fill_req_ready    = dram_fill_req_ready;
 
             // Dram fill response
             assign curr_bank_dram_fill_rsp_valid   = dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i);
@@ -219,44 +288,46 @@ module VX_cache #(
             assign curr_bank_dram_fill_rsp_data    = dram_rsp_data;
             assign per_bank_dram_fill_rsp_ready[i] = curr_bank_dram_fill_rsp_ready;
 
-            // Dram writeback request
-            assign curr_bank_dram_wb_req_pop     = per_bank_dram_wb_queue_pop[i];
+            // Dram writeback request            
             assign per_bank_dram_wb_req_valid[i] = curr_bank_dram_wb_req_valid;            
             assign per_bank_dram_wb_req_addr[i]  = `LINE_TO_DRAM_ADDR(curr_bank_dram_wb_req_addr, i);
             assign per_bank_dram_wb_req_data[i]  = curr_bank_dram_wb_req_data;
+            assign curr_bank_dram_wb_req_ready   = per_bank_dram_wb_req_ready[i];
 
-            // Snoop Request
-            assign curr_bank_snp_req_valid  = snp_req_valid && (`DRAM_ADDR_BANK(snp_req_addr) == i);
-            assign curr_bank_snp_req_addr   = `DRAM_TO_LINE_ADDR(snp_req_addr);
-            assign per_bank_snp_req_full[i] = curr_bank_snp_req_full;
+            // Snoop request
+            assign curr_bank_snp_req_valid   = snp_req_valid_qual && (`DRAM_ADDR_BANK(snp_req_addr_qual) == i);
+            assign curr_bank_snp_req_addr    = `DRAM_TO_LINE_ADDR(snp_req_addr_qual);
+            assign curr_bank_snp_req_tag     = snp_req_tag_qual;
+            assign per_bank_snp_req_ready[i] = curr_bank_snp_req_ready;
 
-            // Snoop Fwd            
-            assign per_bank_snp_fwd_valid[i] = curr_bank_snp_fwd_valid;
-            assign per_bank_snp_fwd_addr[i]  = `LINE_TO_DRAM_ADDR(curr_bank_snp_fwd_addr, i);
-            assign curr_bank_snp_fwd_pop     = per_bank_snp_fwd_pop[i];
+            // Snoop response            
+            assign per_bank_snp_rsp_valid[i] = curr_bank_snp_rsp_valid;
+            assign per_bank_snp_rsp_tag[i]   = curr_bank_snp_rsp_tag;
+            assign curr_bank_snp_rsp_ready   = per_bank_snp_rsp_ready[i];
             
             VX_bank #(
-                .CACHE_SIZE             (CACHE_SIZE),
-                .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-                .NUM_BANKS              (NUM_BANKS),
-                .WORD_SIZE              (WORD_SIZE),
-                .NUM_REQUESTS           (NUM_REQUESTS),
-                .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-                .REQQ_SIZE              (REQQ_SIZE),
-                .MRVQ_SIZE              (MRVQ_SIZE),
-                .DFPQ_SIZE              (DFPQ_SIZE),
-                .SNRQ_SIZE              (SNRQ_SIZE),
-                .CWBQ_SIZE              (CWBQ_SIZE),
-                .DWBQ_SIZE              (DWBQ_SIZE),
-                .DFQQ_SIZE              (DFQQ_SIZE),
-                .LLVQ_SIZE              (LLVQ_SIZE),
-                .FFSQ_SIZE              (FFSQ_SIZE),
-                .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE),
-                .DRAM_ENABLE            (DRAM_ENABLE),
-                .WRITE_ENABLE           (WRITE_ENABLE),
-                .SNOOP_FORWARDING       (SNOOP_FORWARDING),
-                .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),                
-                .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
+                .CACHE_SIZE           (CACHE_SIZE),
+                .BANK_LINE_SIZE       (BANK_LINE_SIZE),
+                .NUM_BANKS            (NUM_BANKS),
+                .WORD_SIZE            (WORD_SIZE),
+                .NUM_REQUESTS         (NUM_REQUESTS),
+                .STAGE_1_CYCLES       (STAGE_1_CYCLES),
+                .REQQ_SIZE            (REQQ_SIZE),
+                .MRVQ_SIZE            (MRVQ_SIZE),
+                .DFPQ_SIZE            (DFPQ_SIZE),
+                .SNRQ_SIZE            (SNRQ_SIZE),
+                .CWBQ_SIZE            (CWBQ_SIZE),
+                .DWBQ_SIZE            (DWBQ_SIZE),
+                .DFQQ_SIZE            (DFQQ_SIZE),
+                .LLVQ_SIZE            (LLVQ_SIZE),
+                .SRPQ_SIZE            (SRPQ_SIZE),
+                .FILL_INVALIDAOR_SIZE (FILL_INVALIDAOR_SIZE),
+                .DRAM_ENABLE          (DRAM_ENABLE),
+                .WRITE_ENABLE         (WRITE_ENABLE),
+                .SNOOP_FORWARDING     (SNOOP_FORWARDING),
+                .CORE_TAG_WIDTH       (CORE_TAG_WIDTH),                
+                .CORE_TAG_ID_BITS     (CORE_TAG_ID_BITS),
+                .SNP_REQ_TAG_WIDTH    (SNP_REQ_TAG_WIDTH)
             ) bank (
                 .clk                     (clk),
                 .reset                   (reset),                
@@ -267,21 +338,19 @@ module VX_cache #(
                 .core_req_addr           (curr_bank_core_req_addr),
                 .core_req_data           (curr_bank_core_req_data),
                 .core_req_tag            (curr_bank_core_req_tag),
-                .core_req_full           (curr_bank_reqq_full),
-                .core_req_ready          (core_req_ready),                
+                .core_req_ready          (curr_bank_core_req_ready),
 
                 // Core response                
                 .core_rsp_valid          (curr_bank_core_rsp_valid),
                 .core_rsp_tid            (curr_bank_core_rsp_tid),
                 .core_rsp_data           (curr_bank_core_rsp_data),
                 .core_rsp_tag            (curr_bank_core_rsp_tag),
-                .core_rsp_pop            (curr_bank_core_rsp_pop),
+                .core_rsp_ready          (curr_bank_core_rsp_ready),
 
                 // Dram fill request
                 .dram_fill_req_valid     (curr_bank_dram_fill_req_valid),
                 .dram_fill_req_addr      (curr_bank_dram_fill_req_addr),
-                .dram_fill_req_is_snp    (curr_bank_dram_fill_req_is_snp),
-                .dram_fill_req_full      (curr_bank_dram_fill_req_full),
+                .dram_fill_req_ready     (curr_bank_dram_fill_req_ready),
 
                 // Dram fill response
                 .dram_fill_rsp_valid     (curr_bank_dram_fill_rsp_valid),                
@@ -293,20 +362,45 @@ module VX_cache #(
                 .dram_wb_req_valid       (curr_bank_dram_wb_req_valid),
                 .dram_wb_req_addr        (curr_bank_dram_wb_req_addr),
                 .dram_wb_req_data        (curr_bank_dram_wb_req_data),   
-                .dram_wb_req_pop         (curr_bank_dram_wb_req_pop),
+                .dram_wb_req_ready       (curr_bank_dram_wb_req_ready),
 
                 // Snoop request
                 .snp_req_valid           (curr_bank_snp_req_valid),
                 .snp_req_addr            (curr_bank_snp_req_addr),
-                .snp_req_full            (curr_bank_snp_req_full),
+                .snp_req_tag             (curr_bank_snp_req_tag),
+                .snp_req_ready           (curr_bank_snp_req_ready),
 
-                // Snoop forwarding
-                .snp_fwd_valid           (curr_bank_snp_fwd_valid),
-                .snp_fwd_addr            (curr_bank_snp_fwd_addr),
-                .snp_fwd_pop             (curr_bank_snp_fwd_pop)
+                // Snoop response
+                .snp_rsp_valid           (curr_bank_snp_rsp_valid),
+                .snp_rsp_tag             (curr_bank_snp_rsp_tag),
+                .snp_rsp_ready           (curr_bank_snp_rsp_ready)
             );
         end   
-    endgenerate   
+    endgenerate
+
+    VX_cache_dram_req_arb #(
+        .BANK_LINE_SIZE (BANK_LINE_SIZE),
+        .NUM_BANKS      (NUM_BANKS),
+        .WORD_SIZE      (WORD_SIZE),
+        .DFQQ_SIZE      (DFQQ_SIZE),
+        .PRFQ_SIZE      (PRFQ_SIZE),
+        .PRFQ_STRIDE    (PRFQ_STRIDE)
+    ) cache_dram_req_arb (
+        .clk                          (clk),
+        .reset                        (reset),        
+        .per_bank_dram_fill_req_valid (per_bank_dram_fill_req_valid),
+        .per_bank_dram_fill_req_addr  (per_bank_dram_fill_req_addr),
+        .dram_fill_req_ready          (dram_fill_req_ready),
+        .per_bank_dram_wb_req_valid   (per_bank_dram_wb_req_valid),        
+        .per_bank_dram_wb_req_addr    (per_bank_dram_wb_req_addr),
+        .per_bank_dram_wb_req_data    (per_bank_dram_wb_req_data),
+        .per_bank_dram_wb_req_ready   (per_bank_dram_wb_req_ready),
+        .dram_req_read                (dram_req_read),
+        .dram_req_write               (dram_req_write),        
+        .dram_req_addr                (dram_req_addr),
+        .dram_req_data                (dram_req_data),  
+        .dram_req_ready               (dram_req_ready)
+    );    
 
     VX_cache_core_rsp_merge #(
         .NUM_BANKS              (NUM_BANKS),
@@ -319,48 +413,24 @@ module VX_cache #(
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
-        .per_bank_core_rsp_pop   (per_bank_core_rsp_pop),
-
+        .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
         .core_rsp_valid (core_rsp_valid),
         .core_rsp_data  (core_rsp_data),        
         .core_rsp_tag   (core_rsp_tag),
         .core_rsp_ready (core_rsp_ready)
-    );
+    );  
 
-    VX_cache_dram_req_arb #(
-        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-        .NUM_BANKS              (NUM_BANKS),
-        .WORD_SIZE              (WORD_SIZE),
-        .DFQQ_SIZE              (DFQQ_SIZE),
-        .PRFQ_SIZE              (PRFQ_SIZE),
-        .PRFQ_STRIDE            (PRFQ_STRIDE)
-    ) cache_dram_req_arb (
-        .clk                           (clk),
-        .reset                         (reset),
-        .dfqq_full                     (dfqq_full),
-        .per_bank_dram_fill_req_valid  (per_bank_dram_fill_req_valid),
-        .per_bank_dram_fill_req_addr   (per_bank_dram_fill_req_addr),
-        .per_bank_dram_wb_queue_pop    (per_bank_dram_wb_queue_pop),
-        .per_bank_dram_wb_req_valid    (per_bank_dram_wb_req_valid),        
-        .per_bank_dram_wb_req_addr     (per_bank_dram_wb_req_addr),
-        .per_bank_dram_wb_req_data     (per_bank_dram_wb_req_data),
-        .dram_req_read                 (dram_req_read),
-        .dram_req_write                (dram_req_write),        
-        .dram_req_addr                 (dram_req_addr),
-        .dram_req_data                 (dram_req_data),  
-        .dram_req_ready                (dram_req_ready)
-    );   
-
-    VX_snp_fwd_arb #(
-        .NUM_BANKS(NUM_BANKS),
-        .BANK_LINE_SIZE(BANK_LINE_SIZE)
-    ) snp_fwd_arb (
-        .per_bank_snp_fwd_valid (per_bank_snp_fwd_valid),
-        .per_bank_snp_fwd_addr  (per_bank_snp_fwd_addr),
-        .per_bank_snp_fwd_pop   (per_bank_snp_fwd_pop),
-        .snp_fwd_valid          (snp_fwd_valid),
-        .snp_fwd_addr           (snp_fwd_addr),
-        .snp_fwd_ready          (snp_fwd_ready)
+    VX_snp_rsp_arb #(
+        .NUM_BANKS         (NUM_BANKS),
+        .BANK_LINE_SIZE    (BANK_LINE_SIZE),
+        .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
+    ) snp_rsp_arb (
+        .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
+        .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
+        .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
+        .snp_rsp_valid (snp_rsp_valid),
+        .snp_rsp_tag   (snp_rsp_tag),
+        .snp_rsp_ready (snp_rsp_ready)
     );
     
 endmodule

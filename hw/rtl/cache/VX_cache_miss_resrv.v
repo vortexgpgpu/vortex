@@ -66,7 +66,7 @@ module VX_cache_miss_resrv #(
     reg [MRVQ_SIZE-1:0] make_ready;
     genvar i;
     generate
-        for (i = 0; i < MRVQ_SIZE; i=i+1) begin
+        for (i = 0; i < MRVQ_SIZE; i++) begin
             assign make_ready[i] = is_fill_st1 && valid_table[i] && (addr_table[i] == fill_addr_st1);
         end
     endgenerate

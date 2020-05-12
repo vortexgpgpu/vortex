@@ -111,7 +111,7 @@
 `define DDFPQ_SIZE 32
 `endif
 
-// Snoop Req Queue
+// Snoop Req Queue Size
 `ifndef DSNRQ_SIZE
 `define DSNRQ_SIZE 32
 `endif
@@ -136,9 +136,9 @@
 `define DLLVQ_SIZE 0
 `endif
 
-// Fill Forward SNP Queue
-`ifndef DFFSQ_SIZE
-`define DFFSQ_SIZE 32
+// Snoop Rsp Queue Size
+`ifndef DSRPQ_SIZE
+`define DSRPQ_SIZE 32
 `endif
 
 // Prefetcher
@@ -197,7 +197,7 @@
 `define IDFPQ_SIZE 32
 `endif
 
-// Snoop Req Queue
+// Snoop Req Queue Size
 `ifndef ISNRQ_SIZE
 `define ISNRQ_SIZE 32
 `endif
@@ -222,9 +222,9 @@
 `define ILLVQ_SIZE 16
 `endif
 
-// Fill Forward SNP Queue
-`ifndef IFFSQ_SIZE
-`define IFFSQ_SIZE 8
+// Snoop Rsp Queue Size
+`ifndef ISRPQ_SIZE
+`define ISRPQ_SIZE 8
 `endif
 
 // Prefetcher
@@ -283,7 +283,7 @@
 `define SDFPQ_SIZE 0
 `endif
 
-// Snoop Req Queue
+// Snoop Req Queue Size
 `ifndef SSNRQ_SIZE
 `define SSNRQ_SIZE 16
 `endif
@@ -308,9 +308,9 @@
 `define SLLVQ_SIZE 16
 `endif
 
-// Fill Forward SNP Queue
-`ifndef SFFSQ_SIZE
-`define SFFSQ_SIZE 16
+// Snoop Rsp Queue Size
+`ifndef SSRPQ_SIZE
+`define SSRPQ_SIZE 16
 `endif
 
 // Prefetcher
@@ -369,7 +369,7 @@
 `define L2DFPQ_SIZE 32
 `endif
 
-// Snoop Req Queue
+// Snoop Req Queue Size
 `ifndef L2SNRQ_SIZE
 `define L2SNRQ_SIZE 32
 `endif
@@ -394,9 +394,9 @@
 `define L2LLVQ_SIZE 32
 `endif
 
-// Fill Forward SNP Queue
-`ifndef L2FFSQ_SIZE
-`define L2FFSQ_SIZE 32
+// Snoop Rsp Queue Size
+`ifndef L2SRPQ_SIZE
+`define L2SRPQ_SIZE 32
 `endif
 
 // Prefetcher
@@ -455,7 +455,7 @@
 `define L3DFPQ_SIZE 32
 `endif
 
-// Snoop Req Queue
+// Snoop Req Queue Size
 `ifndef L3SNRQ_SIZE
 `define L3SNRQ_SIZE 32
 `endif
@@ -480,9 +480,9 @@
 `define L3LLVQ_SIZE 0
 `endif
 
-// Fill Forward SNP Queue
-`ifndef L3FFSQ_SIZE
-`define L3FFSQ_SIZE 8
+// Snoop Rsp Queue Size
+`ifndef L3SRPQ_SIZE
+`define L3SRPQ_SIZE 8
 `endif
 
 // Prefetcher

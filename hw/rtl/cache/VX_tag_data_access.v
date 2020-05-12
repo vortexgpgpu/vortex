@@ -110,7 +110,7 @@ module VX_tag_data_access #(
     );
 
     genvar i;
-    for (i = 1; i < STAGE_1_CYCLES-1; i = i + 1) begin
+    for (i = 1; i < STAGE_1_CYCLES-1; i++) begin
         VX_generic_register #(
             .N( 1 + 1 + `TAG_SELECT_BITS + `BANK_LINE_WIDTH)
         ) s0_1_cc (
@@ -127,7 +127,7 @@ module VX_tag_data_access #(
     assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-1] && DRAM_ENABLE; // Dirty only applies in Dcache
     assign use_read_tag_st1e   = DRAM_ENABLE ? read_tag_st1c[STAGE_1_CYCLES-1] : writeaddr_st1e[`TAG_LINE_ADDR_RNG]; // Tag is always the same in SM
 
-    for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+    for (i = 0; i < `BANK_LINE_WORDS; i++) begin
         assign use_read_data_st1e[i * `WORD_WIDTH +: `WORD_WIDTH]  = read_data_st1c[STAGE_1_CYCLES-1][i * `WORD_WIDTH +: `WORD_WIDTH];
     end
 
@@ -144,7 +144,7 @@ module VX_tag_data_access #(
                          && !miss_st1e 
                          && !is_snp_st1e;
 
-        for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin        
+        for (i = 0; i < `BANK_LINE_WORDS; i++) begin        
             assign we[i] = (force_write || (should_write && !real_writefill)) ? 4'b1111 : 4'b0000;
         end    
 
@@ -199,7 +199,7 @@ module VX_tag_data_access #(
 
         assign readword_st1e = data_Qual;
 
-        for (i = 0; i < `BANK_LINE_WORDS; i = i + 1) begin
+        for (i = 0; i < `BANK_LINE_WORDS; i++) begin
             wire normal_write = (block_offset == i[`WORD_SELECT_BITS-1:0]) && should_write && !real_writefill;
 
             assign we[i] = (force_write)        ? 4'b1111 : 

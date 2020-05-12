@@ -52,7 +52,7 @@ module VX_scheduler (
     always @(posedge clk) begin
         if (reset) begin
             for (w = 0; w < `NUM_WARPS; w=w+1) begin
-                for (i = 0; i < 32; i = i + 1) begin
+                for (i = 0; i < 32; i++) begin
                      rename_table[w][i] <= 0;
                 end
             end

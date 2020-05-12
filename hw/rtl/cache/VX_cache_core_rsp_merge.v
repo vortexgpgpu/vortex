@@ -17,7 +17,7 @@ module VX_cache_core_rsp_merge #(
     input  wire [NUM_BANKS-1:0]                             per_bank_core_rsp_valid,    
     input  wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]            per_bank_core_rsp_data,
     input  wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]         per_bank_core_rsp_tag,    
-    output wire [NUM_BANKS-1:0]                             per_bank_core_rsp_pop,
+    output wire [NUM_BANKS-1:0]                             per_bank_core_rsp_ready,
 
     // Core Writeback
     output reg [NUM_REQUESTS-1:0]                           core_rsp_valid,
@@ -28,7 +28,7 @@ module VX_cache_core_rsp_merge #(
 
     reg [NUM_BANKS-1:0] per_bank_core_rsp_pop_unqual;
     
-    assign per_bank_core_rsp_pop = per_bank_core_rsp_pop_unqual & {NUM_BANKS{core_rsp_ready}};
+    assign per_bank_core_rsp_ready = per_bank_core_rsp_pop_unqual & {NUM_BANKS{core_rsp_ready}};
 
     wire [`BANK_BITS-1:0] main_bank_index;
     wire                  found_bank;
@@ -48,7 +48,7 @@ module VX_cache_core_rsp_merge #(
         always @(*) begin
             core_rsp_valid = 0;
             core_rsp_data  = 0;
-            for (i = 0; i < NUM_BANKS; i = i + 1) begin 
+            for (i = 0; i < NUM_BANKS; i++) begin 
                 if (found_bank
                  && per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
@@ -68,7 +68,7 @@ module VX_cache_core_rsp_merge #(
             core_rsp_valid = 0;
             core_rsp_data  = 0;
             core_rsp_tag   = 0;
-            for (i = 0; i < NUM_BANKS; i = i + 1) begin 
+            for (i = 0; i < NUM_BANKS; i++) begin 
                 if (found_bank
                  && per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     

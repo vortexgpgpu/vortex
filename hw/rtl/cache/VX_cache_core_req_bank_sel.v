@@ -21,7 +21,7 @@ module VX_cache_core_req_bank_sel #(
         integer i;
         always @(*) begin
             per_bank_valids = 0;
-            for (i = 0; i < NUM_REQUESTS; i = i + 1) begin
+            for (i = 0; i < NUM_REQUESTS; i++) begin
                 if (NUM_BANKS == 1) begin
                     // If there is only one bank, then only map requests to that bank
                     per_bank_valids[0][i] = core_req_valid[i];

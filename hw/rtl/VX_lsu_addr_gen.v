@@ -8,7 +8,7 @@ module VX_lsu_addr_gen (
 );
     genvar i;
     generate
-    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : addresses
+    for (i = 0; i < `NUM_THREADS; i++) begin : addresses
         assign address[i] = base_address[i] + offset;
     end
     endgenerate

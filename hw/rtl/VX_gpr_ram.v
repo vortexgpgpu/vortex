@@ -21,7 +21,7 @@ module VX_gpr_ram (
         end else begin
             if (we) begin
                 integer i;
-                for (i = 0; i < `NUM_THREADS; i = i + 1) begin
+                for (i = 0; i < `NUM_THREADS; i++) begin
                     if (be[i]) begin
                         ram[waddr][i][0] <= wdata[i][7:0];
                         ram[waddr][i][1] <= wdata[i][15:8];

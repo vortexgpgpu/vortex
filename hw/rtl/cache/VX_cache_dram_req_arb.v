@@ -19,13 +19,13 @@ module VX_cache_dram_req_arb #(
     // Fill Request    
     input  wire [NUM_BANKS-1:0]                 per_bank_dram_fill_req_valid,
     input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] per_bank_dram_fill_req_addr,
-    output wire                                 dfqq_full,
+    output wire                                 dram_fill_req_ready,
     
     // Writeback Request    
     input  wire [NUM_BANKS-1:0]                 per_bank_dram_wb_req_valid,
     input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] per_bank_dram_wb_req_addr,
     input  wire [NUM_BANKS-1:0][`BANK_LINE_WIDTH-1:0] per_bank_dram_wb_req_data,
-    output wire [NUM_BANKS-1:0]                 per_bank_dram_wb_queue_pop,
+    output wire [NUM_BANKS-1:0]                 per_bank_dram_wb_req_ready,
     
     // Merged Request
     output wire                                 dram_req_read,
@@ -70,6 +70,7 @@ module VX_cache_dram_req_arb #(
 
     wire dfqq_pop  = !dwb_valid && dfqq_req && dram_req_ready; // If no dwb, and dfqq has valids, then pop
     wire dfqq_push = (| per_bank_dram_fill_req_valid);
+    wire dfqq_full;
 
     VX_cache_dfq_queue #(
         .BANK_LINE_SIZE(BANK_LINE_SIZE),
@@ -100,7 +101,9 @@ module VX_cache_dram_req_arb #(
         .found (dwb_valid)
     );
 
-    assign per_bank_dram_wb_queue_pop = dram_req_ready ? (use_wb_valid & ((1 << dwb_bank))) : 0;
+    assign dram_fill_req_ready = ~dfqq_full;
+
+    assign per_bank_dram_wb_req_ready = dram_req_ready ? (use_wb_valid & ((1 << dwb_bank))) : 0;
 
     wire   dram_req_valid  = dwb_valid || dfqq_req || pref_pop;
 
