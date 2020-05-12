@@ -177,6 +177,7 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   for (;;) {
     this->step();
     if (vortex_->snp_rsp_valid) {
+      assert(outstanding_snp_reqs > 0);
       --outstanding_snp_reqs;
     }
     if (vortex_->snp_req_valid && vortex_->snp_req_ready) {

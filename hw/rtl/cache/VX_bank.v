@@ -127,9 +127,9 @@ module VX_bank #(
 
     assign snp_req_ready = ~snrq_full;
 
-    wire                      dfpq_pop;
-    wire                      dfpq_empty;
-    wire                      dfpq_full;
+    wire dfpq_pop;
+    wire dfpq_empty;
+    wire dfpq_full;
     wire [`LINE_ADDR_WIDTH-1:0] dfpq_addr_st0;
     wire [`BANK_LINE_WIDTH-1:0] dfpq_filldata_st0;    
 
@@ -164,11 +164,11 @@ module VX_bank #(
     wire [`BYTE_EN_BITS-1:0]    reqq_req_mem_write_st0;
 
     VX_cache_req_queue #(
-        .WORD_SIZE       (WORD_SIZE),
-        .NUM_REQUESTS    (NUM_REQUESTS),
-        .REQQ_SIZE       (REQQ_SIZE),
-        .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),        
-        .CORE_TAG_ID_BITS(CORE_TAG_ID_BITS)
+        .WORD_SIZE        (WORD_SIZE),
+        .NUM_REQUESTS     (NUM_REQUESTS),
+        .REQQ_SIZE        (REQQ_SIZE),
+        .CORE_TAG_WIDTH   (CORE_TAG_WIDTH),        
+        .CORE_TAG_ID_BITS (CORE_TAG_ID_BITS)
     ) req_queue (
         .clk                   (clk),
         .reset                 (reset),
@@ -343,21 +343,21 @@ module VX_bank #(
     assign {tag_st1e, mem_read_st1e, mem_write_st1e, tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
 
     VX_tag_data_access #(
-        .CACHE_SIZE             (CACHE_SIZE),
-        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-        .NUM_BANKS              (NUM_BANKS),
-        .WORD_SIZE              (WORD_SIZE),
-        .STAGE_1_CYCLES         (STAGE_1_CYCLES),
-        .DRAM_ENABLE            (DRAM_ENABLE),
-        .WRITE_ENABLE           (WRITE_ENABLE)
+        .CACHE_SIZE     (CACHE_SIZE),
+        .BANK_LINE_SIZE (BANK_LINE_SIZE),
+        .NUM_BANKS      (NUM_BANKS),
+        .WORD_SIZE      (WORD_SIZE),
+        .STAGE_1_CYCLES (STAGE_1_CYCLES),
+        .DRAM_ENABLE    (DRAM_ENABLE),
+        .WRITE_ENABLE   (WRITE_ENABLE)
      ) tag_data_access (
-        .clk                (clk),
-        .reset              (reset),
-        .stall              (stall_bank_pipe),
-        .stall_bank_pipe    (stall_bank_pipe),
+        .clk            (clk),
+        .reset          (reset),
+        .stall          (stall_bank_pipe),
+        .stall_bank_pipe(stall_bank_pipe),
 
         // Initial Read
-        .readaddr_st10 (addr_st1[0][`LINE_SELECT_BITS-1:0]),
+        .readaddr_st10(addr_st1[0][`LINE_SELECT_BITS-1:0]),
 
         // Actual Read/Write
         .valid_req_st1e(valid_st1[STAGE_1_CYCLES-1]),
