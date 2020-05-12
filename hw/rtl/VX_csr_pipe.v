@@ -68,7 +68,7 @@ module VX_csr_pipe #(
     assign csr_wb_if.wb        = wb_s2;
 
     genvar i;
-    for (i = 0; i < `NUM_THREADS; i = i + 1) begin
+    for (i = 0; i < `NUM_THREADS; i++) begin
         assign csr_wb_if.data[i] = (csr_address_s2 == `CSR_LTID) ? i : 
                                    (csr_address_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
                                                                    csr_read_data_s2;

@@ -47,7 +47,7 @@ module VX_exec_unit (
 
     genvar i;
     generate
-        for (i = 0; i < `NUM_THREADS; i = i + 1) begin : alu_defs
+        for (i = 0; i < `NUM_THREADS; i++) begin : alu_defs
             VX_alu_unit alu_unit (
                 .clk            (clk),
                 .reset          (reset),
@@ -102,7 +102,7 @@ module VX_exec_unit (
     wire[`NUM_THREADS-1:0][31:0] duplicate_PC_data;
 
     generate
-        for (i = 0; i < `NUM_THREADS; i=i+1) begin
+        for (i = 0; i < `NUM_THREADS; i++) begin
             assign duplicate_PC_data[i] = exec_unit_req_if.PC_next;
         end
     endgenerate

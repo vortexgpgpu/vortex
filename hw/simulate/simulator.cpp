@@ -160,21 +160,29 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   // align address to LLC block boundaries
   auto aligned_addr_start = mem_addr / GLOBAL_BLOCK_SIZE;
   auto aligned_addr_end = (mem_addr + size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE;
+  int outstanding_snp_reqs = 0;
 
   // submit snoop requests for the needed blocks
-  vortex_->snp_req_addr = aligned_addr_start;
+  vortex_->snp_req_addr  = aligned_addr_start;
   vortex_->snp_req_valid = true;
+  vortex_->snp_rsp_ready = true;
   for (;;) {
     this->step();
+    if (vortex_->snp_rsp_valid) {
+      --outstanding_snp_reqs;
+    }
     if (vortex_->snp_req_valid && vortex_->snp_req_ready) {
+      ++outstanding_snp_reqs;
       vortex_->snp_req_addr += 1;
       if (vortex_->snp_req_addr >= aligned_addr_end) {
-        vortex_->snp_req_valid = false;
-        break;
+        vortex_->snp_req_valid = false;        
       }
     }
-  }
-  this->wait(PIPELINE_FLUSH_LATENCY);
+    if (!vortex_->snp_req_valid 
+     && 0 == outstanding_snp_reqs) {
+      break;
+    }
+  }  
 }
 
 bool Simulator::run() {

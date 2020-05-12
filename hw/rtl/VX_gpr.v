@@ -39,7 +39,7 @@ module VX_gpr (
         wire[`NUM_THREADS-1:0][`NUM_GPRS-1:0] write_bit_mask;
 
         genvar i;
-        for (i = 0; i < `NUM_THREADS; i = i + 1) begin
+        for (i = 0; i < `NUM_THREADS; i++) begin
             wire local_write = write_enable & writeback_if.wb_valid[i];
             assign write_bit_mask[i] = {`NUM_GPRS{~local_write}};
         end
@@ -57,8 +57,8 @@ module VX_gpr (
 
     `ifndef SYN
         genvar j;
-        for (i = 0; i < `NUM_THREADS; i = i + 1) begin
-            for (j = 0; j < `NUM_GPRS; j = j + 1) begin
+        for (i = 0; i < `NUM_THREADS; i++) begin
+            for (j = 0; j < `NUM_GPRS; j++) begin
                 assign a_reg_data_uqual[i][j] = ((temp_a[i][j] === 1'dx) || cena_1 )? 1'b0 : temp_a[i][j];
                 assign b_reg_data_uqual[i][j] = ((temp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : temp_b[i][j];
             end

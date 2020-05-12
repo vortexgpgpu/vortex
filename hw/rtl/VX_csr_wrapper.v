@@ -11,11 +11,11 @@ module VX_csr_wrapper (
 
     genvar i;
     generate
-    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : thread_ids_init
+    for (i = 0; i < `NUM_THREADS; i++) begin : thread_ids_init
         assign thread_ids[i] = i;
     end
 
-    for (i = 0; i < `NUM_THREADS; i = i + 1) begin : warp_ids_init
+    for (i = 0; i < `NUM_THREADS; i++) begin : warp_ids_init
         assign warp_ids[i] = {{(31-`NW_BITS-1){1'b0}}, csr_req_if.warp_num};
     end
     endgenerate
