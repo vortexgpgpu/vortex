@@ -46,7 +46,6 @@ module VX_snp_forwarder #(
     wire [SNP_FWD_TAG_WIDTH-1:0] fwdin_tag;
     wire fwdin_ready;
     wire fwdin_taken;
-
     
     assign fwdout_ready = (& snp_fwdout_ready);
 
@@ -112,5 +111,20 @@ module VX_snp_forwarder #(
     for (i = 0; i < NUM_REQUESTS; i++) begin
         assign snp_fwdin_ready[i] = fwdin_ready && (fwdin_sel == `REQS_BITS'(i));
     end
+
+    /*always_comb begin
+        if (1'($time & 1) && snp_req_valid && snp_req_ready) begin
+            $display("*** %t: ", $time);
+        end
+        if (1'($time & 1) && snp_fwdout_valid && snp_fwdout_ready) begin
+            $display("*** %t: ", $time);
+        end
+        if (1'($time & 1) && fwdin_valid && fwdin_ready) begin
+            $display("*** %t: ", $time);
+        end
+        if (1'($time & 1) && snp_rsp_valid && snp_rsp_ready) begin
+            $display("*** %t: ", $time);
+        end
+    end*/
 
 endmodule
