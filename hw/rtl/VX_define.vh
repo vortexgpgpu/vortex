@@ -29,11 +29,6 @@
         if (!(cond)) $error(msg);   \
     endgenerate
 
-`define UNUSED(x)               \
-    `IGNORE_WARNINGS_BEGIN      \
-        if (x != 0) begin end   \
-    `IGNORE_WARNINGS_END
-
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > x) ? 1 : 0))
 `define LOG2UP(x)   ((x > 1) ? $clog2(x) : 1)

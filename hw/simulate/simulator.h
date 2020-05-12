@@ -52,6 +52,7 @@ private:
 
   RAM *ram_;
   VVortex_Socket *vortex_;
+  bool enable_;
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif

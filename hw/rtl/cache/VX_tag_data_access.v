@@ -72,6 +72,9 @@ module VX_tag_data_access #(
                        && ((valid_req_st1e && !use_read_valid_st1e) 
                         || (valid_req_st1e && use_read_valid_st1e && !tags_match)); 
 
+    wire[`TAG_SELECT_BITS-1:0] writetag_st1e = writeaddr_st1e[`TAG_LINE_ADDR_RNG];
+    wire[`LINE_SELECT_BITS-1:0] writeladdr_st1e = writeaddr_st1e[`LINE_SELECT_BITS-1:0];
+
     VX_tag_data_structure #(
         .CACHE_SIZE             (CACHE_SIZE),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
@@ -91,8 +94,8 @@ module VX_tag_data_access #(
         .invalidate  (invalidate_line),
         .write_enable(use_write_enable),
         .write_fill  (real_writefill),
-        .write_addr  (writeaddr_st1e[`LINE_SELECT_BITS-1:0]),
-        .tag_index   (writeaddr_st1e[`TAG_LINE_ADDR_RNG]),
+        .write_addr  (writeladdr_st1e),
+        .tag_index   (writetag_st1e),
         .write_data  (use_write_data),
         .fill_sent   (fill_sent)
     );
@@ -125,30 +128,28 @@ module VX_tag_data_access #(
 
     assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-1] || ~DRAM_ENABLE; // If shared memory, always valid
     assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-1] && DRAM_ENABLE; // Dirty only applies in Dcache
-    assign use_read_tag_st1e   = DRAM_ENABLE ? read_tag_st1c[STAGE_1_CYCLES-1] : writeaddr_st1e[`TAG_LINE_ADDR_RNG]; // Tag is always the same in SM
-
-    for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-        assign use_read_data_st1e[i * `WORD_WIDTH +: `WORD_WIDTH]  = read_data_st1c[STAGE_1_CYCLES-1][i * `WORD_WIDTH +: `WORD_WIDTH];
-    end
+    assign use_read_tag_st1e   = DRAM_ENABLE ? read_tag_st1c[STAGE_1_CYCLES-1] : writetag_st1e; // Tag is always the same in SM
+    assign use_read_data_st1e  = read_data_st1c[STAGE_1_CYCLES-1];
 
     wire force_write  = real_writefill;
+    wire should_write;
 
     wire [`BANK_LINE_WORDS-1:0][3:0] we;
     wire [`BANK_LINE_WIDTH-1:0] data_write;
 
     if (WORD_SIZE == BANK_LINE_SIZE) begin
 
-        wire should_write = ((mem_write_st1e != `BYTE_EN_NO)) 
-                         && valid_req_st1e 
-                         && use_read_valid_st1e 
-                         && !miss_st1e 
-                         && !is_snp_st1e;
+        assign should_write = ((mem_write_st1e != `BYTE_EN_NO)) 
+                           && valid_req_st1e 
+                           && use_read_valid_st1e 
+                           && !miss_st1e 
+                           && !is_snp_st1e;
 
         for (i = 0; i < `BANK_LINE_WORDS; i++) begin        
             assign we[i] = (force_write || (should_write && !real_writefill)) ? 4'b1111 : 4'b0000;
         end    
 
-        assign readword_st1e = read_data_st1c[STAGE_1_CYCLES-1];
+        assign readword_st1e = use_read_data_st1e;
         assign data_write = force_write ? writedata_st1e : writeword_st1e;
 
     end else begin
@@ -174,13 +175,13 @@ module VX_tag_data_access #(
         wire [3:0] sb_mask = (b0 ? 4'b0001 : (b1 ? 4'b0010 : (b2 ? 4'b0100 : 4'b1000)));
         wire [3:0] sh_mask = (b0 ? 4'b0011 : 4'b1100);
 
-        wire should_write = (sw || sb || sh) 
-                         && valid_req_st1e 
-                         && use_read_valid_st1e 
-                         && !miss_st1e 
-                         && !is_snp_st1e;
+        assign should_write = (sw || sb || sh) 
+                           && valid_req_st1e 
+                           && use_read_valid_st1e 
+                           && !miss_st1e 
+                           && !is_snp_st1e;
 
-        wire[`WORD_WIDTH-1:0] data_unmod  = read_data_st1c[STAGE_1_CYCLES-1][block_offset * 32 +: 32];
+        wire[`WORD_WIDTH-1:0] data_unmod  = use_read_data_st1e[block_offset * 32 +: 32];
         wire[`WORD_WIDTH-1:0] data_unQual = (b0 || lw) ? (data_unmod)      :
                                                     b1 ? (data_unmod >> 8)  :
                                                     b2 ? (data_unmod >> 16) :
@@ -200,7 +201,7 @@ module VX_tag_data_access #(
         assign readword_st1e = data_Qual;
 
         for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-            wire normal_write = (block_offset == i[`WORD_SELECT_BITS-1:0]) && should_write && !real_writefill;
+            wire normal_write = (block_offset == `WORD_SELECT_BITS'(i)) && should_write && !real_writefill;
 
             assign we[i] = (force_write)        ? 4'b1111 : 
                            (normal_write && sw) ? 4'b1111 :
@@ -226,7 +227,7 @@ module VX_tag_data_access #(
     assign use_write_data   = data_write;
 
     // use "case equality" to handle uninitialized tag when block entry is not valid
-    assign tags_match = ((writeaddr_st1e[`TAG_LINE_ADDR_RNG] == use_read_tag_st1e) === 1'b1);
+    assign tags_match = ((writetag_st1e == use_read_tag_st1e) === 1'b1);
 
     wire snoop_hit   = valid_req_st1e &&  is_snp_st1e && use_read_valid_st1e && tags_match && use_read_dirty_st1e;
     wire req_invalid = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
