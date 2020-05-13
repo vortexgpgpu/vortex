@@ -256,7 +256,7 @@ module VX_bank #(
     assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe;
     assign dfpq_pop = !mrvq_pop && !dfpq_empty && !stall_bank_pipe;
     assign reqq_pop = !mrvq_stop && !mrvq_pop && !dfpq_pop && !reqq_empty && reqq_req_st0 && !stall_bank_pipe && !is_fill_st1[0] && !is_fill_in_pipe;
-    assign snrq_pop = !reqq_pop && !reqq_pop && !mrvq_pop && !dfpq_pop && !snrq_empty && !stall_bank_pipe;
+    assign snrq_pop = !mrvq_stop && !reqq_pop && !reqq_pop && !mrvq_pop && !dfpq_pop && !snrq_empty && !stall_bank_pipe;
 
     wire                                  qual_is_fill_st0;
     wire                                  qual_valid_st0;
