@@ -25,6 +25,8 @@ module VX_tag_data_access #(
     input wire                          is_snp_st1e,
     input wire                          stall_bank_pipe,
 
+    input wire                          force_request_miss_st1e,
+
     input wire[`LINE_SELECT_BITS-1:0]   readaddr_st10, 
     input wire[`LINE_ADDR_WIDTH-1:0]    writeaddr_st1e,
     
@@ -44,7 +46,8 @@ module VX_tag_data_access #(
     output wire[`TAG_SELECT_BITS-1:0]   readtag_st1e,
     output wire                         miss_st1e,
     output wire                         dirty_st1e,
-    output wire                         fill_saw_dirty_st1e    
+    output wire                         fill_saw_dirty_st1e,
+    output wire                         snp_to_mrvq_st1e
 );
 
     reg                         read_valid_st1c[STAGE_1_CYCLES-1:0];
@@ -229,16 +232,22 @@ module VX_tag_data_access #(
     // use "case equality" to handle uninitialized tag when block entry is not valid
     assign tags_match = ((writetag_st1e == use_read_tag_st1e) === 1'b1);
 
-    wire snoop_hit   = valid_req_st1e &&  is_snp_st1e && use_read_valid_st1e && tags_match && use_read_dirty_st1e;
-    wire req_invalid = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
-    wire req_miss    = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && !tags_match;
+    wire snoop_hit_no_pending = valid_req_st1e &&  is_snp_st1e &&  use_read_valid_st1e && tags_match && use_read_dirty_st1e && !force_request_miss_st1e;
+    wire req_invalid          = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
+    wire req_miss             = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && !tags_match;
+
+    wire real_miss            = req_invalid || req_miss || (force_request_miss_st1e && !is_snp_st1e);
     
-    assign miss_st1e           = snoop_hit || req_invalid || req_miss;
+    assign snp_to_mrvq_st1e    = valid_req_st1e && is_snp_st1e && force_request_miss_st1e;
+    assign miss_st1e           = real_miss || snoop_hit_no_pending;
     assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
     assign readdata_st1e       = use_read_data_st1e;
     assign readtag_st1e        = use_read_tag_st1e;
     assign fill_sent           = miss_st1e;
     assign fill_saw_dirty_st1e = real_writefill && dirty_st1e;
-    assign invalidate_line     = snoop_hit;
+    assign invalidate_line     = snoop_hit_no_pending;
 
 endmodule
+
+
+
