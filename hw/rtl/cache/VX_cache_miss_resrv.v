@@ -26,6 +26,7 @@ module VX_cache_miss_resrv #(
     input wire[CORE_TAG_WIDTH-1:0]      miss_add_tag,
     input wire[`BYTE_EN_BITS-1:0]       miss_add_mem_read,
     input wire[`BYTE_EN_BITS-1:0]       miss_add_mem_write,
+    input wire                          mrvq_init_ready_state,
     input wire                          miss_add_is_snp,
     output wire                         miss_resrv_full,
     output wire                         miss_resrv_stop,
@@ -98,7 +99,7 @@ module VX_cache_miss_resrv #(
         end else begin
             if (mrvq_push) begin
                 valid_table[enqueue_index]    <= 1;
-                ready_table[enqueue_index]    <= 0;
+                ready_table[enqueue_index]    <= mrvq_init_ready_state;
                 addr_table[enqueue_index]     <= miss_add_addr;
                 metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_tag, miss_add_mem_read, miss_add_mem_write, miss_add_wsel, miss_add_is_snp};
                 tail_ptr                      <= tail_ptr + 1;

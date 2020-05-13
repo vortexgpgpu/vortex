@@ -47,7 +47,8 @@ module VX_tag_data_access #(
     output wire                         miss_st1e,
     output wire                         dirty_st1e,
     output wire                         fill_saw_dirty_st1e,
-    output wire                         snp_to_mrvq_st1e
+    output wire                         snp_to_mrvq_st1e,
+    output wire                         mrvq_init_ready_state_st1e
 );
 
     reg                         read_valid_st1c[STAGE_1_CYCLES-1:0];
@@ -236,10 +237,16 @@ module VX_tag_data_access #(
     wire req_invalid          = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
     wire req_miss             = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && !tags_match;
 
-    wire real_miss            = req_invalid || req_miss || (force_request_miss_st1e && !is_snp_st1e);
+    wire real_miss            = req_invalid || req_miss;
+
+    wire force_core_miss      = (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e && !real_miss);
+
     
-    assign snp_to_mrvq_st1e    = valid_req_st1e && is_snp_st1e && force_request_miss_st1e;
-    assign miss_st1e           = real_miss || snoop_hit_no_pending;
+    assign snp_to_mrvq_st1e           = valid_req_st1e && is_snp_st1e && force_request_miss_st1e;
+    
+    assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e || force_core_miss;
+
+    assign miss_st1e           = real_miss || snoop_hit_no_pending || force_core_miss;
     assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
     assign readdata_st1e       = use_read_data_st1e;
     assign readtag_st1e        = use_read_tag_st1e;
