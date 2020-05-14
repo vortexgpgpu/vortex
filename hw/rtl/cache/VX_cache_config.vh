@@ -3,11 +3,13 @@
 
 `include "VX_define.vh"
 
-//                               data           tid                    tag              read             write             base addr   is_snp
-`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQS_BITS + CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS         + 1)
+`define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_REQ_TAG_WIDTH)
+
+//                                data          tid         tag               read            write           base addr        is_snp
+`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQS_BITS + `REQ_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS + 1)
 
 //                               tag               read             write            reqs
-`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `REQS_BITS)
+`define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `REQS_BITS)
 
 `define REQS_BITS               `LOG2UP(NUM_REQUESTS)
 

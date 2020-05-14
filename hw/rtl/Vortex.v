@@ -241,7 +241,9 @@ module Vortex #(
         .ebreak          (ebreak)
     );
 
-    VX_dmem_ctrl dmem_ctrl (
+    VX_dmem_ctrl #(
+        .CORE_ID(CORE_ID)
+    ) dmem_ctrl (
         .clk                (clk),
         .reset              (reset),
 

@@ -1,6 +1,7 @@
 `include "VX_cache_config.vh"
 
 module VX_cache #(
+    parameter CACHE_ID                      = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE                    = 1024, 
     // Size of line inside a bank in bytes
@@ -305,7 +306,9 @@ module VX_cache #(
             assign per_bank_snp_rsp_tag[i]   = curr_bank_snp_rsp_tag;
             assign curr_bank_snp_rsp_ready   = per_bank_snp_rsp_ready[i];
             
-            VX_bank #(
+            VX_bank #(                
+                .BANK_ID              (i),
+                .CACHE_ID             (CACHE_ID),
                 .CACHE_SIZE           (CACHE_SIZE),
                 .BANK_LINE_SIZE       (BANK_LINE_SIZE),
                 .NUM_BANKS            (NUM_BANKS),
@@ -432,5 +435,11 @@ module VX_cache #(
         .snp_rsp_tag   (snp_rsp_tag),
         .snp_rsp_ready (snp_rsp_ready)
     );
+
+    /*always_comb begin
+        if (1'($time & 1) && snp_rsp_valid && snp_rsp_ready) begin
+            $display("*** %t: cache%01d snp rsp tag=%0h", $time, CACHE_ID, snp_rsp_tag);
+        end
+    end*/
     
 endmodule

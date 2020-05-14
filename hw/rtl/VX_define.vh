@@ -30,11 +30,11 @@
     endgenerate
 
 `define CLOG2(x)    $clog2(x)
-`define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > x) ? 1 : 0))
-`define LOG2UP(x)   ((x > 1) ? $clog2(x) : 1)
+`define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
+`define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
 
-`define MIN(x, y)   ((x < y)  ? x : y);
-`define MAX(x, y)   ((x > y)  ? x : y);
+`define MIN(x, y)   ((x < y) ? (x) : (y))
+`define MAX(x, y)   ((x > y) ? (x) : (y))
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -126,6 +126,9 @@
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
+// Cache ID
+`define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
+ 
 // DRAM request data bits
 `define DDRAM_LINE_WIDTH    (`DBANK_LINE_SIZE * 8)
 
@@ -143,6 +146,9 @@
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
+// Cache ID
+`define ICACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 1)
+
 // DRAM request data bits
 `define IDRAM_LINE_WIDTH    (`IBANK_LINE_SIZE * 8)
 
@@ -157,6 +163,9 @@
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
+// Cache ID
+`define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 3)
+
 // DRAM request data bits
 `define SDRAM_LINE_WIDTH    (`SBANK_LINE_SIZE * 8)
 
@@ -170,6 +179,9 @@
 `define SNUM_REQUESTS       `NUM_THREADS
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
+
+// Cache ID
+`define L2CACHE_ID          (`L3_ENABLE ? 1 : 0)
 
 // DRAM request data bits
 `define L2DRAM_LINE_WIDTH   (`L2BANK_LINE_SIZE * 8)
@@ -187,6 +199,9 @@
 `define L2NUM_REQUESTS      (2*`NUM_CORES)
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
+
+// Cache ID
+`define L3CACHE_ID          0
 
 // DRAM request data bits
 `define L3DRAM_LINE_WIDTH   (`L3BANK_LINE_SIZE * 8)

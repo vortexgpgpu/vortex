@@ -25,13 +25,10 @@ PROJECT = demo
 
 SRCS = demo.cpp
 
-all: $(PROJECT)
+all: $(PROJECT) kernel.bin kernel.dump
  
 kernel.dump:  kernel.elf
 	$(VX_DMP) -D  kernel.elf > kernel.dump
-
-kernel.hex:  kernel.elf
-	$(VX_CPY) -O ihex kernel.elf kernel.hex
 
 kernel.bin:  kernel.elf
 	$(VX_CPY) -O binary kernel.elf kernel.bin
@@ -58,7 +55,10 @@ run-simx: $(PROJECT)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o *.dump .depend 
+	rm -rf $(PROJECT) *.o .depend
+
+clean-all:
+	rm -rf $(PROJECT) *.o *.elf *.bin *.dump .depend
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

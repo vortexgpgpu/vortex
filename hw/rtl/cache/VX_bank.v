@@ -1,6 +1,8 @@
 `include "VX_cache_config.vh"
-`include "VX_define.vh"
+
 module VX_bank #(
+    parameter CACHE_ID                      = 0,
+    parameter BANK_ID                       = 0,    
     // Size of cache in bytes
     parameter CACHE_SIZE                    = 0, 
     // Size of line inside a bank in bytes
@@ -57,8 +59,8 @@ module VX_bank #(
     // Snooping request tag width
     parameter SNP_REQ_TAG_WIDTH             = 0
 ) (
-    input wire                                    clk,
-    input wire                                    reset,
+    input wire clk,
+    input wire reset,
 
     // Core Request    
     input wire [NUM_REQUESTS-1:0]                 core_req_valids,        
@@ -205,7 +207,7 @@ module VX_bank #(
     wire [`LINE_ADDR_WIDTH-1:0]           mrvq_addr_st0;
     wire [`BASE_ADDR_BITS-1:0]            mrvq_wsel_st0;
     wire [`WORD_WIDTH-1:0]                mrvq_writeword_st0;
-    wire [CORE_TAG_WIDTH-1:0]             mrvq_tag_st0;
+    wire [`REQ_TAG_WIDTH-1:0]             mrvq_tag_st0;
     wire [`BYTE_EN_BITS-1:0]              mrvq_mem_read_st0;  
     wire [`BYTE_EN_BITS-1:0]              mrvq_mem_write_st0;
     wire                                  mrvq_is_snp_st0;
@@ -224,7 +226,7 @@ module VX_bank #(
     wire[`BASE_ADDR_BITS-1:0]             miss_add_wsel;
     wire[`WORD_WIDTH-1:0]                 miss_add_data;
     wire[`REQS_BITS-1:0]                  miss_add_tid;
-    wire[CORE_TAG_WIDTH-1:0]              miss_add_tag;
+    wire[`REQ_TAG_WIDTH-1:0]              miss_add_tag;
     wire[`BYTE_EN_BITS-1:0]               miss_add_mem_read;
     wire[`BYTE_EN_BITS-1:0]               miss_add_mem_write;
 
@@ -247,10 +249,6 @@ module VX_bank #(
                 is_fill_in_pipe = 1;
             end
         end
-
-        // if (is_fill_st2) begin
-        //     is_fill_in_pipe = 1;
-        // end
     end
 
     assign mrvq_pop = mrvq_valid_st0 && !stall_bank_pipe;
@@ -270,24 +268,23 @@ module VX_bank #(
     wire                                  qual_going_to_write_st0;
     wire                                  qual_is_snp_st0;
 
-    wire                                  valid_st1         [STAGE_1_CYCLES-1:0];
-    wire [`LINE_ADDR_WIDTH-1:0]           addr_st1          [STAGE_1_CYCLES-1:0];
-    wire [`WORD_SELECT_ADDR_END:0]        wsel_st1          [STAGE_1_CYCLES-1:0];
-    wire [`WORD_WIDTH-1:0]                writeword_st1     [STAGE_1_CYCLES-1:0];
-    wire [`REQ_INST_META_WIDTH-1:0]       inst_meta_st1     [STAGE_1_CYCLES-1:0];    
-    wire [`BANK_LINE_WIDTH-1:0]           writedata_st1     [STAGE_1_CYCLES-1:0];
-    wire [SNP_REQ_TAG_WIDTH-1:0]          snrq_tag_st1      [STAGE_1_CYCLES-1:0];
-    wire                                  is_snp_st1        [STAGE_1_CYCLES-1:0];
-    wire                                  from_mrvq_st1     [STAGE_1_CYCLES-1:0];
+    wire                                  valid_st1     [STAGE_1_CYCLES-1:0];
+    wire [`LINE_ADDR_WIDTH-1:0]           addr_st1      [STAGE_1_CYCLES-1:0];
+    wire [`WORD_SELECT_ADDR_END:0]        wsel_st1      [STAGE_1_CYCLES-1:0];
+    wire [`WORD_WIDTH-1:0]                writeword_st1 [STAGE_1_CYCLES-1:0];
+    wire [`REQ_INST_META_WIDTH-1:0]       inst_meta_st1 [STAGE_1_CYCLES-1:0];    
+    wire [`BANK_LINE_WIDTH-1:0]           writedata_st1 [STAGE_1_CYCLES-1:0];
+    wire                                  is_snp_st1    [STAGE_1_CYCLES-1:0];
+    wire                                  from_mrvq_st1 [STAGE_1_CYCLES-1:0];
 
     assign qual_is_fill_st0 = dfpq_pop;
 
     assign qual_valid_st0   = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop;
 
-    assign qual_addr_st0    = dfpq_pop ? dfpq_addr_st0     :
-                              mrvq_pop ? mrvq_addr_st0     :
+    assign qual_addr_st0    = dfpq_pop ? dfpq_addr_st0 :
+                              mrvq_pop ? mrvq_addr_st0 :
                               reqq_pop ? reqq_req_addr_st0[31:`LINE_SELECT_ADDR_START] :
-                              snrq_pop ? snrq_addr_st0     :
+                              snrq_pop ? snrq_addr_st0 :
                                          0;
 
     assign qual_wsel_st0   =  reqq_pop ? reqq_req_addr_st0[`BASE_ADDR_BITS-1:0] :
@@ -296,48 +293,48 @@ module VX_bank #(
 
     assign qual_writedata_st0 = dfpq_pop ? dfpq_filldata_st0 : 57;
 
-    assign qual_inst_meta_st0 = mrvq_pop ? {mrvq_tag_st0    , mrvq_mem_read_st0,     mrvq_mem_write_st0,     mrvq_tid_st0} :
-                                reqq_pop ? {reqq_req_tag_st0, reqq_req_mem_read_st0, reqq_req_mem_write_st0, reqq_req_tid_st0} :
+    assign qual_inst_meta_st0 = mrvq_pop ? {`REQ_TAG_WIDTH'(mrvq_tag_st0)    , mrvq_mem_read_st0,     mrvq_mem_write_st0,     mrvq_tid_st0} :
+                                reqq_pop ? {`REQ_TAG_WIDTH'(reqq_req_tag_st0), reqq_req_mem_read_st0, reqq_req_mem_write_st0, reqq_req_tid_st0} :
+                                snrq_pop ? {`REQ_TAG_WIDTH'(snrq_tag_st0),     `BYTE_EN_BITS'(0),     `BYTE_EN_BITS'(0),      `REQS_BITS'(0)} :
                                            0;
 
     assign qual_going_to_write_st0 = dfpq_pop ? 1 :
                                         (mrvq_pop && (mrvq_mem_write_st0 != `BYTE_EN_NO)) ? 1 :
                                             (reqq_pop && (reqq_req_mem_write_st0 != `BYTE_EN_NO)) ? 1 :
-                                                (snrq_pop) ? 1 :
-                                                    0;
+                                                0;
 
     assign qual_is_snp_st0 = mrvq_pop ? mrvq_is_snp_st0 :
                              snrq_pop ? 1 :
-                             0;
+                                        0;
 
     assign qual_writeword_st0 = mrvq_pop ? mrvq_writeword_st0     :
                                 reqq_pop ? reqq_req_writeword_st0 :
-                                0;
+                                           0;
 
     assign qual_from_mrvq_st0 = mrvq_pop;
 
     VX_generic_register #(
-        .N(1+ 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH + SNP_REQ_TAG_WIDTH)
+        .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
     ) s0_1_c0 (
         .clk   (clk),
         .reset (reset),
         .stall (stall_bank_pipe),
         .flush (0),
-        .in    ({qual_from_mrvq_st0, qual_is_snp_st0, snrq_tag_st0,    qual_going_to_write_st0, qual_valid_st0, qual_addr_st0, qual_wsel_st0, qual_writeword_st0, qual_inst_meta_st0, qual_is_fill_st0, qual_writedata_st0}),
-        .out   ({from_mrvq_st1[0]  , is_snp_st1[0],   snrq_tag_st1[0], going_to_write_st1[0],   valid_st1[0],   addr_st1[0],   wsel_st1[0],   writeword_st1[0],   inst_meta_st1[0],   is_fill_st1[0],   writedata_st1[0]})
+        .in    ({qual_from_mrvq_st0, qual_is_snp_st0, qual_going_to_write_st0, qual_valid_st0, qual_addr_st0, qual_wsel_st0, qual_writeword_st0, qual_inst_meta_st0, qual_is_fill_st0, qual_writedata_st0}),
+        .out   ({from_mrvq_st1[0]  , is_snp_st1[0],   going_to_write_st1[0],   valid_st1[0],   addr_st1[0],   wsel_st1[0],   writeword_st1[0],   inst_meta_st1[0],   is_fill_st1[0],   writedata_st1[0]})
     );
 
     genvar i;
     for (i = 1; i < STAGE_1_CYCLES; i++) begin
         VX_generic_register #(
-            .N(1+ 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH + SNP_REQ_TAG_WIDTH)
+            .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
         ) s0_1_cc (
             .clk  (clk),
             .reset(reset),
             .stall(stall_bank_pipe),
             .flush(0),
-            .in  ({from_mrvq_st1[i-1], is_snp_st1[i-1], snrq_tag_st1[i-1], going_to_write_st1[i-1], valid_st1[i-1], addr_st1[i-1],   wsel_st1[i-1], writeword_st1[i-1], inst_meta_st1[i-1], is_fill_st1[i-1], writedata_st1[i-1]}),
-            .out ({from_mrvq_st1[i]  , is_snp_st1[i],   snrq_tag_st1[i],   going_to_write_st1[i],   valid_st1[i],   addr_st1[i],     wsel_st1[i],   writeword_st1[i],   inst_meta_st1[i],   is_fill_st1[i],   writedata_st1[i]})
+            .in  ({from_mrvq_st1[i-1], is_snp_st1[i-1], going_to_write_st1[i-1], valid_st1[i-1], addr_st1[i-1],   wsel_st1[i-1], writeword_st1[i-1], inst_meta_st1[i-1], is_fill_st1[i-1], writedata_st1[i-1]}),
+            .out ({from_mrvq_st1[i]  , is_snp_st1[i],   going_to_write_st1[i],   valid_st1[i],   addr_st1[i],     wsel_st1[i],   writeword_st1[i],   inst_meta_st1[i],   is_fill_st1[i],   writedata_st1[i]})
         );
     end
 
@@ -347,7 +344,7 @@ module VX_bank #(
     wire                        miss_st1e;
     wire                        dirty_st1e;
 `DEBUG_BEGIN
-    wire [CORE_TAG_WIDTH-1:0]   tag_st1e;
+    wire [`REQ_TAG_WIDTH-1:0]   tag_st1e;
     wire [`REQS_BITS-1:0]       tid_st1e;
 `DEBUG_END
     wire [`BYTE_EN_BITS-1:0]    mem_read_st1e;  
@@ -358,6 +355,7 @@ module VX_bank #(
     wire                        mrvq_init_ready_state_st1e;
 
     assign is_snp_st1e = is_snp_st1[STAGE_1_CYCLES-1];
+
     assign {tag_st1e, mem_read_st1e, mem_write_st1e, tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
 
     assign st2_pending_hazard_st1e = (miss_add_because_miss) && ((addr_st2 == addr_st1[STAGE_1_CYCLES-1]) && !is_fill_st2);
@@ -419,32 +417,32 @@ module VX_bank #(
     wire [`REQ_INST_META_WIDTH-1:0] inst_meta_st2;
     wire [`TAG_SELECT_BITS-1:0]     readtag_st2;    
     wire                            fill_saw_dirty_st2;
-    wire [SNP_REQ_TAG_WIDTH-1:0]    snrq_tag_st2;
     wire                            is_snp_st2;
     wire                            snp_to_mrvq_st2;
     wire                            mrvq_init_ready_state_st2;
 
     VX_generic_register #(
-        .N(1+1+ 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + `REQ_INST_META_WIDTH + SNP_REQ_TAG_WIDTH)
+        .N(1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + `REQ_INST_META_WIDTH)
     ) st_1e_2 (
         .clk  (clk),
         .reset(reset),
         .stall(stall_bank_pipe),
         .flush(0),
-        .in  ({mrvq_init_ready_state_st1e, snp_to_mrvq_st1e, is_snp_st1e, snrq_tag_st1[STAGE_1_CYCLES-1], fill_saw_dirty_st1e, is_fill_st1[STAGE_1_CYCLES-1] , qual_valid_st1e_2, addr_st1[STAGE_1_CYCLES-1], wsel_st1[STAGE_1_CYCLES-1], writeword_st1[STAGE_1_CYCLES-1], readword_st1e, readdata_st1e, readtag_st1e, miss_st1e, dirty_st1e, inst_meta_st1[STAGE_1_CYCLES-1]}),
-        .out ({mrvq_init_ready_state_st2,  snp_to_mrvq_st2 , is_snp_st2 , snrq_tag_st2,                   fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
+        .in  ({mrvq_init_ready_state_st1e, snp_to_mrvq_st1e, is_snp_st1e, fill_saw_dirty_st1e, is_fill_st1[STAGE_1_CYCLES-1] , qual_valid_st1e_2, addr_st1[STAGE_1_CYCLES-1], wsel_st1[STAGE_1_CYCLES-1], writeword_st1[STAGE_1_CYCLES-1], readword_st1e, readdata_st1e, readtag_st1e, miss_st1e, dirty_st1e, inst_meta_st1[STAGE_1_CYCLES-1]}),
+        .out ({mrvq_init_ready_state_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
     );
-
 
     wire dram_fill_req_stall = (valid_st2 && miss_st2 && !invalidate_fill && ~dram_fill_req_ready);
 
-    wire cwbq_full;
     wire dwbq_push;
+    wire dwbq_pop;
     wire dwbq_empty;    
     wire dwbq_full;
-    wire srpq_full;
-    wire invalidate_fill;
 
+    wire cwbq_full;        
+    wire srpq_full;
+
+    wire invalidate_fill;
     wire miss_add_is_snp;
 
     // Enqueue to miss reserv if it's a valid miss
@@ -471,10 +469,12 @@ module VX_bank #(
         .WORD_SIZE              (WORD_SIZE),
         .NUM_REQUESTS           (NUM_REQUESTS),
         .MRVQ_SIZE              (MRVQ_SIZE),
-        .CORE_TAG_WIDTH         (CORE_TAG_WIDTH)
+        .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),
+        .SNP_REQ_TAG_WIDTH      (SNP_REQ_TAG_WIDTH)
     ) cache_miss_resrv (
         .clk                     (clk),
         .reset                   (reset),
+
         // Enqueue
         .miss_add                (miss_add),
         .miss_add_addr           (miss_add_addr),
@@ -493,8 +493,6 @@ module VX_bank #(
         .is_fill_st1             (is_fill_st1[STAGE_1_CYCLES-1]),
         .fill_addr_st1           (addr_st1[STAGE_1_CYCLES-1]),
         .pending_hazard          (mrvq_pending_hazard_st1e),
-        // .is_fill_st1             (is_fill_st2),
-        // .fill_addr_st1           (addr_st2),
 
         // Dequeue
         .miss_resrv_pop          (mrvq_pop),
@@ -509,8 +507,8 @@ module VX_bank #(
         .miss_resrv_is_snp_st0   (mrvq_is_snp_st0)
     );
 
-    wire cwbq_push_unqual = valid_st2 && !miss_st2 && !is_fill_st2 && !is_snp_st2;
     // Enqueue to CWB Queue
+    wire cwbq_push_unqual = valid_st2 && !miss_st2 && !is_fill_st2 && !is_snp_st2;
     wire cwbq_push = cwbq_push_unqual
                    && !cwbq_full 
                    && (miss_add_mem_write == `BYTE_EN_NO) 
@@ -521,7 +519,7 @@ module VX_bank #(
 
     wire [`WORD_WIDTH-1:0]    cwbq_data = readword_st2;
     wire [`REQS_BITS-1:0]     cwbq_tid  = miss_add_tid;
-    wire [CORE_TAG_WIDTH-1:0] cwbq_tag  = miss_add_tag;
+    wire [CORE_TAG_WIDTH-1:0] cwbq_tag  = CORE_TAG_WIDTH'(miss_add_tag);
     
     wire cwbq_empty;
     wire cwbq_pop;
@@ -545,8 +543,8 @@ module VX_bank #(
         .full    (cwbq_full)
     );
 
-    wire dwbq_push_unqual = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2);
     // Enqueue to DWB Queue
+    wire dwbq_push_unqual = ((valid_st2 && miss_st2 && dirty_st2) || fill_saw_dirty_st2);
     assign dwbq_push = dwbq_push_unqual 
                     && !dwbq_full 
                     && !((snp_rsp_push_unqual && srpq_full) 
@@ -579,6 +577,8 @@ module VX_bank #(
 
     assign dram_wb_req_valid = !dwbq_empty;
 
+    assign dwbq_pop = dram_wb_req_valid && dram_wb_req_ready;
+
     VX_generic_queue #(
         .DATAW(`LINE_ADDR_WIDTH + `BANK_LINE_WIDTH), 
         .SIZE(DWBQ_SIZE)
@@ -589,25 +589,30 @@ module VX_bank #(
         .push    (dwbq_push),
         .data_in ({dwbq_req_addr, dwbq_req_data}),
 
-        .pop     (dram_wb_req_ready),
+        .pop     (dwbq_pop),
         .data_out({dram_wb_req_addr, dram_wb_req_data}),
         .empty   (dwbq_empty),
         .full    (dwbq_full)
     );
 
-    wire snp_rsp_push;    
+    wire srpq_push;
+    wire srpq_pop;
     wire srpq_empty;
 
     wire snp_rsp_push_unqual = is_snp_st2 && valid_st2 && !snp_to_mrvq_st2;
-
-    assign snp_rsp_push = snp_rsp_push_unqual
-                       && !srpq_full 
-                       && !((cwbq_push_unqual && cwbq_full) 
-                         || (dwbq_push_unqual && dwbq_full) 
-                         || (miss_add_unqual && mrvq_full) 
-                         || dram_fill_req_stall);
     
-    assign snp_rsp_valid = !srpq_empty;
+    wire [SNP_REQ_TAG_WIDTH-1:0] snrq_tag_st2 = SNP_REQ_TAG_WIDTH'(miss_add_tag);
+
+    assign srpq_push = snp_rsp_push_unqual
+                    && !srpq_full 
+                    && !((cwbq_push_unqual && cwbq_full) 
+                      || (dwbq_push_unqual && dwbq_full) 
+                      || (miss_add_unqual && mrvq_full) 
+                      || dram_fill_req_stall);
+
+    assign srpq_pop = snp_rsp_valid && snp_rsp_ready;
+    
+    assign snp_rsp_valid = !srpq_empty;    
 
     VX_generic_queue #(
         .DATAW(SNP_REQ_TAG_WIDTH), 
@@ -615,9 +620,9 @@ module VX_bank #(
     ) snp_rsp_queue (
         .clk     (clk),
         .reset   (reset),
-        .push    (snp_rsp_push),
+        .push    (srpq_push),
         .data_in (snrq_tag_st2),
-        .pop     (snp_rsp_ready),
+        .pop     (srpq_pop),
         .data_out(snp_rsp_tag),
         .empty   (srpq_empty),
         .full    (srpq_full)
@@ -628,5 +633,11 @@ module VX_bank #(
                           || (dwbq_push_unqual && dwbq_full) 
                           || (miss_add_unqual && mrvq_full) 
                           || dram_fill_req_stall;
+
+    /*always_comb begin
+        if (1'($time & 1) && snp_rsp_push) begin
+            $display("*** %t: bank%01d:%01d snp rsp in: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, addr_st2, snrq_tag_st2);
+        end
+    end*/
 
 endmodule : VX_bank
