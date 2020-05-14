@@ -20,7 +20,7 @@ module VX_fill_invalidator #(
 );
 
     if (FILL_INVALIDAOR_SIZE == 0) begin
-
+    
         assign invalidate_fill = 0;
 
     end else begin 
@@ -34,7 +34,8 @@ module VX_fill_invalidator #(
         integer i;
         always @(*) begin
             for (i = 0; i < FILL_INVALIDAOR_SIZE; i+=1) begin
-                matched_fill[i] = fills_active[i] && (fills_address[i] == fill_addr);
+                matched_fill[i] = fills_active[i] 
+                               && ((fills_address[i] == fill_addr) === 1); // use "case equality" to handle uninitialized entry
             end
         end
 
@@ -55,8 +56,7 @@ module VX_fill_invalidator #(
 
         always @(posedge clk) begin
             if (reset) begin
-                fills_active  <= 0;
-                fills_address <= 0;
+                fills_active <= 0;
             end else begin
                 if (possible_fill && !matched && enqueue_found) begin
                     fills_active [enqueue_index] <= 1;

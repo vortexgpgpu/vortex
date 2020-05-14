@@ -1,3 +1,5 @@
+#!/bin/bash
+
 echo start > results.txt
 
 make

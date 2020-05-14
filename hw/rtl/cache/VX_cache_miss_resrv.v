@@ -11,8 +11,10 @@ module VX_cache_miss_resrv #(
     parameter NUM_REQUESTS                  = 0, 
     // Miss Reserv Queue Knob
     parameter MRVQ_SIZE                     = 0, 
-     // caceh requests tag size
-    parameter CORE_TAG_WIDTH                = 0
+    // core request tag size
+    parameter CORE_TAG_WIDTH                = 0,
+    // Snooping request tag width
+    parameter SNP_REQ_TAG_WIDTH             = 0
 ) (
     input wire clk,
     input wire reset,
@@ -23,7 +25,7 @@ module VX_cache_miss_resrv #(
     input wire[`BASE_ADDR_BITS-1:0]     miss_add_wsel,
     input wire[`WORD_WIDTH-1:0]         miss_add_data,
     input wire[`REQS_BITS-1:0]          miss_add_tid,
-    input wire[CORE_TAG_WIDTH-1:0]      miss_add_tag,
+    input wire[`REQ_TAG_WIDTH-1:0]      miss_add_tag,
     input wire[`BYTE_EN_BITS-1:0]       miss_add_mem_read,
     input wire[`BYTE_EN_BITS-1:0]       miss_add_mem_write,
     input wire                          mrvq_init_ready_state,
@@ -44,7 +46,7 @@ module VX_cache_miss_resrv #(
     output wire[`BASE_ADDR_BITS-1:0]    miss_resrv_wsel_st0,
     output wire[`WORD_WIDTH-1:0]        miss_resrv_data_st0,
     output wire[`REQS_BITS-1:0]         miss_resrv_tid_st0,
-    output wire[CORE_TAG_WIDTH-1:0]     miss_resrv_tag_st0,
+    output wire[`REQ_TAG_WIDTH-1:0]     miss_resrv_tag_st0,
     output wire[`BYTE_EN_BITS-1:0]      miss_resrv_mem_read_st0,
     output wire[`BYTE_EN_BITS-1:0]      miss_resrv_mem_write_st0,
     output wire                         miss_resrv_is_snp_st0   

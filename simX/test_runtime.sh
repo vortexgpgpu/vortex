@@ -1,3 +1,5 @@
+#!/bin/bash
+
 make
 make -C ../runtime/tests/dev
 make -C ../runtime/tests/hello

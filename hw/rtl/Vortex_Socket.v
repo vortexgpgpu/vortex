@@ -53,7 +53,7 @@ module Vortex_Socket (
     if (`NUM_CLUSTERS == 1) begin
 
         Vortex_Cluster #(
-            .CLUSTER_ID(0)
+            .CLUSTER_ID(`L3CACHE_ID)
         ) Vortex_Cluster (
             .clk                (clk),
             .reset              (reset),
@@ -244,6 +244,7 @@ module Vortex_Socket (
         assign l3_core_rsp_ready = (& per_cluster_dram_rsp_ready);
 
         VX_cache #(
+            .CACHE_ID               (0),
             .CACHE_SIZE             (`L3CACHE_SIZE),
             .BANK_LINE_SIZE         (`L3BANK_LINE_SIZE),
             .NUM_BANKS              (`L3NUM_BANKS),

@@ -238,6 +238,7 @@ module Vortex_Cluster #(
         assign l2_core_rsp_ready = (& per_core_D_dram_rsp_ready) && (& per_core_I_dram_rsp_ready);
 
         VX_cache #(
+            .CACHE_ID               (`L2CACHE_ID),
             .CACHE_SIZE             (`L2CACHE_SIZE),
             .BANK_LINE_SIZE         (`L2BANK_LINE_SIZE),
             .NUM_BANKS              (`L2NUM_BANKS),

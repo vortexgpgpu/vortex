@@ -55,6 +55,10 @@
 `define L2_ENABLE (`NUM_CORES > 1)
 `endif
 
+`ifndef L3_ENABLE
+`define L3_ENABLE (`NUM_CLUSTERS > 1)
+`endif
+
 `define CSR_LTID    12'h020
 `define CSR_LWID    12'h021
 `define CSR_GTID    12'h022
@@ -113,7 +117,7 @@
 
 // Snoop Req Queue Size
 `ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 32
+`define DSNRQ_SIZE 16
 `endif
 
 // Core Writeback Queue Size
@@ -138,7 +142,7 @@
 
 // Snoop Rsp Queue Size
 `ifndef DSRPQ_SIZE
-`define DSRPQ_SIZE 32
+`define DSRPQ_SIZE 8
 `endif
 
 // Prefetcher
@@ -197,11 +201,6 @@
 `define IDFPQ_SIZE 32
 `endif
 
-// Snoop Req Queue Size
-`ifndef ISNRQ_SIZE
-`define ISNRQ_SIZE 32
-`endif
-
 // Core Writeback Queue Size
 `ifndef ICWBQ_SIZE
 `define ICWBQ_SIZE `IREQQ_SIZE
@@ -220,11 +219,6 @@
 // Lower Level Cache Hit Queue Size
 `ifndef ILLVQ_SIZE
 `define ILLVQ_SIZE 16
-`endif
-
-// Snoop Rsp Queue Size
-`ifndef ISRPQ_SIZE
-`define ISRPQ_SIZE 8
 `endif
 
 // Prefetcher
@@ -283,11 +277,6 @@
 `define SDFPQ_SIZE 0
 `endif
 
-// Snoop Req Queue Size
-`ifndef SSNRQ_SIZE
-`define SSNRQ_SIZE 16
-`endif
-
 // Core Writeback Queue Size
 `ifndef SCWBQ_SIZE
 `define SCWBQ_SIZE `SREQQ_SIZE
@@ -306,11 +295,6 @@
 // Lower Level Cache Hit Queue Size
 `ifndef SLLVQ_SIZE
 `define SLLVQ_SIZE 16
-`endif
-
-// Snoop Rsp Queue Size
-`ifndef SSRPQ_SIZE
-`define SSRPQ_SIZE 16
 `endif
 
 // Prefetcher
@@ -371,7 +355,7 @@
 
 // Snoop Req Queue Size
 `ifndef L2SNRQ_SIZE
-`define L2SNRQ_SIZE 32
+`define L2SNRQ_SIZE 16
 `endif
 
 // Core Writeback Queue Size
@@ -396,7 +380,7 @@
 
 // Snoop Rsp Queue Size
 `ifndef L2SRPQ_SIZE
-`define L2SRPQ_SIZE 32
+`define L2SRPQ_SIZE 8
 `endif
 
 // Prefetcher
@@ -457,7 +441,7 @@
 
 // Snoop Req Queue Size
 `ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 32
+`define L3SNRQ_SIZE 16
 `endif
 
 // Core Writeback Queue Size

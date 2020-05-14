@@ -1,6 +1,8 @@
 `include "VX_define.vh"
 
-module VX_dmem_ctrl (
+module VX_dmem_ctrl # (
+    parameter CORE_ID = 0
+) (
     input wire              clk,
     input wire              reset,
 
@@ -36,7 +38,7 @@ module VX_dmem_ctrl (
         .CORE_TAG_ID_BITS(`CORE_TAG_ID_BITS)
     ) dcache_core_rsp_qual_if(), smem_core_rsp_if();
 
-    // use "case equality" to handle uninitialized address value
+    // use "case equality" to handle uninitialized entry
     wire smem_select = ((dcache_core_req_if.core_req_addr[0][31:24] == `SHARED_MEM_TOP_ADDR) === 1'b1);
 
     VX_dcache_io_arb dcache_io_arb (
@@ -50,6 +52,7 @@ module VX_dmem_ctrl (
     );
 
     VX_cache #(
+        .CACHE_ID               (`SCACHE_ID),
         .CACHE_SIZE             (`SCACHE_SIZE),
         .BANK_LINE_SIZE         (`SBANK_LINE_SIZE),
         .NUM_BANKS              (`SNUM_BANKS),
@@ -59,12 +62,12 @@ module VX_dmem_ctrl (
         .REQQ_SIZE              (`SREQQ_SIZE),
         .MRVQ_SIZE              (`SMRVQ_SIZE),
         .DFPQ_SIZE              (`SDFPQ_SIZE),
-        .SNRQ_SIZE              (`SSNRQ_SIZE),
+        .SNRQ_SIZE              (0),
         .CWBQ_SIZE              (`SCWBQ_SIZE),
         .DWBQ_SIZE              (`SDWBQ_SIZE),
         .DFQQ_SIZE              (`SDFQQ_SIZE),
         .LLVQ_SIZE              (`SLLVQ_SIZE),
-        .SRPQ_SIZE              (`SSRPQ_SIZE),
+        .SRPQ_SIZE              (0),
         .PRFQ_SIZE              (`SPRFQ_SIZE),
         .PRFQ_STRIDE            (`SPRFQ_STRIDE),
         .FILL_INVALIDAOR_SIZE   (`SFILL_INVALIDAOR_SIZE),
@@ -133,6 +136,7 @@ module VX_dmem_ctrl (
     );
 
     VX_cache #(
+        .CACHE_ID               (`DCACHE_ID),
         .CACHE_SIZE             (`DCACHE_SIZE),
         .BANK_LINE_SIZE         (`DBANK_LINE_SIZE),
         .NUM_BANKS              (`DNUM_BANKS),
@@ -217,6 +221,7 @@ module VX_dmem_ctrl (
     );
 
     VX_cache #(
+        .CACHE_ID               (`ICACHE_ID),
         .CACHE_SIZE             (`ICACHE_SIZE),
         .BANK_LINE_SIZE         (`IBANK_LINE_SIZE),
         .NUM_BANKS              (`INUM_BANKS),
@@ -226,12 +231,12 @@ module VX_dmem_ctrl (
         .REQQ_SIZE              (`IREQQ_SIZE),
         .MRVQ_SIZE              (`IMRVQ_SIZE),
         .DFPQ_SIZE              (`IDFPQ_SIZE),
-        .SNRQ_SIZE              (`ISNRQ_SIZE),
+        .SNRQ_SIZE              (0),
         .CWBQ_SIZE              (`ICWBQ_SIZE),
         .DWBQ_SIZE              (`IDWBQ_SIZE),
         .DFQQ_SIZE              (`IDFQQ_SIZE),
         .LLVQ_SIZE              (`ILLVQ_SIZE),
-        .SRPQ_SIZE              (`ISRPQ_SIZE),
+        .SRPQ_SIZE              (0),
         .PRFQ_SIZE              (`IPRFQ_SIZE),
         .PRFQ_STRIDE            (`IPRFQ_STRIDE),
         .FILL_INVALIDAOR_SIZE   (`IFILL_INVALIDAOR_SIZE),

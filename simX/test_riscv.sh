@@ -1,3 +1,5 @@
+#!/bin/bash
+
 make
 cd obj_dir
 echo start > results.txt
