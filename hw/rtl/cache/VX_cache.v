@@ -425,8 +425,6 @@ module VX_cache #(
         .BANK_LINE_SIZE    (BANK_LINE_SIZE),
         .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
     ) snp_rsp_arb (
-        //.clk(clk),
-        //.reset(reset),
         .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
         .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
         .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
