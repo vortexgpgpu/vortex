@@ -253,7 +253,6 @@ module Vortex_Cluster #(
             .DWBQ_SIZE              (`L2DWBQ_SIZE),
             .DFQQ_SIZE              (`L2DFQQ_SIZE),
             .LLVQ_SIZE              (`L2LLVQ_SIZE),
-            .SRPQ_SIZE              (`L2SRPQ_SIZE),
             .PRFQ_SIZE              (`L2PRFQ_SIZE),
             .PRFQ_STRIDE            (`L2PRFQ_STRIDE),
             .FILL_INVALIDAOR_SIZE   (`L2FILL_INVALIDAOR_SIZE),            

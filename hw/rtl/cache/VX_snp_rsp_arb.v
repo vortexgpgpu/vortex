@@ -14,15 +14,13 @@ module VX_snp_rsp_arb #(
     input  wire                         snp_rsp_ready    
 );
 
-    wire [NUM_BANKS-1:0] qual_per_bank_snp_rsp = per_bank_snp_rsp_valid & {NUM_BANKS{snp_rsp_ready}};
-
     wire [`BANK_BITS-1:0] fsq_bank;
     wire                  fsq_valid;
 
     VX_generic_priority_encoder #(
         .N(NUM_BANKS)
     ) sel_ffsq (
-        .valids (qual_per_bank_snp_rsp),
+        .valids (per_bank_snp_rsp_valid),
         .index  (fsq_bank),
         .found  (fsq_valid)
     );
@@ -32,7 +30,7 @@ module VX_snp_rsp_arb #(
 
     genvar i;
     for (i = 0; i < NUM_BANKS; i++) begin
-        assign per_bank_snp_rsp_ready[i] = fsq_valid && (fsq_bank == `BANK_BITS'(i));
+        assign per_bank_snp_rsp_ready[i] = snp_rsp_ready && (fsq_bank == `BANK_BITS'(i));
     end
 
 endmodule

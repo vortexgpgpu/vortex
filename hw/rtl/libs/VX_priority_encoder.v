@@ -16,7 +16,7 @@ module VX_priority_encoder #(
         found_r = 0;
         for (i = `NUM_WARPS-1; i >= 0; i = i - 1) begin
             if (valids[i]) begin
-                index_r = i[`NW_BITS-1:0];
+                index_r = `NW_BITS'(i);
                 found_r = 1;
             end
         end
