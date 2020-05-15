@@ -259,7 +259,6 @@ module Vortex_Socket (
             .DWBQ_SIZE              (`L3DWBQ_SIZE),
             .DFQQ_SIZE              (`L3DFQQ_SIZE),
             .LLVQ_SIZE              (`L3LLVQ_SIZE),
-            .SRPQ_SIZE              (`L3SRPQ_SIZE),
             .PRFQ_SIZE              (`L3PRFQ_SIZE),
             .PRFQ_STRIDE            (`L3PRFQ_STRIDE),
             .FILL_INVALIDAOR_SIZE   (`L3FILL_INVALIDAOR_SIZE),
@@ -329,13 +328,13 @@ module Vortex_Socket (
         );
     end
 
-    /*always_comb begin
+    always_comb begin
         if (1'($time & 1) && (dram_req_read || dram_req_write) && dram_req_ready) begin
             $display("*** %t: DRAM req: w=%b addr=%0h, tag=%0h, data=%0h", $time, dram_req_write, {dram_req_addr, `CLOG2(`GLOBAL_BLOCK_SIZE)'(0)}, dram_req_tag, dram_req_data);
         end
         if (1'($time & 1) && dram_rsp_valid && dram_rsp_ready) begin
             $display("*** %t: DRAM rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
         end
-    end*/
+    end
 
 endmodule

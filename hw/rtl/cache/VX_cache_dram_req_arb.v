@@ -89,21 +89,22 @@ module VX_cache_dram_req_arb #(
         .dfqq_full                      (dfqq_full)
     );
 
-    wire [`BANK_BITS-1:0] dwb_bank;
+    assign dram_fill_req_ready = ~dfqq_full;
 
-    wire [NUM_BANKS-1:0] use_wb_valid = per_bank_dram_wb_req_valid;
+    wire [`BANK_BITS-1:0] dwb_bank;
     
     VX_generic_priority_encoder #(
         .N(NUM_BANKS)
     ) sel_dwb (
-        .valids(use_wb_valid),
+        .valids(per_bank_dram_wb_req_valid),
         .index (dwb_bank),
         .found (dwb_valid)
-    );
+    );    
 
-    assign dram_fill_req_ready = ~dfqq_full;
-
-    assign per_bank_dram_wb_req_ready = dram_req_ready ? (use_wb_valid & ((1 << dwb_bank))) : 0;
+    genvar i;
+    for (i = 0; i < NUM_BANKS; i++) begin
+        assign per_bank_dram_wb_req_ready[i] = dram_req_ready && (dwb_bank == `BANK_BITS'(i));
+    end
 
     wire   dram_req_valid  = dwb_valid || dfqq_req || pref_pop;
 

@@ -34,9 +34,7 @@ module VX_cache #(
     // Dram Fill Req Queue Size
     parameter DFQQ_SIZE                     = 8, 
     // Lower Level Cache Hit Queue Size
-    parameter LLVQ_SIZE                     = 16, 
-    // Snoop Rsp Queue Size
-    parameter SRPQ_SIZE                     = 8,
+    parameter LLVQ_SIZE                     = 16,
 
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 16,
@@ -323,7 +321,6 @@ module VX_cache #(
                 .DWBQ_SIZE            (DWBQ_SIZE),
                 .DFQQ_SIZE            (DFQQ_SIZE),
                 .LLVQ_SIZE            (LLVQ_SIZE),
-                .SRPQ_SIZE            (SRPQ_SIZE),
                 .FILL_INVALIDAOR_SIZE (FILL_INVALIDAOR_SIZE),
                 .DRAM_ENABLE          (DRAM_ENABLE),
                 .WRITE_ENABLE         (WRITE_ENABLE),
@@ -428,6 +425,8 @@ module VX_cache #(
         .BANK_LINE_SIZE    (BANK_LINE_SIZE),
         .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
     ) snp_rsp_arb (
+        //.clk(clk),
+        //.reset(reset),
         .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
         .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
         .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),

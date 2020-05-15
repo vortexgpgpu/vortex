@@ -140,11 +140,6 @@
 `define DLLVQ_SIZE 0
 `endif
 
-// Snoop Rsp Queue Size
-`ifndef DSRPQ_SIZE
-`define DSRPQ_SIZE 8
-`endif
-
 // Prefetcher
 `ifndef DPRFQ_SIZE
 `define DPRFQ_SIZE 32
@@ -378,11 +373,6 @@
 `define L2LLVQ_SIZE 32
 `endif
 
-// Snoop Rsp Queue Size
-`ifndef L2SRPQ_SIZE
-`define L2SRPQ_SIZE 8
-`endif
-
 // Prefetcher
 `ifndef L2PRFQ_SIZE
 `define L2PRFQ_SIZE 32
@@ -462,11 +452,6 @@
 // Lower Level Cache Hit Queue Size
 `ifndef L3LLVQ_SIZE
 `define L3LLVQ_SIZE 0
-`endif
-
-// Snoop Rsp Queue Size
-`ifndef L3SRPQ_SIZE
-`define L3SRPQ_SIZE 8
 `endif
 
 // Prefetcher

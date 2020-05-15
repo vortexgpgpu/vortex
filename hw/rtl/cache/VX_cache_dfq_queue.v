@@ -20,17 +20,16 @@ module VX_cache_dfq_queue #(
     output wire                         dfqq_empty,
     output wire                         dfqq_full
 );
-
-    wire[NUM_BANKS-1:0] out_per_bank_dram_fill_req_valid;
-    wire[NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] out_per_bank_dram_fill_req_addr;
-
     reg [NUM_BANKS-1:0] use_per_bank_dram_fill_req_valid;
     reg [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] use_per_bank_dram_fill_req_addr;
 
-    wire[NUM_BANKS-1:0] use_per_bqual_bank_dram_fill_req_valid;
-    wire[NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] qual_bank_dram_fill_req_addr;
+    wire [NUM_BANKS-1:0] out_per_bank_dram_fill_req_valid;
+    wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] out_per_bank_dram_fill_req_addr;
 
-    wire[NUM_BANKS-1:0] updated_bank_dram_fill_req_valid;
+    wire [NUM_BANKS-1:0] use_per_bqual_bank_dram_fill_req_valid;
+    wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] qual_bank_dram_fill_req_addr;
+
+    wire [NUM_BANKS-1:0] updated_bank_dram_fill_req_valid;
 
     wire o_empty;
 
