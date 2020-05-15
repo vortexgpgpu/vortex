@@ -328,13 +328,13 @@ module Vortex_Socket (
         );
     end
 
-    always_comb begin
+    /*always_comb begin
         if (1'($time & 1) && (dram_req_read || dram_req_write) && dram_req_ready) begin
             $display("*** %t: DRAM req: w=%b addr=%0h, tag=%0h, data=%0h", $time, dram_req_write, {dram_req_addr, `CLOG2(`GLOBAL_BLOCK_SIZE)'(0)}, dram_req_tag, dram_req_data);
         end
         if (1'($time & 1) && dram_rsp_valid && dram_rsp_ready) begin
             $display("*** %t: DRAM rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
         end
-    end
+    end*/
 
 endmodule
