@@ -46,7 +46,7 @@ run-ase: $(PROJECT)
 	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 
 run-rtlsim: $(PROJECT)
-	LD_LIBRARY_PATH=../../rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 1
+	LD_LIBRARY_PATH=../../rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
 	
 run-simx: $(PROJECT)
 	LD_LIBRARY_PATH=../../simx:$(LD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 16
