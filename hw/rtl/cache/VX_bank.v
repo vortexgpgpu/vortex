@@ -627,4 +627,18 @@ module VX_bank #(
                           || msrq_push_stall 
                           || dram_fill_req_stall;
 
+`ifdef DBG_PRINT_BANK
+    always_comb begin
+        if (1'($time & 1) && dram_fill_req_valid && dram_fill_req_ready) begin
+            $display("*** %t: bank%02d:%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
+        end
+        if (1'($time & 1) && dram_wb_req_valid && dram_wb_req_ready) begin
+            $display("*** %t: bank%02d:%01d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
+        end
+        if (1'($time & 1) && dram_fill_rsp_valid && dram_fill_rsp_ready) begin
+            $display("*** %t: bank%02d:%01d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
+        end
+    end
+`endif
+
 endmodule : VX_bank

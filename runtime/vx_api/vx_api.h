@@ -1,6 +1,5 @@
-
-#ifndef VX_API_
-#define VX_API_
+#ifndef VX_API_H
+#define VX_API_H
 
 #include <stdint.h>
 #include <stdio.h>
@@ -11,7 +10,7 @@ extern "C" {
 
 typedef void (*func_t)(void *);
 
-void vx_spawn_warps(unsigned numWarps, unsigned numThreads, func_t func_ptr , void * args);
+void vx_spawn_warps(int num_warps, int num_threads, func_t func_ptr , void * args);
 
 struct context_t {
   uint32_t num_groups[3];

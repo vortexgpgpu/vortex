@@ -1,5 +1,5 @@
-
-#pragma once
+#ifndef VX_IO_H
+#define VX_IO_H
 
 #include <stdbool.h>
 
@@ -15,7 +15,8 @@ void vx_printf(const char *, unsigned);
 void vx_print_str(const char *);
 void vx_printc(unsigned, char c);
 
-
 #ifdef __cplusplus
 }
+#endif
+
 #endif

@@ -4,8 +4,6 @@
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
 
 struct kernel_arg_t {
-  uint32_t num_warps;
-  uint32_t num_threads;
   uint32_t stride;
   uint32_t src0_ptr;
   uint32_t src1_ptr;

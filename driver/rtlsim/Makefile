@@ -3,11 +3,18 @@ CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CFLAGS += -I../../include -I../../../hw/simulate -I../../../runtime
 
+# control RTL debug print states
+DBG_PRINT = -DDBG_PRINT_CORE_ICACHE \
+            -DDBG_PRINT_CORE_DCACHE \
+            -DDBG_PRINT_BANK \
+			-DDBG_PRINT_DRAM \
+            -DDBG_PRINT_SNP_FWD
+
 #MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=2
 #MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
 MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
-#DEBUG = 1
+DEBUG = 1
 
 CFLAGS += -fPIC
 
@@ -31,7 +38,7 @@ VL_FLAGS += -DGLOBAL_BLOCK_SIZE=64
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += --trace -DVL_DEBUG=1 
+	VL_FLAGS += --trace -DVL_DEBUG=1 $(DBG_PRINT)
 	CFLAGS += -DVCD_OUTPUT
 else
     CFLAGS += -DNDEBUG
