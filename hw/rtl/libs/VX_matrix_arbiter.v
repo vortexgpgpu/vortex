@@ -3,54 +3,51 @@
 module VX_matrix_arbiter #(
     parameter N = 0
 ) (
-    input  wire         clk,
-    input  wire         reset,
-    input  wire [N-1:0] inputs,
-    output wire [N-1:0] grant
+    input  wire                  clk,
+    input  wire                  reset,
+    input  wire [N-1:0]          requests,   
+    output wire                  grant_valid,  
+    output wire [N-1:0]          grant_onehot,   
+    output wire [`LOG2UP(N)-1:0] grant_index
   );
 
-    reg [N-1:1][N-1:0] pri;    
+    reg [N-1:0] state [0:N-1];  
+    wire [N-1:0] dis [0:N-1];
 
-    always @(posedge clk) begin
-        if (reset) begin            
-            integer i, j;
-            for (i = 0; i < N; ++i) begin      
-                for (j = 0; j < N; ++j) begin
-                    pri[i][j] <= 1;
+    genvar i, j;
+    
+    for (i = 0; i < N; ++i) begin      
+        for (j = i + 1; j < N; ++j) begin
+            always @(posedge clk) begin                       
+                if (reset) begin         
+                    state[i][j] <= 0;
+                end else begin
+                    state[i][j] <= (state[i][j] || grant_onehot[j]) && ~grant_onehot[i];
                 end
             end
-        end else begin
-            integer i, j;
-            for (i = 0; i < N; ++i) begin                        
-                if (grant[i]) begin
-                    for (j = 0; j < N; ++j) begin
-                        if (j > i)
-                            pri[j][i] <= 1;
-                        else if (j < i)
-                            pri[i][j] <= 0;
-                    end
-                end
-            end        
         end
-    end    
-
-    genvar i, j;    
+    end           
 
     for (i = 0; i < N; ++i) begin      
-
-        wire [N-1:0] dis;
-
         for (j = 0; j < N; ++j) begin
             if (j > i) begin
-                assign dis[j] = inputs[j] & pri[j][i];
+                assign dis[j][i] = requests[i] & state[i][j];
             end else if (j < i) begin
-                assign dis[j] = inputs[j] & ~pri[i][j];
+                assign dis[j][i] = requests[i] & ~state[j][i];
             end else begin
-                assign dis[j] = 0;            
+                assign dis[j][i] = 0;            
             end
         end
 
-        assign grant[i] = inputs[i] & ~(| dis);
+        assign grant_onehot[i] = requests[i] & ~(| dis[i]);
     end
+
+    VX_encoder_onehot #(
+        .N(N)
+    ) encoder (
+        .onehot(grant_onehot),
+        .valid(grant_valid),
+        .value(grant_index)
+    );
     
 endmodule

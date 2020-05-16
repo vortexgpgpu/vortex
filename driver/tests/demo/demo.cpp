@@ -6,7 +6,7 @@
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
-     int _ret = _expr;                                           \
+     int _ret = _expr;                                          \
      if (0 == _ret)                                             \
        break;                                                   \
      printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
@@ -15,7 +15,7 @@
    } while (false)
 
 const char* program_file = "kernel.bin";
-uint32_t data_stride = 0xffffffff;
+uint32_t data_stride = 0;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
@@ -111,19 +111,22 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  uint32_t block_size  = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
   uint32_t max_cores   = vx_dev_caps(VX_CAPS_MAX_CORES);
   uint32_t max_warps   = vx_dev_caps(VX_CAPS_MAX_WARPS);
   uint32_t max_threads = vx_dev_caps(VX_CAPS_MAX_THREADS);
 
-  if (data_stride == 0xffffffff) {
-    data_stride = block_size / sizeof(uint32_t);
+  if (data_stride == 0) {
+    data_stride = 1;
   }
 
-  uint32_t num_points = max_cores * max_warps * max_threads * data_stride;
-  uint32_t buf_size = num_points * sizeof(uint32_t);
+  kernel_arg.stride = data_stride;
+
+  uint32_t num_points = max_cores * max_warps * max_threads;
+  uint32_t buf_size = num_points * data_stride * sizeof(uint32_t);
 
   std::cout << "number of workitems: " << num_points << std::endl;
+  std::cout << "workitem size: " << data_stride * sizeof(uint32_t) << " bytes" << std::endl;
+  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
   // open device connection
   std::cout << "open device connection" << std::endl;  
@@ -167,10 +170,6 @@ int main(int argc, char *argv[]) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    kernel_arg.num_warps   = max_warps;
-    kernel_arg.num_threads = max_threads;
-    kernel_arg.stride      = data_stride;
-
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));

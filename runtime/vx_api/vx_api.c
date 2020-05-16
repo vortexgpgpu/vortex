@@ -9,7 +9,7 @@ extern "C" {
 
 func_t global_function_pointer;
 void * global_argument_struct;
-unsigned global_num_threads;
+int global_num_threads;
 
 void spawn_warp_runonce() {
 	// active all threads
@@ -19,12 +19,12 @@ void spawn_warp_runonce() {
 	global_function_pointer(global_argument_struct);
 
 	// resume single-thread execution on exit
-	unsigned wid = vx_warp_id();
+	int wid = vx_warp_id();
 	unsigned tmask = (0 == wid) ? 0x1 : 0x0; 
 	vx_tmc(tmask);
 }
 
-void vx_spawn_warps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void * args) {
+void vx_spawn_warps(int numWarps, int numThreads, func_t func_ptr, void * args) {
 	global_function_pointer = func_ptr;
 	global_argument_struct  = args;
 	global_num_threads      = numThreads;
@@ -34,7 +34,7 @@ void vx_spawn_warps(unsigned numWarps, unsigned numThreads, func_t func_ptr, voi
 	spawn_warp_runonce();
 }
 
-unsigned               pocl_threads;
+int                    pocl_threads;
 struct context_t *     pocl_ctx;
 vx_pocl_workgroup_func pocl_pfn;
 const void *           pocl_args;

@@ -70,6 +70,8 @@
 
 `define DRAM_TO_LINE_ADDR(x)    x[`DRAM_ADDR_WIDTH-1:`BANK_SELECT_BITS]
 
-`define LINE_TO_DRAM_ADDR(x, i) {x, (`BANK_SELECT_BITS)'(i)};
+`define LINE_TO_DRAM_ADDR(x, i) {x, `BANK_SELECT_BITS'(i)}
+
+`define LINE_TO_BYTE_ADDR(x, i) {x, `BANK_SELECT_BITS'(i), `BASE_ADDR_BITS'(0)}
 
 `endif

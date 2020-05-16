@@ -625,7 +625,7 @@ Disassembly of section .text:
 8000083c:	28d1a023          	sw	a3,640(gp) # 80016a88 <global_argument_struct>
 80000840:	26b1ae23          	sw	a1,636(gp) # 80016a84 <global_num_threads>
 80000844:	00100793          	li	a5,1
-80000848:	00a7fa63          	bgeu	a5,a0,8000085c <vx_spawn_warps+0x38>
+80000848:	00a7da63          	bge	a5,a0,8000085c <vx_spawn_warps+0x38>
 8000084c:	800005b7          	lui	a1,0x80000
 80000850:	7a058593          	addi	a1,a1,1952 # 800007a0 <__BSS_END__+0xfffe9c78>
 80000854:	d55ff0ef          	jal	ra,800005a8 <vx_wspawn>

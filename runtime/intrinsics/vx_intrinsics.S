@@ -5,7 +5,7 @@
 .type vx_wspawn, @function
 .global vx_wspawn
 vx_wspawn:
-	.word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
+	.word 0x00b5106b # wspawn a0(num_warps), a1(func_ptr)
 	ret
 
 .type vx_tmc, @function
@@ -17,7 +17,7 @@ vx_tmc:
 .type vx_barrier, @function
 .global vx_barrier
 vx_barrier:
-	.word 0x00b5406b # barrier a0(barrier id), a1(numWarps)
+	.word 0x00b5406b # barrier a0(barrier_id), a1(num_warps)
 	ret
 
 .type vx_split, @function
