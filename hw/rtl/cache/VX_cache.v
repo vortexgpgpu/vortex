@@ -127,6 +127,16 @@ module VX_cache #(
     output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdin_ready
 );
 
+`DEBUG_BEGIN
+    wire[31:0]           debug_core_req_use_pc;
+    wire[1:0]            debug_core_req_wb;
+    wire[4:0]            debug_core_req_rd;
+    wire[`NW_BITS-1:0]   debug_core_req_warp_num;
+
+    assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_warp_num} = core_req_tag[0];
+
+`DEBUG_END
+
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valids;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;

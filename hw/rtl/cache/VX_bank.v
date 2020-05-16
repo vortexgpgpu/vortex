@@ -104,6 +104,35 @@ module VX_bank #(
     input  wire                                   snp_rsp_ready
 );
 
+`DEBUG_BEGIN
+    wire[31:0]           debug_use_pc_st0;
+    wire[1:0]            debug_wb_st0;
+    wire[4:0]            debug_rd_st0;
+    wire[`NW_BITS-1:0]   debug_warp_num_st0;
+    wire[2:0]            debug_mem_read_st0;    
+    wire[2:0]            debug_mem_write_st0;
+    wire[`REQS_BITS-1:0] debug_tid_st0;
+
+
+    wire[31:0]           debug_use_pc_st1e;
+    wire[1:0]            debug_wb_st1e;
+    wire[4:0]            debug_rd_st1e;
+    wire[`NW_BITS-1:0]   debug_warp_num_st1e;
+    wire[2:0]            debug_mem_read_st1e;    
+    wire[2:0]            debug_mem_write_st1e;
+    wire[`REQS_BITS-1:0] debug_tid_st1e;
+
+
+    wire[31:0]           debug_use_pc_st2;
+    wire[1:0]            debug_wb_st2;
+    wire[4:0]            debug_rd_st2;
+    wire[`NW_BITS-1:0]   debug_warp_num_st2;
+    wire[2:0]            debug_mem_read_st2;    
+    wire[2:0]            debug_mem_write_st2;
+    wire[`REQS_BITS-1:0] debug_tid_st2;
+`DEBUG_END
+
+
     wire snrq_pop;
     wire snrq_empty;
     wire snrq_full;
@@ -210,11 +239,9 @@ module VX_bank #(
     wire [`BYTE_EN_BITS-1:0]              mrvq_mem_write_st0;
     wire                                  mrvq_is_snp_st0;
 
-`DEBUG_BEGIN
     wire                                  mrvq_pending_hazard_st1e;
     wire                                  st2_pending_hazard_st1e;
     wire                                  force_request_miss_st1e;
-`DEBUG_END
 
     wire[`LINE_ADDR_WIDTH-1:0]            miss_add_addr;
     wire[`BASE_ADDR_BITS-1:0]             miss_add_wsel;
@@ -312,6 +339,10 @@ module VX_bank #(
 
     assign qual_from_mrvq_st0 = mrvq_pop;
 
+`DEBUG_BEGIN
+    assign {debug_use_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_mem_read_st0, debug_mem_write_st0, debug_tid_st0} = qual_inst_meta_st0;
+`DEBUG_END
+
     VX_generic_register #(
         .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
     ) s0_1_c0 (
@@ -404,6 +435,10 @@ module VX_bank #(
         .mrvq_init_ready_state_st1e(mrvq_init_ready_state_st1e)
     );
 
+`DEBUG_BEGIN
+    assign {debug_use_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_mem_read_st1e, debug_mem_write_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
+`DEBUG_END
+
     wire qual_valid_st1e_2 = valid_st1[STAGE_1_CYCLES-1] && !is_fill_st1[STAGE_1_CYCLES-1];
 
     wire                            valid_st2;    
@@ -430,6 +465,10 @@ module VX_bank #(
         .in  ({mrvq_init_ready_state_st1e, snp_to_mrvq_st1e, is_snp_st1e, fill_saw_dirty_st1e, is_fill_st1[STAGE_1_CYCLES-1] , qual_valid_st1e_2, addr_st1[STAGE_1_CYCLES-1], wsel_st1[STAGE_1_CYCLES-1], writeword_st1[STAGE_1_CYCLES-1], readword_st1e, readdata_st1e, readtag_st1e, miss_st1e, dirty_st1e, inst_meta_st1[STAGE_1_CYCLES-1]}),
         .out ({mrvq_init_ready_state_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
     );    
+
+`DEBUG_BEGIN
+    assign {debug_use_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_mem_read_st2, debug_mem_write_st2, debug_tid_st2} = inst_meta_st2;
+`DEBUG_END
 
     // Enqueue to miss reserv if it's a valid miss
     wire miss_add_because_miss    = valid_st2 && !is_snp_st2 && miss_st2;
