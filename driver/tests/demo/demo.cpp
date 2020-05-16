@@ -91,6 +91,8 @@ int run_test(vx_device_h device,
       int ref = i + i; 
       int cur = buf_ptr[i];
       if (cur != ref) {
+        std::cout << "error at 0x" << std::hex << (buf_ptr + i)
+                << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
         ++errors;
       }
     }
