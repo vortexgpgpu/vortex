@@ -244,7 +244,9 @@ module VX_tag_data_access #(
     
     assign snp_to_mrvq_st1e           = valid_req_st1e && is_snp_st1e && force_request_miss_st1e;
     
-    assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e || force_core_miss;
+    // The second term is basically saying always make an entry ready if there's already antoher entry waiting, even if you yourself see a miss
+    assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e || (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e);
+    // assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e || force_core_miss;
 
     assign miss_st1e           = real_miss || snoop_hit_no_pending || force_core_miss;
     assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;
