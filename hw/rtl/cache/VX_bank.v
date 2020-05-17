@@ -459,6 +459,9 @@ module VX_bank #(
     wire                            is_snp_st2;
     wire                            snp_to_mrvq_st2;
     wire                            mrvq_init_ready_state_st2;
+    wire                            mrvq_init_ready_state_unqual_st2;
+    wire                            mrvq_init_ready_state_hazard_st0_st1;
+    wire                            mrvq_init_ready_state_hazard_st1e_st1;
 
     VX_generic_register #(
         .N(1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `BASE_ADDR_BITS + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + `REQ_INST_META_WIDTH)
@@ -468,8 +471,9 @@ module VX_bank #(
         .stall(stall_bank_pipe),
         .flush(0),
         .in  ({mrvq_init_ready_state_st1e, snp_to_mrvq_st1e, is_snp_st1e, fill_saw_dirty_st1e, is_fill_st1[STAGE_1_CYCLES-1] , qual_valid_st1e_2, addr_st1[STAGE_1_CYCLES-1], wsel_st1[STAGE_1_CYCLES-1], writeword_st1[STAGE_1_CYCLES-1], readword_st1e, readdata_st1e, readtag_st1e, miss_st1e, dirty_st1e, inst_meta_st1[STAGE_1_CYCLES-1]}),
-        .out ({mrvq_init_ready_state_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
+        .out ({mrvq_init_ready_state_unqual_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
     );    
+
 
 `DEBUG_BEGIN
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
@@ -495,6 +499,12 @@ module VX_bank #(
     wire miss_add_data  = writeword_st2;
     assign {miss_add_tag, miss_add_mem_read, miss_add_mem_write, miss_add_tid} = inst_meta_st2;
     wire miss_add_is_snp = is_snp_st2;
+
+
+    assign mrvq_init_ready_state_hazard_st0_st1  = miss_add && qual_is_fill_st0              && (miss_add_addr == qual_addr_st0             );
+    assign mrvq_init_ready_state_hazard_st1e_st1 = miss_add && is_fill_st1[STAGE_1_CYCLES-1] && (miss_add_addr == addr_st1[STAGE_1_CYCLES-1]);
+
+    assign mrvq_init_ready_state_st2 = mrvq_init_ready_state_unqual_st2 || mrvq_init_ready_state_hazard_st0_st1 || mrvq_init_ready_state_hazard_st1e_st1;
 
     VX_cache_miss_resrv #(
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
