@@ -21,6 +21,7 @@ CFLAGS += -fPIC
 CFLAGS += -DUSE_RTLSIM $(MULTICORE)
 
 LDFLAGS += -shared -pthread
+# LDFLAGS += -dynamiclib -pthread
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
@@ -46,6 +47,7 @@ else
 endif
 
 PROJECT = libvortex.so
+# PROJECT = libvortex.dylib
 
 all: $(PROJECT)
 	
