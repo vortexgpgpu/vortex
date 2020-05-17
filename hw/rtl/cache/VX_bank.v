@@ -105,31 +105,32 @@ module VX_bank #(
 );
 
 `DEBUG_BEGIN
-    wire[31:0]           debug_use_pc_st0;
-    wire[1:0]            debug_wb_st0;
-    wire[4:0]            debug_rd_st0;
-    wire[`NW_BITS-1:0]   debug_warp_num_st0;
-    wire[2:0]            debug_mem_read_st0;    
-    wire[2:0]            debug_mem_write_st0;
-    wire[`REQS_BITS-1:0] debug_tid_st0;
+
+        wire[31:0]           debug_use_pc_st0;
+        wire[1:0]            debug_wb_st0;
+        wire[4:0]            debug_rd_st0;
+        wire[`NW_BITS-1:0]   debug_warp_num_st0;
+        wire[2:0]            debug_mem_read_st0;    
+        wire[2:0]            debug_mem_write_st0;
+        wire[`REQS_BITS-1:0] debug_tid_st0;
 
 
-    wire[31:0]           debug_use_pc_st1e;
-    wire[1:0]            debug_wb_st1e;
-    wire[4:0]            debug_rd_st1e;
-    wire[`NW_BITS-1:0]   debug_warp_num_st1e;
-    wire[2:0]            debug_mem_read_st1e;    
-    wire[2:0]            debug_mem_write_st1e;
-    wire[`REQS_BITS-1:0] debug_tid_st1e;
+        wire[31:0]           debug_use_pc_st1e;
+        wire[1:0]            debug_wb_st1e;
+        wire[4:0]            debug_rd_st1e;
+        wire[`NW_BITS-1:0]   debug_warp_num_st1e;
+        wire[2:0]            debug_mem_read_st1e;    
+        wire[2:0]            debug_mem_write_st1e;
+        wire[`REQS_BITS-1:0] debug_tid_st1e;
 
 
-    wire[31:0]           debug_use_pc_st2;
-    wire[1:0]            debug_wb_st2;
-    wire[4:0]            debug_rd_st2;
-    wire[`NW_BITS-1:0]   debug_warp_num_st2;
-    wire[2:0]            debug_mem_read_st2;    
-    wire[2:0]            debug_mem_write_st2;
-    wire[`REQS_BITS-1:0] debug_tid_st2;
+        wire[31:0]           debug_use_pc_st2;
+        wire[1:0]            debug_wb_st2;
+        wire[4:0]            debug_rd_st2;
+        wire[`NW_BITS-1:0]   debug_warp_num_st2;
+        wire[2:0]            debug_mem_read_st2;    
+        wire[2:0]            debug_mem_write_st2;
+        wire[`REQS_BITS-1:0] debug_tid_st2;
 `DEBUG_END
 
 
@@ -340,7 +341,9 @@ module VX_bank #(
     assign qual_from_mrvq_st0 = mrvq_pop;
 
 `DEBUG_BEGIN
-    assign {debug_use_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_mem_read_st0, debug_mem_write_st0, debug_tid_st0} = qual_inst_meta_st0;
+    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+        assign {debug_use_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_mem_read_st0, debug_mem_write_st0, debug_tid_st0} = qual_inst_meta_st0;
+    end
 `DEBUG_END
 
     VX_generic_register #(
@@ -436,7 +439,9 @@ module VX_bank #(
     );
 
 `DEBUG_BEGIN
-    assign {debug_use_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_mem_read_st1e, debug_mem_write_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
+    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+        assign {debug_use_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_mem_read_st1e, debug_mem_write_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
+    end
 `DEBUG_END
 
     wire qual_valid_st1e_2 = valid_st1[STAGE_1_CYCLES-1] && !is_fill_st1[STAGE_1_CYCLES-1];
@@ -467,7 +472,9 @@ module VX_bank #(
     );    
 
 `DEBUG_BEGIN
-    assign {debug_use_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_mem_read_st2, debug_mem_write_st2, debug_tid_st2} = inst_meta_st2;
+    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+        assign {debug_use_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_mem_read_st2, debug_mem_write_st2, debug_tid_st2} = inst_meta_st2;
+    end
 `DEBUG_END
 
     // Enqueue to miss reserv if it's a valid miss
