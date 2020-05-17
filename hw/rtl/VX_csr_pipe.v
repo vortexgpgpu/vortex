@@ -38,7 +38,10 @@ module VX_csr_pipe #(
         .wb_valid       (| writeback_if.valid)
     );
 
-    assign csr_read_data = (csr_address_s2 == csr_req_if.csr_address) ? csr_updated_data_s2 : csr_read_data_unqual; 
+    // wire hazard = (csr_address_s2 == csr_req_if.csr_address) & (warp_num_s2 == csr_req_if.warp_num) & |(valid_s2) & is_csr_s2;
+    wire car_hazard = (csr_address_s2 == csr_req_if.csr_address) & (warp_num_s2 == csr_req_if.warp_num) & |(valid_s2) & is_csr_s2;
+
+    assign csr_read_data = car_hazard ? csr_updated_data_s2 : csr_read_data_unqual; 
 
     reg [31:0] csr_updated_data;   
 
