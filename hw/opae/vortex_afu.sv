@@ -40,9 +40,6 @@ localparam AVS_RD_QUEUE_SIZE  = 16;
 localparam CCI_RD_WINDOW_SIZE = 8;
 localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
 
-localparam VX_SNOOP_DELAY     = 1000;
-localparam VX_SNOOP_LEVELS    = 2;
-
 localparam AFU_ID_L           = 16'h0002;      // AFU ID Lower
 localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher 
 
@@ -89,7 +86,12 @@ logic vx_dram_rsp_ready;
 
 logic vx_snp_req_valid;
 logic [DRAM_ADDR_WIDTH-1:0] vx_snp_req_addr;
+logic [0:0] vx_snp_req_tag;
 logic vx_snp_req_ready;
+
+logic vx_snp_rsp_valid;
+logic [0:0] vx_snp_rsp_addr;
+logic vx_snp_rsp_ready;
 
 logic vx_busy;
 
@@ -207,9 +209,8 @@ end
 logic [DRAM_ADDR_WIDTH-1:0] cci_write_ctr;
 logic [DRAM_ADDR_WIDTH-1:0] avs_read_ctr;
 logic [DRAM_ADDR_WIDTH-1:0] avs_write_ctr;
-logic [DRAM_ADDR_WIDTH-1:0] snp_req_ctr;
-logic [9:0] snp_req_delay;
-logic       vx_reset;
+logic                       vx_reset;
+logic                       snp_rsp_done;
 
 always_ff @(posedge clk) 
 begin
@@ -267,7 +268,7 @@ begin
       end
 
       STATE_CLFLUSH: begin
-        if (snp_req_delay >= VX_SNOOP_DELAY) begin
+        if (snp_rsp_done) begin
           state <= STATE_IDLE;
         end
       end
@@ -572,33 +573,48 @@ end
 
 // Vortex cache snooping //////////////////////////////////////////////////////
 
+logic [DRAM_ADDR_WIDTH-1:0] snp_req_ctr;
+logic [DRAM_ADDR_WIDTH-1:0] snp_rsp_ctr;
+
+always_comb 
+begin
+  snp_rsp_done = (snp_rsp_ctr >= csr_data_size);
+end
+
 always_ff @(posedge clk) 
 begin
   if (SoftReset) begin
     vx_snp_req_valid <= 0;
+    vx_snp_req_tag   <= 0;
+    vx_snp_rsp_ready <= 0;
     snp_req_ctr      <= 0;
-    snp_req_delay    <= 0;
+    snp_rsp_ctr      <= 0;
   end
   else begin
     if (STATE_IDLE == state) begin
-      snp_req_ctr   <= 0;
-      snp_req_delay <= 0;
+      snp_req_ctr      <= 0;
+      snp_rsp_ctr      <= 0;
+      vx_snp_rsp_ready <= 0;
     end
 
     vx_snp_req_valid <= 0;
+    vx_snp_rsp_ready <= 0;
 
     if ((STATE_CLFLUSH == state)
      && (snp_req_ctr < csr_data_size)
      && vx_snp_req_ready)
     begin
       vx_snp_req_addr  <= csr_mem_addr + snp_req_ctr;
-      vx_snp_req_valid <= 1;
       snp_req_ctr      <= snp_req_ctr + 1;
+      vx_snp_req_valid <= 1;
+      vx_snp_rsp_ready <= 1;
     end
 
-    if (snp_req_ctr == csr_data_size) begin 
-      snp_req_delay <= snp_req_delay + 1;
-    end
+    if ((STATE_CLFLUSH == state) 
+     && (snp_rsp_ctr < csr_data_size)
+     && vx_snp_rsp_valid) begin
+       snp_rsp_ctr <= snp_rsp_ctr + 1;
+    end   
   end
 end
 
@@ -622,10 +638,16 @@ Vortex_Socket #() vx_socket (
   .dram_rsp_tag     (vx_dram_rsp_tag),
   .dram_rsp_ready   (vx_dram_rsp_ready),
 
-  // Cache snooping
+  // Snoop request
   .snp_req_valid 	  (vx_snp_req_valid),
   .snp_req_addr     (vx_snp_req_addr),
+  .snp_req_tag      (vx_snp_req_tag),
   .snp_req_ready    (vx_snp_req_ready),
+
+  // Snoop response
+  .snp_rsp_valid 	  (vx_snp_rsp_valid),
+  .snp_rsp_tag      (vx_snp_rsp_tag),
+  .snp_rsp_ready    (vx_snp_rsp_ready),
 
   // I/O request
   .io_req_read      (),

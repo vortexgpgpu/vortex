@@ -53,13 +53,14 @@ module VX_dram_arb #(
     assign dram_req_data  = core_req_data [bus_req_sel];
     assign dram_req_tag   = {core_req_tag [bus_req_sel], (`REQS_BITS)'(bus_req_sel)};
 
+    genvar i;
+
     for (i = 0; i < NUM_REQUESTS; i++) begin
         assign core_req_ready[i] = dram_req_ready && (bus_req_sel == `REQS_BITS'(i));
     end
 
     wire [`REQS_BITS-1:0] bus_rsp_sel = dram_rsp_tag[`REQS_BITS-1:0];
     
-    genvar i;
     for (i = 0; i < NUM_REQUESTS; i++) begin                
         assign core_rsp_valid[i] = dram_rsp_valid && (bus_rsp_sel == `REQS_BITS'(i));
         assign core_rsp_data[i]  = dram_rsp_data;

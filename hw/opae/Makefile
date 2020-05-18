@@ -15,7 +15,7 @@ setup-ase: $(ASE_BUILD_DIR)/Makefile
 setup-fpga: $(FPGA_BUILD_DIR)/build/dcp.qpf
 
 $(ASE_BUILD_DIR)/Makefile:
-	afu_sim_setup --s sources.txt $(ASE_BUILD_DIR)
+	afu_sim_setup -s sources.txt $(ASE_BUILD_DIR)
 
 $(FPGA_BUILD_DIR)/build/dcp.qpf:
 	afu_synth_setup -s sources.txt $(FPGA_BUILD_DIR)
