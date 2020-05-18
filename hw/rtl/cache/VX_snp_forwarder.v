@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_cache_config.vh"
 
 module VX_snp_forwarder #(
     parameter BANK_LINE_SIZE    = 0, 

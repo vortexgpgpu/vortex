@@ -244,9 +244,6 @@ module VX_bank #(
     wire                                  st2_pending_hazard_st1e;
     wire                                  force_request_miss_st1e;
 
-    wire[`LINE_ADDR_WIDTH-1:0]            miss_add_addr;
-    wire[`BASE_ADDR_BITS-1:0]             miss_add_wsel;
-    wire[`WORD_WIDTH-1:0]                 miss_add_data;
     wire[`REQS_BITS-1:0]                  miss_add_tid;
     wire[`REQ_TAG_WIDTH-1:0]              miss_add_tag;
     wire[`BYTE_EN_BITS-1:0]               miss_add_mem_read;
@@ -386,6 +383,7 @@ module VX_bank #(
     wire                        is_snp_st1e;
     wire                        snp_to_mrvq_st1e;
     wire                        mrvq_init_ready_state_st1e;
+    wire                        miss_add_because_miss;
 
     assign is_snp_st1e = is_snp_st1[STAGE_1_CYCLES-1];
 
@@ -482,7 +480,7 @@ module VX_bank #(
 `DEBUG_END
 
     // Enqueue to miss reserv if it's a valid miss
-    wire miss_add_because_miss    = valid_st2 && !is_snp_st2 && miss_st2;
+    assign miss_add_because_miss  = valid_st2 && !is_snp_st2 && miss_st2;
     wire miss_add_because_pending = snp_to_mrvq_st2;
 
     wire miss_add_unqual = (miss_add_because_miss || miss_add_because_pending);
@@ -494,9 +492,9 @@ module VX_bank #(
                      || dwbq_push_stall 
                      || dram_fill_req_stall);    
 
-    wire miss_add_addr  = addr_st2;
-    wire miss_add_wsel  = wsel_st2;
-    wire miss_add_data  = writeword_st2;
+    wire [`LINE_ADDR_WIDTH-1:0] miss_add_addr  = addr_st2;
+    wire [`BASE_ADDR_BITS-1:0] miss_add_wsel  = wsel_st2;
+    wire [`WORD_WIDTH-1:0] miss_add_data  = writeword_st2;
     assign {miss_add_tag, miss_add_mem_read, miss_add_mem_write, miss_add_tid} = inst_meta_st2;
     wire miss_add_is_snp = is_snp_st2;
 

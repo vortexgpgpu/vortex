@@ -10,12 +10,14 @@ export ASE_WORKDIR=$SCRIPT_DIR/build_ase/work
 shift 1
 
 # cleanup incomplete runs
-rm -rf $ASE_WORKDIR/.app_lock.pid $ASE_WORKDIR/.ase_ready.pid
+rm -f $ASE_WORKDIR/.app_lock.pid 
+rm -f $ASE_WORKDIR/.ase_ready.pid
+rm -f $SCRIPT_DIR/build_ase/nohup.out
 
 # Start Simulator in background
 pushd $SCRIPT_DIR/build_ase 
-echo "  [DBG]  starting ASE simnulator"
-nohup make sim  & 
+echo "  [DBG]  starting ASE simnulator (stdout saved to '$SCRIPT_DIR/build_ase/nohup.out')"
+nohup make sim & 
 popd
 
 # Wait for simulator readiness

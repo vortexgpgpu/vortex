@@ -66,11 +66,9 @@ module VX_cache_miss_resrv #(
     wire                           enqueue_possible = !miss_resrv_full;
     wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
 
-    wire qual_mrvq_init = mrvq_push && mrvq_init_ready_state;
-
-    `IGNORE_WARNINGS_BEGIN
+`IGNORE_WARNINGS_BEGIN
     wire [31:0] make_ready_push_full;
-    `IGNORE_WARNINGS_END
+`IGNORE_WARNINGS_END
 
     reg [MRVQ_SIZE-1:0] make_ready;
     reg [MRVQ_SIZE-1:0] make_ready_push;
@@ -79,7 +77,7 @@ module VX_cache_miss_resrv #(
     genvar i;
     generate
         for (i = 0; i < MRVQ_SIZE; i++) begin
-            assign valid_address_match[i] = valid_table[i] && (addr_table[i] == fill_addr_st1);
+            assign valid_address_match[i] = valid_table[i] && (addr_table[i] === fill_addr_st1);
             assign make_ready[i]          = is_fill_st1 && valid_address_match[i];
         end
     endgenerate
@@ -97,6 +95,8 @@ module VX_cache_miss_resrv #(
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
 
     wire update_ready = (|make_ready);
+
+    wire qual_mrvq_init = mrvq_push && mrvq_init_ready_state;
 
     assign make_ready_push_full = ({31'b0, qual_mrvq_init} << enqueue_index);
     assign make_ready_push = make_ready_push_full[MRVQ_SIZE-1:0];
