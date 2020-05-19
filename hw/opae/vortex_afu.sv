@@ -28,9 +28,9 @@ module vortex_afu #(
   output logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select
 );
 
-localparam DRAM_ADDR_WIDTH    = $bits(t_local_mem_addr);
-localparam DRAM_LINE_WIDTH    = $bits(t_local_mem_data);
-localparam DRAM_TAG_WIDTH     = `L3DRAM_TAG_WIDTH;
+localparam DRAM_ADDR_WIDTH = $bits(t_local_mem_addr);
+localparam DRAM_LINE_WIDTH = $bits(t_local_mem_data);
+localparam DRAM_TAG_WIDTH  = `L3DRAM_TAG_WIDTH;
 
 `STATIC_ASSERT(DRAM_ADDR_WIDTH == `L3DRAM_ADDR_WIDTH, "invalid vortex dram bus!")
 `STATIC_ASSERT(DRAM_LINE_WIDTH == `L3DRAM_LINE_WIDTH, "invalid vortex dram bus!")
@@ -210,7 +210,16 @@ logic [DRAM_ADDR_WIDTH-1:0] cci_write_ctr;
 logic [DRAM_ADDR_WIDTH-1:0] avs_read_ctr;
 logic [DRAM_ADDR_WIDTH-1:0] avs_write_ctr;
 logic                       vx_reset;
-logic                       snp_rsp_done;
+
+logic cmd_read_done;
+logic cmd_write_done;
+logic cmd_run_done;
+logic cmd_clflush_done;
+
+always_comb 
+begin
+  cmd_run_done = !vx_busy;
+end
 
 always_ff @(posedge clk) 
 begin
@@ -246,13 +255,13 @@ begin
       end      
 
       STATE_READ: begin
-        if (cci_write_ctr >= csr_data_size) begin
+        if (cmd_read_done) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_WRITE: begin
-        if (avs_write_ctr >= csr_data_size) begin
+        if (cmd_write_done) begin
           state <= STATE_IDLE;
         end
       end
@@ -262,13 +271,13 @@ begin
       end
 
       STATE_RUN: begin
-        if (!vx_busy) begin
+        if (cmd_run_done) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_CLFLUSH: begin
-        if (snp_rsp_done) begin
+        if (cmd_clflush_done) begin
           state <= STATE_IDLE;
         end
       end
@@ -279,104 +288,118 @@ end
 
 // AVS Controller /////////////////////////////////////////////////////////////
 
+logic vortex_enabled;
 logic cci_rdq_empty;
 t_cci_rdq_data cci_rdq_dout;
 logic cci_rdq_pop;
-logic [DRAM_TAG_WIDTH-1:0] dram_req_tag;
+logic cci_dram_req_read_fire;
+logic cci_dram_req_write_fire;
+logic vx_dram_req_read_fire;
+logic vx_dram_req_write_fire;
+logic [`LOG2UP(AVS_RD_QUEUE_SIZE):0] avs_pending_reads, avs_pending_rds_next;
 
 t_ccip_clAddr next_avs_address;
 always_comb 
 begin
+  vortex_enabled = (STATE_RUN == state) || (STATE_CLFLUSH == state);
+
   next_avs_address = csr_mem_addr + {avs_write_ctr[DRAM_ADDR_WIDTH-1:$bits(t_cci_rdq_tag)], t_cci_rdq_tag'(cci_rdq_dout)};
+
   cci_rdq_pop = (state == STATE_WRITE
               && !cci_rdq_empty 
               && !avs_waitrequest
               && avs_write_ctr < csr_data_size);
+
+  cci_dram_req_read_fire = (state == STATE_READ) 
+                        && (avs_pending_reads < AVS_RD_QUEUE_SIZE)
+                        && !avs_waitrequest 
+                        && avs_read_ctr < csr_data_size;
+
+  cci_dram_req_write_fire = (state == STATE_WRITE) 
+                         && cci_rdq_pop;
+
+  vx_dram_req_read_fire  = vx_dram_req_read && vx_dram_req_ready;
+
+  vx_dram_req_write_fire = vx_dram_req_write && vx_dram_req_ready;
+
+  if ((cci_dram_req_read_fire || vx_dram_req_read_fire)
+   && ~avs_readdatavalid) begin
+    avs_pending_rds_next = avs_pending_reads + 1;
+  end else 
+  if (~(cci_dram_req_read_fire || vx_dram_req_read_fire)
+   && avs_readdatavalid) begin
+    avs_pending_rds_next = avs_pending_reads - 1;
+  end else begin
+    avs_pending_rds_next = avs_pending_reads;
+  end
+
+  cmd_write_done = (avs_write_ctr >= csr_data_size);
 end
 
 always_ff @(posedge clk) 
 begin
   if (SoftReset) 
   begin    
-    mem_bank_select <= 0;
-    avs_burstcount  <= 1;
-    avs_byteenable  <= 64'hffffffffffffffff; 
-    avs_read        <= 0;
-    avs_write       <= 0;
-    avs_read_ctr    <= 0;
-    avs_write_ctr   <= 0;
+    mem_bank_select   <= 0;
+    avs_burstcount    <= 1;
+    avs_byteenable    <= 64'hffffffffffffffff; 
+    avs_read          <= 0;
+    avs_write         <= 0;
+    avs_read_ctr      <= 0;
+    avs_write_ctr     <= 0;
+    avs_pending_reads <= 0;
   end
   else begin
 
     avs_read <= 0;
     avs_write <= 0;
 
-    case (state)
-      STATE_IDLE: begin
-        avs_read_ctr <= 0;
-        avs_write_ctr <= 0;
-      end
+    if (state == STATE_IDLE) begin
+      avs_read_ctr  <= 0;
+      avs_write_ctr <= 0;
+    end
 
-      STATE_READ: begin
-        if (!avs_rtq_full 
-         && !avs_rdq_full
-         && !avs_waitrequest 
-         && avs_read_ctr < csr_data_size) 
-        begin
-          avs_address  <= csr_mem_addr + avs_read_ctr;          
-          avs_read_ctr <= avs_read_ctr + 1;
-          avs_read     <= 1;
-          $display("%t: AVS Rd Req: addr=%h", $time, csr_mem_addr + avs_read_ctr);
-        end        
-      end
+    if (cci_dram_req_read_fire) begin
+      avs_address  <= csr_mem_addr + avs_read_ctr;          
+      avs_read_ctr <= avs_read_ctr + 1;          
+      avs_read     <= 1;
+      $display("%t: AVS Rd Req: addr=%h, pending=%d", $time, (csr_mem_addr + avs_read_ctr), avs_pending_reads);
+    end
 
-      STATE_WRITE: begin
-        if (cci_rdq_pop) 
-        begin          
-          avs_writedata <= cci_rdq_dout[$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:$bits(t_cci_rdq_tag)];
-          avs_address   <= next_avs_address;          
-          avs_write_ctr <= avs_write_ctr + 1;
-          avs_write     <= 1;
-          $display("%t: AVS Wr Req: addr=%h (%0d/%0d)", $time, next_avs_address, avs_write_ctr + 1, csr_data_size);
-        end
-      end
+    if (cci_dram_req_write_fire) begin          
+      avs_writedata <= cci_rdq_dout[$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:$bits(t_cci_rdq_tag)];
+      avs_address   <= next_avs_address;          
+      avs_write_ctr <= avs_write_ctr + 1;
+      avs_write     <= 1;
+      $display("%t: AVS Wr Req: addr=%h (%0d/%0d)", $time, next_avs_address, avs_write_ctr + 1, csr_data_size);
+    end
 
-      STATE_RUN, STATE_CLFLUSH: begin
-        if (vx_dram_req_read
-         && vx_dram_req_ready) 
-        begin
-          avs_address  <= vx_dram_req_addr;
-          dram_req_tag <= vx_dram_req_tag;
-          avs_read     <= 1;
-          $display("%t: AVS Rd Req: addr=%h", $time, vx_dram_req_addr);
-        end 
-        
-        if (vx_dram_req_write
-         && vx_dram_req_ready) 
-        begin
-          avs_address   <= vx_dram_req_addr;
-          avs_writedata <= vx_dram_req_data;          
-          avs_write     <= 1;
-          $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr);
-        end
-      end
-    endcase
-
-    if (avs_readdatavalid) 
-    begin
-      $display("%t: AVS Rd Rsp", $time);
+    if (vx_dram_req_read_fire) begin
+      avs_address <= vx_dram_req_addr;
+      avs_read    <= 1;
+      $display("%t: AVS Rd Req: addr=%h, pending=%d", $time, vx_dram_req_addr, avs_pending_reads);
+    end 
+    
+    if (vx_dram_req_write_fire) begin
+      avs_address   <= vx_dram_req_addr;
+      avs_writedata <= vx_dram_req_data;          
+      avs_write     <= 1;
+      $display("%t: AVS Wr Req: addr=%h", $time, vx_dram_req_addr);
     end   
+
+    if (avs_readdatavalid) begin
+      $display("%t: AVS Rd Rsp: pending=%d", $time, avs_pending_rds_next);
+    end
+
+    avs_pending_reads <= avs_pending_rds_next;   
   end
 end
 
-// Vortex DRAM requests stalling
-
-logic vortex_enabled;
+// Vortex DRAM requests
 
 always_comb 
-begin
-  vortex_enabled    = (STATE_RUN == state) || (STATE_CLFLUSH == state);
-  vx_dram_req_ready = vortex_enabled && !avs_waitrequest && !avs_rtq_full && !avs_rdq_full;
+begin  
+  vx_dram_req_ready = vortex_enabled && !avs_waitrequest && (avs_pending_reads < AVS_RD_QUEUE_SIZE);
 end
 
 // Vortex DRAM fill response
@@ -394,9 +417,9 @@ logic cci_wr_req;
 
 always_comb 
 begin
-  avs_rtq_pop  = vx_dram_rsp_valid || cci_wr_req;
-  avs_rtq_din  = dram_req_tag;
-  avs_rtq_push = avs_read;
+  avs_rtq_push = vx_dram_req_read_fire;
+  avs_rtq_din  = vx_dram_req_tag;
+  avs_rtq_pop  = vx_dram_rsp_valid;
 end
 
 VX_generic_queue #(
@@ -417,9 +440,9 @@ VX_generic_queue #(
 
 always_comb 
 begin
-  avs_rdq_pop  = avs_rtq_pop;
-  avs_rdq_din  = avs_readdata;
   avs_rdq_push = avs_readdatavalid;
+  avs_rdq_din  = avs_readdata;
+  avs_rdq_pop  = vx_dram_rsp_valid || cci_wr_req; 
 end
 
 VX_generic_queue #(
@@ -456,7 +479,7 @@ begin
   cci_read_hdr.mdata = t_cci_rdq_tag'(cci_read_ctr);
 
   cci_rdq_push = (STATE_WRITE == state) && cp2af_sRxPort.c0.rspValid;
-  cci_rdq_din  = {cp2af_sRxPort.c0.data, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata)};
+  cci_rdq_din  = {cp2af_sRxPort.c0.data, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata)};  
 end
 
 // Send read requests to CCI
@@ -487,10 +510,10 @@ begin
       af2cp_sTxPort.c0.hdr   <= cci_read_hdr;
       af2cp_sTxPort.c0.valid <= 1;      
       cci_read_ctr           <= cci_read_ctr + 1;
-      if (cci_read_ctr == (CCI_RD_WINDOW_SIZE-1)) begin
+      if (t_cci_rdq_tag'(cci_read_ctr) == (CCI_RD_WINDOW_SIZE-1)) begin
         cci_read_wait <= 1;             // end current request batch
       end 
-      $display("%t: CCI Rd Req: addr=%h", $time, cci_read_hdr.address);
+      $display("%t: CCI Rd Req: addr=%h, ctr=%d", $time, cci_read_hdr.address, cci_read_ctr);
     end
 
     if (cci_rdq_push) begin
@@ -521,19 +544,29 @@ VX_generic_queue #(
 
 t_ccip_c1_ReqMemHdr cci_write_hdr;
 
-logic cci_write_wait;
+logic [DRAM_ADDR_WIDTH:0] cci_pending_writes, cci_pending_writes_next;
 
 always_comb 
 begin
   cci_wr_req = (STATE_READ == state) 
             && !avs_rdq_empty 
             && !cp2af_sRxPort.c1TxAlmFull
-            && !cci_write_wait
-            && cci_write_ctr < csr_data_size;
+            && (cci_write_ctr < csr_data_size);  
+
+  if (cci_wr_req && ~cp2af_sRxPort.c1.rspValid) begin
+    cci_pending_writes_next = cci_pending_writes + 1;
+  end else
+  if (~cci_wr_req && cp2af_sRxPort.c1.rspValid) begin
+    cci_pending_writes_next = cci_pending_writes - 1;
+  end else begin
+    cci_pending_writes_next = cci_pending_writes;
+  end
 
   cci_write_hdr = t_ccip_c1_ReqMemHdr'(0);
   cci_write_hdr.address = csr_io_addr + cci_write_ctr;
   cci_write_hdr.sop = 1; // single line write mode
+
+  cmd_read_done = (cci_write_ctr >= csr_data_size) && (0 == cci_pending_writes);
 end
 
 // Send write requests to CCI
@@ -544,7 +577,7 @@ begin
     af2cp_sTxPort.c1.data  <= 0;
     af2cp_sTxPort.c1.valid <= 0;
     cci_write_ctr          <= 0;
-    cci_write_wait         <= 0;
+    cci_pending_writes     <= 0;
   end
   else begin
     af2cp_sTxPort.c1.valid <= 0;
@@ -556,18 +589,16 @@ begin
     if (cci_wr_req) begin
       af2cp_sTxPort.c1.hdr   <= cci_write_hdr;
       af2cp_sTxPort.c1.data  <= t_ccip_clData'(avs_rdq_dout);
-      af2cp_sTxPort.c1.valid <= 1;      
-      cci_write_wait         <= 1;
-      $display("%t: CCI Wr Req: addr=%h", $time, cci_write_hdr.address);
+      af2cp_sTxPort.c1.valid <= 1;            
+      cci_write_ctr          <= cci_write_ctr + 1;
+      $display("%t: CCI Wr Req: addr=%h (%0d/%0d)", $time, cci_write_hdr.address, cci_write_ctr + 1, csr_data_size);
     end
 
-    if (cci_write_wait
-     && cp2af_sRxPort.c1.rspValid) 
-    begin
-      cci_write_ctr  <= cci_write_ctr + 1;
-      cci_write_wait <= 0;
-      $display("%t: CCI Wr Rsp (%0d/%0d)", $time, cci_write_ctr + 1, csr_data_size);      
+    if (cp2af_sRxPort.c1.rspValid) begin      
+      $display("%t: CCI Wr Rsp: pending=%d", $time, cci_pending_writes_next);      
     end
+
+    cci_pending_writes <= cci_pending_writes_next;
   end
 end
 
@@ -578,7 +609,7 @@ logic [DRAM_ADDR_WIDTH-1:0] snp_rsp_ctr;
 
 always_comb 
 begin
-  snp_rsp_done = (snp_rsp_ctr >= csr_data_size);
+  cmd_clflush_done = (snp_rsp_ctr >= csr_data_size);
 end
 
 always_ff @(posedge clk) 
@@ -656,12 +687,12 @@ Vortex_Socket #() vx_socket (
   .io_req_data      (),
   .io_req_byteen    (),
   .io_req_tag       (),    
-  .io_req_ready     (0),
+  .io_req_ready     (1'b0),
 
   // I/O response
-  .io_rsp_valid     (0),
-  .io_rsp_data      (0),
-  .io_rsp_tag       (0),
+  .io_rsp_valid     (1'b0),
+  .io_rsp_data      (32'b0),
+  .io_rsp_tag       (`CORE_REQ_TAG_WIDTH'(0)),
   .io_rsp_ready     (),
  
   // status

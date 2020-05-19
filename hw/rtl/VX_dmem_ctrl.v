@@ -102,16 +102,16 @@ module VX_dmem_ctrl # (
         .dram_req_addr      (),
         .dram_req_data      (),
         .dram_req_tag       (),
-        .dram_req_ready     (0),       
+        .dram_req_ready     (1'b0),       
 
         // DRAM response
-        .dram_rsp_valid     (0),
+        .dram_rsp_valid     (1'b0),
         .dram_rsp_data      (0),
-        .dram_rsp_tag       (0),
+        .dram_rsp_tag       (`SDRAM_TAG_WIDTH'(0)),
         .dram_rsp_ready     (),
 
         // Snoop request
-        .snp_req_valid      (0),
+        .snp_req_valid      (1'b0),
         .snp_req_addr       (0),
         .snp_req_tag        (0),
         .snp_req_ready      (),
@@ -119,7 +119,7 @@ module VX_dmem_ctrl # (
         // Snoop response
         .snp_rsp_valid      (),
         .snp_rsp_tag        (),
-        .snp_rsp_ready      (0),
+        .snp_rsp_ready      (1'b0),
 
         // Snoop forward out
         .snp_fwdout_valid   (),
@@ -128,7 +128,7 @@ module VX_dmem_ctrl # (
         .snp_fwdout_ready   (0),
 
          // Snoop forward in
-        .snp_fwdin_valid    (0),
+        .snp_fwdin_valid    (1'b0),
         .snp_fwdin_tag      (0),    
         .snp_fwdin_ready    ()
     `IGNORE_WARNINGS_END
@@ -209,10 +209,10 @@ module VX_dmem_ctrl # (
         .snp_fwdout_valid   (),
         .snp_fwdout_addr    (),    
         .snp_fwdout_tag     (),    
-        .snp_fwdout_ready   (0),
+        .snp_fwdout_ready   (1'b0),
 
          // Snoop forward in
-        .snp_fwdin_valid    (0),
+        .snp_fwdin_valid    (1'b0),
         .snp_fwdin_tag      (0),    
         .snp_fwdin_ready    ()
     `IGNORE_WARNINGS_END
@@ -278,7 +278,7 @@ module VX_dmem_ctrl # (
 
     `IGNORE_WARNINGS_BEGIN
         // Snoop request
-        .snp_req_valid         (0),
+        .snp_req_valid         (1'b0),
         .snp_req_addr          (0),
         .snp_req_tag           (0),
         .snp_req_ready         (),
@@ -286,16 +286,16 @@ module VX_dmem_ctrl # (
         // Snoop response
         .snp_rsp_valid         (),
         .snp_rsp_tag           (),
-        .snp_rsp_ready         (0),
+        .snp_rsp_ready         (1'b0),
 
         // Snoop forward out
         .snp_fwdout_valid      (),
         .snp_fwdout_addr       (),    
         .snp_fwdout_tag        (),    
-        .snp_fwdout_ready      (0),
+        .snp_fwdout_ready      (1'b0),
 
          // Snoop forward in
-        .snp_fwdin_valid       (0),
+        .snp_fwdin_valid       (1'b0),
         .snp_fwdin_tag         (0),    
         .snp_fwdin_ready       ()
     `IGNORE_WARNINGS_END
