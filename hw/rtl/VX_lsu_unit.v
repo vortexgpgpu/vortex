@@ -42,7 +42,7 @@ module VX_lsu_unit #(
         .clk  (clk),
         .reset(reset),
         .stall(delay),
-        .flush(0),
+        .flush(1'b0),
         .in   ({address    , lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.lsu_pc}),
         .out  ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
     );

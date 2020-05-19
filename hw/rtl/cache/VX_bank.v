@@ -349,7 +349,7 @@ module VX_bank #(
         .clk   (clk),
         .reset (reset),
         .stall (stall_bank_pipe),
-        .flush (0),
+        .flush (1'b0),
         .in    ({qual_from_mrvq_st0, qual_is_snp_st0, qual_going_to_write_st0, qual_valid_st0, qual_addr_st0, qual_wsel_st0, qual_writeword_st0, qual_inst_meta_st0, qual_is_fill_st0, qual_writedata_st0}),
         .out   ({from_mrvq_st1[0]  , is_snp_st1[0],   going_to_write_st1[0],   valid_st1[0],   addr_st1[0],   wsel_st1[0],   writeword_st1[0],   inst_meta_st1[0],   is_fill_st1[0],   writedata_st1[0]})
     );
@@ -362,7 +362,7 @@ module VX_bank #(
             .clk  (clk),
             .reset(reset),
             .stall(stall_bank_pipe),
-            .flush(0),
+            .flush(1'b0),
             .in  ({from_mrvq_st1[i-1], is_snp_st1[i-1], going_to_write_st1[i-1], valid_st1[i-1], addr_st1[i-1],   wsel_st1[i-1], writeword_st1[i-1], inst_meta_st1[i-1], is_fill_st1[i-1], writedata_st1[i-1]}),
             .out ({from_mrvq_st1[i]  , is_snp_st1[i],   going_to_write_st1[i],   valid_st1[i],   addr_st1[i],     wsel_st1[i],   writeword_st1[i],   inst_meta_st1[i],   is_fill_st1[i],   writedata_st1[i]})
         );
@@ -467,7 +467,7 @@ module VX_bank #(
         .clk  (clk),
         .reset(reset),
         .stall(stall_bank_pipe),
-        .flush(0),
+        .flush(1'b0),
         .in  ({mrvq_init_ready_state_st1e, snp_to_mrvq_st1e, is_snp_st1e, fill_saw_dirty_st1e, is_fill_st1[STAGE_1_CYCLES-1] , qual_valid_st1e_2, addr_st1[STAGE_1_CYCLES-1], wsel_st1[STAGE_1_CYCLES-1], writeword_st1[STAGE_1_CYCLES-1], readword_st1e, readdata_st1e, readtag_st1e, miss_st1e, dirty_st1e, inst_meta_st1[STAGE_1_CYCLES-1]}),
         .out ({mrvq_init_ready_state_unqual_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
     );    
