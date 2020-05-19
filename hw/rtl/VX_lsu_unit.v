@@ -63,12 +63,12 @@ module VX_lsu_unit #(
     assign {mem_wb_if.pc, mem_wb_if.wb, mem_wb_if.rd, mem_wb_if.warp_num} = dcache_rsp_if.core_rsp_tag;
 
 `ifdef DBG_PRINT_CORE_DCACHE
-   always_comb begin
-        if (1'($time & 1) && dcache_req_if.core_req_ready && (| dcache_req_if.core_req_valid)) begin
-            $display("*** %t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, use_valid, use_address, dcache_req_if.core_req_tag, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, use_store_data);
+   always_ff @(posedge clk) begin
+        if (dcache_req_if.core_req_ready && (| dcache_req_if.core_req_valid)) begin
+            $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, use_valid, use_address, dcache_req_if.core_req_tag, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, use_store_data);
         end
-        if (1'($time & 1) && dcache_rsp_if.core_rsp_ready && (| dcache_rsp_if.core_rsp_valid)) begin
-            $display("*** %t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, dcache_rsp_if.core_rsp_tag, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
+        if (dcache_rsp_if.core_rsp_ready && (| dcache_rsp_if.core_rsp_valid)) begin
+            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, dcache_rsp_if.core_rsp_tag, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end
 `endif

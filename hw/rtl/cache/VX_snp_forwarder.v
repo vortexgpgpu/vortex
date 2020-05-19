@@ -113,18 +113,18 @@ module VX_snp_forwarder #(
     end
 
 `ifdef DBG_PRINT_SNP_FWD
-     always_comb begin
-        if (1'($time & 1) && snp_req_valid && snp_req_ready) begin
-            $display("*** %t: snp req: addr=%0h, tag=%0h", $time, snp_req_addr, snp_req_tag);
+     always_ff @(posedge clk) begin
+        if (snp_req_valid && snp_req_ready) begin
+            $display("%t: snp req: addr=%0h, tag=%0h", $time, snp_req_addr, snp_req_tag);
         end
-        if (1'($time & 1) && snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
-            $display("*** %t: snp fwd_out: addr=%0h, tag=%0h", $time, snp_fwdout_addr[0], snp_fwdout_tag[0]);
+        if (snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
+            $display("%t: snp fwd_out: addr=%0h, tag=%0h", $time, snp_fwdout_addr[0], snp_fwdout_tag[0]);
         end
-        if (1'($time & 1) && fwdin_valid && fwdin_ready) begin
-            $display("*** %t: snp fwd_in[%01d]: tag=%0h", $time, fwdin_sel, fwdin_tag);
+        if (fwdin_valid && fwdin_ready) begin
+            $display("%t: snp fwd_in[%01d]: tag=%0h", $time, fwdin_sel, fwdin_tag);
         end
-        if (1'($time & 1) && snp_rsp_valid && snp_rsp_ready) begin
-            $display("*** %t: snp rsp: addr=%0h, tag=%0h", $time, snp_rsp_addr, snp_rsp_tag);
+        if (snp_rsp_valid && snp_rsp_ready) begin
+            $display("%t: snp rsp: addr=%0h, tag=%0h", $time, snp_rsp_addr, snp_rsp_tag);
         end
     end
 `endif
