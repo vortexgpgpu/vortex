@@ -63,12 +63,12 @@ module VX_icache_stage #(
     end
 
 `ifdef DBG_PRINT_CORE_ICACHE
-    always_comb begin
-        if (1'($time & 1) && icache_req_if.core_req_ready && icache_req_if.core_req_valid) begin
-            $display("*** %t: I%01d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, icache_req_if.core_req_tag, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
+    always_ff @(posedge clk) begin
+        if (icache_req_if.core_req_ready && icache_req_if.core_req_valid) begin
+            $display("%t: I%01d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, icache_req_if.core_req_tag, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
         end
-        if (1'($time & 1) && icache_rsp_if.core_rsp_ready && icache_rsp_if.core_rsp_valid) begin
-            $display("*** %t: I%01d$ rsp: tag=%0h, pc=%0h, warp=%0d, instr=%0h", $time, CORE_ID, icache_rsp_if.core_rsp_tag, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
+        if (icache_rsp_if.core_rsp_ready && icache_rsp_if.core_rsp_valid) begin
+            $display("%t: I%01d$ rsp: tag=%0h, pc=%0h, warp=%0d, instr=%0h", $time, CORE_ID, icache_rsp_if.core_rsp_tag, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
         end
     end
 `endif

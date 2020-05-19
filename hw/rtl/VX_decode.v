@@ -311,12 +311,6 @@ module VX_decode(
 
     assign frE_to_bckE_req_if.alu_op = ((func7[0] == 1'b1) && is_rtype) ? mul_alu : temp_final_alu;
 
-    /*always_comb begin
-        if (1'($time & 1) && (| fd_inst_meta_de.valid)) begin
-            $display("*** %t: decode: opcode=%h", $time, curr_opcode);
-        end
-    end*/
-
 endmodule
 
 

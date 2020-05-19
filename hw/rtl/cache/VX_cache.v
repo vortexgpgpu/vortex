@@ -447,11 +447,5 @@ module VX_cache #(
         .snp_rsp_tag   (snp_rsp_tag),
         .snp_rsp_ready (snp_rsp_ready)
     );
-
-    /*always_comb begin
-        if (1'($time & 1) && snp_rsp_valid && snp_rsp_ready) begin
-            $display("*** %t: cache%01d snp rsp tag=%0h", $time, CACHE_ID, snp_rsp_tag);
-        end
-    end*/
     
 endmodule

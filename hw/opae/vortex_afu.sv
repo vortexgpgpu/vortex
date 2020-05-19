@@ -363,7 +363,7 @@ begin
       avs_address  <= csr_mem_addr + avs_read_ctr;          
       avs_read_ctr <= avs_read_ctr + 1;          
       avs_read     <= 1;
-      $display("%t: AVS Rd Req: addr=%h, pending=%d", $time, (csr_mem_addr + avs_read_ctr), avs_pending_reads);
+      $display("%t: AVS Rd Req: addr=%h, pending=%0d", $time, (csr_mem_addr + avs_read_ctr), avs_pending_reads);
     end
 
     if (cci_dram_req_write_fire) begin          
@@ -377,7 +377,7 @@ begin
     if (vx_dram_req_read_fire) begin
       avs_address <= vx_dram_req_addr;
       avs_read    <= 1;
-      $display("%t: AVS Rd Req: addr=%h, pending=%d", $time, vx_dram_req_addr, avs_pending_reads);
+      $display("%t: AVS Rd Req: addr=%h, pending=%0d", $time, vx_dram_req_addr, avs_pending_reads);
     end 
     
     if (vx_dram_req_write_fire) begin
@@ -388,7 +388,7 @@ begin
     end   
 
     if (avs_readdatavalid) begin
-      $display("%t: AVS Rd Rsp: pending=%d", $time, avs_pending_rds_next);
+      $display("%t: AVS Rd Rsp: pending=%0d", $time, avs_pending_rds_next);
     end
 
     avs_pending_reads <= avs_pending_rds_next;   
@@ -513,7 +513,7 @@ begin
       if (t_cci_rdq_tag'(cci_read_ctr) == (CCI_RD_WINDOW_SIZE-1)) begin
         cci_read_wait <= 1;             // end current request batch
       end 
-      $display("%t: CCI Rd Req: addr=%h, ctr=%d", $time, cci_read_hdr.address, cci_read_ctr);
+      $display("%t: CCI Rd Req: addr=%h, ctr=%0d", $time, cci_read_hdr.address, cci_read_ctr);
     end
 
     if (cci_rdq_push) begin
@@ -521,7 +521,7 @@ begin
       if (cci_rdq_ctr == (CCI_RD_WINDOW_SIZE-1)) begin
         cci_read_wait <= 0;             // restart new request batch
       end 
-      $display("%t: CCI Rd Rsp: idx=%d, ctr=%d", $time, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata), cci_rdq_ctr);
+      $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d", $time, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata), cci_rdq_ctr);
     end        
   end
 end
@@ -595,7 +595,7 @@ begin
     end
 
     if (cp2af_sRxPort.c1.rspValid) begin      
-      $display("%t: CCI Wr Rsp: pending=%d", $time, cci_pending_writes_next);      
+      $display("%t: CCI Wr Rsp: pending=%0d", $time, cci_pending_writes_next);      
     end
 
     cci_pending_writes <= cci_pending_writes_next;
