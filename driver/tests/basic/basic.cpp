@@ -175,11 +175,11 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_alloc_shared_mem(device, 4096, &dbuf));
 
   // run tests  
-  /*if (0 == test || -1 == test) {
+  if (0 == test || -1 == test) {
     std::cout << "run memcopy test" << std::endl;
     RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_SRC_ADDR, 0x0badf00d00ff00ff, 1));
     RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_SRC_ADDR, 0x0badf00d40ff40ff, 64));
-  }*/
+  }
 
   if (1 == test || -1 == test) {
     std::cout << "run kernel test" << std::endl;
