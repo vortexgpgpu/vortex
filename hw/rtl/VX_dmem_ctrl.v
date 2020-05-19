@@ -128,7 +128,7 @@ module VX_dmem_ctrl # (
         .snp_fwdout_ready   (0),
 
          // Snoop forward in
-        .snp_fwdin_valid    (1'b0),
+        .snp_fwdin_valid    (0),
         .snp_fwdin_tag      (0),    
         .snp_fwdin_ready    ()
     `IGNORE_WARNINGS_END
@@ -209,10 +209,10 @@ module VX_dmem_ctrl # (
         .snp_fwdout_valid   (),
         .snp_fwdout_addr    (),    
         .snp_fwdout_tag     (),    
-        .snp_fwdout_ready   (1'b0),
+        .snp_fwdout_ready   (0),
 
          // Snoop forward in
-        .snp_fwdin_valid    (1'b0),
+        .snp_fwdin_valid    (0),
         .snp_fwdin_tag      (0),    
         .snp_fwdin_ready    ()
     `IGNORE_WARNINGS_END
@@ -292,10 +292,10 @@ module VX_dmem_ctrl # (
         .snp_fwdout_valid      (),
         .snp_fwdout_addr       (),    
         .snp_fwdout_tag        (),    
-        .snp_fwdout_ready      (1'b0),
+        .snp_fwdout_ready      (0),
 
          // Snoop forward in
-        .snp_fwdin_valid       (1'b0),
+        .snp_fwdin_valid       (0),
         .snp_fwdin_tag         (0),    
         .snp_fwdin_ready       ()
     `IGNORE_WARNINGS_END
