@@ -66,7 +66,7 @@ module VX_cache_miss_resrv #(
     assign miss_resrv_stop = (size  > $bits(size)'(MRVQ_SIZE-5));
 
     wire                           enqueue_possible = !miss_resrv_full;
-    wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;
+    wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;    
 
 `IGNORE_WARNINGS_BEGIN
     wire [31:0] make_ready_push_full;
@@ -125,11 +125,9 @@ module VX_cache_miss_resrv #(
             end
 
             if (mrvq_pop) begin
-                valid_table[dequeue_index]    <= 0;
-                ready_table[dequeue_index]    <= 0;
-                addr_table[dequeue_index]     <= 0;
-                metadata_table[dequeue_index] <= 0;
-                head_ptr                      <= head_ptr + 1;
+                valid_table[dequeue_index] <= 0;
+                ready_table[dequeue_index] <= 0;
+                head_ptr                   <= head_ptr + 1;
             end
 
             if (!(mrvq_push && mrvq_pop)) begin
