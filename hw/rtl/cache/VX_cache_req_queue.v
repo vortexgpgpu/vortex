@@ -83,7 +83,8 @@ module VX_cache_req_queue #(
         .pop      (pop_qual),
         .data_out ({out_per_valids, out_per_addr, out_per_writedata, out_per_tag, out_per_mem_read, out_per_mem_write}),
         .empty    (o_empty),
-        .full     (reqq_full)
+        .full     (reqq_full),
+        `UNUSED_PIN(size)
     );
 
     wire[NUM_REQUESTS-1:0] real_out_per_valids = out_per_valids & {NUM_REQUESTS{~out_empty}};

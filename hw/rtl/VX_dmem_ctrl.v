@@ -95,43 +95,41 @@ module VX_dmem_ctrl # (
         .core_rsp_tag       (smem_core_rsp_if.core_rsp_tag),
         .core_rsp_ready     (smem_core_rsp_if.core_rsp_ready),
 
-    `IGNORE_WARNINGS_BEGIN
         // DRAM request
-        .dram_req_read      (),
-        .dram_req_write     (),        
-        .dram_req_addr      (),
-        .dram_req_data      (),
-        .dram_req_tag       (),
+        `UNUSED_PIN(dram_req_read),
+        `UNUSED_PIN(dram_req_write),        
+        `UNUSED_PIN(dram_req_addr),
+        `UNUSED_PIN(dram_req_data),
+        `UNUSED_PIN(dram_req_tag),
         .dram_req_ready     (1'b0),       
 
         // DRAM response
         .dram_rsp_valid     (1'b0),
         .dram_rsp_data      (0),
         .dram_rsp_tag       (`SDRAM_TAG_WIDTH'(0)),
-        .dram_rsp_ready     (),
+        `UNUSED_PIN(dram_rsp_ready),
 
         // Snoop request
         .snp_req_valid      (1'b0),
         .snp_req_addr       (0),
         .snp_req_tag        (0),
-        .snp_req_ready      (),
+        `UNUSED_PIN(snp_req_ready),
 
         // Snoop response
-        .snp_rsp_valid      (),
-        .snp_rsp_tag        (),
+        `UNUSED_PIN(snp_rsp_valid),
+        `UNUSED_PIN(snp_rsp_tag),
         .snp_rsp_ready      (1'b0),
 
         // Snoop forward out
-        .snp_fwdout_valid   (),
-        .snp_fwdout_addr    (),    
-        .snp_fwdout_tag     (),    
+        `UNUSED_PIN(snp_fwdout_valid),
+        `UNUSED_PIN(snp_fwdout_addr),    
+        `UNUSED_PIN(snp_fwdout_tag),    
         .snp_fwdout_ready   (0),
 
          // Snoop forward in
         .snp_fwdin_valid    (0),
         .snp_fwdin_tag      (0),    
-        .snp_fwdin_ready    ()
-    `IGNORE_WARNINGS_END
+        `UNUSED_PIN(snp_fwdin_ready)
     );
 
     VX_cache #(
@@ -204,18 +202,16 @@ module VX_dmem_ctrl # (
         .snp_rsp_tag        (dcache_snp_rsp_if.snp_rsp_tag),
         .snp_rsp_ready      (dcache_snp_rsp_if.snp_rsp_ready),
         
-    `IGNORE_WARNINGS_BEGIN
         // Snoop forward out
-        .snp_fwdout_valid   (),
-        .snp_fwdout_addr    (),    
-        .snp_fwdout_tag     (),    
+        `UNUSED_PIN(snp_fwdout_valid),
+        `UNUSED_PIN(snp_fwdout_addr),    
+        `UNUSED_PIN(snp_fwdout_tag),    
         .snp_fwdout_ready   (0),
 
          // Snoop forward in
         .snp_fwdin_valid    (0),
         .snp_fwdin_tag      (0),    
-        .snp_fwdin_ready    ()
-    `IGNORE_WARNINGS_END
+        `UNUSED_PIN(snp_fwdin_ready)
     );
 
     VX_cache #(
@@ -276,29 +272,27 @@ module VX_dmem_ctrl # (
         .dram_rsp_tag          (icache_dram_rsp_if.dram_rsp_tag),
         .dram_rsp_ready        (icache_dram_rsp_if.dram_rsp_ready),
 
-    `IGNORE_WARNINGS_BEGIN
         // Snoop request
         .snp_req_valid         (1'b0),
         .snp_req_addr          (0),
         .snp_req_tag           (0),
-        .snp_req_ready         (),
+        `UNUSED_PIN(snp_req_ready),
 
         // Snoop response
-        .snp_rsp_valid         (),
-        .snp_rsp_tag           (),
+        `UNUSED_PIN(snp_rsp_valid),
+        `UNUSED_PIN(snp_rsp_tag),
         .snp_rsp_ready         (1'b0),
 
         // Snoop forward out
-        .snp_fwdout_valid      (),
-        .snp_fwdout_addr       (),    
-        .snp_fwdout_tag        (),    
+        `UNUSED_PIN(snp_fwdout_valid),
+        `UNUSED_PIN(snp_fwdout_addr),    
+        `UNUSED_PIN(snp_fwdout_tag),    
         .snp_fwdout_ready      (0),
 
          // Snoop forward in
         .snp_fwdin_valid       (0),
         .snp_fwdin_tag         (0),    
-        .snp_fwdin_ready       ()
-    `IGNORE_WARNINGS_END
+        `UNUSED_PIN(snp_fwdin_ready)
     );
 
 endmodule
