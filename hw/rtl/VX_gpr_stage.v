@@ -100,7 +100,8 @@ module VX_gpr_stage (
             .stall (stall_rest),
             .flush (stall_rest),
             .in    (stall_lsu),
-            .out   (delayed_lsu_last_cycle)
+            .out   (delayed_lsu_last_cycle),
+            `UNUSED_PIN(size)
         );
 
         wire[`NUM_THREADS-1:0][31:0] temp_store_data;

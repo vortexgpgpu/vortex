@@ -3,8 +3,7 @@
 module VX_lsu_addr_gen (
     input  wire[`NUM_THREADS-1:0][31:0] base_address,
     input  wire[31:0]                   offset,
-    output wire[`NUM_THREADS-1:0][31:0] address
-    
+    output wire[`NUM_THREADS-1:0][31:0] address    
 );
     genvar i;
     generate

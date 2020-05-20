@@ -150,7 +150,8 @@ module VX_bank #(
         .pop     (snrq_pop),
         .data_out({snrq_addr_st0, snrq_tag_st0}),
         .empty   (snrq_empty),
-        .full    (snrq_full)
+        .full    (snrq_full),
+        `UNUSED_PIN(size)
     );
 
     assign snp_req_ready = ~snrq_full;
@@ -172,7 +173,8 @@ module VX_bank #(
         .pop     (dfpq_pop),
         .data_out({dfpq_addr_st0, dfpq_filldata_st0}),
         .empty   (dfpq_empty),
-        .full    (dfpq_full)
+        .full    (dfpq_full),
+        `UNUSED_PIN(size)
     );
 
     assign dram_fill_rsp_ready = !dfpq_full;
@@ -467,7 +469,7 @@ module VX_bank #(
         .stall(stall_bank_pipe),
         .flush(1'b0),
         .in  ({mrvq_init_ready_state_st1e, snp_to_mrvq_st1e, is_snp_st1e, fill_saw_dirty_st1e, is_fill_st1[STAGE_1_CYCLES-1] , qual_valid_st1e_2, addr_st1[STAGE_1_CYCLES-1], wsel_st1[STAGE_1_CYCLES-1], writeword_st1[STAGE_1_CYCLES-1], readword_st1e, readdata_st1e, readtag_st1e, miss_st1e, dirty_st1e, inst_meta_st1[STAGE_1_CYCLES-1]}),
-        .out ({mrvq_init_ready_state_unqual_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2                  })
+        .out ({mrvq_init_ready_state_unqual_st2,  snp_to_mrvq_st2 , is_snp_st2 , fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , inst_meta_st2           })
     );    
 
 
@@ -582,7 +584,8 @@ module VX_bank #(
         .pop     (cwbq_pop),
         .data_out({core_rsp_tid, core_rsp_tag, core_rsp_data}),
         .empty   (cwbq_empty),
-        .full    (cwbq_full)
+        .full    (cwbq_full),
+        `UNUSED_PIN(size)
     );    
 
     assign core_rsp_valid = !cwbq_empty;
@@ -651,7 +654,8 @@ module VX_bank #(
         .pop     (dwbq_pop),
         .data_out({dwbq_is_dwb_out, dwbq_is_snp_out, dram_wb_req_addr, dram_wb_req_data, snp_rsp_tag}),
         .empty   (dwbq_empty),
-        .full    (dwbq_full)
+        .full    (dwbq_full),
+        `UNUSED_PIN(size)
     );       
 
     wire dram_wb_req_fire = dram_wb_req_valid && dram_wb_req_ready;

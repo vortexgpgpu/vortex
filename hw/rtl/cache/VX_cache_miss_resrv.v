@@ -77,7 +77,7 @@ module VX_cache_miss_resrv #(
     reg [MRVQ_SIZE-1:0] valid_address_match;
 
     genvar i;
-    generate
+    generate         
         for (i = 0; i < MRVQ_SIZE; i++) begin
             assign valid_address_match[i] = valid_table[i] && (addr_table[i] === fill_addr_st1);
             assign make_ready[i]          = is_fill_st1 && valid_address_match[i];
@@ -143,16 +143,17 @@ module VX_cache_miss_resrv #(
         end
     end
 
-`ifdef DBG_PRINT_CACHE_MSRQ
+`ifdef DBG_PRINT_CACHE_MSRQ    
+    integer j;
     always_ff @(posedge clk) begin
         if (mrvq_push || mrvq_pop) begin
             $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);
-            for (int i = 0; i < MRVQ_SIZE; i++) begin
-                if (valid_table[i]) begin
+            for (j = 0; j < MRVQ_SIZE; j++) begin
+                if (valid_table[j]) begin
                     $write(" ");                    
-                    if (i == head_ptr) $write("*");
-                    if (~ready_table[i]) $write("!");
-                    $write("addr%0d=%0h", i, `LINE_TO_BYTE_ADDR(addr_table[i], BANK_ID));
+                    if (head_ptr == $bits(head_ptr)'(j)) $write("*");
+                    if (~ready_table[j]) $write("!");
+                    $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
                 end
             end
             $write("\n");

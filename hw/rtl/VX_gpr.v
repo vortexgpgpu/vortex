@@ -72,7 +72,7 @@ module VX_gpr (
 
         for (i = 0; i < 'NT; i=i+4)
         begin
-            `IGNORE_WARNINGS_BEGIN
+        `IGNORE_WARNINGS_BEGIN
            rf2_32x128_wm1 first_ram (
                 .CENYA(),
                 .AYA(),
@@ -109,9 +109,7 @@ module VX_gpr (
                 .SEB(1'b0),
                 .COLLDISN(1'b1)
            );
-           `IGNORE_WARNINGS_END
 
-           `IGNORE_WARNINGS_BEGIN
            rf2_`NUM_GPRSx128_wm1 second_ram (
                 .CENYA(),
                 .AYA(),
@@ -148,7 +146,7 @@ module VX_gpr (
                 .SEB(1'b0),
                 .COLLDISN(1'b1)
            );
-           `IGNORE_WARNINGS_END
+        `IGNORE_WARNINGS_END
         end
 
     `endif

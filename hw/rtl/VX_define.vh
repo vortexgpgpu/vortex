@@ -22,6 +22,10 @@
                               /* verilator lint_on PINCONNECTEMPTY */ \
                               /* verilator lint_on DECLFILENAME */
 
+`define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
+                       . x () \
+                       /* verilator lint_on PINCONNECTEMPTY */
+
 `define STRINGIFY(x) `"x`"
 
 `define STATIC_ASSERT(cond, msg)    \
