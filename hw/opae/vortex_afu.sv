@@ -629,7 +629,6 @@ begin
     end
 
     vx_snp_req_valid <= 0;
-    vx_snp_rsp_ready <= 0;
 
     if ((STATE_CLFLUSH == state)
      && (snp_req_ctr < csr_data_size)
@@ -643,7 +642,8 @@ begin
 
     if ((STATE_CLFLUSH == state) 
      && (snp_rsp_ctr < csr_data_size)
-     && vx_snp_rsp_valid) begin
+     && vx_snp_rsp_valid
+     && vx_snp_rsp_ready) begin
        snp_rsp_ctr <= snp_rsp_ctr + 1;
     end   
   end
@@ -687,7 +687,7 @@ Vortex_Socket #() vx_socket (
   .io_req_data      (),
   .io_req_byteen    (),
   .io_req_tag       (),    
-  .io_req_ready     (1'b0),
+  .io_req_ready     (1'b1),
 
   // I/O response
   .io_rsp_valid     (1'b0),
