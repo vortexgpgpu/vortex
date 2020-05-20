@@ -75,7 +75,6 @@ module VX_snp_forwarder #(
             rd_ptr       <= 0;
             wr_ptr       <= 0;
             pending_size <= 0;
-            fwdin_sel    <= 0;
         end else begin
             if (enqueue)  begin
                 pending_reqs[wr_ptr]  <= {snp_req_addr, snp_req_tag};
