@@ -2,14 +2,15 @@ vortex_afu.json
 
 +define+GLOBAL_BLOCK_SIZE=64
 
-#+define+NUM_CORES=2
-#+define+L2_ENABLE=0
++define+NUM_CORES=2
++define+L2_ENABLE=0
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE
-#+define+DBG_PRINT_BANK
+#+define+DBG_PRINT_CACHE_BANK
+#+define+DBG_PRINT_CACHE_SNP
+#+define+DBG_PRINT_CACHE_MSRQ
 #+define+DBG_PRINT_DRAM
-#+define+DBG_PRINT_SNP_FWD
 
 +incdir+.
 +incdir+../rtl

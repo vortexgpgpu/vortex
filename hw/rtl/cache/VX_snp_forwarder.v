@@ -112,7 +112,7 @@ module VX_snp_forwarder #(
         assign snp_fwdin_ready[i] = fwdin_ready && (fwdin_sel == `REQS_BITS'(i));
     end
 
-`ifdef DBG_PRINT_SNP_FWD
+`ifdef DBG_PRINT_CACHE_SNP
      always_ff @(posedge clk) begin
         if (snp_req_valid && snp_req_ready) begin
             $display("%t: snp req: addr=%0h, tag=%0h", $time, snp_req_addr, snp_req_tag);

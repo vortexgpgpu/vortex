@@ -1,6 +1,8 @@
 `include "VX_cache_config.vh"
 
 module VX_cache_miss_resrv #(
+    parameter CACHE_ID                      = 0,
+    parameter BANK_ID                       = 0,    
     // Size of line inside a bank in bytes
     parameter BANK_LINE_SIZE                = 0, 
     // Number of banks {1, 2, 4, 8,...}
@@ -140,5 +142,22 @@ module VX_cache_miss_resrv #(
             end
         end
     end
+
+`ifdef DBG_PRINT_CACHE_MSRQ
+    always_ff @(posedge clk) begin
+        if (mrvq_push || mrvq_pop) begin
+            $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);
+            for (int i = 0; i < MRVQ_SIZE; i++) begin
+                if (valid_table[i]) begin
+                    $write(" ");                    
+                    if (i == head_ptr) $write("*");
+                    if (~ready_table[i]) $write("!");
+                    $write("addr%0d=%0h", i, `LINE_TO_BYTE_ADDR(addr_table[i], BANK_ID));
+                end
+            end
+            $write("\n");
+        end
+    end
+`endif
 
 endmodule
