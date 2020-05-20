@@ -13,13 +13,15 @@ module VX_generic_queue #(
     output wire             full,    
 `IGNORE_WARNINGS_END        
     input  wire [DATAW-1:0] data_in,
-    output wire [DATAW-1:0] data_out
+    output wire [DATAW-1:0] data_out,
+    output wire [`LOG2UP(SIZE+1)-1:0] size
 ); 
     if (SIZE == 0) begin
 
         assign empty        = 1;
         assign data_out     = data_in;
         assign full         = 0;
+        assign size         = 0;
 
     end else begin // (SIZE > 0)
     
@@ -59,6 +61,8 @@ module VX_generic_queue #(
             assign data_out     = head_r;
             assign empty        = (size_r == 0);
             assign full         = (size_r != 0);
+            assign size         = size_r;
+
         end else begin // (SIZE > 1)
 
             reg [DATAW-1:0]         curr_r;
@@ -131,8 +135,9 @@ module VX_generic_queue #(
             end
 
             assign data_out = bypass_r ? curr_r : head_r;
-            assign empty = empty_r;
-            assign full = full_r;
+            assign empty    = empty_r;
+            assign full     = full_r;
+            assign size     = size_r;
         end
     end
 

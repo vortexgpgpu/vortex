@@ -105,34 +105,32 @@ module VX_bank #(
 );
 
 `DEBUG_BEGIN
-
-        wire[31:0]           debug_use_pc_st0;
-        wire[1:0]            debug_wb_st0;
-        wire[4:0]            debug_rd_st0;
-        wire[`NW_BITS-1:0]   debug_warp_num_st0;
-        wire[2:0]            debug_mem_read_st0;    
-        wire[2:0]            debug_mem_write_st0;
-        wire[`REQS_BITS-1:0] debug_tid_st0;
-
-
-        wire[31:0]           debug_use_pc_st1e;
-        wire[1:0]            debug_wb_st1e;
-        wire[4:0]            debug_rd_st1e;
-        wire[`NW_BITS-1:0]   debug_warp_num_st1e;
-        wire[2:0]            debug_mem_read_st1e;    
-        wire[2:0]            debug_mem_write_st1e;
-        wire[`REQS_BITS-1:0] debug_tid_st1e;
+    wire[31:0]           debug_use_pc_st0;
+    wire[1:0]            debug_wb_st0;
+    wire[4:0]            debug_rd_st0;
+    wire[`NW_BITS-1:0]   debug_warp_num_st0;
+    wire[2:0]            debug_mem_read_st0;    
+    wire[2:0]            debug_mem_write_st0;
+    wire[`REQS_BITS-1:0] debug_tid_st0;
 
 
-        wire[31:0]           debug_use_pc_st2;
-        wire[1:0]            debug_wb_st2;
-        wire[4:0]            debug_rd_st2;
-        wire[`NW_BITS-1:0]   debug_warp_num_st2;
-        wire[2:0]            debug_mem_read_st2;    
-        wire[2:0]            debug_mem_write_st2;
-        wire[`REQS_BITS-1:0] debug_tid_st2;
+    wire[31:0]           debug_use_pc_st1e;
+    wire[1:0]            debug_wb_st1e;
+    wire[4:0]            debug_rd_st1e;
+    wire[`NW_BITS-1:0]   debug_warp_num_st1e;
+    wire[2:0]            debug_mem_read_st1e;    
+    wire[2:0]            debug_mem_write_st1e;
+    wire[`REQS_BITS-1:0] debug_tid_st1e;
+
+
+    wire[31:0]           debug_use_pc_st2;
+    wire[1:0]            debug_wb_st2;
+    wire[4:0]            debug_rd_st2;
+    wire[`NW_BITS-1:0]   debug_warp_num_st2;
+    wire[2:0]            debug_mem_read_st2;    
+    wire[2:0]            debug_mem_write_st2;
+    wire[`REQS_BITS-1:0] debug_tid_st2;
 `DEBUG_END
-
 
     wire snrq_pop;
     wire snrq_empty;
@@ -505,6 +503,8 @@ module VX_bank #(
     assign mrvq_init_ready_state_st2 = mrvq_init_ready_state_unqual_st2 || mrvq_init_ready_state_hazard_st0_st1 || mrvq_init_ready_state_hazard_st1e_st1;
 
     VX_cache_miss_resrv #(
+        .BANK_ID                (BANK_ID),
+        .CACHE_ID               (CACHE_ID),
         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
         .NUM_BANKS              (NUM_BANKS),
         .WORD_SIZE              (WORD_SIZE),
@@ -681,7 +681,7 @@ module VX_bank #(
                           || msrq_push_stall 
                           || dram_fill_req_stall;
 
-`ifdef DBG_PRINT_BANK
+`ifdef DBG_PRINT_CACHE_BANK
     always_ff @(posedge clk) begin
         if (dram_fill_req_valid && dram_fill_req_ready) begin
             $display("%t: bank%02d:%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));

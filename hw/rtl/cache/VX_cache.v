@@ -228,7 +228,7 @@ module VX_cache #(
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
         .NUM_REQUESTS   (NUM_REQUESTS)
-    ) cache_core_req_bank_sell (
+    ) cache_core_req_bank_sel (
         .core_req_valid  (core_req_valid),
         .core_req_addr   (core_req_addr),
         .per_bank_valids (per_bank_valids)
