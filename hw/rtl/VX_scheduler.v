@@ -17,13 +17,14 @@ module VX_scheduler (
     assign is_empty = count_valid == 0;
 
     reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
+    reg[31:0]                   valid_table [`NUM_WARPS-1:0];
 
     wire valid_wb  = (writeback_if.wb != 0) && (| writeback_if.valid) && (writeback_if.rd != 0);
     wire wb_inc    = (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
 
-    wire rs1_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs1] != 0;
-    wire rs2_rename = rename_table[bckE_req_if.warp_num][bckE_req_if.rs2] != 0;
-    wire rd_rename  = rename_table[bckE_req_if.warp_num][bckE_req_if.rd ] != 0;
+    wire rs1_rename = (rename_table[bckE_req_if.warp_num][bckE_req_if.rs1] != 0) && valid_table[bckE_req_if.warp_num][bckE_req_if.rs1];
+    wire rs2_rename = (rename_table[bckE_req_if.warp_num][bckE_req_if.rs2] != 0) && valid_table[bckE_req_if.warp_num][bckE_req_if.rs2];
+    wire rd_rename  = (rename_table[bckE_req_if.warp_num][bckE_req_if.rd ] != 0) && valid_table[bckE_req_if.warp_num][bckE_req_if.rd ];
 
     wire is_store = (bckE_req_if.mem_write != `BYTE_EN_NO);
     wire is_load  = (bckE_req_if.mem_read  != `BYTE_EN_NO);
@@ -49,21 +50,31 @@ module VX_scheduler (
                           || (exec_delay && is_exec));
 
     integer i, w;
+
+    wire[`NUM_THREADS-1:0] old_rename_mask     = rename_table[writeback_if.warp_num][writeback_if.rd];
+    wire[`NUM_THREADS-1:0] invalidate_mask     = (~writeback_if.valid);
+
+    wire[`NUM_THREADS-1:0] valid_wb_new_mask   = old_rename_mask & invalidate_mask;
+    wire                   valid_wb_new_valid  = valid_wb_new_mask != 0;
     
     always @(posedge clk) begin
         if (reset) begin
             for (w = 0; w < `NUM_WARPS; w=w+1) begin
                 for (i = 0; i < 32; i++) begin
-                     rename_table[w][i] <= 0;
+                     // rename_table[w][i] <= 0;
+                     valid_table[w][i]  <= 0;
                 end
             end
         end else begin
             if (valid_wb) begin
-                rename_table[writeback_if.warp_num][writeback_if.rd] <= rename_table[writeback_if.warp_num][writeback_if.rd] & (~writeback_if.valid);
+                rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;
+                valid_table [writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_valid;
+
             end
 
             if (!schedule_delay && wb_inc) begin
                 rename_table[bckE_req_if.warp_num][bckE_req_if.rd] <= bckE_req_if.valid;
+                valid_table [bckE_req_if.warp_num][bckE_req_if.rd] <= 1'b1;
             end
         
             if (valid_wb 
