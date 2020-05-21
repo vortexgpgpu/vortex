@@ -10,18 +10,21 @@ module VX_fill_invalidator #(
 ) (
     input  wire     clk,
     input  wire     reset,
-
     input  wire     possible_fill,
     input  wire     success_fill,
-
     input  wire[`LINE_ADDR_WIDTH-1:0] fill_addr,
-
     output reg      invalidate_fill    
 );
 
     if (FILL_INVALIDAOR_SIZE == 0) begin
     
         assign invalidate_fill = 0;
+
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        `UNUSED_VAR (possible_fill)
+        `UNUSED_VAR (success_fill)
+        `UNUSED_VAR (fill_addr)
 
     end else begin 
 

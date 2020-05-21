@@ -113,7 +113,6 @@ module VX_bank #(
     wire[2:0]            debug_mem_write_st0;
     wire[`REQS_BITS-1:0] debug_tid_st0;
 
-
     wire[31:0]           debug_use_pc_st1e;
     wire[1:0]            debug_wb_st1e;
     wire[4:0]            debug_rd_st1e;
@@ -121,7 +120,6 @@ module VX_bank #(
     wire[2:0]            debug_mem_read_st1e;    
     wire[2:0]            debug_mem_write_st1e;
     wire[`REQS_BITS-1:0] debug_tid_st1e;
-
 
     wire[31:0]           debug_use_pc_st2;
     wire[1:0]            debug_wb_st2;
@@ -151,7 +149,7 @@ module VX_bank #(
         .data_out({snrq_addr_st0, snrq_tag_st0}),
         .empty   (snrq_empty),
         .full    (snrq_full),
-        `UNUSED_PIN(size)
+        `UNUSED_PIN (size)
     );
 
     assign snp_req_ready = ~snrq_full;
@@ -174,7 +172,7 @@ module VX_bank #(
         .data_out({dfpq_addr_st0, dfpq_filldata_st0}),
         .empty   (dfpq_empty),
         .full    (dfpq_full),
-        `UNUSED_PIN(size)
+        `UNUSED_PIN (size)
     );
 
     assign dram_fill_rsp_ready = !dfpq_full;
@@ -585,7 +583,7 @@ module VX_bank #(
         .data_out({core_rsp_tid, core_rsp_tag, core_rsp_data}),
         .empty   (cwbq_empty),
         .full    (cwbq_full),
-        `UNUSED_PIN(size)
+        `UNUSED_PIN (size)
     );    
 
     assign core_rsp_valid = !cwbq_empty;
@@ -655,7 +653,7 @@ module VX_bank #(
         .data_out({dwbq_is_dwb_out, dwbq_is_snp_out, dram_wb_req_addr, dram_wb_req_data, snp_rsp_tag}),
         .empty   (dwbq_empty),
         .full    (dwbq_full),
-        `UNUSED_PIN(size)
+        `UNUSED_PIN (size)
     );       
 
     wire dram_wb_req_fire = dram_wb_req_valid && dram_wb_req_ready;

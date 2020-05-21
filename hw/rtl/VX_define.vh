@@ -22,6 +22,10 @@
                               /* verilator lint_on PINCONNECTEMPTY */ \
                               /* verilator lint_on DECLFILENAME */
 
+`define UNUSED_VAR(x) /* verilator lint_off UNUSED */ \
+                      wire [$bits(x)-1:0] __``x``__ = x; \
+                      /* verilator lint_on UNUSED */
+
 `define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
