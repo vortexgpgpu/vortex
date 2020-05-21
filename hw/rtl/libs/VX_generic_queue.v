@@ -2,7 +2,8 @@
 
 module VX_generic_queue #(
     parameter DATAW,
-    parameter SIZE = 16
+    parameter SIZE = 16,
+    parameter BUFFERED_OUTPUT = (SIZE >= 8)
 ) (
 `IGNORE_WARNINGS_BEGIN  
     input  wire             clk,
@@ -31,7 +32,6 @@ module VX_generic_queue #(
         reg [DATAW-1:0] data [SIZE-1:0];
     `endif
 
-        reg [DATAW-1:0]           head_r;        
         reg [`LOG2UP(SIZE+1)-1:0] size_r;        
         wire                      reading;
         wire                      writing;
@@ -39,7 +39,9 @@ module VX_generic_queue #(
         assign reading = pop && !empty;
         assign writing = push && !full; 
 
-        if (SIZE == 1) begin
+        if (SIZE == 1) begin // (SIZE == 1)
+
+            reg [DATAW-1:0] head_r;
 
             always @(posedge clk) begin
                 if (reset) begin
@@ -58,86 +60,113 @@ module VX_generic_queue #(
                 end
             end        
 
-            assign data_out     = head_r;
-            assign empty        = (size_r == 0);
-            assign full         = (size_r != 0);
-            assign size         = size_r;
+            assign data_out = head_r;
+            assign empty    = (size_r == 0);
+            assign full     = (size_r != 0);
+            assign size     = size_r;
 
         end else begin // (SIZE > 1)
 
-            reg [DATAW-1:0]         curr_r;
-            reg [`LOG2UP(SIZE)-1:0] wr_ctr_r;
-            reg [`LOG2UP(SIZE)-1:0] rd_ptr_r;
-            reg [`LOG2UP(SIZE)-1:0] rd_next_ptr_r;
-            reg                     empty_r;
-            reg                     full_r;
-            reg                     bypass_r;
-            
-            always @(posedge clk) begin
-                if (reset) begin
-                    wr_ctr_r <= 0;
-                end else begin
-                    if (writing)
-                    wr_ctr_r <= wr_ctr_r + 1; 
+            if (0 == BUFFERED_OUTPUT) begin                
+
+                reg [`LOG2UP(SIZE):0] wr_ptr_r;
+                reg [`LOG2UP(SIZE):0] rd_ptr_r;
+
+                wire [`LOG2UP(SIZE)-1:0] wr_ptr_a = wr_ptr_r[`LOG2UP(SIZE)-1:0];
+                wire [`LOG2UP(SIZE)-1:0] rd_ptr_a = rd_ptr_r[`LOG2UP(SIZE)-1:0];
+
+                always @(posedge clk) begin
+                    if (reset) begin
+                        rd_ptr_r <= 0;
+                        wr_ptr_r <= 0;
+                        size_r   <= 0;
+                    end else begin
+                        if (writing) begin 
+                            data[wr_ptr_a] <= data_in;
+                            wr_ptr_r <= wr_ptr_r + 1;
+                            if (!reading) begin                                                       
+                                size_r <= size_r + 1;
+                            end
+                        end
+
+                        if (reading) begin
+                            rd_ptr_r <= rd_ptr_r + 1;
+                            if (!writing) begin                                                        
+                                size_r <= size_r - 1;
+                            end
+                        end
+                    end                   
+                end    
+
+                assign data_out = data[rd_ptr_a];
+                assign empty    = (wr_ptr_r == rd_ptr_r);
+                assign full     = (wr_ptr_a == rd_ptr_a) && (wr_ptr_r[`LOG2UP(SIZE)] != rd_ptr_r[`LOG2UP(SIZE)]);
+                assign size     = size_r;            
+
+            end else begin
+
+                reg [DATAW-1:0]         head_r;
+                reg [DATAW-1:0]         curr_r;
+                reg [`LOG2UP(SIZE)-1:0] wr_ctr_r;
+                reg [`LOG2UP(SIZE)-1:0] rd_ptr_r;
+                reg [`LOG2UP(SIZE)-1:0] rd_next_ptr_r;
+                reg                     empty_r;
+                reg                     full_r;
+                reg                     bypass_r;
+
+                always @(posedge clk) begin
+                    if (reset) begin
+                        size_r          <= 0;
+                        empty_r         <= 1;                   
+                        full_r          <= 0;
+                        wr_ctr_r        <= 0;
+                        curr_r          <= 0;
+                        rd_ptr_r        <= 0;
+                        rd_next_ptr_r   <= 1;
+                        bypass_r        <= 0;
+                    end else begin
+                        if (writing) begin
+                            data[wr_ctr_r] <= data_in;
+                            wr_ctr_r <= wr_ctr_r + 1; 
+
+                            if (!reading) begin
+                                size_r <= size_r + 1;
+                                empty_r <= 0;
+                                if (size_r == SIZE-1) begin
+                                    full_r <= 1;
+                                end
+                            end
+                        end
+
+                        if (reading) begin
+                            if (SIZE == 2) begin
+                                rd_ptr_r <= rd_next_ptr_r;
+                                rd_next_ptr_r <= ~rd_next_ptr_r;
+                            end else if (SIZE > 2) begin        
+                                rd_ptr_r <= rd_next_ptr_r;
+                                rd_next_ptr_r <= rd_ptr_r + 2;
+                            end
+
+                            if (!writing) begin
+                                size_r <= size_r - 1;
+                                if (size_r == 1) begin
+                                    empty_r <= 1;  
+                                end;                
+                                full_r <= 0;
+                            end
+                        end
+
+                        bypass_r <= writing && (empty_r || (1 == size_r) && reading);
+                        curr_r <= data_in;
+                        head_r <= data[reading ? rd_next_ptr_r : rd_ptr_r];
+                    end
                 end 
+
+                assign data_out = bypass_r ? curr_r : head_r;
+                assign empty    = empty_r;
+                assign full     = full_r;
+                assign size     = size_r;
             end
-
-            always @(posedge clk) begin
-                if (reset) begin
-                    size_r  <= 0;
-                    empty_r <= 1;                   
-                    full_r  <= 0;
-                end else begin
-                    if (writing && !reading) begin
-                        size_r <= size_r + 1;
-                        empty_r <= 0;
-                        if (size_r == SIZE-1) begin
-                            full_r <= 1;
-                        end
-                    end else 
-                    if (reading && !writing) begin
-                        size_r <= size_r - 1;
-                        if (size_r == 1) begin
-                            empty_r <= 1;  
-                        end;                
-                        full_r <= 0;
-                    end
-                end
-            end    
-
-            always @(posedge clk) begin
-                if (writing) begin 
-                    data[wr_ctr_r] <= data_in;
-                end
-            end
-        
-            always @(posedge clk) begin
-                if (reset) begin
-                    curr_r        <= 0;
-                    rd_ptr_r      <= 0;
-                    rd_next_ptr_r <= 1;
-                    bypass_r      <= 0;
-                end else begin
-                    if (reading) begin
-                        if (SIZE == 2) begin
-                            rd_ptr_r <= rd_next_ptr_r;
-                            rd_next_ptr_r <= ~rd_next_ptr_r;
-                        end else if (SIZE > 2) begin        
-                            rd_ptr_r <= rd_next_ptr_r;
-                            rd_next_ptr_r <= rd_ptr_r + 2;
-                        end
-                    end
-
-                    bypass_r <= writing && (empty_r || (1 == size_r) && reading);
-                    curr_r <= data_in;
-                    head_r <= data[reading ? rd_next_ptr_r : rd_ptr_r];
-                end
-            end
-
-            assign data_out = bypass_r ? curr_r : head_r;
-            assign empty    = empty_r;
-            assign full     = full_r;
-            assign size     = size_r;
         end
     end
 
