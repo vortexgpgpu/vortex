@@ -52,7 +52,7 @@
 `endif
 
 `ifndef L2_ENABLE
-`define L2_ENABLE (`NUM_CORES > 1)
+`define L2_ENABLE (`NUM_CORES > 2)
 `endif
 
 `ifndef L3_ENABLE
