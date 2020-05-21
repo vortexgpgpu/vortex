@@ -5,11 +5,6 @@
 
 int main(int argc, char **argv)
 {
-
-	// Verilated::debug(1);
-
-	Verilated::commandArgs(argc, argv);
-
 //#define ALL_TESTS
 #ifdef ALL_TESTS
 	bool passed = true;
