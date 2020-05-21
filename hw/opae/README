@@ -6,40 +6,50 @@ source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 #########################
 ## Vortex Run commands ##
 #########################
-## Synthesis
-cd /driver/hw/opae
-# Configure a Quartus build area
-afu_synth_setup -s sources.txt build_fpga
-cd build_fpga
-# Run Quartus in the vLab batch queue
-qsub-synth
-# Check if the job is submitted to the queue and running. Status should be R 
-qstat | grep tinebp
-# Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C 
-watch ‘qstat | grep tinebp’
-## Executing on FPGA
-# From the build_fpga directory acquire a fpga node
-qsub-fpga
-# Go to the directory whree qsub-synth was run above
-cd $PBS_O_WORKDIR
-# Load the image onto an FPGA
-fpgaconf vortex_afu.gbs
-# If this says Multiple ports. Then use --bus with fpgaconf. #bus info can be found by fpgainfo port
-#fpgaconf --bus 0xaf vortex_afu.gbs
-## Running the Test case 
-cd /driver/opae
-make clean
-make
-# For shared library
-export LD_LIBRARY_PATH=${PWD}:$LD_LIBRARY_PATH
-# Run the program
-cd /driver/tests/basic
-make clean
-make
-./basic
 
 #
-# ASE build instructions
+## Synthesis
+#
+
+cd /driver/hw/opae
+
+# Configure a Quartus build area
+afu_synth_setup -s sources.txt build_fpga
+
+# Run Quartus in the vLab batch queue
+cd build_fpga && qsub-synth
+
+# check last 10 lines in build log for possible errors
+tail -n 10 ./build_fpga/build.log
+
+# Check if the job is submitted to the queue and running. Status should be R 
+qstat | grep tinebp
+
+# Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C 
+watch ‘qstat | grep tinebp’
+
+#
+## Executing on FPGA
+#
+
+# From the build_fpga directory acquire a fpga node
+qsub-fpga
+
+# Go to the directory whree qsub-synth was run above
+cd $PBS_O_WORKDIR
+
+# Load the image onto an FPGA
+fpgaconf vortex_afu.gbs
+
+# If this says Multiple ports. Then use --bus with fpgaconf. #bus info can be found by fpgainfo port
+fpgaconf --bus 0xaf vortex_afu.gbs
+
+# Running the Test case 
+cd /driver/tests/basic
+make run-fpga
+
+#
+## ASE build instructions
 #
 
 source /export/fpga/bin/setup-fpga-env fpga-pac-a10
