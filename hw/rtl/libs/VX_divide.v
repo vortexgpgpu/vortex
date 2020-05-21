@@ -27,9 +27,7 @@ module VX_divide #(
 
     generate
         if (NREP != DREP) begin
-        `IGNORE_WARNINGS_BEGIN
             different_nrep_drep_not_yet_supported non_existing_module();
-        `IGNORE_WARNINGS_END
         end
 
         if (IMPL == "quartus") begin
@@ -58,6 +56,7 @@ module VX_divide #(
 
             wire [WIDTHN-1:0] numer_pipe_end;
             wire [WIDTHD-1:0] denom_pipe_end;
+
             if (PIPELINE == 0) begin
                 assign numer_pipe_end = numer;
                 assign denom_pipe_end = denom;
@@ -100,16 +99,6 @@ module VX_divide #(
 
             if (NREP == "SIGNED") begin
 
-                /*VX_divide_ifnal_signed #(
-                    .WIDTHN,
-                    .WIDTHD
-                )div(
-                    .numer(numer_pipe_end),
-                    .denom(denom_pipe_end),
-                    .quotient,
-                    .remainder
-                );*/
-
                 always @(*) begin
                     if (denom_pipe_end == 0) begin
                         quotient = 32'hffffffff;
@@ -118,12 +107,12 @@ module VX_divide #(
                     else if (denom_pipe_end == 32'hffffffff && numer_pipe_end == 32'h80000000) begin
                         // this edge case kills verilator in some cases by causing a division
                         // overflow exception. INT_MIN / -1 (on x86)
-                        quotient = 0;
+                        quotient  = 0;
                         remainder = 0;
                     end
                     else begin
-                        quotient = $signed($signed(numer_pipe_end)/$signed(denom_pipe_end));
-                        remainder = $signed($signed(numer_pipe_end)%$signed(denom_pipe_end));
+                        quotient  = $signed($signed(numer_pipe_end) / $signed(denom_pipe_end));
+                        remainder = $signed($signed(numer_pipe_end) % $signed(denom_pipe_end));
                     end
                 end
 

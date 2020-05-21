@@ -114,12 +114,10 @@ module Vortex_Cluster #(
             .D_dram_rsp_valid   (per_core_D_dram_rsp_valid  [i]),                
             .D_dram_rsp_data    (per_core_D_dram_rsp_data   [i]),
             .D_dram_rsp_tag     (per_core_D_dram_rsp_tag    [i]),
-            .D_dram_rsp_ready   (per_core_D_dram_rsp_ready  [i]),                
-            .I_dram_req_read    (per_core_I_dram_req_read   [i]),
+            .D_dram_rsp_ready   (per_core_D_dram_rsp_ready  [i]),
 
-        `IGNORE_WARNINGS_BEGIN
-            .I_dram_req_write   (),                
-        `IGNORE_WARNINGS_END
+            .I_dram_req_read    (per_core_I_dram_req_read   [i]),
+            `UNUSED_PIN (I_dram_req_write),                            
             .I_dram_req_addr    (per_core_I_dram_req_addr   [i]),                
             .I_dram_req_data    (per_core_I_dram_req_data   [i]),
             .I_dram_req_tag     (per_core_I_dram_req_tag    [i]),                
@@ -400,11 +398,9 @@ module Vortex_Cluster #(
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
-            .snp_rsp_valid      (snp_rsp_valid),
+            .snp_rsp_valid      (snp_rsp_valid),       
+            `UNUSED_PIN (snp_rsp_addr),
             .snp_rsp_tag        (snp_rsp_tag),
-        `IGNORE_WARNINGS_BEGIN
-            .snp_rsp_addr       (),
-        `IGNORE_WARNINGS_END
             .snp_rsp_ready      (snp_rsp_ready),   
 
             .snp_fwdout_valid   (arb_snp_fwdout_valid),

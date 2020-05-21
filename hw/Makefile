@@ -3,6 +3,7 @@ all: build-s
 CF += -std=c++11 -fms-extensions
 
 VF += --language 1800-2009 --assert -Wall -Wpedantic
+VF += -Wno-DECLFILENAME
 
 VF += -exe $(SRCS) $(INCLUDE)
 

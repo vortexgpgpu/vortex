@@ -439,13 +439,13 @@ module VX_cache #(
         .NUM_BANKS         (NUM_BANKS),
         .BANK_LINE_SIZE    (BANK_LINE_SIZE),
         .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
-    ) snp_rsp_arb (
+    ) snp_rsp_arb (      
         .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
         .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
         .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
-        .snp_rsp_valid (snp_rsp_valid),
-        .snp_rsp_tag   (snp_rsp_tag),
-        .snp_rsp_ready (snp_rsp_ready)
+        .snp_rsp_valid          (snp_rsp_valid),
+        .snp_rsp_tag            (snp_rsp_tag),
+        .snp_rsp_ready           (snp_rsp_ready)
     );
     
 endmodule

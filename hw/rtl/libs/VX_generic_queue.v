@@ -4,25 +4,29 @@ module VX_generic_queue #(
     parameter DATAW,
     parameter SIZE = 16,
     parameter BUFFERED_OUTPUT = 1
-) (
-`IGNORE_WARNINGS_BEGIN  
+) ( 
     input  wire             clk,
     input  wire             reset,
     input  wire             push,
-    input  wire             pop,    
-    output wire             empty,
-    output wire             full,    
-`IGNORE_WARNINGS_END        
+    input  wire             pop,        
     input  wire [DATAW-1:0] data_in,
     output wire [DATAW-1:0] data_out,
+    output wire             empty,
+    output wire             full,      
     output wire [`LOG2UP(SIZE+1)-1:0] size
 ); 
     if (SIZE == 0) begin
 
         assign empty    = 1;
-        assign data_out = data_in;
+        assign data_out = 0;
         assign full     = 0;
         assign size     = 0;
+
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        `UNUSED_VAR (push)
+        `UNUSED_VAR (pop)
+        `UNUSED_VAR (data_in)
 
     end else begin // (SIZE > 0)
     

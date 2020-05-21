@@ -51,7 +51,7 @@ module VX_cache_dfq_queue #(
         .data_out({out_per_bank_dram_fill_req_valid, out_per_bank_dram_fill_req_addr}),
         .empty   (o_empty),
         .full    (dfqq_full),
-        `UNUSED_PIN(size)
+        `UNUSED_PIN (size)
     );
 
     assign use_per_bqual_bank_dram_fill_req_valid = use_empty ? (out_per_bank_dram_fill_req_valid & {NUM_BANKS{!o_empty}}) : (use_per_bank_dram_fill_req_valid & {NUM_BANKS{!use_empty}}); 

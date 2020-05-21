@@ -47,7 +47,7 @@ module VX_prefetcher #(
 
         .empty   (current_empty),
         .full    (current_full),
-        `UNUSED_PIN(size)
+        `UNUSED_PIN (size)
     );
 
     assign pref_valid = 0; // TODO use_valid != 0;
