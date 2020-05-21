@@ -129,12 +129,12 @@ module VX_cache #(
 
 `DEBUG_BEGIN
 
-    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+    wire[31:0]           debug_core_req_use_pc;
+    wire[1:0]            debug_core_req_wb;
+    wire[4:0]            debug_core_req_rd;
+    wire[`NW_BITS-1:0]   debug_core_req_warp_num;
 
-        wire[31:0]           debug_core_req_use_pc;
-        wire[1:0]            debug_core_req_wb;
-        wire[4:0]            debug_core_req_rd;
-        wire[`NW_BITS-1:0]   debug_core_req_warp_num;
+    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
 
         assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_warp_num} = core_req_tag[0];
 
