@@ -3,28 +3,28 @@
 module VX_cache #(
     parameter CACHE_ID                      = 0,
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1024, 
+    parameter CACHE_SIZE                    = 2048, 
     // Size of line inside a bank in bytes
     parameter BANK_LINE_SIZE                = 16, 
     // Number of banks {1, 2, 4, 8,...}
     parameter NUM_BANKS                     = 8, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 16, 
+    parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 2, 
+    parameter NUM_REQUESTS                  = 4, 
     // Number of cycles to complete stage 1 (read from memory)
-    parameter STAGE_1_CYCLES                = 2,
+    parameter STAGE_1_CYCLES                = 1,
 
     // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
     // Core Request Queue Size
     parameter REQQ_SIZE                     = 8, 
     // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 8, 
+    parameter MRVQ_SIZE                     = 16, 
     // Dram Fill Rsp Queue Size
-    parameter DFPQ_SIZE                     = 2, 
+    parameter DFPQ_SIZE                     = 16, 
     // Snoop Req Queue Size
-    parameter SNRQ_SIZE                     = 8, 
+    parameter SNRQ_SIZE                     = 16, 
 
     // Queues for writebacks Knobs {1, 2, 4, 8, ...}
     // Core Writeback Queue Size
@@ -37,7 +37,7 @@ module VX_cache #(
     parameter LLVQ_SIZE                     = 16,
 
     // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 16,
+    parameter FILL_INVALIDAOR_SIZE          = 0,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
@@ -49,23 +49,23 @@ module VX_cache #(
     parameter SNOOP_FORWARDING              = 0,
 
     // Prefetcher
-    parameter PRFQ_SIZE                     = 64,
+    parameter PRFQ_SIZE                     = 0,
     parameter PRFQ_STRIDE                   = 0,
 
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
 
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 0,
+    parameter CORE_TAG_ID_BITS              = 42,
 
     // dram request tag size
-    parameter DRAM_TAG_WIDTH                = 1,
+    parameter DRAM_TAG_WIDTH                = 8,
 
     // Number of snoop forwarding requests
     parameter NUM_SNP_REQUESTS              = 2, 
 
     // Snooping request tag width
-    parameter SNP_REQ_TAG_WIDTH             = 1,
+    parameter SNP_REQ_TAG_WIDTH             = 28,
 
     // Snooping forward tag width
     parameter SNP_FWD_TAG_WIDTH             = 1
