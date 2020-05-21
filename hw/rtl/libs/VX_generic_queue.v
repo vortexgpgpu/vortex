@@ -3,7 +3,7 @@
 module VX_generic_queue #(
     parameter DATAW,
     parameter SIZE = 16,
-    parameter BUFFERED_OUTPUT = (SIZE >= 8)
+    parameter BUFFERED_OUTPUT = 1
 ) (
 `IGNORE_WARNINGS_BEGIN  
     input  wire             clk,
@@ -19,10 +19,10 @@ module VX_generic_queue #(
 ); 
     if (SIZE == 0) begin
 
-        assign empty        = 1;
-        assign data_out     = data_in;
-        assign full         = 0;
-        assign size         = 0;
+        assign empty    = 1;
+        assign data_out = data_in;
+        assign full     = 0;
+        assign size     = 0;
 
     end else begin // (SIZE > 0)
     
@@ -45,8 +45,8 @@ module VX_generic_queue #(
 
             always @(posedge clk) begin
                 if (reset) begin
-                    size_r <= 0;
                     head_r <= 0;
+                    size_r <= 0;                    
                 end else begin
                     if (writing && !reading) begin
                         size_r <= 1;
@@ -81,7 +81,7 @@ module VX_generic_queue #(
                         wr_ptr_r <= 0;
                         size_r   <= 0;
                     end else begin
-                        if (writing) begin 
+                        if (writing) begin                             
                             data[wr_ptr_a] <= data_in;
                             wr_ptr_r <= wr_ptr_r + 1;
                             if (!reading) begin                                                       
@@ -96,7 +96,7 @@ module VX_generic_queue #(
                             end
                         end
                     end                   
-                end    
+                end  
 
                 assign data_out = data[rd_ptr_a];
                 assign empty    = (wr_ptr_r == rd_ptr_r);
@@ -107,9 +107,9 @@ module VX_generic_queue #(
 
                 reg [DATAW-1:0]         head_r;
                 reg [DATAW-1:0]         curr_r;
-                reg [`LOG2UP(SIZE)-1:0] wr_ctr_r;
+                reg [`LOG2UP(SIZE)-1:0] wr_ptr_r;
                 reg [`LOG2UP(SIZE)-1:0] rd_ptr_r;
-                reg [`LOG2UP(SIZE)-1:0] rd_next_ptr_r;
+                reg [`LOG2UP(SIZE)-1:0] rd_ptr_next_r;
                 reg                     empty_r;
                 reg                     full_r;
                 reg                     bypass_r;
@@ -119,46 +119,42 @@ module VX_generic_queue #(
                         size_r          <= 0;
                         empty_r         <= 1;                   
                         full_r          <= 0;
-                        wr_ctr_r        <= 0;
-                        curr_r          <= 0;
+                        wr_ptr_r        <= 0;
                         rd_ptr_r        <= 0;
-                        rd_next_ptr_r   <= 1;
-                        bypass_r        <= 0;
+                        rd_ptr_next_r   <= 1;
                     end else begin
-                        if (writing) begin
-                            data[wr_ctr_r] <= data_in;
-                            wr_ctr_r <= wr_ctr_r + 1; 
-
-                            if (!reading) begin
-                                size_r <= size_r + 1;
+                        if (writing) begin                            
+                            data[wr_ptr_r] <= data_in;
+                            wr_ptr_r <= wr_ptr_r + 1; 
+                            if (!reading) begin                                
                                 empty_r <= 0;
                                 if (size_r == SIZE-1) begin
                                     full_r <= 1;
                                 end
+                                size_r <= size_r + 1;
                             end
                         end
 
                         if (reading) begin
-                            if (SIZE == 2) begin
-                                rd_ptr_r <= rd_next_ptr_r;
-                                rd_next_ptr_r <= ~rd_next_ptr_r;
+                            rd_ptr_r <= rd_ptr_next_r;
+                            if (SIZE == 2) begin                                
+                                rd_ptr_next_r <= ~rd_ptr_next_r;
                             end else if (SIZE > 2) begin        
-                                rd_ptr_r <= rd_next_ptr_r;
-                                rd_next_ptr_r <= rd_ptr_r + 2;
+                                rd_ptr_next_r <= rd_ptr_r + 2;
                             end
 
-                            if (!writing) begin
-                                size_r <= size_r - 1;
+                            if (!writing) begin                                
                                 if (size_r == 1) begin
                                     empty_r <= 1;  
                                 end;                
                                 full_r <= 0;
+                                size_r <= size_r - 1;
                             end
                         end
 
                         bypass_r <= writing && (empty_r || (1 == size_r) && reading);
-                        curr_r <= data_in;
-                        head_r <= data[reading ? rd_next_ptr_r : rd_ptr_r];
+                        curr_r   <= data_in;
+                        head_r   <= data[reading ? rd_ptr_next_r : rd_ptr_r];
                     end
                 end 
 
