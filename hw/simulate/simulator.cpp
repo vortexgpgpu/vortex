@@ -9,6 +9,14 @@ double sc_time_stamp() {
 }
 
 Simulator::Simulator() {    
+  // force random values for unitialized signals
+  const char* args[] = {"", "+verilator+rand+reset+2", "+verilator+seed+0"};
+  Verilated::commandArgs(3, args);
+
+#ifndef NDEBUG
+  Verilated::debug(1);
+#endif
+
   ram_ = nullptr;
   vortex_ = new VVortex_Socket();
 
