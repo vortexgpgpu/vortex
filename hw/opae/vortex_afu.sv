@@ -152,19 +152,27 @@ begin
       case (mmioHdr.address)
         MMIO_CSR_IO_ADDR: begin                     
           csr_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);          
-          $display("%t: CSR_IO_ADDR: 0x%0h", $time, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
+          `ifdef DBG_PRINT_OPAE 
+            $display("%t: CSR_IO_ADDR: 0x%0h", $time, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
+          `endif
         end
         MMIO_CSR_MEM_ADDR: begin          
           csr_mem_addr <= t_local_mem_addr'(cp2af_sRxPort.c0.data);                  
-          $display("%t: CSR_MEM_ADDR: 0x%0h", $time, t_local_mem_addr'(cp2af_sRxPort.c0.data));
+          `ifdef DBG_PRINT_OPAE
+            $display("%t: CSR_MEM_ADDR: 0x%0h", $time, t_local_mem_addr'(cp2af_sRxPort.c0.data));
+          `endif
         end
         MMIO_CSR_DATA_SIZE: begin          
           csr_data_size <= $bits(csr_data_size)'(cp2af_sRxPort.c0.data);          
-          $display("%t: CSR_DATA_SIZE: %0d", $time, $bits(csr_data_size)'(cp2af_sRxPort.c0.data));
+          `ifdef DBG_PRINT_OPAE
+            $display("%t: CSR_DATA_SIZE: %0d", $time, $bits(csr_data_size)'(cp2af_sRxPort.c0.data));
+          `endif
         end
         MMIO_CSR_CMD: begin          
           csr_cmd <= $bits(csr_cmd)'(cp2af_sRxPort.c0.data);
-          $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
+          `ifdef DBG_PRINT_OPAE
+            $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
+          `endif
         end
         default: begin
            // user-defined CSRs
@@ -195,9 +203,11 @@ begin
         16'h0006: af2cp_sTxPort.c2.data <= 64'h0; // next AFU
         16'h0008: af2cp_sTxPort.c2.data <= 64'h0; // reserved
         MMIO_CSR_STATUS: begin
-          if (state != af2cp_sTxPort.c2.data) begin
-            $display("%t: STATUS: state=%0d", $time, state);
-          end
+          `ifdef DBG_PRINT_OPAE
+            if (state != af2cp_sTxPort.c2.data) begin
+              $display("%t: STATUS: state=%0d", $time, state);
+            end
+          `endif
           af2cp_sTxPort.c2.data <= state;
         end  
         default: af2cp_sTxPort.c2.data <= 64'h0;
@@ -238,20 +248,28 @@ begin
       STATE_IDLE: begin             
         case (csr_cmd)
           CMD_TYPE_READ: begin     
-            $display("%t: STATE READ: ia=%0h da=%0h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            `ifdef DBG_PRINT_OPAE
+              $display("%t: STATE READ: ia=%0h da=%0h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            `endif
             state <= STATE_READ;   
           end 
           CMD_TYPE_WRITE: begin      
-            $display("%t: STATE WRITE: ia=%0h da=%0h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            `ifdef DBG_PRINT_OPAE
+              $display("%t: STATE WRITE: ia=%0h da=%0h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            `endif
             state <= STATE_WRITE;
           end
           CMD_TYPE_RUN: begin        
-            $display("%t: STATE START", $time);
+            `ifdef DBG_PRINT_OPAE
+              $display("%t: STATE START", $time);
+            `endif
             vx_reset <= 1;
             state <= STATE_START;                    
           end
           CMD_TYPE_CLFLUSH: begin
-            $display("%t: STATE CFLUSH: da=%0h sz=%0d", $time, csr_mem_addr, csr_data_size);
+            `ifdef DBG_PRINT_OPAE
+              $display("%t: STATE CFLUSH: da=%0h sz=%0d", $time, csr_mem_addr, csr_data_size);
+            `endif
             state <= STATE_CLFLUSH;
           end
         endcase
@@ -369,7 +387,9 @@ begin
       avs_address  <= csr_mem_addr + avs_read_ctr;          
       avs_read_ctr <= avs_read_ctr + 1;          
       avs_read     <= 1;
-      $display("%t: AVS Rd Req: addr=%0h, pending=%0d", $time, `DRAM_TO_BYTE_ADDR(csr_mem_addr + avs_read_ctr), avs_pending_reads);
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: AVS Rd Req: addr=%0h, pending=%0d", $time, `DRAM_TO_BYTE_ADDR(csr_mem_addr + avs_read_ctr), avs_pending_reads);
+      `endif
     end
 
     if (cci_dram_req_write_fire) begin          
@@ -377,25 +397,33 @@ begin
       avs_address   <= next_avs_address;          
       avs_write_ctr <= avs_write_ctr + 1;
       avs_write     <= 1;
-      $display("%t: AVS Wr Req: addr=%0h (%0d/%0d)", $time, `DRAM_TO_BYTE_ADDR(next_avs_address), avs_write_ctr + 1, csr_data_size);
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: AVS Wr Req: addr=%0h (%0d/%0d)", $time, `DRAM_TO_BYTE_ADDR(next_avs_address), avs_write_ctr + 1, csr_data_size);
+      `endif
     end
 
     if (vx_dram_req_read_fire) begin
       avs_address <= vx_dram_req_addr;
       avs_read    <= 1;
-      $display("%t: AVS Rd Req: addr=%0h, pending=%0d", $time, `DRAM_TO_BYTE_ADDR(vx_dram_req_addr), avs_pending_reads);
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: AVS Rd Req: addr=%0h, pending=%0d", $time, `DRAM_TO_BYTE_ADDR(vx_dram_req_addr), avs_pending_reads);
+      `endif
     end 
     
     if (vx_dram_req_write_fire) begin
       avs_address   <= vx_dram_req_addr;
       avs_writedata <= vx_dram_req_data;          
       avs_write     <= 1;
-      $display("%t: AVS Wr Req: addr=%0h", $time, `DRAM_TO_BYTE_ADDR(vx_dram_req_addr));
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: AVS Wr Req: addr=%0h", $time, `DRAM_TO_BYTE_ADDR(vx_dram_req_addr));
+      `endif
     end   
 
-    if (avs_readdatavalid) begin
-      $display("%t: AVS Rd Rsp: pending=%0d", $time, avs_pending_rds_next);
-    end
+    `ifdef DBG_PRINT_OPAE
+      if (avs_readdatavalid) begin
+        $display("%t: AVS Rd Rsp: pending=%0d", $time, avs_pending_rds_next);
+      end
+    `endif
 
     avs_pending_reads <= avs_pending_rds_next;   
   end
@@ -522,7 +550,9 @@ begin
       if (t_cci_rdq_tag'(cci_read_ctr) == (CCI_RD_WINDOW_SIZE-1)) begin
         cci_read_wait <= 1;             // end current request batch
       end 
-      $display("%t: CCI Rd Req: addr=%0h, ctr=%0d", $time, `DRAM_TO_BYTE_ADDR(cci_read_hdr.address), cci_read_ctr);
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: CCI Rd Req: addr=%0h, ctr=%0d", $time, `DRAM_TO_BYTE_ADDR(cci_read_hdr.address), cci_read_ctr);
+      `endif
     end
 
     if (cci_rdq_push) begin
@@ -530,7 +560,9 @@ begin
       if (cci_rdq_ctr == (CCI_RD_WINDOW_SIZE-1)) begin
         cci_read_wait <= 0;             // restart new request batch
       end 
-      $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d", $time, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata), cci_rdq_ctr);
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d", $time, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata), cci_rdq_ctr);
+      `endif
     end        
   end
 end
@@ -600,12 +632,16 @@ begin
       af2cp_sTxPort.c1.data  <= t_ccip_clData'(avs_rdq_dout);
       af2cp_sTxPort.c1.valid <= 1;            
       cci_write_ctr          <= cci_write_ctr + 1;
-      $display("%t: CCI Wr Req: addr=%0h (%0d/%0d)", $time, `DRAM_TO_BYTE_ADDR(cci_write_hdr.address), cci_write_ctr + 1, csr_data_size);
+      `ifdef DBG_PRINT_OPAE
+        $display("%t: CCI Wr Req: addr=%0h (%0d/%0d)", $time, `DRAM_TO_BYTE_ADDR(cci_write_hdr.address), cci_write_ctr + 1, csr_data_size);
+      `endif
     end
 
-    if (cp2af_sRxPort.c1.rspValid) begin      
-      $display("%t: CCI Wr Rsp: pending=%0d", $time, cci_pending_writes_next);      
-    end
+    `ifdef DBG_PRINT_OPAE
+      if (cp2af_sRxPort.c1.rspValid) begin      
+        $display("%t: CCI Wr Rsp: pending=%0d", $time, cci_pending_writes_next);      
+      end
+    `endif
 
     cci_pending_writes <= cci_pending_writes_next;
   end

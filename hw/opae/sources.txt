@@ -11,6 +11,7 @@ vortex_afu.json
 #+define+DBG_PRINT_CACHE_SNP
 #+define+DBG_PRINT_CACHE_MSRQ
 #+define+DBG_PRINT_DRAM
+#+define+DBG_PRINT_OPAE
 
 +incdir+.
 +incdir+../rtl
