@@ -48,9 +48,15 @@ module VX_scheduler (
                           || (gpr_stage_delay && (is_mem || is_exec))  
                           || (exec_delay && is_exec));
 
+    integer i, w;
+    
     always @(posedge clk) begin
         if (reset) begin
-            //--
+            for (w = 0; w < `NUM_WARPS; w=w+1) begin
+                for (i = 0; i < 32; i++) begin
+                     rename_table[w][i] <= 0;
+                end
+            end
         end else begin
             if (valid_wb) begin
                 rename_table[writeback_if.warp_num][writeback_if.rd] <= rename_table[writeback_if.warp_num][writeback_if.rd] & (~writeback_if.valid);

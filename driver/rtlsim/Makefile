@@ -34,6 +34,8 @@ VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(MULTICORE)
 CFLAGS += -DGLOBAL_BLOCK_SIZE=64
 VL_FLAGS += -DGLOBAL_BLOCK_SIZE=64
 
+VL_FLAGS += --x-initial unique
+
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 #VL_FLAGS += --threads $(THREADS)
