@@ -64,7 +64,7 @@ asm.chg:
 	$(STAMP) asm.chg
 
 program: $(PROJECT).sof
-	quartus_pgm --no_banner --mode=jtag -o "P;$(PROJECT).sof"
+	quartus_pgm --no_banner --mode=jtag -o "$(PROJECT).sof"
 	
 clean:
 	rm -rf bin *.rpt *.chg *.qsf *.qpf *.qws smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

@@ -608,7 +608,7 @@ module VX_bank #(
         .invalidate_fill   (invalidate_fill)
     );    
 
-    assign dram_fill_req_valid = possible_fill && !invalidate_fill;
+    assign dram_fill_req_valid = miss_add && !mrvq_init_ready_state_st2;
     assign dram_fill_req_addr  = addr_st2;
     assign dram_fill_req_stall = (valid_st2 && miss_st2 && !invalidate_fill && ~dram_fill_req_ready);
 
