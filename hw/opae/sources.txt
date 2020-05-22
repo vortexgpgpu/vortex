@@ -4,19 +4,6 @@ vortex_afu.json
 
 +define+NUM_CORES=2
 
-+define+DPRFQ_SIZE=0 
-+define+IPRFQ_SIZE=0 
-+define+SPRFQ_SIZE=0 
-+define+L2PRFQ_SIZE=0 
-+define+L3PRFQ_SIZE=0
-
-+define+DFILL_INVALIDAOR_SIZE=0 
-+define+IFILL_INVALIDAOR_SIZE=0 
-+define+SFILL_INVALIDAOR_SIZE=0 
-+define+L2FILL_INVALIDAOR_SIZE=0 
-+define+L3FILL_INVALIDAOR_SIZE=0
-
-
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE
 #+define+DBG_PRINT_CACHE_BANK

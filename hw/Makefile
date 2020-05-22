@@ -4,6 +4,7 @@ CF += -std=c++11 -fms-extensions
 
 VF += --language 1800-2009 --assert -Wall -Wpedantic
 VF += -Wno-DECLFILENAME
+VF += --x-initial unique
 
 VF += -exe $(SRCS) $(INCLUDE)
 
@@ -11,8 +12,9 @@ VF += -exe $(SRCS) $(INCLUDE)
 CF += -DGLOBAL_BLOCK_SIZE=64
 VF += -DGLOBAL_BLOCK_SIZE=64
 
+#MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=4
+#MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=4
 MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
-#MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
 INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cache -I./rtl/simulate
 

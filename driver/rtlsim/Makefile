@@ -31,15 +31,11 @@ RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(MULTICORE)
 VL_FLAGS += -Wno-DECLFILENAME
+VL_FLAGS += --x-initial unique
 
 # Use 64 bytes DRAM blocks
 CFLAGS += -DGLOBAL_BLOCK_SIZE=64
 VL_FLAGS += -DGLOBAL_BLOCK_SIZE=64
-
-VL_FLAGS += --x-initial unique
-
-VL_FLAGS += -DDPRFQ_SIZE=0 -DIPRFQ_SIZE=0 -DSPRFQ_SIZE=0 -DL2PRFQ_SIZE=0 -DL3PRFQ_SIZE=0
-VL_FLAGS += -DDFILL_INVALIDAOR_SIZE=0 -DIFILL_INVALIDAOR_SIZE=0 -DSFILL_INVALIDAOR_SIZE=0 -DL2FILL_INVALIDAOR_SIZE=0 -DL3FILL_INVALIDAOR_SIZE=0
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
