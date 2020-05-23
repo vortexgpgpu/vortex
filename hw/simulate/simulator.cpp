@@ -181,27 +181,34 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   // align address to LLC block boundaries
   auto aligned_addr_start = mem_addr / GLOBAL_BLOCK_SIZE;
   auto aligned_addr_end = (mem_addr + size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE;
-  int outstanding_snp_reqs = 0;
-
+  
   // submit snoop requests for the needed blocks
   vortex_->snp_req_addr  = aligned_addr_start;
+  vortex_->snp_req_tag   = 0;
   vortex_->snp_req_valid = 1;
   vortex_->snp_rsp_ready = 1;
+
+  int pending_snp_reqs = 1;
+
   for (;;) {
-    this->step();
-    if (vortex_->snp_rsp_valid) {
-      assert(outstanding_snp_reqs > 0);
-      --outstanding_snp_reqs;
+    this->step();        
+    if (vortex_->snp_rsp_valid) {      
+      assert(pending_snp_reqs > 0);
+      --pending_snp_reqs;
+      //std::cout << timestamp << ": [sim] snp rsp: tag=" << vortex_->snp_rsp_tag << " pending=" << pending_snp_reqs << std::endl;
     }
-    if (vortex_->snp_req_valid && vortex_->snp_req_ready) {
-      ++outstanding_snp_reqs;
-      vortex_->snp_req_addr += 1;
-      if (vortex_->snp_req_addr >= aligned_addr_end) {
+    if (vortex_->snp_req_valid && vortex_->snp_req_ready) {            
+      if (vortex_->snp_req_addr < aligned_addr_end) {        
+        vortex_->snp_req_addr += 1;
+        vortex_->snp_req_tag  += 1;
+        ++pending_snp_reqs;
+        //std::cout << timestamp << ": [sim] snp req: addr=" << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << (aligned_addr_end - vortex_->snp_req_addr) << std::endl;
+      } else {
         vortex_->snp_req_valid = 0;        
-      }
+      }      
     }
     if (!vortex_->snp_req_valid 
-     && 0 == outstanding_snp_reqs) {
+     && 0 == pending_snp_reqs) {
       break;
     }
   }  
