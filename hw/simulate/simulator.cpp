@@ -10,15 +10,19 @@ double sc_time_stamp() {
 
 Simulator::Simulator() {    
   // force random values for unitialized signals
-  const char* args[] = {"", "+verilator+rand+reset+2", "+verilator+seed+0"};
+  const char* args[] = {"", "+verilator+rand+reset+1", "+verilator+seed+0"};
   Verilated::commandArgs(3, args);
-
-#ifndef NDEBUG
-  Verilated::debug(1);
-#endif
 
   ram_ = nullptr;
   vortex_ = new VVortex_Socket();
+
+  // initial values
+  vortex_->dram_req_ready = 0;
+  vortex_->dram_rsp_valid = 0;
+  vortex_->io_req_ready   = 0;
+  vortex_->io_rsp_valid   = 0;
+  vortex_->snp_req_valid  = 0;
+  vortex_->snp_rsp_ready  = 0;
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
@@ -47,7 +51,7 @@ void Simulator::print_stats(std::ostream& out) {
 
 void Simulator::dbus_driver() {
   if (ram_ == nullptr) {
-    vortex_->dram_req_ready = false;
+    vortex_->dram_req_ready = 0;
     return;
   }
 
@@ -126,7 +130,8 @@ void Simulator::io_driver() {
     char c = (char)data_write;
     std::cout << c;      
   }
-  vortex_->io_req_ready = true;
+  vortex_->io_req_ready = 1;
+  vortex_->io_rsp_valid = 01;
 }
 
 void Simulator::reset() {     
@@ -180,8 +185,8 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
 
   // submit snoop requests for the needed blocks
   vortex_->snp_req_addr  = aligned_addr_start;
-  vortex_->snp_req_valid = true;
-  vortex_->snp_rsp_ready = true;
+  vortex_->snp_req_valid = 1;
+  vortex_->snp_rsp_ready = 1;
   for (;;) {
     this->step();
     if (vortex_->snp_rsp_valid) {
@@ -192,7 +197,7 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
       ++outstanding_snp_reqs;
       vortex_->snp_req_addr += 1;
       if (vortex_->snp_req_addr >= aligned_addr_end) {
-        vortex_->snp_req_valid = false;        
+        vortex_->snp_req_valid = 0;        
       }
     }
     if (!vortex_->snp_req_valid 
