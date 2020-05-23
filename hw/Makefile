@@ -31,7 +31,7 @@ INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cac
 
 SRCS += ./simulate/testbench.cpp ./simulate/simulator.cpp
 
-DBG += --trace
+DBG += -DVCD_OUTPUT $(DBG_PRINT)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
@@ -44,7 +44,7 @@ gen-s: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG'
 
 gen-sd: build_config
-	verilator $(VF) -cc Vortex_Socket.v $(DBG_PRINT) -CFLAGS '$(CF) -g -O0 -DVCD_OUTPUT' $(DBG)
+	verilator $(VF) -cc Vortex_Socket.v $(DBG_PRINT) -CFLAGS '$(CF) -g -O0  $(DBG)' --trace $(DBG)
 
 gen-st: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
@@ -53,7 +53,7 @@ gen-m: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md: build_config
-	verilator $(VF) -cc Vortex_Socket.v $(MULTICORE) $(DBG_PRINT) -CFLAGS '$(CF) -g -O0 -DVCD_OUTPUT $(MULTICORE)' $(DBG)
+	verilator $(VF) -cc Vortex_Socket.v $(MULTICORE) $(DBG_PRINT) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
 
 gen-mt: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
