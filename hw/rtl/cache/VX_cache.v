@@ -34,9 +34,6 @@ module VX_cache #(
     // Dram Fill Req Queue Size
     parameter DFQQ_SIZE                     = 8, 
 
-    // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 0,
-
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
 
@@ -333,7 +330,6 @@ module VX_cache #(
                 .CWBQ_SIZE            (CWBQ_SIZE),
                 .DWBQ_SIZE            (DWBQ_SIZE),
                 .DFQQ_SIZE            (DFQQ_SIZE),
-                .FILL_INVALIDAOR_SIZE (FILL_INVALIDAOR_SIZE),
                 .DRAM_ENABLE          (DRAM_ENABLE),
                 .WRITE_ENABLE         (WRITE_ENABLE),
                 .SNOOP_FORWARDING     (SNOOP_FORWARDING),
