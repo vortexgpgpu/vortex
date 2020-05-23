@@ -112,7 +112,6 @@ logic avs_rdq_pop;
 t_local_mem_data avs_rdq_dout;
 logic avs_rdq_empty;
 logic avs_rdq_full;
-logic [`LOG2UP(AVS_RD_QUEUE_SIZE+1)-1:0] avs_rdq_size;
 
 // CSR variables //////////////////////////////////////////////////////////////
 
@@ -318,7 +317,7 @@ logic cci_dram_req_write_fire;
 logic vx_dram_req_read_fire;
 logic vx_dram_req_write_fire;
 logic vx_dram_rsp_fire;
-logic [`LOG2UP(AVS_RD_QUEUE_SIZE+1)-1:0] avs_pending_reads, avs_pending_rds_next;
+logic [`LOG2UP(AVS_RD_QUEUE_SIZE+1)-1:0] avs_pending_reads, avs_pending_reads_next;
 
 t_ccip_clAddr next_avs_address;
 always_comb 
@@ -333,7 +332,7 @@ begin
               && avs_write_ctr < csr_data_size);
 
   cci_dram_req_read_fire = (state == STATE_READ) 
-                        && ((avs_pending_reads + avs_rdq_size) < AVS_RD_QUEUE_SIZE)
+                        && ((avs_pending_reads < AVS_RD_QUEUE_SIZE)
                         && !avs_waitrequest 
                         && avs_read_ctr < csr_data_size;
 
@@ -347,14 +346,14 @@ begin
   vx_dram_rsp_fire = vx_dram_rsp_valid && vx_dram_rsp_ready;
 
   if ((cci_dram_req_read_fire || vx_dram_req_read_fire)
-   && ~avs_readdatavalid) begin
-    avs_pending_rds_next = avs_pending_reads + 1;
+   && ~avs_rdq_pop) begin
+    avs_pending_reads_next = avs_pending_reads + 1;
   end else 
   if (~(cci_dram_req_read_fire || vx_dram_req_read_fire)
-   && avs_readdatavalid) begin
-    avs_pending_rds_next = avs_pending_reads - 1;
+   && avs_rdq_pop) begin
+    avs_pending_reads_next = avs_pending_reads - 1;
   end else begin
-    avs_pending_rds_next = avs_pending_reads;
+    avs_pending_reads_next = avs_pending_reads;
   end
 
   cmd_write_done = (avs_write_ctr >= csr_data_size);
@@ -421,11 +420,11 @@ begin
 
     `ifdef DBG_PRINT_OPAE
       if (avs_readdatavalid) begin
-        $display("%t: AVS Rd Rsp: pending=%0d", $time, avs_pending_rds_next);
+        $display("%t: AVS Rd Rsp: pending=%0d", $time, avs_pending_reads_next);
       end
     `endif
 
-    avs_pending_reads <= avs_pending_rds_next;   
+    avs_pending_reads <= avs_pending_reads_next;   
   end
 end
 
@@ -435,7 +434,7 @@ always_comb
 begin  
   vx_dram_req_ready = vortex_enabled 
                    && !avs_waitrequest 
-                   && ((avs_pending_reads + avs_rdq_size) < AVS_RD_QUEUE_SIZE);
+                   && (avs_pending_reads < AVS_RD_QUEUE_SIZE);
 end
 
 // Vortex DRAM fill response
@@ -492,8 +491,7 @@ VX_generic_queue #(
   .pop      (avs_rdq_pop),
   .data_out (avs_rdq_dout),
   .empty    (avs_rdq_empty),
-  .full     (avs_rdq_full),
-  .size     (avs_rdq_size)
+  .full     (avs_rdq_full)
 );
 
 // CCI Read Request ///////////////////////////////////////////////////////////
