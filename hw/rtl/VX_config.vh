@@ -144,11 +144,6 @@
 `define DPRFQ_STRIDE 0
 `endif
 
-// Fill Invalidator Size {Fill invalidator must be active}
-`ifndef DFILL_INVALIDAOR_SIZE
-`define DFILL_INVALIDAOR_SIZE 32
-`endif
-
 // ========================== Icache Configurable Knobs =======================
 
 // Size of cache in bytes
@@ -215,11 +210,6 @@
 `define IPRFQ_STRIDE 0
 `endif
 
-// Fill Invalidator Size {Fill invalidator must be active}
-`ifndef IFILL_INVALIDAOR_SIZE
-`define IFILL_INVALIDAOR_SIZE 32
-`endif
-
 // =========================== SM Configurable Knobs ==========================
 
 // Size of cache in bytes
@@ -284,11 +274,6 @@
 
 `ifndef SPRFQ_STRIDE
 `define SPRFQ_STRIDE 0
-`endif
-
-// Fill Invalidator Size {Fill invalidator must be active}
-`ifndef SFILL_INVALIDAOR_SIZE
-`define SFILL_INVALIDAOR_SIZE 32
 `endif
 
 // ======================== L2cache Configurable Knobs ========================
@@ -362,11 +347,6 @@
 `define L2PRFQ_STRIDE 0
 `endif
 
-// Fill Invalidator Size {Fill invalidator must be active}
-`ifndef L2FILL_INVALIDAOR_SIZE
-`define L2FILL_INVALIDAOR_SIZE 32
-`endif
-
 // ======================== L3cache Configurable Knobs ========================
 
 // Size of cache in bytes
@@ -436,11 +416,6 @@
 
 `ifndef L3PRFQ_STRIDE
 `define L3PRFQ_STRIDE 0
-`endif
-
-// Fill Invalidator Size {Fill invalidator must be active}
-`ifndef L3FILL_INVALIDAOR_SIZE
-`define L3FILL_INVALIDAOR_SIZE 32
 `endif
 
  // VX_CONFIG

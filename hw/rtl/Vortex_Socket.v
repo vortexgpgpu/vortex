@@ -260,7 +260,6 @@ module Vortex_Socket (
             .DFQQ_SIZE              (`L3DFQQ_SIZE),
             .PRFQ_SIZE              (`L3PRFQ_SIZE),
             .PRFQ_STRIDE            (`L3PRFQ_STRIDE),
-            .FILL_INVALIDAOR_SIZE   (`L3FILL_INVALIDAOR_SIZE),
             .DRAM_ENABLE            (1),
             .WRITE_ENABLE           (1),
             .SNOOP_FORWARDING       (1),

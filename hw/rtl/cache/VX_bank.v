@@ -34,9 +34,6 @@ module VX_bank #(
     // Dram Fill Req Queue Size
     parameter DFQQ_SIZE                     = 0, 
 
-    // Fill Invalidator Size {Fill invalidator must be active}
-    parameter FILL_INVALIDAOR_SIZE          = 0,
-
     // Enable cache writeable
      parameter WRITE_ENABLE                 = 0,
 
@@ -589,26 +586,9 @@ module VX_bank #(
 
     // Enqueue DRAM fill request
 
-    wire invalidate_fill;
-    wire possible_fill = valid_st2 && miss_st2 && dram_fill_req_ready && ~is_snp_st2;
-    wire [`LINE_ADDR_WIDTH-1:0] fill_invalidator_addr = addr_st2;
-
-    VX_fill_invalidator #(
-        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-        .NUM_BANKS              (NUM_BANKS),
-        .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE)
-    ) fill_invalidator (
-        .clk               (clk),
-        .reset             (reset),
-        .possible_fill     (possible_fill),
-        .success_fill      (is_fill_st2),
-        .fill_addr         (fill_invalidator_addr),
-        .invalidate_fill   (invalidate_fill)
-    );    
-
     assign dram_fill_req_valid = miss_add && !mrvq_init_ready_state_st2;
     assign dram_fill_req_addr  = addr_st2;
-    assign dram_fill_req_stall = (valid_st2 && miss_st2 && !invalidate_fill && ~dram_fill_req_ready);
+    assign dram_fill_req_stall = (valid_st2 && miss_st2 && ~dram_fill_req_ready);
 
     // Enqueue DRAM writeback request
 

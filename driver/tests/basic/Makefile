@@ -42,9 +42,6 @@ kernel.elf: $(SRCS)
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../stub -lvortex -o $@
 
-# $(PROJECT): $(SRCS)
-# 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../stub -L../../rtlsim -lvortex -o $@
-
 run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
@@ -53,9 +50,6 @@ run-ase: $(PROJECT)
 
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
-
-# run-rtlsim: $(PROJECT)
-# 	DYLD_LIBRARY_PATH=../../rtlsim:$(DYLD_LIBRARY_PATH) ./$(PROJECT) -f kernel.bin -n 4
 
 run-simx: $(PROJECT)
 	LD_LIBRARY_PATH=../../simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
