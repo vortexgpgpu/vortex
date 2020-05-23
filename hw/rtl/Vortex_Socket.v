@@ -258,7 +258,6 @@ module Vortex_Socket (
             .CWBQ_SIZE              (`L3CWBQ_SIZE),
             .DWBQ_SIZE              (`L3DWBQ_SIZE),
             .DFQQ_SIZE              (`L3DFQQ_SIZE),
-            .LLVQ_SIZE              (`L3LLVQ_SIZE),
             .PRFQ_SIZE              (`L3PRFQ_SIZE),
             .PRFQ_STRIDE            (`L3PRFQ_STRIDE),
             .FILL_INVALIDAOR_SIZE   (`L3FILL_INVALIDAOR_SIZE),
