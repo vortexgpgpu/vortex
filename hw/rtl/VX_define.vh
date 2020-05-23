@@ -201,7 +201,7 @@
 `define L2DRAM_TAG_WIDTH    (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
 
 // Snoop request tag bits
-`define L2SNP_TAG_WIDTH     ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SNRQ_SIZE) : 1)
+`define L2SNP_TAG_WIDTH     ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define L2NUM_REQUESTS      (2*`NUM_CORES)
@@ -221,7 +221,7 @@
 `define L3DRAM_TAG_WIDTH    ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
 
 // Snoop request tag bits
-`define L3SNP_TAG_WIDTH     1 
+`define L3SNP_TAG_WIDTH     16 
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define L3NUM_REQUESTS      `NUM_CLUSTERS
