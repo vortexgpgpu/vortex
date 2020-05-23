@@ -58,8 +58,8 @@ source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 qsub-sim
 
 # tests
-./run_ase.sh ../../driver/tests/basic/basic
-./run_ase.sh ../../driver/tests/demo/demo
+./run_ase.sh build_ase ../../driver/tests/basic/basic
+./run_ase.sh build_ase ../../driver/tests/demo/demo
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file vortex.vcd

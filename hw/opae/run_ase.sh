@@ -1,22 +1,25 @@
 #!/bin/bash
 
 SCRIPT_DIR=$PWD
-PROGRAM=$(basename "$1")
-PROGRAM_DIR=`dirname $1`
+
+BUILD_DIR=$1
+
+PROGRAM=$(basename "$2")
+PROGRAM_DIR=`dirname $2`
 
 # Export ASE_WORKDIR variable
-export ASE_WORKDIR=$SCRIPT_DIR/build_ase/work
+export ASE_WORKDIR=$SCRIPT_DIR/$BUILD_DIR/work
 
-shift 1
+shift 2
 
 # cleanup incomplete runs
 rm -f $ASE_WORKDIR/.app_lock.pid 
 rm -f $ASE_WORKDIR/.ase_ready.pid
-rm -f $SCRIPT_DIR/build_ase/nohup.out
+rm -f $SCRIPT_DIR/$BUILD_DIR/nohup.out
 
 # Start Simulator in background
-pushd $SCRIPT_DIR/build_ase 
-echo "  [DBG]  starting ASE simnulator (stdout saved to '$SCRIPT_DIR/build_ase/nohup.out')"
+pushd $SCRIPT_DIR/$BUILD_DIR 
+echo "  [DBG]  starting ASE simnulator (stdout saved to '$SCRIPT_DIR/$BUILD_DIR/nohup.out')"
 nohup make sim & 
 popd
 

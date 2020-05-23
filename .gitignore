@@ -1,9 +1,0 @@
-./rtl/obj_dir/
-./rtl/obj_dir/*.vcd
-./rtl/.*
-./rtl/modelsim/*.vcd
-*.vcd
-.*
-!.gitignore
-*.pyc
-__pycache__

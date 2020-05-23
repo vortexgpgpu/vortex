@@ -2,7 +2,21 @@ vortex_afu.json
 
 +define+GLOBAL_BLOCK_SIZE=64
 
++define+DCACHE_SIZE=2048
++define+ICACHE_SIZE=1024
++define+SCACHE_SIZE=1024
+
 +define+NUM_CORES=2
++define+NUM_WARPS=4
++define+NUM_THREADS=4
+
++define+DNUM_BANKS=4
++define+INUM_BANKS=2
++define+SNUM_BANKS=4
+
++define+DDFPQ_SIZE=16
++define+IDFPQ_SIZE=16
++define+SDFPQ_SIZE=0
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE
