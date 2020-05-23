@@ -33,8 +33,6 @@ module VX_bank #(
     parameter DWBQ_SIZE                     = 0, 
     // Dram Fill Req Queue Size
     parameter DFQQ_SIZE                     = 0, 
-    // Lower Level Cache Hit Queue Size
-    parameter LLVQ_SIZE                     = 0,
 
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 0,

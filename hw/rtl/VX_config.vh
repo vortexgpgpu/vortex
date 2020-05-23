@@ -135,11 +135,6 @@
 `define DDFQQ_SIZE `DREQQ_SIZE
 `endif
 
-// Lower Level Cache Hit Queue Size
-`ifndef DLLVQ_SIZE
-`define DLLVQ_SIZE 0
-`endif
-
 // Prefetcher
 `ifndef DPRFQ_SIZE
 `define DPRFQ_SIZE 32
@@ -211,11 +206,6 @@
 `define IDFQQ_SIZE `IREQQ_SIZE
 `endif
 
-// Lower Level Cache Hit Queue Size
-`ifndef ILLVQ_SIZE
-`define ILLVQ_SIZE 16
-`endif
-
 // Prefetcher
 `ifndef IPRFQ_SIZE
 `define IPRFQ_SIZE 32
@@ -285,11 +275,6 @@
 // Dram Fill Req Queue Size
 `ifndef SDFQQ_SIZE
 `define SDFQQ_SIZE 16
-`endif
-
-// Lower Level Cache Hit Queue Size
-`ifndef SLLVQ_SIZE
-`define SLLVQ_SIZE 16
 `endif
 
 // Prefetcher
@@ -368,11 +353,6 @@
 `define L2DFQQ_SIZE `L2REQQ_SIZE
 `endif
 
-// Lower Level Cache Hit Queue Size
-`ifndef L2LLVQ_SIZE
-`define L2LLVQ_SIZE 32
-`endif
-
 // Prefetcher
 `ifndef L2PRFQ_SIZE
 `define L2PRFQ_SIZE 32
@@ -447,11 +427,6 @@
 // Dram Fill Req Queue Size
 `ifndef L3DFQQ_SIZE
 `define L3DFQQ_SIZE `L3REQQ_SIZE
-`endif
-
-// Lower Level Cache Hit Queue Size
-`ifndef L3LLVQ_SIZE
-`define L3LLVQ_SIZE 0
 `endif
 
 // Prefetcher

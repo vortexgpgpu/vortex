@@ -33,8 +33,6 @@ module VX_cache #(
     parameter DWBQ_SIZE                     = 4, 
     // Dram Fill Req Queue Size
     parameter DFQQ_SIZE                     = 8, 
-    // Lower Level Cache Hit Queue Size
-    parameter LLVQ_SIZE                     = 16,
 
     // Fill Invalidator Size {Fill invalidator must be active}
     parameter FILL_INVALIDAOR_SIZE          = 0,
@@ -335,7 +333,6 @@ module VX_cache #(
                 .CWBQ_SIZE            (CWBQ_SIZE),
                 .DWBQ_SIZE            (DWBQ_SIZE),
                 .DFQQ_SIZE            (DFQQ_SIZE),
-                .LLVQ_SIZE            (LLVQ_SIZE),
                 .FILL_INVALIDAOR_SIZE (FILL_INVALIDAOR_SIZE),
                 .DRAM_ENABLE          (DRAM_ENABLE),
                 .WRITE_ENABLE         (WRITE_ENABLE),
