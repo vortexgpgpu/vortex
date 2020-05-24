@@ -195,14 +195,18 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
     if (vortex_->snp_rsp_valid) {      
       assert(pending_snp_reqs > 0);
       --pending_snp_reqs;
-      //std::cout << timestamp << ": [sim] snp rsp: tag=" << vortex_->snp_rsp_tag << " pending=" << pending_snp_reqs << std::endl;
+    #ifdef DBG_PRINT_CACHE_SNP
+      std::cout << timestamp << ": [sim] snp rsp: tag=" << vortex_->snp_rsp_tag << " pending=" << pending_snp_reqs << std::endl;
+    #endif
     }
     if (vortex_->snp_req_valid && vortex_->snp_req_ready) {            
       if (vortex_->snp_req_addr < aligned_addr_end) {        
         vortex_->snp_req_addr += 1;
         vortex_->snp_req_tag  += 1;
         ++pending_snp_reqs;
-        //std::cout << timestamp << ": [sim] snp req: addr=" << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << (aligned_addr_end - vortex_->snp_req_addr) << std::endl;
+      #ifdef DBG_PRINT_CACHE_SNP
+        std::cout << timestamp << ": [sim] snp req: addr=" << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << (aligned_addr_end - vortex_->snp_req_addr) << std::endl;
+      #endif
       } else {
         vortex_->snp_req_valid = 0;        
       }      
