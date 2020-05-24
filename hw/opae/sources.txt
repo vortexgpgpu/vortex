@@ -46,7 +46,6 @@ vortex_afu.json
 ../rtl/cache/VX_cache_dfq_queue.v
 ../rtl/cache/VX_cache_req_queue.v
 ../rtl/cache/VX_cache_miss_resrv.v
-../rtl/cache/VX_fill_invalidator.v
 ../rtl/cache/VX_snp_rsp_arb.v
 ../rtl/cache/VX_tag_data_access.v
 ../rtl/cache/VX_tag_data_structure.v
