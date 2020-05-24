@@ -38,7 +38,7 @@ module VX_snp_forwarder #(
     reg [`LOG2UP(SNRQ_SIZE)-1:0] rd_ptr, wr_ptr;
     reg [`LOG2UP(SNRQ_SIZE)-1:0] pending_size;
     reg [`REQS_BITS-1:0] fwdin_sel;
-    wire enqueue, dequeue;
+    wire enqueue, dequeue, empty;
 
     wire fwdout_ready;
 
@@ -67,8 +67,9 @@ module VX_snp_forwarder #(
     assign snp_rsp_valid = fwdin_taken && (1 == pending_cntrs[fwdin_tag]); // send response
     assign {snp_rsp_addr, snp_rsp_tag} = pending_reqs[fwdin_tag];
 
+    assign empty   = (wr_ptr == rd_ptr);
     assign enqueue = snp_req_valid && snp_req_ready;       
-    assign dequeue = snp_rsp_valid && (rd_ptr == fwdin_tag);
+    assign dequeue = !empty && (0 == pending_cntrs[rd_ptr]);
 
     always @(posedge clk) begin
         if (reset) begin
