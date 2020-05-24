@@ -287,25 +287,43 @@ module VX_cache #(
             assign per_bank_core_rsp_data  [i] = curr_bank_core_rsp_data;
 
             // Dram fill request            
-            assign per_bank_dram_fill_req_valid[i]  = curr_bank_dram_fill_req_valid;
-            assign per_bank_dram_fill_req_addr[i]   = `LINE_TO_DRAM_ADDR(curr_bank_dram_fill_req_addr, i);
-            assign curr_bank_dram_fill_req_ready    = dram_fill_req_ready;
+            assign per_bank_dram_fill_req_valid[i] = curr_bank_dram_fill_req_valid;
+            if (NUM_BANKS == 1) begin
+                assign per_bank_dram_fill_req_addr[i] = curr_bank_dram_fill_req_addr;
+            end else begin
+                assign per_bank_dram_fill_req_addr[i] = `LINE_TO_DRAM_ADDR(curr_bank_dram_fill_req_addr, i);
+            end
+            assign curr_bank_dram_fill_req_ready = dram_fill_req_ready;
 
             // Dram fill response
-            assign curr_bank_dram_fill_rsp_valid   = dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i);
-            assign curr_bank_dram_fill_rsp_addr    = `DRAM_TO_LINE_ADDR(dram_rsp_tag);
+            if (NUM_BANKS == 1) begin
+                assign curr_bank_dram_fill_rsp_valid = dram_rsp_valid;
+                assign curr_bank_dram_fill_rsp_addr  = dram_rsp_tag;
+            end else begin
+                assign curr_bank_dram_fill_rsp_valid = dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i);
+                assign curr_bank_dram_fill_rsp_addr  = `DRAM_TO_LINE_ADDR(dram_rsp_tag);    
+            end
             assign curr_bank_dram_fill_rsp_data    = dram_rsp_data;
             assign per_bank_dram_fill_rsp_ready[i] = curr_bank_dram_fill_rsp_ready;
 
             // Dram writeback request            
-            assign per_bank_dram_wb_req_valid[i] = curr_bank_dram_wb_req_valid;            
-            assign per_bank_dram_wb_req_addr[i]  = `LINE_TO_DRAM_ADDR(curr_bank_dram_wb_req_addr, i);
-            assign per_bank_dram_wb_req_data[i]  = curr_bank_dram_wb_req_data;
-            assign curr_bank_dram_wb_req_ready   = per_bank_dram_wb_req_ready[i];
+            assign per_bank_dram_wb_req_valid[i] = curr_bank_dram_wb_req_valid;          
+            if (NUM_BANKS == 1) begin  
+                assign per_bank_dram_wb_req_addr[i] = curr_bank_dram_wb_req_addr;
+            end else begin
+                assign per_bank_dram_wb_req_addr[i] = `LINE_TO_DRAM_ADDR(curr_bank_dram_wb_req_addr, i);
+            end
+            assign per_bank_dram_wb_req_data[i] = curr_bank_dram_wb_req_data;
+            assign curr_bank_dram_wb_req_ready  = per_bank_dram_wb_req_ready[i];
 
             // Snoop request
-            assign curr_bank_snp_req_valid   = snp_req_valid_qual && (`DRAM_ADDR_BANK(snp_req_addr_qual) == i);
-            assign curr_bank_snp_req_addr    = `DRAM_TO_LINE_ADDR(snp_req_addr_qual);
+            if (NUM_BANKS == 1) begin
+                assign curr_bank_snp_req_valid = snp_req_valid_qual;
+                assign curr_bank_snp_req_addr  = snp_req_addr_qual;
+            end else begin
+                assign curr_bank_snp_req_valid = snp_req_valid_qual && (`DRAM_ADDR_BANK(snp_req_addr_qual) == i);
+                assign curr_bank_snp_req_addr  = `DRAM_TO_LINE_ADDR(snp_req_addr_qual);
+            end
             assign curr_bank_snp_req_tag     = snp_req_tag_qual;
             assign per_bank_snp_req_ready[i] = curr_bank_snp_req_ready;
 

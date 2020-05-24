@@ -190,6 +190,10 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
 
   int pending_snp_reqs = 1;
 
+#ifdef DBG_PRINT_CACHE_SNP
+  std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << std::dec << " tag=" << vortex_->snp_req_tag << " remain=" << (aligned_addr_end - vortex_->snp_req_addr - 1) << std::endl;
+#endif  
+
   for (;;) {
     this->step();        
     if (vortex_->snp_rsp_valid) {      
@@ -200,12 +204,12 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
     #endif
     }
     if (vortex_->snp_req_valid && vortex_->snp_req_ready) {            
-      if (vortex_->snp_req_addr < aligned_addr_end) {        
+      if (vortex_->snp_req_addr + 1 < aligned_addr_end) {        
         vortex_->snp_req_addr += 1;
         vortex_->snp_req_tag  += 1;
         ++pending_snp_reqs;
       #ifdef DBG_PRINT_CACHE_SNP
-        std::cout << timestamp << ": [sim] snp req: addr=" << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << (aligned_addr_end - vortex_->snp_req_addr) << std::endl;
+        std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << std::dec << " tag=" << vortex_->snp_req_tag << " remain=" << (aligned_addr_end - vortex_->snp_req_addr - 1) << std::endl;
       #endif
       } else {
         vortex_->snp_req_valid = 0;        

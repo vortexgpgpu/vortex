@@ -158,7 +158,7 @@
 
 // Number of banks {1, 2, 4, 8,...}
 `ifndef INUM_BANKS
-`define INUM_BANKS 8
+`define INUM_BANKS 1
 `endif
 
 // Size of a word in bytes

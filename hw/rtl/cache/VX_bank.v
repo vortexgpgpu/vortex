@@ -714,17 +714,31 @@ module VX_bank #(
                           || dram_fill_req_stall;
 
 `ifdef DBG_PRINT_CACHE_BANK
-    always_ff @(posedge clk) begin
-        if (dram_fill_req_valid && dram_fill_req_ready) begin
-            $display("%t: bank%02d:%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
+    if (NUM_BANKS == 1) begin
+        always_ff @(posedge clk) begin
+            if (dram_fill_req_valid && dram_fill_req_ready) begin
+                $display("%t: bank%02d:%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, dram_fill_req_addr);
+            end
+            if (dram_wb_req_valid && dram_wb_req_ready) begin
+                $display("%t: bank%02d:%01d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, dram_wb_req_addr, dram_wb_req_data);
+            end
+            if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
+                $display("%t: bank%02d:%01d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, dram_fill_rsp_addr, dram_fill_rsp_data);
+            end
         end
-        if (dram_wb_req_valid && dram_wb_req_ready) begin
-            $display("%t: bank%02d:%01d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
+    end else begin
+        always_ff @(posedge clk) begin
+            if (dram_fill_req_valid && dram_fill_req_ready) begin
+                $display("%t: bank%02d:%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
+            end
+            if (dram_wb_req_valid && dram_wb_req_ready) begin
+                $display("%t: bank%02d:%01d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
+            end
+            if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
+                $display("%t: bank%02d:%01d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
+            end
         end
-        if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
-            $display("%t: bank%02d:%01d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
-        end
-    end
+    end    
 `endif
 
 endmodule : VX_bank

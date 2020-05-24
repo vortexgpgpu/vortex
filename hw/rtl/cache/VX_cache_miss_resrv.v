@@ -156,18 +156,35 @@ module VX_cache_miss_resrv #(
 
 `ifdef DBG_PRINT_CACHE_MSRQ    
     integer j;
-    always_ff @(posedge clk) begin
-        if (mrvq_push || mrvq_pop) begin
-            $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);
-            for (j = 0; j < MRVQ_SIZE; j++) begin
-                if (valid_table[j]) begin
-                    $write(" ");                    
-                    if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");
-                    if (~ready_table[j]) $write("!");
-                    $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
-                end
-            end
-            $write("\n");
+    if (NUM_BANKS == 1) begin
+        always_ff @(posedge clk) begin        
+            if (mrvq_push || mrvq_pop) begin
+                $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);            
+                for (j = 0; j < MRVQ_SIZE; j++) begin
+                    if (valid_table[j]) begin
+                        $write(" ");                    
+                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");
+                        if (~ready_table[j]) $write("!");
+                        $write("addr%0d=%0h", j, {addr_table[j], `BASE_ADDR_BITS'(0)});
+                    end
+                end            
+                $write("\n");
+            end        
+        end
+    end else begin
+        always_ff @(posedge clk) begin        
+            if (mrvq_push || mrvq_pop) begin
+                $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);            
+                for (j = 0; j < MRVQ_SIZE; j++) begin
+                    if (valid_table[j]) begin
+                        $write(" ");                    
+                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");
+                        if (~ready_table[j]) $write("!");
+                        $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
+                    end
+                end            
+                $write("\n");
+            end        
         end
     end
 `endif
