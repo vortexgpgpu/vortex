@@ -16,7 +16,6 @@
 `define BANK_BITS               `LOG2UP(NUM_BANKS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
-`define BYTE_WIDTH              (`WORD_WIDTH / 4)
 
 `define BANK_LINE_WIDTH         (8 * BANK_LINE_SIZE)
 

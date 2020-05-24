@@ -10,7 +10,7 @@ double sc_time_stamp() {
 
 Simulator::Simulator() {    
   // force random values for unitialized signals
-  const char* args[] = {"", "+verilator+rand+reset+1", "+verilator+seed+0"};
+  const char* args[] = {"", "+verilator+rand+reset+2", "+verilator+seed+50"};
   Verilated::commandArgs(3, args);
 
   ram_ = nullptr;

@@ -21,7 +21,7 @@ module VX_tag_data_structure #(
     output wire[`BANK_LINE_WIDTH-1:0]       read_data,
 
     input  wire                             invalidate,
-    input  wire[`BANK_LINE_WORDS-1:0][3:0]  write_enable,
+    input  wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] write_enable,
     input  wire                             write_fill,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
     input  wire[`TAG_SELECT_BITS-1:0]       tag_index,
@@ -29,10 +29,10 @@ module VX_tag_data_structure #(
     input  wire                             fill_sent    
 );
 
-    reg [`BANK_LINE_WORDS-1:0][3:0][`BYTE_WIDTH-1:0] data [`BANK_LINE_COUNT-1:0];
-    reg [`TAG_SELECT_BITS-1:0]                        tag [`BANK_LINE_COUNT-1:0];
-    reg                                             valid [`BANK_LINE_COUNT-1:0];
-    reg                                             dirty [`BANK_LINE_COUNT-1:0];   
+    reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0][7:0] data [`BANK_LINE_COUNT-1:0];
+    reg [`TAG_SELECT_BITS-1:0]                      tag [`BANK_LINE_COUNT-1:0];
+    reg                                           valid [`BANK_LINE_COUNT-1:0];
+    reg                                           dirty [`BANK_LINE_COUNT-1:0];   
 
     assign read_valid = valid [read_addr];
     assign read_dirty = dirty [read_addr];
@@ -66,10 +66,10 @@ module VX_tag_data_structure #(
             end
 
             for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-                if (write_enable[i][0]) data[write_addr][i][0] <= write_data[i * `WORD_WIDTH + 0 * `BYTE_WIDTH +: `BYTE_WIDTH];
-                if (write_enable[i][1]) data[write_addr][i][1] <= write_data[i * `WORD_WIDTH + 1 * `BYTE_WIDTH +: `BYTE_WIDTH];
-                if (write_enable[i][2]) data[write_addr][i][2] <= write_data[i * `WORD_WIDTH + 2 * `BYTE_WIDTH +: `BYTE_WIDTH];
-                if (write_enable[i][3]) data[write_addr][i][3] <= write_data[i * `WORD_WIDTH + 3 * `BYTE_WIDTH +: `BYTE_WIDTH];
+                if (write_enable[i][0]) data[write_addr][i][0] <= write_data[i * `WORD_WIDTH + 0 * 8 +: 8];
+                if (write_enable[i][1]) data[write_addr][i][1] <= write_data[i * `WORD_WIDTH + 1 * 8 +: 8];
+                if (write_enable[i][2]) data[write_addr][i][2] <= write_data[i * `WORD_WIDTH + 2 * 8 +: 8];
+                if (write_enable[i][3]) data[write_addr][i][3] <= write_data[i * `WORD_WIDTH + 3 * 8 +: 8];
             end
         end
     end

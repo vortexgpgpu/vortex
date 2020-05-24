@@ -65,7 +65,7 @@ module VX_tag_data_access #(
     wire                        use_read_dirty_st1e;
     wire[`TAG_SELECT_BITS-1:0]  use_read_tag_st1e;
     wire[`BANK_LINE_WIDTH-1:0]  use_read_data_st1e;
-    wire[`BANK_LINE_WORDS-1:0][3:0] use_write_enable;
+    wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] use_write_enable;
     wire[`BANK_LINE_WIDTH-1:0]  use_write_data;
 
     wire fill_sent;
@@ -138,7 +138,7 @@ module VX_tag_data_access #(
     wire force_write  = real_writefill;
     wire should_write;
 
-    wire [`BANK_LINE_WORDS-1:0][3:0] we;
+    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] we;
     wire [`BANK_LINE_WIDTH-1:0] data_write;
 
     if (WORD_SIZE == BANK_LINE_SIZE) begin
@@ -150,7 +150,7 @@ module VX_tag_data_access #(
                            && !is_snp_st1e;
 
         for (i = 0; i < `BANK_LINE_WORDS; i++) begin        
-            assign we[i] = (force_write || (should_write && !real_writefill)) ? 4'b1111 : 4'b0000;
+            assign we[i] = (force_write || (should_write && !real_writefill)) ? {WORD_SIZE{1'b1}} : {WORD_SIZE{1'b0}};
         end    
 
         assign readword_st1e = use_read_data_st1e;
