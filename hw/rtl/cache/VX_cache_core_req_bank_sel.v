@@ -12,18 +12,24 @@ module VX_cache_core_req_bank_sel #(
     parameter NUM_REQUESTS                  = 0
 ) (
     input  wire [NUM_REQUESTS-1:0]                  core_req_valid,
+`IGNORE_WARNINGS_BEGIN    
     input  wire [NUM_REQUESTS-1:0][31:0]            core_req_addr,    
+`IGNORE_WARNINGS_END
     output reg  [NUM_BANKS-1:0][NUM_REQUESTS-1:0]   per_bank_valids
 );     
     integer i;
-    
-    always @(*) begin
-        per_bank_valids = 0;
-        for (i = 0; i < NUM_REQUESTS; i++) begin
-            if (NUM_BANKS == 1) begin
-                // If there is only one bank, then only map requests to that bank
+
+    if (NUM_BANKS == 1) begin
+        always @(*) begin
+            per_bank_valids = 0;
+            for (i = 0; i < NUM_REQUESTS; i++) begin                    
                 per_bank_valids[0][i] = core_req_valid[i];
-            end else begin
+            end
+        end
+    end else begin    
+        always @(*) begin
+            per_bank_valids = 0;
+            for (i = 0; i < NUM_REQUESTS; i++) begin
                 per_bank_valids[core_req_addr[i][`BANK_SELECT_ADDR_RNG]][i] = core_req_valid[i];
             end
         end
