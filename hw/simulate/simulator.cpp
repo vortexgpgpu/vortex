@@ -131,7 +131,7 @@ void Simulator::io_driver() {
     std::cout << c;      
   }
   vortex_->io_req_ready = 1;
-  vortex_->io_rsp_valid = 01;
+  vortex_->io_rsp_valid = 0;
 }
 
 void Simulator::reset() {     
