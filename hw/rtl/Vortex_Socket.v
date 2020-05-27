@@ -3,52 +3,53 @@
 
 module Vortex_Socket (
     // Clock
-    input  wire                         clk,
-    input  wire                         reset,
+    input  wire                             clk,
+    input  wire                             reset,
 
     // DRAM request
-    output wire                         dram_req_read,
-    output wire                         dram_req_write,    
-    output wire[`L3DRAM_ADDR_WIDTH-1:0] dram_req_addr,
-    output wire[`L3DRAM_LINE_WIDTH-1:0] dram_req_data,
-    output wire[`L3DRAM_TAG_WIDTH-1:0]  dram_req_tag,
-    input  wire                         dram_req_ready,
+    output wire                             dram_req_valid,
+    output wire                             dram_req_rw,    
+    output wire[`L3DRAM_BYTEEN_WIDTH-1:0]   dram_req_byteen,    
+    output wire[`L3DRAM_ADDR_WIDTH-1:0]     dram_req_addr,
+    output wire[`L3DRAM_LINE_WIDTH-1:0]     dram_req_data,
+    output wire[`L3DRAM_TAG_WIDTH-1:0]      dram_req_tag,
+    input  wire                             dram_req_ready,
 
     // DRAM response    
-    input wire                          dram_rsp_valid,        
-    input wire[`L3DRAM_LINE_WIDTH-1:0]  dram_rsp_data,
-    input wire[`L3DRAM_TAG_WIDTH-1:0]   dram_rsp_tag,
-    output wire                         dram_rsp_ready,
+    input wire                              dram_rsp_valid,        
+    input wire[`L3DRAM_LINE_WIDTH-1:0]      dram_rsp_data,
+    input wire[`L3DRAM_TAG_WIDTH-1:0]       dram_rsp_tag,
+    output wire                             dram_rsp_ready,
 
     // Snoop request
-    input wire                          snp_req_valid,
-    input wire[`L3DRAM_ADDR_WIDTH-1:0]  snp_req_addr,
-    input wire[`L3SNP_TAG_WIDTH-1:0]    snp_req_tag,
-    output wire                         snp_req_ready, 
+    input wire                              snp_req_valid,
+    input wire[`L3DRAM_ADDR_WIDTH-1:0]      snp_req_addr,
+    input wire[`L3SNP_TAG_WIDTH-1:0]        snp_req_tag,
+    output wire                             snp_req_ready, 
 
     // Snoop response
-    output wire                         snp_rsp_valid,
-    output wire[`L3SNP_TAG_WIDTH-1:0]   snp_rsp_tag,
-    input wire                          snp_rsp_ready,     
+    output wire                             snp_rsp_valid,
+    output wire[`L3SNP_TAG_WIDTH-1:0]       snp_rsp_tag,
+    input wire                              snp_rsp_ready,     
 
     // I/O request
-    output wire                         io_req_read,
-    output wire                         io_req_write,    
-    output wire[31:0]                   io_req_addr,
-    output wire[31:0]                   io_req_data,
-    output wire[`BYTE_EN_BITS-1:0]      io_req_byteen,
-    output wire[`CORE_REQ_TAG_WIDTH-1:0] io_req_tag,    
-    input wire                          io_req_ready,
+    output wire                             io_req_valid,
+    output wire                             io_req_rw,  
+    output wire[`DCORE_BYTEEN_WIDTH-1:0]    io_req_byteen,  
+    output wire[`DCORE_ADDR_WIDTH-1:0]      io_req_addr,
+    output wire[31:0]                       io_req_data,    
+    output wire[`DCORE_TAG_WIDTH-1:0]       io_req_tag,    
+    input wire                              io_req_ready,
 
     // I/O response
-    input wire                          io_rsp_valid,
-    input wire[31:0]                    io_rsp_data,
-    input wire[`CORE_REQ_TAG_WIDTH-1:0] io_rsp_tag,
-    output wire                         io_rsp_ready,
+    input wire                              io_rsp_valid,
+    input wire[31:0]                        io_rsp_data,
+    input wire[`DCORE_TAG_WIDTH-1:0]        io_rsp_tag,
+    output wire                             io_rsp_ready,
 
     // Status
-    output wire                         busy, 
-    output wire                         ebreak
+    output wire                             busy, 
+    output wire                             ebreak
 );
     if (`NUM_CLUSTERS == 1) begin
 
@@ -58,8 +59,9 @@ module Vortex_Socket (
             .clk                (clk),
             .reset              (reset),
             
-            .dram_req_read      (dram_req_read),
-            .dram_req_write     (dram_req_write),
+            .dram_req_valid     (dram_req_valid),
+            .dram_req_rw        (dram_req_rw),
+            .dram_req_byteen    (dram_req_byteen),
             .dram_req_addr      (dram_req_addr),
             .dram_req_data      (dram_req_data),
             .dram_req_tag       (dram_req_tag),
@@ -79,11 +81,11 @@ module Vortex_Socket (
             .snp_rsp_tag        (snp_rsp_tag),
             .snp_rsp_ready      (snp_rsp_ready),
 
-            .io_req_read        (io_req_read),
-            .io_req_write       (io_req_write),
+            .io_req_valid       (io_req_valid),
+            .io_req_rw          (io_req_rw),
+            .io_req_byteen      (io_req_byteen),
             .io_req_addr        (io_req_addr),
             .io_req_data        (io_req_data),
-            .io_req_byteen      (io_req_byteen),
             .io_req_tag         (io_req_tag),
             .io_req_ready       (io_req_ready),
 
@@ -98,8 +100,9 @@ module Vortex_Socket (
 
     end else begin
 
-        wire[`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_read;
-        wire[`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_write;        
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_valid;
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_rw;        
+        wire[`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen;   
         wire[`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_dram_req_addr;
         wire[`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_req_data;
         wire[`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_req_tag;
@@ -120,12 +123,12 @@ module Vortex_Socket (
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_snp_rsp_ready;
 
     `IGNORE_WARNINGS_BEGIN
-        wire[`NUM_CLUSTERS-1:0]                         per_cluster_io_req_read;
-        wire[`NUM_CLUSTERS-1:0]                         per_cluster_io_req_write;
-        wire[`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_req_addr;
-        wire[`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_req_data;
-        wire[`NUM_CLUSTERS-1:0][`BYTE_EN_BITS-1:0]      per_cluster_io_req_byteen;
-        wire[`NUM_CLUSTERS-1:0][`CORE_REQ_TAG_WIDTH-1:0] per_cluster_io_req_tag;
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_io_req_valid;
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_io_req_rw;
+        wire[`NUM_CLUSTERS-1:0][`DCORE_BYTEEN_WIDTH-1:0] per_cluster_io_req_byteen;
+        wire[`NUM_CLUSTERS-1:0][`DCORE_ADDR_WIDTH-1:0]  per_cluster_io_req_addr;
+        wire[`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_req_data;        
+        wire[`NUM_CLUSTERS-1:0][`DCORE_TAG_WIDTH-1:0]   per_cluster_io_req_tag;
 
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_ready;
     `IGNORE_WARNINGS_END
@@ -141,8 +144,9 @@ module Vortex_Socket (
                 .clk                (clk),
                 .reset              (reset),
 
-                .dram_req_write     (per_cluster_dram_req_write [i]),
-                .dram_req_read      (per_cluster_dram_req_read  [i]),
+                .dram_req_valid     (per_cluster_dram_req_valid [i]),
+                .dram_req_rw        (per_cluster_dram_req_rw    [i]),
+                .dram_req_byteen    (per_cluster_dram_req_byteen[i]),
                 .dram_req_addr      (per_cluster_dram_req_addr  [i]),
                 .dram_req_data      (per_cluster_dram_req_data  [i]),
                 .dram_req_tag       (per_cluster_dram_req_tag   [i]), 
@@ -162,11 +166,11 @@ module Vortex_Socket (
                 .snp_rsp_tag        (per_cluster_snp_rsp_tag    [i]),
                 .snp_rsp_ready      (per_cluster_snp_rsp_ready  [i]),
 
-                .io_req_read        (per_cluster_io_req_read    [i]),
-                .io_req_write       (per_cluster_io_req_write   [i]),
-                .io_req_addr        (per_cluster_io_req_addr    [i]),
-                .io_req_data        (per_cluster_io_req_data    [i]),
+                .io_req_valid       (per_cluster_io_req_valid   [i]),
+                .io_req_rw          (per_cluster_io_req_rw      [i]),
                 .io_req_byteen      (per_cluster_io_req_byteen  [i]),
+                .io_req_addr        (per_cluster_io_req_addr    [i]),
+                .io_req_data        (per_cluster_io_req_data    [i]),                
                 .io_req_tag         (per_cluster_io_req_tag     [i]),
                 .io_req_ready       (io_req_ready),
 
@@ -180,11 +184,11 @@ module Vortex_Socket (
             );
         end        
 
-        assign io_req_read   = per_cluster_io_req_read[0];
-        assign io_req_write  = per_cluster_io_req_write[0];
+        assign io_req_valid  = per_cluster_io_req_valid[0];
+        assign io_req_rw     = per_cluster_io_req_rw[0];
+        assign io_req_byteen = per_cluster_io_req_byteen[0];
         assign io_req_addr   = per_cluster_io_req_addr[0];
         assign io_req_data   = per_cluster_io_req_data[0];
-        assign io_req_byteen = per_cluster_io_req_byteen[0];
         assign io_req_tag    = per_cluster_io_req_tag[0];
 
         assign io_rsp_ready  = per_cluster_io_rsp_ready[0];
@@ -195,9 +199,9 @@ module Vortex_Socket (
         // L3 Cache ///////////////////////////////////////////////////////////
 
         wire[`L3NUM_REQUESTS-1:0]                           l3_core_req_valid;
-        wire[`L3NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]        l3_core_req_read;
-        wire[`L3NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]        l3_core_req_write;
-        wire[`L3NUM_REQUESTS-1:0][31:0]                     l3_core_req_addr;
+        wire[`L3NUM_REQUESTS-1:0]                           l3_core_req_rw;
+        wire[`L3NUM_REQUESTS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] l3_core_req_byteen;
+        wire[`L3NUM_REQUESTS-1:0][`L2DRAM_ADDR_WIDTH-1:0]   l3_core_req_addr;
         wire[`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   l3_core_req_data;
         wire[`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    l3_core_req_tag;
 
@@ -217,10 +221,10 @@ module Vortex_Socket (
 
         for (i = 0; i < `L3NUM_REQUESTS; i++) begin
             // Core Request
-            assign l3_core_req_valid [i] = (per_cluster_dram_req_read [i] | per_cluster_dram_req_write [i]);
-            assign l3_core_req_read  [i] = per_cluster_dram_req_read  [i] ? `BYTE_EN_LW : `BYTE_EN_NO;
-            assign l3_core_req_write [i] = per_cluster_dram_req_write [i] ? `BYTE_EN_LW : `BYTE_EN_NO;
-            assign l3_core_req_addr  [i] = {per_cluster_dram_req_addr [i], {`LOG2UP(`L2BANK_LINE_SIZE){1'b0}}};
+            assign l3_core_req_valid [i] = per_cluster_dram_req_valid [i];
+            assign l3_core_req_rw    [i] = per_cluster_dram_req_rw    [i];
+            assign l3_core_req_byteen[i] = per_cluster_dram_req_byteen[i];
+            assign l3_core_req_addr  [i] = per_cluster_dram_req_addr  [i];
             assign l3_core_req_tag   [i] = per_cluster_dram_req_tag   [i];
             assign l3_core_req_data  [i] = per_cluster_dram_req_data  [i];            
 
@@ -251,7 +255,7 @@ module Vortex_Socket (
             .WORD_SIZE              (`L3WORD_SIZE),
             .NUM_REQUESTS           (`L3NUM_REQUESTS),
             .STAGE_1_CYCLES         (`L3STAGE_1_CYCLES),
-            .REQQ_SIZE              (`L3REQQ_SIZE),
+            .CREQ_SIZE              (`L3CREQ_SIZE),
             .MRVQ_SIZE              (`L3MRVQ_SIZE),
             .DFPQ_SIZE              (`L3DFPQ_SIZE),
             .SNRQ_SIZE              (`L3SNRQ_SIZE),
@@ -275,8 +279,8 @@ module Vortex_Socket (
 
             // Core request    
             .core_req_valid     (l3_core_req_valid),
-            .core_req_read      (l3_core_req_read),
-            .core_req_write     (l3_core_req_write),
+            .core_req_rw        (l3_core_req_rw),
+            .core_req_byteen    (l3_core_req_byteen),
             .core_req_addr      (l3_core_req_addr),
             .core_req_data      (l3_core_req_data),
             .core_req_tag       (l3_core_req_tag),
@@ -289,8 +293,9 @@ module Vortex_Socket (
             .core_rsp_ready     (l3_core_rsp_ready),
 
             // DRAM request
-            .dram_req_write     (dram_req_write),
-            .dram_req_read      (dram_req_read),
+            .dram_req_valid     (dram_req_valid),
+            .dram_req_rw        (dram_req_rw),
+            .dram_req_byteen    (dram_req_byteen),
             .dram_req_addr      (dram_req_addr),
             .dram_req_data      (dram_req_data),
             .dram_req_tag       (dram_req_tag),
@@ -328,8 +333,8 @@ module Vortex_Socket (
 
 `ifdef DBG_PRINT_DRAM
     always_ff @(posedge clk) begin
-        if ((dram_req_read || dram_req_write) && dram_req_ready) begin
-            $display("%t: DRAM req: w=%b addr=%0h, tag=%0h, data=%0h", $time, dram_req_write, {dram_req_addr, `CLOG2(`GLOBAL_BLOCK_SIZE)'(0)}, dram_req_tag, dram_req_data);
+        if (dram_req_valid && dram_req_ready) begin
+            $display("%t: DRAM req: rw=%b addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, dram_req_rw, {dram_req_addr, `CLOG2(`GLOBAL_BLOCK_SIZE)'(0)}, dram_req_tag, dram_req_byteen, dram_req_data);
         end
         if (dram_rsp_valid && dram_rsp_ready) begin
             $display("%t: DRAM rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);

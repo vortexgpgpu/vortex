@@ -5,11 +5,11 @@
 
 `define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_REQ_TAG_WIDTH)
 
-//                                data          tid         tag               read            write           base addr        is_snp
-`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQS_BITS + `REQ_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `BASE_ADDR_BITS + 1)
+//                               tag              rw   byteen      tid
+`define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
-//                               tag               read             write            reqs
-`define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + `BYTE_EN_BITS + `BYTE_EN_BITS + `REQS_BITS)
+//                                data         metadata               word_sel             is_snp
+`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `WORD_SELECT_WIDTH + 1)
 
 `define REQS_BITS               `LOG2UP(NUM_REQUESTS)
 
@@ -27,35 +27,38 @@
 `define OFFSET_ADDR_BITS        `CLOG2(WORD_SIZE)
 `define OFFSET_ADDR_START       0
 `define OFFSET_ADDR_END         (`OFFSET_ADDR_START+`OFFSET_ADDR_BITS-1)
-`define OFFSET_ADDR_RNG         `OFFSET_ADDR_END:`OFFSET_ADDR_START
 
 // Word select
 `define WORD_SELECT_BITS        `CLOG2(`BANK_LINE_WORDS)
 `define WORD_SELECT_ADDR_START  (1+`OFFSET_ADDR_END)
 `define WORD_SELECT_ADDR_END    (`WORD_SELECT_ADDR_START+`WORD_SELECT_BITS-1)
-`define WORD_SELECT_ADDR_RNG    `WORD_SELECT_ADDR_END:`WORD_SELECT_ADDR_START
 
 // Bank select
 `define BANK_SELECT_BITS        `CLOG2(NUM_BANKS)
 `define BANK_SELECT_ADDR_START  (1+`WORD_SELECT_ADDR_END)
 `define BANK_SELECT_ADDR_END    (`BANK_SELECT_ADDR_START+`BANK_SELECT_BITS-1)
-`define BANK_SELECT_ADDR_RNG    `BANK_SELECT_ADDR_END:`BANK_SELECT_ADDR_START
 
 // Line select
 `define LINE_SELECT_BITS        `CLOG2(`BANK_LINE_COUNT)
 `define LINE_SELECT_ADDR_START  (1+`BANK_SELECT_ADDR_END)
 `define LINE_SELECT_ADDR_END    (`LINE_SELECT_ADDR_START+`LINE_SELECT_BITS-1)
-`define LINE_SELECT_ADDR_RNG    `LINE_SELECT_ADDR_END:`LINE_SELECT_ADDR_START
 
 // Tag select
 `define TAG_SELECT_BITS         (31-`LINE_SELECT_ADDR_END)
 `define TAG_SELECT_ADDR_START   (1+`LINE_SELECT_ADDR_END)
 `define TAG_SELECT_ADDR_END     31
-`define TAG_SELECT_ADDR_RNG     `TAG_SELECT_ADDR_END:`TAG_SELECT_ADDR_START
+
+`define WORD_SELECT_WIDTH       `LOG2UP(`BANK_LINE_WORDS)
+
+`define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
 
 `define DRAM_ADDR_WIDTH         (32-`CLOG2(BANK_LINE_SIZE))
 
 `define LINE_ADDR_WIDTH         (`DRAM_ADDR_WIDTH-`BANK_SELECT_BITS)
+
+`define BANK_SELECT_ADDR_RNG    (`BANK_SELECT_BITS+`WORD_SELECT_BITS-1):`WORD_SELECT_BITS
+
+`define LINE_SELECT_ADDR_RNG    `WORD_ADDR_WIDTH-1:(`BANK_SELECT_BITS + `WORD_SELECT_BITS)
 
 `define TAG_LINE_ADDR_RNG       `LINE_ADDR_WIDTH-1:`LINE_SELECT_BITS
 
@@ -69,8 +72,12 @@
 
 `define DRAM_TO_LINE_ADDR(x)    x[`DRAM_ADDR_WIDTH-1:`BANK_SELECT_BITS]
 
+`define BYTE_TO_WORD_ADDR(x, w) (32-`CLOG2(w))'(x >> `CLOG2(w)) 
+
 `define LINE_TO_DRAM_ADDR(x, i) {x, `BANK_SELECT_BITS'(i)}
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, `BANK_SELECT_BITS'(i), `BASE_ADDR_BITS'(0)}
+
+`define LINE_TO_BYTE_ADDR0(x)   {x, `BASE_ADDR_BITS'(0)}
 
 `endif

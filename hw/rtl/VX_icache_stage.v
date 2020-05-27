@@ -21,24 +21,48 @@ module VX_icache_stage #(
     wire valid_inst = (| fe_inst_meta_fi.valid);
 
 `DEBUG_BEGIN
-    wire [`CORE_REQ_TAG_WIDTH-1:0] core_req_tag = icache_req_if.core_req_tag;
-    wire [`CORE_REQ_TAG_WIDTH-1:0] core_rsp_tag = icache_rsp_if.core_rsp_tag;
+    wire [`ICORE_TAG_WIDTH-1:0] mem_req_tag = icache_req_if.core_req_tag;
+    wire [`ICORE_TAG_WIDTH-1:0] mem_rsp_tag = icache_rsp_if.core_rsp_tag;
 `DEBUG_END
 
+    wire [`LOG2UP(`ICREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr;
+    wire mrq_full;
+
+    wire mrq_push = (| icache_req_if.core_req_valid) && icache_req_if.core_req_ready;    
+    wire mrq_pop  = (| icache_rsp_if.core_rsp_valid) && icache_rsp_if.core_rsp_ready;
+
+    assign mrq_read_addr = icache_rsp_if.core_rsp_tag[0][`LOG2UP(`ICREQ_SIZE)-1:0];    
+
+    VX_indexable_queue #(
+        .DATAW (32 + `NW_BITS),
+        .SIZE  (`ICREQ_SIZE)
+    ) mem_req_queue (
+        .clk        (clk),
+        .reset      (reset),        
+        .write_data ({fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num}),    
+        .write_addr (mrq_write_addr),        
+        .push       (mrq_push),    
+        .full       (mrq_full),
+        .pop        (mrq_pop),
+        .read_addr  (mrq_read_addr),
+        .read_data  ({fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num})
+    );
+
     // Icache Request
-    assign icache_req_if.core_req_valid = valid_inst;
-    assign icache_req_if.core_req_addr  = fe_inst_meta_fi.inst_pc;
-    assign icache_req_if.core_req_data  = 0;
-    assign icache_req_if.core_req_read  = `BYTE_EN_LW;
-    assign icache_req_if.core_req_write = `BYTE_EN_NO;
-    assign icache_req_if.core_req_tag   = {fe_inst_meta_fi.inst_pc, 2'b1, 5'b0, fe_inst_meta_fi.warp_num};
+    assign icache_req_if.core_req_valid  = valid_inst && ~mrq_full;
+    assign icache_req_if.core_req_rw     = 0;
+    assign icache_req_if.core_req_byteen = 0;
+    assign icache_req_if.core_req_addr   = fe_inst_meta_fi.inst_pc[31:2];
+    assign icache_req_if.core_req_data   = 0;    
 
-`IGNORE_WARNINGS_BEGIN
-    wire[4:0] rsp_rd;    
-    wire[1:0] rsp_wb;
-`IGNORE_WARNINGS_END
+    // Can't accept new request
+    assign icache_stage_delay = mrq_full || ~icache_req_if.core_req_ready;
 
-    assign {fe_inst_meta_id.inst_pc, rsp_wb, rsp_rd, fe_inst_meta_id.warp_num} = icache_rsp_if.core_rsp_tag;
+`ifndef NDEBUG      
+    assign icache_req_if.core_req_tag = {fe_inst_meta_fi.inst_pc, 2'b1, 5'b0, fe_inst_meta_fi.warp_num, mrq_write_addr};
+`else
+    assign icache_req_if.core_req_tag = mrq_write_addr;
+`endif
 
     assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_data[0];
     assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? valid_threads[fe_inst_meta_id.warp_num] : 0;
@@ -46,10 +70,7 @@ module VX_icache_stage #(
     assign icache_stage_wid            = fe_inst_meta_id.warp_num;
     assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
 
-    // Cache can't accept request
-    assign icache_stage_delay = ~icache_req_if.core_req_ready;
-
-    // Core can't accept response
+    // Can't accept new response
     assign icache_rsp_if.core_rsp_ready = ~total_freeze;
 
     always @(posedge clk) begin
@@ -64,11 +85,11 @@ module VX_icache_stage #(
 
 `ifdef DBG_PRINT_CORE_ICACHE
     always_ff @(posedge clk) begin
-        if (icache_req_if.core_req_ready && icache_req_if.core_req_valid) begin
-            $display("%t: I%01d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, icache_req_if.core_req_tag, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
+        if (icache_req_if.core_req_valid && icache_req_if.core_req_ready) begin
+            $display("%t: I%01d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, mrq_write_addr, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
         end
-        if (icache_rsp_if.core_rsp_ready && icache_rsp_if.core_rsp_valid) begin
-            $display("%t: I%01d$ rsp: tag=%0h, pc=%0h, warp=%0d, instr=%0h", $time, CORE_ID, icache_rsp_if.core_rsp_tag, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
+        if (icache_rsp_if.core_rsp_valid && icache_rsp_if.core_rsp_ready) begin
+            $display("%t: I%01d$ rsp: tag=%0h, pc=%0h, warp=%0d, instr=%0h", $time, CORE_ID, mrq_read_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
         end
     end
 `endif

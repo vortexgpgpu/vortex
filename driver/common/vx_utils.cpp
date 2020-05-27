@@ -97,15 +97,11 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
     return -1;
   }
 
-  // get length of file:
+  // read file content
   ifs.seekg(0, ifs.end);
   auto size = ifs.tellg();
+  auto content = new char [size];   
   ifs.seekg(0, ifs.beg);
-
-  // allocate buffer 
-  auto content = new char [size];  
-
-  // read file content
   ifs.read(content, size);
 
   // upload

@@ -50,7 +50,7 @@ void mat_add_kernel(void * void_arguments)
 
 int main()
 {
-	// ensure single thread
+	/*// ensure single thread
 	vx_tmc(1);
 
 	vx_print_str("Let's start... (This might take a while)\n");
@@ -87,7 +87,7 @@ int main()
 	vx_print_str("Simple Main\n");
 
 	// TMC test
-	test_tmc();
+	test_tmc();*/
 
 	// Control Divergence Test
 	vx_print_str("test_divergence\n");
@@ -95,7 +95,7 @@ int main()
 	test_divergence();
 	vx_tmc(1);
 
-
+/*
 	// Test wspawn
 	vx_print_str("test_wspawn\n");
 	test_wsapwn();
@@ -143,7 +143,7 @@ int main()
 			vx_print_str(" ");
 		}
 		vx_print_str("\n");
-	}
+	}*/
 
 	return 0;
 }

@@ -58,20 +58,19 @@ int main(int argc, char **argv)
 	 	"../../benchmarks/riscv_tests/rv32um-p-remu.hex"
 	 };
 
-	for (std::string s : tests) {
+	for (std::string test : tests) {
 		std::cerr << DEFAULT << "\n---------------------------------------\n";
 
-		std::cerr << s << std::endl;
+		std::cerr << test << std::endl;
 
 		RAM ram;
-		loadHexImpl(s.c_str(), &ram);
-
 		Simulator simulator;
 		simulator.attach_ram(&ram);
+		simulator.load_ihex(test.c_str());
 		bool curr = simulator.run();
 
-		if (curr) std::cerr << GREEN << "Test Passed: " << s << std::endl;
-		if (!curr) std::cerr << RED   << "Test Failed: " << s << std::endl;
+		if (curr) std::cerr << GREEN << "Test Passed: " << test << std::endl;
+		if (!curr) std::cerr << RED   << "Test Failed: " << test << std::endl;
 		std::cerr << DEFAULT;
 		passed = passed && curr;
 	}
@@ -79,37 +78,29 @@ int main(int argc, char **argv)
 	std::cerr << DEFAULT << "\n***************************************\n";
 
 	if (passed) std::cerr << DEFAULT << "PASSED ALL TESTS\n";
-	if(!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
+	if (!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
 
 	return !passed;
 
 #else
 
-	char testing[] = "../../runtime/tests/simple/vx_simple_main.hex";
-	//char testing[] = "../../benchmarks/riscv_tests/rv32ui-p-lw.hex";
-	//char testing[] = "../../benchmarks/riscv_tests/rv32ui-p-sw.hex";
+	char test[] = "../../runtime/tests/simple/vx_simple_main.hex";
+	//char test[] = "../../benchmarks/riscv_tests/rv32ui-p-lb.hex";
+	//char test[] = "../../benchmarks/riscv_tests/rv32ui-p-lw.hex";
+	//char test[] = "../../benchmarks/riscv_tests/rv32ui-p-sw.hex";
 
-	// const char *testing;
-
-	// if (argc >= 2) {
-	//     testing = argv[1];
-	// } else {
-	//     testing = "../../kernel/vortex_test.hex";
-	// }
-
-  std::cerr << testing << std::endl;
+  std::cerr << test << std::endl;
 
   RAM ram;
-	loadHexImpl(testing, &ram);
-
 	Simulator simulator;
 	simulator.attach_ram(&ram);
+	simulator.load_ihex(test);
 	bool curr = simulator.run();
 
-	if (curr) std::cerr << GREEN << "Test Passed: " << testing << std::endl;
-	if (!curr) std::cerr << RED   << "Test Failed: " << testing << std::endl;
+	if (curr) std::cerr << GREEN << "Test Passed: " << test << std::endl;
+	if (!curr) std::cerr << RED   << "Test Failed: " << test << std::endl;
 
-    return !curr;
+  return !curr;
 
 #endif
 }

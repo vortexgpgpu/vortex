@@ -14,12 +14,12 @@ module VX_scheduler (
 );
     reg[31:0] count_valid;
 
-    assign is_empty = count_valid == 0;
+    assign is_empty = (count_valid == 0);
 
     reg[31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
 
-    wire valid_wb  = (writeback_if.wb != 0) && (| writeback_if.valid) && (writeback_if.rd != 0);
-    wire wb_inc    = (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
+    wire valid_wb  = (| writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd != 0);
+    wire wb_inc    = (| bckE_req_if.valid) && (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
 
     wire rs1_rename = (rename_table[bckE_req_if.warp_num][bckE_req_if.rs1] != 0);
     wire rs2_rename = (rename_table[bckE_req_if.warp_num][bckE_req_if.rs2] != 0);
@@ -50,9 +50,7 @@ module VX_scheduler (
 
     integer i, w;
 
-    wire[`NUM_THREADS-1:0] old_rename_mask   = rename_table[writeback_if.warp_num][writeback_if.rd];
-    wire[`NUM_THREADS-1:0] invalidate_mask   = ~writeback_if.valid;
-    wire[`NUM_THREADS-1:0] valid_wb_new_mask = old_rename_mask & invalidate_mask;
+    wire [`NUM_THREADS-1:0] valid_wb_new_mask = rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid;
     
     always @(posedge clk) begin
         if (reset) begin
@@ -63,21 +61,16 @@ module VX_scheduler (
             end
         end else begin
             if (valid_wb) begin
-                rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;
+                rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;               
+                if (0 == valid_wb_new_mask) begin
+                    count_valid <= count_valid - 1;
+                end
             end
 
             if (!schedule_delay && wb_inc) begin
                 rename_table[bckE_req_if.warp_num][bckE_req_if.rd] <= bckE_req_if.valid;
-            end
-        
-            if (valid_wb 
-             && (0 == (rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid))) begin
-                count_valid <= count_valid - 1;
-            end
-
-            if (!schedule_delay && wb_inc) begin
                 count_valid <= count_valid + 1;
-            end
+            end           
         end
     end
 

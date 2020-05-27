@@ -737,7 +737,7 @@ Vortex_Socket #() vx_socket (
   // I/O response
   .io_rsp_valid     (1'b0),
   .io_rsp_data      (32'b0),
-  .io_rsp_tag       (`CORE_REQ_TAG_WIDTH'(0)),
+  .io_rsp_tag       (`DCORE_TAG_WIDTH'(0)),
   .io_rsp_ready     (),
  
   // status

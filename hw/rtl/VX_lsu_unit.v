@@ -47,33 +47,154 @@ module VX_lsu_unit #(
         .out  ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
     );
 
+    wire core_req_rw = (use_mem_write != `BYTE_EN_NO);
+
+    reg [3:0] wmask;
+    always @(*) begin
+        case (use_mem_write[1:0])
+            0: begin 
+                wmask = 4'b0001;   
+            end
+            1: begin
+                wmask = 4'b0011;
+            end
+            default : begin
+                wmask = 4'b1111;
+            end                         
+        endcase
+    end
+
+    genvar i;
+
+    wire [`NUM_THREADS-1:0][4:0]  mem_req_offset;
+    wire [`NUM_THREADS-1:0][29:0] mem_req_addr;    
+    wire [`NUM_THREADS-1:0][3:0]  mem_req_byteen;
+    wire [`NUM_THREADS-1:0][31:0] mem_req_data;
+
+    wire [`NUM_THREADS-1:0][4:0]  mem_rsp_offset;
+    wire[2:0] core_rsp_mem_read;
+
+    for (i = 0; i < `NUM_THREADS; ++i) begin  
+
+        always @(*) begin
+            case (core_req_rw ? use_mem_write[1:0] : use_mem_read[1:0])
+                2'b0: begin 
+                    case (use_address[i][1:0])
+                        1: mem_req_offset[i] = 8;
+                        2: mem_req_offset[i] = 16;
+                        3: mem_req_offset[i] = 24;
+                        default : mem_req_offset[i] = 0;
+                    endcase
+                end
+                2'b1: begin
+                    case (use_address[i][1:0])
+                        2: mem_req_offset[i] = 16;
+                        default : mem_req_offset[i] = 0;
+                    endcase
+                end
+                default : begin
+                    mem_req_offset[i] = 0;
+                end                         
+            endcase
+        end
+
+        assign mem_req_addr[i]   = use_address[i][31:2];        
+        assign mem_req_byteen[i] = (wmask << use_address[i][1:0]);
+        assign mem_req_data[i]   = (use_store_data[i] << mem_req_offset[i]);
+    end   
+
+    reg [`NUM_THREADS-1:0] mem_rsp_mask[`DCREQ_SIZE-1:0]; 
+
+    wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr;
+    wire mrq_full;
+
+    wire mrq_push     = (0 == core_req_rw) && (| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready;    
+    wire mrq_pop_part = (| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready;    
+    
+    assign mrq_read_addr = dcache_rsp_if.core_rsp_tag[0][`LOG2UP(`DCREQ_SIZE)-1:0];    
+
+    wire [`NUM_THREADS-1:0] mem_rsp_mask_next = mem_rsp_mask[mrq_read_addr] & ~dcache_rsp_if.core_rsp_valid;
+
+    wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_next);    
+
+    always @(posedge clk) begin
+        if (reset) begin
+            //--
+        end else begin
+            if (mrq_push)  begin
+                mem_rsp_mask[mrq_write_addr] <= use_valid;
+            end    
+            if (mrq_pop_part) begin
+                mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_next;
+            end
+        end
+    end
+
+    VX_indexable_queue #(
+        .DATAW (32 + 2 + (`NUM_THREADS * 5) + `BYTE_EN_BITS + 5 + `NW_BITS),
+        .SIZE  (`DCREQ_SIZE)
+    ) mem_req_queue (
+        .clk        (clk),
+        .reset      (reset),
+        .write_data ({use_pc, use_wb, mem_req_offset, use_mem_read, use_rd, use_warp_num}),    
+        .write_addr (mrq_write_addr),        
+        .push       (mrq_push),    
+        .full       (mrq_full),
+        .pop        (mrq_pop),
+        .read_addr  (mrq_read_addr),
+        .read_data  ({mem_wb_if.pc, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num})
+    );
+
     // Core Request
-    assign dcache_req_if.core_req_valid = use_valid;
-    assign dcache_req_if.core_req_read  = {`NUM_THREADS{use_mem_read}};
-    assign dcache_req_if.core_req_write = {`NUM_THREADS{use_mem_write}};
-    assign dcache_req_if.core_req_addr  = use_address;
-    assign dcache_req_if.core_req_data  = use_store_data;    
-    assign dcache_req_if.core_req_tag   = {use_pc, use_wb, use_rd, use_warp_num};
-    assign delay = ~dcache_req_if.core_req_ready;
+
+    assign dcache_req_if.core_req_valid = use_valid & {`NUM_THREADS{~mrq_full}};
+    assign dcache_req_if.core_req_rw    = {`NUM_THREADS{core_req_rw}};
+    assign dcache_req_if.core_req_byteen= mem_req_byteen;
+    assign dcache_req_if.core_req_addr  = mem_req_addr;
+    assign dcache_req_if.core_req_data  = mem_req_data;  
+
+`ifndef NDEBUG      
+    assign dcache_req_if.core_req_tag   = {use_pc, use_wb, use_rd, use_warp_num, mrq_write_addr};
+`else
+    assign dcache_req_if.core_req_tag   = mrq_write_addr;
+`endif
+
+    // Can't accept new request
+    assign delay = mrq_full || ~dcache_req_if.core_req_ready;
 
     // Core Response
-    assign mem_wb_if.valid = dcache_rsp_if.core_rsp_valid;
-    assign mem_wb_if.data  = dcache_rsp_if.core_rsp_data;
-    assign dcache_rsp_if.core_rsp_ready = ~no_slot_mem;    
-    assign {mem_wb_if.pc, mem_wb_if.wb, mem_wb_if.rd, mem_wb_if.warp_num} = dcache_rsp_if.core_rsp_tag;
 
+    reg  [`NUM_THREADS-1:0][31:0] core_rsp_data;
+    wire [`NUM_THREADS-1:0][31:0] rsp_data_shifted;
+    
+    for (i = 0; i < `NUM_THREADS; ++i) begin        
+        assign rsp_data_shifted[i] = (dcache_rsp_if.core_rsp_data[i] >> mem_rsp_offset[i]);
+        always @(*) begin
+            case (core_rsp_mem_read)
+                `BYTE_EN_SB: core_rsp_data[i] = rsp_data_shifted[i][7]  ? (rsp_data_shifted[i] | 32'hFFFFFF00) : (rsp_data_shifted[i] & 32'h000000FF);      
+                `BYTE_EN_SH: core_rsp_data[i] = rsp_data_shifted[i][15] ? (rsp_data_shifted[i] | 32'hFFFF0000) : (rsp_data_shifted[i] & 32'h0000FFFF);
+                `BYTE_EN_UB: core_rsp_data[i] = (rsp_data_shifted[i] & 32'h000000FF);      
+                `BYTE_EN_UH: core_rsp_data[i] = (rsp_data_shifted[i] & 32'h0000FFFF);
+                default    : core_rsp_data[i] = rsp_data_shifted[i];
+            endcase
+        end
+    end   
+
+    assign mem_wb_if.valid = dcache_rsp_if.core_rsp_valid;
+    assign mem_wb_if.data  = core_rsp_data;
+
+    // Can't accept new response
+    assign dcache_rsp_if.core_rsp_ready = ~no_slot_mem;    
+    
 `ifdef DBG_PRINT_CORE_DCACHE
    always_ff @(posedge clk) begin
-        if (dcache_req_if.core_req_ready && (| dcache_req_if.core_req_valid)) begin
-            $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, use_valid, use_address, dcache_req_if.core_req_tag, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, use_store_data);
+        if ((| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready) begin
+            $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);
         end
-        if (dcache_rsp_if.core_rsp_ready && (| dcache_rsp_if.core_rsp_valid)) begin
-            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, dcache_rsp_if.core_rsp_tag, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
+        if ((| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready) begin
+            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end
 `endif
     
 endmodule
-
-
-

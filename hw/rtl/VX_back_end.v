@@ -25,14 +25,6 @@ module VX_back_end #(
     output wire            ebreak
 );
 
-    VX_wb_if wb_temp_if();
-    assign writeback_if.wb        = wb_temp_if.wb;
-    assign writeback_if.rd        = wb_temp_if.rd;
-    assign writeback_if.data      = wb_temp_if.data;
-    assign writeback_if.valid     = wb_temp_if.valid;
-    assign writeback_if.warp_num  = wb_temp_if.warp_num;
-    assign writeback_if.pc        = wb_temp_if.pc;
-
     wire                no_slot_mem;
     wire                no_slot_exec;
 
@@ -57,7 +49,7 @@ module VX_back_end #(
         .clk                (clk),
         .reset              (reset),
         .schedule_delay     (schedule_delay),
-        .writeback_if       (wb_temp_if),
+        .writeback_if       (writeback_if),
         .bckE_req_if        (bckE_req_if),
         // New
         .exec_unit_req_if   (exec_unit_req_if),
@@ -109,7 +101,7 @@ module VX_back_end #(
         .reset          (reset),
         .no_slot_csr    (no_slot_csr),
         .csr_req_if     (csr_req_if),
-        .writeback_if   (wb_temp_if),
+        .writeback_if   (writeback_if),
         .csr_wb_if      (csr_wb_if),
         .stall_gpr_csr  (stall_gpr_csr)
     );
@@ -121,7 +113,7 @@ module VX_back_end #(
         .inst_exec_wb_if(inst_exec_wb_if),
         .csr_wb_if      (csr_wb_if),
 
-        .writeback_if   (wb_temp_if),
+        .writeback_if   (writeback_if),
         .no_slot_mem    (no_slot_mem),
         .no_slot_exec   (no_slot_exec),
         .no_slot_csr    (no_slot_csr)

@@ -115,7 +115,7 @@ module VX_decode(
     assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
     assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
 
-    assign join_if.is_join       = is_join;
+    assign join_if.is_join       = is_join && (| in_valid);
     assign join_if.join_warp_num = in_warp_num;
 
     assign frE_to_bckE_req_if.is_wspawn  = is_wspawn;

@@ -20,23 +20,23 @@ module VX_writeback (
     output wire         no_slot_csr
 );
 
-    VX_wb_if    writeback_tmp_if();
+    VX_wb_if writeback_tmp_if();
 
     wire exec_wb = (inst_exec_wb_if.wb != 0) && (| inst_exec_wb_if.valid);
     wire mem_wb  = (mem_wb_if.wb       != 0) && (| mem_wb_if.valid);
     wire csr_wb  = (csr_wb_if.wb       != 0) && (| csr_wb_if.valid);
 
     assign no_slot_mem  = mem_wb && (exec_wb || csr_wb);
-    assign no_slot_csr  = csr_wb && (exec_wb);
+    assign no_slot_csr  = csr_wb && exec_wb;    
     assign no_slot_exec = 0;
 
     assign writeback_tmp_if.data     = exec_wb ? inst_exec_wb_if.data :
                                        csr_wb  ? csr_wb_if.data       :
-                                       mem_wb  ? mem_wb_if.data      :
+                                       mem_wb  ? mem_wb_if.data       :
                                                  0;
 
     assign writeback_tmp_if.valid    = exec_wb ? inst_exec_wb_if.valid :
-                                       csr_wb  ? csr_wb_if.valid          :
+                                       csr_wb  ? csr_wb_if.valid       :
                                        mem_wb  ? mem_wb_if.valid       :
                                                  0;    
 
@@ -51,13 +51,13 @@ module VX_writeback (
                                                  0;   
 
     assign writeback_tmp_if.warp_num = exec_wb ? inst_exec_wb_if.warp_num :
-                                       csr_wb  ? csr_wb_if.warp_num          :
+                                       csr_wb  ? csr_wb_if.warp_num       :
                                        mem_wb  ? mem_wb_if.warp_num       :
                                                  0;   
 
     assign writeback_tmp_if.pc       = exec_wb ? inst_exec_wb_if.pc  :
-                                       csr_wb  ? 32'hdeadbeef                :
-                                       mem_wb  ? mem_wb_if.pc         :
+                                       csr_wb  ? 32'hdeadbeef        :
+                                       mem_wb  ? mem_wb_if.pc        :
                                                  32'hdeadbeef;
 
     wire zero = 0;
