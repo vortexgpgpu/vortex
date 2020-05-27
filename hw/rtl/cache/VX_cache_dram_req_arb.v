@@ -23,13 +23,15 @@ module VX_cache_dram_req_arb #(
     
     // Writeback Request    
     input  wire [NUM_BANKS-1:0]                 per_bank_dram_wb_req_valid,
+    input  wire [NUM_BANKS-1:0][BANK_LINE_SIZE-1:0] per_bank_dram_wb_req_byteen,
     input  wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0] per_bank_dram_wb_req_addr,
     input  wire [NUM_BANKS-1:0][`BANK_LINE_WIDTH-1:0] per_bank_dram_wb_req_data,
     output wire [NUM_BANKS-1:0]                 per_bank_dram_wb_req_ready,
     
     // Merged Request
-    output wire                                 dram_req_read,
-    output wire                                 dram_req_write,    
+    output wire                                 dram_req_valid,
+    output wire                                 dram_req_rw,    
+    output wire [BANK_LINE_SIZE-1:0]            dram_req_byteen,
     output wire [`DRAM_ADDR_WIDTH-1:0]          dram_req_addr,
     output wire [`BANK_LINE_WIDTH-1:0]          dram_req_data,
 
@@ -54,7 +56,7 @@ module VX_cache_dram_req_arb #(
         .clk          (clk),
         .reset        (reset),
 
-        .dram_req     (dram_req_read),
+        .dram_req     (dram_req_valid && ~dram_req_rw),
         .dram_req_addr(dram_req_addr),
 
         .pref_pop     (pref_pop),
@@ -106,10 +108,9 @@ module VX_cache_dram_req_arb #(
         assign per_bank_dram_wb_req_ready[i] = dram_req_ready && (dwb_bank == `BANK_BITS'(i));
     end
 
-    wire   dram_req_valid  = dwb_valid || dfqq_req || pref_pop;
-
-    assign dram_req_read   = ((dfqq_req && !dwb_valid) || pref_pop) && dram_req_valid;
-    assign dram_req_write  = dwb_valid && dram_req_valid;    
+    assign dram_req_valid  = dwb_valid || dfqq_req || pref_pop;    
+    assign dram_req_rw     = dwb_valid;    
+    assign dram_req_byteen = dwb_valid ? per_bank_dram_wb_req_byteen[dwb_bank] : {BANK_LINE_SIZE{1'b1}};    
     assign dram_req_addr   = dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : (dfqq_req ? dfqq_req_addr : pref_addr);
     assign {dram_req_data} = dwb_valid ? per_bank_dram_wb_req_data[dwb_bank] : 0;
 

@@ -5,55 +5,57 @@ module Vortex_Cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
     // Clock
-    input  wire                         clk,
-    input  wire                         reset,
+    input  wire                             clk,
+    input  wire                             reset,
 
     // DRAM request
-    output wire                         dram_req_read,
-    output wire                         dram_req_write,    
-    output wire[`L2DRAM_ADDR_WIDTH-1:0] dram_req_addr,
-    output wire[`L2DRAM_LINE_WIDTH-1:0] dram_req_data,
-    output wire[`L2DRAM_TAG_WIDTH-1:0]  dram_req_tag,
-    input  wire                         dram_req_ready,
+    output wire                             dram_req_valid,
+    output wire                             dram_req_rw,    
+    output wire[`L2DRAM_BYTEEN_WIDTH-1:0]   dram_req_byteen,    
+    output wire[`L2DRAM_ADDR_WIDTH-1:0]     dram_req_addr,
+    output wire[`L2DRAM_LINE_WIDTH-1:0]     dram_req_data,
+    output wire[`L2DRAM_TAG_WIDTH-1:0]      dram_req_tag,
+    input  wire                             dram_req_ready,
 
-    // DRAM response  
-    input  wire                         dram_rsp_valid,
-    input  wire[`L2DRAM_LINE_WIDTH-1:0] dram_rsp_data,
-    input  wire[`L2DRAM_TAG_WIDTH-1:0]  dram_rsp_tag,
-    output wire                         dram_rsp_ready,
+    // DRAM response    
+    input wire                              dram_rsp_valid,        
+    input wire[`L2DRAM_LINE_WIDTH-1:0]      dram_rsp_data,
+    input wire[`L2DRAM_TAG_WIDTH-1:0]       dram_rsp_tag,
+    output wire                             dram_rsp_ready,
 
     // Snoop request
-    input wire                          snp_req_valid,
-    input wire[`L2DRAM_ADDR_WIDTH-1:0]  snp_req_addr,
-    input wire[`L2SNP_TAG_WIDTH-1:0]    snp_req_tag,
-    output wire                         snp_req_ready, 
+    input wire                              snp_req_valid,
+    input wire[`L2DRAM_ADDR_WIDTH-1:0]      snp_req_addr,
+    input wire[`L2SNP_TAG_WIDTH-1:0]        snp_req_tag,
+    output wire                             snp_req_ready, 
 
     // Snoop response
-    output wire                         snp_rsp_valid,
-    output wire[`L2SNP_TAG_WIDTH-1:0]   snp_rsp_tag,
-    input wire                          snp_rsp_ready,     
+    output wire                             snp_rsp_valid,
+    output wire[`L2SNP_TAG_WIDTH-1:0]       snp_rsp_tag,
+    input wire                              snp_rsp_ready,     
 
     // I/O request
-    output wire                         io_req_read,
-    output wire                         io_req_write,    
-    output wire[31:0]                   io_req_addr,
-    output wire[31:0]                   io_req_data,
-    output wire[`BYTE_EN_BITS-1:0]      io_req_byteen,
-    output wire[`CORE_REQ_TAG_WIDTH-1:0] io_req_tag,
-    input wire                          io_req_ready,
+    output wire                             io_req_valid,
+    output wire                             io_req_rw,  
+    output wire[`DCORE_BYTEEN_WIDTH-1:0]    io_req_byteen,  
+    output wire[`DCORE_ADDR_WIDTH-1:0]      io_req_addr,
+    output wire[31:0]                       io_req_data,    
+    output wire[`DCORE_TAG_WIDTH-1:0]       io_req_tag,    
+    input wire                              io_req_ready,
 
     // I/O response
-    input wire                          io_rsp_valid,
-    input wire[31:0]                    io_rsp_data,
-    input wire[`CORE_REQ_TAG_WIDTH-1:0] io_rsp_tag,    
-    output wire                         io_rsp_ready,
+    input wire                              io_rsp_valid,
+    input wire[31:0]                        io_rsp_data,
+    input wire[`DCORE_TAG_WIDTH-1:0]        io_rsp_tag,
+    output wire                             io_rsp_ready,
 
     // Status
-    output wire                         busy, 
-    output wire                         ebreak
+    output wire                             busy, 
+    output wire                             ebreak
 );    
-    wire[`NUM_CORES-1:0]                        per_core_D_dram_req_read;
-    wire[`NUM_CORES-1:0]                        per_core_D_dram_req_write;    
+    wire[`NUM_CORES-1:0]                        per_core_D_dram_req_valid;
+    wire[`NUM_CORES-1:0]                        per_core_D_dram_req_rw;    
+    wire[`NUM_CORES-1:0][`DDRAM_BYTEEN_WIDTH-1:0] per_core_D_dram_req_byteen;    
     wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0] per_core_D_dram_req_addr;
     wire[`NUM_CORES-1:0][`DDRAM_LINE_WIDTH-1:0] per_core_D_dram_req_data;
     wire[`NUM_CORES-1:0][`DDRAM_TAG_WIDTH-1:0]  per_core_D_dram_req_tag;
@@ -64,7 +66,9 @@ module Vortex_Cluster #(
     wire[`NUM_CORES-1:0][`DDRAM_TAG_WIDTH-1:0]  per_core_D_dram_rsp_tag;
     wire[`NUM_CORES-1:0]                        per_core_D_dram_rsp_ready;
 
-    wire[`NUM_CORES-1:0]                        per_core_I_dram_req_read;  
+    wire[`NUM_CORES-1:0]                        per_core_I_dram_req_valid;  
+    wire[`NUM_CORES-1:0]                        per_core_I_dram_req_rw; 
+    wire[`NUM_CORES-1:0][`IDRAM_BYTEEN_WIDTH-1:0] per_core_I_dram_req_byteen;    
     wire[`NUM_CORES-1:0][`IDRAM_ADDR_WIDTH-1:0] per_core_I_dram_req_addr;
     wire[`NUM_CORES-1:0][`IDRAM_LINE_WIDTH-1:0] per_core_I_dram_req_data;
     wire[`NUM_CORES-1:0][`IDRAM_TAG_WIDTH-1:0]  per_core_I_dram_req_tag;
@@ -85,12 +89,12 @@ module Vortex_Cluster #(
     wire[`NUM_CORES-1:0]                        per_core_snp_rsp_ready;
 
 `IGNORE_WARNINGS_BEGIN
-    wire[`NUM_CORES-1:0]                        per_core_io_req_read;
-    wire[`NUM_CORES-1:0]                        per_core_io_req_write;
-    wire[`NUM_CORES-1:0][31:0]                  per_core_io_req_addr;
-    wire[`NUM_CORES-1:0][31:0]                  per_core_io_req_data;
-    wire[`NUM_CORES-1:0][`BYTE_EN_BITS-1:0]     per_core_io_req_byteen;
-    wire[`NUM_CORES-1:0][`CORE_REQ_TAG_WIDTH-1:0] per_core_io_req_tag;
+    wire[`NUM_CORES-1:0]                        per_core_io_req_valid;
+    wire[`NUM_CORES-1:0]                        per_core_io_req_rw;
+    wire[`NUM_CORES-1:0][`DCORE_BYTEEN_WIDTH-1:0] per_core_io_req_byteen;
+    wire[`NUM_CORES-1:0][`DCORE_ADDR_WIDTH-1:0] per_core_io_req_addr;
+    wire[`NUM_CORES-1:0][31:0]                  per_core_io_req_data;    
+    wire[`NUM_CORES-1:0][`DCORE_TAG_WIDTH-1:0] per_core_io_req_tag;
     
     wire[`NUM_CORES-1:0]                        per_core_io_rsp_ready;
 `IGNORE_WARNINGS_END
@@ -105,8 +109,9 @@ module Vortex_Cluster #(
         ) vortex_core (
             .clk                (clk),
             .reset              (reset),
-            .D_dram_req_read    (per_core_D_dram_req_read   [i]),
-            .D_dram_req_write   (per_core_D_dram_req_write  [i]),                
+            .D_dram_req_valid   (per_core_D_dram_req_valid  [i]),
+            .D_dram_req_rw      (per_core_D_dram_req_rw     [i]),                
+            .D_dram_req_byteen  (per_core_D_dram_req_byteen [i]),                
             .D_dram_req_addr    (per_core_D_dram_req_addr   [i]),
             .D_dram_req_data    (per_core_D_dram_req_data   [i]),
             .D_dram_req_tag     (per_core_D_dram_req_tag    [i]),
@@ -116,8 +121,9 @@ module Vortex_Cluster #(
             .D_dram_rsp_tag     (per_core_D_dram_rsp_tag    [i]),
             .D_dram_rsp_ready   (per_core_D_dram_rsp_ready  [i]),
 
-            .I_dram_req_read    (per_core_I_dram_req_read   [i]),
-            `UNUSED_PIN (I_dram_req_write),                            
+            .I_dram_req_valid   (per_core_I_dram_req_valid  [i]),
+            .I_dram_req_rw      (per_core_I_dram_req_rw     [i]),
+            .I_dram_req_byteen  (per_core_I_dram_req_byteen [i]),
             .I_dram_req_addr    (per_core_I_dram_req_addr   [i]),                
             .I_dram_req_data    (per_core_I_dram_req_data   [i]),
             .I_dram_req_tag     (per_core_I_dram_req_tag    [i]),                
@@ -136,11 +142,11 @@ module Vortex_Cluster #(
             .snp_rsp_tag        (per_core_snp_rsp_tag       [i]),
             .snp_rsp_ready      (per_core_snp_rsp_ready     [i]),
 
-            .io_req_read        (per_core_io_req_read       [i]),
-            .io_req_write       (per_core_io_req_write      [i]),
-            .io_req_addr        (per_core_io_req_addr       [i]),
-            .io_req_data        (per_core_io_req_data       [i]),
+            .io_req_valid       (per_core_io_req_valid      [i]),
+            .io_req_rw          (per_core_io_req_rw         [i]),
             .io_req_byteen      (per_core_io_req_byteen     [i]),
+            .io_req_addr        (per_core_io_req_addr       [i]),
+            .io_req_data        (per_core_io_req_data       [i]),            
             .io_req_tag         (per_core_io_req_tag        [i]),
             .io_req_ready       (io_req_ready),
 
@@ -154,8 +160,9 @@ module Vortex_Cluster #(
         );
     end   
 
-    assign io_req_read   = per_core_io_req_read[0];
-    assign io_req_write  = per_core_io_req_write[0];
+    assign io_req_valid  = per_core_io_req_valid[0];
+    assign io_req_rw     = per_core_io_req_rw[0];
+    assign io_req_byteen = per_core_io_req_byteen[0];
     assign io_req_addr   = per_core_io_req_addr[0];
     assign io_req_data   = per_core_io_req_data[0];
     assign io_req_byteen = per_core_io_req_byteen[0];
@@ -171,9 +178,9 @@ module Vortex_Cluster #(
         // L2 Cache ///////////////////////////////////////////////////////////
 
         wire[`L2NUM_REQUESTS-1:0]                           l2_core_req_valid;
-        wire[`L2NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]        l2_core_req_write;
-        wire[`L2NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]        l2_core_req_read;
-        wire[`L2NUM_REQUESTS-1:0][31:0]                     l2_core_req_addr;
+        wire[`L2NUM_REQUESTS-1:0]                           l2_core_req_rw;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_BYTEEN_WIDTH-1:0]  l2_core_req_byteen;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_ADDR_WIDTH-1:0]    l2_core_req_addr;
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]     l2_core_req_tag;
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0]    l2_core_req_data;
         wire                                                l2_core_req_ready;
@@ -193,17 +200,17 @@ module Vortex_Cluster #(
         wire[`NUM_CORES-1:0]                                l2_snp_fwdin_ready;
 
         for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
-            assign l2_core_req_valid [i]   = (per_core_D_dram_req_read[(i/2)] | per_core_D_dram_req_write[(i/2)]);
-            assign l2_core_req_valid [i+1] = per_core_I_dram_req_read[(i/2)];
+            assign l2_core_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
+            assign l2_core_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
 
-            assign l2_core_req_read  [i]   = per_core_D_dram_req_read[(i/2)] ? `BYTE_EN_LW : `BYTE_EN_NO;
-            assign l2_core_req_read  [i+1] = per_core_I_dram_req_read[(i/2)] ? `BYTE_EN_LW : `BYTE_EN_NO;
+            assign l2_core_req_rw  [i]   = per_core_D_dram_req_rw[(i/2)];
+            assign l2_core_req_rw  [i+1] = per_core_I_dram_req_rw[(i/2)];
             
-            assign l2_core_req_write [i]   = per_core_D_dram_req_write[(i/2)] ? `BYTE_EN_LW : `BYTE_EN_NO;
-            assign l2_core_req_write [i+1] = `BYTE_EN_NO;
+            assign l2_core_req_byteen [i]   = per_core_D_dram_req_byteen[(i/2)];
+            assign l2_core_req_byteen [i+1] = per_core_I_dram_req_byteen[(i/2)];
 
-            assign l2_core_req_addr  [i]   = {per_core_D_dram_req_addr[(i/2)], {`LOG2UP(`DBANK_LINE_SIZE){1'b0}}};
-            assign l2_core_req_addr  [i+1] = {per_core_I_dram_req_addr[(i/2)], {`LOG2UP(`IBANK_LINE_SIZE){1'b0}}};
+            assign l2_core_req_addr  [i]   = per_core_D_dram_req_addr[(i/2)];
+            assign l2_core_req_addr  [i+1] = per_core_I_dram_req_addr[(i/2)];
 
             assign l2_core_req_data  [i]   = per_core_D_dram_req_data[(i/2)];
             assign l2_core_req_data  [i+1] = per_core_I_dram_req_data[(i/2)];
@@ -243,7 +250,7 @@ module Vortex_Cluster #(
             .WORD_SIZE              (`L2WORD_SIZE),
             .NUM_REQUESTS           (`L2NUM_REQUESTS),
             .STAGE_1_CYCLES         (`L2STAGE_1_CYCLES),
-            .REQQ_SIZE              (`L2REQQ_SIZE),
+            .CREQ_SIZE              (`L2CREQ_SIZE),
             .MRVQ_SIZE              (`L2MRVQ_SIZE),
             .DFPQ_SIZE              (`L2DFPQ_SIZE),
             .SNRQ_SIZE              (`L2SNRQ_SIZE),
@@ -267,8 +274,8 @@ module Vortex_Cluster #(
 
             // Core request
             .core_req_valid     (l2_core_req_valid),
-            .core_req_read      (l2_core_req_read),
-            .core_req_write     (l2_core_req_write),
+            .core_req_rw        (l2_core_req_rw),
+            .core_req_byteen    (l2_core_req_byteen),
             .core_req_addr      (l2_core_req_addr),
             .core_req_data      (l2_core_req_data),  
             .core_req_tag       (l2_core_req_tag),  
@@ -281,8 +288,9 @@ module Vortex_Cluster #(
             .core_rsp_ready     (l2_core_rsp_ready),
 
             // DRAM request
-            .dram_req_read      (dram_req_read),
-            .dram_req_write     (dram_req_write),        
+            .dram_req_valid     (dram_req_valid),
+            .dram_req_rw        (dram_req_rw),        
+            .dram_req_byteen    (dram_req_byteen),
             .dram_req_addr      (dram_req_addr),
             .dram_req_data      (dram_req_data),
             .dram_req_tag       (dram_req_tag),
@@ -319,8 +327,9 @@ module Vortex_Cluster #(
 
     end else begin
     
-        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_read;
-        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_write;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_valid;
+        wire[`L2NUM_REQUESTS-1:0]                        arb_core_req_rw;
+        wire[`L2NUM_REQUESTS-1:0][`DDRAM_BYTEEN_WIDTH-1:0] arb_core_req_byteen;
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_ADDR_WIDTH-1:0] arb_core_req_addr;
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_TAG_WIDTH-1:0]  arb_core_req_tag;
         wire[`L2NUM_REQUESTS-1:0][`DDRAM_LINE_WIDTH-1:0] arb_core_req_data;
@@ -341,11 +350,14 @@ module Vortex_Cluster #(
         wire[`NUM_CORES-1:0]                             arb_snp_fwdin_ready;
 
         for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin            
-            assign arb_core_req_read  [i]   = per_core_D_dram_req_read[(i/2)];
-            assign arb_core_req_read  [i+1] = per_core_I_dram_req_read[(i/2)];
+            assign arb_core_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
+            assign arb_core_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
 
-            assign arb_core_req_write [i]   = per_core_D_dram_req_write[(i/2)];
-            assign arb_core_req_write [i+1] = 0;
+            assign arb_core_req_rw    [i]   = per_core_D_dram_req_rw[(i/2)];
+            assign arb_core_req_rw    [i+1] = per_core_I_dram_req_rw[(i/2)];
+
+            assign arb_core_req_byteen[i]   = per_core_D_dram_req_byteen[(i/2)];
+            assign arb_core_req_byteen[i+1] = per_core_I_dram_req_byteen[(i/2)];
 
             assign arb_core_req_addr  [i]   = per_core_D_dram_req_addr[(i/2)];
             assign arb_core_req_addr  [i+1] = per_core_I_dram_req_addr[(i/2)];
@@ -421,8 +433,9 @@ module Vortex_Cluster #(
             .reset              (reset),
 
             // Core request
-            .core_req_read      (arb_core_req_read),
-            .core_req_write     (arb_core_req_write),
+            .core_req_valid     (arb_core_req_valid),
+            .core_req_rw        (arb_core_req_rw),
+            .core_req_byteen    (arb_core_req_byteen),
             .core_req_addr      (arb_core_req_addr),
             .core_req_data      (arb_core_req_data),  
             .core_req_tag       (arb_core_req_tag),  
@@ -435,8 +448,9 @@ module Vortex_Cluster #(
             .core_rsp_ready     (arb_core_rsp_ready),
 
             // DRAM request
-            .dram_req_read      (dram_req_read),
-            .dram_req_write     (dram_req_write),        
+            .dram_req_valid     (dram_req_valid),
+            .dram_req_rw        (dram_req_rw),        
+            .dram_req_byteen    (dram_req_byteen),        
             .dram_req_addr      (dram_req_addr),
             .dram_req_data      (dram_req_data),
             .dram_req_tag       (dram_req_tag),

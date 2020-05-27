@@ -143,7 +143,6 @@ public:
         return 0;
     }
 
-
 private:
 
     size_t mem_allocation_;     

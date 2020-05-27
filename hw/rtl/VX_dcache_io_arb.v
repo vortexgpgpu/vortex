@@ -22,15 +22,15 @@ module VX_dcache_io_arb (
     VX_cache_core_rsp_if    core_rsp_if
 );
     assign dcache_core_req_if.core_req_valid = core_req_if.core_req_valid & {`NUM_THREADS{~io_select}};        
-    assign dcache_core_req_if.core_req_read  = core_req_if.core_req_read;
-    assign dcache_core_req_if.core_req_write = core_req_if.core_req_write;
+    assign dcache_core_req_if.core_req_rw    = core_req_if.core_req_rw;
+    assign dcache_core_req_if.core_req_byteen= core_req_if.core_req_byteen;
     assign dcache_core_req_if.core_req_addr  = core_req_if.core_req_addr;
     assign dcache_core_req_if.core_req_data  = core_req_if.core_req_data;
     assign dcache_core_req_if.core_req_tag   = core_req_if.core_req_tag;    
 
     assign io_core_req_if.core_req_valid = core_req_if.core_req_valid & {`NUM_THREADS{io_select}};        
-    assign io_core_req_if.core_req_read  = core_req_if.core_req_read;
-    assign io_core_req_if.core_req_write = core_req_if.core_req_write;
+    assign io_core_req_if.core_req_rw    = core_req_if.core_req_rw;
+    assign io_core_req_if.core_req_byteen= core_req_if.core_req_byteen;
     assign io_core_req_if.core_req_addr  = core_req_if.core_req_addr;
     assign io_core_req_if.core_req_data  = core_req_if.core_req_data;
     assign io_core_req_if.core_req_tag   = core_req_if.core_req_tag;    

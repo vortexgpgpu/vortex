@@ -10,6 +10,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifndef NDEBUG
+    `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
+                           x \
+                           /* verilator lint_on UNUSED */
+`else
+    `define DEBUG_BLOCK(x)
+`endif
+
 `define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
 
 `define DEBUG_END   /* verilator lint_on UNUSED */     
@@ -44,6 +52,8 @@
 `define MIN(x, y)   ((x < y) ? (x) : (y))
 `define MAX(x, y)   ((x > y) ? (x) : (y))
 
+`define UP(x)       (((x) > 0) ? x : 1)
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define NW_BITS     (`LOG2UP(`NUM_WARPS))
@@ -61,11 +71,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define BYTE_EN_NO      3'h7 
-`define BYTE_EN_LB      3'h0 
-`define BYTE_EN_LH      3'h1
-`define BYTE_EN_LW      3'h2
-`define BYTE_EN_HB      3'h4
-`define BYTE_EN_HH      3'h5
+`define BYTE_EN_SB      3'h0 
+`define BYTE_EN_SH      3'h1
+`define BYTE_EN_SW      3'h2
+`define BYTE_EN_UB      3'h4
+`define BYTE_EN_UH      3'h5
 `define BYTE_EN_BITS    3
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -126,22 +136,38 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Core request tag width    pc,  wb, rd,  warp_num
-`define CORE_REQ_TAG_WIDTH  (32 + 2 + 5 + `NW_BITS)
-
-// TAG sharing enable        rd,  warp_num
-`define CORE_TAG_ID_BITS    (5 + `NW_BITS)
+`ifndef NDEBUG
+                                  // pc,  wb, rd, warp_num
+`define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 2 + 5 + `NW_BITS)
+`else
+`define DEBUG_CORE_REQ_MDATA_WIDTH  0
+`endif
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
 // Cache ID
 `define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
+
+// Core request address bits
+`define DCORE_ADDR_WIDTH    (32-`CLOG2(`DWORD_SIZE))
+
+// Core request byte enable bits
+`define DCORE_BYTEEN_WIDTH  `DWORD_SIZE
+
+// TAG sharing enable       
+`define DCORE_TAG_ID_BITS   `LOG2UP(`DCREQ_SIZE)
+
+// Core request tag bits
+`define DCORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `DCORE_TAG_ID_BITS)
  
 // DRAM request data bits
 `define DDRAM_LINE_WIDTH    (`DBANK_LINE_SIZE * 8)
 
 // DRAM request address bits
 `define DDRAM_ADDR_WIDTH    (32 - `CLOG2(`DBANK_LINE_SIZE))
+
+// DRAM byte enable bits
+`define DDRAM_BYTEEN_WIDTH  `DBANK_LINE_SIZE
 
 // DRAM request tag bits
 `define DDRAM_TAG_WIDTH     `DDRAM_ADDR_WIDTH
@@ -157,11 +183,26 @@
 // Cache ID
 `define ICACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 1)
 
+// Core request address bits
+`define ICORE_ADDR_WIDTH    (32-`CLOG2(`IWORD_SIZE))
+
+// Core request byte enable bits
+`define ICORE_BYTEEN_WIDTH `DWORD_SIZE
+
+// TAG sharing enable       
+`define ICORE_TAG_ID_BITS   `LOG2UP(`ICREQ_SIZE)
+
+// Core request tag bits
+`define ICORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `ICORE_TAG_ID_BITS)
+
 // DRAM request data bits
 `define IDRAM_LINE_WIDTH    (`IBANK_LINE_SIZE * 8)
 
 // DRAM request address bits
 `define IDRAM_ADDR_WIDTH    (32 - `CLOG2(`IBANK_LINE_SIZE))
+
+// DRAM byte enable bits
+`define IDRAM_BYTEEN_WIDTH  `IBANK_LINE_SIZE
 
 // DRAM request tag bits
 `define IDRAM_TAG_WIDTH     `IDRAM_ADDR_WIDTH
@@ -174,8 +215,8 @@
 // Cache ID
 `define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 3)
 
-// DRAM request data bits
-`define SDRAM_LINE_WIDTH    (`SBANK_LINE_SIZE * 8)
+// Number of Word requests per cycle {1, 2, 4, 8, ...}
+`define SNUM_REQUESTS       `NUM_THREADS
 
 // DRAM request address bits
 `define SDRAM_ADDR_WIDTH    (32 - `CLOG2(`SBANK_LINE_SIZE))
@@ -197,11 +238,14 @@
 // DRAM request address bits
 `define L2DRAM_ADDR_WIDTH   (32 - `CLOG2(`L2BANK_LINE_SIZE))
 
+// DRAM byte enable bits
+`define L2DRAM_BYTEEN_WIDTH (`L2_ENABLE ? `L2BANK_LINE_SIZE : `DDRAM_BYTEEN_WIDTH)
+
 // DRAM request tag bits
 `define L2DRAM_TAG_WIDTH    (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
 
 // Snoop request tag bits
-`define L2SNP_TAG_WIDTH     ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
+`define L2SNP_TAG_WIDTH     (`L3_ENABLE ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define L2NUM_REQUESTS      (2*`NUM_CORES)
@@ -217,8 +261,11 @@
 // DRAM request address bits
 `define L3DRAM_ADDR_WIDTH   (32 - `CLOG2(`L3BANK_LINE_SIZE))
 
+// DRAM byte enable bits
+`define L3DRAM_BYTEEN_WIDTH (`L3_ENABLE ? `L3BANK_LINE_SIZE : `L2DRAM_BYTEEN_WIDTH)
+
 // DRAM request tag bits
-`define L3DRAM_TAG_WIDTH    ((`NUM_CLUSTERS > 1) ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
+`define L3DRAM_TAG_WIDTH    (`L3_ENABLE ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
 
 // Snoop request tag bits
 `define L3SNP_TAG_WIDTH     16 

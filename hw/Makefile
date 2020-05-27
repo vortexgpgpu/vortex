@@ -25,7 +25,7 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 				  -DDBG_PRINT_DRAM        \
 				  -DDBG_PRINT_OPAE
 
-#DBG_PRINT=$(DBG_PRINT_FLAGSs)
+DBG_PRINT=$(DBG_PRINT_FLAGS)
 
 INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cache -I./rtl/simulate
 
@@ -44,7 +44,7 @@ gen-s: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG'
 
 gen-sd: build_config
-	verilator $(VF) -cc Vortex_Socket.v $(DBG_PRINT) -CFLAGS '$(CF) -g -O0  $(DBG)' --trace $(DBG)
+	verilator $(VF) -cc Vortex_Socket.v -CFLAGS '$(CF) -g -O0  $(DBG)' --trace $(DBG)
 
 gen-st: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
@@ -53,7 +53,7 @@ gen-m: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md: build_config
-	verilator $(VF) -cc Vortex_Socket.v $(MULTICORE) $(DBG_PRINT) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
+	verilator $(VF) -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
 
 gen-mt: build_config
 	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)

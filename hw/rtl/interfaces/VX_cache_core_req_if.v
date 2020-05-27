@@ -10,13 +10,13 @@ interface VX_cache_core_req_if #(
     parameter CORE_TAG_ID_BITS = 0
 ) ();
 
-    wire [NUM_REQUESTS-1:0]                     core_req_valid;
-    wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  core_req_read;
-    wire [NUM_REQUESTS-1:0][`BYTE_EN_BITS-1:0]  core_req_write;
-    wire [NUM_REQUESTS-1:0][31:0]               core_req_addr;
-    wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    core_req_data;
-    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_req_tag;    
-    wire                                        core_req_ready;
+    wire [NUM_REQUESTS-1:0]                             core_req_valid;
+    wire [NUM_REQUESTS-1:0]                             core_req_rw;
+    wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              core_req_byteen;
+    wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       core_req_addr;
+    wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]            core_req_data;
+    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]  core_req_tag;    
+    wire                                                core_req_ready;
 
 endinterface
 

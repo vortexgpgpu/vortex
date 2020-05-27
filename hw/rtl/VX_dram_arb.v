@@ -10,8 +10,9 @@ module VX_dram_arb #(
     input wire reset,
 
     // Core request    
-    input wire [NUM_REQUESTS-1:0]                       core_req_read,
-    input wire [NUM_REQUESTS-1:0]                       core_req_write,
+    input wire [NUM_REQUESTS-1:0]                       core_req_valid,
+    input wire [NUM_REQUESTS-1:0]                       core_req_rw,
+    input wire [NUM_REQUESTS-1:0][BANK_LINE_SIZE-1:0]   core_req_byteen,
     input wire [NUM_REQUESTS-1:0][`DRAM_ADDR_WIDTH-1:0] core_req_addr,
     input wire [NUM_REQUESTS-1:0][`BANK_LINE_WIDTH-1:0] core_req_data,
     input wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0]   core_req_tag,
@@ -24,8 +25,9 @@ module VX_dram_arb #(
     input  wire [NUM_REQUESTS-1:0]                      core_rsp_ready,   
 
     // DRAM request
-    output wire                        dram_req_read,
-    output wire                        dram_req_write,    
+    output wire                        dram_req_valid,
+    output wire                        dram_req_rw,    
+    output wire [BANK_LINE_SIZE-1:0]   dram_req_byteen,
     output wire [`DRAM_ADDR_WIDTH-1:0] dram_req_addr,
     output wire [`BANK_LINE_WIDTH-1:0] dram_req_data,
     output wire [DRAM_TAG_WIDTH-1:0]   dram_req_tag,
@@ -47,8 +49,9 @@ module VX_dram_arb #(
         end
     end
 
-    assign dram_req_read  = core_req_read [bus_req_sel];
-    assign dram_req_write = core_req_write [bus_req_sel];
+    assign dram_req_valid = core_req_valid [bus_req_sel];
+    assign dram_req_rw    = core_req_rw   [bus_req_sel];
+    assign dram_req_byteen= core_req_byteen [bus_req_sel];
     assign dram_req_addr  = core_req_addr [bus_req_sel];
     assign dram_req_data  = core_req_data [bus_req_sel];
     assign dram_req_tag   = {core_req_tag [bus_req_sel], (`REQS_BITS)'(bus_req_sel)};

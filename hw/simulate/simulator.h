@@ -21,7 +21,7 @@
 
 typedef struct {
   int cycles_left;  
-  unsigned *data;
+  uint8_t *data;
   unsigned tag;
 } dram_req_t;
 
@@ -31,6 +31,9 @@ public:
   Simulator();
   virtual ~Simulator();
 
+  void load_bin(const char* program_file);
+  void load_ihex(const char* program_file);
+  
   bool is_busy();  
   void reset();
   void step();

@@ -285,7 +285,7 @@ module VX_warp_sched (
     // wire should_stall = stall || (jal && (warp_to_schedule == jal_warp_num)) || (branch_dir && (warp_to_schedule == branch_warp_num));
 
     wire should_jal = (jal && (warp_to_schedule == jal_warp_num));
-    wire should_bra = (branch_dir && (warp_to_schedule == branch_warp_num));
+    wire should_bra = (branch_valid && branch_dir && (warp_to_schedule == branch_warp_num));
 
     assign hazard = (should_jal || should_bra) && schedule;
 

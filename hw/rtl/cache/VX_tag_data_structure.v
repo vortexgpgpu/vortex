@@ -17,6 +17,7 @@ module VX_tag_data_structure #(
     input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
     output wire                             read_valid,
     output wire                             read_dirty,
+    output wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] read_dirtyb,
     output wire[`TAG_SELECT_BITS-1:0]       read_tag,
     output wire[`BANK_LINE_WIDTH-1:0]       read_data,
 
@@ -30,35 +31,41 @@ module VX_tag_data_structure #(
 );
 
     reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0][7:0] data [`BANK_LINE_COUNT-1:0];
+    reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0]    dirtyb [`BANK_LINE_COUNT-1:0];
     reg [`TAG_SELECT_BITS-1:0]                      tag [`BANK_LINE_COUNT-1:0];
     reg                                           valid [`BANK_LINE_COUNT-1:0];
     reg                                           dirty [`BANK_LINE_COUNT-1:0];   
 
-    assign read_valid = valid [read_addr];
-    assign read_dirty = dirty [read_addr];
-    assign read_tag   = tag   [read_addr];
-    assign read_data  = data  [read_addr];
+    assign read_valid  = valid  [read_addr];
+    assign read_dirty  = dirty  [read_addr];
+    assign read_dirtyb = dirtyb [read_addr];
+    assign read_tag    = tag    [read_addr];
+    assign read_data   = data   [read_addr];
 
-    wire going_to_write = (| write_enable);
+    wire do_write = (| write_enable);
 
-    integer i;
+    integer i, j;
     always @(posedge clk) begin
         if (reset) begin
             for (i = 0; i < `BANK_LINE_COUNT; i++) begin
-                valid[i] <= 0;
-                dirty[i] <= 0;
+                valid[i]  <= 0;
+                dirty[i]  <= 0;
+                dirtyb[i] <= 0;
             end
         end else if (!stall_bank_pipe) begin
-            if (going_to_write) begin
+            if (do_write) begin
                 valid[write_addr] <= 1;
                 tag  [write_addr] <= tag_index;
                 if (write_fill) begin
-                    dirty[write_addr] <= 0;
+                    dirty[write_addr]  <= 0;
+                    dirtyb[write_addr] <= 0;
                 end else begin
-                    dirty[write_addr] <= 1;
+                    dirty[write_addr]  <= 1;
+                    dirtyb[write_addr] <= dirtyb[write_addr] | write_enable;
                 end
             end else if (fill_sent) begin
-                dirty[write_addr] <= 0;
+                dirty[write_addr]  <= 0;
+                dirtyb[write_addr] <= 0;
             end
 
             if (invalidate) begin
@@ -66,10 +73,11 @@ module VX_tag_data_structure #(
             end
 
             for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-                if (write_enable[i][0]) data[write_addr][i][0] <= write_data[i * `WORD_WIDTH + 0 * 8 +: 8];
-                if (write_enable[i][1]) data[write_addr][i][1] <= write_data[i * `WORD_WIDTH + 1 * 8 +: 8];
-                if (write_enable[i][2]) data[write_addr][i][2] <= write_data[i * `WORD_WIDTH + 2 * 8 +: 8];
-                if (write_enable[i][3]) data[write_addr][i][3] <= write_data[i * `WORD_WIDTH + 3 * 8 +: 8];
+                for (j = 0; j < WORD_SIZE; j++) begin
+                    if (write_enable[i][j]) begin
+                        data[write_addr][i][j] <= write_data[i * `WORD_WIDTH + j * 8 +: 8];
+                    end
+                end
             end
         end
     end

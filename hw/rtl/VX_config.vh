@@ -28,15 +28,15 @@
 `endif
 
 `ifndef NUM_CSRS
-`define NUM_CSRS 2
+`define NUM_CSRS 1024
 `endif
 
 `ifndef STARTUP_ADDR
 `define STARTUP_ADDR 32'h80000000
 `endif
 
-`ifndef SHARED_MEM_TOP_ADDR
-`define SHARED_MEM_TOP_ADDR 8'hFE
+`ifndef SHARED_MEM_BASE_ADDR
+`define SHARED_MEM_BASE_ADDR 32'hFE000000
 `endif
 
 `ifndef STACK_BASE_ADDR
@@ -48,7 +48,7 @@
 `endif
 
 `ifndef IO_BUS_ADDR_COUT
-`define IO_BUS_ADDR_COUT 32'hFFFFFFFC
+`define IO_BUS_ADDR_COUT 30'h3FFFFFFF
 `endif
 
 `ifndef L2_ENABLE
@@ -61,7 +61,7 @@
 
 `define CSR_LTID    12'h020
 `define CSR_LWID    12'h021
-`define CSR_GTID    12'h022
+`define CSR_GTID    12'hF14 // reserved Hardware Thread ID (mhartid)
 `define CSR_GWID    12'h023
 `define CSR_GCID    12'h024
 `define CSR_NT      12'h025
@@ -101,8 +101,8 @@
 `endif
 
 // Core Request Queue Size
-`ifndef DREQQ_SIZE
-`define DREQQ_SIZE `NUM_WARPS
+`ifndef DCREQ_SIZE
+`define DCREQ_SIZE `NUM_WARPS
 `endif
 
 // Miss Reserv Queue Knob
@@ -122,7 +122,7 @@
 
 // Core Writeback Queue Size
 `ifndef DCWBQ_SIZE
-`define DCWBQ_SIZE `DREQQ_SIZE
+`define DCWBQ_SIZE `DCREQ_SIZE
 `endif
 
 // Dram Writeback Queue Size
@@ -132,7 +132,7 @@
 
 // Dram Fill Req Queue Size
 `ifndef DDFQQ_SIZE
-`define DDFQQ_SIZE `DREQQ_SIZE
+`define DDFQQ_SIZE `DCREQ_SIZE
 `endif
 
 // Prefetcher
@@ -172,13 +172,13 @@
 `endif
 
 // Core Request Queue Size
-`ifndef IREQQ_SIZE
-`define IREQQ_SIZE `NUM_WARPS
+`ifndef ICREQ_SIZE
+`define ICREQ_SIZE `NUM_WARPS
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef IMRVQ_SIZE
-`define IMRVQ_SIZE `IREQQ_SIZE
+`define IMRVQ_SIZE `ICREQ_SIZE
 `endif
 
 // Dram Fill Rsp Queue Size
@@ -188,7 +188,7 @@
 
 // Core Writeback Queue Size
 `ifndef ICWBQ_SIZE
-`define ICWBQ_SIZE `IREQQ_SIZE
+`define ICWBQ_SIZE `ICREQ_SIZE
 `endif
 
 // Dram Writeback Queue Size
@@ -198,7 +198,7 @@
 
 // Dram Fill Req Queue Size
 `ifndef IDFQQ_SIZE
-`define IDFQQ_SIZE `IREQQ_SIZE
+`define IDFQQ_SIZE `ICREQ_SIZE
 `endif
 
 // Prefetcher
@@ -238,42 +238,13 @@
 `endif
 
 // Core Request Queue Size
-`ifndef SREQQ_SIZE
-`define SREQQ_SIZE `NUM_WARPS
-`endif
-
-// Miss Reserv Queue Knob
-`ifndef SMRVQ_SIZE
-`define SMRVQ_SIZE `SREQQ_SIZE
-`endif
-
-// Dram Fill Rsp Queue Size
-`ifndef SDFPQ_SIZE
-`define SDFPQ_SIZE 0
+`ifndef SCREQ_SIZE
+`define SCREQ_SIZE `NUM_WARPS
 `endif
 
 // Core Writeback Queue Size
 `ifndef SCWBQ_SIZE
-`define SCWBQ_SIZE `SREQQ_SIZE
-`endif
-
-// Dram Writeback Queue Size
-`ifndef SDWBQ_SIZE
-`define SDWBQ_SIZE 16
-`endif
-
-// Dram Fill Req Queue Size
-`ifndef SDFQQ_SIZE
-`define SDFQQ_SIZE 16
-`endif
-
-// Prefetcher
-`ifndef SPRFQ_SIZE
-`define SPRFQ_SIZE 4
-`endif
-
-`ifndef SPRFQ_STRIDE
-`define SPRFQ_STRIDE 0
+`define SCWBQ_SIZE `SCREQ_SIZE
 `endif
 
 // ======================== L2cache Configurable Knobs ========================
@@ -304,8 +275,8 @@
 `endif
 
 // Core Request Queue Size
-`ifndef L2REQQ_SIZE
-`define L2REQQ_SIZE 32
+`ifndef L2CREQ_SIZE
+`define L2CREQ_SIZE 32
 `endif
 
 // Miss Reserv Queue Knob
@@ -325,7 +296,7 @@
 
 // Core Writeback Queue Size
 `ifndef L2CWBQ_SIZE
-`define L2CWBQ_SIZE `L2REQQ_SIZE
+`define L2CWBQ_SIZE `L2CREQ_SIZE
 `endif
 
 // Dram Writeback Queue Size
@@ -335,7 +306,7 @@
 
 // Dram Fill Req Queue Size
 `ifndef L2DFQQ_SIZE
-`define L2DFQQ_SIZE `L2REQQ_SIZE
+`define L2DFQQ_SIZE `L2CREQ_SIZE
 `endif
 
 // Prefetcher
@@ -375,13 +346,13 @@
 `endif
 
 // Core Request Queue Size
-`ifndef L3REQQ_SIZE
-`define L3REQQ_SIZE 32
+`ifndef L3CREQ_SIZE
+`define L3CREQ_SIZE 32
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef L3MRVQ_SIZE
-`define L3MRVQ_SIZE `L3REQQ_SIZE
+`define L3MRVQ_SIZE `L3CREQ_SIZE
 `endif
 
 // Dram Fill Rsp Queue Size
@@ -396,7 +367,7 @@
 
 // Core Writeback Queue Size
 `ifndef L3CWBQ_SIZE
-`define L3CWBQ_SIZE `L3REQQ_SIZE
+`define L3CWBQ_SIZE `L3CREQ_SIZE
 `endif
 
 // Dram Writeback Queue Size
@@ -406,7 +377,7 @@
 
 // Dram Fill Req Queue Size
 `ifndef L3DFQQ_SIZE
-`define L3DFQQ_SIZE `L3REQQ_SIZE
+`define L3DFQQ_SIZE `L3CREQ_SIZE
 `endif
 
 // Prefetcher
