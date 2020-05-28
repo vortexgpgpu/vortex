@@ -33,67 +33,65 @@ module VX_snp_forwarder #(
     input wire [NUM_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdin_tag,
     output wire [NUM_REQUESTS-1:0]      snp_fwdin_ready
 );
-    reg [`DRAM_ADDR_WIDTH+SNP_REQ_TAG_WIDTH-1:0] pending_reqs [SNRQ_SIZE-1:0];
     reg [`REQS_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
-    reg [`LOG2UP(SNRQ_SIZE):0] rd_ptr, wr_ptr;
     reg [`REQS_BITS-1:0] fwdin_sel;
 
-    wire [`LOG2UP(SNRQ_SIZE)-1:0] rd_a, wr_a;
-
-    wire enqueue, dequeue, empty, full;
-
-    wire fwdout_ready;
+    wire [`LOG2UP(SNRQ_SIZE)-1:0] sfq_write_addr, sfq_read_addr, dbg_sfq_write_addr;
+    wire sfq_push, sfq_pop, sfq_full;
 
     wire fwdin_valid;
     wire [SNP_FWD_TAG_WIDTH-1:0] fwdin_tag;
-    wire fwdin_ready;
-    wire fwdin_taken;
     
-    assign fwdout_ready = (& snp_fwdout_ready);
+    wire fwdin_ready  = snp_rsp_ready;
+    wire fwdin_taken  = fwdin_valid && fwdin_ready;  
 
-    assign snp_req_ready = !full && fwdout_ready;
+    wire fwdout_ready = (& snp_fwdout_ready);         
 
-    assign rd_a = rd_ptr[`LOG2UP(SNRQ_SIZE)-1:0];
-    assign wr_a = wr_ptr[`LOG2UP(SNRQ_SIZE)-1:0];
+    assign snp_rsp_valid = fwdin_taken && (1 == pending_cntrs[sfq_read_addr]); // send response
+    
+    assign sfq_read_addr = fwdin_tag[`LOG2UP(SNRQ_SIZE)-1:0];
+    
+    assign sfq_push = snp_req_valid && fwdout_ready;       
+    assign sfq_pop  = snp_rsp_valid;
+
+    VX_indexable_queue #(
+        .DATAW (`LOG2UP(SNRQ_SIZE) + `DRAM_ADDR_WIDTH+SNP_REQ_TAG_WIDTH),
+        .SIZE  (SNRQ_SIZE)
+    ) snp_fwd_queue (
+        .clk        (clk),
+        .reset      (reset),
+        .write_data ({sfq_write_addr, snp_req_addr, snp_req_tag}),    
+        .write_addr (sfq_write_addr),        
+        .push       (sfq_push),    
+        .full       (sfq_full),
+        .pop        (sfq_pop),
+        .read_addr  (sfq_read_addr),
+        .read_data  ({dbg_sfq_write_addr, snp_rsp_addr, snp_rsp_tag})
+    );
+
+    always @(posedge clk) begin
+        if (reset) begin
+            //--
+        end else begin
+            if (sfq_push)  begin
+                pending_cntrs[sfq_write_addr] <= NUM_REQUESTS;
+            end      
+            if (fwdin_taken) begin
+                pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
+                assert(sfq_read_addr == dbg_sfq_write_addr);
+            end
+        end
+    end
 
     genvar i;
 
     for (i = 0; i < NUM_REQUESTS; i++) begin
-        assign snp_fwdout_valid[i] = enqueue && fwdout_ready;
+        assign snp_fwdout_valid[i] = snp_req_valid && !sfq_full;
         assign snp_fwdout_addr[i]  = snp_req_addr;
-        assign snp_fwdout_tag[i]   = wr_a;
+        assign snp_fwdout_tag[i]   = sfq_write_addr;
     end
 
-    assign fwdin_ready = snp_rsp_ready;
-    assign fwdin_taken = fwdin_valid && fwdin_ready;
-
-    assign snp_rsp_valid = fwdin_taken && (1 == pending_cntrs[fwdin_tag]); // send response
-    assign {snp_rsp_addr, snp_rsp_tag} = pending_reqs[fwdin_tag];
-
-    assign empty   = (wr_ptr == rd_ptr);
-    assign full    = (wr_a == rd_a) && (wr_ptr[`LOG2UP(SNRQ_SIZE)] != rd_ptr[`LOG2UP(SNRQ_SIZE)]);
-    
-    assign enqueue = snp_req_valid && snp_req_ready;       
-    assign dequeue = !empty && (0 == pending_cntrs[rd_a]);
-
-    always @(posedge clk) begin
-        if (reset) begin
-            rd_ptr <= 0;
-            wr_ptr <= 0;
-        end else begin
-            if (enqueue)  begin
-                pending_reqs[wr_a]  <= {snp_req_addr, snp_req_tag};
-                pending_cntrs[wr_a] <= NUM_REQUESTS;
-                wr_ptr              <= wr_ptr + 1;
-            end            
-            if (dequeue) begin
-                rd_ptr <= rd_ptr + 1;
-            end
-            if (fwdin_taken) begin
-                pending_cntrs[fwdin_tag] <= pending_cntrs[fwdin_tag] - 1;
-            end
-        end
-    end
+    assign snp_req_ready = !sfq_full && fwdout_ready;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -104,7 +102,7 @@ module VX_snp_forwarder #(
     end
 
     assign fwdin_valid = snp_fwdin_valid[fwdin_sel];
-    assign fwdin_tag = snp_fwdin_tag[fwdin_sel];
+    assign fwdin_tag   = snp_fwdin_tag[fwdin_sel];
 
     for (i = 0; i < NUM_REQUESTS; i++) begin
         assign snp_fwdin_ready[i] = fwdin_ready && (fwdin_sel == `REQS_BITS'(i));

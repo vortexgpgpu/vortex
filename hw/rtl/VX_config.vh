@@ -48,7 +48,7 @@
 `endif
 
 `ifndef IO_BUS_ADDR_COUT
-`define IO_BUS_ADDR_COUT 30'h3FFFFFFF
+`define IO_BUS_ADDR_COUT 32'hFFFFFFFC
 `endif
 
 `ifndef L2_ENABLE

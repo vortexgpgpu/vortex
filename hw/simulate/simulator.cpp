@@ -204,7 +204,7 @@ void Simulator::dbus_driver() {
 void Simulator::io_driver() {
   if (vortex_->io_req_valid
    && vortex_->io_req_rw 
-   && vortex_->io_req_addr == IO_BUS_ADDR_COUT) {
+   && ((vortex_->io_req_addr << 2) == IO_BUS_ADDR_COUT)) {
     uint32_t data_write = (uint32_t)vortex_->io_req_data;
     char c = (char)data_write;
     std::cout << c;      

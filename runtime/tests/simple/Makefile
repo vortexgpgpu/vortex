@@ -23,13 +23,16 @@ VX_MAIN = vx_simple_main
 
 VX_SRCS = vx_simple_main.c tests.c
 
-all: HEX DUMP ELF
+all: HEX DUMP ELF BIN
 
 DUMP: ELF
 	$(DMP) -D $(VX_MAIN).elf > $(VX_MAIN).dump
 
 HEX: ELF
 	$(CPY) -O ihex $(VX_MAIN).elf $(VX_MAIN).hex
+
+BIN: ELF
+	$(CPY) -O binary $(VX_MAIN).elf $(VX_MAIN).bin
 
 ELF: 
 	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_SRCS) $(LIBS) -Iinclude  -o $(VX_MAIN).elf

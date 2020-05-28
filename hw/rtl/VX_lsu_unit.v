@@ -75,26 +75,20 @@ module VX_lsu_unit #(
     wire[2:0] core_rsp_mem_read;
 
     for (i = 0; i < `NUM_THREADS; ++i) begin  
-
-        always @(*) begin
+        always @(*) begin            
             case (core_req_rw ? use_mem_write[1:0] : use_mem_read[1:0])
                 2'b0: begin 
                     case (use_address[i][1:0])
-                        1: mem_req_offset[i] = 8;
-                        2: mem_req_offset[i] = 16;
-                        3: mem_req_offset[i] = 24;
-                        default : mem_req_offset[i] = 0;
+                        1: mem_req_offset[i]   = 8;
+                        2: mem_req_offset[i]   = 16;
+                        3: mem_req_offset[i]   = 24;    
+                    default: mem_req_offset[i] = 0;                   
                     endcase
                 end
                 2'b1: begin
-                    case (use_address[i][1:0])
-                        2: mem_req_offset[i] = 16;
-                        default : mem_req_offset[i] = 0;
-                    endcase
+                    mem_req_offset[i] = (2 == use_address[i][1:0]) ? 16 : 0;
                 end
-                default : begin
-                    mem_req_offset[i] = 0;
-                end                         
+                default: mem_req_offset[i] = 0;                    
             endcase
         end
 
@@ -105,7 +99,7 @@ module VX_lsu_unit #(
 
     reg [`NUM_THREADS-1:0] mem_rsp_mask[`DCREQ_SIZE-1:0]; 
 
-    wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr;
+    wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr, dbg_mrq_write_addr;
     wire mrq_full;
 
     wire mrq_push     = (0 == core_req_rw) && (| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready;    
@@ -117,6 +111,21 @@ module VX_lsu_unit #(
 
     wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_next);    
 
+    VX_indexable_queue #(
+        .DATAW (`LOG2UP(`DCREQ_SIZE) + 32 + 2 + (`NUM_THREADS * 5) + `BYTE_EN_BITS + 5 + `NW_BITS),
+        .SIZE  (`DCREQ_SIZE)
+    ) mem_req_queue (
+        .clk        (clk),
+        .reset      (reset),
+        .write_data ({mrq_write_addr, use_pc, use_wb, mem_req_offset, use_mem_read, use_rd, use_warp_num}),    
+        .write_addr (mrq_write_addr),        
+        .push       (mrq_push),    
+        .full       (mrq_full),
+        .pop        (mrq_pop),
+        .read_addr  (mrq_read_addr),
+        .read_data  ({dbg_mrq_write_addr, mem_wb_if.pc, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num})
+    );
+
     always @(posedge clk) begin
         if (reset) begin
             //--
@@ -126,24 +135,10 @@ module VX_lsu_unit #(
             end    
             if (mrq_pop_part) begin
                 mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_next;
+                assert(mrq_read_addr == dbg_mrq_write_addr);
             end
         end
     end
-
-    VX_indexable_queue #(
-        .DATAW (32 + 2 + (`NUM_THREADS * 5) + `BYTE_EN_BITS + 5 + `NW_BITS),
-        .SIZE  (`DCREQ_SIZE)
-    ) mem_req_queue (
-        .clk        (clk),
-        .reset      (reset),
-        .write_data ({use_pc, use_wb, mem_req_offset, use_mem_read, use_rd, use_warp_num}),    
-        .write_addr (mrq_write_addr),        
-        .push       (mrq_push),    
-        .full       (mrq_full),
-        .pop        (mrq_pop),
-        .read_addr  (mrq_read_addr),
-        .read_data  ({mem_wb_if.pc, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num})
-    );
 
     // Core Request
 

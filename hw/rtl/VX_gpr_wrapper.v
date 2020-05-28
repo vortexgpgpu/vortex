@@ -58,8 +58,14 @@ module VX_gpr_wrapper (
                 .a_reg_data             (temp_a_reg_data[i]),
                 .b_reg_data             (temp_b_reg_data[i])
             );
+
+            /*always_ff @(posedge clk) begin
+                if (valid_write_request && ((writeback_if.wb != 0))) begin
+                    $display("%t: GPR%01d$: wid=%0d, rd=%0d, data=%0h", $time, 0, writeback_if.warp_num, writeback_if.rd, writeback_if.data);
+                end
+            end*/
         end
-    endgenerate    
+    endgenerate        
 
 endmodule
 

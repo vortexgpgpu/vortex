@@ -8,7 +8,7 @@ module VX_fetch (
     input  wire                   schedule_delay,
     input  wire                   icache_stage_delay,
     input  wire[`NW_BITS-1:0]     icache_stage_wid,
-    input  wire[`NUM_THREADS-1:0] icache_stage_valids,
+    input  wire                   icache_stage_response,
     output wire                   busy,
     VX_jal_rsp_if         jal_rsp_if,
     VX_branch_rsp_if      branch_rsp_if,
@@ -52,7 +52,7 @@ module VX_fetch (
         .wstall_warp_num  (wstall_if.warp_num),
 
         // Lock/release Stuff
-        .icache_stage_valids(icache_stage_valids),
+        .icache_stage_response(icache_stage_response),
         .icache_stage_wid   (icache_stage_wid),
 
         // Join

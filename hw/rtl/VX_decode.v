@@ -10,13 +10,12 @@ module VX_decode(
     VX_wstall_if          wstall_if,
     VX_join_if            join_if
 );
-    wire[31:0]      in_instruction    = fd_inst_meta_de.instruction;
-    wire[31:0]      in_curr_PC        = fd_inst_meta_de.inst_pc;
-    wire[`NW_BITS-1:0] in_warp_num    = fd_inst_meta_de.warp_num;
+    wire               in_valid        = (| fd_inst_meta_de.valid);
+    wire[31:0]         in_instruction  = fd_inst_meta_de.instruction;
+    wire[31:0]         in_curr_PC      = fd_inst_meta_de.inst_pc;
+    wire[`NW_BITS-1:0] in_warp_num     = fd_inst_meta_de.warp_num;
 
     assign frE_to_bckE_req_if.curr_PC = in_curr_PC;
-
-    wire[`NUM_THREADS-1:0]  in_valid  = fd_inst_meta_de.valid;
 
     wire[6:0]  curr_opcode;
 
@@ -115,7 +114,7 @@ module VX_decode(
     assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
     assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
 
-    assign join_if.is_join       = is_join && (| in_valid);
+    assign join_if.is_join       = is_join && in_valid;
     assign join_if.join_warp_num = in_warp_num;
 
     assign frE_to_bckE_req_if.is_wspawn  = is_wspawn;
@@ -170,23 +169,23 @@ module VX_decode(
         case (curr_opcode)
             `INST_JAL:
                 begin
-                    temp_jal        = 1'b1 && (| in_valid);
+                    temp_jal        = 1'b1 && in_valid;
                     temp_jal_offset = jal_1_offset;
                 end
             `INST_JALR:
                 begin
-                    temp_jal        = 1'b1 && (| in_valid);
+                    temp_jal        = 1'b1 && in_valid;
                     temp_jal_offset = jal_2_offset;
                 end
             `INST_SYS:
                 begin
-                    // $display("SYS EBREAK %h", (jal_sys_jal && (| in_valid)));
-                    temp_jal        = jal_sys_jal && (| in_valid);
+                    // $display("SYS EBREAK %h", (jal_sys_jal && in_valid));
+                    temp_jal        = jal_sys_jal && in_valid;
                     temp_jal_offset = jal_sys_off;
                 end
             default:
                 begin
-                    temp_jal          = 1'b0 && (| in_valid);
+                    temp_jal          = 1'b0 && in_valid;
                     temp_jal_offset   = 32'hdeadbeef;
                 end
         endcase
@@ -228,7 +227,7 @@ module VX_decode(
         case (curr_opcode)
             `INST_B: begin
                 // $display("BRANCH IN DECODE");
-                temp_branch_stall = 1'b1 && (| in_valid);
+                temp_branch_stall = 1'b1 && in_valid;
                 case (func3)
                     3'h0: temp_branch_type = `BR_EQ;
                     3'h1: temp_branch_type = `BR_NE;
@@ -241,22 +240,22 @@ module VX_decode(
             end
             `INST_JAL: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b1 && (| in_valid);
+                temp_branch_stall = 1'b1 && in_valid;
             end
             `INST_JALR: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b1 && (| in_valid);
+                temp_branch_stall = 1'b1 && in_valid;
             end
             default: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b0 && (| in_valid);
+                temp_branch_stall = 1'b0 && in_valid;
             end
         endcase
     end
 
     assign frE_to_bckE_req_if.branch_type = temp_branch_type;
 
-    assign wstall_if.wstall   = (temp_branch_stall || is_tmc || is_split || is_barrier) && (| in_valid);
+    assign wstall_if.wstall   = (temp_branch_stall || is_tmc || is_split || is_barrier) && in_valid;
     assign wstall_if.warp_num = in_warp_num;
 
     always @(*) begin

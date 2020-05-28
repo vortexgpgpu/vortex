@@ -60,7 +60,7 @@ module VX_warp_sched (
     output wire                       scheduled_warp,
 
     input  wire[`NW_BITS-1:0]         icache_stage_wid,
-    input  wire[`NUM_THREADS-1:0]     icache_stage_valids
+    input  wire                       icache_stage_response
 );
     wire update_use_wspawn;
     wire update_visible_active;
@@ -209,7 +209,7 @@ module VX_warp_sched (
 
             // Branch
             if (branch_valid) begin
-                if (branch_dir) warp_pcs[branch_warp_num]     <= branch_dest;
+                if (branch_dir) warp_pcs[branch_warp_num] <= branch_dest;
                 warp_stalled[branch_warp_num] <= 0;
             end
 
@@ -218,7 +218,7 @@ module VX_warp_sched (
                 warp_lock[warp_num] <= 1'b1;
                 // warp_lock <= {`NUM_WARPS{1'b1}};
             end
-            if ((| icache_stage_valids) && !stall) begin
+            if (icache_stage_response) begin
                 warp_lock[icache_stage_wid] <= 1'b0;
                 // warp_lock <= {`NUM_WARPS{1'b0}};
             end
@@ -251,7 +251,7 @@ module VX_warp_sched (
 
     assign total_barrier_stall = barrier_stall_mask[0] | barrier_stall_mask[1] | barrier_stall_mask[2] | barrier_stall_mask[3];
 
-    assign update_visible_active = (count_visible_active < 1) && !(stall || wstall_this_cycle || hazard || is_join);
+    assign update_visible_active = (0 == count_visible_active) && !(stall || wstall_this_cycle || hazard || is_join);
 
     wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0, thread_masks[split_warp_num]};
     wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, split_save_pc, split_later_mask};
@@ -305,7 +305,7 @@ module VX_warp_sched (
 
     assign new_pc = warp_pc + 4;
 
-    assign use_active = (count_visible_active < 1) ? (warp_active & (~warp_stalled) & (~total_barrier_stall) & (~warp_lock)) : visible_active;
+    assign use_active = (count_visible_active != 0) ? visible_active : (warp_active & (~warp_stalled) & (~total_barrier_stall) & (~warp_lock));
 
     // Choosing a warp to schedule
     VX_priority_encoder #(
