@@ -61,8 +61,10 @@ module VX_scheduler (
             end
         end else begin
             if (valid_wb) begin
+                assert(rename_table[writeback_if.warp_num][writeback_if.rd] != 0);
                 rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;               
                 if (0 == valid_wb_new_mask) begin
+                    assert(count_valid != 0);
                     count_valid <= count_valid - 1;
                 end
             end

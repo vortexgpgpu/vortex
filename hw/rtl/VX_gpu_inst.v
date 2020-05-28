@@ -8,7 +8,7 @@ module VX_gpu_inst (
     VX_warp_ctl_if        warp_ctl_if
 );
     wire[`NUM_THREADS-1:0] curr_valids = gpu_inst_req_if.valid;
-    wire is_split                      = (gpu_inst_req_if.is_split);
+    wire is_split                      = gpu_inst_req_if.is_split;
 
     wire[`NUM_THREADS-1:0] tmc_new_mask;
     wire all_threads = `NUM_THREADS < gpu_inst_req_if.a_reg_data[0];
@@ -23,12 +23,12 @@ module VX_gpu_inst (
     wire valid_inst = (| curr_valids);
 
     assign warp_ctl_if.warp_num    = gpu_inst_req_if.warp_num;
-    assign warp_ctl_if.change_mask = (gpu_inst_req_if.is_tmc) && valid_inst;
+    assign warp_ctl_if.change_mask = gpu_inst_req_if.is_tmc && valid_inst;
     assign warp_ctl_if.thread_mask = gpu_inst_req_if.is_tmc ? tmc_new_mask : 0;
 
-    assign warp_ctl_if.whalt = warp_ctl_if.change_mask && (warp_ctl_if.thread_mask == 0);
+    assign warp_ctl_if.whalt = warp_ctl_if.change_mask && (0 == warp_ctl_if.thread_mask);
 
-    wire       wspawn     = gpu_inst_req_if.is_wspawn;
+    wire       wspawn     = gpu_inst_req_if.is_wspawn && valid_inst;
     wire[31:0] wspawn_pc  = gpu_inst_req_if.rd2;
     wire       all_active = `NUM_WARPS < gpu_inst_req_if.a_reg_data[0];
     wire[`NUM_WARPS-1:0] wspawn_new_active;

@@ -8,7 +8,7 @@ module VX_icache_stage #(
     input  wire             total_freeze,
     output wire             icache_stage_delay,
     output wire[`NW_BITS-1:0] icache_stage_wid,
-    output wire[`NUM_THREADS-1:0] icache_stage_valids,
+    output wire             icache_stage_response,
     VX_inst_meta_if         fe_inst_meta_fi,
     VX_inst_meta_if         fe_inst_meta_id,
     
@@ -25,28 +25,41 @@ module VX_icache_stage #(
     wire [`ICORE_TAG_WIDTH-1:0] mem_rsp_tag = icache_rsp_if.core_rsp_tag;
 `DEBUG_END
 
-    wire [`LOG2UP(`ICREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr;
+    wire [`LOG2UP(`ICREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr, dbg_mrq_write_addr;
     wire mrq_full;
 
-    wire mrq_push = (| icache_req_if.core_req_valid) && icache_req_if.core_req_ready;    
-    wire mrq_pop  = (| icache_rsp_if.core_rsp_valid) && icache_rsp_if.core_rsp_ready;
+    wire mrq_push = icache_req_if.core_req_valid && icache_req_if.core_req_ready;    
+    wire mrq_pop  = icache_rsp_if.core_rsp_valid && icache_rsp_if.core_rsp_ready;
 
     assign mrq_read_addr = icache_rsp_if.core_rsp_tag[0][`LOG2UP(`ICREQ_SIZE)-1:0];    
 
     VX_indexable_queue #(
-        .DATAW (32 + `NW_BITS),
+        .DATAW (`LOG2UP(`ICREQ_SIZE) + 32 + `NW_BITS),
         .SIZE  (`ICREQ_SIZE)
     ) mem_req_queue (
         .clk        (clk),
         .reset      (reset),        
-        .write_data ({fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num}),    
+        .write_data ({mrq_write_addr, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num}),    
         .write_addr (mrq_write_addr),        
         .push       (mrq_push),    
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num})
-    );
+        .read_data  ({dbg_mrq_write_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num})
+    );    
+
+    always @(posedge clk) begin
+        if (reset) begin
+            //--
+        end else begin
+            if (mrq_push) begin
+                valid_threads[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
+            end
+            if (mrq_pop) begin
+                assert(mrq_read_addr == dbg_mrq_write_addr);      
+            end
+        end
+    end
 
     // Icache Request
     assign icache_req_if.core_req_valid  = valid_inst && ~mrq_full;
@@ -67,21 +80,11 @@ module VX_icache_stage #(
     assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_data[0];
     assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? valid_threads[fe_inst_meta_id.warp_num] : 0;
 
+    assign icache_stage_response       = mrq_pop;
     assign icache_stage_wid            = fe_inst_meta_id.warp_num;
-    assign icache_stage_valids         = fe_inst_meta_id.valid & {`NUM_THREADS{!icache_stage_delay}};
-
+    
     // Can't accept new response
     assign icache_rsp_if.core_rsp_ready = ~total_freeze;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            //--
-        end else begin
-            if (icache_req_if.core_req_valid && icache_req_if.core_req_ready) begin
-                valid_threads[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
-            end
-        end
-    end
 
 `ifdef DBG_PRINT_CORE_ICACHE
     always_ff @(posedge clk) begin

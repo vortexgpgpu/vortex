@@ -148,12 +148,6 @@
 // Cache ID
 `define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
 
-// Core request address bits
-`define DCORE_ADDR_WIDTH    (32-`CLOG2(`DWORD_SIZE))
-
-// Core request byte enable bits
-`define DCORE_BYTEEN_WIDTH  `DWORD_SIZE
-
 // TAG sharing enable       
 `define DCORE_TAG_ID_BITS   `LOG2UP(`DCREQ_SIZE)
 

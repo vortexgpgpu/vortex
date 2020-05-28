@@ -37,8 +37,8 @@ module Vortex_Cluster #(
     // I/O request
     output wire                             io_req_valid,
     output wire                             io_req_rw,  
-    output wire[`DCORE_BYTEEN_WIDTH-1:0]    io_req_byteen,  
-    output wire[`DCORE_ADDR_WIDTH-1:0]      io_req_addr,
+    output wire[3:0]                        io_req_byteen,  
+    output wire[29:0]                       io_req_addr,
     output wire[31:0]                       io_req_data,    
     output wire[`DCORE_TAG_WIDTH-1:0]       io_req_tag,    
     input wire                              io_req_ready,
@@ -91,8 +91,8 @@ module Vortex_Cluster #(
 `IGNORE_WARNINGS_BEGIN
     wire[`NUM_CORES-1:0]                        per_core_io_req_valid;
     wire[`NUM_CORES-1:0]                        per_core_io_req_rw;
-    wire[`NUM_CORES-1:0][`DCORE_BYTEEN_WIDTH-1:0] per_core_io_req_byteen;
-    wire[`NUM_CORES-1:0][`DCORE_ADDR_WIDTH-1:0] per_core_io_req_addr;
+    wire[`NUM_CORES-1:0][3:0]                   per_core_io_req_byteen;
+    wire[`NUM_CORES-1:0][29:0]                  per_core_io_req_addr;
     wire[`NUM_CORES-1:0][31:0]                  per_core_io_req_data;    
     wire[`NUM_CORES-1:0][`DCORE_TAG_WIDTH-1:0] per_core_io_req_tag;
     

@@ -31,7 +31,7 @@ module VX_front_end #(
     wire icache_stage_delay;
 
     wire[`NW_BITS-1:0] icache_stage_wid;
-    wire[`NUM_THREADS-1:0] icache_stage_valids;
+    wire               icache_stage_response;
 
     VX_wstall_if wstall_if();
     VX_join_if   join_if();
@@ -40,7 +40,7 @@ module VX_front_end #(
         .clk                (clk),
         .reset              (reset),
         .icache_stage_wid   (icache_stage_wid),
-        .icache_stage_valids(icache_stage_valids),
+        .icache_stage_response(icache_stage_response),
         .wstall_if          (wstall_if),
         .join_if            (join_if),
         .schedule_delay     (schedule_delay),
@@ -67,7 +67,7 @@ module VX_front_end #(
         .reset              (reset),
         .total_freeze       (total_freeze),
         .icache_stage_delay (icache_stage_delay),
-        .icache_stage_valids(icache_stage_valids),
+        .icache_stage_response(icache_stage_response),
         .icache_stage_wid   (icache_stage_wid),
         .fe_inst_meta_fi    (fe_inst_meta_fi2),
         .fe_inst_meta_id    (fe_inst_meta_id),

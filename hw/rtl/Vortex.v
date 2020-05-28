@@ -51,8 +51,8 @@ module Vortex #(
     // I/O request
     output wire                             io_req_valid,
     output wire                             io_req_rw,    
-    output wire[`DCORE_BYTEEN_WIDTH-1:0] io_req_byteen,
-    output wire[`DCORE_ADDR_WIDTH-1:0]      io_req_addr,
+    output wire[3:0]                        io_req_byteen,  
+    output wire[29:0]                       io_req_addr,
     output wire[31:0]                       io_req_data,    
     output wire[`DCORE_TAG_WIDTH-1:0]       io_req_tag,  
     input wire                              io_req_ready,
