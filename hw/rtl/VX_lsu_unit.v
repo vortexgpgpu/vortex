@@ -107,9 +107,9 @@ module VX_lsu_unit #(
     
     assign mrq_read_addr = dcache_rsp_if.core_rsp_tag[0][`LOG2UP(`DCREQ_SIZE)-1:0];    
 
-    wire [`NUM_THREADS-1:0] mem_rsp_mask_next = mem_rsp_mask[mrq_read_addr] & ~dcache_rsp_if.core_rsp_valid;
+    wire [`NUM_THREADS-1:0] mem_rsp_mask_upd = mem_rsp_mask[mrq_read_addr] & ~dcache_rsp_if.core_rsp_valid;
 
-    wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_next);    
+    wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_upd);    
 
     VX_indexable_queue #(
         .DATAW (`LOG2UP(`DCREQ_SIZE) + 32 + 2 + (`NUM_THREADS * 5) + `BYTE_EN_BITS + 5 + `NW_BITS),
@@ -134,7 +134,7 @@ module VX_lsu_unit #(
                 mem_rsp_mask[mrq_write_addr] <= use_valid;
             end    
             if (mrq_pop_part) begin
-                mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_next;
+                mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_upd;
                 assert(mrq_read_addr == dbg_mrq_write_addr);
             end
         end

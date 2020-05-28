@@ -25,7 +25,7 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 				  -DDBG_PRINT_DRAM        \
 				  -DDBG_PRINT_OPAE
 
-DBG_PRINT=$(DBG_PRINT_FLAGS)
+#DBG_PRINT=$(DBG_PRINT_FLAGS)
 
 INCLUDE = -I./rtl/ -I./rtl/libs -I./rtl/interfaces -I./rtl/pipe_regs -I./rtl/cache -I./rtl/simulate
 

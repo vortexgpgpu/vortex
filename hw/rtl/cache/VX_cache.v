@@ -172,8 +172,7 @@ module VX_cache #(
             .BANK_LINE_SIZE    (BANK_LINE_SIZE), 
             .NUM_REQUESTS      (NUM_SNP_REQUESTS), 
             .SNRQ_SIZE         (SNRQ_SIZE),
-            .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH),
-            .SNP_FWD_TAG_WIDTH (SNP_FWD_TAG_WIDTH)
+            .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
         ) snp_forwarder (
             .clk                (clk),
             .reset              (reset),
