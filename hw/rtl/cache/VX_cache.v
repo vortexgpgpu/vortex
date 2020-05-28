@@ -48,13 +48,13 @@ module VX_cache #(
     parameter PRFQ_STRIDE                   = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 1,
+    parameter CORE_TAG_WIDTH                = 42,
 
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 42,
+    parameter CORE_TAG_ID_BITS              = 8,
 
     // dram request tag size
-    parameter DRAM_TAG_WIDTH                = 8,
+    parameter DRAM_TAG_WIDTH                = 28,
 
     // Number of snoop forwarding requests
     parameter NUM_SNP_REQUESTS              = 2, 

@@ -332,7 +332,7 @@ begin
               && avs_write_ctr < csr_data_size);
 
   cci_dram_req_read_fire = (state == STATE_READ) 
-                        && ((avs_pending_reads < AVS_RD_QUEUE_SIZE)
+                        && (avs_pending_reads < AVS_RD_QUEUE_SIZE)
                         && !avs_waitrequest 
                         && avs_read_ctr < csr_data_size;
 
