@@ -397,8 +397,7 @@ module Vortex_Cluster #(
             .BANK_LINE_SIZE(`L2BANK_LINE_SIZE), 
             .NUM_REQUESTS(`NUM_CORES), 
             .SNRQ_SIZE(`L2SNRQ_SIZE),
-            .SNP_REQ_TAG_WIDTH(`L2SNP_TAG_WIDTH),
-            .SNP_FWD_TAG_WIDTH(`DSNP_TAG_WIDTH)
+            .SNP_REQ_TAG_WIDTH(`L2SNP_TAG_WIDTH)
         ) snp_forwarder (
             .clk                (clk),
             .reset              (reset),

@@ -25,12 +25,12 @@ module VX_snp_forwarder #(
     // Snoop Forwarding out
     output wire [NUM_REQUESTS-1:0]      snp_fwdout_valid,
     output wire [NUM_REQUESTS-1:0][`DRAM_ADDR_WIDTH-1:0] snp_fwdout_addr,
-    output wire [NUM_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdout_tag,
+    output wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdout_tag,
     input wire [NUM_REQUESTS-1:0]       snp_fwdout_ready,
 
     // Snoop forwarding in
     input wire [NUM_REQUESTS-1:0]       snp_fwdin_valid,    
-    input wire [NUM_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdin_tag,
+    input wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdin_tag,
     output wire [NUM_REQUESTS-1:0]      snp_fwdin_ready
 );
     reg [`REQS_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
@@ -40,7 +40,7 @@ module VX_snp_forwarder #(
     wire sfq_push, sfq_pop, sfq_full;
 
     wire fwdin_valid;
-    wire [SNP_FWD_TAG_WIDTH-1:0] fwdin_tag;
+    wire [`LOG2UP(SNRQ_SIZE)-1:0] fwdin_tag;
     
     wire fwdin_ready  = snp_rsp_ready;
     wire fwdin_taken  = fwdin_valid && fwdin_ready;  
@@ -49,9 +49,9 @@ module VX_snp_forwarder #(
 
     assign snp_rsp_valid = fwdin_taken && (1 == pending_cntrs[sfq_read_addr]); // send response
     
-    assign sfq_read_addr = fwdin_tag[`LOG2UP(SNRQ_SIZE)-1:0];
+    assign sfq_read_addr = fwdin_tag;
     
-    assign sfq_push = snp_req_valid && fwdout_ready;       
+    assign sfq_push = snp_req_valid && !sfq_full && fwdout_ready;       
     assign sfq_pop  = snp_rsp_valid;
 
     VX_indexable_queue #(
@@ -111,10 +111,10 @@ module VX_snp_forwarder #(
 `ifdef DBG_PRINT_CACHE_SNP
      always_ff @(posedge clk) begin
         if (snp_req_valid && snp_req_ready) begin
-            $display("%t: snp req: addr=%0h, tag=%0h", $time, snp_req_addr, snp_req_tag);
+            $display("%t: snp req: addr=%0h, tag=%0h", $time, {snp_req_addr, `LOG2UP(BANK_LINE_SIZE)'(0)}, snp_req_tag);
         end
         if (snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
-            $display("%t: snp fwd_out: addr=%0h, tag=%0h", $time, snp_fwdout_addr[0], snp_fwdout_tag[0]);
+            $display("%t: snp fwd_out: addr=%0h, tag=%0h", $time, {snp_fwdout_addr[0], `LOG2UP(BANK_LINE_SIZE)'(0)}, snp_fwdout_tag[0]);
         end
         if (fwdin_valid && fwdin_ready) begin
             $display("%t: snp fwd_in[%01d]: tag=%0h", $time, fwdin_sel, fwdin_tag);
