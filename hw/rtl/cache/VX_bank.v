@@ -249,6 +249,8 @@ module VX_bank #(
     wire[`LINE_ADDR_WIDTH-1:0]            addr_st2;
     wire                                  is_fill_st2;
 
+    wire                                  recover_mrvq_state_st2;
+
     wire mrvq_push_stall;
     wire cwbq_push_stall;    
     wire dwbq_push_stall;    
@@ -474,8 +476,7 @@ module VX_bank #(
     wire                            mrvq_init_ready_state_unqual_st2;
     wire                            mrvq_init_ready_state_hazard_st0_st1;
     wire                            mrvq_init_ready_state_hazard_st1e_st1;
-    wire                            recover_mrvq_state_st2;
-
+    
     VX_generic_register #(
         .N(1+ 1+ 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_WIDTH + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE + `REQ_INST_META_WIDTH)
     ) st_1e_2 (
