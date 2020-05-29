@@ -153,11 +153,13 @@ module VX_tag_data_access #(
                      && !is_snp_st1e;
 
     for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-        wire normal_write = ((writewsel_st1e == `WORD_SELECT_WIDTH'(i)) || (`BANK_LINE_WORDS == 1)) && should_write && !real_writefill;
+        wire normal_write = ((writewsel_st1e == `WORD_SELECT_WIDTH'(i)) || (`BANK_LINE_WORDS == 1)) 
+                         && should_write 
+                         && !real_writefill;
 
-        assign we[i] = real_writefill  ? {WORD_SIZE{1'b1}} : 
-                       normal_write ? mem_byteen_st1e:
-                                      {WORD_SIZE{1'b0}};
+        assign we[i] = real_writefill ? {WORD_SIZE{1'b1}} : 
+                         normal_write ? mem_byteen_st1e:
+                                        {WORD_SIZE{1'b0}};
 
         assign data_write[i * `WORD_WIDTH +: `WORD_WIDTH] = real_writefill ? writedata_st1e[i * `WORD_WIDTH +: `WORD_WIDTH] : writeword_st1e;
     end

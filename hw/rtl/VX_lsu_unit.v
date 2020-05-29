@@ -52,15 +52,9 @@ module VX_lsu_unit #(
     reg [3:0] wmask;
     always @(*) begin
         case (use_mem_write[1:0])
-            0: begin 
-                wmask = 4'b0001;   
-            end
-            1: begin
-                wmask = 4'b0011;
-            end
-            default : begin
-                wmask = 4'b1111;
-            end                         
+            0:        wmask = 4'b0001;   
+            1:        wmask = 4'b0011;
+            default : wmask = 4'b1111;
         endcase
     end
 
@@ -79,10 +73,10 @@ module VX_lsu_unit #(
             case (core_req_rw ? use_mem_write[1:0] : use_mem_read[1:0])
                 2'b0: begin 
                     case (use_address[i][1:0])
-                        1: mem_req_offset[i]   = 8;
-                        2: mem_req_offset[i]   = 16;
-                        3: mem_req_offset[i]   = 24;    
-                    default: mem_req_offset[i] = 0;                   
+                        1:      mem_req_offset[i] = 8;
+                        2:      mem_req_offset[i] = 16;
+                        3:      mem_req_offset[i] = 24;    
+                       default: mem_req_offset[i] = 0;                   
                     endcase
                 end
                 2'b1: begin
