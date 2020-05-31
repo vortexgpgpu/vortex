@@ -77,7 +77,7 @@
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
-`define DCACHE_SIZE 2048
+`define DCACHE_SIZE 4096
 `endif
 
 // Size of line inside a bank in bytes

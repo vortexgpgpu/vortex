@@ -51,11 +51,13 @@ make run-fpga
 #
 ## ASE build instructions
 #
-
 source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 
 # Acquire a sever node for running ASE simulations
 qsub-sim
+
+# build
+make ase
 
 # tests
 ./run_ase.sh build_ase ../../driver/tests/basic/basic

@@ -59,6 +59,7 @@ module VX_scheduler (
                     rename_table[w][i] <= 0;
                 end
             end
+            count_valid <= 0;
         end else begin
             if (valid_wb) begin
                 assert(rename_table[writeback_if.warp_num][writeback_if.rd] != 0);

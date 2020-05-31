@@ -1,6 +1,7 @@
 `include "VX_cache_config.vh"
 
 module VX_snp_forwarder #(
+    parameter CACHE_ID          = 0, 
     parameter BANK_LINE_SIZE    = 0, 
     parameter NUM_REQUESTS      = 0, 
     parameter SNRQ_SIZE         = 0,
@@ -111,16 +112,16 @@ module VX_snp_forwarder #(
 `ifdef DBG_PRINT_CACHE_SNP
      always_ff @(posedge clk) begin
         if (snp_req_valid && snp_req_ready) begin
-            $display("%t: snp req: addr=%0h, tag=%0h", $time, {snp_req_addr, `LOG2UP(BANK_LINE_SIZE)'(0)}, snp_req_tag);
+            $display("%t: cache%01d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_req_addr), snp_req_tag);
         end
         if (snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
-            $display("%t: snp fwd_out: addr=%0h, tag=%0h", $time, {snp_fwdout_addr[0], `LOG2UP(BANK_LINE_SIZE)'(0)}, snp_fwdout_tag[0]);
+            $display("%t: cache%01d snp fwd_out: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_fwdout_addr[0]), snp_fwdout_tag[0]);
         end
         if (fwdin_valid && fwdin_ready) begin
-            $display("%t: snp fwd_in[%01d]: tag=%0h", $time, fwdin_sel, fwdin_tag);
+            $display("%t: cache%01d snp fwd_in[%01d]: tag=%0h", $time, CACHE_ID, fwdin_sel, fwdin_tag);
         end
         if (snp_rsp_valid && snp_rsp_ready) begin
-            $display("%t: snp rsp: addr=%0h, tag=%0h", $time, snp_rsp_addr, snp_rsp_tag);
+            $display("%t: cache%01d snp rsp: addr=%0h, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_tag);
         end
     end
 `endif

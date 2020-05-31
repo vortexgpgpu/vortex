@@ -72,8 +72,6 @@
 
 `define DRAM_TO_LINE_ADDR(x)    x[`DRAM_ADDR_WIDTH-1:`BANK_SELECT_BITS]
 
-`define BYTE_TO_WORD_ADDR(x, w) (32-`CLOG2(w))'(x >> `CLOG2(w)) 
-
 `define LINE_TO_DRAM_ADDR(x, i) {x, `BANK_SELECT_BITS'(i)}
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, `BANK_SELECT_BITS'(i), `BASE_ADDR_BITS'(0)}

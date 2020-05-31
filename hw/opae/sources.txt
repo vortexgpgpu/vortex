@@ -1,9 +1,7 @@
 vortex_afu.json
 
-+define+GLOBAL_BLOCK_SIZE=64
-
-+define+DCACHE_SIZE=2048
-+define+ICACHE_SIZE=1024
++define+DCACHE_SIZE=4096
++define+ICACHE_SIZE=2048
 +define+SCACHE_SIZE=1024
 
 +define+NUM_CORES=2
@@ -11,20 +9,20 @@ vortex_afu.json
 +define+NUM_THREADS=4
 
 +define+DNUM_BANKS=4
-+define+INUM_BANKS=2
++define+INUM_BANKS=1
 +define+SNUM_BANKS=4
 
 +define+DDFPQ_SIZE=16
 +define+IDFPQ_SIZE=16
 +define+SDFPQ_SIZE=0
 
-#+define+DBG_PRINT_CORE_ICACHE
-#+define+DBG_PRINT_CORE_DCACHE
-#+define+DBG_PRINT_CACHE_BANK
-#+define+DBG_PRINT_CACHE_SNP
-#+define+DBG_PRINT_CACHE_MSRQ
-#+define+DBG_PRINT_DRAM
-#+define+DBG_PRINT_OPAE
++define+DBG_PRINT_CORE_ICACHE
++define+DBG_PRINT_CORE_DCACHE
++define+DBG_PRINT_CACHE_BANK
++define+DBG_PRINT_CACHE_SNP
++define+DBG_PRINT_CACHE_MSRQ
++define+DBG_PRINT_DRAM
++define+DBG_PRINT_OPAE
 
 +incdir+.
 +incdir+../rtl
@@ -81,6 +79,7 @@ vortex_afu.json
 ../rtl/libs/VX_generic_priority_encoder.v
 ../rtl/libs/VX_priority_encoder.v
 ../rtl/libs/VX_generic_queue.v
+../rtl/libs/VX_indexable_queue.v
 ../rtl/libs/VX_countones.v
 
 ../rtl/Vortex_Socket.v

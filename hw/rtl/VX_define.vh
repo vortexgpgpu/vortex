@@ -136,8 +136,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifndef NDEBUG
-                                  // pc,  wb, rd, warp_num
+`ifndef NDEBUG                    // pc,  wb, rd, warp_num
 `define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 2 + 5 + `NW_BITS)
 `else
 `define DEBUG_CORE_REQ_MDATA_WIDTH  0
@@ -227,10 +226,10 @@
 `define L2CACHE_ID          (`L3_ENABLE ? 1 : 0)
 
 // DRAM request data bits
-`define L2DRAM_LINE_WIDTH   (`L2BANK_LINE_SIZE * 8)
+`define L2DRAM_LINE_WIDTH   (`L2_ENABLE ? (`L2BANK_LINE_SIZE * 8) : `DDRAM_LINE_WIDTH)
 
 // DRAM request address bits
-`define L2DRAM_ADDR_WIDTH   (32 - `CLOG2(`L2BANK_LINE_SIZE))
+`define L2DRAM_ADDR_WIDTH   (`L2_ENABLE ? (32 - `CLOG2(`L2BANK_LINE_SIZE)) : `DDRAM_ADDR_WIDTH)
 
 // DRAM byte enable bits
 `define L2DRAM_BYTEEN_WIDTH (`L2_ENABLE ? `L2BANK_LINE_SIZE : `DDRAM_BYTEEN_WIDTH)
@@ -242,7 +241,7 @@
 `define L2SNP_TAG_WIDTH     (`L3_ENABLE ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
-`define L2NUM_REQUESTS      (2*`NUM_CORES)
+`define L2NUM_REQUESTS      (2 * `NUM_CORES)
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
@@ -250,10 +249,10 @@
 `define L3CACHE_ID          0
 
 // DRAM request data bits
-`define L3DRAM_LINE_WIDTH   (`L3BANK_LINE_SIZE * 8)
+`define L3DRAM_LINE_WIDTH   (`L3_ENABLE ? (`L3BANK_LINE_SIZE * 8) : `L2DRAM_LINE_WIDTH)
 
 // DRAM request address bits
-`define L3DRAM_ADDR_WIDTH   (32 - `CLOG2(`L3BANK_LINE_SIZE))
+`define L3DRAM_ADDR_WIDTH   (`L3_ENABLE ? (32 - `CLOG2(`L3BANK_LINE_SIZE)) : `L2DRAM_ADDR_WIDTH)
 
 // DRAM byte enable bits
 `define L3DRAM_BYTEEN_WIDTH (`L3_ENABLE ? `L3BANK_LINE_SIZE : `L2DRAM_BYTEEN_WIDTH)
@@ -266,6 +265,17 @@
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define L3NUM_REQUESTS      `NUM_CLUSTERS
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define VX_DRAM_BYTEEN_WIDTH    `L3DRAM_BYTEEN_WIDTH   
+`define VX_DRAM_ADDR_WIDTH      `L3DRAM_ADDR_WIDTH
+`define VX_DRAM_LINE_WIDTH      `L3DRAM_LINE_WIDTH
+`define VX_DRAM_TAG_WIDTH       `L3DRAM_TAG_WIDTH
+`define VX_SNP_TAG_WIDTH        `L3SNP_TAG_WIDTH    
+`define VX_CORE_TAG_WIDTH       `DCORE_TAG_WIDTH 
+
+`define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 
  // VX_DEFINE
 `endif

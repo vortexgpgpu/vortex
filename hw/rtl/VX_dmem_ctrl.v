@@ -39,7 +39,7 @@ module VX_dmem_ctrl # (
     ) dcache_core_rsp_qual_if(), smem_core_rsp_if();
 
     // use "case equality" to handle uninitialized entry
-    wire smem_select = ((dcache_core_req_if.core_req_addr[0] >= `BYTE_TO_WORD_ADDR(`SHARED_MEM_BASE_ADDR, `DWORD_SIZE)) === 1'b1);
+    wire smem_select = (({dcache_core_req_if.core_req_addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) === 1'b1);
 
     VX_dcache_io_arb dcache_io_arb (
         .io_select          (smem_select),

@@ -9,27 +9,27 @@ module Vortex_Socket (
     // DRAM request
     output wire                             dram_req_valid,
     output wire                             dram_req_rw,    
-    output wire[`L3DRAM_BYTEEN_WIDTH-1:0]   dram_req_byteen,    
-    output wire[`L3DRAM_ADDR_WIDTH-1:0]     dram_req_addr,
-    output wire[`L3DRAM_LINE_WIDTH-1:0]     dram_req_data,
-    output wire[`L3DRAM_TAG_WIDTH-1:0]      dram_req_tag,
+    output wire[`VX_DRAM_BYTEEN_WIDTH-1:0]  dram_req_byteen,    
+    output wire[`VX_DRAM_ADDR_WIDTH-1:0]    dram_req_addr,
+    output wire[`VX_DRAM_LINE_WIDTH-1:0]    dram_req_data,
+    output wire[`VX_DRAM_TAG_WIDTH-1:0]     dram_req_tag,
     input  wire                             dram_req_ready,
 
     // DRAM response    
     input wire                              dram_rsp_valid,        
-    input wire[`L3DRAM_LINE_WIDTH-1:0]      dram_rsp_data,
-    input wire[`L3DRAM_TAG_WIDTH-1:0]       dram_rsp_tag,
+    input wire[`VX_DRAM_LINE_WIDTH-1:0]     dram_rsp_data,
+    input wire[`VX_DRAM_TAG_WIDTH-1:0]      dram_rsp_tag,
     output wire                             dram_rsp_ready,
 
     // Snoop request
     input wire                              snp_req_valid,
-    input wire[`L3DRAM_ADDR_WIDTH-1:0]      snp_req_addr,
-    input wire[`L3SNP_TAG_WIDTH-1:0]        snp_req_tag,
+    input wire[`VX_DRAM_ADDR_WIDTH-1:0]     snp_req_addr,
+    input wire[`VX_SNP_TAG_WIDTH-1:0]       snp_req_tag,
     output wire                             snp_req_ready, 
 
     // Snoop response
     output wire                             snp_rsp_valid,
-    output wire[`L3SNP_TAG_WIDTH-1:0]       snp_rsp_tag,
+    output wire[`VX_SNP_TAG_WIDTH-1:0]      snp_rsp_tag,
     input wire                              snp_rsp_ready,     
 
     // I/O request
@@ -38,13 +38,13 @@ module Vortex_Socket (
     output wire[3:0]                        io_req_byteen,  
     output wire[29:0]                       io_req_addr,
     output wire[31:0]                       io_req_data,    
-    output wire[`DCORE_TAG_WIDTH-1:0]       io_req_tag,    
+    output wire[`VX_CORE_TAG_WIDTH-1:0]     io_req_tag,    
     input wire                              io_req_ready,
 
     // I/O response
     input wire                              io_rsp_valid,
     input wire[31:0]                        io_rsp_data,
-    input wire[`DCORE_TAG_WIDTH-1:0]        io_rsp_tag,
+    input wire[`VX_CORE_TAG_WIDTH-1:0]      io_rsp_tag,
     output wire                             io_rsp_ready,
 
     // Status
@@ -334,7 +334,7 @@ module Vortex_Socket (
 `ifdef DBG_PRINT_DRAM
     always_ff @(posedge clk) begin
         if (dram_req_valid && dram_req_ready) begin
-            $display("%t: DRAM req: rw=%b addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, dram_req_rw, {dram_req_addr, `CLOG2(`GLOBAL_BLOCK_SIZE)'(0)}, dram_req_tag, dram_req_byteen, dram_req_data);
+            $display("%t: DRAM req: rw=%b addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, dram_req_rw, `DRAM_TO_BYTE_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen, dram_req_data);
         end
         if (dram_rsp_valid && dram_rsp_ready) begin
             $display("%t: DRAM rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
