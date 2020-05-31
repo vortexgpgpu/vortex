@@ -64,7 +64,7 @@ module VX_icache_stage #(
     // Icache Request
     assign icache_req_if.core_req_valid  = valid_inst && ~mrq_full;
     assign icache_req_if.core_req_rw     = 0;
-    assign icache_req_if.core_req_byteen = 0;
+    assign icache_req_if.core_req_byteen = 4'b1111;
     assign icache_req_if.core_req_addr   = fe_inst_meta_fi.inst_pc[31:2];
     assign icache_req_if.core_req_data   = 0;    
 

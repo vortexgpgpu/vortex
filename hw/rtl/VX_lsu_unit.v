@@ -36,6 +36,8 @@ module VX_lsu_unit #(
     wire[1:0]                       use_wb;
     wire[31:0]                      use_pc;
 
+    genvar i;
+
     VX_generic_register #(
         .N(45 + `NW_BITS-1 + 1 + `NUM_THREADS*65)
     ) lsu_buffer (
@@ -49,17 +51,6 @@ module VX_lsu_unit #(
 
     wire core_req_rw = (use_mem_write != `BYTE_EN_NO);
 
-    reg [3:0] wmask;
-    always @(*) begin
-        case (use_mem_write[1:0])
-            0:        wmask = 4'b0001;   
-            1:        wmask = 4'b0011;
-            default : wmask = 4'b1111;
-        endcase
-    end
-
-    genvar i;
-
     wire [`NUM_THREADS-1:0][4:0]  mem_req_offset;
     wire [`NUM_THREADS-1:0][29:0] mem_req_addr;    
     wire [`NUM_THREADS-1:0][3:0]  mem_req_byteen;
@@ -68,25 +59,18 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][4:0]  mem_rsp_offset;
     wire[2:0] core_rsp_mem_read;
 
-    for (i = 0; i < `NUM_THREADS; ++i) begin  
-        always @(*) begin            
-            case (core_req_rw ? use_mem_write[1:0] : use_mem_read[1:0])
-                2'b0: begin 
-                    case (use_address[i][1:0])
-                        1:      mem_req_offset[i] = 8;
-                        2:      mem_req_offset[i] = 16;
-                        3:      mem_req_offset[i] = 24;    
-                       default: mem_req_offset[i] = 0;                   
-                    endcase
-                end
-                2'b1: begin
-                    mem_req_offset[i] = (2 == use_address[i][1:0]) ? 16 : 0;
-                end
-                default: mem_req_offset[i] = 0;                    
-            endcase
-        end
+    reg [3:0] wmask;
+    always @(*) begin
+        case ((core_req_rw ? use_mem_write[1:0] : use_mem_read[1:0]))
+            0:        wmask = 4'b0001;   
+            1:        wmask = 4'b0011;
+            default : wmask = 4'b1111;
+        endcase
+    end
 
+    for (i = 0; i < `NUM_THREADS; ++i) begin  
         assign mem_req_addr[i]   = use_address[i][31:2];        
+        assign mem_req_offset[i] = {3'b0, use_address[i][1:0]} << 3;
         assign mem_req_byteen[i] = (wmask << use_address[i][1:0]);
         assign mem_req_data[i]   = (use_store_data[i] << mem_req_offset[i]);
     end   
@@ -96,7 +80,9 @@ module VX_lsu_unit #(
     wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr, dbg_mrq_write_addr;
     wire mrq_full;
 
-    wire mrq_push     = (0 == core_req_rw) && (| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready;    
+    wire mrq_push = (| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready
+                 && (0 == core_req_rw); // only push read requests
+
     wire mrq_pop_part = (| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready;    
     
     assign mrq_read_addr = dcache_rsp_if.core_rsp_tag[0][`LOG2UP(`DCREQ_SIZE)-1:0];    

@@ -394,10 +394,11 @@ module Vortex_Cluster #(
         end
 
         VX_snp_forwarder #(
-            .BANK_LINE_SIZE(`L2BANK_LINE_SIZE), 
-            .NUM_REQUESTS(`NUM_CORES), 
-            .SNRQ_SIZE(`L2SNRQ_SIZE),
-            .SNP_REQ_TAG_WIDTH(`L2SNP_TAG_WIDTH)
+            .CACHE_ID           (`L2CACHE_ID),
+            .BANK_LINE_SIZE     (`L2BANK_LINE_SIZE), 
+            .NUM_REQUESTS       (`NUM_CORES), 
+            .SNRQ_SIZE          (`L2SNRQ_SIZE),
+            .SNP_REQ_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
         ) snp_forwarder (
             .clk                (clk),
             .reset              (reset),

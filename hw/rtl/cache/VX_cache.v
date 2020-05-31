@@ -169,6 +169,7 @@ module VX_cache #(
 
     if (SNOOP_FORWARDING) begin
         VX_snp_forwarder #(
+            .CACHE_ID          (CACHE_ID),
             .BANK_LINE_SIZE    (BANK_LINE_SIZE), 
             .NUM_REQUESTS      (NUM_SNP_REQUESTS), 
             .SNRQ_SIZE         (SNRQ_SIZE),

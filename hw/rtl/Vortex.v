@@ -271,7 +271,7 @@ module Vortex #(
     );
 
     // use "case equality" to handle uninitialized address value
-    wire io_select = ((dcache_io_core_req_if.core_req_addr[0] >= `BYTE_TO_WORD_ADDR(`IO_BUS_BASE_ADDR, `DWORD_SIZE)) === 1'b1);
+    wire io_select = (({dcache_io_core_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR) === 1'b1);
 
     VX_dcache_io_arb dcache_io_arb (
         .io_select          (io_select),

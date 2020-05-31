@@ -2,7 +2,7 @@
 ASE_BUILD_DIR=build_ase
 FPGA_BUILD_DIR=build_fpga
 
-all: ase ase-1c fpga fpga-1c
+all: ase
 
 ase: setup-ase
 	make -C $(ASE_BUILD_DIR)
