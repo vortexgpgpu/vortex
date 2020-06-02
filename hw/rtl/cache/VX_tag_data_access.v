@@ -38,7 +38,7 @@ module VX_tag_data_access #(
 `IGNORE_WARNINGS_BEGIN    
     input wire                          mem_rw_st1e,
     input wire[WORD_SIZE-1:0]           mem_byteen_st1e, 
-    input wire[`WORD_SELECT_WIDTH-1:0]  writewsel_st1e,
+    input wire[`UP(`WORD_SELECT_WIDTH)-1:0] wordsel_st1e,
 `IGNORE_WARNINGS_END
 
     output wire[`WORD_WIDTH-1:0]        readword_st1e,
@@ -141,7 +141,11 @@ module VX_tag_data_access #(
     assign use_read_dirtyb_st1e= read_dirtyb_st1c[STAGE_1_CYCLES-1];
     assign use_read_data_st1e  = read_data_st1c[STAGE_1_CYCLES-1];
 
-    assign readword_st1e = use_read_data_st1e[writewsel_st1e * `WORD_WIDTH +: `WORD_WIDTH];
+    if (`WORD_SELECT_WIDTH != 0) begin
+        assign readword_st1e = use_read_data_st1e[wordsel_st1e * `WORD_WIDTH +: `WORD_WIDTH];
+    end else begin
+        assign readword_st1e = use_read_data_st1e;
+    end
 
     wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] we;
     wire [`BANK_LINE_WIDTH-1:0] data_write;
@@ -150,15 +154,15 @@ module VX_tag_data_access #(
                      && valid_req_st1e 
                      && use_read_valid_st1e 
                      && !miss_st1e 
-                     && !is_snp_st1e;
+                     && !is_snp_st1e
+                     && !real_writefill;
 
     for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-        wire normal_write = ((writewsel_st1e == `WORD_SELECT_WIDTH'(i)) || (`BANK_LINE_WORDS == 1)) 
-                         && should_write 
-                         && !real_writefill;
+        wire normal_write = ((`WORD_SELECT_WIDTH == 0) || (wordsel_st1e == `UP(`WORD_SELECT_WIDTH)'(i))) 
+                         && should_write;
 
         assign we[i] = real_writefill ? {WORD_SIZE{1'b1}} : 
-                         normal_write ? mem_byteen_st1e:
+                         normal_write ? mem_byteen_st1e :
                                         {WORD_SIZE{1'b0}};
 
         assign data_write[i * `WORD_WIDTH +: `WORD_WIDTH] = real_writefill ? writedata_st1e[i * `WORD_WIDTH +: `WORD_WIDTH] : writeword_st1e;

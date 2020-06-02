@@ -230,7 +230,7 @@ module VX_bank #(
     wire                                  mrvq_valid_st0;
     wire[`REQS_BITS-1:0]                  mrvq_tid_st0;
     wire [`LINE_ADDR_WIDTH-1:0]           mrvq_addr_st0;
-    wire [`WORD_SELECT_WIDTH-1:0]         mrvq_wsel_st0;
+    wire [`UP(`WORD_SELECT_WIDTH)-1:0]    mrvq_wsel_st0;
     wire [`WORD_WIDTH-1:0]                mrvq_writeword_st0;
     wire [`REQ_TAG_WIDTH-1:0]             mrvq_tag_st0;
     wire                                  mrvq_rw_st0;  
@@ -287,7 +287,7 @@ module VX_bank #(
     wire                                  qual_is_fill_st0;
     wire                                  qual_valid_st0;
     wire [`LINE_ADDR_WIDTH-1:0]           qual_addr_st0;
-    wire [`WORD_SELECT_WIDTH-1:0]         qual_wsel_st0;
+    wire [`UP(`WORD_SELECT_WIDTH)-1:0]    qual_wsel_st0;
     wire                                  qual_from_mrvq_st0;
 
     wire [`WORD_WIDTH-1:0]                qual_writeword_st0;
@@ -298,7 +298,7 @@ module VX_bank #(
 
     wire                                  valid_st1     [STAGE_1_CYCLES-1:0];
     wire [`LINE_ADDR_WIDTH-1:0]           addr_st1      [STAGE_1_CYCLES-1:0];
-    wire [`WORD_SELECT_WIDTH-1:0]         wsel_st1      [STAGE_1_CYCLES-1:0];
+    wire [`UP(`WORD_SELECT_WIDTH)-1:0]    wsel_st1      [STAGE_1_CYCLES-1:0];
     wire [`WORD_WIDTH-1:0]                writeword_st1 [STAGE_1_CYCLES-1:0];
     wire [`REQ_INST_META_WIDTH-1:0]       inst_meta_st1 [STAGE_1_CYCLES-1:0];    
     wire [`BANK_LINE_WIDTH-1:0]           writedata_st1 [STAGE_1_CYCLES-1:0];
@@ -313,18 +313,22 @@ module VX_bank #(
                               mrvq_pop_unqual ? mrvq_addr_st0 :
                               reqq_pop_unqual ? reqq_req_addr_st0[`LINE_SELECT_ADDR_RNG] :
                               snrq_pop_unqual ? snrq_addr_st0 :
-                                         0;
-
-    assign qual_wsel_st0   =  reqq_pop_unqual ? reqq_req_addr_st0[`WORD_SELECT_WIDTH-1:0] :
-                              mrvq_pop_unqual ? mrvq_wsel_st0 :
-                                         0;
+                                                0;
+    if (`WORD_SELECT_WIDTH != 0) begin
+        assign qual_wsel_st0 =  reqq_pop_unqual ? reqq_req_addr_st0[`WORD_SELECT_WIDTH-1:0] :
+                                mrvq_pop_unqual ? mrvq_wsel_st0 :
+                                                  0; 
+    end else begin 
+        `UNUSED_VAR(mrvq_wsel_st0)
+        assign qual_wsel_st0 = 0;
+    end
 
     assign qual_writedata_st0 = dfpq_pop_unqual ? dfpq_filldata_st0 : 57;
 
     assign qual_inst_meta_st0 = mrvq_pop_unqual ? {`REQ_TAG_WIDTH'(mrvq_tag_st0)    , mrvq_rw_st0,     mrvq_byteen_st0,     mrvq_tid_st0} :
                                 reqq_pop_unqual ? {`REQ_TAG_WIDTH'(reqq_req_tag_st0), reqq_req_rw_st0, reqq_req_byteen_st0, reqq_req_tid_st0} :
                                 snrq_pop_unqual ? {`REQ_TAG_WIDTH'(snrq_tag_st0),     1'b0,            WORD_SIZE'(0),       `REQS_BITS'(0)} :
-                                           0;
+                                                  0;
 
     assign qual_going_to_write_st0 = dfpq_pop_unqual ? 1 :
                                         (mrvq_pop_unqual && mrvq_rw_st0) ? 1 :
@@ -333,11 +337,11 @@ module VX_bank #(
 
     assign qual_is_snp_st0 = mrvq_pop_unqual ? mrvq_is_snp_st0 :
                              snrq_pop_unqual ? 1 :
-                                        0;
+                                               0;
 
     assign qual_writeword_st0 = mrvq_pop_unqual ? mrvq_writeword_st0     :
                                 reqq_pop_unqual ? reqq_req_writeword_st0 :
-                                           0;
+                                                  0;
 
     assign qual_from_mrvq_st0 = mrvq_pop_unqual;
 
@@ -348,7 +352,7 @@ module VX_bank #(
 )
 
     VX_generic_register #(
-        .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_WIDTH + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
+        .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
     ) s0_1_c0 (
         .clk   (clk),
         .reset (reset),
@@ -361,7 +365,7 @@ module VX_bank #(
     genvar i;
     for (i = 1; i < STAGE_1_CYCLES; i++) begin
         VX_generic_register #(
-            .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_WIDTH + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
+            .N(1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
         ) s0_1_cc (
             .clk  (clk),
             .reset(reset),
@@ -428,7 +432,7 @@ module VX_bank #(
         .valid_req_st1e            (valid_st1e),
         .writefill_st1e            (is_fill_st1[STAGE_1_CYCLES-1]),
         .writeaddr_st1e            (addr_st1[STAGE_1_CYCLES-1]),
-        .writewsel_st1e            (wsel_st1[STAGE_1_CYCLES-1]),
+        .wordsel_st1e              (wsel_st1[STAGE_1_CYCLES-1]),
         .writeword_st1e            (writeword_st1[STAGE_1_CYCLES-1]),
         .writedata_st1e            (writedata_st1[STAGE_1_CYCLES-1]),
 
@@ -458,7 +462,7 @@ module VX_bank #(
     wire from_mrvq_st1e_st2 = from_mrvq_st1e && !is_snp_st1e;
 
     wire                            valid_st2;    
-    wire [`WORD_SELECT_WIDTH-1:0]   wsel_st2;
+    wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st2;
     wire [`WORD_WIDTH-1:0]          writeword_st2;
     wire [`WORD_WIDTH-1:0]          readword_st2;
     wire [`BANK_LINE_WIDTH-1:0]     readdata_st2;
@@ -478,7 +482,7 @@ module VX_bank #(
     wire                            mrvq_init_ready_state_hazard_st1e_st1;
     
     VX_generic_register #(
-        .N(1+ 1+ 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_WIDTH + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE + `REQ_INST_META_WIDTH)
+        .N(1+ 1+ 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE + `REQ_INST_META_WIDTH)
     ) st_1e_2 (
         .clk  (clk),
         .reset(reset),
@@ -512,7 +516,7 @@ module VX_bank #(
     assign recover_mrvq_state_st2 = miss_add && from_mrvq_st2;  
 
     wire [`LINE_ADDR_WIDTH-1:0] miss_add_addr  = addr_st2;
-    wire [`WORD_SELECT_WIDTH-1:0] miss_add_wsel = wsel_st2;
+    wire [`UP(`WORD_SELECT_WIDTH)-1:0] miss_add_wsel = wsel_st2;
     wire [`WORD_WIDTH-1:0] miss_add_data  = writeword_st2;
     assign {miss_add_tag, miss_add_rw, miss_add_byteen, miss_add_tid} = inst_meta_st2;
     wire miss_add_is_snp = is_snp_st2;
