@@ -4,8 +4,8 @@ CF += -std=c++11 -fms-extensions
 
 VF += --language 1800-2009 --assert -Wall -Wpedantic
 VF += -Wno-DECLFILENAME
-VF += --x-initial unique
-
+VF += --x-initial unique 
+VF += --x-assign unique
 VF += -exe $(SRCS) $(INCLUDE)
 
 #MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=4

@@ -48,6 +48,7 @@
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
+`define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
 
 `define MIN(x, y)   ((x < y) ? (x) : (y))
 `define MAX(x, y)   ((x > y) ? (x) : (y))

@@ -97,7 +97,7 @@ module VX_snp_forwarder #(
     always @(posedge clk) begin
         if (reset) begin
             fwdin_sel <= 0;
-        end else begin
+        end else if (NUM_REQUESTS > 1) begin
             fwdin_sel <= fwdin_sel + 1;
         end
     end

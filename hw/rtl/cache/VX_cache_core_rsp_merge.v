@@ -46,6 +46,7 @@ module VX_cache_core_rsp_merge #(
         assign core_rsp_tag = per_bank_core_rsp_tag[main_bank_index];        
         always @(*) begin
             core_rsp_valid = 0;
+            core_rsp_data = 0;
             for (i = 0; i < NUM_BANKS; i++) begin 
                 if (per_bank_core_rsp_valid[i]                
                  && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == per_bank_core_rsp_tag[main_bank_index][CORE_TAG_ID_BITS-1:0])) begin            
@@ -60,6 +61,8 @@ module VX_cache_core_rsp_merge #(
     end else begin
         always @(*) begin
             core_rsp_valid = 0;
+            core_rsp_data  = 0;
+            core_rsp_tag   = 0;
             for (i = 0; i < NUM_BANKS; i++) begin 
                 if (per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     

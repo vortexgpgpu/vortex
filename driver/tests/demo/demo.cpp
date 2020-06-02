@@ -91,7 +91,7 @@ int run_test(vx_device_h device,
       int ref = i + i; 
       int cur = buf_ptr[i];
       if (cur != ref) {
-        std::cout << "error at 0x" << std::hex << (buf_ptr + i)
+        std::cout << "error at value " << i
                 << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
         ++errors;
       }
@@ -150,23 +150,39 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
   kernel_arg.dst_ptr = value;
 
+  std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::endl;
+  std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::endl;
+  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::endl;
+
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
   RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
 
-  // populate source buffer values
-  std::cout << "populate source buffer values" << std::endl;    
+  // populate source buffer0 values
+  std::cout << "populate source buffer0 values" << std::endl;    
   {
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = i;
+      buf_ptr[i] = i-1;
     }
   }
 
-  // upload source buffers
-  std::cout << "upload source buffers" << std::endl;      
+  // upload source buffer0
+  std::cout << "upload source buffer0" << std::endl;      
   RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src0_ptr, buf_size, 0));
+
+  // populate source buffer1 values
+  std::cout << "populate source buffer1 values" << std::endl;    
+  {
+    auto buf_ptr = (int*)vx_host_ptr(buffer);
+    for (uint32_t i = 0; i < num_points; ++i) {
+      buf_ptr[i] = i+1;
+    }
+  }
+
+  // upload source buffer1
+  std::cout << "upload source buffer1" << std::endl;      
   RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src1_ptr, buf_size, 0));
 
   // upload kernel argument

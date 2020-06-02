@@ -70,7 +70,7 @@ module VX_lsu_unit #(
 
     for (i = 0; i < `NUM_THREADS; ++i) begin  
         assign mem_req_addr[i]   = use_address[i][31:2];        
-        assign mem_req_offset[i] = {3'b0, use_address[i][1:0]} << 3;
+        assign mem_req_offset[i] = (5'(use_address[i][1:0])) << 3;
         assign mem_req_byteen[i] = (wmask << use_address[i][1:0]);
         assign mem_req_data[i]   = (use_store_data[i] << mem_req_offset[i]);
     end   

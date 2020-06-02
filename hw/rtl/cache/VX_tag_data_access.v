@@ -136,7 +136,7 @@ module VX_tag_data_access #(
     end
 
     assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-1] || ~DRAM_ENABLE; // If shared memory, always valid
-    assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-1] && DRAM_ENABLE; // Dirty only applies in Dcache
+    assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-1] && DRAM_ENABLE && WRITE_ENABLE; // Dirty only applies in Dcache
     assign use_read_tag_st1e   = DRAM_ENABLE ? read_tag_st1c[STAGE_1_CYCLES-1] : writetag_st1e; // Tag is always the same in SM
     assign use_read_dirtyb_st1e= read_dirtyb_st1c[STAGE_1_CYCLES-1];
     assign use_read_data_st1e  = read_data_st1c[STAGE_1_CYCLES-1];
