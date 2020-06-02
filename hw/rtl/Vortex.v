@@ -123,7 +123,7 @@ module Vortex #(
     assign io_req_tag    = io_core_req_if.core_req_tag[0];
     assign io_core_req_if.core_req_ready = io_req_ready;
 
-    assign io_core_rsp_if.core_rsp_valid    = {{`NUM_THREADS-1{1'b0}}, io_rsp_valid};
+    assign io_core_rsp_if.core_rsp_valid    = {{(`NUM_THREADS-1){1'b0}}, io_rsp_valid};
     assign io_core_rsp_if.core_rsp_data[0]  = io_rsp_data;
     assign io_core_rsp_if.core_rsp_tag      = io_rsp_tag;    
     assign io_rsp_ready  = io_core_rsp_if.core_rsp_ready;

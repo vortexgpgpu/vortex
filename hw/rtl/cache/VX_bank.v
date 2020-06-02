@@ -718,12 +718,12 @@ module VX_bank #(
 `ifdef DBG_PRINT_CACHE_BANK
     if (NUM_BANKS == 1) begin
         always_ff @(posedge clk) begin
-            /*if (core_req_valid && core_req_ready) begin
+            if (core_req_valid && core_req_ready) begin
                 $display("%t: bank%01d%01d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(core_req_addr), core_req_tag);
             end
             if (core_rsp_valid && core_rsp_ready) begin
                 $display("%t: bank%01d%01d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
-            end*/
+            end
              if (dram_fill_req_valid && dram_fill_req_ready) begin
                 $display("%t: bank%01d%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(dram_fill_req_addr));
             end
@@ -733,21 +733,21 @@ module VX_bank #(
             if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
                 $display("%t: bank%01d%01d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(dram_fill_rsp_addr), dram_fill_rsp_data);
             end
-            /*if (snp_req_valid && snp_req_ready) begin
+            if (snp_req_valid && snp_req_ready) begin
                 $display("%t: bank%01d%01d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(snp_req_addr), snp_req_tag);
             end
             if (snp_rsp_valid && snp_rsp_ready) begin
                 $display("%t: bank%01d%01d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
-            end*/
+            end
         end
     end else begin
         always_ff @(posedge clk) begin
-            /*if ((|core_req_valid) && core_req_ready) begin
+            if ((|core_req_valid) && core_req_ready) begin
                 $display("%t: bank%01d%01d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(core_req_addr, BANK_ID), core_req_tag);
             end
             if (core_rsp_valid && core_rsp_ready) begin
                 $display("%t: bank%01d%01d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
-            end*/
+            end
             if (dram_fill_req_valid && dram_fill_req_ready) begin
                 $display("%t: bank%01d%01d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
             end
@@ -757,12 +757,12 @@ module VX_bank #(
             if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
                 $display("%t: bank%01d%01d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
             end
-            /*if (snp_req_valid && snp_req_ready) begin
+            if (snp_req_valid && snp_req_ready) begin
                 $display("%t: bank%01d%01d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(snp_req_addr, BANK_ID), snp_req_tag);
             end
             if (snp_rsp_valid && snp_rsp_ready) begin
                 $display("%t: bank%01d%01d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
-            end*/
+            end
         end
     end    
 `endif

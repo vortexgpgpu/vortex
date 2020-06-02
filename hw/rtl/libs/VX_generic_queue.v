@@ -15,6 +15,8 @@ module VX_generic_queue #(
     output wire             full,      
     output wire [`LOG2UP(SIZE+1)-1:0] size
 ); 
+    `STATIC_ASSERT(0 == SIZE || `ISPOW2(SIZE), "must be 0 or power of 2!");
+
     if (SIZE == 0) begin
 
         assign empty    = 1;
@@ -88,6 +90,7 @@ module VX_generic_queue #(
                         if (writing) begin                             
                             data[wr_ptr_a] <= data_in;
                             wr_ptr_r <= wr_ptr_r + 1;
+
                             if (!reading) begin                                                       
                                 size_r <= size_r + 1;
                             end
@@ -120,16 +123,17 @@ module VX_generic_queue #(
 
                 always @(posedge clk) begin
                     if (reset) begin
-                        size_r          <= 0;
-                        empty_r         <= 1;                   
-                        full_r          <= 0;
                         wr_ptr_r        <= 0;
                         rd_ptr_r        <= 0;
                         rd_ptr_next_r   <= 1;
+                        empty_r         <= 1;                   
+                        full_r          <= 0;
+                        size_r          <= 0;
                     end else begin
                         if (writing) begin                            
                             data[wr_ptr_r] <= data_in;
                             wr_ptr_r <= wr_ptr_r + 1; 
+
                             if (!reading) begin                                
                                 empty_r <= 0;
                                 if (size_r == SIZE-1) begin
@@ -140,15 +144,17 @@ module VX_generic_queue #(
                         end
 
                         if (reading) begin
-                            rd_ptr_r <= rd_ptr_next_r;
-                            if (SIZE == 2) begin                                
-                                rd_ptr_next_r <= ~rd_ptr_next_r;
-                            end else if (SIZE > 2) begin        
+                            rd_ptr_r <= rd_ptr_next_r;   
+                            
+                            if (SIZE > 2) begin        
                                 rd_ptr_next_r <= rd_ptr_r + 2;
+                            end else begin // (SIZE == 2);
+                                rd_ptr_next_r <= ~rd_ptr_next_r;                                
                             end
 
                             if (!writing) begin                                
                                 if (size_r == 1) begin
+                                    assert(rd_ptr_next_r == wr_ptr_r);
                                     empty_r <= 1;  
                                 end;                
                                 full_r <= 0;
@@ -156,7 +162,9 @@ module VX_generic_queue #(
                             end
                         end
 
-                        bypass_r <= writing && (empty_r || (1 == size_r) && reading);
+                        bypass_r <= writing 
+                                 && (empty_r || ((1 == size_r) && reading)); // empty or about to go empty
+                                 
                         curr_r   <= data_in;
                         head_r   <= data[reading ? rd_ptr_next_r : rd_ptr_r];
                     end

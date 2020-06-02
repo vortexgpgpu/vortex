@@ -34,6 +34,7 @@ RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(MULTICORE)
 VL_FLAGS += -Wno-DECLFILENAME
 VL_FLAGS += --x-initial unique
+VL_FLAGS += --x-assign unique
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
