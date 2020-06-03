@@ -246,8 +246,12 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     
     for (;;) {
         CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_STATUS, &data));
-        if (0 == data || 0 == timeout)
+        if (0 == data || 0 == timeout) {
+            if (data != 0) {
+                fprintf(stdout, "ready-wait timed out: status=%ld\n", data);
+            }
             break;
+        }
         nanosleep(&sleep_time, nullptr);
         timeout -= sleep_time_ms;
     };
