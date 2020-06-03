@@ -25,7 +25,7 @@ module VX_cache_miss_resrv #(
     input wire                          miss_add,
     input wire                          from_mrvq,
     input wire[`LINE_ADDR_WIDTH-1:0]    miss_add_addr,
-    input wire[`WORD_SELECT_WIDTH-1:0]  miss_add_wsel,
+    input wire[`UP(`WORD_SELECT_WIDTH)-1:0] miss_add_wsel,
     input wire[`WORD_WIDTH-1:0]         miss_add_data,
     input wire[`REQS_BITS-1:0]          miss_add_tid,
     input wire[`REQ_TAG_WIDTH-1:0]      miss_add_tag,
@@ -46,7 +46,7 @@ module VX_cache_miss_resrv #(
     input  wire                         miss_resrv_pop,
     output wire                         miss_resrv_valid_st0,
     output wire[`LINE_ADDR_WIDTH-1:0]   miss_resrv_addr_st0,
-    output wire[`WORD_SELECT_WIDTH-1:0] miss_resrv_wsel_st0,
+    output wire[`UP(`WORD_SELECT_WIDTH)-1:0] miss_resrv_wsel_st0,
     output wire[`WORD_WIDTH-1:0]        miss_resrv_data_st0,
     output wire[`REQS_BITS-1:0]         miss_resrv_tid_st0,
     output wire[`REQ_TAG_WIDTH-1:0]     miss_resrv_tag_st0,
@@ -64,8 +64,10 @@ module VX_cache_miss_resrv #(
 
     reg [`LOG2UP(MRVQ_SIZE+1)-1:0] size;
 
+    `STATIC_ASSERT(MRVQ_SIZE > 5, "invalid size");
+
     assign miss_resrv_full = (size == $bits(size)'(MRVQ_SIZE));
-    assign miss_resrv_stop = (size  > $bits(size)'(MRVQ_SIZE-5));
+    assign miss_resrv_stop = (size  > $bits(size)'(MRVQ_SIZE-1));
 
     wire                           enqueue_possible = !miss_resrv_full;
     wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;    

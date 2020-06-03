@@ -125,13 +125,13 @@ module VX_cache #(
 
 `DEBUG_BLOCK(
     wire[31:0]           debug_core_req_use_pc;
-    wire[1:0]            debug_core_req_wb;
-    wire[2:0]            debug_core_req_rmask;
+    wire[1:0]            debug_core_req_wb;    
     wire[4:0]            debug_core_req_rd;
     wire[`NW_BITS-1:0]   debug_core_req_warp_num;
+    wire[`LOG2UP(CREQ_SIZE)-1:0] debug_core_req_idx;
 
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rmask, debug_core_req_rd, debug_core_req_warp_num} = core_req_tag[0];
+        assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_warp_num, debug_core_req_idx} = core_req_tag[0];
     end
 )
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valid;

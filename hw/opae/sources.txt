@@ -7,6 +7,7 @@ vortex_afu.json
 +define+NUM_CORES=2
 +define+NUM_WARPS=4
 +define+NUM_THREADS=4
++define+L2_ENABLE=1
 
 +define+DNUM_BANKS=4
 +define+INUM_BANKS=1
@@ -16,13 +17,13 @@ vortex_afu.json
 +define+IDFPQ_SIZE=16
 +define+SDFPQ_SIZE=0
 
-+define+DBG_PRINT_CORE_ICACHE
-+define+DBG_PRINT_CORE_DCACHE
-+define+DBG_PRINT_CACHE_BANK
-+define+DBG_PRINT_CACHE_SNP
-+define+DBG_PRINT_CACHE_MSRQ
-+define+DBG_PRINT_DRAM
-+define+DBG_PRINT_OPAE
+#+define+DBG_PRINT_CORE_ICACHE
+#+define+DBG_PRINT_CORE_DCACHE
+#+define+DBG_PRINT_CACHE_BANK
+#+define+DBG_PRINT_CACHE_SNP
+#+define+DBG_PRINT_CACHE_MSRQ
+#+define+DBG_PRINT_DRAM
+#+define+DBG_PRINT_OPAE
 
 +incdir+.
 +incdir+../rtl
