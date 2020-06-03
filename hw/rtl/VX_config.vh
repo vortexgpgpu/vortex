@@ -12,7 +12,7 @@
 `endif
 
 `ifndef NUM_WARPS
-`define NUM_WARPS 8
+`define NUM_WARPS 4
 `endif
 
 `ifndef NUM_THREADS
@@ -87,7 +87,7 @@
 
 // Number of banks {1, 2, 4, 8,...}
 `ifndef DNUM_BANKS
-`define DNUM_BANKS 8
+`define DNUM_BANKS 4
 `endif
 
 // Size of a word in bytes
@@ -107,12 +107,12 @@
 
 // Miss Reserv Queue Knob
 `ifndef DMRVQ_SIZE
-`define DMRVQ_SIZE (`NUM_WARPS*`NUM_THREADS)
+`define DMRVQ_SIZE `MAX(`NUM_WARPS*`NUM_THREADS, 8)
 `endif
 
 // Dram Fill Rsp Queue Size
 `ifndef DDFPQ_SIZE
-`define DDFPQ_SIZE 32
+`define DDFPQ_SIZE 16
 `endif
 
 // Snoop Req Queue Size
@@ -137,7 +137,7 @@
 
 // Prefetcher
 `ifndef DPRFQ_SIZE
-`define DPRFQ_SIZE 32
+`define DPRFQ_SIZE 16
 `endif
 
 `ifndef DPRFQ_STRIDE
@@ -178,12 +178,12 @@
 
 // Miss Reserv Queue Knob
 `ifndef IMRVQ_SIZE
-`define IMRVQ_SIZE `ICREQ_SIZE
+`define IMRVQ_SIZE `MAX(`ICREQ_SIZE, 8)
 `endif
 
 // Dram Fill Rsp Queue Size
 `ifndef IDFPQ_SIZE
-`define IDFPQ_SIZE 32
+`define IDFPQ_SIZE 16
 `endif
 
 // Core Writeback Queue Size
@@ -203,7 +203,7 @@
 
 // Prefetcher
 `ifndef IPRFQ_SIZE
-`define IPRFQ_SIZE 32
+`define IPRFQ_SIZE 16
 `endif
 
 `ifndef IPRFQ_STRIDE
@@ -276,17 +276,17 @@
 
 // Core Request Queue Size
 `ifndef L2CREQ_SIZE
-`define L2CREQ_SIZE 32
+`define L2CREQ_SIZE 16
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef L2MRVQ_SIZE
-`define L2MRVQ_SIZE 32
+`define L2MRVQ_SIZE `MAX(`L2CREQ_SIZE, 8)
 `endif
 
 // Dram Fill Rsp Queue Size
 `ifndef L2DFPQ_SIZE
-`define L2DFPQ_SIZE 32
+`define L2DFPQ_SIZE 16
 `endif
 
 // Snoop Req Queue Size
@@ -311,7 +311,7 @@
 
 // Prefetcher
 `ifndef L2PRFQ_SIZE
-`define L2PRFQ_SIZE 32
+`define L2PRFQ_SIZE 16
 `endif
 
 `ifndef L2PRFQ_STRIDE
@@ -347,17 +347,17 @@
 
 // Core Request Queue Size
 `ifndef L3CREQ_SIZE
-`define L3CREQ_SIZE 32
+`define L3CREQ_SIZE 16
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef L3MRVQ_SIZE
-`define L3MRVQ_SIZE `L3CREQ_SIZE
+`define L3MRVQ_SIZE `MAX(`L3CREQ_SIZE, 8)
 `endif
 
 // Dram Fill Rsp Queue Size
 `ifndef L3DFPQ_SIZE
-`define L3DFPQ_SIZE 32
+`define L3DFPQ_SIZE 16
 `endif
 
 // Snoop Req Queue Size
@@ -382,7 +382,7 @@
 
 // Prefetcher
 `ifndef L3PRFQ_SIZE
-`define L3PRFQ_SIZE 32
+`define L3PRFQ_SIZE 16
 `endif
 
 `ifndef L3PRFQ_STRIDE

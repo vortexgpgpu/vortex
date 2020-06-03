@@ -7,7 +7,7 @@ vortex_afu.json
 +define+NUM_CORES=2
 +define+NUM_WARPS=4
 +define+NUM_THREADS=4
-+define+L2_ENABLE=0
++define+L2_ENABLE=1
 
 +define+DNUM_BANKS=4
 +define+INUM_BANKS=1
