@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_cache_config.vh"
 
 module Vortex_Cluster #(
     parameter CLUSTER_ID = 0

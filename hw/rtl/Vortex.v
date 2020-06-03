@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_cache_config.vh"
 
 module Vortex #( 
     parameter CORE_ID = 0

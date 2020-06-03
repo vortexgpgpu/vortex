@@ -1,4 +1,4 @@
-#include "../config.h"
+#include <VX_config.h>
 #include "../intrinsics/vx_intrinsics.h"
 #include "vx_api.h"
 #include <inttypes.h>

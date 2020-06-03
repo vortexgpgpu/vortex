@@ -2,7 +2,7 @@
 #include <fstream>
 #include <cstring>
 #include <vortex.h>
-#include <config.h>
+#include <VX_config.h>
 
 extern int vx_dev_caps(int caps_id) {
   switch (caps_id) {

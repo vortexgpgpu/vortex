@@ -14,6 +14,7 @@ VX_API = $(VX_RT_PATH)/vx_api/vx_api.c
 #VX_FIO = $(VX_RT_PATH)/fileio/fileio.S
 
 VX_CFLAGS = -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VX_RT_PATH)/startup/vx_link.ld -ffreestanding -nostartfiles -Wl,--gc-sections
+VX_CFLAGS += -I../../../hw 
 
 VX_SRCS = kernel.c
 

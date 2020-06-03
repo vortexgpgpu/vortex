@@ -7,7 +7,6 @@
 #include <chrono>
 
 #include <vortex.h>
-#include <ram.h>
 #include <simulator.h>
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -60,7 +59,6 @@ class vx_device {
 public:
     vx_device() {        
         mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
-        simulator_.attach_ram(&ram_);
     } 
 
     ~vx_device() {     
@@ -146,7 +144,6 @@ public:
 private:
 
     size_t mem_allocation_;     
-    RAM ram_;
     Simulator simulator_;
     std::future<void> future_;
 };

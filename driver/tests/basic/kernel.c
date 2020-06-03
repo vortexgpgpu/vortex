@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "config.h"
+#include <VX_config.h>
 #include "intrinsics/vx_intrinsics.h"
 #include "common.h"
 

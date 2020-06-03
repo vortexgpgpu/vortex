@@ -4,6 +4,8 @@ COMP     = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-g++
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,../../startup/vx_link.ld 
 CC_FLAGS += -nostartfiles -ffreestanding -fno-rtti -fno-exceptions -Wl,--gc-sections 
 
+CC_FLAGS += -I../../../hw
+
 DMP  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objdump
 CPY  = ~/dev/riscv-gnu-toolchain/drops/bin/riscv32-unknown-elf-objcopy
 
