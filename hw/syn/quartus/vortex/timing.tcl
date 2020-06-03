@@ -1,11 +1,10 @@
-project_open Vortex
+project_open Vortex_Socket
 
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 
 create_timing_netlist
 read_sdc
 update_timing_netlist
-
 
 foreach_in_collection op [get_available_operating_conditions] {
   set_operating_conditions $op

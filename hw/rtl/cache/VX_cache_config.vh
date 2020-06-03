@@ -8,8 +8,8 @@
 //                               tag              rw   byteen      tid
 `define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
-//                                data         metadata               word_sel             is_snp
-`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `WORD_SELECT_WIDTH + 1)
+//                                data         metadata               word_sel                  is_snp
+`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1)
 
 `define REQS_BITS               `LOG2UP(NUM_REQUESTS)
 
@@ -48,7 +48,7 @@
 `define TAG_SELECT_ADDR_START   (1+`LINE_SELECT_ADDR_END)
 `define TAG_SELECT_ADDR_END     31
 
-`define WORD_SELECT_WIDTH       `LOG2UP(`BANK_LINE_WORDS)
+`define WORD_SELECT_WIDTH       `CLOG2(`BANK_LINE_WORDS)
 
 `define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
 

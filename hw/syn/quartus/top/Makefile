@@ -1,6 +1,6 @@
-PROJECT = Vortex_Socket
-TOP_LEVEL_ENTITY = Vortex_Socket
-SRC_FILE = Vortex_Socket.v
+PROJECT = vortex_afu
+TOP_LEVEL_ENTITY = vortex_afu
+SRC_FILE = vortex_afu.sv
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
@@ -49,7 +49,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache"
+	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache;../../../opae"
 	
 syn.chg:
 	$(STAMP) syn.chg

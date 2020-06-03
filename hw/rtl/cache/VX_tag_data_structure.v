@@ -33,7 +33,7 @@ module VX_tag_data_structure #(
     reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0][7:0] data [`BANK_LINE_COUNT-1:0];    
     reg [`TAG_SELECT_BITS-1:0]                      tag [`BANK_LINE_COUNT-1:0];
     reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0]     dirtyb[`BANK_LINE_COUNT-1:0];
-    reg                                            dirty[`BANK_LINE_COUNT-1:0];   
+    reg [`BANK_LINE_COUNT-1:0]                     dirty;   
     reg [`BANK_LINE_COUNT-1:0]                     valid;    
     
     assign read_valid  = valid  [read_addr];
@@ -49,6 +49,7 @@ module VX_tag_data_structure #(
         if (reset) begin
             for (i = 0; i < `BANK_LINE_COUNT; i++) begin
                 valid[i] <= 0;
+                dirty[i] <= 0;
             end
         end else if (!stall_bank_pipe) begin
             if (do_write) begin

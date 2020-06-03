@@ -1,6 +1,6 @@
-PROJECT = Vortex
-TOP_LEVEL_ENTITY = Vortex
-SRC_FILE = Vortex.v
+PROJECT = Vortex_Socket
+TOP_LEVEL_ENTITY = Vortex_Socket
+SRC_FILE = Vortex_Socket.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
