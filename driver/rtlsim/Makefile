@@ -1,7 +1,7 @@
 #CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
 CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -I../../include -I../../../hw/simulate -I../../../runtime
+CFLAGS += -I../../include -I../../../hw/simulate -I../../../hw
 
 # control RTL debug print states
 DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
@@ -19,7 +19,7 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
 
 #DEBUG = 1
-AFU=1
+#AFU=1
 
 CFLAGS += -fPIC
 

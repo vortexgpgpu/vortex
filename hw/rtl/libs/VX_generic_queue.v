@@ -121,7 +121,7 @@ module VX_generic_queue #(
 
                         if (!reading) begin                                
                             empty_r <= 0;
-                            if (size_r == SIZE-1) begin
+                            if (size_r == ($bits(size_r)'(SIZE-1))) begin
                                 full_r <= 1;
                             end
                             size_r <= size_r + 1;

@@ -436,7 +436,7 @@ begin
     end
 
     if (cci_dram_wr_req_fire) begin                
-      cci_dram_wr_req_addr <= cci_dram_wr_req_addr + ((t_cci_rdq_tag'(cci_dram_wr_req_ctr) == (DRAM_ADDR_WIDTH)'(CCI_RD_WINDOW_SIZE-1)) ? (DRAM_ADDR_WIDTH)'(CCI_RD_WINDOW_SIZE)  : 0);
+      cci_dram_wr_req_addr <= cci_dram_wr_req_addr + ((t_cci_rdq_tag'(cci_dram_wr_req_ctr) == t_cci_rdq_tag'(CCI_RD_WINDOW_SIZE-1)) ? (DRAM_ADDR_WIDTH)'(CCI_RD_WINDOW_SIZE)  : 0);
       cci_dram_wr_req_ctr  <= cci_dram_wr_req_ctr + 1;
     `ifdef DBG_PRINT_OPAE
       $display("%t: AVS Wr Req: addr=%0h, data=%0h, rem=%0d", $time, `DRAM_TO_BYTE_ADDR(avs_address), avs_writedata, (cci_dram_wr_req_ctr + 1));
