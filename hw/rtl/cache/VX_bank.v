@@ -505,13 +505,11 @@ module VX_bank #(
     wire miss_add_unqual = (miss_add_because_miss || miss_add_because_pending);
     assign mrvq_push_stall = miss_add_unqual && mrvq_full;
 
-
     wire miss_add = miss_add_unqual
                    && !mrvq_full 
                    && !(cwbq_push_stall 
                      || dwbq_push_stall 
                      || dram_fill_req_stall);  
-
 
     assign recover_mrvq_state_st2 = miss_add && from_mrvq_st2;  
 
