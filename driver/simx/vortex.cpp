@@ -9,7 +9,7 @@
 
 #include <vortex.h>
 #include <core.h>
-#include <config.h>
+#include <VX_config.h>
 
 #define PAGE_SIZE 4096
 

@@ -1,7 +1,7 @@
 
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I/tools/opae/1.4.0/include  -I../../runtime
+CXXFLAGS += -I../include -I/tools/opae/1.4.0/include  -I../../hw
 
 LDFLAGS += -L/tools/opae/1.4.0/lib
 

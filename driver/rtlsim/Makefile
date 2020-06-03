@@ -19,6 +19,7 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
 
 #DEBUG = 1
+AFU=1
 
 CFLAGS += -fPIC
 
@@ -26,6 +27,8 @@ CFLAGS += -DUSE_RTLSIM $(MULTICORE)
 
 LDFLAGS += -shared -pthread
 # LDFLAGS += -dynamiclib -pthread
+
+TOP = Vortex_Socket
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
@@ -48,14 +51,22 @@ else
 	VL_FLAGS += -DNDEBUG
 endif
 
+# AFU
+ifdef AFU
+    TOP = vortex_afu_sim
+	VL_FLAGS += -DNOPAE
+	CFLAGS += -DNOPAE
+	RTL_INCLUDE += -I../../hw/opae  -I../../hw/opae/ccip
+endif
+
 PROJECT = libvortex.so
 # PROJECT = libvortex.dylib
 
 all: $(PROJECT)
 	
 $(PROJECT): $(SRCS)
-	verilator --exe --cc Vortex_Socket.v $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
-	make -j -C obj_dir -f VVortex_Socket.mk
+	verilator --exe --cc $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
+	make -j -C obj_dir -f V$(TOP).mk
 
 clean:
 	rm -rf $(PROJECT) obj_dir

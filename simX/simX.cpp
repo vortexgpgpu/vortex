@@ -21,7 +21,7 @@
 #include "include/args.h"
 #include "include/help.h"
 
-#include "../runtime/config.h"
+#include <VX_config.h>
 
 #include <sys/stat.h>
 

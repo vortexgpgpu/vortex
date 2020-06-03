@@ -1,7 +1,7 @@
 #pragma once
 
-#include "VVortex_Socket.h"
-#include "VVortex_Socket__Syms.h"
+#include "Vvortex_afu_sim.h"
+#include "Vvortex_afu_sim__Syms.h"
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
@@ -31,31 +31,28 @@ public:
   Simulator();
   virtual ~Simulator();
 
-  void load_bin(const char* program_file);
-  void load_ihex(const char* program_file);
-  
-  bool is_busy();  
   void reset();
-  void step();
-  void wait(uint32_t cycles);
-  void flush_caches(uint32_t mem_addr, uint32_t size);  
+  
+  void step();  
 
-  void attach_ram(RAM* ram);
+  int mmio_read(uint64_t addr, uint64_t* value);
 
-  bool run();  
-  void print_stats(std::ostream& out);
-
+  int mmio_write(uint64_t addr, uint64_t value);
+  
 private:  
 
-  void eval();  
-  void dbus_driver();
-  void io_driver();
+  void eval(); 
+
+  void avs_driver();
+
+  void ccip_driver(); 
   
   std::vector<dram_req_t> dram_rsp_vec_;
 
-  RAM *ram_;
-  VVortex_Socket *vortex_;
-  bool enable_;
+  RAM ram_;
+  Vvortex_afu_sim *vortex_;
+  
+
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif

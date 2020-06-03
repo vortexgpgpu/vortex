@@ -1,5 +1,4 @@
-
-#include "../config.h"
+#include <VX_config.h>
 
 # .section .FileIO
 

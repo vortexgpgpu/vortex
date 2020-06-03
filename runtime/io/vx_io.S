@@ -1,4 +1,4 @@
-#include "../config.h"
+#include <VX_config.h>
 
 .type vx_print_str, @function
 .global vx_print_str

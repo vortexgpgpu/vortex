@@ -17,14 +17,6 @@ Simulator::Simulator() {
   ram_ = nullptr;
   vortex_ = new VVortex_Socket();
 
-  // initial values
-  vortex_->dram_req_ready = 0;
-  vortex_->dram_rsp_valid = 0;
-  vortex_->io_req_ready   = 0;
-  vortex_->io_rsp_valid   = 0;
-  vortex_->snp_req_valid  = 0;
-  vortex_->snp_rsp_ready  = 0;
-
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
   trace_ = new VerilatedVcdC;
