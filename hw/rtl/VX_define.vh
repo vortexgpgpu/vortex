@@ -172,7 +172,7 @@
 `define DNUM_REQUESTS       `NUM_THREADS
 
 // Snoop request tag bits
-`define DSNP_TAG_WIDTH      `LOG2UP(`L2SNRQ_SIZE)
+`define DSNP_TAG_WIDTH      ((`NUM_CORES > 1) ? `LOG2UP(`L2SNRQ_SIZE) : `L2SNP_TAG_WIDTH)
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 

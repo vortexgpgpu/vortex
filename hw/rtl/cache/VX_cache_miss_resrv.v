@@ -72,10 +72,6 @@ module VX_cache_miss_resrv #(
     wire                           enqueue_possible = !miss_resrv_full;
     wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;    
 
-`IGNORE_WARNINGS_BEGIN
-    wire [31:0] make_ready_push_full;
-`IGNORE_WARNINGS_END
-
     reg [MRVQ_SIZE-1:0] make_ready;
     reg [MRVQ_SIZE-1:0] make_ready_push;
     reg [MRVQ_SIZE-1:0] valid_address_match;
@@ -93,24 +89,21 @@ module VX_cache_miss_resrv #(
     wire                          dequeue_possible = valid_table[schedule_ptr] && ready_table[schedule_ptr];
     wire [`LOG2UP(MRVQ_SIZE)-1:0] dequeue_index    = schedule_ptr;
 
-    assign miss_resrv_valid_st0 = (MRVQ_SIZE != 2) && dequeue_possible;
+    assign miss_resrv_valid_st0 = dequeue_possible;
     assign miss_resrv_addr_st0  = addr_table[dequeue_index];
     assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_tag_st0, miss_resrv_rw_st0, miss_resrv_byteen_st0, miss_resrv_wsel_st0, miss_resrv_is_snp_st0} = metadata_table[dequeue_index];
 
-    wire mrvq_push = miss_add && enqueue_possible && !from_mrvq && (MRVQ_SIZE != 2);
+    wire mrvq_push = miss_add && enqueue_possible && !from_mrvq;
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
-
 
     wire recover_state  =  miss_add && from_mrvq;
     wire increment_head = !miss_add && from_mrvq;
-
 
     wire update_ready = (|make_ready);
 
     wire qual_mrvq_init = mrvq_push && mrvq_init_ready_state;
 
-    assign make_ready_push_full = ({31'b0, qual_mrvq_init} << enqueue_index);
-    assign make_ready_push = make_ready_push_full[MRVQ_SIZE-1:0];
+    assign make_ready_push = (MRVQ_SIZE'(qual_mrvq_init)) << enqueue_index;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -160,12 +153,12 @@ module VX_cache_miss_resrv #(
     integer j;
     if (NUM_BANKS == 1) begin
         always_ff @(posedge clk) begin        
-            if (mrvq_push || mrvq_pop) begin
-                $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);            
+            if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
+                $write("%t: bank%0d-%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);            
                 for (j = 0; j < MRVQ_SIZE; j++) begin
                     if (valid_table[j]) begin
                         $write(" ");                    
-                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");
+                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");   
                         if (~ready_table[j]) $write("!");
                         $write("addr%0d=%0h", j, {addr_table[j], `BASE_ADDR_BITS'(0)});
                     end
@@ -175,12 +168,12 @@ module VX_cache_miss_resrv #(
         end
     end else begin
         always_ff @(posedge clk) begin        
-            if (mrvq_push || mrvq_pop) begin
-                $write("%t: bank%02d:%01d msrq: push=%b pop=%b", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop);            
+            if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
+                $write("%t: bank%0d-%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);            
                 for (j = 0; j < MRVQ_SIZE; j++) begin
                     if (valid_table[j]) begin
                         $write(" ");                    
-                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");
+                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");                   
                         if (~ready_table[j]) $write("!");
                         $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
                     end

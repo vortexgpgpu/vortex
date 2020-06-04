@@ -138,8 +138,11 @@ public:
     int flush_caches(size_t dev_maddr, size_t size) {
         if (future_.valid()) {
             future_.wait(); // ensure prior run completed
-        }
-        simulator_.flush_caches(dev_maddr, size);
+        }        
+        simulator_.flush_caches(dev_maddr, size);        
+        while (simulator_.is_busy()) {
+            simulator_.step();
+        };
         return 0;
     }
 

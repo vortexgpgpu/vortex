@@ -208,13 +208,13 @@ module VX_cache #(
         assign snp_req_addr_qual  = snp_req_addr;
         assign snp_req_tag_qual   = snp_req_tag;
         assign snp_req_ready      = snp_req_ready_qual;
-    end
+    end    
 
-    assign dram_req_tag        = dram_req_addr;
-
-    assign core_req_ready      = (& per_bank_core_req_ready);    
-    assign dram_rsp_ready      = (| per_bank_dram_fill_rsp_ready);    
-    assign snp_req_ready_qual  = (& per_bank_snp_req_ready);
+    if (NUM_BANKS == 1) begin
+        assign snp_req_ready_qual = per_bank_snp_req_ready;
+    end else begin
+        assign snp_req_ready_qual = per_bank_snp_req_ready[`DRAM_ADDR_BANK(snp_req_addr_qual)];
+    end    
 
     VX_cache_core_req_bank_sel #(
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
@@ -223,11 +223,17 @@ module VX_cache #(
         .NUM_REQUESTS   (NUM_REQUESTS)
     ) cache_core_req_bank_sel (
         .core_req_valid  (core_req_valid),
+        .per_bank_ready  (per_bank_core_req_ready),
         .core_req_addr   (core_req_addr),
-        .per_bank_valid  (per_bank_valid)
+        .per_bank_valid  (per_bank_valid),
+        .core_req_ready  (core_req_ready)
     );
 
+    assign dram_req_tag   = dram_req_addr;
+    assign dram_rsp_ready = (| per_bank_dram_fill_rsp_ready);
+
     genvar i;
+    
     generate
         for (i = 0; i < NUM_BANKS; i++) begin
             wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_valid;            
@@ -270,7 +276,7 @@ module VX_cache #(
             wire                            curr_bank_core_req_ready;
 
             // Core Req
-            assign curr_bank_core_req_valid   = per_bank_valid[i] & {NUM_REQUESTS{core_req_ready}};
+            assign curr_bank_core_req_valid   = (per_bank_valid[i] & {NUM_REQUESTS{core_req_ready}});
             assign curr_bank_core_req_addr    = core_req_addr;
             assign curr_bank_core_req_rw      = core_req_rw;
             assign curr_bank_core_req_byteen  = core_req_byteen;

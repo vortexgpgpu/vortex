@@ -35,6 +35,7 @@ public:
   void load_ihex(const char* program_file);
   
   bool is_busy();  
+
   void reset();
   void step();
   void wait(uint32_t cycles);
@@ -48,14 +49,19 @@ public:
 private:  
 
   void eval();  
-  void dbus_driver();
-  void io_driver();
+
+  void eval_dram_bus();
+  void eval_io_bus();
+  void eval_snp_bus();
   
   std::vector<dram_req_t> dram_rsp_vec_;
+  
+  uint32_t snp_req_active_;
+  uint32_t snp_req_size_;
+  uint32_t pending_snp_reqs_;
 
   RAM *ram_;
   VVortex_Socket *vortex_;
-  bool enable_;
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif
