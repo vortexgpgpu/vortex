@@ -1,0 +1,4 @@
++define+NUM_CORES=2
++define+L2_ENABLE=0
+
+C:sources.txt
