@@ -57,11 +57,13 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define NW_BITS     (`LOG2UP(`NUM_WARPS))
+`define NW_BITS     `LOG2UP(`NUM_WARPS)
 
-`define NT_BITS     (`LOG2UP(`NUM_THREADS))
+`define NT_BITS     `LOG2UP(`NUM_THREADS)
 
-`define NC_BITS     (`LOG2UP(`NUM_CORES))
+`define NC_BITS     `LOG2UP(`NUM_CORES)
+
+`define REQS_BITS   `LOG2UP(NUM_REQUESTS)
 
 `define NUM_GPRS    32
 
