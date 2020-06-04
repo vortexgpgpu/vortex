@@ -392,6 +392,7 @@ module Vortex_Cluster #(
             assign per_core_snp_rsp_ready [(i/2)] = arb_snp_fwdin_ready [(i/2)];
         end
 
+    if (`NUM_CORES > 1) begin
         VX_snp_forwarder #(
             .CACHE_ID           (`L2CACHE_ID),
             .BANK_LINE_SIZE     (`L2BANK_LINE_SIZE), 
@@ -421,6 +422,16 @@ module Vortex_Cluster #(
             .snp_fwdin_tag      (arb_snp_fwdin_tag),
             .snp_fwdin_ready    (arb_snp_fwdin_ready)      
         );
+    end else begin
+        assign arb_snp_fwdout_valid = snp_req_valid;
+        assign arb_snp_fwdout_addr  = snp_req_addr;
+        assign arb_snp_fwdout_tag   = snp_req_tag;
+        assign snp_req_ready        = arb_snp_fwdout_ready;
+ 
+        assign snp_rsp_valid        = arb_snp_fwdin_valid;
+        assign snp_rsp_tag          = arb_snp_fwdin_tag;
+        assign arb_snp_fwdin_ready  = snp_rsp_ready;
+    end
 
         VX_dram_arb #(
             .NUM_REQUESTS   (`L2NUM_REQUESTS),
