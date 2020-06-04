@@ -82,4 +82,4 @@ ps -u tinebp
 kill -9 <pid>
 
 # fixing device resource busy issue when deleting /build_ase/
--
+lsof +D build_ase

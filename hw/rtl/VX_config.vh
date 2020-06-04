@@ -224,7 +224,7 @@
 
 // Number of banks {1, 2, 4, 8,...}
 `ifndef SNUM_BANKS
-`define SNUM_BANKS 8
+`define SNUM_BANKS 4
 `endif
 
 // Size of a word in bytes
@@ -261,7 +261,7 @@
 
 // Number of banks {1, 2, 4, 8,...}
 `ifndef L2NUM_BANKS
-`define L2NUM_BANKS 8
+`define L2NUM_BANKS 4
 `endif
 
 // Size of a word in bytes
@@ -332,7 +332,7 @@
 
 // Number of banks {1, 2, 4, 8,...}
 `ifndef L3NUM_BANKS
-`define L3NUM_BANKS 8
+`define L3NUM_BANKS 4
 `endif
 
 // Size of a word in bytes

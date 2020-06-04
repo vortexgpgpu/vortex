@@ -1,10 +1,13 @@
 `include "VX_define.vh"
 
-module VX_dram_arb #(
-    parameter BANK_LINE_SIZE = 1, 
+module VX_dram_arb #(    
     parameter NUM_REQUESTS   = 1, 
+    parameter DRAM_LINE_SIZE = 1, 
     parameter CORE_TAG_WIDTH = 1,
-    parameter DRAM_TAG_WIDTH = 1
+    parameter DRAM_TAG_WIDTH = 1,
+
+    parameter DRAM_LINE_WIDTH = DRAM_LINE_SIZE * 8,
+    parameter DRAM_ADDR_WIDTH = 32 - `CLOG2(DRAM_LINE_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -12,30 +15,30 @@ module VX_dram_arb #(
     // Core request    
     input wire [NUM_REQUESTS-1:0]                       core_req_valid,
     input wire [NUM_REQUESTS-1:0]                       core_req_rw,
-    input wire [NUM_REQUESTS-1:0][BANK_LINE_SIZE-1:0]   core_req_byteen,
-    input wire [NUM_REQUESTS-1:0][`DRAM_ADDR_WIDTH-1:0] core_req_addr,
-    input wire [NUM_REQUESTS-1:0][`BANK_LINE_WIDTH-1:0] core_req_data,
+    input wire [NUM_REQUESTS-1:0][DRAM_LINE_SIZE-1:0]   core_req_byteen,
+    input wire [NUM_REQUESTS-1:0][DRAM_ADDR_WIDTH-1:0]  core_req_addr,
+    input wire [NUM_REQUESTS-1:0][DRAM_LINE_WIDTH-1:0]  core_req_data,
     input wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0]   core_req_tag,
     output wire [NUM_REQUESTS-1:0]                      core_req_ready,
 
     // Core response
     output wire [NUM_REQUESTS-1:0]                      core_rsp_valid,    
-    output wire [NUM_REQUESTS-1:0][`BANK_LINE_WIDTH-1:0]core_rsp_data,
+    output wire [NUM_REQUESTS-1:0][DRAM_LINE_WIDTH-1:0] core_rsp_data,
     output wire [NUM_REQUESTS-1:0][CORE_TAG_WIDTH-1:0]  core_rsp_tag,
     input  wire [NUM_REQUESTS-1:0]                      core_rsp_ready,   
 
     // DRAM request
     output wire                        dram_req_valid,
     output wire                        dram_req_rw,    
-    output wire [BANK_LINE_SIZE-1:0]   dram_req_byteen,
-    output wire [`DRAM_ADDR_WIDTH-1:0] dram_req_addr,
-    output wire [`BANK_LINE_WIDTH-1:0] dram_req_data,
+    output wire [DRAM_LINE_SIZE-1:0]   dram_req_byteen,
+    output wire [DRAM_ADDR_WIDTH-1:0]  dram_req_addr,
+    output wire [DRAM_LINE_WIDTH-1:0]  dram_req_data,
     output wire [DRAM_TAG_WIDTH-1:0]   dram_req_tag,
     input  wire                        dram_req_ready,
     
     // DRAM response
     input  wire                        dram_rsp_valid,    
-    input  wire [`BANK_LINE_WIDTH-1:0] dram_rsp_data,
+    input  wire [DRAM_LINE_WIDTH-1:0]  dram_rsp_data,
     input  wire [DRAM_TAG_WIDTH-1:0]   dram_rsp_tag,
     output wire                        dram_rsp_ready
 );

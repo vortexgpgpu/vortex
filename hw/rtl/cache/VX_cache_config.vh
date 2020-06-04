@@ -11,8 +11,6 @@
 //                                data         metadata               word_sel                  is_snp
 `define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1)
 
-`define REQS_BITS               `LOG2UP(NUM_REQUESTS)
-
 `define BANK_BITS               `LOG2UP(NUM_BANKS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)

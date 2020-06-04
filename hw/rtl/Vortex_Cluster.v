@@ -423,8 +423,8 @@ module Vortex_Cluster #(
         );
 
         VX_dram_arb #(
-            .BANK_LINE_SIZE (`L2BANK_LINE_SIZE),
             .NUM_REQUESTS   (`L2NUM_REQUESTS),
+            .DRAM_LINE_SIZE (`L2BANK_LINE_SIZE),            
             .CORE_TAG_WIDTH (`DDRAM_TAG_WIDTH),
             .DRAM_TAG_WIDTH (`L2DRAM_TAG_WIDTH)
         ) dram_arb (
