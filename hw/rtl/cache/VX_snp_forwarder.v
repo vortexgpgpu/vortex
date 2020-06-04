@@ -34,6 +34,8 @@ module VX_snp_forwarder #(
     input wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdin_tag,
     output wire [NUM_REQUESTS-1:0]      snp_fwdin_ready
 );
+    `STATIC_ASSERT(NUM_REQUESTS > 1, "invalid value");
+
     reg [`REQS_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
     reg [`REQS_BITS-1:0] fwdin_sel;
 
@@ -43,12 +45,12 @@ module VX_snp_forwarder #(
     wire fwdin_valid;
     wire [`LOG2UP(SNRQ_SIZE)-1:0] fwdin_tag;
     
-    wire fwdin_ready  = snp_rsp_ready;
-    wire fwdin_taken  = fwdin_valid && fwdin_ready;  
+    wire fwdin_ready = snp_rsp_ready || (1 != pending_cntrs[sfq_read_addr]);
+    wire fwdin_fire  = fwdin_valid && fwdin_ready;  
 
     wire fwdout_ready = (& snp_fwdout_ready);         
 
-    assign snp_rsp_valid = fwdin_taken && (1 == pending_cntrs[sfq_read_addr]); // send response
+    assign snp_rsp_valid = fwdin_valid && (1 == pending_cntrs[sfq_read_addr]); // send response
     
     assign sfq_read_addr = fwdin_tag;
     
@@ -77,7 +79,7 @@ module VX_snp_forwarder #(
             if (sfq_push)  begin
                 pending_cntrs[sfq_write_addr] <= NUM_REQUESTS;
             end      
-            if (fwdin_taken) begin
+            if (fwdin_fire) begin
                 pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
                 assert(sfq_read_addr == dbg_sfq_write_addr);
             end
@@ -112,16 +114,16 @@ module VX_snp_forwarder #(
 `ifdef DBG_PRINT_CACHE_SNP
      always_ff @(posedge clk) begin
         if (snp_req_valid && snp_req_ready) begin
-            $display("%t: cache%01d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_req_addr), snp_req_tag);
+            $display("%t: cache%0d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_req_addr), snp_req_tag);
         end
         if (snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
-            $display("%t: cache%01d snp fwd_out: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_fwdout_addr[0]), snp_fwdout_tag[0]);
+            $display("%t: cache%0d snp fwd_out: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_fwdout_addr[0]), snp_fwdout_tag[0]);
         end
         if (fwdin_valid && fwdin_ready) begin
-            $display("%t: cache%01d snp fwd_in[%01d]: tag=%0h", $time, CACHE_ID, fwdin_sel, fwdin_tag);
+            $display("%t: cache%0d snp fwd_in[%01d]: tag=%0h", $time, CACHE_ID, fwdin_sel, fwdin_tag);
         end
         if (snp_rsp_valid && snp_rsp_ready) begin
-            $display("%t: cache%01d snp rsp: addr=%0h, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_tag);
+            $display("%t: cache%0d snp rsp: addr=%0h, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_tag);
         end
     end
 `endif
