@@ -3,6 +3,8 @@
 module Vortex_Cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
+    `SCOPE_SIGNALS_IO(),
+
     // Clock
     input  wire                             clk,
     input  wire                             reset,
@@ -106,6 +108,8 @@ module Vortex_Cluster #(
         Vortex #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) vortex_core (
+            `SCOPE_SIGNALS_ATTACH(),
+
             .clk                (clk),
             .reset              (reset),
             .D_dram_req_valid   (per_core_D_dram_req_valid  [i]),

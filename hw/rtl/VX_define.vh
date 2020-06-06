@@ -280,5 +280,101 @@
 
 `define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 
+///////////////////////////////////////////////////////////////////////////////
+
+`ifdef SCOPE
+    `define SCOPE_SIGNALS_LIST() \
+        scope_icache_req_valid, \
+        scope_icache_req_tag, \
+        scope_icache_req_ready, \
+        scope_icache_rsp_valid, \
+        scope_icache_rsp_tag, \
+        scope_icache_rsp_ready, \
+        scope_dcache_req_valid, \
+        scope_dcache_req_tag, \
+        scope_dcache_req_ready, \
+        scope_dcache_rsp_valid, \
+        scope_dcache_rsp_tag, \
+        scope_dcache_rsp_ready, \
+        scope_dram_req_valid, \
+        scope_dram_req_tag, \
+        scope_dram_req_ready, \
+        scope_dram_rsp_valid, \
+        scope_dram_rsp_tag, \
+        scope_dram_rsp_ready, \
+        scope_schedule_delay
+
+    `define SCOPE_SIGNALS_DECL() \
+        wire scope_icache_req_valid; \
+        wire [`DCORE_TAG_WIDTH-1:0] scope_icache_req_tag; \
+        wire scope_icache_req_ready; \
+        wire scope_icache_rsp_valid; \
+        wire [`DCORE_TAG_WIDTH-1:0] scope_icache_rsp_tag; \
+        wire scope_icache_rsp_ready; \
+        wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid; \
+        wire [`ICORE_TAG_WIDTH-1:0] scope_dcache_req_tag; \
+        wire scope_dcache_req_ready; \
+        wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid; \
+        wire [`ICORE_TAG_WIDTH-1:0] scope_dcache_rsp_tag; \
+        wire scope_dcache_rsp_ready; \
+        wire scope_dram_req_valid; \
+        wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_req_tag; \
+        wire scope_dram_req_ready; \
+        wire scope_dram_rsp_valid; \
+        wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag; \
+        wire scope_dram_rsp_ready; \
+        wire scope_schedule_delay;
+
+    `define SCOPE_SIGNALS_IO() \
+        /* verilator lint_off UNDRIVEN */ \
+        output wire scope_icache_req_valid, \
+        output wire [`DCORE_TAG_WIDTH-1:0] scope_icache_req_tag, \
+        output wire scope_icache_req_ready, \
+        output wire scope_icache_rsp_valid, \
+        output wire [`DCORE_TAG_WIDTH-1:0] scope_icache_rsp_tag, \
+        output wire scope_icache_rsp_ready, \
+        output wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid, \
+        output wire [`ICORE_TAG_WIDTH-1:0] scope_dcache_req_tag, \
+        output wire scope_dcache_req_ready, \
+        output wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid, \
+        output wire [`ICORE_TAG_WIDTH-1:0] scope_dcache_rsp_tag, \
+        output wire scope_dcache_rsp_ready, \
+        output wire scope_dram_req_valid, \
+        output wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_req_tag, \
+        output wire scope_dram_req_ready, \
+        output wire scope_dram_rsp_valid, \
+        output wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag, \
+        output wire scope_dram_rsp_ready, \
+        output wire scope_schedule_delay  \
+        /* verilator lint_on UNDRIVEN */
+
+    `define SCOPE_SIGNALS_ATTACH() \
+        .scope_icache_req_valid (scope_icache_req_valid), \
+        .scope_icache_req_tag   (scope_icache_req_tag), \
+        .scope_icache_req_ready (scope_icache_req_ready), \
+        .scope_icache_rsp_valid (scope_icache_rsp_valid), \
+        .scope_icache_rsp_tag   (scope_icache_rsp_tag), \
+        .scope_icache_rsp_ready (scope_icache_rsp_ready), \
+        .scope_dcache_req_valid (scope_dcache_req_valid), \
+        .scope_dcache_req_tag   (scope_dcache_req_tag), \
+        .scope_dcache_req_ready (scope_dcache_req_ready), \
+        .scope_dcache_rsp_valid (scope_dcache_rsp_valid), \
+        .scope_dcache_rsp_tag   (scope_dcache_rsp_tag), \
+        .scope_dcache_rsp_ready (scope_dcache_rsp_ready), \
+        .scope_dram_req_valid (scope_dram_req_valid), \
+        .scope_dram_req_tag   (scope_dram_req_tag), \
+        .scope_dram_req_ready (scope_dram_req_ready), \
+        .scope_dram_rsp_valid (scope_dram_rsp_valid), \
+        .scope_dram_rsp_tag   (scope_dram_rsp_tag), \
+        .scope_dram_rsp_ready (scope_dram_rsp_ready), \
+        .scope_schedule_delay (scope_schedule_delay)
+
+    `define SCOPE_ASSIGN(d,s) assign d = s
+`else
+    `define SCOPE_SIGNALS_IO()
+    `define SCOPE_SIGNALS_ATTACH()
+    `define SCOPE_ASSIGN(d,s)
+`endif
+
  // VX_DEFINE
 `endif
