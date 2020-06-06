@@ -60,8 +60,8 @@ int emu_main(int argc, char **argv) {
     string archString("rv32i");
     string imgFileName("a.dsfsdout.bin");
     bool showHelp(false), showStats(false), basicMachine(true);
-    int max_warps(NW);
-    int max_threads(NT);
+    int max_warps(NUM_WARPS);
+    int max_threads(NUM_THREADS);
 
     /* Read the command line arguments. */
     CommandLineArgFlag          fh("-h", "--help", "", showHelp);

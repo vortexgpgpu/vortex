@@ -7,8 +7,8 @@ module VX_dmem_ctrl # (
     input wire              reset,
 
     // Core <-> Dcache    
-    VX_cache_core_req_if    dcache_core_req_if,
-    VX_cache_core_rsp_if    dcache_core_rsp_if,
+    VX_cache_core_req_if    core_dcache_req_if,
+    VX_cache_core_rsp_if    core_dcache_rsp_if,
 
     // Dram <-> Dcache
     VX_cache_dram_req_if    dcache_dram_req_if,
@@ -17,8 +17,8 @@ module VX_dmem_ctrl # (
     VX_cache_snp_rsp_if     dcache_snp_rsp_if,
 
     // Core <-> Icache    
-    VX_cache_core_req_if    icache_core_req_if,  
-    VX_cache_core_rsp_if    icache_core_rsp_if,
+    VX_cache_core_req_if    core_icache_req_if,  
+    VX_cache_core_rsp_if    core_icache_rsp_if,
 
     // Dram <-> Icache
     VX_cache_dram_req_if    icache_dram_req_if,
@@ -29,26 +29,26 @@ module VX_dmem_ctrl # (
         .WORD_SIZE          (`DWORD_SIZE), 
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
-    ) dcache_core_req_qual_if(), smem_core_req_if();
+    ) core_dcache_req_qual_if(), core_smem_req_if();
 
     VX_cache_core_rsp_if #(
         .NUM_REQUESTS       (`DNUM_REQUESTS), 
         .WORD_SIZE          (`DWORD_SIZE), 
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
-    ) dcache_core_rsp_qual_if(), smem_core_rsp_if();
+    ) core_dcache_rsp_qual_if(), core_smem_rsp_if();
 
     // use "case equality" to handle uninitialized entry
-    wire smem_select = (({dcache_core_req_if.core_req_addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) === 1'b1);
+    wire smem_select = (({core_dcache_req_if.core_req_addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) === 1'b1);
 
     VX_dcache_io_arb dcache_io_arb (
         .io_select          (smem_select),
-        .core_req_if        (dcache_core_req_if),
-        .dcache_core_req_if (dcache_core_req_qual_if),
-        .io_core_req_if     (smem_core_req_if),    
-        .dcache_core_rsp_if (dcache_core_rsp_qual_if),
-        .io_core_rsp_if     (smem_core_rsp_if),    
-        .core_rsp_if        (dcache_core_rsp_if)
+        .core_req_if        (core_dcache_req_if),
+        .core_dcache_req_if (core_dcache_req_qual_if),
+        .core_io_req_if     (core_smem_req_if),    
+        .core_dcache_rsp_if (core_dcache_rsp_qual_if),
+        .core_io_rsp_if     (core_smem_rsp_if),    
+        .core_rsp_if        (core_dcache_rsp_if)
     );
 
     VX_cache #(
@@ -79,19 +79,19 @@ module VX_dmem_ctrl # (
         .reset              (reset),
 
         // Core request
-        .core_req_valid     (smem_core_req_if.core_req_valid),
-        .core_req_rw        (smem_core_req_if.core_req_rw),
-        .core_req_byteen    (smem_core_req_if.core_req_byteen),
-        .core_req_addr      (smem_core_req_if.core_req_addr),
-        .core_req_data      (smem_core_req_if.core_req_data),        
-        .core_req_tag       (smem_core_req_if.core_req_tag),
-        .core_req_ready     (smem_core_req_if.core_req_ready),
+        .core_req_valid     (core_smem_req_if.core_req_valid),
+        .core_req_rw        (core_smem_req_if.core_req_rw),
+        .core_req_byteen    (core_smem_req_if.core_req_byteen),
+        .core_req_addr      (core_smem_req_if.core_req_addr),
+        .core_req_data      (core_smem_req_if.core_req_data),        
+        .core_req_tag       (core_smem_req_if.core_req_tag),
+        .core_req_ready     (core_smem_req_if.core_req_ready),
 
         // Core response
-        .core_rsp_valid     (smem_core_rsp_if.core_rsp_valid),
-        .core_rsp_data      (smem_core_rsp_if.core_rsp_data),
-        .core_rsp_tag       (smem_core_rsp_if.core_rsp_tag),
-        .core_rsp_ready     (smem_core_rsp_if.core_rsp_ready),
+        .core_rsp_valid     (core_smem_rsp_if.core_rsp_valid),
+        .core_rsp_data      (core_smem_rsp_if.core_rsp_data),
+        .core_rsp_tag       (core_smem_rsp_if.core_rsp_tag),
+        .core_rsp_ready     (core_smem_rsp_if.core_rsp_ready),
 
         // DRAM request
         `UNUSED_PIN (dram_req_valid),
@@ -160,19 +160,19 @@ module VX_dmem_ctrl # (
         .reset              (reset),
 
         // Core req
-        .core_req_valid     (dcache_core_req_qual_if.core_req_valid),
-        .core_req_rw        (dcache_core_req_qual_if.core_req_rw),
-        .core_req_byteen    (dcache_core_req_qual_if.core_req_byteen),
-        .core_req_addr      (dcache_core_req_qual_if.core_req_addr),
-        .core_req_data      (dcache_core_req_qual_if.core_req_data),        
-        .core_req_tag       (dcache_core_req_qual_if.core_req_tag),
-        .core_req_ready     (dcache_core_req_qual_if.core_req_ready),
+        .core_req_valid     (core_dcache_req_qual_if.core_req_valid),
+        .core_req_rw        (core_dcache_req_qual_if.core_req_rw),
+        .core_req_byteen    (core_dcache_req_qual_if.core_req_byteen),
+        .core_req_addr      (core_dcache_req_qual_if.core_req_addr),
+        .core_req_data      (core_dcache_req_qual_if.core_req_data),        
+        .core_req_tag       (core_dcache_req_qual_if.core_req_tag),
+        .core_req_ready     (core_dcache_req_qual_if.core_req_ready),
 
         // Core response
-        .core_rsp_valid     (dcache_core_rsp_qual_if.core_rsp_valid),
-        .core_rsp_data      (dcache_core_rsp_qual_if.core_rsp_data),
-        .core_rsp_tag       (dcache_core_rsp_qual_if.core_rsp_tag),
-        .core_rsp_ready     (dcache_core_rsp_qual_if.core_rsp_ready),
+        .core_rsp_valid     (core_dcache_rsp_qual_if.core_rsp_valid),
+        .core_rsp_data      (core_dcache_rsp_qual_if.core_rsp_data),
+        .core_rsp_tag       (core_dcache_rsp_qual_if.core_rsp_tag),
+        .core_rsp_ready     (core_dcache_rsp_qual_if.core_rsp_ready),
 
         // DRAM request
         .dram_req_valid     (dcache_dram_req_if.dram_req_valid),
@@ -240,19 +240,19 @@ module VX_dmem_ctrl # (
         .reset                 (reset),
 
         // Core request
-        .core_req_valid        (icache_core_req_if.core_req_valid),
-        .core_req_rw           (icache_core_req_if.core_req_rw),
-        .core_req_byteen       (icache_core_req_if.core_req_byteen),
-        .core_req_addr         (icache_core_req_if.core_req_addr),
-        .core_req_data         (icache_core_req_if.core_req_data),        
-        .core_req_tag          (icache_core_req_if.core_req_tag),
-        .core_req_ready        (icache_core_req_if.core_req_ready),
+        .core_req_valid        (core_icache_req_if.core_req_valid),
+        .core_req_rw           (core_icache_req_if.core_req_rw),
+        .core_req_byteen       (core_icache_req_if.core_req_byteen),
+        .core_req_addr         (core_icache_req_if.core_req_addr),
+        .core_req_data         (core_icache_req_if.core_req_data),        
+        .core_req_tag          (core_icache_req_if.core_req_tag),
+        .core_req_ready        (core_icache_req_if.core_req_ready),
 
         // Core response
-        .core_rsp_valid        (icache_core_rsp_if.core_rsp_valid),
-        .core_rsp_data         (icache_core_rsp_if.core_rsp_data),
-        .core_rsp_tag          (icache_core_rsp_if.core_rsp_tag),
-        .core_rsp_ready        (icache_core_rsp_if.core_rsp_ready),
+        .core_rsp_valid        (core_icache_rsp_if.core_rsp_valid),
+        .core_rsp_data         (core_icache_rsp_if.core_rsp_data),
+        .core_rsp_tag          (core_icache_rsp_if.core_rsp_tag),
+        .core_rsp_ready        (core_icache_rsp_if.core_rsp_ready),
 
         // DRAM Req
         .dram_req_valid        (icache_dram_req_if.dram_req_valid),

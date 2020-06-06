@@ -7,42 +7,42 @@ module VX_dcache_io_arb (
     VX_cache_core_req_if    core_req_if,
 
     // Dcache request
-    VX_cache_core_req_if    dcache_core_req_if,
+    VX_cache_core_req_if    core_dcache_req_if,
 
     // I/O request
-    VX_cache_core_req_if    io_core_req_if,
+    VX_cache_core_req_if    core_io_req_if,
 
     // Dcache response
-    VX_cache_core_rsp_if    dcache_core_rsp_if,
+    VX_cache_core_rsp_if    core_dcache_rsp_if,
 
     // I/O response
-    VX_cache_core_rsp_if    io_core_rsp_if,
+    VX_cache_core_rsp_if    core_io_rsp_if,
 
     // Core response
     VX_cache_core_rsp_if    core_rsp_if
 );
-    assign dcache_core_req_if.core_req_valid = core_req_if.core_req_valid & {`NUM_THREADS{~io_select}};        
-    assign dcache_core_req_if.core_req_rw    = core_req_if.core_req_rw;
-    assign dcache_core_req_if.core_req_byteen= core_req_if.core_req_byteen;
-    assign dcache_core_req_if.core_req_addr  = core_req_if.core_req_addr;
-    assign dcache_core_req_if.core_req_data  = core_req_if.core_req_data;
-    assign dcache_core_req_if.core_req_tag   = core_req_if.core_req_tag;    
+    assign core_dcache_req_if.core_req_valid = core_req_if.core_req_valid & {`NUM_THREADS{~io_select}};        
+    assign core_dcache_req_if.core_req_rw    = core_req_if.core_req_rw;
+    assign core_dcache_req_if.core_req_byteen= core_req_if.core_req_byteen;
+    assign core_dcache_req_if.core_req_addr  = core_req_if.core_req_addr;
+    assign core_dcache_req_if.core_req_data  = core_req_if.core_req_data;
+    assign core_dcache_req_if.core_req_tag   = core_req_if.core_req_tag;    
 
-    assign io_core_req_if.core_req_valid = core_req_if.core_req_valid & {`NUM_THREADS{io_select}};        
-    assign io_core_req_if.core_req_rw    = core_req_if.core_req_rw;
-    assign io_core_req_if.core_req_byteen= core_req_if.core_req_byteen;
-    assign io_core_req_if.core_req_addr  = core_req_if.core_req_addr;
-    assign io_core_req_if.core_req_data  = core_req_if.core_req_data;
-    assign io_core_req_if.core_req_tag   = core_req_if.core_req_tag;    
+    assign core_io_req_if.core_req_valid = core_req_if.core_req_valid & {`NUM_THREADS{io_select}};        
+    assign core_io_req_if.core_req_rw    = core_req_if.core_req_rw;
+    assign core_io_req_if.core_req_byteen= core_req_if.core_req_byteen;
+    assign core_io_req_if.core_req_addr  = core_req_if.core_req_addr;
+    assign core_io_req_if.core_req_data  = core_req_if.core_req_data;
+    assign core_io_req_if.core_req_tag   = core_req_if.core_req_tag;    
 
-    assign core_req_if.core_req_ready = io_select ? io_core_req_if.core_req_ready : dcache_core_req_if.core_req_ready;
+    assign core_req_if.core_req_ready = io_select ? core_io_req_if.core_req_ready : core_dcache_req_if.core_req_ready;
 
-    wire dcache_rsp_valid = (| dcache_core_rsp_if.core_rsp_valid);
+    wire dcache_rsp_valid = (| core_dcache_rsp_if.core_rsp_valid);
 
-    assign core_rsp_if.core_rsp_valid = dcache_rsp_valid ? dcache_core_rsp_if.core_rsp_valid : io_core_rsp_if.core_rsp_valid;
-    assign core_rsp_if.core_rsp_data  = dcache_rsp_valid ? dcache_core_rsp_if.core_rsp_data : io_core_rsp_if.core_rsp_data;
-    assign core_rsp_if.core_rsp_tag   = dcache_rsp_valid ? dcache_core_rsp_if.core_rsp_tag : io_core_rsp_if.core_rsp_tag;    
-    assign dcache_core_rsp_if.core_rsp_ready = core_rsp_if.core_rsp_ready; 
-    assign io_core_rsp_if.core_rsp_ready     = core_rsp_if.core_rsp_ready && ~dcache_rsp_valid; 
+    assign core_rsp_if.core_rsp_valid = dcache_rsp_valid ? core_dcache_rsp_if.core_rsp_valid : core_io_rsp_if.core_rsp_valid;
+    assign core_rsp_if.core_rsp_data  = dcache_rsp_valid ? core_dcache_rsp_if.core_rsp_data : core_io_rsp_if.core_rsp_data;
+    assign core_rsp_if.core_rsp_tag   = dcache_rsp_valid ? core_dcache_rsp_if.core_rsp_tag : core_io_rsp_if.core_rsp_tag;    
+    assign core_dcache_rsp_if.core_rsp_ready = core_rsp_if.core_rsp_ready; 
+    assign core_io_rsp_if.core_rsp_ready     = core_rsp_if.core_rsp_ready && ~dcache_rsp_valid; 
 
 endmodule

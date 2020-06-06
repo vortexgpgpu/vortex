@@ -1,6 +1,8 @@
 `include "VX_define.vh"
 
 module Vortex_Socket (
+    `SCOPE_SIGNALS_IO(),
+
     // Clock
     input  wire                             clk,
     input  wire                             reset,
@@ -50,11 +52,20 @@ module Vortex_Socket (
     output wire                             busy, 
     output wire                             ebreak
 );
+    `SCOPE_ASSIGN(scope_dram_req_valid, dram_req_valid);
+    `SCOPE_ASSIGN(scope_dram_req_tag,   dram_req_tag);
+    `SCOPE_ASSIGN(scope_dram_req_ready, dram_req_ready);
+    `SCOPE_ASSIGN(scope_dram_rsp_valid, dram_rsp_valid);
+    `SCOPE_ASSIGN(scope_dram_rsp_tag,   dram_req_tag);
+    `SCOPE_ASSIGN(scope_dram_rsp_ready, dram_rsp_ready);
+
     if (`NUM_CLUSTERS == 1) begin
 
         Vortex_Cluster #(
             .CLUSTER_ID(`L3CACHE_ID)
         ) Vortex_Cluster (
+            `SCOPE_SIGNALS_ATTACH(),
+
             .clk                (clk),
             .reset              (reset),
             
@@ -140,6 +151,8 @@ module Vortex_Socket (
             Vortex_Cluster #(
                 .CLUSTER_ID(i)
             ) Vortex_Cluster (
+                `SCOPE_SIGNALS_ATTACH(),
+
                 .clk                (clk),
                 .reset              (reset),
 
