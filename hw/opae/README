@@ -20,7 +20,7 @@ afu_synth_setup -s sources.txt build_fpga
 cd build_fpga && qsub-synth
 
 # check last 10 lines in build log for possible errors
-tail -n 10 ./build_fpga/build.log
+tail -n 10 ./build_fpga_1c/build.log
 
 # Check if the job is submitted to the queue and running. Status should be R 
 qstat | grep tinebp
@@ -60,8 +60,8 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase ../../driver/tests/basic/basic
-./run_ase.sh build_ase ../../driver/tests/demo/demo
+./run_ase.sh build_ase_1c ../../driver/tests/basic/basic
+./run_ase.sh build_ase_1c ../../driver/tests/demo/demo
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file vortex.vcd
@@ -69,17 +69,17 @@ vcd add -r /*/Vortex/hw/rtl/*
 run -all
 
 # compress VCD trace
-tar -zcvf vortex.vcd.tar.gz ./build_ase/work/vortex.vcd
+tar -zcvf vortex.vcd.tar.gz ./build_ase_1c/work/vortex.vcd
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
 
 # launch Gtkwave
-gtkwave ./build_ase/work/vortex.vcd &
+gtkwave ./build_ase_1c/work/vortex.vcd &
 
 # kill process by Users
 ps -u tinebp
 kill -9 <pid>
 
-# fixing device resource busy issue when deleting /build_ase/
-lsof +D build_ase
+# fixing device resource busy issue when deleting /build_ase_1c/
+lsof +D build_ase_1c
