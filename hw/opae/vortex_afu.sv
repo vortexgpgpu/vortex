@@ -61,10 +61,13 @@ localparam CMD_TYPE_RUN       = `AFU_IMAGE_CMD_TYPE_RUN;
 localparam CMD_TYPE_CLFLUSH   = `AFU_IMAGE_CMD_TYPE_CLFLUSH;
 
 localparam MMIO_CSR_CMD       = `AFU_IMAGE_MMIO_CSR_CMD; 
-localparam MMIO_CSR_STATUS    = `AFU_IMAGE_MMIO_CSR_STATUS;
 localparam MMIO_CSR_IO_ADDR   = `AFU_IMAGE_MMIO_CSR_IO_ADDR;
 localparam MMIO_CSR_MEM_ADDR  = `AFU_IMAGE_MMIO_CSR_MEM_ADDR;
 localparam MMIO_CSR_DATA_SIZE = `AFU_IMAGE_MMIO_CSR_DATA_SIZE;
+localparam MMIO_CSR_STATUS    = `AFU_IMAGE_MMIO_CSR_STATUS;
+
+localparam MMIO_CSR_SCOPE_DELAY = `AFU_IMAGE_MMIO_CSR_SCOPE_DELAY;
+localparam MMIO_CSR_SCOPE_DATA  = `AFU_IMAGE_MMIO_CSR_SCOPE_DATA;
 
 logic [127:0] afu_id = `AFU_ACCEL_UUID;
 
@@ -135,6 +138,11 @@ t_ccip_clAddr              csr_io_addr;
 logic[DRAM_ADDR_WIDTH-1:0] csr_mem_addr;
 logic[DRAM_ADDR_WIDTH-1:0] csr_data_size;
 
+logic [63:0]               csr_scope_delay;  
+logic [63:0]               csr_scope_data;
+logic                      csr_scope_read;
+logic                      csr_scope_write;
+
 // MMIO controller ////////////////////////////////////////////////////////////
 
 `IGNORE_WARNINGS_BEGIN
@@ -144,6 +152,10 @@ assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
 
 t_if_ccip_c2_Tx mmio_tx;
 assign af2cp_sTxPort.c2 = mmio_tx;
+
+assign csr_scope_delay = 64'(cp2af_sRxPort.c0.data);
+assign csr_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CSR_SCOPE_DELAY == mmio_hdr.address);
+assign csr_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_CSR_SCOPE_DATA == mmio_hdr.address);
 
 always_ff @(posedge clk) 
 begin
@@ -158,7 +170,7 @@ begin
   end
   else begin
 
-    csr_cmd <= 0;
+    csr_cmd             <= 0;
     mmio_tx.mmioRdValid <= 0;
 
     // serve MMIO write request
@@ -223,8 +235,14 @@ begin
             $display("%t: STATUS: state=%0d", $time, state);
           end
         `endif
-          mmio_tx.data <= {60'b0, state};
+          mmio_tx.data <= 64'(state);
         end  
+        MMIO_CSR_SCOPE_DATA: begin          
+          mmio_tx.data    <= csr_scope_data;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: scope: data=%0d", $time, csr_scope_data);
+        `endif
+        end
         default: mmio_tx.data <= 64'h0;
       endcase
       mmio_tx.mmioRdValid <= 1; // post response
@@ -768,11 +786,36 @@ begin
   end
 end
 
+// SCOPE //////////////////////////////////////////////////////////////////////
+
+`ifdef SCOPE
+
+`SCOPE_SIGNALS_DECL()
+
+VX_scope #(
+  .DATAW  ($bits({`SCOPE_SIGNALS_LIST()})),
+  .BUSW   (64),
+  .SIZE   (1024)
+) scope (
+  .clk      (clk),
+  .reset    (SoftReset),
+  .start    (vx_reset),
+  .data_in  ({`SCOPE_SIGNALS_LIST()}),
+  .bus_in   (csr_scope_delay),
+  .bus_out  (csr_scope_data),
+  .bus_read (csr_scope_read),
+  .bus_write(csr_scope_write)
+);
+
+`endif
+
 // Vortex binding /////////////////////////////////////////////////////////////
 
 assign cmd_run_done = !vx_busy;
 
 Vortex_Socket #() vx_socket (
+  `SCOPE_SIGNALS_ATTACH(),
+
   .clk              (clk),
   .reset            (vx_reset),
 

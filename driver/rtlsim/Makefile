@@ -19,7 +19,7 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
 
 #DEBUG=1
-#AFU=1
+AFU=1
 
 CFLAGS += -fPIC
 
@@ -55,8 +55,8 @@ endif
 # AFU
 ifdef AFU
     TOP = vortex_afu_sim
-	VL_FLAGS += -DNOPAE
-	CFLAGS += -DNOPAE
+	VL_FLAGS += -DNOPAE -DSCOPE
+	CFLAGS += -DNOPAE -DSCOPE
 	RTL_INCLUDE += -I../../hw/opae  -I../../hw/opae/ccip
 endif
 
