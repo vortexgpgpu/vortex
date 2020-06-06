@@ -3,6 +3,8 @@
 module Vortex #( 
     parameter CORE_ID = 0
 ) (        
+    `SCOPE_SIGNALS_IO(),
+    
     // Clock
     input  wire                             clk,
     input  wire                             reset,
@@ -66,29 +68,7 @@ module Vortex #(
     output wire                             busy, 
     output wire                             ebreak
 );
-`DEBUG_BEGIN
-    wire scheduler_empty;
-`DEBUG_END
-
-    wire memory_delay;
-    wire exec_delay;
-    wire gpr_stage_delay;
-    wire schedule_delay;
-
-    // Dcache Interfaces
-    VX_cache_core_req_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) dcache_core_req_if(), io_core_req_if(), dcache_io_core_req_if();
-
-    VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) dcache_core_rsp_if(), io_core_rsp_if(), dcache_io_core_rsp_if();
+    // Dcache Interfaces   
 
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
@@ -114,33 +94,34 @@ module Vortex #(
     assign dcache_dram_rsp_if.dram_rsp_tag   = D_dram_rsp_tag;
     assign D_dram_rsp_ready = dcache_dram_rsp_if.dram_rsp_ready;
 
-    assign io_req_valid  = io_core_req_if.core_req_valid[0];
-    assign io_req_rw     = io_core_req_if.core_req_rw[0];
-    assign io_req_byteen = io_core_req_if.core_req_byteen[0];
-    assign io_req_addr   = io_core_req_if.core_req_addr[0];
-    assign io_req_data   = io_core_req_if.core_req_data[0];
-    assign io_req_tag    = io_core_req_if.core_req_tag[0];
-    assign io_core_req_if.core_req_ready = io_req_ready;
-
-    assign io_core_rsp_if.core_rsp_valid    = {{(`NUM_THREADS-1){1'b0}}, io_rsp_valid};
-    assign io_core_rsp_if.core_rsp_data[0]  = io_rsp_data;
-    assign io_core_rsp_if.core_rsp_tag      = io_rsp_tag;    
-    assign io_rsp_ready  = io_core_rsp_if.core_rsp_ready;
-    
-    // Icache interfaces
     VX_cache_core_req_if #(
-        .NUM_REQUESTS(`INUM_REQUESTS), 
-        .WORD_SIZE(`IWORD_SIZE), 
+        .NUM_REQUESTS(`DNUM_REQUESTS), 
+        .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    )  icache_core_req_if();
+    ) core_dcache_req_if(),arb_dcache_req_if(), arb_io_req_if();
 
     VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`INUM_REQUESTS), 
-        .WORD_SIZE(`IWORD_SIZE), 
+        .NUM_REQUESTS(`DNUM_REQUESTS), 
+        .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    )  icache_core_rsp_if();
+    ) core_dcache_rsp_if(), arb_dcache_rsp_if(), arb_io_rsp_if();
+
+    assign io_req_valid  = arb_io_req_if.core_req_valid[0];
+    assign io_req_rw     = arb_io_req_if.core_req_rw[0];
+    assign io_req_byteen = arb_io_req_if.core_req_byteen[0];
+    assign io_req_addr   = arb_io_req_if.core_req_addr[0];
+    assign io_req_data   = arb_io_req_if.core_req_data[0];
+    assign io_req_tag    = arb_io_req_if.core_req_tag[0];
+    assign arb_io_req_if.core_req_ready = io_req_ready;
+
+    assign arb_io_rsp_if.core_rsp_valid   = {{(`NUM_THREADS-1){1'b0}}, io_rsp_valid};
+    assign arb_io_rsp_if.core_rsp_data[0] = io_rsp_data;
+    assign arb_io_rsp_if.core_rsp_tag     = io_rsp_tag;    
+    assign io_rsp_ready = arb_io_rsp_if.core_rsp_ready;
+    
+    // Icache interfaces
     
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH(`IDRAM_LINE_WIDTH),
@@ -164,20 +145,65 @@ module Vortex #(
     assign icache_dram_rsp_if.dram_rsp_valid = I_dram_rsp_valid;    
     assign icache_dram_rsp_if.dram_rsp_data  = I_dram_rsp_data;
     assign icache_dram_rsp_if.dram_rsp_tag   = I_dram_rsp_tag;
-    assign I_dram_rsp_ready = icache_dram_rsp_if.dram_rsp_ready;    
+    assign I_dram_rsp_ready = icache_dram_rsp_if.dram_rsp_ready;  
+    
+    VX_cache_core_req_if #(
+        .NUM_REQUESTS(`INUM_REQUESTS), 
+        .WORD_SIZE(`IWORD_SIZE), 
+        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
+    ) core_icache_req_if();
 
-    ///////////////////////////////////////////////////////////////////////////////
+    VX_cache_core_rsp_if #(
+        .NUM_REQUESTS(`INUM_REQUESTS), 
+        .WORD_SIZE(`IWORD_SIZE), 
+        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
+    ) core_icache_rsp_if();
 
-    // Front-end to Back-end
-    VX_frE_to_bckE_req_if    bckE_req_if();     // New instruction request to EXE/MEM
+    // Vortex pipeline
+    VX_pipeline #(
+        .CORE_ID(CORE_ID)
+    ) pipeline (
+        `SCOPE_SIGNALS_ATTACH(),
 
-    // Back-end to Front-end
-    VX_wb_if                 writeback_if();    // Writeback to GPRs
-    VX_branch_rsp_if         branch_rsp_if();   // Branch Resolution to Fetch
-    VX_jal_rsp_if            jal_rsp_if();      // Jump resolution to Fetch
+        .clk(clk),
+        .reset(reset),
 
-    // Warp controls
-    VX_warp_ctl_if           warp_ctl_if();
+        // Dcache core request
+        .dcache_req_valid   (core_dcache_req_if.core_req_valid),
+        .dcache_req_rw      (core_dcache_req_if.core_req_rw),
+        .dcache_req_byteen  (core_dcache_req_if.core_req_byteen),
+        .dcache_req_addr    (core_dcache_req_if.core_req_addr),
+        .dcache_req_data    (core_dcache_req_if.core_req_data),
+        .dcache_req_tag     (core_dcache_req_if.core_req_tag),
+        .dcache_req_ready   (core_dcache_req_if.core_req_ready),
+
+        // Dcache core reponse    
+        .dcache_rsp_valid   (core_dcache_rsp_if.core_rsp_valid),
+        .dcache_rsp_data    (core_dcache_rsp_if.core_rsp_data),
+        .dcache_rsp_tag     (core_dcache_rsp_if.core_rsp_tag),
+        .dcache_rsp_ready   (core_dcache_rsp_if.core_rsp_ready),
+
+        // Dcache core request
+        .icache_req_valid   (core_icache_req_if.core_req_valid),
+        .icache_req_rw      (core_icache_req_if.core_req_rw),
+        .icache_req_byteen  (core_icache_req_if.core_req_byteen),
+        .icache_req_addr    (core_icache_req_if.core_req_addr),
+        .icache_req_data    (core_icache_req_if.core_req_data),
+        .icache_req_tag     (core_icache_req_if.core_req_tag),
+        .icache_req_ready   (core_icache_req_if.core_req_ready),
+
+        // Dcache core reponse    
+        .icache_rsp_valid   (core_icache_rsp_if.core_rsp_valid),
+        .icache_rsp_data    (core_icache_rsp_if.core_rsp_data),
+        .icache_rsp_tag     (core_icache_rsp_if.core_rsp_tag),
+        .icache_rsp_ready   (core_icache_rsp_if.core_rsp_ready),     
+
+        // Status
+        .busy(busy), 
+        .ebreak(ebreak)
+    );  
 
     // Cache snooping
     VX_cache_snp_req_if #(
@@ -198,52 +224,6 @@ module Vortex #(
     assign snp_rsp_tag   = dcache_snp_rsp_if.snp_rsp_tag;
     assign dcache_snp_rsp_if.snp_rsp_ready = snp_rsp_ready;
 
-    VX_front_end #(
-        .CORE_ID(CORE_ID)
-    ) front_end (
-        .clk            (clk),
-        .reset          (reset),
-        .warp_ctl_if    (warp_ctl_if),
-        .bckE_req_if    (bckE_req_if),
-        .schedule_delay (schedule_delay),
-        .icache_rsp_if  (icache_core_rsp_if),
-        .icache_req_if  (icache_core_req_if),
-        .jal_rsp_if     (jal_rsp_if),
-        .branch_rsp_if  (branch_rsp_if),
-        .busy           (busy)
-    );
-
-    VX_scheduler scheduler (
-        .clk            (clk),
-        .reset          (reset),
-        .memory_delay   (memory_delay),
-        .exec_delay     (exec_delay),
-        .gpr_stage_delay(gpr_stage_delay),
-        .bckE_req_if    (bckE_req_if),
-        .writeback_if   (writeback_if),
-        .schedule_delay (schedule_delay),
-        .is_empty       (scheduler_empty)
-    );
-
-    VX_back_end #(
-        .CORE_ID(CORE_ID)
-    ) back_end (
-        .clk             (clk),
-        .reset           (reset),
-        .schedule_delay  (schedule_delay),
-        .warp_ctl_if     (warp_ctl_if),
-        .bckE_req_if     (bckE_req_if),
-        .jal_rsp_if      (jal_rsp_if),
-        .branch_rsp_if   (branch_rsp_if),    
-        .dcache_req_if   (dcache_io_core_req_if),
-        .dcache_rsp_if   (dcache_io_core_rsp_if),
-        .writeback_if    (writeback_if),
-        .mem_delay       (memory_delay),
-        .exec_delay      (exec_delay),
-        .gpr_stage_delay (gpr_stage_delay),        
-        .ebreak          (ebreak)
-    );
-
     VX_dmem_ctrl #(
         .CORE_ID(CORE_ID)
     ) dmem_ctrl (
@@ -251,8 +231,8 @@ module Vortex #(
         .reset              (reset),
 
         // Core <-> Dcache
-        .dcache_core_req_if (dcache_core_req_if),
-        .dcache_core_rsp_if (dcache_core_rsp_if),
+        .core_dcache_req_if (arb_dcache_req_if),
+        .core_dcache_rsp_if (arb_dcache_rsp_if),
 
         // Dram <-> Dcache
         .dcache_dram_req_if (dcache_dram_req_if),
@@ -261,8 +241,8 @@ module Vortex #(
         .dcache_snp_rsp_if  (dcache_snp_rsp_if),
 
         // Core <-> Icache
-        .icache_core_req_if (icache_core_req_if),
-        .icache_core_rsp_if (icache_core_rsp_if),
+        .core_icache_req_if (core_icache_req_if),
+        .core_icache_rsp_if (core_icache_rsp_if),
 
         // Dram <-> Icache
         .icache_dram_req_if (icache_dram_req_if),
@@ -270,16 +250,16 @@ module Vortex #(
     );
 
     // use "case equality" to handle uninitialized address value
-    wire io_select = (({dcache_io_core_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR) === 1'b1);
+    wire io_select = (({core_dcache_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR) === 1'b1);
 
     VX_dcache_io_arb dcache_io_arb (
         .io_select          (io_select),
-        .core_req_if        (dcache_io_core_req_if),
-        .dcache_core_req_if (dcache_core_req_if),
-        .io_core_req_if     (io_core_req_if),  
-        .dcache_core_rsp_if (dcache_core_rsp_if),
-        .io_core_rsp_if     (io_core_rsp_if),    
-        .core_rsp_if        (dcache_io_core_rsp_if)
+        .core_req_if        (core_dcache_req_if),
+        .core_dcache_req_if (arb_dcache_req_if),
+        .core_io_req_if     (arb_io_req_if),  
+        .core_dcache_rsp_if (arb_dcache_rsp_if),
+        .core_io_rsp_if     (arb_io_rsp_if),    
+        .core_rsp_if        (core_dcache_rsp_if)
     );
 
 endmodule // Vortex
