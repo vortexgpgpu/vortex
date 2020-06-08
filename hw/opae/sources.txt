@@ -9,6 +9,7 @@ vortex_afu.json
 +define+DBG_PRINT_CACHE_MSRQ
 +define+DBG_PRINT_DRAM
 +define+DBG_PRINT_OPAE
++define+DBG_PRINT_SCOPE
 
 +define+SCOPE
 

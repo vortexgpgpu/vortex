@@ -802,7 +802,8 @@ end
 VX_scope #(
   .DATAW  ($bits({`SCOPE_SIGNALS_LIST})),
   .BUSW   (64),
-  .SIZE   (256)
+  .SIZE   (256),
+  .IDW    (19)
 ) scope (
   .clk      (clk),
   .reset    (SoftReset),
