@@ -3,7 +3,7 @@
 module VX_pipeline #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_SIGNALS_IO(),
+    `SCOPE_SIGNALS_IO
     
     // Clock
     input wire                              clk,

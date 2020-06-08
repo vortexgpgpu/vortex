@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module Vortex_Socket (
-    `SCOPE_SIGNALS_IO(),
+    `SCOPE_SIGNALS_IO
 
     // Clock
     input  wire                             clk,
@@ -64,7 +64,7 @@ module Vortex_Socket (
         Vortex_Cluster #(
             .CLUSTER_ID(`L3CACHE_ID)
         ) Vortex_Cluster (
-            `SCOPE_SIGNALS_ATTACH(),
+            `SCOPE_SIGNALS_ATTACH
 
             .clk                (clk),
             .reset              (reset),
@@ -151,7 +151,7 @@ module Vortex_Socket (
             Vortex_Cluster #(
                 .CLUSTER_ID(i)
             ) Vortex_Cluster (
-                `SCOPE_SIGNALS_ATTACH(),
+                `SCOPE_SIGNALS_ATTACH
 
                 .clk                (clk),
                 .reset              (reset),
