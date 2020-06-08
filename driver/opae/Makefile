@@ -17,7 +17,7 @@ CXXFLAGS +=-fstack-protector
 # Position independent code
 CXXFLAGS += -fPIC
 
-CXXFLAGS += -DGLOBAL_BLOCK_SIZE_BYTES=64
+CXXFLAGS += -DSCOPE
 
 LDFLAGS += -luuid
 

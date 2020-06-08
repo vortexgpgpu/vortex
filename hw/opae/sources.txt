@@ -1,12 +1,16 @@
 vortex_afu.json
 
-#+define+DBG_PRINT_CORE_ICACHE
-#+define+DBG_PRINT_CORE_DCACHE
-#+define+DBG_PRINT_CACHE_BANK
-#+define+DBG_PRINT_CACHE_SNP
-#+define+DBG_PRINT_CACHE_MSRQ
-#+define+DBG_PRINT_DRAM
-#+define+DBG_PRINT_OPAE
++define+NDEBUG
+
++define+DBG_PRINT_CORE_ICACHE
++define+DBG_PRINT_CORE_DCACHE
++define+DBG_PRINT_CACHE_BANK
++define+DBG_PRINT_CACHE_SNP
++define+DBG_PRINT_CACHE_MSRQ
++define+DBG_PRINT_DRAM
++define+DBG_PRINT_OPAE
+
++define+SCOPE
 
 +incdir+.
 +incdir+../rtl
@@ -65,10 +69,12 @@ vortex_afu.json
 ../rtl/libs/VX_generic_queue.v
 ../rtl/libs/VX_indexable_queue.v
 ../rtl/libs/VX_countones.v
+../rtl/libs/VX_scope.v
 
 ../rtl/Vortex_Socket.v
 ../rtl/Vortex_Cluster.v
 ../rtl/Vortex.v
+../rtl/VX_pipeline.v
 ../rtl/VX_front_end.v
 ../rtl/VX_back_end.v
 ../rtl/VX_fetch.v

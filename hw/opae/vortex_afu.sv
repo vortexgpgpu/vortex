@@ -66,8 +66,8 @@ localparam MMIO_CSR_MEM_ADDR  = `AFU_IMAGE_MMIO_CSR_MEM_ADDR;
 localparam MMIO_CSR_DATA_SIZE = `AFU_IMAGE_MMIO_CSR_DATA_SIZE;
 localparam MMIO_CSR_STATUS    = `AFU_IMAGE_MMIO_CSR_STATUS;
 
-localparam MMIO_CSR_SCOPE_DELAY = `AFU_IMAGE_MMIO_CSR_SCOPE_DELAY;
-localparam MMIO_CSR_SCOPE_DATA  = `AFU_IMAGE_MMIO_CSR_SCOPE_DATA;
+localparam MMIO_CSR_SCOPE_CMD = `AFU_IMAGE_MMIO_CSR_SCOPE_CMD;
+localparam MMIO_CSR_SCOPE_DATA= `AFU_IMAGE_MMIO_CSR_SCOPE_DATA;
 
 logic [127:0] afu_id = `AFU_ACCEL_UUID;
 
@@ -138,7 +138,7 @@ t_ccip_clAddr              csr_io_addr;
 logic[DRAM_ADDR_WIDTH-1:0] csr_mem_addr;
 logic[DRAM_ADDR_WIDTH-1:0] csr_data_size;
 
-logic [63:0]               csr_scope_delay;  
+logic [63:0]               csr_scope_cmd;  
 logic [63:0]               csr_scope_data;
 logic                      csr_scope_read;
 logic                      csr_scope_write;
@@ -153,8 +153,8 @@ assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
 t_if_ccip_c2_Tx mmio_tx;
 assign af2cp_sTxPort.c2 = mmio_tx;
 
-assign csr_scope_delay = 64'(cp2af_sRxPort.c0.data);
-assign csr_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CSR_SCOPE_DELAY == mmio_hdr.address);
+assign csr_scope_cmd   = 64'(cp2af_sRxPort.c0.data);
+assign csr_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CSR_SCOPE_CMD == mmio_hdr.address);
 assign csr_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_CSR_SCOPE_DATA == mmio_hdr.address);
 
 always_ff @(posedge clk) 
@@ -201,6 +201,11 @@ begin
           $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
         `endif
         end
+        MMIO_CSR_SCOPE_CMD: begin          
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: CSR_SCOPE_CMD: %0d", $time, 64'(cp2af_sRxPort.c0.data));
+        `endif
+        end
         default: begin
            // user-defined CSRs
            //if (mmio_hdr.addres >= MMIO_CSR_USER) begin
@@ -238,9 +243,9 @@ begin
           mmio_tx.data <= 64'(state);
         end  
         MMIO_CSR_SCOPE_DATA: begin          
-          mmio_tx.data    <= csr_scope_data;
+          mmio_tx.data <= csr_scope_data;
         `ifdef DBG_PRINT_OPAE
-          $display("%t: scope: data=%0d", $time, csr_scope_data);
+          $display("%t: SCOPE: data=%0d", $time, csr_scope_data);
         `endif
         end
         default: mmio_tx.data <= 64'h0;
@@ -790,18 +795,20 @@ end
 
 `ifdef SCOPE
 
-`SCOPE_SIGNALS_DECL()
+`SCOPE_SIGNALS_DECL
+
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_LIST}) == 85, "oops!")
 
 VX_scope #(
-  .DATAW  ($bits({`SCOPE_SIGNALS_LIST()})),
+  .DATAW  ($bits({`SCOPE_SIGNALS_LIST})),
   .BUSW   (64),
-  .SIZE   (1024)
+  .SIZE   (256)
 ) scope (
   .clk      (clk),
   .reset    (SoftReset),
   .start    (vx_reset),
-  .data_in  ({`SCOPE_SIGNALS_LIST()}),
-  .bus_in   (csr_scope_delay),
+  .data_in  ({`SCOPE_SIGNALS_LIST}),
+  .bus_in   (csr_scope_cmd),
   .bus_out  (csr_scope_data),
   .bus_read (csr_scope_read),
   .bus_write(csr_scope_write)
@@ -814,7 +821,7 @@ VX_scope #(
 assign cmd_run_done = !vx_busy;
 
 Vortex_Socket #() vx_socket (
-  `SCOPE_SIGNALS_ATTACH(),
+  `SCOPE_SIGNALS_ATTACH
 
   .clk              (clk),
   .reset            (vx_reset),
