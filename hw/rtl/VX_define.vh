@@ -285,24 +285,24 @@
 `ifdef SCOPE
     `define SCOPE_SIGNALS_LIST \
         scope_icache_req_valid, \
-        scope_icache_req_tag, \
         scope_icache_req_ready, \
         scope_icache_rsp_valid, \
-        scope_icache_rsp_tag, \
         scope_icache_rsp_ready, \
         scope_dcache_req_valid, \
-        scope_dcache_req_tag, \
         scope_dcache_req_ready, \
         scope_dcache_rsp_valid, \
-        scope_dcache_rsp_tag, \
         scope_dcache_rsp_ready, \
         scope_dram_req_valid, \
-        scope_dram_req_tag, \
         scope_dram_req_ready, \
         scope_dram_rsp_valid, \
-        scope_dram_rsp_tag, \
         scope_dram_rsp_ready, \
-        scope_schedule_delay
+        scope_schedule_delay, \
+        scope_icache_req_tag, \
+        scope_icache_rsp_tag, \
+        scope_dcache_req_tag, \
+        scope_dcache_rsp_tag, \
+        scope_dram_req_tag, \
+        scope_dram_rsp_tag
 
     `define SCOPE_SIGNALS_DECL \
         wire scope_icache_req_valid; \
