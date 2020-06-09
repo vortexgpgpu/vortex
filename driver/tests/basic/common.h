@@ -3,6 +3,6 @@
 
 #define DEV_MEM_SRC_ADDR 0x10000040
 #define DEV_MEM_DST_ADDR 0x20000080
-#define NUM_BLOCKS       64
+#define NUM_BLOCKS       1
 
 #endif

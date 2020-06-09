@@ -1,17 +1,16 @@
 vortex_afu.json
 
 +define+NDEBUG
-
-+define+DBG_PRINT_CORE_ICACHE
-+define+DBG_PRINT_CORE_DCACHE
-+define+DBG_PRINT_CACHE_BANK
-+define+DBG_PRINT_CACHE_SNP
-+define+DBG_PRINT_CACHE_MSRQ
-+define+DBG_PRINT_DRAM
-+define+DBG_PRINT_OPAE
-+define+DBG_PRINT_SCOPE
-
 +define+SCOPE
+
+#+define+DBG_PRINT_CORE_ICACHE
+#+define+DBG_PRINT_CORE_DCACHE
+#+define+DBG_PRINT_CACHE_BANK
+#+define+DBG_PRINT_CACHE_SNP
+#+define+DBG_PRINT_CACHE_MSRQ
+#+define+DBG_PRINT_DRAM
+#+define+DBG_PRINT_OPAE
+#+define+DBG_PRINT_SCOPE
 
 +incdir+.
 +incdir+../rtl

@@ -3,7 +3,9 @@
 module VX_pipeline #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_SIGNALS_IO
+    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_CORE_IO
     
     // Clock
     input wire                              clk,
@@ -53,21 +55,23 @@ module VX_pipeline #(
     wire gpr_stage_delay;
     wire schedule_delay;
 
-    `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);
+    `SCOPE_ASSIGN(scope_icache_req_valid, icache_req_valid);
+    `SCOPE_ASSIGN(scope_icache_req_addr,  icache_req_addr);
+    `SCOPE_ASSIGN(scope_icache_req_tag,   icache_req_tag);
+    `SCOPE_ASSIGN(scope_icache_req_ready, icache_req_ready);
+    `SCOPE_ASSIGN(scope_icache_rsp_valid, icache_rsp_valid);
+    `SCOPE_ASSIGN(scope_icache_rsp_data,  icache_rsp_data);
+    `SCOPE_ASSIGN(scope_icache_rsp_tag,   icache_rsp_tag);
+    `SCOPE_ASSIGN(scope_icache_rsp_ready, icache_rsp_ready);
 
-    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_valid);
+    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_valid);    
     `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_tag);
     `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_ready);
     `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_valid);
     `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_tag);
     `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_ready);
 
-    `SCOPE_ASSIGN(scope_icache_req_valid, icache_req_valid);
-    `SCOPE_ASSIGN(scope_icache_req_tag,   icache_req_tag);
-    `SCOPE_ASSIGN(scope_icache_req_ready, icache_req_ready);
-    `SCOPE_ASSIGN(scope_icache_rsp_valid, icache_rsp_valid);
-    `SCOPE_ASSIGN(scope_icache_rsp_tag,   icache_rsp_tag);
-    `SCOPE_ASSIGN(scope_icache_rsp_ready, icache_rsp_ready);
+    `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);
 
     // Dcache
     VX_cache_core_req_if #(
