@@ -3,7 +3,9 @@
 module Vortex_Cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
-    `SCOPE_SIGNALS_IO
+    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_CORE_IO
 
     // Clock
     input  wire                             clk,
@@ -108,7 +110,9 @@ module Vortex_Cluster #(
         Vortex #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) vortex_core (
-            `SCOPE_SIGNALS_ATTACH
+            `SCOPE_SIGNALS_ICACHE_ATTACH
+            `SCOPE_SIGNALS_DCACHE_ATTACH
+            `SCOPE_SIGNALS_CORE_ATTACH
 
             .clk                (clk),
             .reset              (reset),
@@ -443,38 +447,38 @@ module Vortex_Cluster #(
             .CORE_TAG_WIDTH (`DDRAM_TAG_WIDTH),
             .DRAM_TAG_WIDTH (`L2DRAM_TAG_WIDTH)
         ) dram_arb (
-            .clk                (clk),
-            .reset              (reset),
+            .clk                    (clk),
+            .reset                  (reset),
 
             // Core request
-            .core_req_valid     (arb_core_req_valid),
-            .core_req_rw        (arb_core_req_rw),
-            .core_req_byteen    (arb_core_req_byteen),
-            .core_req_addr      (arb_core_req_addr),
-            .core_req_data      (arb_core_req_data),  
-            .core_req_tag       (arb_core_req_tag),  
-            .core_req_ready     (arb_core_req_ready),
+            .in_dram_req_valid      (arb_core_req_valid),
+            .in_dram_req_rw         (arb_core_req_rw),
+            .in_dram_req_byteen     (arb_core_req_byteen),
+            .in_dram_req_addr       (arb_core_req_addr),
+            .in_dram_req_data       (arb_core_req_data),  
+            .in_dram_req_tag        (arb_core_req_tag),  
+            .in_dram_req_ready      (arb_core_req_ready),
 
             // Core response
-            .core_rsp_valid     (arb_core_rsp_valid),
-            .core_rsp_data      (arb_core_rsp_data),
-            .core_rsp_tag       (arb_core_rsp_tag),
-            .core_rsp_ready     (arb_core_rsp_ready),
+            .in_dram_rsp_valid      (arb_core_rsp_valid),
+            .in_dram_rsp_data       (arb_core_rsp_data),
+            .in_dram_rsp_tag        (arb_core_rsp_tag),
+            .in_dram_rsp_ready      (arb_core_rsp_ready),
 
             // DRAM request
-            .dram_req_valid     (dram_req_valid),
-            .dram_req_rw        (dram_req_rw),        
-            .dram_req_byteen    (dram_req_byteen),        
-            .dram_req_addr      (dram_req_addr),
-            .dram_req_data      (dram_req_data),
-            .dram_req_tag       (dram_req_tag),
-            .dram_req_ready     (dram_req_ready),
+            .out_dram_req_valid     (dram_req_valid),
+            .out_dram_req_rw        (dram_req_rw),        
+            .out_dram_req_byteen    (dram_req_byteen),        
+            .out_dram_req_addr      (dram_req_addr),
+            .out_dram_req_data      (dram_req_data),
+            .out_dram_req_tag       (dram_req_tag),
+            .out_dram_req_ready     (dram_req_ready),
             
             // DRAM response
-            .dram_rsp_valid     (dram_rsp_valid),
-            .dram_rsp_tag       (dram_rsp_tag),
-            .dram_rsp_data      (dram_rsp_data),
-            .dram_rsp_ready     (dram_rsp_ready)
+            .out_dram_rsp_valid     (dram_rsp_valid),
+            .out_dram_rsp_tag       (dram_rsp_tag),
+            .out_dram_rsp_data      (dram_rsp_data),
+            .out_dram_rsp_ready     (dram_rsp_ready)
         );
 
     end

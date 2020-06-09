@@ -797,17 +797,25 @@ end
 
 `SCOPE_SIGNALS_DECL
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_LIST}) == 85, "oops!")
+`SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
+`SCOPE_ASSIGN(scope_dram_req_tag,   vx_dram_req_tag);
+`SCOPE_ASSIGN(scope_dram_req_ready, vx_dram_req_ready);
+`SCOPE_ASSIGN(scope_dram_rsp_valid, vx_dram_rsp_valid);
+`SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
+`SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
+
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_LIST}) == 147, "oops!")
 
 VX_scope #(
   .DATAW  ($bits({`SCOPE_SIGNALS_LIST})),
   .BUSW   (64),
-  .SIZE   (256),
+  .SIZE   (8192),
   .IDW    (19)
 ) scope (
   .clk      (clk),
   .reset    (SoftReset),
   .start    (vx_reset),
+  .stop     (cmd_run_done),
   .data_in  ({`SCOPE_SIGNALS_LIST}),
   .bus_in   (csr_scope_cmd),
   .bus_out  (csr_scope_data),
@@ -822,7 +830,9 @@ VX_scope #(
 assign cmd_run_done = !vx_busy;
 
 Vortex_Socket #() vx_socket (
-  `SCOPE_SIGNALS_ATTACH
+  `SCOPE_SIGNALS_ICACHE_ATTACH
+  `SCOPE_SIGNALS_DCACHE_ATTACH
+  `SCOPE_SIGNALS_CORE_ATTACH
 
   .clk              (clk),
   .reset            (vx_reset),

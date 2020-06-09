@@ -3,7 +3,9 @@
 module Vortex #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_SIGNALS_IO
+    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_CORE_IO
     
     // Clock
     input  wire                             clk,
@@ -165,7 +167,9 @@ module Vortex #(
     VX_pipeline #(
         .CORE_ID(CORE_ID)
     ) pipeline (
-        `SCOPE_SIGNALS_ATTACH
+        `SCOPE_SIGNALS_ICACHE_ATTACH
+        `SCOPE_SIGNALS_DCACHE_ATTACH
+        `SCOPE_SIGNALS_CORE_ATTACH
 
         .clk(clk),
         .reset(reset),
