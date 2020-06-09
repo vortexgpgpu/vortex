@@ -233,12 +233,12 @@ bool Simulator::run() {
 
   // check riscv-tests PASSED/FAILED status
 #if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
-  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->pipeline->back_end->writeback->last_data_wb & 0xf;
 #else
 #if (NUM_CLUSTERS == 1)
-  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex_Socket->genblk1__DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->pipeline->back_end->writeback->last_data_wb & 0xf;
 #else
-  int status = (int)vortex_->Vortex_Socket->genblk2__DOT__genblk1__BRA__0__KET____DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex_Socket->genblk2__DOT__genblk1__BRA__0__KET____DOT__Vortex_Cluster->genblk1__BRA__0__KET____DOT__vortex_core->pipeline->back_end->writeback->last_data_wb & 0xf;
 #endif
 #endif
 

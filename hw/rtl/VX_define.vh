@@ -397,8 +397,16 @@
 
     `define SCOPE_ASSIGN(d,s) assign d = s
 `else
-    `define SCOPE_SIGNALS_IO
-    `define SCOPE_SIGNALS_ATTACH
+    `define SCOPE_SIGNALS_ICACHE_IO
+    `define SCOPE_SIGNALS_DCACHE_IO
+    `define SCOPE_SIGNALS_DRAM_IO
+    `define SCOPE_SIGNALS_CORE_IO
+
+    `define SCOPE_SIGNALS_ICACHE_ATTACH
+    `define SCOPE_SIGNALS_DCACHE_ATTACH
+    `define SCOPE_SIGNALS_DRAM_ATTACH
+    `define SCOPE_SIGNALS_CORE_ATTACH
+    
     `define SCOPE_ASSIGN(d,s)
 `endif
 
