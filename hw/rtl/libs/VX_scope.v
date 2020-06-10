@@ -10,6 +10,7 @@ module VX_scope #(
 	input wire reset,
 	input wire start,
 	input wire stop,
+	input wire changed,
 	input wire [DATAW-1:0] data_in,
 	input wire [BUSW-1:0]  bus_in,
 	output reg [BUSW-1:0]  bus_out,	
@@ -102,8 +103,7 @@ module VX_scope #(
 
 			if (start_wait) begin				
 				delay_cntr <= delay_cntr - 1;
-				if (1 == delay_cntr) begin		
-					$display("%t: scope-state: recording", $time);			
+				if (1 == delay_cntr) begin				
 					start_wait <= 0;
 					recording  <= 1;
 					delta      <= 0;
@@ -112,7 +112,8 @@ module VX_scope #(
 
 			if (recording) begin
 				if (DELTA_ENABLE) begin
-					if (0 == waddr 
+					if (changed
+					 || (0 == waddr)
 					 || (trigger_id != prev_id)) begin
 						data_store[waddr]  <= data_in;
 						delta_store[waddr] <= delta;
@@ -129,7 +130,6 @@ module VX_scope #(
 
 				if (stop 
 				 || (waddr == waddr_end)) begin
-					$display("%t: scope-state: data_valid, waddr=%0d", $time, waddr);	
 					waddr      <= waddr;  // keep last written address
 					recording  <= 0;
 					data_valid <= 1;

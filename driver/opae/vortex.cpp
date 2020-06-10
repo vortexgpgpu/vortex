@@ -74,8 +74,8 @@ static int vx_scope_start(vx_device_h hdevice) {
     vx_device_t *device = ((vx_device_t*)hdevice);
 
     // set start delay
-    uint64_t delay = ((0 << 3) | 4);
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, delay));
+    uint64_t delay = 0;
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, ((delay << 3) | 4)));
 
     // start execution
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_RUN));
@@ -110,27 +110,29 @@ static int vx_scope_start(vx_device_h hdevice) {
     ofs << "$var reg 2  15 icache_req_tag $end" << std::endl;    
     ofs << "$var reg 32 16 icache_rsp_data $end" << std::endl;    
     ofs << "$var reg 2  17 icache_rsp_tag $end" << std::endl;
-    ofs << "$var reg 2  18 dcache_req_tag $end" << std::endl;
-    ofs << "$var reg 2  19 dcache_rsp_tag $end" << std::endl;     
-    ofs << "$var reg 29 20 dram_req_tag $end" << std::endl;
-    ofs << "$var reg 29 21 dram_rsp_tag $end" << std::endl;    
+    ofs << "$var reg 32 18 dcache_req_addr $end" << std::endl;
+    ofs << "$var reg 2  19 dcache_req_tag $end" << std::endl;
+    ofs << "$var reg 32 20 dcache_rsp_data $end" << std::endl;    
+    ofs << "$var reg 2  21 dcache_rsp_tag $end" << std::endl;     
+    ofs << "$var reg 29 22 dram_req_tag $end" << std::endl;
+    ofs << "$var reg 29 23 dram_rsp_tag $end" << std::endl;   
+    ofs << "$var reg 2  24 icache_req_warp $end" << std::endl;
+    ofs << "$var reg 2  25 dcache_req_warp $end" << std::endl; 
 
-    fwidth += 128;
+    fwidth += 198;
 
-    #define IS_PC_SID(x)  (x == 14)
-
-    const int num_signals = 22;
+    const int num_signals = 26;
 
     uint64_t frame_width, max_frames, data_valid;
 
     ofs << "enddefinitions $end" << std::endl;
 
-    do {
-        CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 0));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 0));
+    do {        
         CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));        
         if (data_valid)
             break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     } while (true);
 
     std::cout << "scope trace dump begin..." << std::endl;    
@@ -186,12 +188,7 @@ static int vx_scope_start(vx_device_h hdevice) {
 
         if (signal_offset == signal_width) {
             signa_data[signal_width] = 0; // string null termination
-            int sid = (num_signals - signal_id);
-            if (IS_PC_SID(sid)) {
-                ofs << 'b' << signa_data.data() << "00 " << sid << std::endl;
-            } else {
-                ofs << 'b' << signa_data.data() << ' ' << sid << std::endl;
-            }
+            ofs << 'b' << signa_data.data() << ' ' << (num_signals - signal_id) << std::endl;
             signal_offset = 0;            
             ++signal_id;
         }
@@ -228,22 +225,24 @@ static int vx_scope_start(vx_device_h hdevice) {
                 break;
             case 15:
             case 17:
-            case 18:
             case 19:
+            case 21:
+            case 24:
+            case 25:
                 print_signal(word, 2); 
                 break;
             case 5:
             case 7:
                 print_signal(word, 4); 
                 break;
-            case 20:
-            case 21: 
+            case 22:
+            case 23: 
                 print_signal(word, 29); 
                 break;
             case 14: 
-                print_signal(word, 30); 
-                break;
             case 16: 
+            case 18: 
+            case 20: 
                 print_signal(word, 32); 
                 break;
             }           

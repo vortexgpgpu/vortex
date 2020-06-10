@@ -3,6 +3,8 @@
 module VX_front_end #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_SIGNALS_FE_IO
+
     input wire                clk,
     input wire                reset,
 
@@ -63,6 +65,8 @@ module VX_front_end #(
     VX_icache_stage #(
         .CORE_ID(CORE_ID)
     ) icache_stage (
+        `SCOPE_SIGNALS_FE_ATTACH
+
         .clk                (clk),
         .reset              (reset),
         .total_freeze       (total_freeze),
@@ -99,7 +103,7 @@ module VX_front_end #(
         .freeze             (total_freeze),
         .frE_to_bckE_req_if (frE_to_bckE_req_if),
         .bckE_req_if        (bckE_req_if)
-    );
+    );    
 
 endmodule
 

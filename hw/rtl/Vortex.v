@@ -6,6 +6,8 @@ module Vortex #(
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_CORE_IO
+    `SCOPE_SIGNALS_FE_IO
+    `SCOPE_SIGNALS_BE_IO
     
     // Clock
     input  wire                             clk,
@@ -170,6 +172,8 @@ module Vortex #(
         `SCOPE_SIGNALS_ICACHE_ATTACH
         `SCOPE_SIGNALS_DCACHE_ATTACH
         `SCOPE_SIGNALS_CORE_ATTACH
+        `SCOPE_SIGNALS_FE_ATTACH
+        `SCOPE_SIGNALS_BE_ATTACH
 
         .clk(clk),
         .reset(reset),

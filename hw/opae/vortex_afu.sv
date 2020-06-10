@@ -804,7 +804,14 @@ end
 `SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
 `SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_LIST}) == 147, "oops!")
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_LIST}) == 217, "oops!")
+
+wire force_changed = (scope_icache_req_valid && scope_icache_req_ready)
+                  || (scope_icache_rsp_valid && scope_icache_rsp_ready)
+                  || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
+                  || ((| scope_dcache_rsp_valid) && scope_dcache_rsp_ready)
+                  || (scope_dram_req_valid && scope_dram_req_ready)
+                  || (scope_dram_rsp_valid && scope_dram_rsp_ready);
 
 VX_scope #(
   .DATAW  ($bits({`SCOPE_SIGNALS_LIST})),
@@ -816,6 +823,7 @@ VX_scope #(
   .reset    (SoftReset),
   .start    (vx_reset),
   .stop     (cmd_run_done),
+  .changed  (force_changed),
   .data_in  ({`SCOPE_SIGNALS_LIST}),
   .bus_in   (csr_scope_cmd),
   .bus_out  (csr_scope_data),
@@ -833,6 +841,8 @@ Vortex_Socket #() vx_socket (
   `SCOPE_SIGNALS_ICACHE_ATTACH
   `SCOPE_SIGNALS_DCACHE_ATTACH
   `SCOPE_SIGNALS_CORE_ATTACH
+  `SCOPE_SIGNALS_FE_ATTACH
+  `SCOPE_SIGNALS_BE_ATTACH
 
   .clk              (clk),
   .reset            (vx_reset),
