@@ -3,6 +3,9 @@
 module VX_lsu_unit #(
     parameter CORE_ID = 0
 ) (
+    
+    `SCOPE_SIGNALS_BE_IO
+
     input wire              clk,
     input wire              reset,
 
@@ -48,6 +51,8 @@ module VX_lsu_unit #(
         .in   ({address    , lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.lsu_pc}),
         .out  ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
     );
+
+    `SCOPE_ASSIGN(scope_dcache_req_warp, use_warp_num);
 
     wire core_req_rw = (use_mem_write != `BYTE_EN_NO);
 

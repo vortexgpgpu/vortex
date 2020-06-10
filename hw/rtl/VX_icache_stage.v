@@ -3,6 +3,8 @@
 module VX_icache_stage #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_SIGNALS_FE_IO
+
     input  wire             clk,
     input  wire             reset,
     input  wire             total_freeze,
@@ -19,11 +21,6 @@ module VX_icache_stage #(
     reg [`NUM_THREADS-1:0] valid_threads [`NUM_WARPS-1:0];
 
     wire valid_inst = (| fe_inst_meta_fi.valid);
-
-`DEBUG_BEGIN
-    wire [`ICORE_TAG_WIDTH-1:0] mem_req_tag = icache_req_if.core_req_tag;
-    wire [`ICORE_TAG_WIDTH-1:0] mem_rsp_tag = icache_rsp_if.core_rsp_tag;
-`DEBUG_END
 
     wire [`LOG2UP(`ICREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr, dbg_mrq_write_addr;
     wire mrq_full;
@@ -47,6 +44,8 @@ module VX_icache_stage #(
         .read_addr  (mrq_read_addr),
         .read_data  ({dbg_mrq_write_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num})
     );    
+
+    `SCOPE_ASSIGN(scope_icache_req_warp, fe_inst_meta_fi.warp_num);
 
     always @(posedge clk) begin
         if (reset) begin

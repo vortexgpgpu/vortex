@@ -6,6 +6,8 @@ module VX_pipeline #(
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_CORE_IO
+    `SCOPE_SIGNALS_FE_IO
+    `SCOPE_SIGNALS_BE_IO
     
     // Clock
     input wire                              clk,
@@ -56,7 +58,7 @@ module VX_pipeline #(
     wire schedule_delay;
 
     `SCOPE_ASSIGN(scope_icache_req_valid, icache_req_valid);
-    `SCOPE_ASSIGN(scope_icache_req_addr,  icache_req_addr);
+    `SCOPE_ASSIGN(scope_icache_req_addr,  {icache_req_addr, 2'b0});
     `SCOPE_ASSIGN(scope_icache_req_tag,   icache_req_tag);
     `SCOPE_ASSIGN(scope_icache_req_ready, icache_req_ready);
     `SCOPE_ASSIGN(scope_icache_rsp_valid, icache_rsp_valid);
@@ -65,9 +67,11 @@ module VX_pipeline #(
     `SCOPE_ASSIGN(scope_icache_rsp_ready, icache_rsp_ready);
 
     `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_valid);    
+    `SCOPE_ASSIGN(scope_dcache_req_addr,  {dcache_req_addr[0], 2'b0});
     `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_tag);
     `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_ready);
     `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_valid);
+    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_data[0]);
     `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_tag);
     `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_ready);
 
@@ -117,6 +121,7 @@ module VX_pipeline #(
     VX_front_end #(
         .CORE_ID(CORE_ID)
     ) front_end (
+        `SCOPE_SIGNALS_FE_ATTACH
         .clk            (clk),
         .reset          (reset),
         .warp_ctl_if    (warp_ctl_if),
@@ -144,6 +149,7 @@ module VX_pipeline #(
     VX_back_end #(
         .CORE_ID(CORE_ID)
     ) back_end (
+        `SCOPE_SIGNALS_BE_ATTACH
         .clk             (clk),
         .reset           (reset),
         .schedule_delay  (schedule_delay),

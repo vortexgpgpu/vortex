@@ -13,7 +13,6 @@ module VX_alu_unit (
     output reg[31:0]  alu_result,
     output reg        alu_stall
 );
-
     localparam div_pipeline_len = 20;
     localparam mul_pipeline_len = 8;
 

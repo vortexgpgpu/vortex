@@ -3,6 +3,8 @@
 module VX_back_end #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_SIGNALS_BE_IO
+
     input wire clk, 
     input wire reset, 
 
@@ -68,6 +70,8 @@ module VX_back_end #(
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
     ) lsu_unit (
+        `SCOPE_SIGNALS_BE_ATTACH
+
         .clk            (clk),
         .reset          (reset),
         .lsu_req_if     (lsu_req_if),

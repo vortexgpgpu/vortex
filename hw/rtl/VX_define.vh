@@ -301,14 +301,18 @@
         scope_icache_req_tag, \
         scope_icache_rsp_data, \
         scope_icache_rsp_tag, \
+        scope_dcache_req_addr, \
         scope_dcache_req_tag, \
+        scope_dcache_rsp_data, \
         scope_dcache_rsp_tag, \
         scope_dram_req_tag, \
-        scope_dram_rsp_tag
+        scope_dram_rsp_tag, \
+        scope_icache_req_warp, \
+        scope_dcache_req_warp
 
     `define SCOPE_SIGNALS_DECL \
         wire scope_icache_req_valid; \
-        wire [29:0] scope_icache_req_addr; \
+        wire [31:0] scope_icache_req_addr; \
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag; \
         wire scope_icache_req_ready; \
         wire scope_icache_rsp_valid; \
@@ -316,9 +320,11 @@
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_rsp_tag; \
         wire scope_icache_rsp_ready; \
         wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid; \
+        wire [31:0] scope_dcache_req_addr; \
         wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_req_tag; \
         wire scope_dcache_req_ready; \
         wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid; \
+        wire [31:0] scope_dcache_rsp_data; \
         wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_rsp_tag; \
         wire scope_dcache_rsp_ready; \
         wire scope_dram_req_valid; \
@@ -327,12 +333,14 @@
         wire scope_dram_rsp_valid; \
         wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag; \
         wire scope_dram_rsp_ready; \
-        wire scope_schedule_delay;
+        wire scope_schedule_delay; \
+        wire [1:0] scope_icache_req_warp; \
+        wire [1:0] scope_dcache_req_warp;
 
     `define SCOPE_SIGNALS_ICACHE_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire scope_icache_req_valid, \
-        output wire [29:0] scope_icache_req_addr, \
+        output wire [31:0] scope_icache_req_addr, \
         output wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag, \
         output wire scope_icache_req_ready, \
         output wire scope_icache_rsp_valid, \
@@ -344,9 +352,11 @@
     `define SCOPE_SIGNALS_DCACHE_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid, \
+        output wire [31:0] scope_dcache_req_addr, \
         output wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_req_tag, \
         output wire scope_dcache_req_ready, \
         output wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid, \
+        output wire [31:0] scope_dcache_rsp_data, \
         output wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_rsp_tag, \
         output wire scope_dcache_rsp_ready, \
         /* verilator lint_on UNDRIVEN */
@@ -366,6 +376,16 @@
         output wire scope_schedule_delay, \
         /* verilator lint_on UNDRIVEN */
 
+    `define SCOPE_SIGNALS_FE_IO \
+        /* verilator lint_off UNDRIVEN */ \
+        output wire [1:0] scope_icache_req_warp, \
+        /* verilator lint_on UNDRIVEN */
+
+    `define SCOPE_SIGNALS_BE_IO \
+        /* verilator lint_off UNDRIVEN */ \
+        output wire [1:0] scope_dcache_req_warp, \
+        /* verilator lint_on UNDRIVEN */
+
     `define SCOPE_SIGNALS_ICACHE_ATTACH \
         .scope_icache_req_valid (scope_icache_req_valid), \
         .scope_icache_req_addr  (scope_icache_req_addr), \
@@ -378,9 +398,11 @@
 
     `define SCOPE_SIGNALS_DCACHE_ATTACH \
         .scope_dcache_req_valid (scope_dcache_req_valid), \
+        .scope_dcache_req_addr  (scope_dcache_req_addr), \
         .scope_dcache_req_tag   (scope_dcache_req_tag), \
         .scope_dcache_req_ready (scope_dcache_req_ready), \
         .scope_dcache_rsp_valid (scope_dcache_rsp_valid), \
+        .scope_dcache_rsp_data  (scope_dcache_rsp_data), \
         .scope_dcache_rsp_tag   (scope_dcache_rsp_tag), \
         .scope_dcache_rsp_ready (scope_dcache_rsp_ready),
 
@@ -395,17 +417,27 @@
     `define SCOPE_SIGNALS_CORE_ATTACH \
         .scope_schedule_delay   (scope_schedule_delay),
 
+    `define SCOPE_SIGNALS_FE_ATTACH \
+        .scope_icache_req_warp  (scope_icache_req_warp),
+
+    `define SCOPE_SIGNALS_BE_ATTACH \
+        .scope_dcache_req_warp  (scope_dcache_req_warp),
+
     `define SCOPE_ASSIGN(d,s) assign d = s
 `else
     `define SCOPE_SIGNALS_ICACHE_IO
     `define SCOPE_SIGNALS_DCACHE_IO
     `define SCOPE_SIGNALS_DRAM_IO
     `define SCOPE_SIGNALS_CORE_IO
+    `define SCOPE_SIGNALS_FE_IO
+    `define SCOPE_SIGNALS_BE_IO
 
     `define SCOPE_SIGNALS_ICACHE_ATTACH
     `define SCOPE_SIGNALS_DCACHE_ATTACH
     `define SCOPE_SIGNALS_DRAM_ATTACH
     `define SCOPE_SIGNALS_CORE_ATTACH
+    `define SCOPE_SIGNALS_FE_ATTACH
+    `define SCOPE_SIGNALS_BE_ATTACH
     
     `define SCOPE_ASSIGN(d,s)
 `endif
