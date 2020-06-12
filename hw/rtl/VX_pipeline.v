@@ -6,7 +6,6 @@ module VX_pipeline #(
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_CORE_IO
-    `SCOPE_SIGNALS_FE_IO
     `SCOPE_SIGNALS_BE_IO
     
     // Clock
@@ -57,26 +56,6 @@ module VX_pipeline #(
     wire gpr_stage_delay;
     wire schedule_delay;
 
-    `SCOPE_ASSIGN(scope_icache_req_valid, icache_req_valid);
-    `SCOPE_ASSIGN(scope_icache_req_addr,  {icache_req_addr, 2'b0});
-    `SCOPE_ASSIGN(scope_icache_req_tag,   icache_req_tag);
-    `SCOPE_ASSIGN(scope_icache_req_ready, icache_req_ready);
-    `SCOPE_ASSIGN(scope_icache_rsp_valid, icache_rsp_valid);
-    `SCOPE_ASSIGN(scope_icache_rsp_data,  icache_rsp_data);
-    `SCOPE_ASSIGN(scope_icache_rsp_tag,   icache_rsp_tag);
-    `SCOPE_ASSIGN(scope_icache_rsp_ready, icache_rsp_ready);
-
-    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_valid);    
-    `SCOPE_ASSIGN(scope_dcache_req_addr,  {dcache_req_addr[0], 2'b0});
-    `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_tag);
-    `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_ready);
-    `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_valid);
-    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_data[0]);
-    `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_tag);
-    `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_ready);
-
-    `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);
-
     // Dcache
     VX_cache_core_req_if #(
         .NUM_REQUESTS(`NUM_THREADS), 
@@ -121,7 +100,8 @@ module VX_pipeline #(
     VX_front_end #(
         .CORE_ID(CORE_ID)
     ) front_end (
-        `SCOPE_SIGNALS_FE_ATTACH
+        `SCOPE_SIGNALS_ICACHE_ATTACH
+
         .clk            (clk),
         .reset          (reset),
         .warp_ctl_if    (warp_ctl_if),
@@ -149,7 +129,9 @@ module VX_pipeline #(
     VX_back_end #(
         .CORE_ID(CORE_ID)
     ) back_end (
+        `SCOPE_SIGNALS_DCACHE_ATTACH
         `SCOPE_SIGNALS_BE_ATTACH
+
         .clk             (clk),
         .reset           (reset),
         .schedule_delay  (schedule_delay),
@@ -191,5 +173,18 @@ module VX_pipeline #(
     assign core_icache_rsp_if.core_rsp_data  = icache_rsp_data;
     assign core_icache_rsp_if.core_rsp_tag   = icache_rsp_tag;
     assign icache_rsp_ready = core_icache_rsp_if.core_rsp_ready;
+
+    `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);    
+    `SCOPE_ASSIGN(scope_memory_delay, memory_delay);
+    `SCOPE_ASSIGN(scope_exec_delay, exec_delay);
+    `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_stage_delay);
+
+`ifdef DBG_PRINT_WB
+    always_ff @(posedge clk) begin
+        if ((| writeback_if.valid) && (writeback_if.wb != 0)) begin
+            $display("%t: Writeback: wid=%0d, rd=%0d, data=%0h", $time, writeback_if.warp_num, writeback_if.rd, writeback_if.data);
+        end
+    end
+`endif
 
 endmodule // Vortex

@@ -2,9 +2,8 @@
 
 module VX_lsu_unit #(
     parameter CORE_ID = 0
-) (
-    
-    `SCOPE_SIGNALS_BE_IO
+) (    
+    `SCOPE_SIGNALS_DCACHE_IO
 
     input wire              clk,
     input wire              reset,
@@ -44,15 +43,13 @@ module VX_lsu_unit #(
     VX_generic_register #(
         .N(45 + `NW_BITS-1 + 1 + `NUM_THREADS*65)
     ) lsu_buffer (
-        .clk  (clk),
-        .reset(reset),
-        .stall(delay),
-        .flush(1'b0),
-        .in   ({address    , lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.lsu_pc}),
-        .out  ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
+        .clk   (clk),
+        .reset (reset),
+        .stall (delay),
+        .flush (1'b0),
+        .in    ({address    , lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.curr_PC}),
+        .out   ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
     );
-
-    `SCOPE_ASSIGN(scope_dcache_req_warp, use_warp_num);
 
     wire core_req_rw = (use_mem_write != `BYTE_EN_NO);
 
@@ -108,7 +105,7 @@ module VX_lsu_unit #(
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({dbg_mrq_write_addr, mem_wb_if.pc, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num})
+        .read_data  ({dbg_mrq_write_addr, mem_wb_if.curr_PC, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num})
     );
 
     always @(posedge clk) begin
@@ -165,6 +162,16 @@ module VX_lsu_unit #(
 
     // Can't accept new response
     assign dcache_rsp_if.core_rsp_ready = ~no_slot_mem;    
+
+    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.core_req_valid);    
+    `SCOPE_ASSIGN(scope_dcache_req_addr,  {dcache_req_if.core_req_addr[0], 2'b0});
+    `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
+    `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_if.core_req_tag);
+    `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_if.core_req_ready);
+    `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_if.core_rsp_valid);
+    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.core_rsp_data[0]);
+    `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_if.core_rsp_tag);
+    `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_if.core_rsp_ready);
     
 `ifdef DBG_PRINT_CORE_DCACHE
    always_ff @(posedge clk) begin
@@ -172,7 +179,7 @@ module VX_lsu_unit #(
             $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);
         end
         if ((| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready) begin
-            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.pc, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
+            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.curr_PC, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end
 `endif

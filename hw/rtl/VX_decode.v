@@ -91,7 +91,7 @@ module VX_decode(
     assign func7 = in_instruction[31:25];
     assign u_12  = in_instruction[31:20];
 
-    assign frE_to_bckE_req_if.PC_next = in_curr_PC + 32'h4;
+    assign frE_to_bckE_req_if.next_PC = in_curr_PC + 32'h4;
 
     // Write Back sigal
     assign is_rtype     = (curr_opcode == `INST_R);
@@ -169,12 +169,12 @@ module VX_decode(
         case (curr_opcode)
             `INST_JAL:
                 begin
-                    temp_jal        = 1'b1 && in_valid;
+                    temp_jal        = in_valid;
                     temp_jal_offset = jal_1_offset;
                 end
             `INST_JALR:
                 begin
-                    temp_jal        = 1'b1 && in_valid;
+                    temp_jal        = in_valid;
                     temp_jal_offset = jal_2_offset;
                 end
             `INST_SYS:
@@ -185,13 +185,13 @@ module VX_decode(
                 end
             default:
                 begin
-                    temp_jal          = 1'b0 && in_valid;
-                    temp_jal_offset   = 32'hdeadbeef;
+                    temp_jal        = 1'b0;
+                    temp_jal_offset = 32'hdeadbeef;
                 end
         endcase
     end
 
-    assign frE_to_bckE_req_if.jalQual    = is_jal;
+    assign frE_to_bckE_req_if.is_jal     = is_jal;
     assign frE_to_bckE_req_if.jal        = temp_jal;
     assign frE_to_bckE_req_if.jal_offset = temp_jal_offset;
 

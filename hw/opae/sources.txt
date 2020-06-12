@@ -9,6 +9,7 @@ vortex_afu.json
 #+define+DBG_PRINT_CACHE_SNP
 #+define+DBG_PRINT_CACHE_MSRQ
 #+define+DBG_PRINT_DRAM
+#+define+DBG_PRINT_WB
 #+define+DBG_PRINT_OPAE
 #+define+DBG_PRINT_SCOPE
 
@@ -87,12 +88,11 @@ vortex_afu.json
 ../rtl/VX_writeback.v
 ../rtl/VX_csr_pipe.v
 ../rtl/VX_csr_data.v
-../rtl/VX_csr_wrapper.v
 ../rtl/VX_warp_sched.v
 ../rtl/VX_gpr.v
 ../rtl/VX_gpr_ram.v
 ../rtl/VX_gpr_stage.v
-../rtl/VX_dmem_ctrl.v
+../rtl/VX_mem_ctrl.v
 ../rtl/VX_alu_unit.v
 ../rtl/VX_lsu_unit.v
 ../rtl/VX_decode.v

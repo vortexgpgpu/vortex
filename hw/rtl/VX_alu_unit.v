@@ -1,17 +1,17 @@
 `include "VX_define.vh"
 
 module VX_alu_unit (
-    input wire        clk,
-    input wire        reset,
-    input wire[31:0]  src_a,
-    input wire[31:0]  src_b,
-    input wire        src_rs2,
-    input wire[31:0]  itype_immed,
-    input wire[19:0]  upper_immed,
-    input wire[4:0]   alu_op,
-    input wire[31:0]  curr_PC,
-    output reg[31:0]  alu_result,
-    output reg        alu_stall
+    input wire         clk,
+    input wire         reset,
+    input wire [31:0]  src_a,
+    input wire [31:0]  src_b,
+    input wire         src_rs2,
+    input wire [31:0]  itype_immed,
+    input wire [19:0]  upper_immed,
+    input wire [4:0]   alu_op,
+    input wire [31:0]  curr_PC,
+    output reg [31:0]  alu_result,
+    output reg         alu_stall
 );
     localparam div_pipeline_len = 20;
     localparam mul_pipeline_len = 8;
@@ -85,7 +85,7 @@ module VX_alu_unit (
     reg [15:0] inst_delay;
     reg inst_was_stalling;
 
-    wire inst_delay_stall = inst_was_stalling ? inst_delay != 0 : curr_inst_delay != 0;
+    wire inst_delay_stall = inst_was_stalling ? (inst_delay != 0) : (curr_inst_delay != 0);
     assign alu_stall = inst_delay_stall;
 
     always @(*) begin
@@ -127,7 +127,7 @@ module VX_alu_unit (
     wire which_in2;
     wire[31:0] upper_immed;
 
-    assign which_in2  = src_rs2 == `RS2_IMMED;
+    assign which_in2 = (src_rs2 == `RS2_IMMED);
 
     assign ALU_in1 = src_a;
     assign ALU_in2 = which_in2 ? itype_immed : src_b;
@@ -167,7 +167,7 @@ module VX_alu_unit (
     wire which_in2;        
     wire[31:0] upper_immed_s;
 
-    assign which_in2  = src_rs2 == `RS2_IMMED;
+    assign which_in2  = (src_rs2 == `RS2_IMMED);
 
     assign ALU_in1 = src_a;
 

@@ -7,11 +7,8 @@ module VX_exec_unit (
     VX_exec_unit_req_if   exec_unit_req_if,
 
     // Output
-        // Writeback
-    VX_wb_if    inst_exec_wb_if,
-        // JAL Response
+    VX_wb_if              inst_exec_wb_if,
     VX_jal_rsp_if         jal_rsp_if,
-        // Branch Response
     VX_branch_rsp_if      branch_rsp_if,
 
     input wire            no_slot_exec,
@@ -71,7 +68,7 @@ module VX_exec_unit (
 
 `DEBUG_BEGIN
     wire [$clog2(`NUM_THREADS)-1:0] jal_branch_use_index;
-    wire  jal_branch_found_valid;
+    wire jal_branch_found_valid;
 `DEBUG_END
 
     VX_generic_priority_encoder #(
@@ -103,16 +100,12 @@ module VX_exec_unit (
 
     generate
         for (i = 0; i < `NUM_THREADS; i++) begin
-            assign duplicate_PC_data[i] = exec_unit_req_if.PC_next;
+            assign duplicate_PC_data[i] = exec_unit_req_if.next_PC;
         end
     endgenerate
-
-
-    // VX_wb_if    inst_exec_wb_temp_if();
-        // JAL Response
-    VX_jal_rsp_if    jal_rsp_temp_if();
-        // Branch Response
-    VX_branch_rsp_if branch_rsp_temp_if();
+  
+    VX_jal_rsp_if       jal_rsp_temp_if();
+    VX_branch_rsp_if    branch_rsp_temp_if();
 
     // Actual Writeback
     assign inst_exec_wb_if.rd       = exec_unit_req_if.rd;
@@ -120,7 +113,7 @@ module VX_exec_unit (
     assign inst_exec_wb_if.valid    = exec_unit_req_if.valid & {`NUM_THREADS{!internal_stall}};
     assign inst_exec_wb_if.warp_num = exec_unit_req_if.warp_num;
     assign inst_exec_wb_if.data     = exec_unit_req_if.jal ? duplicate_PC_data : alu_result;
-    assign inst_exec_wb_if.pc       = in_curr_PC;
+    assign inst_exec_wb_if.curr_PC  = in_curr_PC;
 
     // Jal rsp
     assign jal_rsp_temp_if.jal          = in_jal;
@@ -133,50 +126,26 @@ module VX_exec_unit (
     assign branch_rsp_temp_if.branch_warp_num = exec_unit_req_if.warp_num;
     assign branch_rsp_temp_if.branch_dest     = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
 
-    wire zero = 0;
-
-    // VX_generic_register #(.N(174)) exec_reg(
-    //     .clk  (clk),
-    //     .reset(reset),
-    //     .stall(zero),
-    //     .flush(zero),
-    //     .in   ({inst_exec_wb_temp_if.rd, inst_exec_wb_temp_if.wb, inst_exec_wb_temp_if.wb_valid, inst_exec_wb_temp_if.wb_warp_num, inst_exec_wb_temp_if.alu_result, inst_exec_wb_temp_if.exec_wb_pc}),
-    //     .out  ({inst_exec_wb_if.rd     , inst_exec_wb_if.wb     , inst_exec_wb_if.wb_valid     , inst_exec_wb_if.wb_warp_num     , inst_exec_wb_if.alu_result     , inst_exec_wb_if.exec_wb_pc     })
-    // );
-
     VX_generic_register #(
         .N(33 + `NW_BITS-1 + 1)
     ) jal_reg (
-        .clk  (clk),
-        .reset(reset),
-        .stall(zero),
-        .flush(zero),
-        .in   ({jal_rsp_temp_if.jal, jal_rsp_temp_if.jal_dest, jal_rsp_temp_if.jal_warp_num}),
-        .out  ({jal_rsp_if.jal     , jal_rsp_if.jal_dest     , jal_rsp_if.jal_warp_num})
+        .clk   (clk),
+        .reset (reset),
+        .stall (1'b0),
+        .flush (1'b0),
+        .in    ({jal_rsp_temp_if.jal, jal_rsp_temp_if.jal_dest, jal_rsp_temp_if.jal_warp_num}),
+        .out   ({jal_rsp_if.jal     , jal_rsp_if.jal_dest     , jal_rsp_if.jal_warp_num})
     );
 
     VX_generic_register #(
         .N(34 + `NW_BITS-1 + 1)
     ) branch_reg (
-        .clk  (clk),
-        .reset(reset),
-        .stall(zero),
-        .flush(zero),
-        .in   ({branch_rsp_temp_if.valid_branch, branch_rsp_temp_if.branch_dir, branch_rsp_temp_if.branch_warp_num, branch_rsp_temp_if.branch_dest}),
-        .out  ({branch_rsp_if.valid_branch     , branch_rsp_if.branch_dir     , branch_rsp_if.branch_warp_num     , branch_rsp_if.branch_dest     })
+        .clk   (clk),
+        .reset (reset),
+        .stall (1'b0),
+        .flush (1'b0),
+        .in    ({branch_rsp_temp_if.valid_branch, branch_rsp_temp_if.branch_dir, branch_rsp_temp_if.branch_warp_num, branch_rsp_temp_if.branch_dest}),
+        .out   ({branch_rsp_if.valid_branch     , branch_rsp_if.branch_dir     , branch_rsp_if.branch_warp_num     , branch_rsp_if.branch_dest     })
     );
-
-    // always @(*) begin
-    //     case (in_alu_op)
-    //         `ALU_CSR_RW: out_csr_result = in_csr_mask;
-    //         `ALU_CSR_RS: out_csr_result = in_csr_data | in_csr_mask;
-    //         `ALU_CSR_RC: out_csr_result = in_csr_data & (32'hFFFFFFFF - in_csr_mask);
-    //         default:     out_csr_result = 32'hdeadbeef;
-    //     endcase
-    
-    // end
-
-    // assign out_is_csr        = exec_unit_req_if.is_csr;
-    // assign out_csr_address   = exec_unit_req_if.csr_address;
 
 endmodule : VX_exec_unit

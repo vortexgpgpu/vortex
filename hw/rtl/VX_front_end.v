@@ -3,7 +3,7 @@
 module VX_front_end #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_FE_IO
+    `SCOPE_SIGNALS_ICACHE_IO
 
     input wire                clk,
     input wire                reset,
@@ -65,7 +65,7 @@ module VX_front_end #(
     VX_icache_stage #(
         .CORE_ID(CORE_ID)
     ) icache_stage (
-        `SCOPE_SIGNALS_FE_ATTACH
+        `SCOPE_SIGNALS_ICACHE_ATTACH
 
         .clk                (clk),
         .reset              (reset),

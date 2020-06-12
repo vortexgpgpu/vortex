@@ -8,8 +8,8 @@
 //                               tag              rw   byteen      tid
 `define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
-//                                data         metadata               word_sel                  is_snp
-`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1)
+//                                data         metadata               word_sel                  is_snp  snp_invalidate 
+`define MRVQ_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1     + 1)
 
 `define BANK_BITS               `LOG2UP(NUM_BANKS)
 

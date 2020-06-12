@@ -67,7 +67,60 @@ inline bool is_aligned(size_t addr, size_t alignment) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static int vx_scope_start(vx_device_h hdevice) {      
+struct scope_signal_t {
+    int width;
+    const char* name;
+};
+
+static const scope_signal_t scope_signals[] = {
+    { 32, "icache_req_addr" },
+    { 2 , "icache_req_tag" },    
+    { 32, "icache_rsp_data" },    
+    { 2 , "icache_rsp_tag" },
+    { 32, "dcache_req_addr" },
+    { 2 , "dcache_req_tag" },
+    { 32, "dcache_rsp_data" },    
+    { 2 , "dcache_rsp_tag" },     
+    { 29, "dram_req_tag" },
+    { 29, "dram_rsp_tag" },   
+    { 2 , "icache_req_warp_num" },
+    { 2 , "dcache_req_warp_num" },         
+    { 32, "decode_curr_PC" },
+    { 5 , "execute_rd" },
+    { 2 , "execute_warp_num" },
+    { 32, "execute_a" },
+    { 32, "execute_b" },
+    { 5 , "writeback_rd" },
+    { 2 , "writeback_warp_num" },
+    { 32, "writeback_data" },
+    { 2 , "decode_warp_num" },
+    { 1 , "decode_is_jal" },
+    { 5 , "decode_rs1" },
+    { 5 , "decode_rs2" },
+    { 2 , "writeback_wb" },
+
+    { 1, "icache_req_valid" },
+    { 1, "icache_req_ready" },
+    { 1, "icache_rsp_valid" },
+    { 1, "icache_rsp_ready" },
+    { 4, "dcache_req_valid" },  
+    { 1, "dcache_req_ready" }, 
+    { 4, "dcache_rsp_valid" }, 
+    { 1, "dcache_rsp_ready" },
+    { 1, "dram_req_valid" },   
+    { 1, "dram_req_ready" },
+    { 1, "dram_rsp_valid" },
+    { 1, "dram_rsp_ready" },
+    { 4, "decode_valid" },
+    { 4, "execute_valid" },
+    { 4, "writeback_valid" },    
+    { 1, "schedule_delay" },
+    { 1, "memory_delay" },
+    { 1, "exec_delay" },
+    { 1, "gpr_stage_delay" },
+};
+
+static int vx_scope_start(vx_device_h hdevice) {    
     if (nullptr == hdevice)
         return -1;
 
@@ -80,48 +133,19 @@ static int vx_scope_start(vx_device_h hdevice) {
     // start execution
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_RUN));
 
+    const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
+
     std::ofstream ofs("vx_scope.vcd");
 
     ofs << "$timescale 1 ns $end" << std::endl;
 
-    int fwidth = 0;
-
     ofs << "$var reg 1  0 clk $end" << std::endl;
 
-    fwidth += 1;
-
-    ofs << "$var reg 1  1 icache_req_valid $end" << std::endl;
-    ofs << "$var reg 1  2 icache_req_ready $end" << std::endl;
-    ofs << "$var reg 1  3 icache_rsp_valid $end" << std::endl;
-    ofs << "$var reg 1  4 icache_rsp_ready $end" << std::endl;
-    ofs << "$var reg 4  5 dcache_req_valid $end" << std::endl;  
-    ofs << "$var reg 1  6 dcache_req_ready $end" << std::endl; 
-    ofs << "$var reg 4  7 dcache_rsp_valid $end" << std::endl; 
-    ofs << "$var reg 1  8 dcache_rsp_ready $end" << std::endl;
-    ofs << "$var reg 1  9 dram_req_valid $end" << std::endl;   
-    ofs << "$var reg 1 10 dram_req_ready $end" << std::endl;
-    ofs << "$var reg 1 11 dram_rsp_valid $end" << std::endl;
-    ofs << "$var reg 1 12 dram_rsp_ready $end" << std::endl;
-    ofs << "$var reg 1 13 schedule_delay $end" << std::endl;
-
-    fwidth += 19;
-
-    ofs << "$var reg 32 14 icache_req_addr $end" << std::endl;
-    ofs << "$var reg 2  15 icache_req_tag $end" << std::endl;    
-    ofs << "$var reg 32 16 icache_rsp_data $end" << std::endl;    
-    ofs << "$var reg 2  17 icache_rsp_tag $end" << std::endl;
-    ofs << "$var reg 32 18 dcache_req_addr $end" << std::endl;
-    ofs << "$var reg 2  19 dcache_req_tag $end" << std::endl;
-    ofs << "$var reg 32 20 dcache_rsp_data $end" << std::endl;    
-    ofs << "$var reg 2  21 dcache_rsp_tag $end" << std::endl;     
-    ofs << "$var reg 29 22 dram_req_tag $end" << std::endl;
-    ofs << "$var reg 29 23 dram_rsp_tag $end" << std::endl;   
-    ofs << "$var reg 2  24 icache_req_warp $end" << std::endl;
-    ofs << "$var reg 2  25 dcache_req_warp $end" << std::endl; 
-
-    fwidth += 198;
-
-    const int num_signals = 26;
+    int fwidth = 0;
+    for (int i = 0; i < num_signals; ++i) {
+        ofs << "$var reg " << scope_signals[i].width << " " << (i+1) << " " << scope_signals[i].name << " $end" << std::endl;
+        fwidth += scope_signals[i].width;
+    }
 
     uint64_t frame_width, max_frames, data_valid;
 
@@ -141,7 +165,7 @@ static int vx_scope_start(vx_device_h hdevice) {
     CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &frame_width));
     std::cout << "scope::frame_width=" << frame_width << std::endl;
 
-    assert((fwidth-1)== (int)frame_width);
+    assert(fwidth == (int)frame_width);
 
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 3));
     CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &max_frames));
@@ -149,7 +173,7 @@ static int vx_scope_start(vx_device_h hdevice) {
 
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 1));
 
-    std::vector<char> signa_data(frame_width+1);
+    std::vector<char> signal_data(frame_width+1);
 
     uint64_t frame_offset = 0, frame_no = 0, timestamp = 0;
     
@@ -174,34 +198,7 @@ static int vx_scope_start(vx_device_h hdevice) {
             --delta;
         }
 
-        signal_id = 1;
-    };
-    
-    auto print_signal = [&] (uint64_t word, int signal_width) {
-
-        int word_offset = frame_offset % 64;
-
-        signa_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
-
-        ++signal_offset;
-        ++frame_offset;
-
-        if (signal_offset == signal_width) {
-            signa_data[signal_width] = 0; // string null termination
-            ofs << 'b' << signa_data.data() << ' ' << (num_signals - signal_id) << std::endl;
-            signal_offset = 0;            
-            ++signal_id;
-        }
-
-        if (frame_offset == frame_width) {   
-            assert(0 == signal_offset);                     
-            signal_id = 0;
-            frame_offset = 0;
-            ++frame_no;
-            if (frame_no != max_frames) {                
-                print_header();
-            }                        
-        }
+        signal_id = num_signals;
     };
 
     print_header();
@@ -218,34 +215,30 @@ static int vx_scope_start(vx_device_h hdevice) {
         uint64_t word;
         CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &word));
         
-        do {
-            switch (num_signals - signal_id) {
-            default: 
-                print_signal(word, 1);
-                break;
-            case 15:
-            case 17:
-            case 19:
-            case 21:
-            case 24:
-            case 25:
-                print_signal(word, 2); 
-                break;
-            case 5:
-            case 7:
-                print_signal(word, 4); 
-                break;
-            case 22:
-            case 23: 
-                print_signal(word, 29); 
-                break;
-            case 14: 
-            case 16: 
-            case 18: 
-            case 20: 
-                print_signal(word, 32); 
-                break;
-            }           
+        do {          
+            int signal_width = scope_signals[signal_id-1].width;
+            int word_offset = frame_offset % 64;
+
+            signal_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
+
+            ++signal_offset;
+            ++frame_offset;
+
+            if (signal_offset == signal_width) {
+                signal_data[signal_width] = 0; // string null termination
+                ofs << 'b' << signal_data.data() << ' ' << signal_id << std::endl;
+                signal_offset = 0;            
+                --signal_id;
+            }
+
+            if (frame_offset == frame_width) {   
+                assert(0 == signal_offset);   
+                frame_offset = 0;
+                ++frame_no;
+                if (frame_no != max_frames) {                
+                    print_header();
+                }                        
+            }
         } while ((frame_offset % 64) != 0);
 
     } while (frame_no != max_frames);

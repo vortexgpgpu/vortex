@@ -13,7 +13,7 @@ interface VX_gpu_inst_req_if();
 
     wire                     is_barrier;
 
-    wire[31:0]               pc_next;
+    wire[31:0]               next_PC;
 
     wire [`NUM_THREADS-1:0][31:0] a_reg_data;
     wire [31:0]              rd2;
