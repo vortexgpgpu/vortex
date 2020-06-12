@@ -101,6 +101,7 @@ module VX_cache #(
     // Snoop request
     input wire                              snp_req_valid,
     input wire [`DRAM_ADDR_WIDTH-1:0]       snp_req_addr,
+    input wire                              snp_req_invalidate,
     input wire [SNP_REQ_TAG_WIDTH-1:0]      snp_req_tag,
     output wire                             snp_req_ready,
 
@@ -112,6 +113,7 @@ module VX_cache #(
     // Snoop Forwarding out
     output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdout_valid,
     output wire [NUM_SNP_REQUESTS-1:0][`DRAM_ADDR_WIDTH-1:0] snp_fwdout_addr,
+    output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdout_invalidate,
     output wire [NUM_SNP_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdout_tag,
 `IGNORE_WARNINGS_BEGIN
     input wire [NUM_SNP_REQUESTS-1:0]       snp_fwdout_ready,
@@ -164,6 +166,7 @@ module VX_cache #(
 
     wire                         snp_req_valid_qual;    
     wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
+    wire                         snp_req_invalidate_qual;    
     wire [SNP_REQ_TAG_WIDTH-1:0] snp_req_tag_qual;
     wire                         snp_req_ready_qual;
 
@@ -180,16 +183,19 @@ module VX_cache #(
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
             .snp_rsp_valid      (snp_req_valid_qual),
             .snp_rsp_addr       (snp_req_addr_qual),
+            .snp_rsp_invalidate (snp_req_invalidate_qual),
             .snp_rsp_tag        (snp_req_tag_qual),
             .snp_rsp_ready      (snp_req_ready_qual),   
 
             .snp_fwdout_valid   (snp_fwdout_valid),
             .snp_fwdout_addr    (snp_fwdout_addr),
+            .snp_fwdout_invalidate(snp_fwdout_invalidate),
             .snp_fwdout_tag     (snp_fwdout_tag),
             .snp_fwdout_ready   (snp_fwdout_ready),
 
@@ -200,14 +206,16 @@ module VX_cache #(
     end else begin
         assign snp_fwdout_valid = 0;
         assign snp_fwdout_addr  = 0;
+        assign snp_fwdout_invalidate = 0;
         assign snp_fwdout_tag   = 0;
 
         assign snp_fwdin_ready  = 0;
 
-        assign snp_req_valid_qual = snp_req_valid;
-        assign snp_req_addr_qual  = snp_req_addr;
-        assign snp_req_tag_qual   = snp_req_tag;
-        assign snp_req_ready      = snp_req_ready_qual;
+        assign snp_req_valid_qual      = snp_req_valid;
+        assign snp_req_addr_qual       = snp_req_addr;
+        assign snp_req_invalidate_qual = snp_req_invalidate;
+        assign snp_req_tag_qual        = snp_req_tag;
+        assign snp_req_ready           = snp_req_ready_qual;
     end    
 
     if (NUM_BANKS == 1) begin
@@ -266,6 +274,7 @@ module VX_cache #(
 
             wire                            curr_bank_snp_req_valid;
             wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_snp_req_addr;
+            wire                            curr_bank_snp_req_invalidate;
             wire [SNP_REQ_TAG_WIDTH-1:0]    curr_bank_snp_req_tag;
             wire                            curr_bank_snp_req_ready;    
 
@@ -330,8 +339,9 @@ module VX_cache #(
                 assign curr_bank_snp_req_valid = snp_req_valid_qual && (`DRAM_ADDR_BANK(snp_req_addr_qual) == i);
                 assign curr_bank_snp_req_addr  = `DRAM_TO_LINE_ADDR(snp_req_addr_qual);
             end
-            assign curr_bank_snp_req_tag     = snp_req_tag_qual;
-            assign per_bank_snp_req_ready[i] = curr_bank_snp_req_ready;
+            assign curr_bank_snp_req_invalidate = snp_req_invalidate_qual;
+            assign curr_bank_snp_req_tag        = snp_req_tag_qual;
+            assign per_bank_snp_req_ready[i]    = curr_bank_snp_req_ready;
 
             // Snoop response            
             assign per_bank_snp_rsp_valid[i] = curr_bank_snp_rsp_valid;
@@ -400,6 +410,7 @@ module VX_cache #(
                 // Snoop request
                 .snp_req_valid           (curr_bank_snp_req_valid),
                 .snp_req_addr            (curr_bank_snp_req_addr),
+                .snp_req_invalidate      (curr_bank_snp_req_invalidate),
                 .snp_req_tag             (curr_bank_snp_req_tag),
                 .snp_req_ready           (curr_bank_snp_req_ready),
 

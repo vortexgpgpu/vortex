@@ -6,7 +6,6 @@ module Vortex_Cluster #(
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_CORE_IO
-    `SCOPE_SIGNALS_FE_IO
     `SCOPE_SIGNALS_BE_IO
 
     // Clock
@@ -31,6 +30,7 @@ module Vortex_Cluster #(
     // Snoop request
     input wire                              snp_req_valid,
     input wire[`L2DRAM_ADDR_WIDTH-1:0]      snp_req_addr,
+    input wire                              snp_req_invalidate,
     input wire[`L2SNP_TAG_WIDTH-1:0]        snp_req_tag,
     output wire                             snp_req_ready, 
 
@@ -84,8 +84,9 @@ module Vortex_Cluster #(
     wire[`NUM_CORES-1:0][`IDRAM_TAG_WIDTH-1:0]  per_core_I_dram_rsp_tag;
     wire[`NUM_CORES-1:0]                        per_core_I_dram_rsp_ready;
 
-    wire[`NUM_CORES-1:0]                        per_core_snp_req_valid;
+    wire[`NUM_CORES-1:0]                        per_core_snp_req_valid;    
     wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0] per_core_snp_req_addr;
+    wire[`NUM_CORES-1:0]                        per_core_snp_req_invalidate;
     wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]   per_core_snp_req_tag;
     wire[`NUM_CORES-1:0]                        per_core_snp_req_ready;
     
@@ -115,7 +116,6 @@ module Vortex_Cluster #(
             `SCOPE_SIGNALS_ICACHE_ATTACH
             `SCOPE_SIGNALS_DCACHE_ATTACH
             `SCOPE_SIGNALS_CORE_ATTACH
-            `SCOPE_SIGNALS_FE_ATTACH
             `SCOPE_SIGNALS_BE_ATTACH
 
             .clk                (clk),
@@ -146,6 +146,7 @@ module Vortex_Cluster #(
 
             .snp_req_valid      (per_core_snp_req_valid     [i]),
             .snp_req_addr       (per_core_snp_req_addr      [i]),
+            .snp_req_invalidate (per_core_snp_req_invalidate[i]),
             .snp_req_tag        (per_core_snp_req_tag       [i]),
             .snp_req_ready      (per_core_snp_req_ready     [i]),
 
@@ -203,6 +204,7 @@ module Vortex_Cluster #(
 
         wire[`NUM_CORES-1:0]                                l2_snp_fwdout_valid;
         wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0]         l2_snp_fwdout_addr;
+        wire[`NUM_CORES-1:0]                                l2_snp_fwdout_invalidate;
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]           l2_snp_fwdout_tag;
         wire[`NUM_CORES-1:0]                                l2_snp_fwdout_ready;    
 
@@ -241,10 +243,11 @@ module Vortex_Cluster #(
             assign per_core_D_dram_rsp_tag   [(i/2)] = l2_core_rsp_tag[i];
             assign per_core_I_dram_rsp_tag   [(i/2)] = l2_core_rsp_tag[i+1];  
 
-            assign per_core_snp_req_valid [(i/2)] = l2_snp_fwdout_valid [(i/2)];
-            assign per_core_snp_req_addr  [(i/2)] = l2_snp_fwdout_addr [(i/2)];    
-            assign per_core_snp_req_tag   [(i/2)] = l2_snp_fwdout_tag [(i/2)];
-            assign l2_snp_fwdout_ready    [(i/2)] = per_core_snp_req_ready[(i/2)];
+            assign per_core_snp_req_valid      [(i/2)] = l2_snp_fwdout_valid [(i/2)];
+            assign per_core_snp_req_addr       [(i/2)] = l2_snp_fwdout_addr [(i/2)];    
+            assign per_core_snp_req_invalidate [(i/2)] = l2_snp_fwdout_invalidate [(i/2)];    
+            assign per_core_snp_req_tag        [(i/2)] = l2_snp_fwdout_tag [(i/2)];
+            assign l2_snp_fwdout_ready         [(i/2)] = per_core_snp_req_ready[(i/2)];
 
             assign l2_snp_fwdin_valid     [(i/2)] = per_core_snp_rsp_valid [(i/2)];
             assign l2_snp_fwdin_tag       [(i/2)] = per_core_snp_rsp_tag [(i/2)];
@@ -316,6 +319,7 @@ module Vortex_Cluster #(
             // Snoop request
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
@@ -327,6 +331,7 @@ module Vortex_Cluster #(
             // Snoop forwarding out
             .snp_fwdout_valid   (l2_snp_fwdout_valid),
             .snp_fwdout_addr    (l2_snp_fwdout_addr),
+            .snp_fwdout_invalidate(l2_snp_fwdout_invalidate),
             .snp_fwdout_tag     (l2_snp_fwdout_tag),
             .snp_fwdout_ready   (l2_snp_fwdout_ready),
 
@@ -353,6 +358,7 @@ module Vortex_Cluster #(
 
         wire[`NUM_CORES-1:0]                             arb_snp_fwdout_valid;
         wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0]      arb_snp_fwdout_addr;
+        wire[`NUM_CORES-1:0]                             arb_snp_fwdout_invalidate;
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]        arb_snp_fwdout_tag;
         wire[`NUM_CORES-1:0]                             arb_snp_fwdout_ready;    
 
@@ -394,10 +400,11 @@ module Vortex_Cluster #(
             assign arb_core_rsp_ready [i]   = per_core_D_dram_rsp_ready[(i/2)];
             assign arb_core_rsp_ready [i+1] = per_core_I_dram_rsp_ready[(i/2)];  
 
-            assign per_core_snp_req_valid [(i/2)] = arb_snp_fwdout_valid [(i/2)];
-            assign per_core_snp_req_addr  [(i/2)] = arb_snp_fwdout_addr [(i/2)];    
-            assign per_core_snp_req_tag   [(i/2)] = arb_snp_fwdout_tag [(i/2)];
-            assign arb_snp_fwdout_ready   [(i/2)] = per_core_snp_req_ready[(i/2)];
+            assign per_core_snp_req_valid      [(i/2)] = arb_snp_fwdout_valid [(i/2)];
+            assign per_core_snp_req_addr       [(i/2)] = arb_snp_fwdout_addr [(i/2)];    
+            assign per_core_snp_req_invalidate [(i/2)] = arb_snp_fwdout_invalidate [(i/2)];   
+            assign per_core_snp_req_tag        [(i/2)] = arb_snp_fwdout_tag [(i/2)];
+            assign arb_snp_fwdout_ready        [(i/2)] = per_core_snp_req_ready[(i/2)];
 
             assign arb_snp_fwdin_valid    [(i/2)] = per_core_snp_rsp_valid [(i/2)];
             assign arb_snp_fwdin_tag      [(i/2)] = per_core_snp_rsp_tag [(i/2)];
@@ -417,16 +424,19 @@ module Vortex_Cluster #(
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
             .snp_rsp_valid      (snp_rsp_valid),       
             `UNUSED_PIN (snp_rsp_addr),
+            `UNUSED_PIN (snp_rsp_invalidate),
             .snp_rsp_tag        (snp_rsp_tag),
             .snp_rsp_ready      (snp_rsp_ready),   
 
             .snp_fwdout_valid   (arb_snp_fwdout_valid),
             .snp_fwdout_addr    (arb_snp_fwdout_addr),
+            .snp_fwdout_invalidate(arb_snp_fwdout_invalidate),
             .snp_fwdout_tag     (arb_snp_fwdout_tag),
             .snp_fwdout_ready   (arb_snp_fwdout_ready),
 
@@ -435,10 +445,11 @@ module Vortex_Cluster #(
             .snp_fwdin_ready    (arb_snp_fwdin_ready)      
         );
     end else begin
-        assign arb_snp_fwdout_valid = snp_req_valid;
-        assign arb_snp_fwdout_addr  = snp_req_addr;
-        assign arb_snp_fwdout_tag   = snp_req_tag;
-        assign snp_req_ready        = arb_snp_fwdout_ready;
+        assign arb_snp_fwdout_valid      = snp_req_valid;
+        assign arb_snp_fwdout_addr       = snp_req_addr;
+        assign arb_snp_fwdout_invalidate = snp_req_invalidate;
+        assign arb_snp_fwdout_tag        = snp_req_tag;
+        assign snp_req_ready             = arb_snp_fwdout_ready;
  
         assign snp_rsp_valid        = arb_snp_fwdin_valid;
         assign snp_rsp_tag          = arb_snp_fwdin_tag;

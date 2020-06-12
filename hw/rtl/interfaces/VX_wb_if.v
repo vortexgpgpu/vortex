@@ -10,7 +10,7 @@ interface VX_wb_if ();
     wire [`NW_BITS-1:0]             warp_num;
     wire [4:0]                      rd;
     wire [1:0]                      wb;    
-    wire [31:0]                     pc;    
+    wire [31:0]                     curr_PC;    
 
 endinterface
 

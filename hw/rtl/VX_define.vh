@@ -283,7 +283,34 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef SCOPE
-    `define SCOPE_SIGNALS_LIST \
+    `define SCOPE_SIGNALS_DATA_LIST \
+        scope_icache_req_addr, \
+        scope_icache_req_tag, \
+        scope_icache_rsp_data, \
+        scope_icache_rsp_tag, \
+        scope_dcache_req_addr, \
+        scope_dcache_req_tag, \
+        scope_dcache_rsp_data, \
+        scope_dcache_rsp_tag, \
+        scope_dram_req_tag, \
+        scope_dram_rsp_tag, \
+        scope_icache_req_warp_num, \
+        scope_dcache_req_warp_num, \
+        scope_decode_curr_PC, \
+        scope_execute_rd, \
+        scope_execute_warp_num, \
+        scope_execute_a, \
+        scope_execute_b, \
+        scope_writeback_rd, \
+        scope_writeback_warp_num, \
+        scope_writeback_data, \
+        scope_decode_warp_num, \
+        scope_decode_is_jal, \
+        scope_decode_rs1, \
+        scope_decode_rs2, \
+        scope_writeback_wb,
+    
+    `define SCOPE_SIGNALS_UPD_LIST \
         scope_icache_req_valid, \
         scope_icache_req_ready, \
         scope_icache_rsp_valid, \
@@ -296,23 +323,18 @@
         scope_dram_req_ready, \
         scope_dram_rsp_valid, \
         scope_dram_rsp_ready, \
+        scope_decode_valid, \
+        scope_execute_valid, \
+        scope_writeback_valid, \
         scope_schedule_delay, \
-        scope_icache_req_addr, \
-        scope_icache_req_tag, \
-        scope_icache_rsp_data, \
-        scope_icache_rsp_tag, \
-        scope_dcache_req_addr, \
-        scope_dcache_req_tag, \
-        scope_dcache_rsp_data, \
-        scope_dcache_rsp_tag, \
-        scope_dram_req_tag, \
-        scope_dram_rsp_tag, \
-        scope_icache_req_warp, \
-        scope_dcache_req_warp
+        scope_memory_delay, \
+        scope_exec_delay, \
+        scope_gpr_stage_delay
 
     `define SCOPE_SIGNALS_DECL \
         wire scope_icache_req_valid; \
         wire [31:0] scope_icache_req_addr; \
+        wire [1:0] scope_icache_req_warp_num; \
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag; \
         wire scope_icache_req_ready; \
         wire scope_icache_rsp_valid; \
@@ -321,6 +343,7 @@
         wire scope_icache_rsp_ready; \
         wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid; \
         wire [31:0] scope_dcache_req_addr; \
+        wire [1:0] scope_dcache_req_warp_num; \
         wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_req_tag; \
         wire scope_dcache_req_ready; \
         wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid; \
@@ -334,13 +357,31 @@
         wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag; \
         wire scope_dram_rsp_ready; \
         wire scope_schedule_delay; \
-        wire [1:0] scope_icache_req_warp; \
-        wire [1:0] scope_dcache_req_warp;
+        wire scope_memory_delay; \
+        wire scope_exec_delay; \
+        wire scope_gpr_stage_delay; \
+        wire [3:0]  scope_decode_valid; \
+        wire [1:0]  scope_decode_warp_num; \
+        wire [31:0] scope_decode_curr_PC; \
+        wire        scope_decode_is_jal; \
+        wire [4:0]  scope_decode_rs1; \
+        wire [4:0]  scope_decode_rs2; \
+        wire [3:0]  scope_execute_valid; \
+        wire [1:0]  scope_execute_warp_num; \
+        wire [4:0]  scope_execute_rd; \
+        wire [31:0] scope_execute_a; \
+        wire [31:0] scope_execute_b; \
+        wire [3:0]  scope_writeback_valid; \
+        wire [1:0]  scope_writeback_warp_num; \
+        wire [1:0]  scope_writeback_wb; \
+        wire [4:0]  scope_writeback_rd; \
+        wire [31:0] scope_writeback_data;
 
     `define SCOPE_SIGNALS_ICACHE_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire scope_icache_req_valid, \
         output wire [31:0] scope_icache_req_addr, \
+        output wire [1:0] scope_icache_req_warp_num, \
         output wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag, \
         output wire scope_icache_req_ready, \
         output wire scope_icache_rsp_valid, \
@@ -353,6 +394,7 @@
         /* verilator lint_off UNDRIVEN */ \
         output wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid, \
         output wire [31:0] scope_dcache_req_addr, \
+        output wire [1:0] scope_dcache_req_warp_num, \
         output wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_req_tag, \
         output wire scope_dcache_req_ready, \
         output wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid, \
@@ -374,21 +416,35 @@
     `define SCOPE_SIGNALS_CORE_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire scope_schedule_delay, \
-        /* verilator lint_on UNDRIVEN */
-
-    `define SCOPE_SIGNALS_FE_IO \
-        /* verilator lint_off UNDRIVEN */ \
-        output wire [1:0] scope_icache_req_warp, \
+        output wire scope_memory_delay, \
+        output wire scope_exec_delay, \
+        output wire scope_gpr_stage_delay, \
         /* verilator lint_on UNDRIVEN */
 
     `define SCOPE_SIGNALS_BE_IO \
         /* verilator lint_off UNDRIVEN */ \
-        output wire [1:0] scope_dcache_req_warp, \
+        output wire [3:0]  scope_decode_valid, \
+        output wire [1:0]  scope_decode_warp_num, \
+        output wire [31:0] scope_decode_curr_PC, \
+        output wire        scope_decode_is_jal, \
+        output wire [4:0]  scope_decode_rs1, \
+        output wire [4:0]  scope_decode_rs2, \
+        output wire [3:0]  scope_execute_valid, \
+        output wire [1:0]  scope_execute_warp_num, \
+        output wire [4:0]  scope_execute_rd, \
+        output wire [31:0] scope_execute_a, \
+        output wire [31:0] scope_execute_b, \
+        output wire [3:0]  scope_writeback_valid, \
+        output wire [1:0]  scope_writeback_warp_num, \
+        output wire [1:0]  scope_writeback_wb, \
+        output wire [4:0]  scope_writeback_rd, \
+        output wire [31:0] scope_writeback_data, \
         /* verilator lint_on UNDRIVEN */
 
     `define SCOPE_SIGNALS_ICACHE_ATTACH \
         .scope_icache_req_valid (scope_icache_req_valid), \
         .scope_icache_req_addr  (scope_icache_req_addr), \
+        .scope_icache_req_warp_num (scope_icache_req_warp_num), \
         .scope_icache_req_tag   (scope_icache_req_tag), \
         .scope_icache_req_ready (scope_icache_req_ready), \
         .scope_icache_rsp_valid (scope_icache_rsp_valid), \
@@ -399,6 +455,7 @@
     `define SCOPE_SIGNALS_DCACHE_ATTACH \
         .scope_dcache_req_valid (scope_dcache_req_valid), \
         .scope_dcache_req_addr  (scope_dcache_req_addr), \
+        .scope_dcache_req_warp_num (scope_dcache_req_warp_num), \
         .scope_dcache_req_tag   (scope_dcache_req_tag), \
         .scope_dcache_req_ready (scope_dcache_req_ready), \
         .scope_dcache_rsp_valid (scope_dcache_rsp_valid), \
@@ -415,13 +472,28 @@
         .scope_dram_rsp_ready   (scope_dram_rsp_ready),
 
     `define SCOPE_SIGNALS_CORE_ATTACH \
-        .scope_schedule_delay   (scope_schedule_delay),
-
-    `define SCOPE_SIGNALS_FE_ATTACH \
-        .scope_icache_req_warp  (scope_icache_req_warp),
+        .scope_schedule_delay   (scope_schedule_delay), \
+        .scope_memory_delay     (scope_memory_delay), \
+        .scope_exec_delay       (scope_exec_delay), \
+        .scope_gpr_stage_delay  (scope_gpr_stage_delay),
 
     `define SCOPE_SIGNALS_BE_ATTACH \
-        .scope_dcache_req_warp  (scope_dcache_req_warp),
+        .scope_decode_valid        (scope_decode_valid), \
+        .scope_decode_warp_num     (scope_decode_warp_num), \
+        .scope_decode_curr_PC      (scope_decode_curr_PC), \
+        .scope_decode_is_jal       (scope_decode_is_jal), \
+        .scope_decode_rs1          (scope_decode_rs1), \
+        .scope_decode_rs2          (scope_decode_rs2), \
+        .scope_execute_valid       (scope_execute_valid), \
+        .scope_execute_warp_num    (scope_execute_warp_num), \
+        .scope_execute_rd          (scope_execute_rd), \
+        .scope_execute_a           (scope_execute_a), \
+        .scope_execute_b           (scope_execute_b), \
+        .scope_writeback_valid     (scope_writeback_valid), \
+        .scope_writeback_warp_num  (scope_writeback_warp_num), \
+        .scope_writeback_wb        (scope_writeback_wb), \
+        .scope_writeback_rd        (scope_writeback_rd), \
+        .scope_writeback_data      (scope_writeback_data),
 
     `define SCOPE_ASSIGN(d,s) assign d = s
 `else
@@ -429,14 +501,12 @@
     `define SCOPE_SIGNALS_DCACHE_IO
     `define SCOPE_SIGNALS_DRAM_IO
     `define SCOPE_SIGNALS_CORE_IO
-    `define SCOPE_SIGNALS_FE_IO
     `define SCOPE_SIGNALS_BE_IO
 
     `define SCOPE_SIGNALS_ICACHE_ATTACH
     `define SCOPE_SIGNALS_DCACHE_ATTACH
     `define SCOPE_SIGNALS_DRAM_ATTACH
     `define SCOPE_SIGNALS_CORE_ATTACH
-    `define SCOPE_SIGNALS_FE_ATTACH
     `define SCOPE_SIGNALS_BE_ATTACH
     
     `define SCOPE_ASSIGN(d,s)

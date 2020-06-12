@@ -3,7 +3,7 @@
 module VX_icache_stage #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_FE_IO
+    `SCOPE_SIGNALS_ICACHE_IO
 
     input  wire             clk,
     input  wire             reset,
@@ -45,8 +45,6 @@ module VX_icache_stage #(
         .read_data  ({dbg_mrq_write_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num})
     );    
 
-    `SCOPE_ASSIGN(scope_icache_req_warp, fe_inst_meta_fi.warp_num);
-
     always @(posedge clk) begin
         if (reset) begin
             //--
@@ -76,7 +74,7 @@ module VX_icache_stage #(
     assign icache_req_if.core_req_tag = mrq_write_addr;
 `endif
 
-    assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_data[0];
+    assign fe_inst_meta_id.instruction = icache_rsp_if.core_rsp_valid ? icache_rsp_if.core_rsp_data[0] : 0;
     assign fe_inst_meta_id.valid       = icache_rsp_if.core_rsp_valid ? valid_threads[fe_inst_meta_id.warp_num] : 0;
 
     assign icache_stage_response       = mrq_pop;
@@ -84,6 +82,16 @@ module VX_icache_stage #(
     
     // Can't accept new response
     assign icache_rsp_if.core_rsp_ready = ~total_freeze;
+
+    `SCOPE_ASSIGN(scope_icache_req_valid, icache_req_if.core_req_valid);
+    `SCOPE_ASSIGN(scope_icache_req_addr,  {icache_req_if.core_req_addr, 2'b0});
+    `SCOPE_ASSIGN(scope_icache_req_warp_num, fe_inst_meta_fi.warp_num);
+    `SCOPE_ASSIGN(scope_icache_req_tag,   icache_req_if.core_req_tag);
+    `SCOPE_ASSIGN(scope_icache_req_ready, icache_req_if.core_req_ready);
+    `SCOPE_ASSIGN(scope_icache_rsp_valid, icache_rsp_if.core_rsp_valid);
+    `SCOPE_ASSIGN(scope_icache_rsp_data,  icache_rsp_if.core_rsp_data);
+    `SCOPE_ASSIGN(scope_icache_rsp_tag,   icache_rsp_if.core_rsp_tag);
+    `SCOPE_ASSIGN(scope_icache_rsp_ready, icache_rsp_if.core_rsp_ready);
 
 `ifdef DBG_PRINT_CORE_ICACHE
     always_ff @(posedge clk) begin

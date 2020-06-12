@@ -78,7 +78,7 @@ module VX_gpu_inst (
     assign warp_ctl_if.dont_split       = warp_ctl_if.is_split && ((split_new_use_mask == 0) || (split_new_use_mask == {`NUM_THREADS{1'b1}}));
     assign warp_ctl_if.split_new_mask   = split_new_use_mask;
     assign warp_ctl_if.split_later_mask = split_new_later_mask;
-    assign warp_ctl_if.split_save_pc    = gpu_inst_req_if.pc_next;
+    assign warp_ctl_if.split_save_pc    = gpu_inst_req_if.next_PC;
     assign warp_ctl_if.split_warp_num   = gpu_inst_req_if.warp_num;
 
     // gpu_inst_req_if.is_wspawn

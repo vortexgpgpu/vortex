@@ -9,7 +9,7 @@ interface VX_exec_unit_req_if ();
     wire [`NUM_THREADS-1:0]       valid;
     wire [`NW_BITS-1:0]           warp_num;
     wire [31:0]                   curr_PC;
-    wire [31:0]                   PC_next;
+    wire [31:0]                   next_PC;
 
     // Write Back Info
     wire [4:0]          rd;
@@ -29,7 +29,7 @@ interface VX_exec_unit_req_if ();
     wire [2:0]          branch_type;
 
     // Jal info
-    wire                jalQual;
+    wire                is_jal;
     wire                jal;
     wire [31:0]         jal_offset;
 

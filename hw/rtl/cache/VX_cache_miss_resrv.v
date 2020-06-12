@@ -33,6 +33,7 @@ module VX_cache_miss_resrv #(
     input wire[WORD_SIZE-1:0]           miss_add_byteen,
     input wire                          mrvq_init_ready_state,
     input wire                          miss_add_is_snp,
+    input wire                          miss_add_snp_invalidate,
     output wire                         miss_resrv_full,
     output wire                         miss_resrv_stop,
 
@@ -52,7 +53,8 @@ module VX_cache_miss_resrv #(
     output wire[`REQ_TAG_WIDTH-1:0]     miss_resrv_tag_st0,
     output wire                         miss_resrv_rw_st0,
     output wire[WORD_SIZE-1:0]          miss_resrv_byteen_st0,
-    output wire                         miss_resrv_is_snp_st0   
+    output wire                         miss_resrv_is_snp_st0,   
+    output wire                         miss_resrv_snp_invalidate_st0
 );
     reg [`MRVQ_METADATA_WIDTH-1:0] metadata_table[MRVQ_SIZE-1:0];
     reg [MRVQ_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table;
@@ -91,7 +93,7 @@ module VX_cache_miss_resrv #(
 
     assign miss_resrv_valid_st0 = dequeue_possible;
     assign miss_resrv_addr_st0  = addr_table[dequeue_index];
-    assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_tag_st0, miss_resrv_rw_st0, miss_resrv_byteen_st0, miss_resrv_wsel_st0, miss_resrv_is_snp_st0} = metadata_table[dequeue_index];
+    assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_tag_st0, miss_resrv_rw_st0, miss_resrv_byteen_st0, miss_resrv_wsel_st0, miss_resrv_is_snp_st0, miss_resrv_snp_invalidate_st0} = metadata_table[dequeue_index];
 
     wire mrvq_push = miss_add && enqueue_possible && !from_mrvq;
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
@@ -119,7 +121,7 @@ module VX_cache_miss_resrv #(
                 valid_table[enqueue_index]    <= 1;
                 ready_table[enqueue_index]    <= mrvq_init_ready_state;
                 addr_table[enqueue_index]     <= miss_add_addr;
-                metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_tag, miss_add_rw, miss_add_byteen, miss_add_wsel, miss_add_is_snp};
+                metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_tag, miss_add_rw, miss_add_byteen, miss_add_wsel, miss_add_is_snp, miss_add_snp_invalidate};
                 tail_ptr                      <= tail_ptr + 1;
             end else if (increment_head) begin
                 valid_table[head_ptr]         <= 0;

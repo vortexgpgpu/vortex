@@ -22,10 +22,10 @@ interface VX_frE_to_bckE_req_if ();
     wire [19:0]              upper_immed;
     wire [31:0]              curr_PC;
     wire                     is_etype;
-    wire                     jalQual;
+    wire                     is_jal;
     wire                     jal;
     wire [31:0]              jal_offset;
-    wire [31:0]              PC_next;
+    wire [31:0]              next_PC;
     wire [`NUM_THREADS-1:0]  valid;
     wire [`NW_BITS-1:0]      warp_num;
 

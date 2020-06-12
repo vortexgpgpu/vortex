@@ -14,18 +14,21 @@ module VX_snp_forwarder #(
     // Snoop request
     input wire                          snp_req_valid,
     input wire [`DRAM_ADDR_WIDTH-1:0]   snp_req_addr,
+    input wire                          snp_req_invalidate,
     input wire [SNP_REQ_TAG_WIDTH-1:0]  snp_req_tag,
     output wire                         snp_req_ready,
 
     // Snoop response
     output wire                         snp_rsp_valid,    
     output wire [`DRAM_ADDR_WIDTH-1:0]  snp_rsp_addr,
+    output wire                         snp_rsp_invalidate,
     output wire [SNP_REQ_TAG_WIDTH-1:0] snp_rsp_tag,
     input  wire                         snp_rsp_ready,
 
     // Snoop Forwarding out
     output wire [NUM_REQUESTS-1:0]      snp_fwdout_valid,
     output wire [NUM_REQUESTS-1:0][`DRAM_ADDR_WIDTH-1:0] snp_fwdout_addr,
+    output wire [NUM_REQUESTS-1:0]      snp_fwdout_invalidate,
     output wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdout_tag,
     input wire [NUM_REQUESTS-1:0]       snp_fwdout_ready,
 
@@ -58,18 +61,18 @@ module VX_snp_forwarder #(
     assign sfq_pop  = snp_rsp_valid;
 
     VX_indexable_queue #(
-        .DATAW (`LOG2UP(SNRQ_SIZE) + `DRAM_ADDR_WIDTH+SNP_REQ_TAG_WIDTH),
+        .DATAW (`LOG2UP(SNRQ_SIZE) + 1 +`DRAM_ADDR_WIDTH+SNP_REQ_TAG_WIDTH),
         .SIZE  (SNRQ_SIZE)
     ) snp_fwd_queue (
         .clk        (clk),
         .reset      (reset),
-        .write_data ({sfq_write_addr, snp_req_addr, snp_req_tag}),    
+        .write_data ({sfq_write_addr, snp_req_addr, snp_req_invalidate, snp_req_tag}),    
         .write_addr (sfq_write_addr),        
         .push       (sfq_push),    
         .full       (sfq_full),
         .pop        (sfq_pop),
         .read_addr  (sfq_read_addr),
-        .read_data  ({dbg_sfq_write_addr, snp_rsp_addr, snp_rsp_tag})
+        .read_data  ({dbg_sfq_write_addr, snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag})
     );
 
     always @(posedge clk) begin
@@ -89,9 +92,10 @@ module VX_snp_forwarder #(
     genvar i;
 
     for (i = 0; i < NUM_REQUESTS; i++) begin
-        assign snp_fwdout_valid[i] = snp_req_valid && !sfq_full;
-        assign snp_fwdout_addr[i]  = snp_req_addr;
-        assign snp_fwdout_tag[i]   = sfq_write_addr;
+        assign snp_fwdout_valid[i]      = snp_req_valid && !sfq_full;
+        assign snp_fwdout_addr[i]       = snp_req_addr;
+        assign snp_fwdout_invalidate[i] = snp_req_invalidate;
+        assign snp_fwdout_tag[i]        = sfq_write_addr;
     end
 
     assign snp_req_ready = !sfq_full && fwdout_ready;
@@ -114,16 +118,16 @@ module VX_snp_forwarder #(
 `ifdef DBG_PRINT_CACHE_SNP
      always_ff @(posedge clk) begin
         if (snp_req_valid && snp_req_ready) begin
-            $display("%t: cache%0d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_req_addr), snp_req_tag);
+            $display("%t: cache%0d snp req: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_req_addr), snp_req_invalidate, snp_req_tag);
         end
         if (snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
-            $display("%t: cache%0d snp fwd_out: addr=%0h, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_fwdout_addr[0]), snp_fwdout_tag[0]);
+            $display("%t: cache%0d snp fwd_out: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_fwdout_addr[0]), snp_fwdout_invalidate[0], snp_fwdout_tag[0]);
         end
         if (fwdin_valid && fwdin_ready) begin
             $display("%t: cache%0d snp fwd_in[%01d]: tag=%0h", $time, CACHE_ID, fwdin_sel, fwdin_tag);
         end
         if (snp_rsp_valid && snp_rsp_ready) begin
-            $display("%t: cache%0d snp rsp: addr=%0h, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_tag);
+            $display("%t: cache%0d snp rsp: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag);
         end
     end
 `endif

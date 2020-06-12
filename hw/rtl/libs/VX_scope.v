@@ -1,10 +1,11 @@
 `include "VX_define.vh"
 
 module VX_scope #(     
-	parameter DATAW = 64, 
-	parameter BUSW  = 64, 
-	parameter SIZE  = 256,
-	parameter IDW   = 1
+	parameter DATAW  = 64, 
+	parameter BUSW   = 64, 
+	parameter SIZE   = 16,
+	parameter UPDW   = 1,
+	parameter DELTAW = 16
 ) ( 
 	input wire clk,
 	input wire reset,
@@ -17,7 +18,8 @@ module VX_scope #(
 	input wire bus_write,
 	input wire bus_read
 );
-	localparam DELTA_ENABLE = (IDW != 0);
+	localparam DELTA_ENABLE = (UPDW != 0);
+	localparam MAX_DELTA = (1**DELTAW)-1;
 
 	typedef enum logic[2:0] { 		
 		CMD_GET_VALID,
@@ -38,10 +40,9 @@ module VX_scope #(
 	} cmd_get_t;
 
 	reg [DATAW-1:0] data_store [SIZE-1:0];
-
-	reg [63:0] delta_store [SIZE-1:0];
-	reg [IDW-1:0] prev_id;
-	reg [63:0] delta;
+	reg [DELTAW-1:0] delta_store [SIZE-1:0];
+	reg [UPDW-1:0] prev_id;
+	reg [DELTAW-1:0] delta;
 
 	reg [`CLOG2(SIZE)-1:0] raddr, waddr, waddr_end;
 
@@ -57,7 +58,7 @@ module VX_scope #(
 	wire [BUSW-4:0] cmd_data;
 	assign {cmd_data, cmd_type} = bus_in;
 
-	wire [IDW-1:0] trigger_id = data_in[DATAW-1:DATAW-IDW];
+	wire [UPDW-1:0] trigger_id = data_in[UPDW-1:0];
 
 	always @(posedge clk) begin
 		if (reset) begin
@@ -93,7 +94,7 @@ module VX_scope #(
 					start_wait <= 0;
 					recording  <= 1;
 					delay_cntr <= 0;	
-					delta      <= 0;						
+					delta      <= MAX_DELTA;						
 				end else begin
 					start_wait <= 1;
 					recording  <= 0;
@@ -106,22 +107,22 @@ module VX_scope #(
 				if (1 == delay_cntr) begin				
 					start_wait <= 0;
 					recording  <= 1;
-					delta      <= 0;
+					delta      <= MAX_DELTA;
 				end 
 			end
 
 			if (recording) begin
 				if (DELTA_ENABLE) begin
 					if (changed
-					 || (0 == waddr)
+					 || (delta == MAX_DELTA)
 					 || (trigger_id != prev_id)) begin
 						data_store[waddr]  <= data_in;
 						delta_store[waddr] <= delta;
 						waddr <= waddr + 1;
 						delta <= 0;
-					 end else begin
+					end else begin
 						delta <= delta + 1;
-					 end
+					end
 					prev_id <= trigger_id;
 				end else begin
 					data_store[waddr] <= data_in;
@@ -171,7 +172,7 @@ module VX_scope #(
 			GET_VALID : bus_out = BUSW'(data_valid);
 			GET_WIDTH : bus_out = BUSW'(DATAW);
 			GET_COUNT : bus_out = BUSW'(waddr) + BUSW'(1);
-			default   : bus_out = read_delta ? (BUSW)'(delta_store[raddr]) : (BUSW)'(data_store[raddr] >> read_offset);
+			default   : bus_out = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
 		endcase
 	end
 

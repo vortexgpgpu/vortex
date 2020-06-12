@@ -23,6 +23,7 @@ module VX_tag_data_access #(
     input wire                          reset,
     input wire                          stall,
     input wire                          is_snp_st1e,
+    input wire                          snp_invalidate_st1e,
     input wire                          stall_bank_pipe,
 
     input wire                          force_request_miss_st1e,
@@ -113,12 +114,12 @@ module VX_tag_data_access #(
         .N(1 + 1 + BANK_LINE_SIZE + `TAG_SELECT_BITS + `BANK_LINE_WIDTH), 
         .PassThru(1)
     ) s0_1_c0 (
-        .clk  (clk),
-        .reset(reset),
-        .stall(stall),
-        .flush(1'b0),
-        .in({qual_read_valid_st1, qual_read_dirty_st1, qual_read_dirtyb_st1, qual_read_tag_st1, qual_read_data_st1}),
-        .out({read_valid_st1c[0],  read_dirty_st1c[0], read_dirtyb_st1c[0],  read_tag_st1c[0],  read_data_st1c[0]})
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall),
+        .flush (1'b0),
+        .in    ({qual_read_valid_st1, qual_read_dirty_st1, qual_read_dirtyb_st1, qual_read_tag_st1, qual_read_data_st1}),
+        .out   ({read_valid_st1c[0],  read_dirty_st1c[0],  read_dirtyb_st1c[0],  read_tag_st1c[0],  read_data_st1c[0]})
     );
 
     genvar i;
@@ -126,12 +127,12 @@ module VX_tag_data_access #(
         VX_generic_register #(
             .N( 1 + 1 + BANK_LINE_SIZE + `TAG_SELECT_BITS + `BANK_LINE_WIDTH)
         ) s0_1_cc (
-            .clk  (clk),
-            .reset(reset),
-            .stall(stall),
-            .flush(1'b0),
-            .in({read_valid_st1c[i-1], read_dirty_st1c[i-1], read_dirtyb_st1c[i-1], read_tag_st1c[i-1], read_data_st1c[i-1]}),
-            .out({read_valid_st1c[i],  read_dirty_st1c[i],   read_dirtyb_st1c[i],   read_tag_st1c[i],   read_data_st1c[i]})
+            .clk   (clk),
+            .reset (reset),
+            .stall (stall),
+            .flush (1'b0),
+            .in    ({read_valid_st1c[i-1], read_dirty_st1c[i-1], read_dirtyb_st1c[i-1], read_tag_st1c[i-1], read_data_st1c[i-1]}),
+            .out   ({read_valid_st1c[i],   read_dirty_st1c[i],   read_dirtyb_st1c[i],   read_tag_st1c[i],   read_data_st1c[i]})
         );
     end
 
@@ -174,20 +175,19 @@ module VX_tag_data_access #(
     // use "case equality" to handle uninitialized tag when block entry is not valid
     assign tags_match = ((writetag_st1e == use_read_tag_st1e) === 1'b1);
 
-    wire snoop_hit_no_pending = valid_req_st1e &&  is_snp_st1e &&  use_read_valid_st1e && tags_match && use_read_dirty_st1e && !force_request_miss_st1e;
+    wire snoop_hit_no_pending = valid_req_st1e &&  is_snp_st1e &&  use_read_valid_st1e && tags_match && (use_read_dirty_st1e || snp_invalidate_st1e) && !force_request_miss_st1e;
     wire req_invalid          = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
     wire req_miss             = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && !tags_match;
 
     wire real_miss            = req_invalid || req_miss;
 
     wire force_core_miss      = (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e && !real_miss);
-
     
     assign snp_to_mrvq_st1e   = valid_req_st1e && is_snp_st1e && force_request_miss_st1e;
     
     // The second term is basically saying always make an entry ready if there's already antoher entry waiting, even if you yourself see a miss
-    assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e || (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e);
-    // assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e || force_core_miss;
+    assign mrvq_init_ready_state_st1e = snp_to_mrvq_st1e 
+                                     || (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e);
 
     assign miss_st1e           = real_miss || snoop_hit_no_pending || force_core_miss;
     assign dirty_st1e          = valid_req_st1e && use_read_valid_st1e && use_read_dirty_st1e;

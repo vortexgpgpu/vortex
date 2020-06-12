@@ -3,6 +3,7 @@
 module VX_back_end #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_BE_IO
 
     input wire clk, 
@@ -70,7 +71,7 @@ module VX_back_end #(
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
     ) lsu_unit (
-        `SCOPE_SIGNALS_BE_ATTACH
+        `SCOPE_SIGNALS_DCACHE_ATTACH
 
         .clk            (clk),
         .reset          (reset),
@@ -122,5 +123,24 @@ module VX_back_end #(
         .no_slot_exec   (no_slot_exec),
         .no_slot_csr    (no_slot_csr)
     );   
+
+    `SCOPE_ASSIGN(scope_decode_valid,       bckE_req_if.valid);
+    `SCOPE_ASSIGN(scope_decode_warp_num,    bckE_req_if.warp_num);
+    `SCOPE_ASSIGN(scope_decode_curr_PC,     bckE_req_if.curr_PC);    
+    `SCOPE_ASSIGN(scope_decode_is_jal,      bckE_req_if.is_jal);
+    `SCOPE_ASSIGN(scope_decode_rs1,         bckE_req_if.rs1);
+    `SCOPE_ASSIGN(scope_decode_rs2,         bckE_req_if.rs2);
+
+    `SCOPE_ASSIGN(scope_execute_valid,      exec_unit_req_if.valid);    
+    `SCOPE_ASSIGN(scope_execute_warp_num,   exec_unit_req_if.warp_num);
+    `SCOPE_ASSIGN(scope_execute_rd,         exec_unit_req_if.rd);
+    `SCOPE_ASSIGN(scope_execute_a,          exec_unit_req_if.a_reg_data[0]);
+    `SCOPE_ASSIGN(scope_execute_b,          exec_unit_req_if.b_reg_data[0]);   
+        
+    `SCOPE_ASSIGN(scope_writeback_valid,    writeback_if.valid);
+    `SCOPE_ASSIGN(scope_writeback_wb,       writeback_if.wb);    
+    `SCOPE_ASSIGN(scope_writeback_warp_num, writeback_if.warp_num);
+    `SCOPE_ASSIGN(scope_writeback_rd,       writeback_if.rd);
+    `SCOPE_ASSIGN(scope_writeback_data,     writeback_if.data[0]);   
 
 endmodule

@@ -6,7 +6,6 @@ module Vortex #(
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_CORE_IO
-    `SCOPE_SIGNALS_FE_IO
     `SCOPE_SIGNALS_BE_IO
     
     // Clock
@@ -46,6 +45,7 @@ module Vortex #(
     // Snoop request
     input  wire                             snp_req_valid,
     input  wire [`DDRAM_ADDR_WIDTH-1:0]     snp_req_addr,
+    input wire                              snp_req_invalidate,
     input  wire [`DSNP_TAG_WIDTH-1:0]       snp_req_tag,
     output wire                             snp_req_ready,
 
@@ -172,7 +172,6 @@ module Vortex #(
         `SCOPE_SIGNALS_ICACHE_ATTACH
         `SCOPE_SIGNALS_DCACHE_ATTACH
         `SCOPE_SIGNALS_CORE_ATTACH
-        `SCOPE_SIGNALS_FE_ATTACH
         `SCOPE_SIGNALS_BE_ATTACH
 
         .clk(clk),
@@ -223,18 +222,19 @@ module Vortex #(
         .SNP_TAG_WIDTH(`DSNP_TAG_WIDTH)
     ) dcache_snp_rsp_if();
 
-    assign dcache_snp_req_if.snp_req_valid = snp_req_valid;
-    assign dcache_snp_req_if.snp_req_addr  = snp_req_addr;
-    assign dcache_snp_req_if.snp_req_tag   = snp_req_tag;
-    assign snp_req_ready                   = dcache_snp_req_if.snp_req_ready;
+    assign dcache_snp_req_if.snp_req_valid      = snp_req_valid;
+    assign dcache_snp_req_if.snp_req_addr       = snp_req_addr;
+    assign dcache_snp_req_if.snp_req_invalidate = snp_req_invalidate;
+    assign dcache_snp_req_if.snp_req_tag        = snp_req_tag;
+    assign snp_req_ready                        = dcache_snp_req_if.snp_req_ready;
 
     assign snp_rsp_valid = dcache_snp_rsp_if.snp_rsp_valid;
     assign snp_rsp_tag   = dcache_snp_rsp_if.snp_rsp_tag;
     assign dcache_snp_rsp_if.snp_rsp_ready = snp_rsp_ready;
 
-    VX_dmem_ctrl #(
+    VX_mem_ctrl #(
         .CORE_ID(CORE_ID)
-    ) dmem_ctrl (
+    ) mem_ctrl (
         .clk                (clk),
         .reset              (reset),
 

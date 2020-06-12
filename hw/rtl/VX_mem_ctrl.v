@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_dmem_ctrl # (
+module VX_mem_ctrl # (
     parameter CORE_ID = 0
 ) (
     input wire              clk,
@@ -111,6 +111,7 @@ module VX_dmem_ctrl # (
         // Snoop request
         .snp_req_valid      (0),
         .snp_req_addr       (0),
+        .snp_req_invalidate (0),
         .snp_req_tag        (0),
         `UNUSED_PIN (snp_req_ready),
 
@@ -122,6 +123,7 @@ module VX_dmem_ctrl # (
         // Snoop forward out
         `UNUSED_PIN (snp_fwdout_valid),
         `UNUSED_PIN (snp_fwdout_addr),    
+        `UNUSED_PIN (snp_fwdout_invalidate),
         `UNUSED_PIN (snp_fwdout_tag),    
         .snp_fwdout_ready   (0),
 
@@ -192,6 +194,7 @@ module VX_dmem_ctrl # (
         // Snoop request
         .snp_req_valid      (dcache_snp_req_if.snp_req_valid),
         .snp_req_addr       (dcache_snp_req_if.snp_req_addr),
+        .snp_req_invalidate (dcache_snp_req_if.snp_req_invalidate),
         .snp_req_tag        (dcache_snp_req_if.snp_req_tag),
         .snp_req_ready      (dcache_snp_req_if.snp_req_ready),
 
@@ -203,6 +206,7 @@ module VX_dmem_ctrl # (
         // Snoop forward out
         `UNUSED_PIN (snp_fwdout_valid),
         `UNUSED_PIN (snp_fwdout_addr),    
+        `UNUSED_PIN (snp_fwdout_invalidate),
         `UNUSED_PIN (snp_fwdout_tag),    
         .snp_fwdout_ready   (0),
 
@@ -272,6 +276,7 @@ module VX_dmem_ctrl # (
         // Snoop request
         .snp_req_valid         (0),
         .snp_req_addr          (0),
+        .snp_req_invalidate    (0),
         .snp_req_tag           (0),
         `UNUSED_PIN (snp_req_ready),
 
@@ -282,7 +287,8 @@ module VX_dmem_ctrl # (
 
         // Snoop forward out
         `UNUSED_PIN (snp_fwdout_valid),
-        `UNUSED_PIN (snp_fwdout_addr),    
+        `UNUSED_PIN (snp_fwdout_addr),   
+        `UNUSED_PIN (snp_fwdout_invalidate), 
         `UNUSED_PIN (snp_fwdout_tag),    
         .snp_fwdout_ready      (0),
 

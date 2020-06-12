@@ -42,14 +42,13 @@ module VX_inst_multiplex (
     assign lsu_req_if.mem_write    = bckE_req_if.mem_write;
     assign lsu_req_if.rd           = bckE_req_if.rd;
     assign lsu_req_if.wb           = bckE_req_if.wb;
-    assign lsu_req_if.lsu_pc       = bckE_req_if.curr_PC;
-
+    assign lsu_req_if.curr_PC      = bckE_req_if.curr_PC;
 
     // Execute Unit
     assign exec_unit_req_if.valid       = bckE_req_if.valid & (~is_mem_mask & ~is_gpu_mask & ~is_csr_mask);
     assign exec_unit_req_if.warp_num    = bckE_req_if.warp_num;
     assign exec_unit_req_if.curr_PC     = bckE_req_if.curr_PC;
-    assign exec_unit_req_if.PC_next     = bckE_req_if.PC_next;
+    assign exec_unit_req_if.next_PC     = bckE_req_if.next_PC;
     assign exec_unit_req_if.rd          = bckE_req_if.rd;
     assign exec_unit_req_if.wb          = bckE_req_if.wb;
     assign exec_unit_req_if.a_reg_data  = gpr_data_if.a_reg_data;
@@ -61,11 +60,10 @@ module VX_inst_multiplex (
     assign exec_unit_req_if.itype_immed = bckE_req_if.itype_immed;
     assign exec_unit_req_if.upper_immed = bckE_req_if.upper_immed;
     assign exec_unit_req_if.branch_type = bckE_req_if.branch_type;
-    assign exec_unit_req_if.jalQual     = bckE_req_if.jalQual;
+    assign exec_unit_req_if.is_jal      = bckE_req_if.is_jal;
     assign exec_unit_req_if.jal         = bckE_req_if.jal;
     assign exec_unit_req_if.jal_offset  = bckE_req_if.jal_offset;
     assign exec_unit_req_if.is_etype    = bckE_req_if.is_etype;
-
 
     // GPR Req
     assign gpu_inst_req_if.valid       = bckE_req_if.valid & is_gpu_mask;
@@ -76,8 +74,7 @@ module VX_inst_multiplex (
     assign gpu_inst_req_if.is_barrier  = bckE_req_if.is_barrier;
     assign gpu_inst_req_if.a_reg_data  = gpr_data_if.a_reg_data;
     assign gpu_inst_req_if.rd2         = gpr_data_if.b_reg_data[0];
-    assign gpu_inst_req_if.pc_next     = bckE_req_if.PC_next;
-
+    assign gpu_inst_req_if.next_PC     = bckE_req_if.next_PC;
 
     // CSR Req
     assign csr_req_if.valid           = bckE_req_if.valid & is_csr_mask;
@@ -91,7 +88,3 @@ module VX_inst_multiplex (
     assign csr_req_if.csr_mask        = bckE_req_if.csr_mask;
 
 endmodule
-
-
-
-

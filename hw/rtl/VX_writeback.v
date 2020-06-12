@@ -55,12 +55,10 @@ module VX_writeback (
                                        mem_wb  ? mem_wb_if.warp_num       :
                                                  0;   
 
-    assign writeback_tmp_if.pc       = exec_wb ? inst_exec_wb_if.pc  :
-                                       csr_wb  ? 32'hdeadbeef        :
-                                       mem_wb  ? mem_wb_if.pc        :
+    assign writeback_tmp_if.curr_PC  = exec_wb ? inst_exec_wb_if.curr_PC  :
+                                       csr_wb  ? 32'hdeadbeef             :
+                                       mem_wb  ? mem_wb_if.curr_PC        :
                                                  32'hdeadbeef;
-
-    wire zero = 0;
 
     wire [`NUM_THREADS-1:0][31:0] use_wb_data;
 
@@ -69,10 +67,10 @@ module VX_writeback (
     ) wb_register (
         .clk  (clk),
         .reset(reset),
-        .stall(zero),
-        .flush(zero),
-        .in   ({writeback_tmp_if.data, writeback_tmp_if.valid, writeback_tmp_if.rd, writeback_tmp_if.wb, writeback_tmp_if.warp_num, writeback_tmp_if.pc}),
-        .out  ({use_wb_data,           writeback_if.valid,     writeback_if.rd,     writeback_if.wb,     writeback_if.warp_num,     writeback_if.pc})
+        .stall(1'b0),
+        .flush(1'b0),
+        .in   ({writeback_tmp_if.data, writeback_tmp_if.valid, writeback_tmp_if.rd, writeback_tmp_if.wb, writeback_tmp_if.warp_num, writeback_tmp_if.curr_PC}),
+        .out  ({use_wb_data,           writeback_if.valid,     writeback_if.rd,     writeback_if.wb,     writeback_if.warp_num,     writeback_if.curr_PC})
     );
 
     reg [31:0] last_data_wb /* verilator public */;

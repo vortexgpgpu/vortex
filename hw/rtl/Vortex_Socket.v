@@ -4,7 +4,6 @@ module Vortex_Socket (
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_DCACHE_IO
     `SCOPE_SIGNALS_CORE_IO
-    `SCOPE_SIGNALS_FE_IO
     `SCOPE_SIGNALS_BE_IO
 
     // Clock
@@ -29,6 +28,7 @@ module Vortex_Socket (
     // Snoop request
     input wire                              snp_req_valid,
     input wire[`VX_DRAM_ADDR_WIDTH-1:0]     snp_req_addr,
+    input wire                              snp_req_invalidate,
     input wire[`VX_SNP_TAG_WIDTH-1:0]       snp_req_tag,
     output wire                             snp_req_ready, 
 
@@ -64,7 +64,6 @@ module Vortex_Socket (
             `SCOPE_SIGNALS_ICACHE_ATTACH
             `SCOPE_SIGNALS_DCACHE_ATTACH
             `SCOPE_SIGNALS_CORE_ATTACH
-            `SCOPE_SIGNALS_FE_ATTACH
             `SCOPE_SIGNALS_BE_ATTACH
 
             .clk                (clk),
@@ -85,6 +84,7 @@ module Vortex_Socket (
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
@@ -126,6 +126,7 @@ module Vortex_Socket (
 
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_valid;
         wire[`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_snp_req_addr;
+        wire[`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_invalidate;
         wire[`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]   per_cluster_snp_req_tag;
         wire[`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_ready;
 
@@ -155,7 +156,6 @@ module Vortex_Socket (
                 `SCOPE_SIGNALS_ICACHE_ATTACH
                 `SCOPE_SIGNALS_DCACHE_ATTACH
                 `SCOPE_SIGNALS_CORE_ATTACH
-                `SCOPE_SIGNALS_FE_ATTACH
                 `SCOPE_SIGNALS_BE_ATTACH
 
                 .clk                (clk),
@@ -176,6 +176,7 @@ module Vortex_Socket (
 
                 .snp_req_valid      (per_cluster_snp_req_valid  [i]),
                 .snp_req_addr       (per_cluster_snp_req_addr   [i]),
+                .snp_req_invalidate (per_cluster_snp_req_invalidate[i]),
                 .snp_req_tag        (per_cluster_snp_req_tag    [i]),
                 .snp_req_ready      (per_cluster_snp_req_ready  [i]),
 
@@ -229,6 +230,7 @@ module Vortex_Socket (
 
         wire[`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_valid;
         wire[`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0]     l3_snp_fwdout_addr;
+        wire[`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_invalidate;
         wire[`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]       l3_snp_fwdout_tag;
         wire[`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_ready;    
 
@@ -251,10 +253,11 @@ module Vortex_Socket (
             assign per_cluster_dram_rsp_tag   [i] = l3_core_rsp_tag [i];
 
             // Snoop Forwarding out
-            assign per_cluster_snp_req_valid [i] = l3_snp_fwdout_valid[i];
-            assign per_cluster_snp_req_addr  [i] = l3_snp_fwdout_addr[i];
-            assign per_cluster_snp_req_tag   [i] = l3_snp_fwdout_tag[i];
-            assign l3_snp_fwdout_ready       [i] = per_cluster_snp_req_ready[i];
+            assign per_cluster_snp_req_valid      [i] = l3_snp_fwdout_valid[i];
+            assign per_cluster_snp_req_addr       [i] = l3_snp_fwdout_addr[i];
+            assign per_cluster_snp_req_invalidate [i] = l3_snp_fwdout_invalidate[i];
+            assign per_cluster_snp_req_tag        [i] = l3_snp_fwdout_tag[i];
+            assign l3_snp_fwdout_ready            [i] = per_cluster_snp_req_ready[i];
 
             // Snoop Forwarding in
             assign l3_snp_fwdin_valid        [i] = per_cluster_snp_rsp_valid [i];
@@ -327,6 +330,7 @@ module Vortex_Socket (
             // Snoop request
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
@@ -338,6 +342,7 @@ module Vortex_Socket (
             // Snoop forwarding out
             .snp_fwdout_valid   (l3_snp_fwdout_valid),
             .snp_fwdout_addr    (l3_snp_fwdout_addr),
+            .snp_fwdout_invalidate(l3_snp_fwdout_invalidate),
             .snp_fwdout_tag     (l3_snp_fwdout_tag),
             .snp_fwdout_ready   (l3_snp_fwdout_ready),
 
