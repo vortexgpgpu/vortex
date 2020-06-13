@@ -12,24 +12,19 @@ module VX_gpr_ram (
     output reg [`NUM_THREADS-1:0][31:0] q1,
 	output reg [`NUM_THREADS-1:0][31:0] q2
 );
-    // Thread   Byte  Bit
-    logic [`NUM_THREADS-1:0][3:0][7:0] ram[31:0];
+    reg [`NUM_THREADS-1:0][31:0] ram[31:0];
+
+    integer i;
+
+    `UNUSED_VAR(reset)
 
     always @(posedge clk) begin
-        if (reset) begin
-            //--
-        end else begin
-            if (we) begin
-                integer i;
-                for (i = 0; i < `NUM_THREADS; i++) begin
-                    if (be[i]) begin
-                        ram[waddr][i][0] <= wdata[i][7:0];
-                        ram[waddr][i][1] <= wdata[i][15:8];
-                        ram[waddr][i][2] <= wdata[i][23:16];
-                        ram[waddr][i][3] <= wdata[i][31:24];
-                    end
+        if (we) begin                
+            for (i = 0; i < `NUM_THREADS; i++) begin
+                if (be[i]) begin
+                    ram[waddr][i] <= wdata[i];
                 end
-            end    
+            end
         end
     end
     

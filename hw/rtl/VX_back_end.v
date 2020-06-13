@@ -141,6 +141,6 @@ module VX_back_end #(
     `SCOPE_ASSIGN(scope_writeback_wb,       writeback_if.wb);    
     `SCOPE_ASSIGN(scope_writeback_warp_num, writeback_if.warp_num);
     `SCOPE_ASSIGN(scope_writeback_rd,       writeback_if.rd);
-    `SCOPE_ASSIGN(scope_writeback_data,     writeback_if.data[0]);   
+    `SCOPE_ASSIGN(scope_writeback_data,     writeback_if.data[0]);
 
 endmodule

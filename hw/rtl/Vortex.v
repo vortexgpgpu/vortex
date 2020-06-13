@@ -56,16 +56,16 @@ module Vortex #(
     // I/O request
     output wire                             io_req_valid,
     output wire                             io_req_rw,    
-    output wire[3:0]                        io_req_byteen,  
-    output wire[29:0]                       io_req_addr,
-    output wire[31:0]                       io_req_data,    
-    output wire[`DCORE_TAG_WIDTH-1:0]       io_req_tag,  
+    output wire [3:0]                       io_req_byteen,  
+    output wire [29:0]                      io_req_addr,
+    output wire [31:0]                      io_req_data,    
+    output wire [`DCORE_TAG_WIDTH-1:0]      io_req_tag,  
     input wire                              io_req_ready,
 
     // I/O response
     input wire                              io_rsp_valid,
-    input wire[31:0]                        io_rsp_data,
-    input wire[`DCORE_TAG_WIDTH-1:0]        io_rsp_tag,
+    input wire [31:0]                       io_rsp_data,
+    input wire [`DCORE_TAG_WIDTH-1:0]       io_rsp_tag,
     output wire                             io_rsp_ready,
 
     // Status
