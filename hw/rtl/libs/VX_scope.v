@@ -19,7 +19,7 @@ module VX_scope #(
 	input wire bus_read
 );
 	localparam DELTA_ENABLE = (UPDW != 0);
-	localparam MAX_DELTA = (1**DELTAW)-1;
+	localparam MAX_DELTA    = (1**DELTAW)-1;
 
 	typedef enum logic[2:0] { 		
 		CMD_GET_VALID,
@@ -27,9 +27,9 @@ module VX_scope #(
 		CMD_GET_WIDTH,
 		CMD_GET_COUNT,
 		CMD_SET_DELAY,
-		CMD_SET_DURATION,
-		CMD_SET_RESERVED1,		
-		CMD_SET_RESERVED2
+		CMD_SET_STOP,	
+		CMD_RESERVED1,
+		CMD_RESERVED2
 	} cmd_t;
 
 	typedef enum logic[1:0] { 		
@@ -81,9 +81,9 @@ module VX_scope #(
 					CMD_GET_VALID, 
 					CMD_GET_DATA, 
 					CMD_GET_WIDTH, 
-				    CMD_GET_COUNT:     out_cmd  <= $bits(out_cmd)'(cmd_type); 
-					CMD_SET_DELAY:    delay_val <= $bits(delay_val)'(cmd_data);
-		            CMD_SET_DURATION: waddr_end <= $bits(waddr)'(cmd_data);
+				    CMD_GET_COUNT:    out_cmd <= $bits(out_cmd)'(cmd_type); 
+					CMD_SET_DELAY:  delay_val <= $bits(delay_val)'(cmd_data);
+		            CMD_SET_STOP:	waddr_end <= $bits(waddr)'(cmd_data);
 				default:;
 				endcase				
 			end
@@ -130,7 +130,7 @@ module VX_scope #(
 				end
 
 				if (stop 
-				 || (waddr == waddr_end)) begin
+				 || (waddr >= waddr_end)) begin
 					waddr      <= waddr;  // keep last written address
 					recording  <= 0;
 					data_valid <= 1;

@@ -4,16 +4,13 @@
 #include <unistd.h>
 #include <assert.h>
 #include <cmath>
-#include <thread>
-#include <future>
-#include <chrono>
-#include <fstream>
-#include <iostream>
-#include <vector>
 #include <uuid/uuid.h>
 #include <opae/fpga.h>
 #include <vortex.h>
 #include "vortex_afu.h"
+#ifdef SCOPE
+#include "scope.h"
+#endif
 
 #define CHECK_RES(_expr)                                            \
    do {                                                             \
@@ -37,8 +34,6 @@
 #define MMIO_CSR_MEM_ADDR       (AFU_IMAGE_MMIO_CSR_MEM_ADDR * 4)
 #define MMIO_CSR_DATA_SIZE      (AFU_IMAGE_MMIO_CSR_DATA_SIZE * 4)
 #define MMIO_CSR_STATUS         (AFU_IMAGE_MMIO_CSR_STATUS * 4)
-#define MMIO_CSR_SCOPE_CMD      (AFU_IMAGE_MMIO_CSR_SCOPE_CMD * 4)
-#define MMIO_CSR_SCOPE_DATA     (AFU_IMAGE_MMIO_CSR_SCOPE_DATA * 4)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -63,203 +58,6 @@ inline size_t align_size(size_t size, size_t alignment) {
 inline bool is_aligned(size_t addr, size_t alignment) {
     assert(0 == (alignment & (alignment - 1)));
     return 0 == (addr & (alignment - 1));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-struct scope_signal_t {
-    int width;
-    const char* name;
-};
-
-static const scope_signal_t scope_signals[] = {
-    { 32, "icache_req_addr" },
-    { 2,  "icache_req_warp_num" },
-    { 2,  "icache_req_tag" },    
-    { 32, "icache_rsp_data" },    
-    { 2,  "icache_rsp_tag" },
-    { 32, "dcache_req_addr" },
-    { 2,  "dcache_req_warp_num" },         
-    { 2,  "dcache_req_tag" },
-    { 32, "dcache_rsp_data" },    
-    { 2 , "dcache_rsp_tag" },     
-    { 32, "dram_req_addr" },
-    { 29, "dram_req_tag" },
-    { 29, "dram_rsp_tag" }, 
-    { 32, "snp_req_addr" },
-    { 1,  "snp_req_invalidate" },
-    { 16, "snp_req_tag" },
-    { 16, "snp_rsp_tag" },    
-    { 2,  "decode_warp_num" },
-    { 32, "decode_curr_PC" },
-    { 1,  "decode_is_jal" },
-    { 5,  "decode_rs1" },
-    { 5,  "decode_rs2" },    
-    { 2,  "execute_warp_num" },
-    { 5,  "execute_rd" },
-    { 32, "execute_a" },
-    { 32, "execute_b" },    
-    { 2,  "writeback_warp_num" },    
-    { 2,  "writeback_wb" },
-    { 5,  "writeback_rd" },
-    { 32, "writeback_data" },    
-
-    { 1, "icache_req_valid" },
-    { 1, "icache_req_ready" },
-    { 1, "icache_rsp_valid" },
-    { 1, "icache_rsp_ready" },
-    { 4, "dcache_req_valid" },  
-    { 1, "dcache_req_ready" }, 
-    { 4, "dcache_rsp_valid" }, 
-    { 1, "dcache_rsp_ready" },
-    { 1, "dram_req_valid" },   
-    { 1, "dram_req_ready" },
-    { 1, "dram_rsp_valid" },
-    { 1, "dram_rsp_ready" },
-    { 1, "snp_req_valid" },   
-    { 1, "snp_req_ready" },
-    { 1, "snp_rsp_valid" },
-    { 1, "snp_rsp_ready" },
-    { 4, "decode_valid" },
-    { 4, "execute_valid" },
-    { 4, "writeback_valid" },    
-    { 1, "schedule_delay" },
-    { 1, "memory_delay" },
-    { 1, "exec_delay" },
-    { 1, "gpr_stage_delay" },
-};
-
-static int vx_scope_start(vx_device_h hdevice) {    
-    if (nullptr == hdevice)
-        return -1;
-
-    vx_device_t *device = ((vx_device_t*)hdevice);
-
-    // set start delay
-    uint64_t delay = 0;
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, ((delay << 3) | 4)));
-
-    // start execution
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_RUN));
-
-    const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
-
-    std::ofstream ofs("vx_scope.vcd");
-
-    ofs << "$timescale 1 ns $end" << std::endl;
-
-    ofs << "$var reg 1  0 clk $end" << std::endl;
-
-    int fwidth = 0;
-    for (int i = 0; i < num_signals; ++i) {
-        ofs << "$var reg " << scope_signals[i].width << " " << (i+1) << " " << scope_signals[i].name << " $end" << std::endl;
-        fwidth += scope_signals[i].width;
-    }
-
-    uint64_t frame_width, max_frames, data_valid;
-
-    ofs << "enddefinitions $end" << std::endl;
-
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 0));
-    do {        
-        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));        
-        if (data_valid)
-            break;
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    } while (true);
-
-    std::cout << "scope trace dump begin..." << std::endl;    
-
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 2));
-    CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &frame_width));
-    std::cout << "scope::frame_width=" << frame_width << std::endl;
-
-    assert(fwidth == (int)frame_width);
-
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 3));
-    CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &max_frames));
-    std::cout << "scope::max_frames=" << max_frames << std::endl;    
-
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 1));
-
-    std::vector<char> signal_data(frame_width+1);
-
-    uint64_t frame_offset = 0, frame_no = 0, timestamp = 0;
-    
-    int signal_id = 0;
-    int signal_offset = 0;
-
-    auto print_header = [&] () {
-        ofs << '#' << timestamp++ << std::endl;
-        ofs << "b0 0" << std::endl;
-        ofs << '#' << timestamp++ << std::endl;
-        ofs << "b1 0" << std::endl;
-        
-        uint64_t delta;
-        fpga_result res = fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &delta);
-        assert(res == FPGA_OK);
-
-        while (delta != 0) {
-            ofs << '#' << timestamp++ << std::endl;
-            ofs << "b0 0" << std::endl;
-            ofs << '#' << timestamp++ << std::endl;
-            ofs << "b1 0" << std::endl;
-            --delta;
-        }
-
-        signal_id = num_signals;
-    };
-
-    print_header();
-
-    do {
-        if (frame_no == max_frames-1) {
-            // verify last frame is valid
-            CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 0));
-            CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));  
-            assert(data_valid == 1);
-            CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 1));
-        }
-
-        uint64_t word;
-        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &word));
-        
-        do {          
-            int signal_width = scope_signals[signal_id-1].width;
-            int word_offset = frame_offset % 64;
-
-            signal_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
-
-            ++signal_offset;
-            ++frame_offset;
-
-            if (signal_offset == signal_width) {
-                signal_data[signal_width] = 0; // string null termination
-                ofs << 'b' << signal_data.data() << ' ' << signal_id << std::endl;
-                signal_offset = 0;            
-                --signal_id;
-            }
-
-            if (frame_offset == frame_width) {   
-                assert(0 == signal_offset);   
-                frame_offset = 0;
-                ++frame_no;
-                if (frame_no != max_frames) {                
-                    print_header();
-                }                        
-            }
-        } while ((frame_offset % 64) != 0);
-
-    } while (frame_no != max_frames);
-
-    std::cout << "scope trace dump done!" << std::endl;
-
-    // verify data not valid
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_CMD, 0));
-    CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));  
-    assert(data_valid == 0);
-
-    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -319,6 +117,14 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     device->mem_allocation = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
 
     *hdevice = device;
+    
+#ifdef SCOPE
+    {
+        int ret = vx_scope_start(device->fpga, 0);
+        if (ret != 0)
+            return ret;
+    }
+#endif
 
     return 0;
 }
@@ -328,6 +134,10 @@ extern int vx_dev_close(vx_device_h hdevice) {
         return -1;
 
     vx_device_t *device = ((vx_device_t*)hdevice);
+
+#ifdef SCOPE
+    vx_scope_stop(device->fpga, 0);
+#endif
 
     fpgaClose(device->fpga);
 
@@ -590,15 +400,9 @@ extern int vx_start(vx_device_h hdevice) {
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;    
   
-#ifdef SCOPE
-    int ret = vx_scope_start(hdevice);
-    if (ret != 0)
-        return ret;
-#else
     // start execution
     vx_device_t *device = ((vx_device_t*)hdevice);
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_RUN));
-#endif
 
     return 0;
 }
