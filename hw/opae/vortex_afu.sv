@@ -835,7 +835,7 @@ VX_scope #(
   .clk      (clk),
   .reset    (SoftReset),
   .start    (vx_reset),
-  .stop     (cmd_run_done),
+  .stop     (0),
   .changed  (force_changed),
   .data_in  ({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}),
   .bus_in   (csr_scope_cmd),

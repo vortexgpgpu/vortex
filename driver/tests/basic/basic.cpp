@@ -42,6 +42,8 @@ vx_device_h device = nullptr;
 vx_buffer_h sbuf = nullptr;
 vx_buffer_h dbuf = nullptr;
 
+int total_blocks = NUM_BLOCKS;
+
 void cleanup() {
   if (sbuf) {
     vx_buf_release(sbuf);
@@ -103,15 +105,15 @@ int run_memcopy_test(vx_buffer_h sbuf,
 int run_kernel_test(vx_device_h device, 
                     vx_buffer_h sbuf, 
                     vx_buffer_h dbuf, 
-                    const char* program) {
+                    const char* program,
+                    int num_blocks) {
   int errors = 0;
 
   uint64_t seed = 0x0badf00d40ff40ff;
   
   int src_dev_addr  = DEV_MEM_SRC_ADDR;
   int dest_dev_addr = DEV_MEM_DST_ADDR;
-  int num_blocks    = NUM_BLOCKS;
-
+  
   // write sbuf data
   for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
     ((uint64_t*)vx_host_ptr(sbuf))[i] = shuffle(i, seed);
@@ -171,29 +173,30 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
+  std::cout << "total blocks: " << total_blocks << std::endl;
+
   // open device connection
   std::cout << "open device connection" << std::endl;
-  vx_device_h device;
   RT_CHECK(vx_dev_open(&device));
 
   // create source buffer
   std::cout << "create source buffer" << std::endl;
-  RT_CHECK(vx_alloc_shared_mem(device, 4096, &sbuf));
+  RT_CHECK(vx_alloc_shared_mem(device, total_blocks * 64, &sbuf));
   
   // create destination buffer
   std::cout << "create destination buffer" << std::endl;
-  RT_CHECK(vx_alloc_shared_mem(device, 4096, &dbuf));
+  RT_CHECK(vx_alloc_shared_mem(device, total_blocks * 64, &dbuf));
 
   // run tests  
   if (0 == test || -1 == test) {
     std::cout << "run memcopy test" << std::endl;
     RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_SRC_ADDR, 0x0badf00d00ff00ff, 1));
-    RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_SRC_ADDR, 0x0badf00d40ff40ff, 64));
+    RT_CHECK(run_memcopy_test(sbuf, dbuf, DEV_MEM_SRC_ADDR, 0x0badf00d40ff40ff, total_blocks));
   }
 
   if (1 == test || -1 == test) {
     std::cout << "run kernel test" << std::endl;
-    RT_CHECK(run_kernel_test(device, sbuf, dbuf, "kernel.bin"));
+    RT_CHECK(run_kernel_test(device, sbuf, dbuf, "kernel.bin", total_blocks));
   }
 
   // cleanup

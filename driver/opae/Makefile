@@ -17,6 +17,7 @@ CXXFLAGS +=-fstack-protector
 # Position independent code
 CXXFLAGS += -fPIC
 
+# Enable scope analyzer
 CXXFLAGS += -DSCOPE
 
 LDFLAGS += -luuid
@@ -37,7 +38,7 @@ PROJECT_ASE = $(ASE_DIR)/libvortex.so
 
 AFU_JSON_INFO = vortex_afu.h
 
-SRCS = vortex.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp scope.cpp ../common/vx_utils.cpp
 
 all: $(PROJECT) $(PROJECT_ASE)
 
