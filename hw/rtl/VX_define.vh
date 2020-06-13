@@ -228,6 +228,9 @@
 // Cache ID
 `define L2CACHE_ID          (`L3_ENABLE ? 1 : 0)
 
+// Core request tag bits
+`define L2CORE_TAG_WIDTH    (`DCORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
+
 // DRAM request data bits
 `define L2DRAM_LINE_WIDTH   (`L2_ENABLE ? (`L2BANK_LINE_SIZE * 8) : `DDRAM_LINE_WIDTH)
 
@@ -250,6 +253,9 @@
 
 // Cache ID
 `define L3CACHE_ID          0
+
+// Core request tag bits
+`define L3CORE_TAG_WIDTH    (`L2CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // DRAM request data bits
 `define L3DRAM_LINE_WIDTH   (`L3_ENABLE ? (`L3BANK_LINE_SIZE * 8) : `L2DRAM_LINE_WIDTH)
@@ -285,30 +291,36 @@
 `ifdef SCOPE
     `define SCOPE_SIGNALS_DATA_LIST \
         scope_icache_req_addr, \
+        scope_icache_req_warp_num, \
         scope_icache_req_tag, \
         scope_icache_rsp_data, \
         scope_icache_rsp_tag, \
         scope_dcache_req_addr, \
+        scope_dcache_req_warp_num, \
         scope_dcache_req_tag, \
         scope_dcache_rsp_data, \
         scope_dcache_rsp_tag, \
+        scope_dram_req_addr, \
         scope_dram_req_tag, \
         scope_dram_rsp_tag, \
-        scope_icache_req_warp_num, \
-        scope_dcache_req_warp_num, \
-        scope_decode_curr_PC, \
-        scope_execute_rd, \
-        scope_execute_warp_num, \
-        scope_execute_a, \
-        scope_execute_b, \
-        scope_writeback_rd, \
-        scope_writeback_warp_num, \
-        scope_writeback_data, \
+        scope_snp_req_addr, \
+        scope_snp_req_invalidate, \
+        scope_snp_req_tag, \
+        scope_snp_rsp_tag, \
         scope_decode_warp_num, \
+        scope_decode_curr_PC, \
         scope_decode_is_jal, \
         scope_decode_rs1, \
         scope_decode_rs2, \
-        scope_writeback_wb,
+        scope_execute_warp_num, \
+        scope_execute_rd, \
+        scope_execute_a, \
+        scope_execute_b, \
+        scope_writeback_warp_num, \
+        scope_writeback_wb, \
+        scope_writeback_rd, \
+        scope_writeback_data,
+         
     
     `define SCOPE_SIGNALS_UPD_LIST \
         scope_icache_req_valid, \
@@ -323,6 +335,10 @@
         scope_dram_req_ready, \
         scope_dram_rsp_valid, \
         scope_dram_rsp_ready, \
+        scope_snp_req_valid, \
+        scope_snp_req_ready, \
+        scope_snp_rsp_valid, \
+        scope_snp_rsp_ready, \
         scope_decode_valid, \
         scope_execute_valid, \
         scope_writeback_valid, \
@@ -351,11 +367,20 @@
         wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_rsp_tag; \
         wire scope_dcache_rsp_ready; \
         wire scope_dram_req_valid; \
+        wire [31:0] scope_dram_req_addr; \
         wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_req_tag; \
         wire scope_dram_req_ready; \
         wire scope_dram_rsp_valid; \
         wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag; \
         wire scope_dram_rsp_ready; \
+        wire scope_snp_req_valid; \
+        wire [31:0] scope_snp_req_addr; \
+        wire scope_snp_req_invalidate; \
+        wire [`VX_SNP_TAG_WIDTH-1:0] scope_snp_req_tag; \
+        wire scope_snp_req_ready; \
+        wire scope_snp_rsp_valid; \
+        wire [`VX_SNP_TAG_WIDTH-1:0] scope_snp_rsp_tag; \
+        wire scope_snp_rsp_ready; \
         wire scope_schedule_delay; \
         wire scope_memory_delay; \
         wire scope_exec_delay; \
@@ -406,11 +431,24 @@
     `define SCOPE_SIGNALS_DRAM_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire scope_dram_req_valid, \
+        output wire [31:0] scope_dram_req_addr, \
         output wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_req_tag, \
         output wire scope_dram_req_ready, \
         output wire scope_dram_rsp_valid, \
         output wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag, \
         output wire scope_dram_rsp_ready, \
+        /* verilator lint_on UNDRIVEN */
+
+    `define SCOPE_SIGNALS_SNP_IO \
+        /* verilator lint_off UNDRIVEN */ \
+        output wire scope_snp_req_valid, \
+        output wire [31:0] scope_snp_req_addr, \
+        output wire scope_snp_req_invalidate, \
+        output wire [`VX_SNP_TAG_WIDTH-1:0] scope_snp_req_tag, \
+        output wire scope_snp_req_ready, \
+        output wire scope_snp_rsp_valid, \
+        output wire [`VX_SNP_TAG_WIDTH-1:0] scope_snp_rsp_tag, \
+        output wire scope_snp_rsp_ready, \
         /* verilator lint_on UNDRIVEN */
 
     `define SCOPE_SIGNALS_CORE_IO \
@@ -438,7 +476,7 @@
         output wire [1:0]  scope_writeback_warp_num, \
         output wire [1:0]  scope_writeback_wb, \
         output wire [4:0]  scope_writeback_rd, \
-        output wire [31:0] scope_writeback_data, \
+        output wire [31:0] scope_writeback_data,
         /* verilator lint_on UNDRIVEN */
 
     `define SCOPE_SIGNALS_ICACHE_ATTACH \
@@ -465,11 +503,22 @@
 
     `define SCOPE_SIGNALS_DRAM_ATTACH \
         .scope_dram_req_valid   (scope_dram_req_valid), \
+        .scope_dram_req_addr    (scope_dram_req_addr), \
         .scope_dram_req_tag     (scope_dram_req_tag), \
         .scope_dram_req_ready   (scope_dram_req_ready), \
         .scope_dram_rsp_valid   (scope_dram_rsp_valid), \
         .scope_dram_rsp_tag     (scope_dram_rsp_tag), \
         .scope_dram_rsp_ready   (scope_dram_rsp_ready),
+
+    `define SCOPE_SIGNALS_SNP_ATTACH \
+        .scope_snp_req_valid    (scope_snp_req_valid), \
+        .scope_snp_req_addr     (scope_snp_req_addr), \
+        .scope_snp_req_invalidate(scope_snp_req_invalidate), \
+        .scope_snp_req_tag      (scope_snp_req_tag), \
+        .scope_snp_req_ready    (scope_snp_req_ready), \
+        .scope_snp_rsp_valid    (scope_snp_rsp_valid), \
+        .scope_snp_rsp_tag      (scope_snp_rsp_tag), \
+        .scope_snp_rsp_ready    (scope_snp_rsp_ready),
 
     `define SCOPE_SIGNALS_CORE_ATTACH \
         .scope_schedule_delay   (scope_schedule_delay), \

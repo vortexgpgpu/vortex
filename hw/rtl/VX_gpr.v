@@ -18,8 +18,8 @@ module VX_gpr (
 
     wire write_enable = write_ce && ((writeback_if.wb != 0));
     
-    `ifndef ASIC
-
+    `ifndef ASIC        
+    
         VX_gpr_ram gpr_ram (
             .we     (write_enable),
             .clk    (clk),

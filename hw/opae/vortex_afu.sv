@@ -102,6 +102,7 @@ logic vx_dram_rsp_ready;
 
 logic vx_snp_req_valid;
 logic [`VX_DRAM_ADDR_WIDTH-1:0] vx_snp_req_addr;
+logic vx_snp_req_invalidate = 0;
 logic [`VX_SNP_TAG_WIDTH-1:0] vx_snp_req_tag;
 logic vx_snp_req_ready;
 
@@ -798,26 +799,38 @@ end
 `SCOPE_SIGNALS_DECL
 
 `SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
+`SCOPE_ASSIGN(scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
 `SCOPE_ASSIGN(scope_dram_req_tag,   vx_dram_req_tag);
 `SCOPE_ASSIGN(scope_dram_req_ready, vx_dram_req_ready);
 `SCOPE_ASSIGN(scope_dram_rsp_valid, vx_dram_rsp_valid);
 `SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
 `SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 389, "oops!")
+`SCOPE_ASSIGN(scope_snp_req_valid, vx_snp_req_valid);
+`SCOPE_ASSIGN(scope_snp_req_addr,  {vx_snp_req_addr, 4'b0});
+`SCOPE_ASSIGN(scope_snp_req_invalidate, vx_snp_req_invalidate);
+`SCOPE_ASSIGN(scope_snp_req_tag,   vx_snp_req_tag);
+`SCOPE_ASSIGN(scope_snp_req_ready, vx_snp_req_ready);
+`SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
+`SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
+`SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
+
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 490, "oops!")
 
 wire force_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
                   || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
                   || ((| scope_dcache_rsp_valid) && scope_dcache_rsp_ready)
                   || (scope_dram_req_valid && scope_dram_req_ready)
-                  || (scope_dram_rsp_valid && scope_dram_rsp_ready);
+                  || (scope_dram_rsp_valid && scope_dram_rsp_ready)
+                  || (scope_snp_req_valid && scope_snp_req_ready)
+                  || (scope_snp_rsp_valid && scope_snp_rsp_ready);
 
 VX_scope #(
-  .DATAW  ($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST})),
-  .BUSW   (64),
-  .SIZE   (4096),
-  .UPDW   ($bits({`SCOPE_SIGNALS_UPD_LIST}))
+  .DATAW    ($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST})),
+  .BUSW     (64),
+  .SIZE     (4096),
+  .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))
 ) scope (
   .clk      (clk),
   .reset    (SoftReset),
@@ -864,7 +877,7 @@ Vortex_Socket #() vx_socket (
   // Snoop request
   .snp_req_valid 	  (vx_snp_req_valid),
   .snp_req_addr     (vx_snp_req_addr),
-  .snp_req_invalidate(0),
+  .snp_req_invalidate(vx_snp_req_invalidate),
   .snp_req_tag      (vx_snp_req_tag),
   .snp_req_ready    (vx_snp_req_ready),
 

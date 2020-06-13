@@ -8,7 +8,7 @@ module VX_gpr_wrapper (
     VX_gpr_jal_if   gpr_jal_if,
 
     output wire [`NUM_THREADS-1:0][31:0] a_reg_data,
-    output wire [`NUM_THREADS-1:0][31:0] b_reg_data    
+    output wire [`NUM_THREADS-1:0][31:0] b_reg_data
 ); 
     wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0][31:0] tmp_a_reg_data;
     wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0][31:0] tmp_b_reg_data;
