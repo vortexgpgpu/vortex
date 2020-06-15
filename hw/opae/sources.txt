@@ -1,7 +1,7 @@
 vortex_afu.json
 
 +define+NDEBUG
-+define+SCOPE
+#+define+SCOPE
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE

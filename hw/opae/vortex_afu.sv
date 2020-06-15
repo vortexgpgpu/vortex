@@ -204,7 +204,7 @@ begin
         end
         MMIO_CSR_SCOPE_CMD: begin          
         `ifdef DBG_PRINT_OPAE
-          $display("%t: CSR_SCOPE_CMD: %0d", $time, 64'(cp2af_sRxPort.c0.data));
+          $display("%t: CSR_SCOPE_CMD: %0h", $time, 64'(cp2af_sRxPort.c0.data));
         `endif
         end
         default: begin
@@ -246,7 +246,7 @@ begin
         MMIO_CSR_SCOPE_DATA: begin          
           mmio_tx.data <= csr_scope_data;
         `ifdef DBG_PRINT_OPAE
-          $display("%t: SCOPE: data=%0d", $time, csr_scope_data);
+          $display("%t: SCOPE: data=%0h", $time, csr_scope_data);
         `endif
         end
         default: mmio_tx.data <= 64'h0;
@@ -815,9 +815,9 @@ end
 `SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
 `SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 490, "oops!")
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 491, "oops!")
 
-wire force_changed = (scope_icache_req_valid && scope_icache_req_ready)
+wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
                   || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
                   || ((| scope_dcache_rsp_valid) && scope_dcache_rsp_ready)
@@ -825,6 +825,9 @@ wire force_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_dram_rsp_valid && scope_dram_rsp_ready)
                   || (scope_snp_req_valid && scope_snp_req_ready)
                   || (scope_snp_rsp_valid && scope_snp_rsp_ready);
+
+wire scope_start = vx_reset;
+wire scope_stop  = 0;
 
 VX_scope #(
   .DATAW    ($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST})),
@@ -834,9 +837,9 @@ VX_scope #(
 ) scope (
   .clk      (clk),
   .reset    (SoftReset),
-  .start    (vx_reset),
-  .stop     (0),
-  .changed  (force_changed),
+  .start    (scope_start),
+  .stop     (scope_stop),
+  .changed  (scope_changed),
   .data_in  ({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}),
   .bus_in   (csr_scope_cmd),
   .bus_out  (csr_scope_data),
