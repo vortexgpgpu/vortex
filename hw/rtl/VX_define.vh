@@ -345,7 +345,8 @@
         scope_schedule_delay, \
         scope_memory_delay, \
         scope_exec_delay, \
-        scope_gpr_stage_delay
+        scope_gpr_stage_delay, \
+        scope_busy
 
     `define SCOPE_SIGNALS_DECL \
         wire scope_icache_req_valid; \
@@ -380,6 +381,7 @@
         wire scope_snp_req_ready; \
         wire scope_snp_rsp_valid; \
         wire [`VX_SNP_TAG_WIDTH-1:0] scope_snp_rsp_tag; \
+        wire scope_busy; \
         wire scope_snp_rsp_ready; \
         wire scope_schedule_delay; \
         wire scope_memory_delay; \
@@ -453,6 +455,7 @@
 
     `define SCOPE_SIGNALS_CORE_IO \
         /* verilator lint_off UNDRIVEN */ \
+        output wire scope_busy, \
         output wire scope_schedule_delay, \
         output wire scope_memory_delay, \
         output wire scope_exec_delay, \
@@ -521,28 +524,29 @@
         .scope_snp_rsp_ready    (scope_snp_rsp_ready),
 
     `define SCOPE_SIGNALS_CORE_ATTACH \
+        .scope_busy             (scope_busy), \
         .scope_schedule_delay   (scope_schedule_delay), \
         .scope_memory_delay     (scope_memory_delay), \
         .scope_exec_delay       (scope_exec_delay), \
         .scope_gpr_stage_delay  (scope_gpr_stage_delay),
 
     `define SCOPE_SIGNALS_BE_ATTACH \
-        .scope_decode_valid        (scope_decode_valid), \
-        .scope_decode_warp_num     (scope_decode_warp_num), \
-        .scope_decode_curr_PC      (scope_decode_curr_PC), \
-        .scope_decode_is_jal       (scope_decode_is_jal), \
-        .scope_decode_rs1          (scope_decode_rs1), \
-        .scope_decode_rs2          (scope_decode_rs2), \
-        .scope_execute_valid       (scope_execute_valid), \
-        .scope_execute_warp_num    (scope_execute_warp_num), \
-        .scope_execute_rd          (scope_execute_rd), \
-        .scope_execute_a           (scope_execute_a), \
-        .scope_execute_b           (scope_execute_b), \
-        .scope_writeback_valid     (scope_writeback_valid), \
-        .scope_writeback_warp_num  (scope_writeback_warp_num), \
-        .scope_writeback_wb        (scope_writeback_wb), \
-        .scope_writeback_rd        (scope_writeback_rd), \
-        .scope_writeback_data      (scope_writeback_data),
+        .scope_decode_valid     (scope_decode_valid), \
+        .scope_decode_warp_num  (scope_decode_warp_num), \
+        .scope_decode_curr_PC   (scope_decode_curr_PC), \
+        .scope_decode_is_jal    (scope_decode_is_jal), \
+        .scope_decode_rs1       (scope_decode_rs1), \
+        .scope_decode_rs2       (scope_decode_rs2), \
+        .scope_execute_valid    (scope_execute_valid), \
+        .scope_execute_warp_num (scope_execute_warp_num), \
+        .scope_execute_rd       (scope_execute_rd), \
+        .scope_execute_a        (scope_execute_a), \
+        .scope_execute_b        (scope_execute_b), \
+        .scope_writeback_valid  (scope_writeback_valid), \
+        .scope_writeback_warp_num (scope_writeback_warp_num), \
+        .scope_writeback_wb     (scope_writeback_wb), \
+        .scope_writeback_rd     (scope_writeback_rd), \
+        .scope_writeback_data   (scope_writeback_data),
 
     `define SCOPE_ASSIGN(d,s) assign d = s
 `else

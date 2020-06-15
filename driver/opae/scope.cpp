@@ -80,6 +80,7 @@ static const scope_signal_t scope_signals[] = {
     { 1, "memory_delay" },
     { 1, "exec_delay" },
     { 1, "gpr_stage_delay" },
+    { 1, "busy" },
 };
 
 static const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
@@ -131,13 +132,13 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
 
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 2));
     CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &frame_width));
-    std::cout << "scope::frame_width=" << frame_width << std::endl;
+    std::cout << "scope::frame_width=" << std::dec << frame_width << std::endl;
 
     assert(fwidth == (int)frame_width);
 
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 3));
     CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &max_frames));
-    std::cout << "scope::max_frames=" << max_frames << std::endl;    
+    std::cout << "scope::max_frames=" << std::dec << max_frames << std::endl;    
 
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 1));
 

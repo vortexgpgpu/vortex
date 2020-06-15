@@ -19,7 +19,7 @@ module VX_scope #(
 	input wire bus_read
 );
 	localparam DELTA_ENABLE = (UPDW != 0);
-	localparam MAX_DELTA    = (1**DELTAW)-1;
+	localparam MAX_DELTA    = (2 ** DELTAW) - 1;
 
 	typedef enum logic[2:0] { 		
 		CMD_GET_VALID,
@@ -41,14 +41,14 @@ module VX_scope #(
 
 	reg [DATAW-1:0] data_store [SIZE-1:0];
 	reg [DELTAW-1:0] delta_store [SIZE-1:0];
-	reg [UPDW-1:0] prev_id;
+	reg [UPDW-1:0] prev_trigger_id;
 	reg [DELTAW-1:0] delta;
 
 	reg [`CLOG2(SIZE)-1:0] raddr, waddr, waddr_end;
 
 	reg [`LOG2UP(DATAW)-1:0] read_offset;
 
-	reg start_wait, recording, data_valid, read_delta;
+	reg start_wait, recording, data_valid, read_delta, started, delta_flush;
 
 	reg [BUSW-3:0] delay_val, delay_cntr;
 
@@ -62,18 +62,21 @@ module VX_scope #(
 
 	always @(posedge clk) begin
 		if (reset) begin
-			raddr      	<= 0;	
-			waddr      	<= 0;	
-			start_wait 	<= 0;
-			recording   <= 0;
-			delay_cntr 	<= 0;
-			read_offset	<= 0;
-			data_valid  <= 0;
-			out_cmd     <= $bits(out_cmd)'(CMD_GET_VALID);
-			delay_val   <= 0;
-			waddr_end   <= $bits(waddr)'(SIZE-1);
-			delta       <= 0;
-			read_delta  <= 0;
+			raddr      		<= 0;	
+			waddr      		<= 0;	
+			start_wait 		<= 0;
+			recording   	<= 0;
+			delay_cntr 		<= 0;
+			read_offset		<= 0;
+			data_valid  	<= 0;
+			out_cmd     	<= $bits(out_cmd)'(CMD_GET_VALID);
+			delay_val   	<= 0;
+			waddr_end   	<= $bits(waddr)'(SIZE-1);
+			delta       	<= 0;
+			prev_trigger_id <= 0;
+			read_delta  	<= 0;
+			started     	<= 0;
+			delta_flush     <= 0;
 		end else begin
 
 			if (bus_write) begin
@@ -88,13 +91,13 @@ module VX_scope #(
 				endcase				
 			end
 
-			if (start) begin		
-				waddr <= 0;
+			if (start && !started) begin		
+				started <= 1;
 				if (0 == delay_val) begin					
-					start_wait <= 0;
-					recording  <= 1;
-					delay_cntr <= 0;	
-					delta      <= MAX_DELTA;						
+					start_wait  <= 0;
+					recording   <= 1;
+					delay_cntr  <= 0;
+					delta_flush <= 1;						
 				end else begin
 					start_wait <= 1;
 					recording  <= 0;
@@ -105,25 +108,27 @@ module VX_scope #(
 			if (start_wait) begin				
 				delay_cntr <= delay_cntr - 1;
 				if (1 == delay_cntr) begin				
-					start_wait <= 0;
-					recording  <= 1;
-					delta      <= MAX_DELTA;
+					start_wait  <= 0;
+					recording   <= 1;
+					delta_flush <= 1;
 				end 
 			end
 
 			if (recording) begin
 				if (DELTA_ENABLE) begin
-					if (changed
-					 || (delta == MAX_DELTA)
-					 || (trigger_id != prev_id)) begin
+					if (delta_flush
+					 || changed
+					 || (trigger_id != prev_trigger_id)) begin
 						data_store[waddr]  <= data_in;
 						delta_store[waddr] <= delta;
-						waddr <= waddr + 1;
-						delta <= 0;
+						waddr       <= waddr + 1;
+						delta       <= 0;
+						delta_flush <= 0;
 					end else begin
-						delta <= delta + 1;
+						delta       <= delta + 1;
+						delta_flush <= (delta == (MAX_DELTA-1));
 					end
-					prev_id <= trigger_id;
+					prev_trigger_id <= trigger_id;
 				end else begin
 					data_store[waddr] <= data_in;
 					waddr <= waddr + 1;
@@ -131,7 +136,7 @@ module VX_scope #(
 
 				if (stop 
 				 || (waddr >= waddr_end)) begin
-					waddr      <= waddr;  // keep last written address
+					waddr      <= waddr;  // keep last address
 					recording  <= 0;
 					data_valid <= 1;
 					read_delta <= DELTA_ENABLE;					
@@ -172,14 +177,15 @@ module VX_scope #(
 			GET_VALID : bus_out = BUSW'(data_valid);
 			GET_WIDTH : bus_out = BUSW'(DATAW);
 			GET_COUNT : bus_out = BUSW'(waddr) + BUSW'(1);
-			default   : bus_out = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
+			GET_DATA  : bus_out = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
+			default   : bus_out = 0;  
 		endcase
 	end
 
 `ifdef DBG_PRINT_SCOPE
 	always_ff @(posedge clk) begin
 		if (bus_read) begin
-			$display("%t: scope-read: cmd=%0d, out=0x%0h, addr=%0d, off=%0d", $time, out_cmd, bus_out, raddr, read_offset);
+			$display("%t: scope-read: cmd=%0d, out=0x%0h, addr=%0d", $time, out_cmd, bus_out, raddr);
 		end
 		if (bus_write) begin
 			$display("%t: scope-write: cmd=%0d, value=%0d", $time, cmd_type, cmd_data);

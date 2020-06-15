@@ -93,7 +93,7 @@ module VX_mem_arb #(
             assign in_mem_rsp_data[i]  = out_mem_rsp_data;
             assign in_mem_rsp_tag[i]   = out_mem_rsp_tag[REQS_BITS +: TAG_IN_WIDTH];              
         end
-        assign out_mem_rsp_ready = in_mem_rsp_ready[bus_rsp_sel];
+        assign out_mem_rsp_ready = out_mem_rsp_valid ? in_mem_rsp_ready[bus_rsp_sel] : 0;
 
     end
 

@@ -174,6 +174,7 @@ module VX_pipeline #(
     assign core_icache_rsp_if.core_rsp_tag   = icache_rsp_tag;
     assign icache_rsp_ready = core_icache_rsp_if.core_rsp_ready;
 
+    `SCOPE_ASSIGN(scope_busy, busy); 
     `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);    
     `SCOPE_ASSIGN(scope_memory_delay, memory_delay);
     `SCOPE_ASSIGN(scope_exec_delay, exec_delay);
