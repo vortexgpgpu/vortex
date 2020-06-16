@@ -8,7 +8,7 @@ FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG   
 
 # Executable Configuration
-SYN_ARGS = --parallel --read_settings_files=on
+SYN_ARGS = --parallel --read_settings_files=on --set=VERILOG_MACRO=NOPAE=1
 FIT_ARGS = --part=$(DEVICE) --read_settings_files=on
 ASM_ARGS =
 STA_ARGS = --do_report_timing
@@ -49,7 +49,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache;../../../opae"
+	quartus_sh -t project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache;../../../opae;../../../opae/ccip" -macro "NOPAE"
 	
 syn.chg:
 	$(STAMP) syn.chg

@@ -290,18 +290,26 @@
 
 `ifdef SCOPE
     `define SCOPE_SIGNALS_DATA_LIST \
-        scope_icache_req_addr, \
         scope_icache_req_warp_num, \
+        scope_icache_req_addr, \
         scope_icache_req_tag, \
         scope_icache_rsp_data, \
         scope_icache_rsp_tag, \
-        scope_dcache_req_addr, \
         scope_dcache_req_warp_num, \
+        scope_dcache_req_curr_PC, \
+        scope_dcache_req_addr, \
+        scope_dcache_req_rw, \
+        scope_dcache_req_byteen, \
+        scope_dcache_req_data, \
         scope_dcache_req_tag, \
         scope_dcache_rsp_data, \
         scope_dcache_rsp_tag, \
         scope_dram_req_addr, \
+        scope_dram_req_rw, \
+        scope_dram_req_byteen, \
+        scope_dram_req_data, \
         scope_dram_req_tag, \
+        scope_dram_rsp_data, \
         scope_dram_rsp_tag, \
         scope_snp_req_addr, \
         scope_snp_req_invalidate, \
@@ -350,8 +358,8 @@
 
     `define SCOPE_SIGNALS_DECL \
         wire scope_icache_req_valid; \
-        wire [31:0] scope_icache_req_addr; \
         wire [1:0] scope_icache_req_warp_num; \
+        wire [31:0] scope_icache_req_addr; \
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag; \
         wire scope_icache_req_ready; \
         wire scope_icache_rsp_valid; \
@@ -359,8 +367,12 @@
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_rsp_tag; \
         wire scope_icache_rsp_ready; \
         wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid; \
-        wire [31:0] scope_dcache_req_addr; \
         wire [1:0] scope_dcache_req_warp_num; \
+        wire [31:0] scope_dcache_req_curr_PC; \
+        wire [31:0] scope_dcache_req_addr; \
+        wire scope_dcache_req_rw; \
+        wire [3:0] scope_dcache_req_byteen; \
+        wire [31:0] scope_dcache_req_data; \
         wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_req_tag; \
         wire scope_dcache_req_ready; \
         wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid; \
@@ -369,9 +381,13 @@
         wire scope_dcache_rsp_ready; \
         wire scope_dram_req_valid; \
         wire [31:0] scope_dram_req_addr; \
+        wire scope_dram_req_rw; \
+        wire [15:0] scope_dram_req_byteen; \
+        wire [31:0] scope_dram_req_data; \
         wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_req_tag; \
         wire scope_dram_req_ready; \
         wire scope_dram_rsp_valid; \
+        wire [31:0] scope_dram_rsp_data; \
         wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag; \
         wire scope_dram_rsp_ready; \
         wire scope_snp_req_valid; \
@@ -407,8 +423,8 @@
     `define SCOPE_SIGNALS_ICACHE_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire scope_icache_req_valid, \
-        output wire [31:0] scope_icache_req_addr, \
         output wire [1:0] scope_icache_req_warp_num, \
+        output wire [31:0] scope_icache_req_addr, \
         output wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag, \
         output wire scope_icache_req_ready, \
         output wire scope_icache_rsp_valid, \
@@ -420,8 +436,12 @@
     `define SCOPE_SIGNALS_DCACHE_IO \
         /* verilator lint_off UNDRIVEN */ \
         output wire [`DNUM_REQUESTS-1:0] scope_dcache_req_valid, \
-        output wire [31:0] scope_dcache_req_addr, \
         output wire [1:0] scope_dcache_req_warp_num, \
+        output wire [31:0] scope_dcache_req_curr_PC, \
+        output wire [31:0] scope_dcache_req_addr, \
+        output wire scope_dcache_req_rw, \
+        output wire [3:0] scope_dcache_req_byteen, \
+        output wire [31:0] scope_dcache_req_data, \
         output wire [`DCORE_TAG_WIDTH-1:0] scope_dcache_req_tag, \
         output wire scope_dcache_req_ready, \
         output wire [`DNUM_REQUESTS-1:0] scope_dcache_rsp_valid, \
@@ -434,9 +454,13 @@
         /* verilator lint_off UNDRIVEN */ \
         output wire scope_dram_req_valid, \
         output wire [31:0] scope_dram_req_addr, \
+        output wire scope_dram_req_rw, \
+        output wire [15:0] scope_dram_req_byteen, \
+        output wire [31:0] scope_dram_req_data, \
         output wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_req_tag, \
         output wire scope_dram_req_ready, \
         output wire scope_dram_rsp_valid, \
+        output wire [31:0] scope_dram_rsp_data, \
         output wire [`VX_DRAM_TAG_WIDTH-1:0] scope_dram_rsp_tag, \
         output wire scope_dram_rsp_ready, \
         /* verilator lint_on UNDRIVEN */
@@ -484,8 +508,8 @@
 
     `define SCOPE_SIGNALS_ICACHE_ATTACH \
         .scope_icache_req_valid (scope_icache_req_valid), \
-        .scope_icache_req_addr  (scope_icache_req_addr), \
         .scope_icache_req_warp_num (scope_icache_req_warp_num), \
+        .scope_icache_req_addr  (scope_icache_req_addr), \
         .scope_icache_req_tag   (scope_icache_req_tag), \
         .scope_icache_req_ready (scope_icache_req_ready), \
         .scope_icache_rsp_valid (scope_icache_rsp_valid), \
@@ -495,8 +519,12 @@
 
     `define SCOPE_SIGNALS_DCACHE_ATTACH \
         .scope_dcache_req_valid (scope_dcache_req_valid), \
-        .scope_dcache_req_addr  (scope_dcache_req_addr), \
         .scope_dcache_req_warp_num (scope_dcache_req_warp_num), \
+        .scope_dcache_req_curr_PC (scope_dcache_req_curr_PC), \
+        .scope_dcache_req_addr  (scope_dcache_req_addr), \
+        .scope_dcache_req_rw    (scope_dcache_req_rw), \
+        .scope_dcache_req_byteen(scope_dcache_req_byteen), \
+        .scope_dcache_req_data  (scope_dcache_req_data), \
         .scope_dcache_req_tag   (scope_dcache_req_tag), \
         .scope_dcache_req_ready (scope_dcache_req_ready), \
         .scope_dcache_rsp_valid (scope_dcache_rsp_valid), \
@@ -507,9 +535,13 @@
     `define SCOPE_SIGNALS_DRAM_ATTACH \
         .scope_dram_req_valid   (scope_dram_req_valid), \
         .scope_dram_req_addr    (scope_dram_req_addr), \
+        .scope_dram_req_rw      (scope_dram_req_rw), \
+        .scope_dram_req_byteen  (scope_dram_req_byteen), \
+        .scope_dram_req_data    (scope_dram_req_data), \
         .scope_dram_req_tag     (scope_dram_req_tag), \
         .scope_dram_req_ready   (scope_dram_req_ready), \
         .scope_dram_rsp_valid   (scope_dram_rsp_valid), \
+        .scope_dram_rsp_data    (scope_dram_rsp_data), \
         .scope_dram_rsp_tag     (scope_dram_rsp_tag), \
         .scope_dram_rsp_ready   (scope_dram_rsp_ready),
 

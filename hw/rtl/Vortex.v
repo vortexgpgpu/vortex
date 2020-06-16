@@ -260,7 +260,7 @@ module Vortex #(
     // use "case equality" to handle uninitialized address value
     wire io_select = (({core_dcache_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR) === 1'b1);
 
-    VX_dcache_io_arb dcache_io_arb (
+    VX_dcache_arb dcache_io_arb (
         .io_select          (io_select),
         .core_req_if        (core_dcache_req_if),
         .core_dcache_req_if (arb_dcache_req_if),

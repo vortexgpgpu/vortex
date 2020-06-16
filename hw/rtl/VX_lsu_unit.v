@@ -164,10 +164,15 @@ module VX_lsu_unit #(
     assign dcache_rsp_if.core_rsp_ready = ~no_slot_mem;    
 
     `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.core_req_valid);    
-    `SCOPE_ASSIGN(scope_dcache_req_addr,  {dcache_req_if.core_req_addr[0], 2'b0});
     `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
+    `SCOPE_ASSIGN(scope_dcache_req_curr_PC, use_pc);
+    `SCOPE_ASSIGN(scope_dcache_req_addr,  {dcache_req_if.core_req_addr[0], 2'b0});    
+    `SCOPE_ASSIGN(scope_dcache_req_rw,    core_req_rw);
+    `SCOPE_ASSIGN(scope_dcache_req_byteen,dcache_req_if.core_req_byteen[0]);
+    `SCOPE_ASSIGN(scope_dcache_req_data,  dcache_req_if.core_req_data[0]);
     `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_if.core_req_tag);
     `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_if.core_req_ready);
+
     `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_if.core_rsp_valid);
     `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.core_rsp_data[0]);
     `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_if.core_rsp_tag);
@@ -176,10 +181,12 @@ module VX_lsu_unit #(
 `ifdef DBG_PRINT_CORE_DCACHE
    always_ff @(posedge clk) begin
         if ((| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready) begin
-            $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);
+            $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", 
+                     $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);
         end
         if ((| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready) begin
-            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.curr_PC, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
+            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", 
+                     $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.curr_PC, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end
 `endif

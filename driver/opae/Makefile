@@ -18,7 +18,7 @@ CXXFLAGS +=-fstack-protector
 CXXFLAGS += -fPIC
 
 # Enable scope analyzer
-CXXFLAGS += -DSCOPE
+#CXXFLAGS += -DSCOPE
 
 LDFLAGS += -luuid
 

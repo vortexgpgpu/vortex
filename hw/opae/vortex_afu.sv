@@ -800,9 +800,14 @@ end
 
 `SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
 `SCOPE_ASSIGN(scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
+`SCOPE_ASSIGN(scope_dram_req_rw,    vx_dram_req_rw);
+`SCOPE_ASSIGN(scope_dram_req_byteen,vx_dram_req_byteen);
+`SCOPE_ASSIGN(scope_dram_req_data,  vx_dram_req_data[31:0]);
 `SCOPE_ASSIGN(scope_dram_req_tag,   vx_dram_req_tag);
 `SCOPE_ASSIGN(scope_dram_req_ready, vx_dram_req_ready);
+
 `SCOPE_ASSIGN(scope_dram_rsp_valid, vx_dram_rsp_valid);
+`SCOPE_ASSIGN(scope_dram_rsp_data,  vx_dram_rsp_data[31:0]);
 `SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
 `SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
 
@@ -811,11 +816,12 @@ end
 `SCOPE_ASSIGN(scope_snp_req_invalidate, vx_snp_req_invalidate);
 `SCOPE_ASSIGN(scope_snp_req_tag,   vx_snp_req_tag);
 `SCOPE_ASSIGN(scope_snp_req_ready, vx_snp_req_ready);
+
 `SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
 `SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
 `SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 491, "oops!")
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 641, "oops!")
 
 wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
