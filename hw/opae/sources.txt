@@ -1,5 +1,7 @@
 vortex_afu.json
 
+QI:vortex_afu.qsf
+
 +define+NDEBUG
 #+define+SCOPE
 
@@ -98,7 +100,7 @@ vortex_afu.json
 ../rtl/VX_decode.v
 ../rtl/VX_inst_multiplex.v
 ../rtl/VX_lsu_addr_gen.v
-../rtl/VX_dcache_io_arb.v
+../rtl/VX_dcache_arb.v
 ../rtl/VX_mem_arb.v
 
 ../rtl/pipe_regs/VX_f_d_reg.v

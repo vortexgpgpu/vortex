@@ -1,29 +1,55 @@
 load_package flow
 package require cmdline
 
-set options { \
-    { "project.arg" "" "Project name" } \
-    { "family.arg" "" "Device family name" } \
-    { "device.arg" "" "Device name" } \
-    { "top.arg" "" "Top level module" } \
-    { "sdc.arg" "" "Timing Design Constraints file" } \
-    { "src.arg" "" "Verilog source file" } \
-    { "inc.arg" "." "Include path" } \
+set options { 
+    { "project.arg" "" "Project name" } 
+    { "family.arg" "" "Device family name" } 
+    { "device.arg" "" "Device name" } 
+    { "top.arg" "" "Top level module" }     
+    { "src.arg" "" "Verilog source file" } 
+    { "inc.arg" "" "Include path (optional)" } 
+    { "sdc.arg" "" "Timing Design Constraints file (optional)" } 
+    { "set.arg" "" "Macro value (optional)" } 
 }
 
+set q_args_orig $quartus(args)
+
 array set opts [::cmdline::getoptions quartus(args) $options]
+
+# Verify required parameters
+set requiredParameters {project family device top src}
+foreach p $requiredParameters {
+    if {$opts($p) == ""} {
+        puts stderr "Missing required parameter: -$p"
+        exit 1
+    }
+}
 
 project_new $opts(project) -overwrite
 
 set_global_assignment -name FAMILY $opts(family)
 set_global_assignment -name DEVICE $opts(device)
 set_global_assignment -name TOP_LEVEL_ENTITY $opts(top)
-set_global_assignment -name VERILOG_FILE $opts(src)
-set_global_assignment -name SEARCH_PATH $opts(inc)
-set_global_assignment -name SDC_FILE $opts(sdc)
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
+
+set idx 0
+foreach arg $q_args_orig {
+    incr idx
+    if [string match "-src" $arg] {
+        set_global_assignment -name VERILOG_FILE [lindex $q_args_orig $idx]
+    }
+    if [string match "-inc" $arg] {
+        set_global_assignment -name SEARCH_PATH [lindex $q_args_orig $idx]
+    }
+    if [string match "-sdc" $arg] {
+        set_global_assignment -name SDC_FILE [lindex $q_args_orig $idx]
+    }
+    if [string match "-set" $arg] {
+        set_global_assignment -name VERILOG_MACRO [lindex $q_args_orig $idx]
+    }
+}
 
 proc make_all_pins_virtual {} {
     execute_module -tool map

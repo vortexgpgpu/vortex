@@ -41,7 +41,7 @@ module VX_mem_ctrl # (
     // use "case equality" to handle uninitialized entry
     wire smem_select = (({core_dcache_req_if.core_req_addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) === 1'b1);
 
-    VX_dcache_io_arb dcache_io_arb (
+    VX_dcache_arb dcache_smem_arb (
         .io_select          (smem_select),
         .core_req_if        (core_dcache_req_if),
         .core_dcache_req_if (core_dcache_req_qual_if),

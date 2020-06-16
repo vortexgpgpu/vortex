@@ -26,32 +26,49 @@ struct scope_signal_t {
 };
 
 static const scope_signal_t scope_signals[] = {
-    { 32, "icache_req_addr" },
     { 2,  "icache_req_warp_num" },
+    { 32, "icache_req_addr" },    
     { 2,  "icache_req_tag" },    
+
     { 32, "icache_rsp_data" },    
     { 2,  "icache_rsp_tag" },
-    { 32, "dcache_req_addr" },
+
     { 2,  "dcache_req_warp_num" },         
+    { 32, "dcache_req_curr_PC" },
+    { 32, "dcache_req_addr" },
+    { 1,  "dcache_req_rw" },
+    { 4,  "dcache_req_byteen" },
+    { 32, "dcache_req_data" },
     { 2,  "dcache_req_tag" },
+
     { 32, "dcache_rsp_data" },    
-    { 2 , "dcache_rsp_tag" },     
+    { 2 , "dcache_rsp_tag" }, 
+
     { 32, "dram_req_addr" },
+    { 1,  "dram_req_rw" },
+    { 16, "dram_req_byteen" },
+    { 32, "dram_req_data" },
     { 29, "dram_req_tag" },
+
+    { 32, "dram_rsp_data" },
     { 29, "dram_rsp_tag" }, 
+
     { 32, "snp_req_addr" },
     { 1,  "snp_req_invalidate" },
     { 16, "snp_req_tag" },
     { 16, "snp_rsp_tag" },    
+    
     { 2,  "decode_warp_num" },
     { 32, "decode_curr_PC" },
     { 1,  "decode_is_jal" },
     { 5,  "decode_rs1" },
     { 5,  "decode_rs2" },    
+    
     { 2,  "execute_warp_num" },
     { 5,  "execute_rd" },
     { 32, "execute_a" },
     { 32, "execute_b" },    
+    
     { 2,  "writeback_warp_num" },    
     { 2,  "writeback_wb" },
     { 5,  "writeback_rd" },
@@ -61,18 +78,22 @@ static const scope_signal_t scope_signals[] = {
     { 1, "icache_req_ready" },
     { 1, "icache_rsp_valid" },
     { 1, "icache_rsp_ready" },
+
     { 4, "dcache_req_valid" },  
     { 1, "dcache_req_ready" }, 
     { 4, "dcache_rsp_valid" }, 
     { 1, "dcache_rsp_ready" },
+
     { 1, "dram_req_valid" },   
     { 1, "dram_req_ready" },
     { 1, "dram_rsp_valid" },
     { 1, "dram_rsp_ready" },
+    
     { 1, "snp_req_valid" },   
     { 1, "snp_req_ready" },
     { 1, "snp_rsp_valid" },
     { 1, "snp_rsp_ready" },
+    
     { 4, "decode_valid" },
     { 4, "execute_valid" },
     { 4, "writeback_valid" },    
@@ -134,16 +155,15 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &frame_width));
     std::cout << "scope::frame_width=" << std::dec << frame_width << std::endl;
 
-    assert(fwidth == (int)frame_width);
-
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 3));
     CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &max_frames));
     std::cout << "scope::max_frames=" << std::dec << max_frames << std::endl;    
 
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 1));
 
+    assert(fwidth == (int)frame_width);
     std::vector<char> signal_data(frame_width+1);
-
+    
     uint64_t frame_offset = 0;
     uint64_t frame_no = 0;
     uint64_t timestamp = 0;    

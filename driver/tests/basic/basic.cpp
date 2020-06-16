@@ -94,7 +94,7 @@ int run_memcopy_test(vx_buffer_h sbuf,
   } 
   
   if (errors != 0) {
-    std::cout << "Found " << errors << " errors!" << std::endl;
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
     return 1;
   }
@@ -161,7 +161,7 @@ int run_kernel_test(vx_device_h device,
   } 
   
   if (errors != 0) {
-    std::cout << "Found " << errors << " errors!" << std::endl;
+    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
     return 1;
   }

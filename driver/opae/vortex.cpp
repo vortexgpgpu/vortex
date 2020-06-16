@@ -120,7 +120,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     
 #ifdef SCOPE
     {
-
         int ret = vx_scope_start(device->fpga, 0);
         if (ret != 0)
             return ret;
