@@ -3,9 +3,9 @@
 module VX_pipeline #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_SIGNALS_ICACHE_IO
-    `SCOPE_SIGNALS_DCACHE_IO
-    `SCOPE_SIGNALS_CORE_IO
+    `SCOPE_SIGNALS_ISTAGE_IO
+    `SCOPE_SIGNALS_LSU_IO
+    `SCOPE_SIGNALS_PIPELINE_IO
     `SCOPE_SIGNALS_BE_IO
     
     // Clock
@@ -100,7 +100,7 @@ module VX_pipeline #(
     VX_front_end #(
         .CORE_ID(CORE_ID)
     ) front_end (
-        `SCOPE_SIGNALS_ICACHE_ATTACH
+        `SCOPE_SIGNALS_ISTAGE_BIND
 
         .clk            (clk),
         .reset          (reset),
@@ -129,8 +129,8 @@ module VX_pipeline #(
     VX_back_end #(
         .CORE_ID(CORE_ID)
     ) back_end (
-        `SCOPE_SIGNALS_DCACHE_ATTACH
-        `SCOPE_SIGNALS_BE_ATTACH
+        `SCOPE_SIGNALS_LSU_BIND
+        `SCOPE_SIGNALS_BE_BIND
 
         .clk             (clk),
         .reset           (reset),
@@ -181,7 +181,7 @@ module VX_pipeline #(
     `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_stage_delay);
 
 `ifdef DBG_PRINT_WB
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if ((| writeback_if.valid) && (writeback_if.wb != 0)) begin
             $display("%t: Writeback: wid=%0d, rd=%0d, data=%0h", $time, writeback_if.warp_num, writeback_if.rd, writeback_if.data);
         end

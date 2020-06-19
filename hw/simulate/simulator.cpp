@@ -11,11 +11,12 @@ double sc_time_stamp() {
 
 Simulator::Simulator() {    
   // force random values for unitialized signals  
-  Verilated::randReset(1);
+  Verilated::randReset(2);
 
   ram_ = nullptr;
   vortex_ = new VVortex_Socket();
 
+  dram_rsp_active_ = false;
   snp_req_active_ = false;
 
 #ifdef VCD_OUTPUT
@@ -76,7 +77,7 @@ void Simulator::eval_dram_bus() {
     return;
   }
 
-  // handle DRAM response cycle
+  // schedule DRAM responses
   int dequeue_index = -1;
   for (int i = 0; i < dram_rsp_vec_.size(); i++) {
     if (dram_rsp_vec_[i].cycles_left > 0) {
@@ -88,16 +89,23 @@ void Simulator::eval_dram_bus() {
     }
   }
 
-  // handle DRAM response message
-  if ((dequeue_index != -1) 
+  // send DRAM response  
+  if (dram_rsp_active_
+   && vortex_->dram_rsp_valid 
    && vortex_->dram_rsp_ready) {
-    vortex_->dram_rsp_valid = 1;
-    memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].data, GLOBAL_BLOCK_SIZE);
-    vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;
-    free(dram_rsp_vec_[dequeue_index].data);
-    dram_rsp_vec_.erase(dram_rsp_vec_.begin() + dequeue_index);
-  } else {
-    vortex_->dram_rsp_valid = 0;
+    dram_rsp_active_ = false;
+  }
+  if (!dram_rsp_active_) {
+    if (dequeue_index != -1) {
+      vortex_->dram_rsp_valid = 1;
+      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].data, GLOBAL_BLOCK_SIZE);
+      vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;    
+      free(dram_rsp_vec_[dequeue_index].data);
+      dram_rsp_vec_.erase(dram_rsp_vec_.begin() + dequeue_index);
+      dram_rsp_active_ = true;
+    } else {
+      vortex_->dram_rsp_valid = 0;
+    }
   }
 
   // handle DRAM stalls
@@ -111,7 +119,7 @@ void Simulator::eval_dram_bus() {
   }
 #endif
 
-  // handle DRAM requests
+  // process DRAM requests
   if (!dram_stalled) {
     if (vortex_->dram_req_valid) {
       if (vortex_->dram_req_rw) {

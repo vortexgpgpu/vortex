@@ -132,7 +132,7 @@ module VX_generic_queue #(
                         rd_ptr_r <= rd_ptr_next_r;   
                         
                         if (SIZE > 2) begin        
-                            rd_ptr_next_r <= rd_ptr_r + 2;
+                            rd_ptr_next_r <= rd_ptr_r + $bits(rd_ptr_r)'(2);
                         end else begin // (SIZE == 2);
                             rd_ptr_next_r <= ~rd_ptr_next_r;                                
                         end

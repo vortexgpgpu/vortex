@@ -25,31 +25,34 @@ struct scope_signal_t {
     const char* name;
 };
 
+constexpr int ilog2(int n) {
+    return (n > 1) ? 1 + ilog2(n >> 1) : 0;
+}
+
+static constexpr int NW_BITS = ilog2(NUM_WARPS);
+
 static const scope_signal_t scope_signals[] = {
-    { 2,  "icache_req_warp_num" },
+    { NW_BITS, "icache_req_warp_num" },
     { 32, "icache_req_addr" },    
-    { 2,  "icache_req_tag" },    
-
+    { NW_BITS, "icache_req_tag" },  
     { 32, "icache_rsp_data" },    
-    { 2,  "icache_rsp_tag" },
+    { NW_BITS, "icache_rsp_tag" },
 
-    { 2,  "dcache_req_warp_num" },         
+    { NW_BITS, "dcache_req_warp_num" },         
     { 32, "dcache_req_curr_PC" },
     { 32, "dcache_req_addr" },
     { 1,  "dcache_req_rw" },
     { 4,  "dcache_req_byteen" },
     { 32, "dcache_req_data" },
-    { 2,  "dcache_req_tag" },
-
+    { NW_BITS, "dcache_req_tag" },
     { 32, "dcache_rsp_data" },    
-    { 2 , "dcache_rsp_tag" }, 
+    { NW_BITS, "dcache_rsp_tag" }, 
 
     { 32, "dram_req_addr" },
     { 1,  "dram_req_rw" },
     { 16, "dram_req_byteen" },
     { 32, "dram_req_data" },
     { 29, "dram_req_tag" },
-
     { 32, "dram_rsp_data" },
     { 29, "dram_rsp_tag" }, 
 
@@ -58,30 +61,32 @@ static const scope_signal_t scope_signals[] = {
     { 16, "snp_req_tag" },
     { 16, "snp_rsp_tag" },    
     
-    { 2,  "decode_warp_num" },
+    { NW_BITS, "decode_warp_num" },
     { 32, "decode_curr_PC" },
-    { 1,  "decode_is_jal" },
-    { 5,  "decode_rs1" },
-    { 5,  "decode_rs2" },    
+    { 1, "decode_is_jal" },
+    { 5, "decode_rs1" },
+    { 5, "decode_rs2" },    
     
-    { 2,  "execute_warp_num" },
+    { NW_BITS, "execute_warp_num" },
     { 5,  "execute_rd" },
     { 32, "execute_a" },
     { 32, "execute_b" },    
     
-    { 2,  "writeback_warp_num" },    
+    { NW_BITS, "writeback_warp_num" },    
     { 2,  "writeback_wb" },
     { 5,  "writeback_rd" },
     { 32, "writeback_data" },    
+
+    ///////////////////////////////////////////////////////////////////////////
 
     { 1, "icache_req_valid" },
     { 1, "icache_req_ready" },
     { 1, "icache_rsp_valid" },
     { 1, "icache_rsp_ready" },
 
-    { 4, "dcache_req_valid" },  
+    { NUM_THREADS, "dcache_req_valid" },  
     { 1, "dcache_req_ready" }, 
-    { 4, "dcache_rsp_valid" }, 
+    { NUM_THREADS, "dcache_rsp_valid" }, 
     { 1, "dcache_rsp_ready" },
 
     { 1, "dram_req_valid" },   
@@ -94,14 +99,19 @@ static const scope_signal_t scope_signals[] = {
     { 1, "snp_rsp_valid" },
     { 1, "snp_rsp_ready" },
     
-    { 4, "decode_valid" },
-    { 4, "execute_valid" },
-    { 4, "writeback_valid" },    
+    { NUM_THREADS, "decode_valid" },
+    { NUM_THREADS, "execute_valid" },
+    { NUM_THREADS, "writeback_valid" },    
     { 1, "schedule_delay" },
     { 1, "memory_delay" },
     { 1, "exec_delay" },
     { 1, "gpr_stage_delay" },
     { 1, "busy" },
+
+    { 1, "idram_req_valid" },   
+    { 1, "idram_req_ready" },
+    { 1, "idram_rsp_valid" },
+    { 1, "idram_rsp_ready" },
 };
 
 static const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
@@ -161,7 +171,10 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
 
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 1));
 
-    assert(fwidth == (int)frame_width);
+    if (fwidth != (int)frame_width) {   
+        std::cerr << "invalid frame_width: expecting " << std::dec << fwidth << "!" << std::endl;
+        std::abort();
+    }
     std::vector<char> signal_data(frame_width+1);
     
     uint64_t frame_offset = 0;

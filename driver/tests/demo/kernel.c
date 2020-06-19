@@ -6,13 +6,14 @@
 
 void kernel_body(void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	int* src0_ptr = (int*)_arg->src0_ptr;
-	int* src1_ptr = (int*)_arg->src1_ptr;
-	int* dst_ptr  = (int*)_arg->dst_ptr;
+	uint32_t count    = _arg->count;
+	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
+	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
+	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;
+	
+	uint32_t offset = vx_thread_gid() * count;
 
-	unsigned offset = vx_thread_gid() * _arg->stride;
-
-	for (unsigned i = 0; i < _arg->stride; ++i) {
+	for (uint32_t i = 0; i < count; ++i) {
 		dst_ptr[offset+i] = src0_ptr[offset+i] + src1_ptr[offset+i];
 	}
 }

@@ -18,26 +18,22 @@ module VX_scope #(
 	input wire bus_write,
 	input wire bus_read
 );
-	localparam DELTA_ENABLE = (UPDW != 0);
-	localparam MAX_DELTA    = (2 ** DELTAW) - 1;
+	localparam DELTA_ENABLE  = (UPDW != 0);
+	localparam MAX_DELTA     = (2 ** DELTAW) - 1;
 
-	typedef enum logic[2:0] { 		
-		CMD_GET_VALID,
-		CMD_GET_DATA,
-		CMD_GET_WIDTH,
-		CMD_GET_COUNT,
-		CMD_SET_DELAY,
-		CMD_SET_STOP,	
-		CMD_RESERVED1,
-		CMD_RESERVED2
-	} cmd_t;
+	localparam CMD_GET_VALID = 3'd0;
+	localparam CMD_GET_DATA  = 3'd1;
+	localparam CMD_GET_WIDTH = 3'd2;
+	localparam CMD_GET_COUNT = 3'd3;
+	localparam CMD_SET_DELAY = 3'd4;
+	localparam CMD_SET_STOP  = 3'd5;
+	localparam CMD_RESERVED1 = 3'd6;
+	localparam CMD_RESERVED2 = 3'd7;
 
-	typedef enum logic[1:0] { 		
-		GET_VALID,
-		GET_DATA,
-		GET_WIDTH,
-		GET_COUNT
-	} cmd_get_t;
+	localparam GET_VALID = 2'd0;
+	localparam GET_DATA  = 2'd1;
+	localparam GET_WIDTH = 2'd2;
+	localparam GET_COUNT = 2'd3;
 
 	reg [DATAW-1:0] data_store [SIZE-1:0];
 	reg [DELTAW-1:0] delta_store [SIZE-1:0];
@@ -84,10 +80,10 @@ module VX_scope #(
 					CMD_GET_VALID, 
 					CMD_GET_DATA, 
 					CMD_GET_WIDTH, 
-				    CMD_GET_COUNT:    out_cmd <= $bits(out_cmd)'(cmd_type); 
-					CMD_SET_DELAY:  delay_val <= $bits(delay_val)'(cmd_data);
-		            CMD_SET_STOP:	waddr_end <= $bits(waddr)'(cmd_data);
-				default:;
+				    CMD_GET_COUNT:   out_cmd <= $bits(out_cmd)'(cmd_type); 
+					CMD_SET_DELAY: delay_val <= $bits(delay_val)'(cmd_data);
+		            CMD_SET_STOP:  waddr_end <= $bits(waddr)'(cmd_data);
+				    default:;
 				endcase				
 			end
 
@@ -183,7 +179,7 @@ module VX_scope #(
 	end
 
 `ifdef DBG_PRINT_SCOPE
-	always_ff @(posedge clk) begin
+	always @(posedge clk) begin
 		if (bus_read) begin
 			$display("%t: scope-read: cmd=%0d, out=0x%0h, addr=%0d", $time, out_cmd, bus_out, raddr);
 		end

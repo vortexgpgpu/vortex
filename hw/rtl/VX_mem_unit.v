@@ -1,8 +1,10 @@
 `include "VX_define.vh"
 
-module VX_mem_ctrl # (
+module VX_mem_unit # (
     parameter CORE_ID = 0
 ) (
+    `SCOPE_SIGNALS_ICACHE_IO
+
     input wire              clk,
     input wire              reset,
 
@@ -74,7 +76,7 @@ module VX_mem_ctrl # (
         .CORE_TAG_WIDTH         (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`SDRAM_TAG_WIDTH)
-    ) gpu_smem (
+    ) smem (
         .clk                (clk),
         .reset              (reset),
 
@@ -157,7 +159,7 @@ module VX_mem_ctrl # (
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
         .SNP_REQ_TAG_WIDTH      (`DSNP_TAG_WIDTH)
-    ) gpu_dcache (
+    ) dcache (
         .clk                (clk),
         .reset              (reset),
 
@@ -239,7 +241,9 @@ module VX_mem_ctrl # (
         .CORE_TAG_WIDTH         (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
-    ) gpu_icache (
+    ) icache (
+        `SCOPE_SIGNALS_ICACHE_BIND
+
         .clk                   (clk),
         .reset                 (reset),
 

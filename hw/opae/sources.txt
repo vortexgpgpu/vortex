@@ -2,8 +2,10 @@ vortex_afu.json
 
 QI:vortex_afu.qsf
 
-+define+NDEBUG
-#+define+SCOPE
++define+SCOPE
+
++define+NUM_WARPS=2
++define+NUM_THREADS=2
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE
@@ -77,6 +79,7 @@ QI:vortex_afu.qsf
 ../rtl/Vortex_Socket.v
 ../rtl/Vortex_Cluster.v
 ../rtl/Vortex.v
+../rtl/VX_mem_unit.v
 ../rtl/VX_pipeline.v
 ../rtl/VX_front_end.v
 ../rtl/VX_back_end.v
@@ -94,12 +97,11 @@ QI:vortex_afu.qsf
 ../rtl/VX_gpr.v
 ../rtl/VX_gpr_ram.v
 ../rtl/VX_gpr_stage.v
-../rtl/VX_mem_ctrl.v
 ../rtl/VX_alu_unit.v
 ../rtl/VX_lsu_unit.v
+../rtl/VX_lsu_addr_gen.v
 ../rtl/VX_decode.v
 ../rtl/VX_inst_multiplex.v
-../rtl/VX_lsu_addr_gen.v
 ../rtl/VX_dcache_arb.v
 ../rtl/VX_mem_arb.v
 

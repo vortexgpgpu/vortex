@@ -65,6 +65,8 @@ module VX_cache #(
     // Snooping forward tag width
     parameter SNP_FWD_TAG_WIDTH             = 1
  ) (
+    `SCOPE_SIGNALS_ICACHE_IO
+    
     input wire clk,
     input wire reset,
 
@@ -125,7 +127,7 @@ module VX_cache #(
     output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdin_ready
 );
 
-`DEBUG_BLOCK(
+`ifdef DBG_CORE_REQ_INFO
     wire[31:0]           debug_core_req_use_pc;
     wire[1:0]            debug_core_req_wb;    
     wire[4:0]            debug_core_req_rd;
@@ -135,7 +137,8 @@ module VX_cache #(
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_warp_num, debug_core_req_idx} = core_req_tag[0];
     end
-)
+`endif
+
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valid;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
@@ -476,7 +479,13 @@ module VX_cache #(
         .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
         .snp_rsp_valid          (snp_rsp_valid),
         .snp_rsp_tag            (snp_rsp_tag),
-        .snp_rsp_ready           (snp_rsp_ready)
-    );
+        .snp_rsp_ready          (snp_rsp_ready)
+    );    
+
+    `SCOPE_ASSIGN(scope_idram_req_valid, per_bank_dram_fill_req_valid[0]);
+    `SCOPE_ASSIGN(scope_idram_req_ready, dram_fill_req_ready);
+    `SCOPE_ASSIGN(scope_idram_rsp_valid, per_bank_core_rsp_valid[0]);
+    `SCOPE_ASSIGN(scope_idram_rsp_ready, per_bank_core_rsp_ready[0]);
+
     
 endmodule

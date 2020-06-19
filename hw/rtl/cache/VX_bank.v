@@ -101,7 +101,7 @@ module VX_bank #(
     input  wire                                   snp_rsp_ready
 );
 
-`DEBUG_BLOCK(
+`ifdef DBG_CORE_REQ_INFO
     wire[31:0]           debug_use_pc_st0;
     wire[1:0]            debug_wb_st0;
     wire[4:0]            debug_rd_st0;
@@ -128,7 +128,7 @@ module VX_bank #(
     wire[WORD_SIZE-1:0]  debug_byteen_st2;
     wire[`REQS_BITS-1:0] debug_tid_st2;
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st2;
-)
+`endif
 
     wire snrq_pop;
     wire snrq_empty;
@@ -300,7 +300,6 @@ module VX_bank #(
     wire                                  qual_is_snp_st0;
     wire                                  qual_snp_invalidate_st0;
 
-
     wire                                  valid_st1     [STAGE_1_CYCLES-1:0];
     wire [`LINE_ADDR_WIDTH-1:0]           addr_st1      [STAGE_1_CYCLES-1:0];
     wire [`UP(`WORD_SELECT_WIDTH)-1:0]    wsel_st1      [STAGE_1_CYCLES-1:0];
@@ -313,17 +312,17 @@ module VX_bank #(
 
     assign qual_is_fill_st0 = dfpq_pop_unqual;
 
-    assign qual_valid_st0   = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop;
+    assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop;
 
-    assign qual_addr_st0    = dfpq_pop_unqual ? dfpq_addr_st0 :
-                              mrvq_pop_unqual ? mrvq_addr_st0 :
-                              reqq_pop_unqual ? reqq_req_addr_st0[`LINE_SELECT_ADDR_RNG] :
-                              snrq_pop_unqual ? snrq_addr_st0 :
-                                                0;
+    assign qual_addr_st0 = dfpq_pop_unqual ? dfpq_addr_st0 :
+                           mrvq_pop_unqual ? mrvq_addr_st0 :
+                           reqq_pop_unqual ? reqq_req_addr_st0[`LINE_SELECT_ADDR_RNG] :
+                           snrq_pop_unqual ? snrq_addr_st0 :
+                                             0;
     if (`WORD_SELECT_WIDTH != 0) begin
-        assign qual_wsel_st0 =  reqq_pop_unqual ? reqq_req_addr_st0[`WORD_SELECT_WIDTH-1:0] :
-                                mrvq_pop_unqual ? mrvq_wsel_st0 :
-                                                  0; 
+        assign qual_wsel_st0 = reqq_pop_unqual ? reqq_req_addr_st0[`WORD_SELECT_WIDTH-1:0] :
+                               mrvq_pop_unqual ? mrvq_wsel_st0 :
+                                                 0; 
     end else begin 
         `UNUSED_VAR(mrvq_wsel_st0)
         assign qual_wsel_st0 = 0;
@@ -355,11 +354,11 @@ module VX_bank #(
 
     assign qual_from_mrvq_st0 = mrvq_pop_unqual;
 
-`DEBUG_BLOCK(
+`ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_use_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = qual_inst_meta_st0;
     end
-)
+`endif
 
     VX_generic_register #(
         .N(1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
@@ -408,18 +407,23 @@ module VX_bank #(
     wire                        from_mrvq_st1e;
     wire                        mrvq_recover_ready_state_st1e;
 
-    assign from_mrvq_st1e = from_mrvq_st1[STAGE_1_CYCLES-1];
+    assign from_mrvq_st1e      = from_mrvq_st1[STAGE_1_CYCLES-1];
     assign valid_st1e          = valid_st1 [STAGE_1_CYCLES-1];
     assign is_snp_st1e         = is_snp_st1 [STAGE_1_CYCLES-1];
     assign snp_invalidate_st1e = snp_invalidate_st1 [STAGE_1_CYCLES-1];
 
     assign {tag_st1e, mem_rw_st1e, mem_byteen_st1e, tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
 
-    assign st2_pending_hazard_st1e = (miss_add_because_miss) && ((addr_st2 == addr_st1[STAGE_1_CYCLES-1]) && !is_fill_st2);
+    assign st2_pending_hazard_st1e = (miss_add_because_miss) 
+                                  && ((addr_st2 == addr_st1[STAGE_1_CYCLES-1]) && !is_fill_st2);
 
-    assign force_request_miss_st1e = (valid_st1e && !from_mrvq_st1e && (mrvq_pending_hazard_st1e || st2_pending_hazard_st1e)) || (valid_st1e && from_mrvq_st1e && recover_mrvq_state_st2);
+    assign force_request_miss_st1e = (valid_st1e && !from_mrvq_st1e && (mrvq_pending_hazard_st1e || st2_pending_hazard_st1e)) 
+                                  || (valid_st1e && from_mrvq_st1e && recover_mrvq_state_st2);
 
-    assign mrvq_recover_ready_state_st1e = valid_st1e && from_mrvq_st1e && recover_mrvq_state_st2 && (addr_st2 == addr_st1[STAGE_1_CYCLES-1]);
+    assign mrvq_recover_ready_state_st1e = valid_st1e 
+                                        && from_mrvq_st1e 
+                                        && recover_mrvq_state_st2 
+                                        && (addr_st2 == addr_st1[STAGE_1_CYCLES-1]);
 
     VX_tag_data_access #(
         .CACHE_SIZE     (CACHE_SIZE),
@@ -466,11 +470,12 @@ module VX_bank #(
         .mrvq_init_ready_state_st1e(mrvq_init_ready_state_st1e)
     );
 
-`DEBUG_BLOCK(
+`ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_use_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_tagid_st1e, debug_rw_st1e, debug_byteen_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
     end
-)
+`endif
+    
     wire qual_valid_st1e_2  = valid_st1e && !is_fill_st1[STAGE_1_CYCLES-1];
     wire from_mrvq_st1e_st2 = from_mrvq_st1e;
 
@@ -506,11 +511,11 @@ module VX_bank #(
         .out   ({mrvq_recover_ready_state_st2 , from_mrvq_st2     , mrvq_init_ready_state_unqual_st2,  snp_to_mrvq_st2 , is_snp_st2 , snp_invalidate_st2,  fill_saw_dirty_st2 , is_fill_st2                   , valid_st2        , addr_st2                  , wsel_st2,                   writeword_st2                  , readword_st2 , readdata_st2 , readtag_st2 , miss_st2 , dirty_st2 , dirtyb_st2, inst_meta_st2           })
     );    
 
-`DEBUG_BLOCK(
+`ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_use_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
     end
-)
+`endif
 
     // Enqueue to miss reserv if it's a valid miss
     assign miss_add_because_miss  = valid_st2 && !is_snp_st2 && miss_st2;
@@ -539,7 +544,9 @@ module VX_bank #(
     assign mrvq_init_ready_state_hazard_st0_st1  = miss_add_unqual && qual_is_fill_st0              && (miss_add_addr == qual_addr_st0             );
     assign mrvq_init_ready_state_hazard_st1e_st1 = miss_add_unqual && is_fill_st1[STAGE_1_CYCLES-1] && (miss_add_addr == addr_st1[STAGE_1_CYCLES-1]);
 
-    assign mrvq_init_ready_state_st2 = mrvq_init_ready_state_unqual_st2 || mrvq_init_ready_state_hazard_st0_st1 || mrvq_init_ready_state_hazard_st1e_st1;
+    assign mrvq_init_ready_state_st2 = mrvq_init_ready_state_unqual_st2 
+                                    || mrvq_init_ready_state_hazard_st0_st1 
+                                    || mrvq_init_ready_state_hazard_st1e_st1;
 
     VX_cache_miss_resrv #(
         .BANK_ID                (BANK_ID),
@@ -592,10 +599,8 @@ module VX_bank #(
 
     // Enqueue core response
      
-    wire cwbq_push;
-    wire cwbq_pop;
-    wire cwbq_empty;
-    wire cwbq_full;
+    wire cwbq_push, cwbq_pop;
+    wire cwbq_empty, cwbq_full;
 
     wire cwbq_push_unqual = valid_st2 && !miss_st2 && !is_fill_st2 && !is_snp_st2;
     assign cwbq_push_stall = cwbq_push_unqual && cwbq_full;
@@ -634,42 +639,22 @@ module VX_bank #(
 
     // Enqueue DRAM fill request
 
-// `IGNORE_WARNINGS_BEGIN
-//     wire invalidate_fill;
-// `IGNORE_WARNINGS_END
-//     wire possible_fill = valid_st2 && miss_st2 && dram_fill_req_ready && ~is_snp_st2;
-//     wire [`LINE_ADDR_WIDTH-1:0] fill_invalidator_addr = addr_st2;
+    wire dram_fill_req_unqual = miss_add_unqual
+                             && (!mrvq_init_ready_state_st2 
+                              || (from_mrvq_st2 && !mrvq_recover_ready_state_st2));
 
-//     VX_fill_invalidator #(
-//         .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-//         .NUM_BANKS              (NUM_BANKS),
-//         .FILL_INVALIDAOR_SIZE   (FILL_INVALIDAOR_SIZE)
-//     ) fill_invalidator (
-//         .clk               (clk),
-//         .reset             (reset),
-//         .possible_fill     (possible_fill),
-//         .success_fill      (is_fill_st2),
-//         .fill_addr         (fill_invalidator_addr),
-//         .invalidate_fill   (invalidate_fill)
-//     );    
-
-    wire dram_fill_req_unqual  = miss_add_unqual && (!mrvq_init_ready_state_st2 || (from_mrvq_st2 && !mrvq_recover_ready_state_st2));
-
-    assign dram_fill_req_valid =    dram_fill_req_unqual 
-                                &&  dram_fill_req_ready
-                                && !(  dwbq_push_stall
-                                    || mrvq_push_stall
-                                    || cwbq_push_stall);
+    assign dram_fill_req_valid = dram_fill_req_unqual 
+                              && !(dwbq_push_stall
+                                || mrvq_push_stall
+                                || cwbq_push_stall);
 
     assign dram_fill_req_addr  = addr_st2;
     assign dram_fill_req_stall = dram_fill_req_unqual && ~dram_fill_req_ready;
 
     // Enqueue DRAM writeback request
 
-    wire dwbq_push;
-    wire dwbq_pop;
-    wire dwbq_empty;   
-    wire dwbq_full;
+    wire dwbq_push, dwbq_pop;
+    wire dwbq_empty, dwbq_full;
 
     wire dwbq_is_dwb_in, dwbq_is_snp_in;
     wire dwbq_is_dwb_out, dwbq_is_snp_out; 
@@ -724,9 +709,9 @@ module VX_bank #(
     assign dram_wb_req_valid = ~dwbq_empty && dwbq_is_dwb_out && (~dwbq_is_snp_out || dwbq_dual_valid_sel == 0);
     assign snp_rsp_valid = ~dwbq_empty && dwbq_is_snp_out && (~dwbq_is_dwb_out || dwbq_dual_valid_sel == 1);  
     
-    assign dwbq_pop =  (dwbq_is_dwb_out && ~dwbq_is_snp_out && dram_wb_req_fire)
-                    || (dwbq_is_snp_out && ~dwbq_is_dwb_out && snp_rsp_fire)
-                    || (dwbq_is_dwb_out && dwbq_is_snp_out && snp_rsp_fire);
+    assign dwbq_pop = (dwbq_is_dwb_out && ~dwbq_is_snp_out && dram_wb_req_fire)
+                   || (dwbq_is_snp_out && ~dwbq_is_dwb_out && snp_rsp_fire)
+                   || (dwbq_is_dwb_out && dwbq_is_snp_out && snp_rsp_fire);
 
     // bank pipeline stall
     assign stall_bank_pipe = cwbq_push_stall 
@@ -735,53 +720,27 @@ module VX_bank #(
                           || dram_fill_req_stall;
 
 `ifdef DBG_PRINT_CACHE_BANK
-    if (NUM_BANKS == 1) begin
-        always_ff @(posedge clk) begin
-            if (core_req_valid && core_req_ready) begin
-                $display("%t: bank%0d-%0d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(core_req_addr), core_req_tag);
-            end
-            if (core_rsp_valid && core_rsp_ready) begin
-                $display("%t: bank%0d-%0d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
-            end
-             if (dram_fill_req_valid && dram_fill_req_ready) begin
-                $display("%t: bank%0d-%0d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(dram_fill_req_addr));
-            end
-            if (dram_wb_req_valid && dram_wb_req_ready) begin
-                $display("%t: bank%0d-%0d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(dram_wb_req_addr), dram_wb_req_data);
-            end
-            if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
-                $display("%t: bank%0d-%0d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(dram_fill_rsp_addr), dram_fill_rsp_data);
-            end
-            if (snp_req_valid && snp_req_ready) begin
-                $display("%t: bank%0d-%0d snp req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR0(snp_req_addr), snp_req_tag);
-            end
-            if (snp_rsp_valid && snp_rsp_ready) begin
-                $display("%t: bank%0d-%0d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
-            end
+    always @(posedge clk) begin
+        if ((|core_req_valid) && core_req_ready) begin
+            $display("%t: bank%0d-%0d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(core_req_addr, BANK_ID), core_req_tag);
         end
-    end else begin
-        always_ff @(posedge clk) begin
-            if ((|core_req_valid) && core_req_ready) begin
-                $display("%t: bank%0d-%0d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(core_req_addr, BANK_ID), core_req_tag);
-            end
-            if (core_rsp_valid && core_rsp_ready) begin
-                $display("%t: bank%0d-%0d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
-            end
-            if (dram_fill_req_valid && dram_fill_req_ready) begin
-                $display("%t: bank%0d-%0d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
-            end
-            if (dram_wb_req_valid && dram_wb_req_ready) begin
-                $display("%t: bank%0d-%0d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
-            end
-            if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
-                $display("%t: bank%0d-%0d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
-            end
-            if (snp_req_valid && snp_req_ready) begin
-                $display("%t: bank%0d-%0d snp req: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(snp_req_addr, BANK_ID), snp_req_invalidate,  snp_req_tag);
-            end
-            if (snp_rsp_valid && snp_rsp_ready) begin
-                $display("%t: bank%0d-%0d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
-            end
+        if (core_rsp_valid && core_rsp_ready) begin
+            $display("%t: bank%0d-%0d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
+        end
+        if (dram_fill_req_valid && dram_fill_req_ready) begin
+            $display("%t: bank%0d-%0d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
+        end
+        if (dram_wb_req_firevalid && dram_wb_req_ready) begin
+            $display("%t: bank%0d-%0d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
+        end
+        if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
+            $display("%t: bank%0d-%0d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
+        end
+        if (snp_req_valid && snp_req_ready) begin
+            $display("%t: bank%0d-%0d snp req: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(snp_req_addr, BANK_ID), snp_req_invalidate,  snp_req_tag);
+        end
+        if (snp_rsp_valid && snp_rsp_ready) begin
+            $display("%t: bank%0d-%0d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
         end
     end    
 `endif

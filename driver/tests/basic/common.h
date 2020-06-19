@@ -1,8 +1,12 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-#define DEV_MEM_SRC_ADDR 0x10000040
-#define DEV_MEM_DST_ADDR 0x20000080
-#define NUM_BLOCKS       16
+#define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
+
+struct kernel_arg_t {
+  uint32_t count;
+  uint32_t src_ptr;
+  uint32_t dst_ptr;  
+};
 
 #endif

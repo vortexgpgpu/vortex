@@ -4,17 +4,14 @@
 #include "common.h"
 
 void main() {
-	int64_t* x = (int64_t*)DEV_MEM_SRC_ADDR;
-	int64_t* y = (int64_t*)DEV_MEM_DST_ADDR;
-	int num_words = (NUM_BLOCKS * 64) / 8;
-
-	int core_id = vx_core_id();
-	int num_cores = vx_num_cores();
-	int num_words_per_core = num_words / num_cores;
-
-	int offset = core_id * num_words_per_core;
+	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	uint32_t count   = arg->count;
+	int32_t* src_ptr = (int32_t*)arg->src_ptr;
+	int32_t* dst_ptr = (int32_t*)arg->dst_ptr;
 	
-	for (int  i = 0; i < num_words_per_core; ++i) {
-		y[offset + i] = x[offset + i];
+	uint32_t offset  = vx_core_id() * count;
+	
+	for (uint32_t i = 0; i < count; ++i) {
+		dst_ptr[offset + i] = src_ptr[offset + i];
 	}
 }

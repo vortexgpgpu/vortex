@@ -116,7 +116,7 @@ module VX_snp_forwarder #(
     end
 
 `ifdef DBG_PRINT_CACHE_SNP
-     always_ff @(posedge clk) begin
+     always @(posedge clk) begin
         if (snp_req_valid && snp_req_ready) begin
             $display("%t: cache%0d snp req: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_req_addr), snp_req_invalidate, snp_req_tag);
         end

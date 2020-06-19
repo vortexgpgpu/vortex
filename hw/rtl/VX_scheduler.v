@@ -13,11 +13,10 @@ module VX_scheduler (
     output wire             schedule_delay,
     output wire             is_empty    
 );
-    reg [31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
-    reg [31:0] count_valid;    
+    localparam CTVW = `CLOG2(`NUM_WARPS * 32 + 1);
 
-    wire acquire_rd = (| bckE_req_if.valid) && (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0);
-    wire release_rd = (| writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd != 0);
+    reg [31:0][`NUM_THREADS-1:0] rename_table[`NUM_WARPS-1:0];
+    reg [CTVW-1:0] count_valid;    
     
     wire is_store = (bckE_req_if.mem_write != `BYTE_EN_NO);
     wire is_load  = (bckE_req_if.mem_read  != `BYTE_EN_NO);  
@@ -51,7 +50,14 @@ module VX_scheduler (
 
     integer i, w;
 
+    wire acquire_rd = (| bckE_req_if.valid) && (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0) && !schedule_delay;
+    wire release_rd = (| writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd != 0);
+
     wire [`NUM_THREADS-1:0] valid_wb_new_mask = rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid;
+
+    reg [CTVW-1:0] count_valid_next = (acquire_rd && ~(release_rd && (0 == valid_wb_new_mask))) ? (count_valid + 1) : 
+                                      (~acquire_rd && (release_rd && (0 == valid_wb_new_mask))) ? (count_valid - 1) :
+                                                                     count_valid; 
     
     always @(posedge clk) begin
         if (reset) begin
@@ -62,19 +68,14 @@ module VX_scheduler (
             end
             count_valid <= 0;
         end else begin
-            if (acquire_rd && !schedule_delay) begin
+            if (acquire_rd) begin
                 rename_table[bckE_req_if.warp_num][bckE_req_if.rd] <= bckE_req_if.valid;
-                count_valid <= count_valid + 1;
             end       
             if (release_rd) begin
                 assert(rename_table[writeback_if.warp_num][writeback_if.rd] != 0);
-                rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;               
-                if (0 == valid_wb_new_mask) begin
-                    assert(count_valid != 0);
-                    count_valid <= count_valid - 1;
-                end
-            end
-    
+                rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;
+            end            
+            count_valid <= count_valid_next;
         end
     end    
 

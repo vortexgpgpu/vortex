@@ -3,7 +3,7 @@
 module VX_back_end #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_LSU_IO
     `SCOPE_SIGNALS_BE_IO
 
     input wire clk, 
@@ -71,7 +71,7 @@ module VX_back_end #(
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
     ) lsu_unit (
-        `SCOPE_SIGNALS_DCACHE_ATTACH
+        `SCOPE_SIGNALS_LSU_BIND
 
         .clk            (clk),
         .reset          (reset),
