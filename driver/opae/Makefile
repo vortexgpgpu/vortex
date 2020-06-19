@@ -18,10 +18,7 @@ CXXFLAGS +=-fstack-protector
 CXXFLAGS += -fPIC
 
 # Enable scope analyzer
-CXXFLAGS += -DSCOPE
-
-# config parameters
-CXXFLAGS += -DNUM_WARPS=2 -DNUM_THREADS=2
+#CXXFLAGS += -DSCOPE
 
 LDFLAGS += -luuid
 
