@@ -283,7 +283,7 @@
 `define VX_DRAM_LINE_WIDTH      `L3DRAM_LINE_WIDTH
 `define VX_DRAM_TAG_WIDTH       `L3DRAM_TAG_WIDTH
 `define VX_SNP_TAG_WIDTH        `L3SNP_TAG_WIDTH    
-`define VX_CORE_TAG_WIDTH       `DCORE_TAG_WIDTH 
+`define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
 
 `define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 
