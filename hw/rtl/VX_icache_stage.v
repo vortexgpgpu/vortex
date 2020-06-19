@@ -3,7 +3,7 @@
 module VX_icache_stage #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_ISTAGE_IO
 
     input  wire             clk,
     input  wire             reset,
@@ -68,7 +68,7 @@ module VX_icache_stage #(
     // Can't accept new request
     assign icache_stage_delay = mrq_full || ~icache_req_if.core_req_ready;
 
-`ifndef NDEBUG      
+`ifdef DBG_CORE_REQ_INFO  
     assign icache_req_if.core_req_tag = {fe_inst_meta_fi.inst_pc, 2'b1, 5'b0, fe_inst_meta_fi.warp_num, mrq_write_addr};
 `else
     assign icache_req_if.core_req_tag = mrq_write_addr;
@@ -95,7 +95,7 @@ module VX_icache_stage #(
     `SCOPE_ASSIGN(scope_icache_rsp_ready, icache_rsp_if.core_rsp_ready);
 
 `ifdef DBG_PRINT_CORE_ICACHE
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (icache_req_if.core_req_valid && icache_req_if.core_req_ready) begin
             $display("%t: I%01d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, mrq_write_addr, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
         end

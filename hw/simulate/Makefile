@@ -28,6 +28,7 @@ VF += --x-initial unique
 VF += -exe $(SRCS) $(INCLUDE)
 
 DBG += -DVCD_OUTPUT $(DBG_PRINT)
+DBG += -DDBG_CORE_REQ_INFO
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 

@@ -151,38 +151,21 @@ module VX_cache_miss_resrv #(
         end
     end
 
-`ifdef DBG_PRINT_CACHE_MSRQ    
+`ifdef DBG_PRINT_CACHE_MSRQ        
     integer j;
-    if (NUM_BANKS == 1) begin
-        always_ff @(posedge clk) begin        
-            if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
-                $write("%t: bank%0d-%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);            
-                for (j = 0; j < MRVQ_SIZE; j++) begin
-                    if (valid_table[j]) begin
-                        $write(" ");                    
-                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");   
-                        if (~ready_table[j]) $write("!");
-                        $write("addr%0d=%0h", j, {addr_table[j], `BASE_ADDR_BITS'(0)});
-                    end
-                end            
-                $write("\n");
-            end        
-        end
-    end else begin
-        always_ff @(posedge clk) begin        
-            if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
-                $write("%t: bank%0d-%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);            
-                for (j = 0; j < MRVQ_SIZE; j++) begin
-                    if (valid_table[j]) begin
-                        $write(" ");                    
-                        if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");                   
-                        if (~ready_table[j]) $write("!");
-                        $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
-                    end
-                end            
-                $write("\n");
-            end        
-        end
+    always @(posedge clk) begin        
+        if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
+            $write("%t: bank%0d-%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);                        
+            for (j = 0; j < MRVQ_SIZE; j++) begin
+                if (valid_table[j]) begin
+                    $write(" ");                    
+                    if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");                   
+                    if (~ready_table[j]) $write("!");
+                    $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
+                end
+            end            
+            $write("\n");
+        end        
     end
 `endif
 

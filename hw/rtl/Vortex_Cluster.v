@@ -3,9 +3,11 @@
 module Vortex_Cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
-    `SCOPE_SIGNALS_ICACHE_IO
-    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_ISTAGE_IO
+    `SCOPE_SIGNALS_LSU_IO
     `SCOPE_SIGNALS_CORE_IO
+    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_PIPELINE_IO
     `SCOPE_SIGNALS_BE_IO
 
     // Clock
@@ -115,10 +117,12 @@ module Vortex_Cluster #(
         Vortex #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) vortex_core (
-            `SCOPE_SIGNALS_ICACHE_ATTACH
-            `SCOPE_SIGNALS_DCACHE_ATTACH
-            `SCOPE_SIGNALS_CORE_ATTACH
-            `SCOPE_SIGNALS_BE_ATTACH
+            `SCOPE_SIGNALS_ISTAGE_BIND
+            `SCOPE_SIGNALS_LSU_BIND
+            `SCOPE_SIGNALS_CORE_BIND
+            `SCOPE_SIGNALS_ICACHE_BIND
+            `SCOPE_SIGNALS_PIPELINE_BIND
+            `SCOPE_SIGNALS_BE_BIND
 
             .clk                (clk),
             .reset              (reset),

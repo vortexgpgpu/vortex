@@ -3,7 +3,7 @@
 module VX_lsu_unit #(
     parameter CORE_ID = 0
 ) (    
-    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_LSU_IO
 
     input wire              clk,
     input wire              reset,
@@ -130,10 +130,10 @@ module VX_lsu_unit #(
     assign dcache_req_if.core_req_addr  = mem_req_addr;
     assign dcache_req_if.core_req_data  = mem_req_data;  
 
-`ifndef NDEBUG      
-    assign dcache_req_if.core_req_tag   = {use_pc, use_wb, use_rd, use_warp_num, mrq_write_addr};
+`ifdef DBG_CORE_REQ_INFO
+    assign dcache_req_if.core_req_tag = {use_pc, use_wb, use_rd, use_warp_num, mrq_write_addr};
 `else
-    assign dcache_req_if.core_req_tag   = mrq_write_addr;
+    assign dcache_req_if.core_req_tag = mrq_write_addr;
 `endif
 
     // Can't accept new request
@@ -179,7 +179,7 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_if.core_rsp_ready);
     
 `ifdef DBG_PRINT_CORE_DCACHE
-   always_ff @(posedge clk) begin
+   always @(posedge clk) begin
         if ((| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready) begin
             $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", 
                      $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);

@@ -1,9 +1,11 @@
 `include "VX_define.vh"
 
 module Vortex_Socket (
-    `SCOPE_SIGNALS_ICACHE_IO
-    `SCOPE_SIGNALS_DCACHE_IO
+    `SCOPE_SIGNALS_ISTAGE_IO
+    `SCOPE_SIGNALS_LSU_IO
     `SCOPE_SIGNALS_CORE_IO
+    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_PIPELINE_IO
     `SCOPE_SIGNALS_BE_IO
 
     // Clock
@@ -61,10 +63,12 @@ module Vortex_Socket (
         Vortex_Cluster #(
             .CLUSTER_ID(`L3CACHE_ID)
         ) Vortex_Cluster (
-            `SCOPE_SIGNALS_ICACHE_ATTACH
-            `SCOPE_SIGNALS_DCACHE_ATTACH
-            `SCOPE_SIGNALS_CORE_ATTACH
-            `SCOPE_SIGNALS_BE_ATTACH
+            `SCOPE_SIGNALS_ISTAGE_BIND
+            `SCOPE_SIGNALS_LSU_BIND
+            `SCOPE_SIGNALS_CORE_BIND
+            `SCOPE_SIGNALS_ICACHE_BIND
+            `SCOPE_SIGNALS_PIPELINE_BIND
+            `SCOPE_SIGNALS_BE_BIND
 
             .clk                (clk),
             .reset              (reset),
@@ -155,10 +159,12 @@ module Vortex_Socket (
             Vortex_Cluster #(
                 .CLUSTER_ID(i)
             ) Vortex_Cluster (
-                `SCOPE_SIGNALS_ICACHE_ATTACH
-                `SCOPE_SIGNALS_DCACHE_ATTACH
-                `SCOPE_SIGNALS_CORE_ATTACH
-                `SCOPE_SIGNALS_BE_ATTACH
+                `SCOPE_SIGNALS_ISTAGE_BIND
+                `SCOPE_SIGNALS_LSU_BIND
+                `SCOPE_SIGNALS_CORE_BIND
+                `SCOPE_SIGNALS_ICACHE_BIND
+                `SCOPE_SIGNALS_PIPELINE_BIND
+                `SCOPE_SIGNALS_BE_BIND
 
                 .clk                (clk),
                 .reset              (reset),
@@ -387,7 +393,7 @@ module Vortex_Socket (
     end
 
 `ifdef DBG_PRINT_DRAM
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (dram_req_valid && dram_req_ready) begin
             $display("%t: DRAM req: rw=%b addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, dram_req_rw, `DRAM_TO_BYTE_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen, dram_req_data);
         end

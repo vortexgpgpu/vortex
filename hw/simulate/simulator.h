@@ -55,8 +55,9 @@ private:
   void eval_snp_bus();
   
   std::vector<dram_req_t> dram_rsp_vec_;
+  int dram_rsp_active_;
   
-  uint32_t snp_req_active_;
+  bool snp_req_active_;
   uint32_t snp_req_size_;
   uint32_t pending_snp_reqs_;
 

@@ -1,67 +1,70 @@
-load_package flow
-package require cmdline
+PROJECT = VX_vortex
+TOP_LEVEL_ENTITY = VX_vortex
+SRC_FILE = VX_vortex.v
+PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
-set options { 
-    { "project.arg" "" "Project name" } 
-    { "family.arg" "" "Device family name" } 
-    { "device.arg" "" "Device name" } 
-    { "top.arg" "" "Top level module" }     
-    { "src.arg" "" "Verilog source file" } 
-    { "inc.arg" "" "Include path (optional)" } 
-    { "sdc.arg" "" "Timing Design Constraints file (optional)" } 
-    { "set.arg" "" "Macro value (optional)" } 
-}
+# Part, Family
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG   
 
-set q_args_orig $quartus(args)
+# Executable Configuration
+SYN_ARGS = --parallel --read_settings_files=on
+FIT_ARGS = --part=$(DEVICE) --read_settings_files=on
+ASM_ARGS =
+STA_ARGS = --do_report_timing
 
-array set opts [::cmdline::getoptions quartus(args) $options]
+# Build targets
+all: $(PROJECT).sta.rpt
 
-# Verify required parameters
-set requiredParameters {project family device top src}
-foreach p $requiredParameters {
-    if {$opts($p) == ""} {
-        puts stderr "Missing required parameter: -$p"
-        exit 1
-    }
-}
+syn: $(PROJECT).syn.rpt
 
-project_new $opts(project) -overwrite
+fit: $(PROJECT).fit.rpt
 
-set_global_assignment -name FAMILY $opts(family)
-set_global_assignment -name DEVICE $opts(device)
-set_global_assignment -name TOP_LEVEL_ENTITY $opts(top)
-set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
-set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
-set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
+asm: $(PROJECT).asm.rpt
 
-set idx 0
-foreach arg $q_args_orig {
-    incr idx
-    if [string match "-src" $arg] {
-        set_global_assignment -name VERILOG_FILE [lindex $q_args_orig $idx]
-    }
-    if [string match "-inc" $arg] {
-        set_global_assignment -name SEARCH_PATH [lindex $q_args_orig $idx]
-    }
-    if [string match "-sdc" $arg] {
-        set_global_assignment -name SDC_FILE [lindex $q_args_orig $idx]
-    }
-    if [string match "-set" $arg] {
-        set_global_assignment -name VERILOG_MACRO [lindex $q_args_orig $idx]
-    }
-}
+sta: $(PROJECT).sta.rpt
 
-proc make_all_pins_virtual {} {
-    execute_module -tool map
-    set name_ids [get_names -filter * -node_type pin]
-    foreach_in_collection name_id $name_ids {        
-        set pin_name [get_name_info -info full_path $name_id]
-        post_message "Making VIRTUAL_PIN assignment to $pin_name"
-        set_instance_assignment -to $pin_name -name VIRTUAL_PIN ON
-    }
-    export_assignments
-}
+smart: smart.log
 
-make_all_pins_virtual
+# Target implementations
+STAMP = echo done >
 
-project_close
+$(PROJECT).syn.rpt: smart.log syn.chg $(SOURCE_FILES) 
+	quartus_syn $(PROJECT) $(SYN_ARGS)
+	$(STAMP) fit.chg
+
+$(PROJECT).fit.rpt: smart.log fit.chg $(PROJECT).syn.rpt
+	quartus_fit $(PROJECT) $(FIT_ARGS)
+	$(STAMP) asm.chg
+	$(STAMP) sta.chg
+
+$(PROJECT).asm.rpt: smart.log asm.chg $(PROJECT).fit.rpt
+	quartus_asm $(PROJECT) $(ASM_ARGS)
+
+$(PROJECT).sta.rpt: smart.log sta.chg $(PROJECT).fit.rpt
+	quartus_sta $(PROJECT)  $(STA_ARGS) 
+
+smart.log: $(PROJECT_FILES)
+	quartus_sh --determine_smart_action $(PROJECT) > smart.log
+
+# Project initialization
+$(PROJECT_FILES):
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc ../project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/pipe_regs;../../../rtl/cache"
+	
+syn.chg:
+	$(STAMP) syn.chg
+
+fit.chg:
+	$(STAMP) fit.chg
+
+sta.chg:
+	$(STAMP) sta.chg
+
+asm.chg:
+	$(STAMP) asm.chg
+
+program: $(PROJECT).sof
+	quartus_pgm --no_banner --mode=jtag -o "$(PROJECT).sof"
+	
+clean:
+	rm -rf bin *.rpt *.chg *.qsf *.qpf *.qws smart.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

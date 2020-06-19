@@ -13,18 +13,19 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 				  -DDBG_PRINT_WB          \
 				  -DDBG_PRINT_OPAE
 
-#DBG_PRINT=$(DBG_PRINT_FLAGS)
+DBG_PRINT=$(DBG_PRINT_FLAGS)
 
-#MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=4
-#MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=4
-#MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
+#CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4
+#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4
+#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2
+CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2
 
-#DEBUG=1
-#AFU=1
+DEBUG=1
+AFU=1
 
 CFLAGS += -fPIC
 
-CFLAGS += -DUSE_RTLSIM $(MULTICORE)
+CFLAGS += -DUSE_RTLSIM $(CONFIGS)
 
 LDFLAGS += -shared -pthread
 # LDFLAGS += -dynamiclib -pthread
@@ -35,7 +36,7 @@ SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
 RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/pipe_regs -I../../hw/rtl/cache
 
-VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(MULTICORE)
+VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
 VL_FLAGS += --x-initial unique
 VL_FLAGS += --x-assign unique
@@ -47,9 +48,11 @@ VL_FLAGS += --x-assign unique
 # Debugigng
 ifdef DEBUG
 	VL_FLAGS += --trace -DVCD_OUTPUT $(DBG_PRINT)
-	CFLAGS += -DVCD_OUTPUT $(DBG_PRINT)
+	CFLAGS   += -DVCD_OUTPUT $(DBG_PRINT)
+	#VL_FLAGS += -DDBG_CORE_REQ_INFO
+	#CFLAGS   += -DDBG_CORE_REQ_INFO
 else
-    CFLAGS += -DNDEBUG
+    CFLAGS   += -DNDEBUG
 	VL_FLAGS += -DNDEBUG
 endif
 

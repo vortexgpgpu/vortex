@@ -13,8 +13,6 @@ import local_mem_cfg_pkg::*;
 
 `include "VX_define.vh"
 
-`define VX_TO_DRAM_ADDR(x)    x[`VX_DRAM_ADDR_WIDTH-1:(`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH)] 
-
 module vortex_afu #(
   parameter NUM_LOCAL_MEM_BANKS = 2
 ) (
@@ -139,10 +137,12 @@ t_ccip_clAddr              csr_io_addr;
 logic[DRAM_ADDR_WIDTH-1:0] csr_mem_addr;
 logic[DRAM_ADDR_WIDTH-1:0] csr_data_size;
 
+`ifdef SCOPE
 logic [63:0]               csr_scope_cmd;  
 logic [63:0]               csr_scope_data;
 logic                      csr_scope_read;
 logic                      csr_scope_write;
+`endif
 
 // MMIO controller ////////////////////////////////////////////////////////////
 
@@ -154,9 +154,11 @@ assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
 t_if_ccip_c2_Tx mmio_tx;
 assign af2cp_sTxPort.c2 = mmio_tx;
 
+`ifdef SCOPE
 assign csr_scope_cmd   = 64'(cp2af_sRxPort.c0.data);
 assign csr_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CSR_SCOPE_CMD == mmio_hdr.address);
 assign csr_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_CSR_SCOPE_DATA == mmio_hdr.address);
+`endif
 
 always_ff @(posedge clk) 
 begin
@@ -202,11 +204,13 @@ begin
           $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
         `endif
         end
+      `ifdef SCOPE
         MMIO_CSR_SCOPE_CMD: begin          
         `ifdef DBG_PRINT_OPAE
           $display("%t: CSR_SCOPE_CMD: %0h", $time, 64'(cp2af_sRxPort.c0.data));
         `endif
         end
+      `endif
         default: begin
            // user-defined CSRs
            //if (mmio_hdr.addres >= MMIO_CSR_USER) begin
@@ -237,18 +241,20 @@ begin
         16'h0008: mmio_tx.data <= 64'h0; // reserved
         MMIO_CSR_STATUS: begin
         `ifdef DBG_PRINT_OPAE
-          if (state != mmio_tx.data) begin
+          if (state != state_t'(mmio_tx.data)) begin
             $display("%t: STATUS: state=%0d", $time, state);
           end
         `endif
           mmio_tx.data <= 64'(state);
         end  
+      `ifdef SCOPE
         MMIO_CSR_SCOPE_DATA: begin          
           mmio_tx.data <= csr_scope_data;
         `ifdef DBG_PRINT_OPAE
           $display("%t: SCOPE: data=%0h", $time, csr_scope_data);
         `endif
         end
+      `endif
         default: mmio_tx.data <= 64'h0;
       endcase
       mmio_tx.mmioRdValid <= 1; // post response
@@ -406,7 +412,7 @@ begin
   case (state)
     CMD_TYPE_READ:  avs_address = cci_dram_rd_req_addr;
     CMD_TYPE_WRITE: avs_address = cci_dram_wr_req_addr + ((DRAM_ADDR_WIDTH)'(t_cci_rdq_tag'(cci_rdq_dout)));
-    default:        avs_address = `VX_TO_DRAM_ADDR(vx_dram_req_addr);
+    default:        avs_address = vx_dram_req_addr[`VX_DRAM_ADDR_WIDTH-1:`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH];
   endcase
 
   case (state)
@@ -821,7 +827,7 @@ end
 `SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
 `SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 641, "oops!")
+`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 626, "oops!")
 
 wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
@@ -855,15 +861,17 @@ VX_scope #(
 
 `endif
 
-// Vortex binding /////////////////////////////////////////////////////////////
+// Vortex /////////////////////////////////////////////////////////////////////
 
 assign cmd_run_done = !vx_busy;
 
 Vortex_Socket #() vx_socket (
-  `SCOPE_SIGNALS_ICACHE_ATTACH
-  `SCOPE_SIGNALS_DCACHE_ATTACH
-  `SCOPE_SIGNALS_CORE_ATTACH
-  `SCOPE_SIGNALS_BE_ATTACH
+  `SCOPE_SIGNALS_ISTAGE_BIND
+  `SCOPE_SIGNALS_LSU_BIND
+  `SCOPE_SIGNALS_CORE_BIND
+  `SCOPE_SIGNALS_ICACHE_BIND
+  `SCOPE_SIGNALS_PIPELINE_BIND
+  `SCOPE_SIGNALS_BE_BIND
 
   .clk              (clk),
   .reset            (vx_reset),
