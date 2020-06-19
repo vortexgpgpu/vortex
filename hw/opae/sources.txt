@@ -2,10 +2,7 @@ vortex_afu.json
 
 QI:vortex_afu.qsf
 
-+define+SCOPE
-
-+define+NUM_WARPS=2
-+define+NUM_THREADS=2
+#+define+SCOPE
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE
