@@ -308,12 +308,15 @@ module VX_warp_sched (
     assign use_active = (count_visible_active != 0) ? visible_active : (warp_active & (~warp_stalled) & (~total_barrier_stall) & (~warp_lock));
 
     // Choosing a warp to schedule
-    VX_priority_encoder #(
+    VX_rr_arbiter #(
         .N(`NUM_WARPS)
     ) choose_schedule (
-        .valids (use_active),
-        .index  (warp_to_schedule),
-        .found  (schedule)
+        .clk         (clk),
+        .reset       (reset),
+        .requests    (use_active),
+        .grant_index (warp_to_schedule),
+        .grant_valid (schedule),
+        `UNUSED_PIN  (grant_onehot)
     );
 
     // always @(*) begin

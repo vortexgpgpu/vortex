@@ -1,6 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_dfq_queue #(
+module VX_cache_dram_fill_arb #(
     // Size of line inside a bank in bytes
     parameter BANK_LINE_SIZE                = 0, 
     // Number of banks {1, 2, 4, 8,...}
@@ -60,12 +60,15 @@ module VX_cache_dfq_queue #(
     wire[`BANK_BITS-1:0] qual_request_index;
     wire                 qual_has_request;
 
-    VX_generic_priority_encoder #(
+    VX_fixed_arbiter #(
         .N(NUM_BANKS)
     ) sel_bank (
-        .valids(use_per_bqual_bank_dram_fill_req_valid),
-        .index (qual_request_index),
-        .found (qual_has_request)
+        .clk         (clk),
+        .reset       (reset),
+        .requests    (use_per_bqual_bank_dram_fill_req_valid),
+        .grant_index (qual_request_index),
+        .grant_valid (qual_has_request),
+        `UNUSED_PIN  (grant_onehot)
     );
 
     assign dfqq_empty    = !qual_has_request;

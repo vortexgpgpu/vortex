@@ -5,6 +5,9 @@ module VX_snp_rsp_arb #(
     parameter BANK_LINE_SIZE    = 0,
     parameter SNP_REQ_TAG_WIDTH = 0
 ) (
+    input  wire clk,
+    input  wire reset,
+    
     input  wire [NUM_BANKS-1:0]         per_bank_snp_rsp_valid,
     input  wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag,
     output wire [NUM_BANKS-1:0]         per_bank_snp_rsp_ready,
@@ -17,12 +20,15 @@ module VX_snp_rsp_arb #(
     wire [`BANK_BITS-1:0] fsq_bank;
     wire                  fsq_valid;
 
-    VX_generic_priority_encoder #(
+    VX_fixed_arbiter #(
         .N(NUM_BANKS)
     ) sel_ffsq (
-        .valids (per_bank_snp_rsp_valid),
-        .index  (fsq_bank),
-        .found  (fsq_valid)
+        .clk         (clk),
+        .reset       (reset),
+        .requests    (per_bank_snp_rsp_valid),
+        .grant_index (fsq_bank),
+        .grant_valid (fsq_valid),
+        `UNUSED_PIN  (grant_onehot)
     );
 
     assign snp_rsp_valid = fsq_valid;

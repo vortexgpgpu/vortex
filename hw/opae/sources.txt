@@ -10,7 +10,7 @@ QI:vortex_afu.qsf
 #+define+DBG_PRINT_CACHE_SNP
 #+define+DBG_PRINT_CACHE_MSRQ
 #+define+DBG_PRINT_DRAM
-#+define+DBG_PRINT_WB
+#+define+DBG_PRINT_PIPELINE
 #+define+DBG_PRINT_OPAE
 #+define+DBG_PRINT_SCOPE
 
@@ -27,13 +27,13 @@ QI:vortex_afu.qsf
 
 ../rtl/cache/VX_cache_config.vh
 ../rtl/cache/VX_cache.v
-../rtl/cache/VX_bank.v
 ../rtl/cache/VX_cache_core_rsp_merge.v
 ../rtl/cache/VX_cache_core_req_bank_sel.v
 ../rtl/cache/VX_cache_dram_req_arb.v
-../rtl/cache/VX_cache_dfq_queue.v
-../rtl/cache/VX_cache_req_queue.v
+../rtl/cache/VX_cache_dram_fill_arb.v
 ../rtl/cache/VX_cache_miss_resrv.v
+../rtl/cache/VX_bank.v
+../rtl/cache/VX_bank_core_req_arb.v
 ../rtl/cache/VX_snp_rsp_arb.v
 ../rtl/cache/VX_tag_data_access.v
 ../rtl/cache/VX_tag_data_structure.v
@@ -66,10 +66,11 @@ QI:vortex_afu.qsf
 ../rtl/libs/VX_mult.v
 ../rtl/libs/VX_divide.v
 ../rtl/libs/VX_generic_stack.v
-../rtl/libs/VX_generic_priority_encoder.v
 ../rtl/libs/VX_priority_encoder.v
 ../rtl/libs/VX_generic_queue.v
 ../rtl/libs/VX_indexable_queue.v
+../rtl/libs/VX_fixed_arbiter.v
+../rtl/libs/VX_rr_arbiter.v
 ../rtl/libs/VX_countones.v
 ../rtl/libs/VX_scope.v
 

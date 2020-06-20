@@ -1,6 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_req_queue #(
+module VX_bank_core_req_arb #(
     // Size of a word in bytes
     parameter WORD_SIZE                     = 0,     
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
@@ -95,12 +95,15 @@ module VX_cache_req_queue #(
     wire[`REQS_BITS-1:0] qual_request_index;
     wire                 qual_has_request;
 
-    VX_generic_priority_encoder #(
+    VX_fixed_arbiter #(
         .N(NUM_REQUESTS)
     ) sel_bank (
-        .valids(qual_valids),
-        .index (qual_request_index),
-        .found (qual_has_request)
+        .clk         (clk),
+        .reset       (reset),
+        .requests    (qual_valids),
+        .grant_index (qual_request_index),
+        .grant_valid (qual_has_request),
+        `UNUSED_PIN  (grant_onehot)
     );
 
     assign reqq_empty              = !qual_has_request;
