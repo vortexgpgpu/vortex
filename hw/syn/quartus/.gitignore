@@ -1,7 +1,11 @@
-/cache/bin/
-/cache/qdb/
-/cache/tmp-clearbox/
+/cache/*
+!/cache/Makefile
 
-/top/bin/
-/top/qdb/
-/top/tmp-clearbox/
+/top/*
+!/top/Makefile
+
+/vortex/*
+!/vortex/Makefile
+
+/pipeline/*
+!/pipeline/Makefile
