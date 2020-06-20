@@ -40,17 +40,18 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
     ) core_dcache_rsp_qual_if(), core_smem_rsp_if();
 
-    // use "case equality" to handle uninitialized entry
-    wire smem_select = (({core_dcache_req_if.core_req_addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) === 1'b1);
+    // select shared memory address
+    wire is_smem_addr = (({core_dcache_req_if.core_req_addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
+    wire smem_select = (| core_dcache_req_if.core_req_valid) ? is_smem_addr : 0;
 
     VX_dcache_arb dcache_smem_arb (
-        .io_select          (smem_select),
-        .core_req_if        (core_dcache_req_if),
-        .core_dcache_req_if (core_dcache_req_qual_if),
-        .core_io_req_if     (core_smem_req_if),    
-        .core_dcache_rsp_if (core_dcache_rsp_qual_if),
-        .core_io_rsp_if     (core_smem_rsp_if),    
-        .core_rsp_if        (core_dcache_rsp_if)
+        .req_select       (smem_select),
+        .in_core_req_if   (core_dcache_req_if),
+        .out0_core_req_if (core_dcache_req_qual_if),
+        .out1_core_req_if (core_smem_req_if),    
+        .in0_core_rsp_if  (core_dcache_rsp_qual_if),
+        .in1_core_rsp_if  (core_smem_rsp_if),    
+        .out_core_rsp_if  (core_dcache_rsp_if)
     );
 
     VX_cache #(

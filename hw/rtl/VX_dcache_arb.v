@@ -1,48 +1,48 @@
 `include "VX_define.vh"
 
 module VX_dcache_arb (
-    input wire io_select,
+    input wire req_select,
 
-    // Core request
-    VX_cache_core_req_if    core_req_if,
+    // input request
+    VX_cache_core_req_if    in_core_req_if,
 
-    // Dcache request
-    VX_cache_core_req_if    core_dcache_req_if,
+    // output 0 request
+    VX_cache_core_req_if    out0_core_req_if,
 
-    // I/O request
-    VX_cache_core_req_if    core_io_req_if,
+    // output 1 request
+    VX_cache_core_req_if    out1_core_req_if,
 
-    // Dcache response
-    VX_cache_core_rsp_if    core_dcache_rsp_if,
+    // input 0 response
+    VX_cache_core_rsp_if    in0_core_rsp_if,
 
-    // I/O response
-    VX_cache_core_rsp_if    core_io_rsp_if,
+    // input 1 response
+    VX_cache_core_rsp_if    in1_core_rsp_if,
 
-    // Core response
-    VX_cache_core_rsp_if    core_rsp_if
+    // output response
+    VX_cache_core_rsp_if    out_core_rsp_if
 );
-    assign core_dcache_req_if.core_req_valid  = core_req_if.core_req_valid & {`NUM_THREADS{~io_select}};        
-    assign core_dcache_req_if.core_req_rw     = core_req_if.core_req_rw;
-    assign core_dcache_req_if.core_req_byteen = core_req_if.core_req_byteen;
-    assign core_dcache_req_if.core_req_addr   = core_req_if.core_req_addr;
-    assign core_dcache_req_if.core_req_data   = core_req_if.core_req_data;
-    assign core_dcache_req_if.core_req_tag    = core_req_if.core_req_tag;    
+    assign out0_core_req_if.core_req_valid  = in_core_req_if.core_req_valid & {`NUM_THREADS{~req_select}};        
+    assign out0_core_req_if.core_req_rw     = in_core_req_if.core_req_rw;
+    assign out0_core_req_if.core_req_byteen = in_core_req_if.core_req_byteen;
+    assign out0_core_req_if.core_req_addr   = in_core_req_if.core_req_addr;
+    assign out0_core_req_if.core_req_data   = in_core_req_if.core_req_data;
+    assign out0_core_req_if.core_req_tag    = in_core_req_if.core_req_tag;    
 
-    assign core_io_req_if.core_req_valid  = core_req_if.core_req_valid & {`NUM_THREADS{io_select}};        
-    assign core_io_req_if.core_req_rw     = core_req_if.core_req_rw;
-    assign core_io_req_if.core_req_byteen = core_req_if.core_req_byteen;
-    assign core_io_req_if.core_req_addr   = core_req_if.core_req_addr;
-    assign core_io_req_if.core_req_data   = core_req_if.core_req_data;
-    assign core_io_req_if.core_req_tag    = core_req_if.core_req_tag;    
+    assign out1_core_req_if.core_req_valid  = in_core_req_if.core_req_valid & {`NUM_THREADS{req_select}};        
+    assign out1_core_req_if.core_req_rw     = in_core_req_if.core_req_rw;
+    assign out1_core_req_if.core_req_byteen = in_core_req_if.core_req_byteen;
+    assign out1_core_req_if.core_req_addr   = in_core_req_if.core_req_addr;
+    assign out1_core_req_if.core_req_data   = in_core_req_if.core_req_data;
+    assign out1_core_req_if.core_req_tag    = in_core_req_if.core_req_tag;    
 
-    assign core_req_if.core_req_ready = io_select ? core_io_req_if.core_req_ready : core_dcache_req_if.core_req_ready;
+    assign in_core_req_if.core_req_ready = req_select ? out1_core_req_if.core_req_ready : out0_core_req_if.core_req_ready;
 
-    wire dcache_rsp_valid = (| core_dcache_rsp_if.core_rsp_valid);
+    wire rsp_select0 = (| in0_core_rsp_if.core_rsp_valid);
 
-    assign core_rsp_if.core_rsp_valid        = dcache_rsp_valid ? core_dcache_rsp_if.core_rsp_valid : core_io_rsp_if.core_rsp_valid;
-    assign core_rsp_if.core_rsp_data         = dcache_rsp_valid ? core_dcache_rsp_if.core_rsp_data  : core_io_rsp_if.core_rsp_data;
-    assign core_rsp_if.core_rsp_tag          = dcache_rsp_valid ? core_dcache_rsp_if.core_rsp_tag   : core_io_rsp_if.core_rsp_tag;    
-    assign core_dcache_rsp_if.core_rsp_ready = core_rsp_if.core_rsp_ready; 
-    assign core_io_rsp_if.core_rsp_ready     = core_rsp_if.core_rsp_ready && ~dcache_rsp_valid; 
+    assign out_core_rsp_if.core_rsp_valid = rsp_select0 ? in0_core_rsp_if.core_rsp_valid : in1_core_rsp_if.core_rsp_valid;
+    assign out_core_rsp_if.core_rsp_data  = rsp_select0 ? in0_core_rsp_if.core_rsp_data  : in1_core_rsp_if.core_rsp_data;
+    assign out_core_rsp_if.core_rsp_tag   = rsp_select0 ? in0_core_rsp_if.core_rsp_tag   : in1_core_rsp_if.core_rsp_tag;    
+    assign in0_core_rsp_if.core_rsp_ready = out_core_rsp_if.core_rsp_ready && rsp_select0; 
+    assign in1_core_rsp_if.core_rsp_ready = out_core_rsp_if.core_rsp_ready && ~rsp_select0; 
 
 endmodule

@@ -210,7 +210,7 @@
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
-`define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 3)
+`define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 2)
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define SNUM_REQUESTS       `NUM_THREADS
@@ -283,7 +283,7 @@
 `define VX_DRAM_LINE_WIDTH      `L3DRAM_LINE_WIDTH
 `define VX_DRAM_TAG_WIDTH       `L3DRAM_TAG_WIDTH
 `define VX_SNP_TAG_WIDTH        `L3SNP_TAG_WIDTH    
-`define VX_CORE_TAG_WIDTH       `DCORE_TAG_WIDTH 
+`define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
 
 `define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 

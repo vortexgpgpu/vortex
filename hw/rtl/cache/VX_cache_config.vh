@@ -72,6 +72,6 @@
 
 `define LINE_TO_DRAM_ADDR(x, i) {x, `BANK_SELECT_BITS'(i)}
 
-`define LINE_TO_BYTE_ADDR(x, i) {x, (((`BANK_SELECT_BITS + `BASE_ADDR_BITS)'(i)) << `BASE_ADDR_BITS)}
+`define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
 
 `endif

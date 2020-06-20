@@ -97,10 +97,10 @@ module VX_icache_stage #(
 `ifdef DBG_PRINT_CORE_ICACHE
     always @(posedge clk) begin
         if (icache_req_if.core_req_valid && icache_req_if.core_req_ready) begin
-            $display("%t: I%01d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, mrq_write_addr, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
+            $display("%t: I%0d$ req: tag=%0h, pc=%0h, warp=%0d", $time, CORE_ID, mrq_write_addr, fe_inst_meta_fi.inst_pc, fe_inst_meta_fi.warp_num);
         end
         if (icache_rsp_if.core_rsp_valid && icache_rsp_if.core_rsp_ready) begin
-            $display("%t: I%01d$ rsp: tag=%0h, pc=%0h, warp=%0d, instr=%0h", $time, CORE_ID, mrq_read_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
+            $display("%t: I%0d$ rsp: tag=%0h, pc=%0h, warp=%0d, instr=%0h", $time, CORE_ID, mrq_read_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num, fe_inst_meta_id.instruction);
         end
     end
 `endif

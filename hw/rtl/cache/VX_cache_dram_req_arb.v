@@ -74,11 +74,11 @@ module VX_cache_dram_req_arb #(
     wire dfqq_push = (| per_bank_dram_fill_req_valid);
     wire dfqq_full;
 
-    VX_cache_dfq_queue #(
+    VX_cache_dram_fill_arb #(
         .BANK_LINE_SIZE(BANK_LINE_SIZE),
         .NUM_BANKS(NUM_BANKS),
         .DFQQ_SIZE(DFQQ_SIZE)
-    ) cache_dfq_queue (
+    ) dram_fill_arb (
         .clk                            (clk),
         .reset                          (reset),
         .dfqq_push                      (dfqq_push),
@@ -95,12 +95,15 @@ module VX_cache_dram_req_arb #(
 
     wire [`BANK_BITS-1:0] dwb_bank;
     
-    VX_generic_priority_encoder #(
+    VX_fixed_arbiter #(
         .N(NUM_BANKS)
     ) sel_dwb (
-        .valids(per_bank_dram_wb_req_valid),
-        .index (dwb_bank),
-        .found (dwb_valid)
+        .clk         (clk),
+        .reset       (reset),
+        .requests    (per_bank_dram_wb_req_valid),
+        .grant_index (dwb_bank),
+        .grant_valid (dwb_valid),
+        `UNUSED_PIN  (grant_onehot)
     );    
 
     genvar i;

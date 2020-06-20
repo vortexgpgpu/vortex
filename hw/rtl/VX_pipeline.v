@@ -180,10 +180,13 @@ module VX_pipeline #(
     `SCOPE_ASSIGN(scope_exec_delay, exec_delay);
     `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_stage_delay);
 
-`ifdef DBG_PRINT_WB
+`ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if ((| writeback_if.valid) && (writeback_if.wb != 0)) begin
-            $display("%t: Writeback: wid=%0d, rd=%0d, data=%0h", $time, writeback_if.warp_num, writeback_if.rd, writeback_if.data);
+            $display("%t: Core%0d-WB: warp=%0d, rd=%0d, data=%0h", $time, CORE_ID, writeback_if.warp_num, writeback_if.rd, writeback_if.data);
+        end
+        if (schedule_delay || memory_delay || exec_delay || gpr_stage_delay) begin
+            $display("%t: Core%0d-Delay: sched=%b, mem=%b, exec=%b, gpr=%b ", $time, CORE_ID, schedule_delay, memory_delay, exec_delay, gpr_stage_delay);
         end
     end
 `endif
