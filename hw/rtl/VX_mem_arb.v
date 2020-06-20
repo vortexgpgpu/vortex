@@ -65,13 +65,16 @@ module VX_mem_arb #(
 
         reg [REQS_BITS-1:0] bus_req_sel;
 
-        always @(posedge clk) begin
-            if (reset) begin      
-                bus_req_sel <= 0;
-            end else begin
-                bus_req_sel <= bus_req_sel + 1;
-            end
-        end
+        VX_rr_arbiter #(
+            .N(NUM_REQUESTS)
+        ) arbiter (
+            .clk         (clk),
+            .reset       (reset),
+            .requests    (in_mem_req_valid),
+            .grant_index (bus_req_sel),
+            `UNUSED_PIN  (grant_valid),
+            `UNUSED_PIN  (grant_onehot)
+        );
 
         assign out_mem_req_valid  = in_mem_req_valid [bus_req_sel];
         assign out_mem_req_rw     = in_mem_req_rw   [bus_req_sel];
@@ -93,7 +96,7 @@ module VX_mem_arb #(
             assign in_mem_rsp_data[i]  = out_mem_rsp_data;
             assign in_mem_rsp_tag[i]   = out_mem_rsp_tag[REQS_BITS +: TAG_IN_WIDTH];              
         end
-        assign out_mem_rsp_ready = out_mem_rsp_valid ? in_mem_rsp_ready[bus_rsp_sel] : 0;
+        assign out_mem_rsp_ready = in_mem_rsp_ready[bus_rsp_sel];
 
     end
 

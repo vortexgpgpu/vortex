@@ -458,22 +458,26 @@ module VX_cache #(
         .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
     ) cache_core_rsp_merge (
+        .clk                     (clk),
+        .reset                   (reset),       
         .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),                
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
         .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
-        .core_rsp_valid (core_rsp_valid),
-        .core_rsp_data  (core_rsp_data),        
-        .core_rsp_tag   (core_rsp_tag),
-        .core_rsp_ready (core_rsp_ready)
+        .core_rsp_valid          (core_rsp_valid),
+        .core_rsp_data           (core_rsp_data),        
+        .core_rsp_tag            (core_rsp_tag),
+        .core_rsp_ready          (core_rsp_ready)
     );  
 
     VX_snp_rsp_arb #(
         .NUM_BANKS         (NUM_BANKS),
         .BANK_LINE_SIZE    (BANK_LINE_SIZE),
         .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
-    ) snp_rsp_arb (      
+    ) snp_rsp_arb ( 
+        .clk                    (clk),
+        .reset                  (reset),
         .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
         .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
         .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
@@ -486,6 +490,5 @@ module VX_cache #(
     `SCOPE_ASSIGN(scope_idram_req_ready, dram_fill_req_ready);
     `SCOPE_ASSIGN(scope_idram_rsp_valid, per_bank_core_rsp_valid[0]);
     `SCOPE_ASSIGN(scope_idram_rsp_ready, per_bank_core_rsp_ready[0]);
-
     
 endmodule

@@ -12,6 +12,9 @@ module VX_cache_core_rsp_merge #(
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS              = 0
 ) (
+    input  wire  clk,
+    input  wire  reset,
+
     // Per Bank WB
     input  wire [NUM_BANKS-1:0][`REQS_BITS-1:0]             per_bank_core_rsp_tid,
     input  wire [NUM_BANKS-1:0]                             per_bank_core_rsp_valid,    
@@ -32,12 +35,15 @@ module VX_cache_core_rsp_merge #(
 
     wire [`BANK_BITS-1:0] main_bank_index;
 
-    VX_generic_priority_encoder #(
+    VX_fixed_arbiter #(
         .N(NUM_BANKS)
     ) sel_bank (
-        .valids(per_bank_core_rsp_valid),
-        .index (main_bank_index),
-        `UNUSED_PIN (found)
+        .clk         (clk),
+        .reset       (reset),
+        .requests    (per_bank_core_rsp_valid),
+        .grant_index (main_bank_index),
+        `UNUSED_PIN  (grant_valid),
+        `UNUSED_PIN  (grant_onehot)
     );
 
     integer i;
