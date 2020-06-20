@@ -192,13 +192,13 @@ module VX_bank #(
     wire [`WORD_WIDTH-1:0]      reqq_req_writeword_st0;
     wire [CORE_TAG_WIDTH-1:0]   reqq_req_tag_st0;
 
-    VX_cache_req_queue #(
+    VX_bank_core_req_arb #(
         .WORD_SIZE        (WORD_SIZE),
         .NUM_REQUESTS     (NUM_REQUESTS),
         .CREQ_SIZE        (CREQ_SIZE),
         .CORE_TAG_WIDTH   (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS (CORE_TAG_ID_BITS)
-    ) req_queue (
+    ) core_req_arb (
         .clk                   (clk),
         .reset                 (reset),
         // Enqueue
@@ -722,25 +722,25 @@ module VX_bank #(
 `ifdef DBG_PRINT_CACHE_BANK
     always @(posedge clk) begin
         if ((|core_req_valid) && core_req_ready) begin
-            $display("%t: bank%0d-%0d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(core_req_addr, BANK_ID), core_req_tag);
+            $display("%t: bank%0d:%0d core req: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(core_req_addr[0], BANK_ID), core_req_tag);
         end
         if (core_rsp_valid && core_rsp_ready) begin
-            $display("%t: bank%0d-%0d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
+            $display("%t: bank%0d:%0d core rsp: tag=%0h, data=%0h", $time, CACHE_ID, BANK_ID, core_rsp_tag, core_rsp_data);
         end
         if (dram_fill_req_valid && dram_fill_req_ready) begin
-            $display("%t: bank%0d-%0d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
+            $display("%t: bank%0d:%0d dram_fill req: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_req_addr, BANK_ID));
         end
-        if (dram_wb_req_firevalid && dram_wb_req_ready) begin
-            $display("%t: bank%0d-%0d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
+        if (dram_wb_req_valid && dram_wb_req_ready) begin
+            $display("%t: bank%0d:%0d dram_wb req: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_wb_req_addr, BANK_ID), dram_wb_req_data);
         end
         if (dram_fill_rsp_valid && dram_fill_rsp_ready) begin
-            $display("%t: bank%0d-%0d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
+            $display("%t: bank%0d:%0d dram_fill rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dram_fill_rsp_addr, BANK_ID), dram_fill_rsp_data);
         end
         if (snp_req_valid && snp_req_ready) begin
-            $display("%t: bank%0d-%0d snp req: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(snp_req_addr, BANK_ID), snp_req_invalidate,  snp_req_tag);
+            $display("%t: bank%0d:%0d snp req: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(snp_req_addr, BANK_ID), snp_req_invalidate,  snp_req_tag);
         end
         if (snp_rsp_valid && snp_rsp_ready) begin
-            $display("%t: bank%0d-%0d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
+            $display("%t: bank%0d:%0d snp rsp: tag=%0h", $time, CACHE_ID, BANK_ID, snp_rsp_tag);
         end
     end    
 `endif

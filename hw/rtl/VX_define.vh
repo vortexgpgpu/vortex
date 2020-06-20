@@ -210,7 +210,7 @@
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
-`define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 3)
+`define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 2)
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define SNUM_REQUESTS       `NUM_THREADS

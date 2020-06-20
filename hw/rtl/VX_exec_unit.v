@@ -71,12 +71,12 @@ module VX_exec_unit (
     wire jal_branch_found_valid;
 `DEBUG_END
 
-    VX_generic_priority_encoder #(
+    VX_priority_encoder #(
         .N(`NUM_THREADS)
     ) choose_alu_result (
-        .valids(exec_unit_req_if.valid),
-        .index (jal_branch_use_index),
-        .found (jal_branch_found_valid)
+        .data_in   (exec_unit_req_if.valid),
+        .data_out  (jal_branch_use_index),
+        .valid_out (jal_branch_found_valid)
     );
 
     wire[31:0] branch_use_alu_result = alu_result[jal_branch_use_index];

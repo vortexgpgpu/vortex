@@ -261,17 +261,18 @@ module Vortex #(
         .icache_dram_rsp_if (icache_dram_rsp_if)
     );
 
-    // use "case equality" to handle uninitialized address value
-    wire io_select = (({core_dcache_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR) === 1'b1);
+    // select io address
+    wire is_io_addr = ({core_dcache_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
+    wire io_select = (| core_dcache_req_if.core_req_valid) ? is_io_addr : 0;
 
     VX_dcache_arb dcache_io_arb (
-        .io_select          (io_select),
-        .core_req_if        (core_dcache_req_if),
-        .core_dcache_req_if (arb_dcache_req_if),
-        .core_io_req_if     (arb_io_req_if),  
-        .core_dcache_rsp_if (arb_dcache_rsp_if),
-        .core_io_rsp_if     (arb_io_rsp_if),    
-        .core_rsp_if        (core_dcache_rsp_if)
+        .req_select       (io_select),
+        .in_core_req_if   (core_dcache_req_if),
+        .out0_core_req_if (arb_dcache_req_if),
+        .out1_core_req_if (arb_io_req_if),  
+        .in0_core_rsp_if  (arb_dcache_rsp_if),
+        .in1_core_rsp_if  (arb_io_rsp_if),    
+        .out_core_rsp_if  (core_dcache_rsp_if)
     );
     
 endmodule // Vortex

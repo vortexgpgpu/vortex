@@ -181,11 +181,11 @@ module VX_lsu_unit #(
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
         if ((| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready) begin
-            $display("%t: D%01d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", 
+            $display("%t: D%0d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", 
                      $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);
         end
         if ((| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready) begin
-            $display("%t: D%01d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", 
+            $display("%t: D%0d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", 
                      $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.curr_PC, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
     end
