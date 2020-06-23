@@ -1,4 +1,0 @@
-cane4_0.db
-cane4_1.db
-cane4_2.db
-cane4_3.db
