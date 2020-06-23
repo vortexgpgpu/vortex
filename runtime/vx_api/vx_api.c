@@ -1,180 +1,76 @@
-
-#pragma once
-
+#include <VX_config.h>
 #include "../intrinsics/vx_intrinsics.h"
 #include "vx_api.h"
 #include <inttypes.h>
-
-#include "../config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 func_t global_function_pointer;
-// void (func_t)(void *)
+void * global_argument_struct;
+int global_num_threads;
 
-void *   global_argument_struct;
-
-unsigned global_num_threads;
-void setup_call()
-{
+void spawn_warp_runonce() {
+	// active all threads
 	vx_tmc(global_num_threads);
+
+	// call user routine
 	global_function_pointer(global_argument_struct);
 
-	unsigned wid = vx_warpID();
-	if (wid != 0)
-	{
-		vx_tmc(0); // Halt Warp Execution
-	}
-	else
-	{
-		vx_tmc(1); // Only activate one thread
-	}
+	// resume single-thread execution on exit
+	int wid = vx_warp_id();
+	unsigned tmask = (0 == wid) ? 0x1 : 0x0; 
+	vx_tmc(tmask);
 }
 
-void vx_spawnWarps(unsigned numWarps, unsigned numThreads, func_t func_ptr, void * args)
-{
+void vx_spawn_warps(int numWarps, int numThreads, func_t func_ptr, void * args) {
 	global_function_pointer = func_ptr;
 	global_argument_struct  = args;
 	global_num_threads      = numThreads;
-	vx_wspawn(numWarps, (unsigned) setup_call);
-	setup_call();
-
+	if (numWarps > 1) {
+		vx_wspawn(numWarps, (unsigned)spawn_warp_runonce);
+	}
+	spawn_warp_runonce();
 }
 
-
-unsigned               pocl_threads;
-uint8_t *              pocl_args;
-uint8_t *              pocl_ctx;
+int                    pocl_threads;
+struct context_t *     pocl_ctx;
 vx_pocl_workgroup_func pocl_pfn;
+const void *           pocl_args;
 
-unsigned               global_z;
-unsigned               global_y;
-unsigned               global_x;
-
-
-void pocl_spawn_real()
-{
+void pocl_spawn_warp_runonce() {
+	// active all threads
 	vx_tmc(pocl_threads);
-	int base_x = vx_threadID();
-	int base_y = vx_warpID();
 
-	int local_x;
-	int local_y;
+	int x = vx_thread_id();
+	int y = vx_warp_gid();
 
-	for (int iter_z = 0; iter_z < global_z; iter_z++)
-	{
-		for (int iter_x = 0; iter_x < global_x; iter_x++)
-		{
-			for (int iter_y = 0; iter_y < global_y; iter_y++)
-			{
+	// call kernel routine
+	(pocl_pfn)(pocl_args, pocl_ctx, x, y, 0);
 
-				local_x = (iter_x * TOTAL_THREADS) + base_x;
-				local_y = (iter_y * TOTAL_WARPS  ) + base_y;
-
-				(pocl_pfn)( pocl_args, pocl_ctx, local_x, local_y, iter_z);
-
-			}
-		}
-	}
-
-	// (pocl_pfn)( pocl_args, pocl_ctx, x, y, 0);
-
-	if (base_y != 0)
-	{
-		vx_tmc(0);
-	}
-	vx_tmc(1);
+	// resume single-thread execution on exit
+	int wid = vx_warp_id();
+	unsigned tmask = (0 == wid) ? 0x1 : 0x0;
+	vx_tmc(tmask);
 }
 
-
-void pocl_spawn(struct context_t * ctx, const void * pfn, void * arguments)
-{
-
-
-	// printf("ctx->num_groups[0]: %d\n", ctx->num_groups[0]);
-	// printf("ctx->num_groups[1]: %d\n", ctx->num_groups[1]);
-	// printf("ctx->num_groups[2]: %d\n", ctx->num_groups[2]);
-
-	// printf("\n\n");
-
-	// printf("ctx->local_size[0]: %d\n", ctx->local_size[0]);
-	// printf("ctx->local_size[1]: %d\n", ctx->local_size[1]);
-	// printf("ctx->local_size[2]: %d\n", ctx->local_size[2]);
-	if (ctx->num_groups[0] > TOTAL_THREADS)
-	{
-		pocl_threads = TOTAL_THREADS;
-		global_x     = ctx->num_groups[0] / TOTAL_THREADS;
-		// printf("pocl_threads: %d\n", pocl_threads);
-		// printf("global_x: %d\n", global_x);
-	}
-	else
-	{
-		pocl_threads = ctx->num_groups[0];
-		global_x     = 1;
-		// printf("pocl_threads: %d\n", pocl_threads);
-		// printf("global_x: %d\n", global_x);
+void pocl_spawn(struct context_t * ctx, vx_pocl_workgroup_func pfn, const void * args) {
+	if (ctx->num_groups[2] > 1)	{
+		printf("ERROR: pocl_spawn doesn't support Z dimension yet!\n");
+		return;
 	}
 
+	pocl_threads = ctx->num_groups[0];
+	pocl_ctx     = ctx;
+	pocl_pfn     = pfn;
+	pocl_args    = args;
 
-	global_z     = ctx->num_groups[2];
-	pocl_pfn     = (vx_pocl_workgroup_func) pfn;
-	pocl_ctx     = (uint8_t *) ctx;
-	pocl_args    = (uint8_t *) arguments;
-
-	if (ctx->num_groups[1] > 1)
-	{
-		if (ctx->num_groups[1] > TOTAL_WARPS)
-		{
-			global_y = ctx->num_groups[1] / TOTAL_WARPS;
-			vx_wspawn(TOTAL_WARPS, (unsigned) &pocl_spawn_real);
-			// printf("global_y: %d\n", global_y);
-			// printf("Warps: %d\n", TOTAL_WARPS);
-		}
-		else
-		{
-			global_y = 1;
-			vx_wspawn(ctx->num_groups[1], (unsigned) &pocl_spawn_real);
-			// printf("global_y: %d\n", global_y);
-			// printf("Warps: %d\n", ctx->num_groups[1]);
-		}
+	if (ctx->num_groups[1] > 1)	{
+		vx_wspawn(ctx->num_groups[1], (unsigned)&pocl_spawn_warp_runonce);
 	}
 
-	unsigned starting_cycles = vx_getCycles();
-	unsigned starting_inst   = vx_getInst();
-
-	pocl_spawn_real();
-
-	unsigned end_cycles = vx_getCycles();
-	unsigned end_inst   = vx_getInst();
-
-
-	unsigned total_cycles = (unsigned) (end_cycles - starting_cycles);
-	// float total_inst   = (float) (end_inst   - starting_inst  );
-
-	// float ipc = total_inst/total_cycles;
-
-	printf("%d\n", total_cycles);
-
-	vx_tmc(0);
-
-	// printf("pocl_spawn: Total Cycles: %d\n", );
-	// printf("pocl_spawn: Total Inst  : %d\n", (end_inst   - starting_inst  ));
-
- //   int z;
- //   int y;
- //   int x;
-	// for (z = 0; z < ctx->num_groups[2]; ++z)
-	// {
-	// 	for (y = 0; y < ctx->num_groups[1]; ++y)
-	// 	{
-	// 		for (x = 0; x < ctx->num_groups[0]; ++x)
-	// 		{
-	// 			(use_pfn)((uint8_t *)arguments, (uint8_t *)ctx, x, y, z);
-	// 		}
-	// 	}
-	// }
+	pocl_spawn_warp_runonce();
 }
 
 #ifdef __cplusplus

@@ -1,25 +1,16 @@
-RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
-POCL_CC_PATH ?= $(wildcard ../../../../pocl/drops_riscv_cc)
-POCL_INC_PATH ?= $(wildcard ../include)
-POCL_LIB_PATH ?= $(wildcard ../lib)
-VX_RT_PATH ?= $(wildcard ../../../runtime)
-VX_SIMX_PATH ?= $(wildcard ../../../simX/obj_dir)
+LLVM_HOME ?= ~/dev/llvm-project/drops
+TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
+SYSROOT ?= $(TOOLCHAIN_PATH)/riscv32-unknown-elf
+POCL_CC_PATH ?= $(realpath ../compiler)
+POCL_RT_PATH ?= $(realpath ../runtime)
+VORTEX_DRV_PATH ?= $(realpath ../../../driver)
+VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
-CC  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
-CXX = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-g++
-DMP = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
-HEX = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
-GDB = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gdb
+CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-errors
 
-VX_SRCS =  $(VX_RT_PATH)/newlib/newlib.c
-VX_SRCS += $(VX_RT_PATH)/startup/vx_start.s
-VX_SRCS += $(VX_RT_PATH)/intrinsics/vx_intrinsics.s
-VX_SRCS += $(VX_RT_PATH)/io/vx_io.s $(VX_RT_PATH)/io/vx_io.c
-VX_SRCS += $(VX_RT_PATH)/fileio/fileio.s
-VX_SRCS += $(VX_RT_PATH)/tests/tests.c
-VX_SRCS += $(VX_RT_PATH)/vx_api/vx_api.c
-VX_SRCS += $(VX_STR) $(VX_FIO) $(VX_NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST)
+CXXFLAGS += -I$(POCL_RT_PATH)/include
 
+<<<<<<< HEAD
 VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VX_RT_PATH)/mains/vortex_link.ld
 
 CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32 
@@ -30,39 +21,40 @@ CXXFLAGS += -I$(POCL_INC_PATH)
 
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 QEMU_LIBS = $(VX_RT_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
+=======
+LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
+>>>>>>> fpga_synthesis
 
 PROJECT = sgemm
 
 SRCS = main.cc
 
-all: $(PROJECT).dump $(PROJECT).hex
+all: $(PROJECT)
 
-lib$(PROJECT).a: kernel.cl
-	POCL_DEBUG=all POCL_DEBUG_LLVM_PASSES=1 LD_LIBRARY_PATH=$(RISCV_TOOL_PATH)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o lib$(PROJECT).a kernel.cl
+kernel.pocl: kernel.cl
+	TOOLCHAIN_PATH=$(TOOLCHAIN_PATH) SYSROOT=$(SYSROOT) LLVM_HOME=$(LLVM_HOME) VORTEX_RUNTIME_PATH=$(VORTEX_RT_PATH) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_HOME)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+ 
+$(PROJECT): $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(PROJECT).elf: $(SRCS) lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS) $(VX_CFLAGS) $(VX_SRCS)  $(SRCS) $(VX_LIBS) -o $(PROJECT).elf
+run-fpga: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
-$(PROJECT).qemu: $(SRCS) lib$(PROJECT).a
-	$(CXX) $(CXXFLAGS)  $(SRCS) $(QEMU_LIBS) -o $(PROJECT).qemu
+run-ase: $(PROJECT) kernel.pocl   
+	ASE_LOG=0 LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
-$(PROJECT).hex: $(PROJECT).elf
-	$(HEX) -O ihex $(PROJECT).elf $(PROJECT).hex
+run-simx: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
-$(PROJECT).dump: $(PROJECT).elf
-	$(DMP) -D $(PROJECT).elf > $(PROJECT).dump
+run-rtlsim: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
-run: $(PROJECT).hex
-	POCL_DEBUG=all $(VX_SIMX_PATH)/Vcache_simX -E -a rv32i --core $(PROJECT).hex -s -b 1> emulator.debug
-
-qemu: $(PROJECT).qemu
-	POCL_DEBUG=all $(RISCV_TOOL_PATH)/bin/qemu-riscv32 -d in_asm -D debug.log $(PROJECT).qemu
-
-gdb-s: $(PROJECT).qemu
-	POCL_DEBUG=all $(RISCV_TOOL_PATH)/bin/qemu-riscv32 -g 1234 -d in_asm -D debug.log $(PROJECT).qemu
-
-gdb-c: $(PROJECT).qemu
-	$(GDB) $(PROJECT).qemu
+.depend: $(SRCS)
+	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug
+	rm -rf $(PROJECT) *.o *.dump .depend 
+
+ifneq ($(MAKECMDGOALS),clean)
+    -include .depend
+endif

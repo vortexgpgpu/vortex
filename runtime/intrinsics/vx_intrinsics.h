@@ -1,51 +1,61 @@
-
-#ifndef VX_INTRINSICS
-
-#define VX_INTRINSICS
+#ifndef VX_INTRINSICS_H
+#define VX_INTRINSICS_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Spawns Warps
-void vx_wspawn (unsigned numWarps, unsigned PC_spawn);
+// Spawn warps
+void vx_wspawn(int num_warps, unsigned func_ptr);
 
-// Changes thread mask (activated/deactivates threads)
-void vx_tmc    (unsigned numThreads);
+// Set thread mask
+void vx_tmc(int num_threads);
 
 // Warp Barrier
-void vx_barrier(unsigned barriedID, unsigned numWarps);
+void vx_barrier(int barried_id, int num_warps);
 
-// split on a predicate
-void vx_split  (unsigned predicate);
-
+// Split on a predicate
+void vx_split(int predicate);
 
 // Join
-void vx_join   (void);
+void vx_join();
 
+// Return the warp's unique thread id 
+int vx_thread_id();
 
-// Get Hardware thread ID
-unsigned vx_threadID(void);
+// Return the core's unique warp id
+int vx_warp_id();
 
+// Return processsor unique core id
+int vx_core_id();
 
-// Get hardware warp ID
-unsigned vx_warpID(void);
+// Return processsor global thread id
+int vx_thread_gid();
 
-// Get Number cycles/Inst
-unsigned vx_getCycles(void);
-unsigned vx_getInst(void);
+// Return processsor global warp id
+int vx_warp_gid();
 
-void vx_resetStack(void);
+// Return the number of threads in a warp
+int vx_num_threads();
 
+// Return the number of warps in a core
+int vx_num_warps();
+
+// Return the number of cores in the processsor
+int vx_num_cores();
+
+// Return the number of cycles
+int vx_num_cycles();
+
+// Return the number of instructions
+int vx_num_instrs();
 
 #define __if(b) vx_split(b); \
                 if (b) 
 
 #define __else else
 
-
 #define __endif vx_join();
-
 
 #ifdef __cplusplus
 }

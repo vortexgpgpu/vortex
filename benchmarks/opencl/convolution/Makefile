@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
 POCL_CC_PATH ?= $(wildcard ../../../../pocl/drops_riscv_cc)
 POCL_INC_PATH ?= $(wildcard ../include)
@@ -30,11 +31,27 @@ CXXFLAGS += -I$(POCL_INC_PATH)
 
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 QEMU_LIBS = $(VX_RT_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
+=======
+LLVM_HOME ?= ~/dev/llvm-project/drops
+TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
+SYSROOT ?= $(TOOLCHAIN_PATH)/riscv32-unknown-elf
+POCL_CC_PATH ?= $(realpath ../compiler)
+POCL_RT_PATH ?= $(realpath ../runtime)
+VORTEX_DRV_PATH ?= $(realpath ../../../driver)
+VORTEX_RT_PATH ?= $(realpath ../../../runtime)
+
+CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-errors
+
+CXXFLAGS += -I$(POCLRT_PATH)/include
+
+LDFLAGS += -L$(POCLRT_PATH)/lib -L$(DRIVER_PATH)/simx -lOpenCL -lvortex
+>>>>>>> fpga_synthesis
 
 PROJECT = convolution
 
 SRCS = main.cpp utils.cpp
 
+<<<<<<< HEAD
 all: $(PROJECT).dump $(PROJECT).hex
 
 lib$(PROJECT).a: kernel.cl
@@ -66,3 +83,34 @@ gdb-c: $(PROJECT).qemu
 
 clean:
 	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug
+=======
+all: $(PROJECT)
+
+kernel.pocl: kernel.cl
+	TOOLCHAIN_PATH=$(TOOLCHAIN_PATH) SYSROOT=$(SYSROOT) LLVM_HOME=$(LLVM_HOME) VORTEX_RUNTIME_PATH=$(VORTEX_RT_PATH) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_HOME)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+ 
+$(PROJECT): $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+run-fpga: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
+
+run-ase: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+
+run-simx: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
+
+run-rtlsim: $(PROJECT) kernel.pocl   
+	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+
+.depend: $(SRCS)
+	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
+
+clean:
+	rm -rf $(PROJECT) *.o *.dump .depend 
+
+ifneq ($(MAKECMDGOALS),clean)
+    -include .depend
+endif
+>>>>>>> fpga_synthesis

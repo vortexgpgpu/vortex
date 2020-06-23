@@ -187,7 +187,7 @@ int main(int argc, char *argv[]) {
   FILE *fp;
   Node *h_graph_nodes;
   char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
-
+  
   try {
     char *input_f = "graph4096.txt";
     printf("Reading File\n");

@@ -20,8 +20,8 @@
  */
 
 // standard utility and system includes
-#include <oclUtils.h>
-#include <shrQATest.h>
+#include "oclUtils.h"
+#include "shrQATest.h"
 
 #define BLOCK_DIM 16
 
@@ -152,7 +152,28 @@ double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ciDeviceC
 
     return time;
 }
+uint8_t *kernel_bin = NULL;
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
 //! Run a simple test for CUDA
 // *********************************************************************
 int runTest( const int argc, const char** argv) 
@@ -286,10 +307,11 @@ int runTest( const int argc, const char** argv)
     //oclCheckError(source_path != NULL, shrTRUE);
     char *source = oclLoadProgSource(source_path, "", &program_length);
     //oclCheckError(source != NULL, shrTRUE);
-
+    size_t kernel_size;
+    cl_int binary_status = 0;
+    cl_device_id device_id;
     // create the program
-    rv_program =
-      clCreateProgramWithBuiltInKernels(context, 1, &device_id, "transpose", NULL);
+    rv_program = clCreateProgramWithBinary(cxGPUContext, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, NULL);
     //rv_program = clCreateProgramWithSource(cxGPUContext, 1,
                      // (const char **)&source, &program_length, &ciErrNum);
     //oclCheckError(ciErrNum, CL_SUCCESS);

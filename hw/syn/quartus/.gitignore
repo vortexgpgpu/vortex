@@ -1,0 +1,11 @@
+/cache/*
+!/cache/Makefile
+
+/top/*
+!/top/Makefile
+
+/vortex/*
+!/vortex/Makefile
+
+/pipeline/*
+!/pipeline/Makefile

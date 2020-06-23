@@ -1,13 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <CL/opencl.h>
 #include <string.h>
 
-#define MAX_KERNELS 1
-#define KERNEL_NAME "vecadd"
-#define KERNEL_FILE_NAME "vecadd.pocl"
 #define SIZE 4
 #define NUM_WORK_GROUPS 2
+#define KERNEL_NAME "vecadd"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -22,7 +21,7 @@
 #define CL_CHECK2(_expr)                                               \
    ({                                                                  \
      cl_int _err = CL_INVALID_VALUE;                                   \
-     typeof(_expr) _ret = _expr;                                       \
+     decltype(_expr) _ret = _expr;                                     \
      if (_err != CL_SUCCESS) {                                         \
        printf("OpenCL Error: '%s' returned %d!\n", #_expr, (int)_err); \
 	   cleanup();			                                                   \
@@ -64,9 +63,30 @@ cl_mem c_memobj = NULL;
 cl_int *A = NULL;
 cl_int *B = NULL;
 cl_int *C = NULL;
-char *binary = NULL;
+uint8_t *kernel_bin = NULL;
 
-void cleanup() {
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
+
+static void cleanup() {
   if (commandQueue) clReleaseCommandQueue(commandQueue);
   if (kernel) clReleaseKernel(kernel);
   if (program) clReleaseProgram(program);
@@ -74,10 +94,32 @@ void cleanup() {
   if (b_memobj) clReleaseMemObject(b_memobj);
   if (c_memobj) clReleaseMemObject(c_memobj);  
   if (context) clReleaseContext(context);
-  if (binary) free(binary);
+  if (kernel_bin) free(kernel_bin);
   if (A) free(A);
   if (B) free(B);
   if (C) free(C);
+}
+
+static int find_device(char* name, cl_platform_id platform_id, cl_device_id *device_id) {
+  cl_device_id device_ids[64];
+  cl_uint num_devices = 0;
+
+  CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, 64, device_ids, &num_devices));
+
+  for (int i=0; i<num_devices; i++) 	{
+		char buffer[1024];
+		cl_uint buf_uint;
+		cl_ulong buf_ulong;
+
+		CL_CHECK(clGetDeviceInfo(device_ids[i], CL_DEVICE_NAME, sizeof(buffer), buffer, NULL));
+		
+    if (0 == strncmp(buffer, name, strlen(name))) {
+      *device_id = device_ids[i];
+      return 0;
+    }
+	}
+
+  return 1;
 }
 
 int main (int argc, char **argv) {
@@ -85,8 +127,13 @@ int main (int argc, char **argv) {
 
   cl_platform_id platform_id;
   cl_device_id device_id;
-  size_t binary_size;
+  size_t kernel_size;
+  cl_int binary_status = 0;
   int i;
+
+  // read kernel binary from file  
+  if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
+    return -1;
   
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
@@ -112,7 +159,8 @@ int main (int argc, char **argv) {
   }
 
   // Create program from kernel source
-  program = CL_CHECK2(clCreateProgramWithBuiltInKernels(context, 1, &device_id, KERNEL_NAME, &_err));	
+  program = CL_CHECK2(clCreateProgramWithBinary(
+    context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));

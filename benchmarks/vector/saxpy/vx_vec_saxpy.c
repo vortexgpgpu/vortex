@@ -39,11 +39,11 @@ int main()
 //    for(int i = 0; i < n; ++i) printf("%d \n", b[i]);
 #endif
 
-    int startCycles = vx_getCycles();
-    int startInst = vx_getInst();
+    int startCycles = vx_num_cycles();
+    int startInst = vx_num_instrs();
     vx_vec_saxpy(n, factor, a, b);
-    int endCycles = vx_getCycles();
-    int endInst = vx_getInst();
+    int endCycles = vx_num_cycles();
+    int endInst = vx_num_instrs();
 
     int totalInst = (endInst - startInst);
     int totalCycles = (endCycles - startCycles);
