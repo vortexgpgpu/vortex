@@ -49,9 +49,7 @@ QI:vortex_afu.qsf
 ../rtl/interfaces/VX_cache_snp_rsp_if.v
 ../rtl/interfaces/VX_csr_req_if.v
 ../rtl/interfaces/VX_exec_unit_req_if.v
-../rtl/interfaces/VX_frE_to_bckE_req_if.v
-../rtl/interfaces/VX_gpr_data_if.v
-../rtl/interfaces/VX_gpr_jal_if.v
+../rtl/interfaces/VX_backend_req_if.v
 ../rtl/interfaces/VX_gpr_read_if.v
 ../rtl/interfaces/VX_gpu_inst_req_if.v
 ../rtl/interfaces/VX_inst_meta_if.v
@@ -92,12 +90,10 @@ QI:vortex_afu.qsf
 ../rtl/VX_csr_pipe.v
 ../rtl/VX_csr_data.v
 ../rtl/VX_warp_sched.v
-../rtl/VX_gpr.v
 ../rtl/VX_gpr_ram.v
 ../rtl/VX_gpr_stage.v
 ../rtl/VX_alu_unit.v
 ../rtl/VX_lsu_unit.v
-../rtl/VX_lsu_addr_gen.v
 ../rtl/VX_decode.v
 ../rtl/VX_inst_multiplex.v
 ../rtl/VX_dcache_arb.v

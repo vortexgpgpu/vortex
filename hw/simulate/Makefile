@@ -33,59 +33,59 @@ DBG += -DDBG_CORE_REQ_INFO
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
 gen-s:
-	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG'
+	verilator $(VF) -DNDEBUG -cc Vortex.v -CFLAGS '$(CF) -DNDEBUG'
 
 gen-sd:
-	verilator $(VF) -cc Vortex_Socket.v -CFLAGS '$(CF) -g -O0  $(DBG)' --trace $(DBG)
+	verilator $(VF) -cc Vortex.v -CFLAGS '$(CF) -g -O0  $(DBG)' --trace $(DBG)
 
 gen-st:
-	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG -cc Vortex.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
 
 gen-m:
-	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
+	verilator $(VF) -DNDEBUG -cc Vortex.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md:
-	verilator $(VF) -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
+	verilator $(VF) -cc Vortex.v $(MULTICORE) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
 
 gen-mt:
-	verilator $(VF) -DNDEBUG -cc Vortex_Socket.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG -cc Vortex.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
 
 build-s: gen-s
-	(cd obj_dir && make -j -f VVortex_Socket.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-sd: gen-sd
-	(cd obj_dir && make -j -f VVortex_Socket.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-st: gen-st
-	(cd obj_dir && make -j -f VVortex_Socket.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-m: gen-m
-	(cd obj_dir && make -j -f VVortex_Socket.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-md: gen-md
-	(cd obj_dir && make -j -f VVortex_Socket.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-mt: gen-mt
-	(cd obj_dir && make -j -f VVortex_Socket.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 run: run-s
 run-s: build-s
-	(cd obj_dir && ./VVortex_Socket)
+	(cd obj_dir && ./VVortex)
 
 run-sd: build-sd
-	(cd obj_dir && ./VVortex_Socket)
+	(cd obj_dir && ./VVortex)
 
 run-st: build-st
-	(cd obj_dir && ./VVortex_Socket)
+	(cd obj_dir && ./VVortex)
 
 run-m: build-m
-	(cd obj_dir && ./VVortex_Socket)
+	(cd obj_dir && ./VVortex)
 
 run-md: build-md
-	(cd obj_dir && ./VVortex_Socket)
+	(cd obj_dir && ./VVortex)
 
 run-mt: build-mt
-	(cd obj_dir && ./VVortex_Socket)
+	(cd obj_dir && ./VVortex)
 
 clean:
 	rm -rf obj_dir

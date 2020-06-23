@@ -1,12 +1,12 @@
 `include "VX_define.vh"
 
 module VX_d_e_reg (
-    input wire              clk,
-    input wire              reset,
-    input wire              branch_stall,
-    input wire              freeze,
-    VX_frE_to_bckE_req_if   frE_to_bckE_req_if,
-    VX_frE_to_bckE_req_if   bckE_req_if
+    input wire          clk,
+    input wire          reset,
+    input wire          branch_stall,
+    input wire          freeze,
+    VX_backend_req_if   frE_to_bckE_req_if,
+    VX_backend_req_if   bckE_req_if
 );
 
     wire stall = freeze;
