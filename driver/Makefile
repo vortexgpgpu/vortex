@@ -1,6 +1,6 @@
 
 
-all: stub
+all: stub rtlsim simx
 
 stub:
 	$(MAKE) -C stub
