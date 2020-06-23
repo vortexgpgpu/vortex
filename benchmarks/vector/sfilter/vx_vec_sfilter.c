@@ -36,15 +36,15 @@ int main()
     }
 
     int N = 4;
-    int startCycles = vx_getCycles();
-    int startInst = vx_getInst();
+    int startCycles = vx_num_cycles();
+    int startInst = vx_num_instrs();
     for(int y = 1; y < (NUM_DATA-1); y++){
         for(int x = 1; x < (NUM_DATA-1); x = x+N) {
             vx_vec_sfilter(a, b, ldc, m, x, y, N);
         }
     }
-    int endCycles = vx_getCycles();
-    int endInst = vx_getInst();
+    int endCycles = vx_num_cycles();
+    int endInst = vx_num_instrs();
 
     int totalInst = (endInst - startInst);
     int totalCycles = (endCycles - startCycles);

@@ -8,12 +8,12 @@ CXXFLAGS ?= -std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -DUSE_DEBUG=3 -DPRINT_A
 LIB_OBJS=simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
 
 
-INCLUDE=-I. -I../rtl/shared_memory -I../rtl/cache -I../rtl/interfaces -Isimulate -I../rtl
+INCLUDE=-I../hw/old_rtl -I../hw/old_rtl/interfaces -I../hw/old_rtl/cache -I../hw/old_rtl/shared_memory
 FILE=cache_simX.v
 COMP=--compiler gcc
 LIB=
 
-CF=-CFLAGS '-std=c++11 -fPIC -O3 -Wall -Wextra -pedantic'
+CF=-CFLAGS '-std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -I../../hw'
 #CF=-CFLAGS '-std=c++11 -fPIC -O0 -g -Wall -Wextra -pedantic'
 
 LIGHTW=-Wno-UNOPTFLAT -Wno-WIDTH

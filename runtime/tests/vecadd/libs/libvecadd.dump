@@ -1,0 +1,420 @@
+In archive libvecadd.a:
+
+tempfile-56-19-33-68-f2.o:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <__cxx_global_var_init>:
+   0:	ff010113          	addi	sp,sp,-16
+   4:	00112623          	sw	ra,12(sp)
+   8:	00812423          	sw	s0,8(sp)
+   c:	01010413          	addi	s0,sp,16
+  10:	00000537          	lui	a0,0x0
+  14:	00050513          	mv	a0,a0
+  18:	00000097          	auipc	ra,0x0
+  1c:	000080e7          	jalr	ra # 18 <__cxx_global_var_init+0x18>
+  20:	00812403          	lw	s0,8(sp)
+  24:	00c12083          	lw	ra,12(sp)
+  28:	01010113          	addi	sp,sp,16
+  2c:	00008067          	ret
+
+00000030 <_ZN12_GLOBAL__N_122auto_register_kernel_tC2Ev>:
+  30:	ff010113          	addi	sp,sp,-16
+  34:	00112623          	sw	ra,12(sp)
+  38:	00812423          	sw	s0,8(sp)
+  3c:	01010413          	addi	s0,sp,16
+  40:	fea42a23          	sw	a0,-12(s0)
+  44:	00000537          	lui	a0,0x0
+  48:	00050513          	mv	a0,a0
+  4c:	000005b7          	lui	a1,0x0
+  50:	00058593          	mv	a1,a1
+  54:	00000637          	lui	a2,0x0
+  58:	00060713          	mv	a4,a2
+  5c:	00000637          	lui	a2,0x0
+  60:	00060793          	mv	a5,a2
+  64:	00300613          	li	a2,3
+  68:	00000693          	li	a3,0
+  6c:	00000097          	auipc	ra,0x0
+  70:	000080e7          	jalr	ra # 6c <_ZN12_GLOBAL__N_122auto_register_kernel_tC2Ev+0x3c>
+  74:	00812403          	lw	s0,8(sp)
+  78:	00c12083          	lw	ra,12(sp)
+  7c:	01010113          	addi	sp,sp,16
+  80:	00008067          	ret
+
+00000084 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc>:
+  84:	ff010113          	addi	sp,sp,-16
+  88:	00112623          	sw	ra,12(sp)
+  8c:	00812423          	sw	s0,8(sp)
+  90:	01010413          	addi	s0,sp,16
+  94:	00000097          	auipc	ra,0x0
+  98:	000080e7          	jalr	ra # 94 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0x10>
+  9c:	00812403          	lw	s0,8(sp)
+  a0:	00c12083          	lw	ra,12(sp)
+  a4:	01010113          	addi	sp,sp,16
+  a8:	00008067          	ret
+
+Disassembly of section .sbss:
+
+00000000 <_ZN12_GLOBAL__N_15__x__E>:
+	...
+
+Disassembly of section .sdata:
+
+00000000 <_ZZN12_GLOBAL__N_122auto_register_kernel_tC1EvE9arg_types>:
+   0:	0101                	addi	sp,sp,0
+   2:	01              	Address 0x0000000000000002 is out of bounds.
+
+
+Disassembly of section .bss:
+
+00000000 <_ZZN12_GLOBAL__N_122auto_register_kernel_tC1EvE11local_sizes>:
+	...
+
+Disassembly of section .rodata.str1.1:
+
+00000000 <.L.str>:
+   0:	6576                	flw	fa0,92(sp)
+   2:	64646163          	bltu	s0,t1,644 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0x5c0>
+	...
+
+Disassembly of section .init_array:
+
+00000000 <.init_array>:
+   0:	0000                	unimp
+	...
+
+Disassembly of section .comment:
+
+00000000 <.comment>:
+   0:	6300                	flw	fs0,0(a4)
+   2:	616c                	flw	fa1,68(a0)
+   4:	676e                	flw	fa4,216(sp)
+   6:	7620                	flw	fs0,104(a2)
+   8:	7265                	lui	tp,0xffff9
+   a:	6e6f6973          	csrrsi	s2,0x6e6,30
+   e:	3920                	fld	fs0,112(a0)
+  10:	302e                	fld	ft0,232(sp)
+  12:	312e                	fld	ft2,232(sp)
+  14:	2820                	fld	fs0,80(s0)
+  16:	7468                	flw	fa0,108(s0)
+  18:	7074                	flw	fa3,100(s0)
+  1a:	2f2f3a73          	csrrc	s4,0x2f2,t5
+  1e:	68746967          	0x68746967
+  22:	6275                	lui	tp,0x1d
+  24:	632e                	flw	ft6,200(sp)
+  26:	6c2f6d6f          	jal	s10,f66e8 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xf6664>
+  2a:	766c                	flw	fa1,108(a2)
+  2c:	2d6d                	jal	6e6 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0x662>
+  2e:	696d                	lui	s2,0x1b
+  30:	7272                	flw	ft4,60(sp)
+  32:	632f726f          	jal	tp,f7664 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xf75e0>
+  36:	616c                	flw	fa1,68(a0)
+  38:	676e                	flw	fa4,216(sp)
+  3a:	672e                	flw	fa4,200(sp)
+  3c:	7469                	lui	s0,0xffffa
+  3e:	6220                	flw	fs0,64(a2)
+  40:	6465                	lui	s0,0x19
+  42:	34643733          	0x34643733
+  46:	3162                	fld	ft2,56(sp)
+  48:	6338                	flw	fa4,64(a4)
+  4a:	3665                	jal	fffffbf2 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xfffffb6e>
+  4c:	3939                	jal	fffffc6a <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xfffffbe6>
+  4e:	32636633          	0x32636633
+  52:	3635                	jal	fffffb7e <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xfffffafa>
+  54:	64386537          	lui	a0,0x64386
+  58:	3665                	jal	fffffc00 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xfffffb7c>
+  5a:	6631                	lui	a2,0xc
+  5c:	6236                	flw	ft4,76(sp)
+  5e:	64663033          	0x64663033
+  62:	6330                	flw	fa2,64(a4)
+  64:	3762                	fld	fa4,56(sp)
+  66:	2935                	jal	4a2 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0x41e>
+  68:	2820                	fld	fs0,80(s0)
+  6a:	7468                	flw	fa0,108(s0)
+  6c:	7074                	flw	fa3,100(s0)
+  6e:	2f2f3a73          	csrrc	s4,0x2f2,t5
+  72:	68746967          	0x68746967
+  76:	6275                	lui	tp,0x1d
+  78:	632e                	flw	ft6,200(sp)
+  7a:	6c2f6d6f          	jal	s10,f673c <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xf66b8>
+  7e:	766c                	flw	fa1,108(a2)
+  80:	2d6d                	jal	73a <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0x6b6>
+  82:	696d                	lui	s2,0x1b
+  84:	7272                	flw	ft4,60(sp)
+  86:	6c2f726f          	jal	tp,f7748 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xf76c4>
+  8a:	766c                	flw	fa1,108(a2)
+  8c:	2e6d                	jal	446 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0x3c2>
+  8e:	20746967          	0x20746967
+  92:	35663263          	0x35663263
+  96:	62393033          	0x62393033
+  9a:	3132                	fld	ft2,296(sp)
+  9c:	6336                	flw	ft6,76(sp)
+  9e:	3062                	fld	ft0,56(sp)
+  a0:	6132                	flw	ft2,12(sp)
+  a2:	6130                	flw	fa2,64(a0)
+  a4:	6561                	lui	a0,0x18
+  a6:	3731                	jal	ffffffb2 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xffffff2e>
+  a8:	35333533          	0x35333533
+  ac:	3934                	fld	fa3,112(a0)
+  ae:	3964                	fld	fs1,240(a0)
+  b0:	3538                	fld	fa4,104(a0)
+  b2:	3562                	fld	fa0,56(sp)
+  b4:	3062                	fld	ft0,56(sp)
+  b6:	3635                	jal	fffffbe2 <_GLOBAL__sub_I_tempfile_7a_73_15_a5_2b.cc+0xfffffb5e>
+  b8:	00293533          	sltu	a0,s2,sp
+
+Disassembly of section .llvm_addrsig:
+
+00000000 <.llvm_addrsig>:
+   0:	0a08                	addi	a0,sp,272
+   2:	0309                	addi	t1,t1,2
+   4:	0705                	addi	a4,a4,1
+   6:	06              	Address 0x0000000000000006 is out of bounds.
+
+
+tempfile-36-3d-1d-4c-cd.so.o:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <_pocl_kernel_vecadd>:
+   0:	fe010113          	addi	sp,sp,-32
+   4:	00112e23          	sw	ra,28(sp)
+   8:	00812c23          	sw	s0,24(sp)
+   c:	00912a23          	sw	s1,20(sp)
+  10:	01212823          	sw	s2,16(sp)
+  14:	01312623          	sw	s3,12(sp)
+  18:	01412423          	sw	s4,8(sp)
+  1c:	01512223          	sw	s5,4(sp)
+  20:	02010413          	addi	s0,sp,32
+  24:	ffc17113          	andi	sp,sp,-4
+  28:	00068913          	mv	s2,a3
+  2c:	00060993          	mv	s3,a2
+  30:	00058a13          	mv	s4,a1
+  34:	00050a93          	mv	s5,a0
+  38:	0186a483          	lw	s1,24(a3)
+  3c:	00048513          	mv	a0,s1
+  40:	00070593          	mv	a1,a4
+  44:	00000097          	auipc	ra,0x0
+  48:	000080e7          	jalr	ra # 44 <_pocl_kernel_vecadd+0x44>
+  4c:	00c92583          	lw	a1,12(s2)
+  50:	00a58533          	add	a0,a1,a0
+  54:	00251513          	slli	a0,a0,0x2
+  58:	00aa82b3          	add	t0,s5,a0
+  5c:	00aa0333          	add	t1,s4,a0
+  60:	00a983b3          	add	t2,s3,a0
+  64:	02092803          	lw	a6,32(s2)
+  68:	01c92e03          	lw	t3,28(s2)
+  6c:	00000893          	li	a7,0
+  70:	00000e93          	li	t4,0
+  74:	00028513          	mv	a0,t0
+  78:	00030593          	mv	a1,t1
+  7c:	00038613          	mv	a2,t2
+  80:	00000793          	li	a5,0
+  84:	00052703          	lw	a4,0(a0)
+  88:	0005a683          	lw	a3,0(a1)
+  8c:	00e686b3          	add	a3,a3,a4
+  90:	00d62023          	sw	a3,0(a2)
+  94:	00450513          	addi	a0,a0,4
+  98:	00458593          	addi	a1,a1,4
+  9c:	00460613          	addi	a2,a2,4
+  a0:	00178793          	addi	a5,a5,1
+  a4:	fe97e0e3          	bltu	a5,s1,84 <_pocl_kernel_vecadd+0x84>
+  a8:	001e8e93          	addi	t4,t4,1
+  ac:	fdcee4e3          	bltu	t4,t3,74 <_pocl_kernel_vecadd+0x74>
+  b0:	00188893          	addi	a7,a7,1
+  b4:	fb08eee3          	bltu	a7,a6,70 <_pocl_kernel_vecadd+0x70>
+  b8:	fe040113          	addi	sp,s0,-32
+  bc:	00412a83          	lw	s5,4(sp)
+  c0:	00812a03          	lw	s4,8(sp)
+  c4:	00c12983          	lw	s3,12(sp)
+  c8:	01012903          	lw	s2,16(sp)
+  cc:	01412483          	lw	s1,20(sp)
+  d0:	01812403          	lw	s0,24(sp)
+  d4:	01c12083          	lw	ra,28(sp)
+  d8:	02010113          	addi	sp,sp,32
+  dc:	00008067          	ret
+
+000000e0 <_pocl_kernel_vecadd_workgroup>:
+  e0:	ff010113          	addi	sp,sp,-16
+  e4:	00112623          	sw	ra,12(sp)
+  e8:	00812423          	sw	s0,8(sp)
+  ec:	00912223          	sw	s1,4(sp)
+  f0:	01212023          	sw	s2,0(sp)
+  f4:	00058493          	mv	s1,a1
+  f8:	00050913          	mv	s2,a0
+  fc:	0185a403          	lw	s0,24(a1)
+ 100:	00040513          	mv	a0,s0
+ 104:	00060593          	mv	a1,a2
+ 108:	00000097          	auipc	ra,0x0
+ 10c:	000080e7          	jalr	ra # 108 <_pocl_kernel_vecadd_workgroup+0x28>
+ 110:	00c4a583          	lw	a1,12(s1)
+ 114:	00a58533          	add	a0,a1,a0
+ 118:	00251513          	slli	a0,a0,0x2
+ 11c:	00892583          	lw	a1,8(s2)
+ 120:	0005a583          	lw	a1,0(a1)
+ 124:	00492603          	lw	a2,4(s2)
+ 128:	00062603          	lw	a2,0(a2)
+ 12c:	00092683          	lw	a3,0(s2)
+ 130:	0006a683          	lw	a3,0(a3)
+ 134:	00a682b3          	add	t0,a3,a0
+ 138:	00a60333          	add	t1,a2,a0
+ 13c:	00a583b3          	add	t2,a1,a0
+ 140:	0204a803          	lw	a6,32(s1)
+ 144:	01c4ae03          	lw	t3,28(s1)
+ 148:	00000893          	li	a7,0
+ 14c:	00000493          	li	s1,0
+ 150:	00028513          	mv	a0,t0
+ 154:	00030593          	mv	a1,t1
+ 158:	00038613          	mv	a2,t2
+ 15c:	00000793          	li	a5,0
+ 160:	00052683          	lw	a3,0(a0)
+ 164:	0005a703          	lw	a4,0(a1)
+ 168:	00d706b3          	add	a3,a4,a3
+ 16c:	00d62023          	sw	a3,0(a2)
+ 170:	00450513          	addi	a0,a0,4
+ 174:	00458593          	addi	a1,a1,4
+ 178:	00460613          	addi	a2,a2,4
+ 17c:	00178793          	addi	a5,a5,1
+ 180:	fe87e0e3          	bltu	a5,s0,160 <_pocl_kernel_vecadd_workgroup+0x80>
+ 184:	00148493          	addi	s1,s1,1
+ 188:	fdc4e4e3          	bltu	s1,t3,150 <_pocl_kernel_vecadd_workgroup+0x70>
+ 18c:	00188893          	addi	a7,a7,1
+ 190:	fb08eee3          	bltu	a7,a6,14c <_pocl_kernel_vecadd_workgroup+0x6c>
+ 194:	00012903          	lw	s2,0(sp)
+ 198:	00412483          	lw	s1,4(sp)
+ 19c:	00812403          	lw	s0,8(sp)
+ 1a0:	00c12083          	lw	ra,12(sp)
+ 1a4:	01010113          	addi	sp,sp,16
+ 1a8:	00008067          	ret
+
+000001ac <_pocl_kernel_vecadd_workgroup_fast>:
+ 1ac:	ff010113          	addi	sp,sp,-16
+ 1b0:	00112623          	sw	ra,12(sp)
+ 1b4:	00812423          	sw	s0,8(sp)
+ 1b8:	00912223          	sw	s1,4(sp)
+ 1bc:	01212023          	sw	s2,0(sp)
+ 1c0:	00058493          	mv	s1,a1
+ 1c4:	00050913          	mv	s2,a0
+ 1c8:	0185a403          	lw	s0,24(a1)
+ 1cc:	00040513          	mv	a0,s0
+ 1d0:	00060593          	mv	a1,a2
+ 1d4:	00000097          	auipc	ra,0x0
+ 1d8:	000080e7          	jalr	ra # 1d4 <_pocl_kernel_vecadd_workgroup_fast+0x28>
+ 1dc:	00c4a583          	lw	a1,12(s1)
+ 1e0:	00a58533          	add	a0,a1,a0
+ 1e4:	00251513          	slli	a0,a0,0x2
+ 1e8:	00892583          	lw	a1,8(s2)
+ 1ec:	00492603          	lw	a2,4(s2)
+ 1f0:	00092683          	lw	a3,0(s2)
+ 1f4:	00a682b3          	add	t0,a3,a0
+ 1f8:	00a60333          	add	t1,a2,a0
+ 1fc:	00a583b3          	add	t2,a1,a0
+ 200:	0204a803          	lw	a6,32(s1)
+ 204:	01c4ae03          	lw	t3,28(s1)
+ 208:	00000893          	li	a7,0
+ 20c:	00000493          	li	s1,0
+ 210:	00028513          	mv	a0,t0
+ 214:	00030593          	mv	a1,t1
+ 218:	00038613          	mv	a2,t2
+ 21c:	00000793          	li	a5,0
+ 220:	00052683          	lw	a3,0(a0)
+ 224:	0005a703          	lw	a4,0(a1)
+ 228:	00d706b3          	add	a3,a4,a3
+ 22c:	00d62023          	sw	a3,0(a2)
+ 230:	00450513          	addi	a0,a0,4
+ 234:	00458593          	addi	a1,a1,4
+ 238:	00460613          	addi	a2,a2,4
+ 23c:	00178793          	addi	a5,a5,1
+ 240:	fe87e0e3          	bltu	a5,s0,220 <_pocl_kernel_vecadd_workgroup_fast+0x74>
+ 244:	00148493          	addi	s1,s1,1
+ 248:	fdc4e4e3          	bltu	s1,t3,210 <_pocl_kernel_vecadd_workgroup_fast+0x64>
+ 24c:	00188893          	addi	a7,a7,1
+ 250:	fb08eee3          	bltu	a7,a6,20c <_pocl_kernel_vecadd_workgroup_fast+0x60>
+ 254:	00012903          	lw	s2,0(sp)
+ 258:	00412483          	lw	s1,4(sp)
+ 25c:	00812403          	lw	s0,8(sp)
+ 260:	00c12083          	lw	ra,12(sp)
+ 264:	01010113          	addi	sp,sp,16
+ 268:	00008067          	ret
+
+Disassembly of section .comment:
+
+00000000 <.comment>:
+   0:	6300                	flw	fs0,0(a4)
+   2:	616c                	flw	fa1,68(a0)
+   4:	676e                	flw	fa4,216(sp)
+   6:	7620                	flw	fs0,104(a2)
+   8:	7265                	lui	tp,0xffff9
+   a:	6e6f6973          	csrrsi	s2,0x6e6,30
+   e:	3920                	fld	fs0,112(a0)
+  10:	302e                	fld	ft0,232(sp)
+  12:	312e                	fld	ft2,232(sp)
+  14:	2820                	fld	fs0,80(s0)
+  16:	7468                	flw	fa0,108(s0)
+  18:	7074                	flw	fa3,100(s0)
+  1a:	2f2f3a73          	csrrc	s4,0x2f2,t5
+  1e:	68746967          	0x68746967
+  22:	6275                	lui	tp,0x1d
+  24:	632e                	flw	ft6,200(sp)
+  26:	6c2f6d6f          	jal	s10,f66e8 <_pocl_kernel_vecadd_workgroup_fast+0xf653c>
+  2a:	766c                	flw	fa1,108(a2)
+  2c:	2d6d                	jal	6e6 <_pocl_kernel_vecadd_workgroup_fast+0x53a>
+  2e:	696d                	lui	s2,0x1b
+  30:	7272                	flw	ft4,60(sp)
+  32:	632f726f          	jal	tp,f7664 <_pocl_kernel_vecadd_workgroup_fast+0xf74b8>
+  36:	616c                	flw	fa1,68(a0)
+  38:	676e                	flw	fa4,216(sp)
+  3a:	672e                	flw	fa4,200(sp)
+  3c:	7469                	lui	s0,0xffffa
+  3e:	6220                	flw	fs0,64(a2)
+  40:	6465                	lui	s0,0x19
+  42:	34643733          	0x34643733
+  46:	3162                	fld	ft2,56(sp)
+  48:	6338                	flw	fa4,64(a4)
+  4a:	3665                	jal	fffffbf2 <_pocl_kernel_vecadd_workgroup_fast+0xfffffa46>
+  4c:	3939                	jal	fffffc6a <_pocl_kernel_vecadd_workgroup_fast+0xfffffabe>
+  4e:	32636633          	0x32636633
+  52:	3635                	jal	fffffb7e <_pocl_kernel_vecadd_workgroup_fast+0xfffff9d2>
+  54:	64386537          	lui	a0,0x64386
+  58:	3665                	jal	fffffc00 <_pocl_kernel_vecadd_workgroup_fast+0xfffffa54>
+  5a:	6631                	lui	a2,0xc
+  5c:	6236                	flw	ft4,76(sp)
+  5e:	64663033          	0x64663033
+  62:	6330                	flw	fa2,64(a4)
+  64:	3762                	fld	fa4,56(sp)
+  66:	2935                	jal	4a2 <_pocl_kernel_vecadd_workgroup_fast+0x2f6>
+  68:	2820                	fld	fs0,80(s0)
+  6a:	7468                	flw	fa0,108(s0)
+  6c:	7074                	flw	fa3,100(s0)
+  6e:	2f2f3a73          	csrrc	s4,0x2f2,t5
+  72:	68746967          	0x68746967
+  76:	6275                	lui	tp,0x1d
+  78:	632e                	flw	ft6,200(sp)
+  7a:	6c2f6d6f          	jal	s10,f673c <_pocl_kernel_vecadd_workgroup_fast+0xf6590>
+  7e:	766c                	flw	fa1,108(a2)
+  80:	2d6d                	jal	73a <_pocl_kernel_vecadd_workgroup_fast+0x58e>
+  82:	696d                	lui	s2,0x1b
+  84:	7272                	flw	ft4,60(sp)
+  86:	6c2f726f          	jal	tp,f7748 <_pocl_kernel_vecadd_workgroup_fast+0xf759c>
+  8a:	766c                	flw	fa1,108(a2)
+  8c:	2e6d                	jal	446 <_pocl_kernel_vecadd_workgroup_fast+0x29a>
+  8e:	20746967          	0x20746967
+  92:	35663263          	0x35663263
+  96:	62393033          	0x62393033
+  9a:	3132                	fld	ft2,296(sp)
+  9c:	6336                	flw	ft6,76(sp)
+  9e:	3062                	fld	ft0,56(sp)
+  a0:	6132                	flw	ft2,12(sp)
+  a2:	6130                	flw	fa2,64(a0)
+  a4:	6561                	lui	a0,0x18
+  a6:	3731                	jal	ffffffb2 <_pocl_kernel_vecadd_workgroup_fast+0xfffffe06>
+  a8:	35333533          	0x35333533
+  ac:	3934                	fld	fa3,112(a0)
+  ae:	3964                	fld	fs1,240(a0)
+  b0:	3538                	fld	fa4,104(a0)
+  b2:	3562                	fld	fa0,56(sp)
+  b4:	3062                	fld	ft0,56(sp)
+  b6:	3635                	jal	fffffbe2 <_pocl_kernel_vecadd_workgroup_fast+0xfffffa36>
+  b8:	00293533          	sltu	a0,s2,sp

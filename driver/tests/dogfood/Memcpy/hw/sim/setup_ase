@@ -1,0 +1,11 @@
+#!/bin/sh
+
+##
+## Setup ASE environment using ../rtl/sources.txt.
+##
+
+# Absolute path to this script
+SCRIPT=$(readlink -f "$0")
+SCRIPT_PATH=$(dirname "$SCRIPT")
+
+afu_sim_setup --sources="${SCRIPT_PATH}/../rtl/sources.txt" $@

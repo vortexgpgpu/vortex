@@ -88,7 +88,6 @@ static cl_command_queue commandQueueNoProf = NULL;
 //! Global status of events
 static bool eventsEnabled = false;
 
-
 //-------------------------------------------------------
 //          Initialization and Cleanup
 //-------------------------------------------------------
@@ -238,6 +237,28 @@ static bool eventsEnabled = false;
 
     return context;
 }*/
+
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
+
 
 cl_context cl_init_context(int platform, int dev,int quiet) {
     int printInfo=1;
@@ -837,13 +858,22 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
     fread(source, 1, size, fp);
     source[size] = '\0';*/
 
+    // read kernel binary from file
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+    cl_int binary_status = 0;  
+    int err = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+    cl_errChk(err, "read_kernel_file", true);
+
     // Create the program object
-    //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);
-    cl_program clProgramReturn = clCreateProgramWithBuiltInKernels(context, 1, &device, "NearestNeighbor", &status);            
+    //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);      
+    cl_program clProgramReturn = clCreateProgramWithBinary(
+        context, 1, devices, &kernel_size, &kernel_bin, &binary_status, &status);  
+    free(kernel_bin);
     cl_errChk(status, "Creating program", true);
     
-    free(source);
-    fclose(fp);    
+    //free(source);
+    //fclose(fp);    
 
     // Try to compile the program
     status = clBuildProgram(clProgramReturn, 0, NULL, compileoptions, NULL, NULL);

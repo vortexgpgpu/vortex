@@ -1,0 +1,27 @@
+# load design
+read_verilog -sv -I../../rtl -I../../rtl/libs -I../../rtl/interfaces -I../../rtl/pipe_regs -I../../rtl/cache  ../../rtl/Vortex.v
+
+# high-level synthesis
+proc; opt; fsm;; memory -nomap; opt
+
+# substitute block rams
+techmap -map map_rams.v
+
+# map remaining memories
+memory_map
+
+# low-level synthesis
+techmap; opt; flatten;; abc -lut6
+techmap -map map_xl_cells.v
+
+# add clock buffers
+select -set xl_clocks t:FDRE %x:+FDRE[C] t:FDRE %d
+iopadmap -inpad BUFGP O:I @xl_clocks
+
+# add io buffers
+select -set xl_nonclocks w:* t:BUFGP %x:+BUFGP[I] %d
+iopadmap -outpad OBUF I:O -inpad IBUF O:I @xl_nonclocks
+
+# write synthesis results
+write_edif synth.edif
+

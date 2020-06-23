@@ -782,6 +782,27 @@ void cl_writeToZCBuffer(cl_mem mem, void* data, size_t size)
     cl_unmapBuffer(mem, ptr);
 }
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
+
 //-------------------------------------------------------
 //          Program and kernels
 //-------------------------------------------------------
@@ -839,11 +860,20 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
 
     // Create the program object
     //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);
-    cl_program clProgramReturn = clCreateProgramWithBuiltInKernels(context, 1, &device, "Fan1;Fan2", &status);            
+    //cl_program clProgramReturn = clCreateProgramWithBuiltInKernels(context, 1, &device, "Fan1;Fan2", &status);            
+    // read kernel binary from file  
+    uint8_t *kernel_bin = NULL;
+    size_t kernel_size;
+    cl_int binary_status = 0;
+    status = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+    cl_errChk(status, "read_kernel_file", true);
+    cl_program clProgramReturn = clCreateProgramWithBinary(
+        context, 1, &device, &kernel_size, &kernel_bin, &binary_status, &status);
+    free(kernel_bin);
     cl_errChk(status, "Creating program", true);
     
-    free(source);
-    fclose(fp);    
+    //free(source);
+    //fclose(fp);    
 
     // Try to compile the program
     status = clBuildProgram(clProgramReturn, 0, NULL, compileoptions, NULL, NULL);

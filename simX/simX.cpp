@@ -21,6 +21,8 @@
 #include "include/args.h"
 #include "include/help.h"
 
+#include <VX_config.h>
+
 #include <sys/stat.h>
 
 //////////////
@@ -57,8 +59,14 @@ HarpToolMode findMode(int argc, char** argv) {
 int emu_main(int argc, char **argv) {
     string archString("rv32i");
     string imgFileName("a.dsfsdout.bin");
+<<<<<<< HEAD
     bool showHelp, showStats, basicMachine, batch;
     bool cpu_mode(false);
+=======
+    bool showHelp(false), showStats(false), basicMachine(true);
+    int max_warps(NUM_WARPS);
+    int max_threads(NUM_THREADS);
+>>>>>>> fpga_synthesis
 
     /* Read the command line arguments. */
     CommandLineArgFlag          fh("-h", "--help", "", showHelp);
@@ -66,8 +74,13 @@ int emu_main(int argc, char **argv) {
     CommandLineArgSetter<string>fa("-a", "--arch", "", archString);
     CommandLineArgFlag          fs("-s", "--stats", "", showStats);
     CommandLineArgFlag          fb("-b", "--basic", "", basicMachine);
+<<<<<<< HEAD
     CommandLineArgFlag          fi("-i", "--batch", "", batch);
     CommandLineArgFlag          fx("-x", "--cpu", "", cpu_mode);
+=======
+    CommandLineArgSetter<int>   fw("-w", "--warps", "", max_warps);
+    CommandLineArgSetter<int>   ft("-t", "--threads", "", max_threads);
+>>>>>>> fpga_synthesis
     
     CommandLineArg::readArgs(argc, argv);
     
@@ -77,7 +90,11 @@ int emu_main(int argc, char **argv) {
     }
 
     /* Instantiate a Core, RAM, and console output. */
+<<<<<<< HEAD
     ArchDef arch(archString, cpu_mode);
+=======
+    ArchDef arch(archString, max_warps, max_threads);
+>>>>>>> fpga_synthesis
 
     Decoder *dec;
 
