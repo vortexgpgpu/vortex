@@ -1,283 +1,406 @@
 `include "VX_define.vh"
 
-module Vortex #( 
-    parameter CORE_ID = 0
-) (        
+module Vortex (
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
     `SCOPE_SIGNALS_CORE_IO
     `SCOPE_SIGNALS_ICACHE_IO
     `SCOPE_SIGNALS_PIPELINE_IO
     `SCOPE_SIGNALS_BE_IO
-    
+
     // Clock
     input  wire                             clk,
     input  wire                             reset,
 
-    // DRAM Dcache request
-    output wire                             D_dram_req_valid,
-    output wire                             D_dram_req_rw,    
-    output wire [`DDRAM_BYTEEN_WIDTH-1:0]   D_dram_req_byteen,
-    output wire [`DDRAM_ADDR_WIDTH-1:0]     D_dram_req_addr,
-    output wire [`DDRAM_LINE_WIDTH-1:0]     D_dram_req_data,
-    output wire [`DDRAM_TAG_WIDTH-1:0]      D_dram_req_tag,
-    input  wire                             D_dram_req_ready,
+    // DRAM request
+    output wire                             dram_req_valid,
+    output wire                             dram_req_rw,    
+    output wire [`VX_DRAM_BYTEEN_WIDTH-1:0] dram_req_byteen,    
+    output wire [`VX_DRAM_ADDR_WIDTH-1:0]   dram_req_addr,
+    output wire [`VX_DRAM_LINE_WIDTH-1:0]   dram_req_data,
+    output wire [`VX_DRAM_TAG_WIDTH-1:0]    dram_req_tag,
+    input  wire                             dram_req_ready,
 
-    // DRAM Dcache reponse    
-    input  wire                             D_dram_rsp_valid,
-    input  wire [`DDRAM_LINE_WIDTH-1:0]     D_dram_rsp_data,
-    input  wire [`DDRAM_TAG_WIDTH-1:0]      D_dram_rsp_tag,
-    output wire                             D_dram_rsp_ready,
-
-    // DRAM Icache request
-    output wire                             I_dram_req_valid,
-    output wire                             I_dram_req_rw,    
-    output wire [`IDRAM_BYTEEN_WIDTH-1:0]   I_dram_req_byteen,
-    output wire [`IDRAM_ADDR_WIDTH-1:0]     I_dram_req_addr,
-    output wire [`IDRAM_LINE_WIDTH-1:0]     I_dram_req_data,
-    output wire [`IDRAM_TAG_WIDTH-1:0]      I_dram_req_tag,
-    input  wire                             I_dram_req_ready,
-
-    // DRAM Icache response    
-    input  wire                             I_dram_rsp_valid,
-    input  wire [`IDRAM_LINE_WIDTH-1:0]     I_dram_rsp_data,
-    input  wire [`IDRAM_TAG_WIDTH-1:0]      I_dram_rsp_tag,
-    output wire                             I_dram_rsp_ready,
+    // DRAM response    
+    input wire                              dram_rsp_valid,        
+    input wire [`VX_DRAM_LINE_WIDTH-1:0]    dram_rsp_data,
+    input wire [`VX_DRAM_TAG_WIDTH-1:0]     dram_rsp_tag,
+    output wire                             dram_rsp_ready,
 
     // Snoop request
-    input  wire                             snp_req_valid,
-    input  wire [`DDRAM_ADDR_WIDTH-1:0]     snp_req_addr,
+    input wire                              snp_req_valid,
+    input wire [`VX_DRAM_ADDR_WIDTH-1:0]    snp_req_addr,
     input wire                              snp_req_invalidate,
-    input  wire [`DSNP_TAG_WIDTH-1:0]       snp_req_tag,
-    output wire                             snp_req_ready,
+    input wire [`VX_SNP_TAG_WIDTH-1:0]      snp_req_tag,
+    output wire                             snp_req_ready, 
 
+    // Snoop response
     output wire                             snp_rsp_valid,
-    output wire [`DSNP_TAG_WIDTH-1:0]       snp_rsp_tag,
-    input  wire                             snp_rsp_ready,
+    output wire [`VX_SNP_TAG_WIDTH-1:0]     snp_rsp_tag,
+    input wire                              snp_rsp_ready,     
 
     // I/O request
     output wire                             io_req_valid,
-    output wire                             io_req_rw,    
+    output wire                             io_req_rw,  
     output wire [3:0]                       io_req_byteen,  
     output wire [29:0]                      io_req_addr,
     output wire [31:0]                      io_req_data,    
-    output wire [`DCORE_TAG_WIDTH-1:0]      io_req_tag,  
+    output wire [`VX_CORE_TAG_WIDTH-1:0]    io_req_tag,    
     input wire                              io_req_ready,
 
     // I/O response
     input wire                              io_rsp_valid,
     input wire [31:0]                       io_rsp_data,
-    input wire [`DCORE_TAG_WIDTH-1:0]       io_rsp_tag,
+    input wire [`VX_CORE_TAG_WIDTH-1:0]     io_rsp_tag,
     output wire                             io_rsp_ready,
 
     // Status
     output wire                             busy, 
     output wire                             ebreak
 );
-    // Dcache Interfaces   
+    if (`NUM_CLUSTERS == 1) begin
 
-    VX_cache_dram_req_if #(
-        .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
-        .DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH),
-        .DRAM_TAG_WIDTH(`DDRAM_TAG_WIDTH)
-    ) dcache_dram_req_if();
+        VX_cluster #(
+            .CLUSTER_ID(`L3CACHE_ID)
+        ) cluster (
+            `SCOPE_SIGNALS_ISTAGE_BIND
+            `SCOPE_SIGNALS_LSU_BIND
+            `SCOPE_SIGNALS_CORE_BIND
+            `SCOPE_SIGNALS_ICACHE_BIND
+            `SCOPE_SIGNALS_PIPELINE_BIND
+            `SCOPE_SIGNALS_BE_BIND
 
-    VX_cache_dram_rsp_if #(
-        .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
-        .DRAM_TAG_WIDTH(`DDRAM_TAG_WIDTH)
-    ) dcache_dram_rsp_if();
+            .clk                (clk),
+            .reset              (reset),
+            
+            .dram_req_valid     (dram_req_valid),
+            .dram_req_rw        (dram_req_rw),
+            .dram_req_byteen    (dram_req_byteen),
+            .dram_req_addr      (dram_req_addr),
+            .dram_req_data      (dram_req_data),
+            .dram_req_tag       (dram_req_tag),
+            .dram_req_ready     (dram_req_ready),
 
-    assign D_dram_req_valid = dcache_dram_req_if.dram_req_valid;
-    assign D_dram_req_rw    = dcache_dram_req_if.dram_req_rw;
-    assign D_dram_req_byteen= dcache_dram_req_if.dram_req_byteen;
-    assign D_dram_req_addr  = dcache_dram_req_if.dram_req_addr;
-    assign D_dram_req_data  = dcache_dram_req_if.dram_req_data;
-    assign D_dram_req_tag   = dcache_dram_req_if.dram_req_tag;
-    assign dcache_dram_req_if.dram_req_ready = D_dram_req_ready;
+            .dram_rsp_valid     (dram_rsp_valid),            
+            .dram_rsp_data      (dram_rsp_data),
+            .dram_rsp_tag       (dram_rsp_tag),
+            .dram_rsp_ready     (dram_rsp_ready),
 
-    assign dcache_dram_rsp_if.dram_rsp_valid = D_dram_rsp_valid;
-    assign dcache_dram_rsp_if.dram_rsp_data  = D_dram_rsp_data;
-    assign dcache_dram_rsp_if.dram_rsp_tag   = D_dram_rsp_tag;
-    assign D_dram_rsp_ready = dcache_dram_rsp_if.dram_rsp_ready;
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_tag        (snp_req_tag),
+            .snp_req_ready      (snp_req_ready),
 
-    VX_cache_core_req_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_dcache_req_if(),arb_dcache_req_if(), arb_io_req_if();
+            .snp_rsp_valid      (snp_rsp_valid),
+            .snp_rsp_tag        (snp_rsp_tag),
+            .snp_rsp_ready      (snp_rsp_ready),
 
-    VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_dcache_rsp_if(), arb_dcache_rsp_if(), arb_io_rsp_if();
+            .io_req_valid       (io_req_valid),
+            .io_req_rw          (io_req_rw),
+            .io_req_byteen      (io_req_byteen),
+            .io_req_addr        (io_req_addr),
+            .io_req_data        (io_req_data),
+            .io_req_tag         (io_req_tag),
+            .io_req_ready       (io_req_ready),
 
-    assign io_req_valid  = arb_io_req_if.core_req_valid[0];
-    assign io_req_rw     = arb_io_req_if.core_req_rw[0];
-    assign io_req_byteen = arb_io_req_if.core_req_byteen[0];
-    assign io_req_addr   = arb_io_req_if.core_req_addr[0];
-    assign io_req_data   = arb_io_req_if.core_req_data[0];
-    assign io_req_tag    = arb_io_req_if.core_req_tag[0];
-    assign arb_io_req_if.core_req_ready = io_req_ready;
+            .io_rsp_valid       (io_rsp_valid),            
+            .io_rsp_data        (io_rsp_data),
+            .io_rsp_tag         (io_rsp_tag),
+            .io_rsp_ready       (io_rsp_ready),
 
-    assign arb_io_rsp_if.core_rsp_valid   = {{(`NUM_THREADS-1){1'b0}}, io_rsp_valid};
-    assign arb_io_rsp_if.core_rsp_data[0] = io_rsp_data;
-    assign arb_io_rsp_if.core_rsp_tag     = io_rsp_tag;    
-    assign io_rsp_ready = arb_io_rsp_if.core_rsp_ready;
-    
-    // Icache interfaces
-    
-    VX_cache_dram_req_if #(
-        .DRAM_LINE_WIDTH(`IDRAM_LINE_WIDTH),
-        .DRAM_ADDR_WIDTH(`IDRAM_ADDR_WIDTH),
-        .DRAM_TAG_WIDTH(`IDRAM_TAG_WIDTH)
-    ) icache_dram_req_if();
+            .busy               (busy),
+            .ebreak             (ebreak)
+        );
 
-    VX_cache_dram_rsp_if #(
-        .DRAM_LINE_WIDTH(`IDRAM_LINE_WIDTH),
-        .DRAM_TAG_WIDTH(`IDRAM_TAG_WIDTH)
-    ) icache_dram_rsp_if();
+    end else begin
 
-    assign I_dram_req_valid = icache_dram_req_if.dram_req_valid;
-    assign I_dram_req_rw    = icache_dram_req_if.dram_req_rw;
-    assign I_dram_req_byteen= icache_dram_req_if.dram_req_byteen;
-    assign I_dram_req_addr  = icache_dram_req_if.dram_req_addr;
-    assign I_dram_req_data  = icache_dram_req_if.dram_req_data;
-    assign I_dram_req_tag   = icache_dram_req_if.dram_req_tag;
-    assign icache_dram_req_if.dram_req_ready = I_dram_req_ready;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_valid;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_rw;        
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen;   
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_dram_req_addr;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_req_data;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_req_tag;
+        wire                                            l3_core_req_ready;
+  
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_valid;        
+        wire [`NUM_CLUSTERS-1:0][`L3DRAM_LINE_WIDTH-1:0] per_cluster_dram_rsp_data;
+        wire [`NUM_CLUSTERS-1:0][`L3DRAM_TAG_WIDTH-1:0]  per_cluster_dram_rsp_tag; 
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_ready;
 
-    assign icache_dram_rsp_if.dram_rsp_valid = I_dram_rsp_valid;    
-    assign icache_dram_rsp_if.dram_rsp_data  = I_dram_rsp_data;
-    assign icache_dram_rsp_if.dram_rsp_tag   = I_dram_rsp_tag;
-    assign I_dram_rsp_ready = icache_dram_rsp_if.dram_rsp_ready;  
-    
-    VX_cache_core_req_if #(
-        .NUM_REQUESTS(`INUM_REQUESTS), 
-        .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_icache_req_if();
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_snp_req_addr;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_invalidate;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]   per_cluster_snp_req_tag;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_ready;
 
-    VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`INUM_REQUESTS), 
-        .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_icache_rsp_if();
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_rsp_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]   per_cluster_snp_rsp_tag;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_rsp_ready;
 
-    // Vortex pipeline
-    VX_pipeline #(
-        .CORE_ID(CORE_ID)
-    ) pipeline (
-        `SCOPE_SIGNALS_ISTAGE_BIND
-        `SCOPE_SIGNALS_LSU_BIND
-        `SCOPE_SIGNALS_PIPELINE_BIND
-        `SCOPE_SIGNALS_BE_BIND
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_req_valid;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_req_rw;
+        wire [`NUM_CLUSTERS-1:0][3:0]                    per_cluster_io_req_byteen;
+        wire [`NUM_CLUSTERS-1:0][29:0]                   per_cluster_io_req_addr;
+        wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_req_data;        
+        wire [`NUM_CLUSTERS-1:0][`L2CORE_TAG_WIDTH-1:0]  per_cluster_io_req_tag;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_req_ready;
 
-        .clk(clk),
-        .reset(reset),
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2CORE_TAG_WIDTH-1:0]  per_cluster_io_rsp_tag;
+        wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_rsp_data;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_ready;
 
-        // Dcache core request
-        .dcache_req_valid   (core_dcache_req_if.core_req_valid),
-        .dcache_req_rw      (core_dcache_req_if.core_req_rw),
-        .dcache_req_byteen  (core_dcache_req_if.core_req_byteen),
-        .dcache_req_addr    (core_dcache_req_if.core_req_addr),
-        .dcache_req_data    (core_dcache_req_if.core_req_data),
-        .dcache_req_tag     (core_dcache_req_if.core_req_tag),
-        .dcache_req_ready   (core_dcache_req_if.core_req_ready),
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_ebreak;
 
-        // Dcache core reponse    
-        .dcache_rsp_valid   (core_dcache_rsp_if.core_rsp_valid),
-        .dcache_rsp_data    (core_dcache_rsp_if.core_rsp_data),
-        .dcache_rsp_tag     (core_dcache_rsp_if.core_rsp_tag),
-        .dcache_rsp_ready   (core_dcache_rsp_if.core_rsp_ready),
+        genvar i;
+        for (i = 0; i < `NUM_CLUSTERS; i++) begin        
+            VX_cluster #(
+                .CLUSTER_ID(i)
+            ) cluster (
+                `SCOPE_SIGNALS_ISTAGE_BIND
+                `SCOPE_SIGNALS_LSU_BIND
+                `SCOPE_SIGNALS_CORE_BIND
+                `SCOPE_SIGNALS_ICACHE_BIND
+                `SCOPE_SIGNALS_PIPELINE_BIND
+                `SCOPE_SIGNALS_BE_BIND
 
-        // Dcache core request
-        .icache_req_valid   (core_icache_req_if.core_req_valid),
-        .icache_req_rw      (core_icache_req_if.core_req_rw),
-        .icache_req_byteen  (core_icache_req_if.core_req_byteen),
-        .icache_req_addr    (core_icache_req_if.core_req_addr),
-        .icache_req_data    (core_icache_req_if.core_req_data),
-        .icache_req_tag     (core_icache_req_if.core_req_tag),
-        .icache_req_ready   (core_icache_req_if.core_req_ready),
+                .clk                (clk),
+                .reset              (reset),
 
-        // Dcache core reponse    
-        .icache_rsp_valid   (core_icache_rsp_if.core_rsp_valid),
-        .icache_rsp_data    (core_icache_rsp_if.core_rsp_data),
-        .icache_rsp_tag     (core_icache_rsp_if.core_rsp_tag),
-        .icache_rsp_ready   (core_icache_rsp_if.core_rsp_ready),     
+                .dram_req_valid     (per_cluster_dram_req_valid [i]),
+                .dram_req_rw        (per_cluster_dram_req_rw    [i]),
+                .dram_req_byteen    (per_cluster_dram_req_byteen[i]),
+                .dram_req_addr      (per_cluster_dram_req_addr  [i]),
+                .dram_req_data      (per_cluster_dram_req_data  [i]),
+                .dram_req_tag       (per_cluster_dram_req_tag   [i]), 
+                .dram_req_ready     (l3_core_req_ready),
 
-        // Status
-        .busy(busy), 
-        .ebreak(ebreak)
-    );  
+                .dram_rsp_valid     (per_cluster_dram_rsp_valid [i]),                
+                .dram_rsp_data      (per_cluster_dram_rsp_data  [i]),
+                .dram_rsp_tag       (per_cluster_dram_rsp_tag   [i]),
+                .dram_rsp_ready     (per_cluster_dram_rsp_ready [i]),
 
-    // Cache snooping
-    VX_cache_snp_req_if #(
-        .DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH),
-        .SNP_TAG_WIDTH(`DSNP_TAG_WIDTH)
-    ) dcache_snp_req_if();
+                .snp_req_valid      (per_cluster_snp_req_valid  [i]),
+                .snp_req_addr       (per_cluster_snp_req_addr   [i]),
+                .snp_req_invalidate (per_cluster_snp_req_invalidate[i]),
+                .snp_req_tag        (per_cluster_snp_req_tag    [i]),
+                .snp_req_ready      (per_cluster_snp_req_ready  [i]),
 
-    VX_cache_snp_rsp_if #(
-        .SNP_TAG_WIDTH(`DSNP_TAG_WIDTH)
-    ) dcache_snp_rsp_if();
+                .snp_rsp_valid      (per_cluster_snp_rsp_valid  [i]),
+                .snp_rsp_tag        (per_cluster_snp_rsp_tag    [i]),
+                .snp_rsp_ready      (per_cluster_snp_rsp_ready  [i]),
 
-    assign dcache_snp_req_if.snp_req_valid      = snp_req_valid;
-    assign dcache_snp_req_if.snp_req_addr       = snp_req_addr;
-    assign dcache_snp_req_if.snp_req_invalidate = snp_req_invalidate;
-    assign dcache_snp_req_if.snp_req_tag        = snp_req_tag;
-    assign snp_req_ready                        = dcache_snp_req_if.snp_req_ready;
+                .io_req_valid       (per_cluster_io_req_valid   [i]),
+                .io_req_rw          (per_cluster_io_req_rw      [i]),
+                .io_req_byteen      (per_cluster_io_req_byteen  [i]),
+                .io_req_addr        (per_cluster_io_req_addr    [i]),
+                .io_req_data        (per_cluster_io_req_data    [i]),                
+                .io_req_tag         (per_cluster_io_req_tag     [i]),
+                .io_req_ready       (per_cluster_io_req_ready   [i]),
 
-    assign snp_rsp_valid = dcache_snp_rsp_if.snp_rsp_valid;
-    assign snp_rsp_tag   = dcache_snp_rsp_if.snp_rsp_tag;
-    assign dcache_snp_rsp_if.snp_rsp_ready = snp_rsp_ready;
+                .io_rsp_valid       (per_cluster_io_rsp_valid   [i]),            
+                .io_rsp_data        (per_cluster_io_rsp_data    [i]),
+                .io_rsp_tag         (per_cluster_io_rsp_tag     [i]),
+                .io_rsp_ready       (per_cluster_io_rsp_ready   [i]),
 
-    VX_mem_unit #(
-        .CORE_ID(CORE_ID)
-    ) mem_unit (
-        `SCOPE_SIGNALS_ICACHE_BIND
+                .busy               (per_cluster_busy           [i]),
+                .ebreak             (per_cluster_ebreak         [i])
+            );
+        end
 
-        .clk                (clk),
-        .reset              (reset),
+        VX_mem_arb #(
+            .NUM_REQUESTS  (`NUM_CLUSTERS),
+            .WORD_SIZE     (4),
+            .TAG_IN_WIDTH  (`L2CORE_TAG_WIDTH),
+            .TAG_OUT_WIDTH (`L3CORE_TAG_WIDTH)
+        ) io_arb (
+            .clk                   (clk),
+            .reset                 (reset),
 
-        // Core <-> Dcache
-        .core_dcache_req_if (arb_dcache_req_if),
-        .core_dcache_rsp_if (arb_dcache_rsp_if),
+            // input requests
+            .in_mem_req_valid      (per_cluster_io_req_valid),
+            .in_mem_req_rw         (per_cluster_io_req_rw),
+            .in_mem_req_byteen     (per_cluster_io_req_byteen),
+            .in_mem_req_addr       (per_cluster_io_req_addr),
+            .in_mem_req_data       (per_cluster_io_req_data),  
+            .in_mem_req_tag        (per_cluster_io_req_tag),  
+            .in_mem_req_ready      (per_cluster_io_req_ready),
 
-        // Dram <-> Dcache
-        .dcache_dram_req_if (dcache_dram_req_if),
-        .dcache_dram_rsp_if (dcache_dram_rsp_if),
-        .dcache_snp_req_if  (dcache_snp_req_if),
-        .dcache_snp_rsp_if  (dcache_snp_rsp_if),
+            // input responses
+            .in_mem_rsp_valid      (per_cluster_io_rsp_valid),
+            .in_mem_rsp_data       (per_cluster_io_rsp_data),
+            .in_mem_rsp_tag        (per_cluster_io_rsp_tag),
+            .in_mem_rsp_ready      (per_cluster_io_rsp_ready),
 
-        // Core <-> Icache
-        .core_icache_req_if (core_icache_req_if),
-        .core_icache_rsp_if (core_icache_rsp_if),
+            // output request
+            .out_mem_req_valid     (io_req_valid),
+            .out_mem_req_rw        (io_req_rw),        
+            .out_mem_req_byteen    (io_req_byteen),        
+            .out_mem_req_addr      (io_req_addr),
+            .out_mem_req_data      (io_req_data),
+            .out_mem_req_tag       (io_req_tag),
+            .out_mem_req_ready     (io_req_ready),
+            
+            // output response
+            .out_mem_rsp_valid     (io_rsp_valid),
+            .out_mem_rsp_tag       (io_rsp_tag),
+            .out_mem_rsp_data      (io_rsp_data),
+            .out_mem_rsp_ready     (io_rsp_ready)
+        );
 
-        // Dram <-> Icache
-        .icache_dram_req_if (icache_dram_req_if),
-        .icache_dram_rsp_if (icache_dram_rsp_if)
-    );
+        assign busy   = (| per_cluster_busy);
+        assign ebreak = (& per_cluster_ebreak);
 
-    // select io address
-    wire is_io_addr = ({core_dcache_req_if.core_req_addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
-    wire io_select = (| core_dcache_req_if.core_req_valid) ? is_io_addr : 0;
+        // L3 Cache ///////////////////////////////////////////////////////////
 
-    VX_dcache_arb dcache_io_arb (
-        .req_select       (io_select),
-        .in_core_req_if   (core_dcache_req_if),
-        .out0_core_req_if (arb_dcache_req_if),
-        .out1_core_req_if (arb_io_req_if),  
-        .in0_core_rsp_if  (arb_dcache_rsp_if),
-        .in1_core_rsp_if  (arb_io_rsp_if),    
-        .out_core_rsp_if  (core_dcache_rsp_if)
-    );
-    
-endmodule // Vortex
+        wire [`L3NUM_REQUESTS-1:0]                           l3_core_req_valid;
+        wire [`L3NUM_REQUESTS-1:0]                           l3_core_req_rw;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] l3_core_req_byteen;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_ADDR_WIDTH-1:0]   l3_core_req_addr;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   l3_core_req_data;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    l3_core_req_tag;
 
+        wire [`L3NUM_REQUESTS-1:0]                           l3_core_rsp_valid;        
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   l3_core_rsp_data;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    l3_core_rsp_tag;
+        wire                                                 l3_core_rsp_ready;    
 
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0]     l3_snp_fwdout_addr;
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_invalidate;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]       l3_snp_fwdout_tag;
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_ready;    
 
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdin_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]       l3_snp_fwdin_tag;
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdin_ready;
 
+        for (i = 0; i < `L3NUM_REQUESTS; i++) begin
+            // Core Request
+            assign l3_core_req_valid  [i] = per_cluster_dram_req_valid [i];
+            assign l3_core_req_rw     [i] = per_cluster_dram_req_rw    [i];
+            assign l3_core_req_byteen [i] = per_cluster_dram_req_byteen[i];
+            assign l3_core_req_addr   [i] = per_cluster_dram_req_addr  [i];
+            assign l3_core_req_tag    [i] = per_cluster_dram_req_tag   [i];
+            assign l3_core_req_data   [i] = per_cluster_dram_req_data  [i];            
 
+            // Core Response
+            assign per_cluster_dram_rsp_valid [i] = l3_core_rsp_valid [i] && l3_core_rsp_ready;
+            assign per_cluster_dram_rsp_data  [i] = l3_core_rsp_data [i];
+            assign per_cluster_dram_rsp_tag   [i] = l3_core_rsp_tag [i];
+
+            // Snoop Forwarding out
+            assign per_cluster_snp_req_valid      [i] = l3_snp_fwdout_valid[i];
+            assign per_cluster_snp_req_addr       [i] = l3_snp_fwdout_addr[i];
+            assign per_cluster_snp_req_invalidate [i] = l3_snp_fwdout_invalidate[i];
+            assign per_cluster_snp_req_tag        [i] = l3_snp_fwdout_tag[i];
+            assign l3_snp_fwdout_ready            [i] = per_cluster_snp_req_ready[i];
+
+            // Snoop Forwarding in
+            assign l3_snp_fwdin_valid        [i] = per_cluster_snp_rsp_valid [i];
+            assign l3_snp_fwdin_tag          [i] = per_cluster_snp_rsp_tag [i];
+            assign per_cluster_snp_rsp_ready [i] = l3_snp_fwdin_ready [i];
+        end
+
+        assign l3_core_rsp_ready = (& per_cluster_dram_rsp_ready);
+
+        VX_cache #(
+            .CACHE_ID           (0),
+            .CACHE_SIZE         (`L3CACHE_SIZE),
+            .BANK_LINE_SIZE     (`L3BANK_LINE_SIZE),
+            .NUM_BANKS          (`L3NUM_BANKS),
+            .WORD_SIZE          (`L3WORD_SIZE),
+            .NUM_REQUESTS       (`L3NUM_REQUESTS),
+            .STAGE_1_CYCLES     (`L3STAGE_1_CYCLES),
+            .CREQ_SIZE          (`L3CREQ_SIZE),
+            .MRVQ_SIZE          (`L3MRVQ_SIZE),
+            .DFPQ_SIZE          (`L3DFPQ_SIZE),
+            .SNRQ_SIZE          (`L3SNRQ_SIZE),
+            .CWBQ_SIZE          (`L3CWBQ_SIZE),
+            .DWBQ_SIZE          (`L3DWBQ_SIZE),
+            .DFQQ_SIZE          (`L3DFQQ_SIZE),
+            .PRFQ_SIZE          (`L3PRFQ_SIZE),
+            .PRFQ_STRIDE        (`L3PRFQ_STRIDE),
+            .DRAM_ENABLE        (1),
+            .WRITE_ENABLE       (1),
+            .SNOOP_FORWARDING   (1),
+            .CORE_TAG_WIDTH     (`L2DRAM_TAG_WIDTH),
+            .CORE_TAG_ID_BITS   (0),
+            .DRAM_TAG_WIDTH     (`L3DRAM_TAG_WIDTH),
+            .NUM_SNP_REQUESTS   (`NUM_CLUSTERS),
+            .SNP_REQ_TAG_WIDTH  (`L3SNP_TAG_WIDTH),
+            .SNP_FWD_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
+        ) gpu_l3cache (
+            .clk                (clk),
+            .reset              (reset),
+
+            // Core request    
+            .core_req_valid     (l3_core_req_valid),
+            .core_req_rw        (l3_core_req_rw),
+            .core_req_byteen    (l3_core_req_byteen),
+            .core_req_addr      (l3_core_req_addr),
+            .core_req_data      (l3_core_req_data),
+            .core_req_tag       (l3_core_req_tag),
+            .core_req_ready     (l3_core_req_ready),
+
+            // Core response
+            .core_rsp_valid     (l3_core_rsp_valid),
+            .core_rsp_data      (l3_core_rsp_data),
+            .core_rsp_tag       (l3_core_rsp_tag),              
+            .core_rsp_ready     (l3_core_rsp_ready),
+
+            // DRAM request
+            .dram_req_valid     (dram_req_valid),
+            .dram_req_rw        (dram_req_rw),
+            .dram_req_byteen    (dram_req_byteen),
+            .dram_req_addr      (dram_req_addr),
+            .dram_req_data      (dram_req_data),
+            .dram_req_tag       (dram_req_tag),
+            .dram_req_ready     (dram_req_ready),
+
+            // DRAM response
+            .dram_rsp_valid     (dram_rsp_valid),            
+            .dram_rsp_data      (dram_rsp_data),
+            .dram_rsp_tag       (dram_rsp_tag),
+            .dram_rsp_ready     (dram_rsp_ready),
+
+            // Snoop request
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_tag        (snp_req_tag),
+            .snp_req_ready      (snp_req_ready),
+
+            // Snoop response
+            .snp_rsp_valid      (snp_rsp_valid),
+            .snp_rsp_tag        (snp_rsp_tag),
+            .snp_rsp_ready      (snp_rsp_ready),
+
+            // Snoop forwarding out
+            .snp_fwdout_valid   (l3_snp_fwdout_valid),
+            .snp_fwdout_addr    (l3_snp_fwdout_addr),
+            .snp_fwdout_invalidate(l3_snp_fwdout_invalidate),
+            .snp_fwdout_tag     (l3_snp_fwdout_tag),
+            .snp_fwdout_ready   (l3_snp_fwdout_ready),
+
+            // Snoop forwarding in
+            .snp_fwdin_valid    (l3_snp_fwdin_valid),
+            .snp_fwdin_tag      (l3_snp_fwdin_tag),
+            .snp_fwdin_ready    (l3_snp_fwdin_ready)       
+        );
+    end
+
+`ifdef DBG_PRINT_DRAM
+    always @(posedge clk) begin
+        if (dram_req_valid && dram_req_ready) begin
+            $display("%t: DRAM req: rw=%b addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, dram_req_rw, `DRAM_TO_BYTE_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen, dram_req_data);
+        end
+        if (dram_rsp_valid && dram_rsp_ready) begin
+            $display("%t: DRAM rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
+        end
+    end
+`endif
+
+endmodule

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "VVortex_Socket.h"
-#include "VVortex_Socket__Syms.h"
+#include "VVortex.h"
+#include "VVortex__Syms.h"
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
@@ -62,7 +62,7 @@ private:
   uint32_t pending_snp_reqs_;
 
   RAM *ram_;
-  VVortex_Socket *vortex_;
+  VVortex *vortex_;
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif

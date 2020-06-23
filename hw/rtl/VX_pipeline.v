@@ -191,4 +191,4 @@ module VX_pipeline #(
     end
 `endif
 
-endmodule // Vortex
+endmodule
