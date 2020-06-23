@@ -18,14 +18,8 @@ VX_STR  = ../../startup/vx_start.S
 VX_INT  = ../../intrinsics/vx_intrinsics.S
 VX_IO   = ../../io/vx_io.S ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
-<<<<<<< HEAD:runtime/mains/nativevecadd/Makefile
-VX_TEST = ../../tests/tests.c
-VX_FIO  = ../../fileio/fileio.s
-LIBS    = -Wl,--whole-archive ./libs/libvecadd.a -Wl,--no-whole-archive ./libs/libOpenCL.a $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libc.a $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
-=======
 VX_FIO  = ../../fileio/fileio.S
 LIBS    = -Wl,--whole-archive ./libs/libvecadd.a -Wl,--no-whole-archive ./libs/libOpenCL.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libc.a ../../../../riscv-gnu-toolchain/drops/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
->>>>>>> fpga_synthesis:runtime/tests/vecadd/Makefile
 
 VX_MAIN = vx_pocl_main
 
@@ -38,11 +32,4 @@ HEX: ELF
 	$(CPY) -O ihex $(VX_MAIN).elf $(VX_MAIN).hex
 
 ELF: 
-<<<<<<< HEAD:runtime/mains/nativevecadd/Makefile
-	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_TEST) $(VX_MAIN).c $(LIBS) -Iinclude  -o $(VX_MAIN).elf
-
-clean:
-	rm -rf *.o *.elf *.dump *.hex *.qemu *.log *.debug
-=======
 	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_MAIN).c $(LIBS) -Iinclude  -o $(VX_MAIN).elf
->>>>>>> fpga_synthesis:runtime/tests/vecadd/Makefile

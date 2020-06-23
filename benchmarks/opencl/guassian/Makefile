@@ -12,20 +12,7 @@ CXXFLAGS += -I$(POCL_RT_PATH)/include
 
 LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
 
-<<<<<<< HEAD
-CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32 
-CXXFLAGS += -ffreestanding # program may not begin at main()
-CXXFLAGS += -Wl,--gc-sections # enable garbage collection of unused input sections
-CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
-CXXFLAGS += -I$(POCL_INC_PATH)
-
-VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
-QEMU_LIBS = $(VX_RT_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
-
-PROJECT = gaussian
-=======
 PROJECT = guassian
->>>>>>> fpga_synthesis
 
 SRCS = main.cc clutils.cpp utils.cpp
 

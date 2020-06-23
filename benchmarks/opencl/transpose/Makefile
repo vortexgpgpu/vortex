@@ -14,12 +14,7 @@ LDFLAGS += -L$(POCLRT_PATH)/lib -L$(DRIVER_PATH)/simx -lOpenCL -lvortex
 
 PROJECT = transpose
 
-<<<<<<< HEAD
-VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
-QEMU_LIBS = $(VX_RT_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
-=======
 SRCS = main.cc transpose_gold.cpp
->>>>>>> fpga_synthesis
 
 all: $(PROJECT)
 
