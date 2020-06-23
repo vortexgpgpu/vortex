@@ -1,6 +1,6 @@
-PROJECT = VX_vortex
-TOP_LEVEL_ENTITY = VX_vortex
-SRC_FILE = VX_vortex.v
+PROJECT = Vortex
+TOP_LEVEL_ENTITY = Vortex
+SRC_FILE = Vortex.v
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family

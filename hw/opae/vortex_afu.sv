@@ -883,7 +883,7 @@ VX_scope #(
 
 assign cmd_run_done = !vx_busy;
 
-Vortex_Socket #() vx_socket (
+Vortex #() vortex (
   `SCOPE_SIGNALS_ISTAGE_BIND
   `SCOPE_SIGNALS_LSU_BIND
   `SCOPE_SIGNALS_CORE_BIND

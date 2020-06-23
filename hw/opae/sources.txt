@@ -74,9 +74,9 @@ QI:vortex_afu.qsf
 ../rtl/libs/VX_countones.v
 ../rtl/libs/VX_scope.v
 
-../rtl/Vortex_Socket.v
-../rtl/Vortex_Cluster.v
 ../rtl/Vortex.v
+../rtl/VX_cluster.v
+../rtl/VX_core.v
 ../rtl/VX_mem_unit.v
 ../rtl/VX_pipeline.v
 ../rtl/VX_front_end.v

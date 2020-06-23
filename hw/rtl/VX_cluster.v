@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module Vortex_Cluster #(
+module VX_cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
     `SCOPE_SIGNALS_ISTAGE_IO
@@ -114,9 +114,9 @@ module Vortex_Cluster #(
 
     genvar i;
     for (i = 0; i < `NUM_CORES; i++) begin    
-        Vortex #(
+        VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
-        ) vortex_core (
+        ) core (
             `SCOPE_SIGNALS_ISTAGE_BIND
             `SCOPE_SIGNALS_LSU_BIND
             `SCOPE_SIGNALS_CORE_BIND
