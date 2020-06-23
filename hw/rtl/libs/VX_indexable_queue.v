@@ -31,8 +31,6 @@ module VX_indexable_queue #(
     assign enqueue = push && ~full;       
     assign dequeue = ~empty && ~valid[rd_a]; // auto-remove when head is invalid
 
-    integer i;
-
     always @(posedge clk) begin
         if (reset) begin
             rd_ptr <= 0;

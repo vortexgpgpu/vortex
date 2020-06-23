@@ -29,7 +29,7 @@ CFLAGS += -DUSE_RTLSIM $(CONFIGS)
 LDFLAGS += -shared -pthread
 # LDFLAGS += -dynamiclib -pthread
 
-TOP = Vortex_Socket
+TOP = Vortex
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 

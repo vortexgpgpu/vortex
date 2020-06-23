@@ -3,12 +3,12 @@
 
 module VX_decode(
     // Fetch Inputs
-    VX_inst_meta_if       fd_inst_meta_de,
+    VX_inst_meta_if    fd_inst_meta_de,
 
     // Outputs
-    VX_frE_to_bckE_req_if frE_to_bckE_req_if,
-    VX_wstall_if          wstall_if,
-    VX_join_if            join_if
+    VX_backend_req_if  frE_to_bckE_req_if,
+    VX_wstall_if       wstall_if,
+    VX_join_if         join_if
 );
     wire               in_valid        = (| fd_inst_meta_de.valid);
     wire[31:0]         in_instruction  = fd_inst_meta_de.instruction;

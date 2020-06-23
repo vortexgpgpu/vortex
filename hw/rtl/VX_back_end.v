@@ -16,7 +16,7 @@ module VX_back_end #(
     VX_jal_rsp_if          jal_rsp_if,
     VX_branch_rsp_if       branch_rsp_if,
 
-    VX_frE_to_bckE_req_if  bckE_req_if,
+    VX_backend_req_if      bckE_req_if,
     VX_wb_if               writeback_if,
 
     VX_warp_ctl_if         warp_ctl_if,

@@ -20,14 +20,6 @@ module VX_lsu_unit #(
 
     output wire             delay
 );
-    // Generate Addresses
-    wire[`NUM_THREADS-1:0][31:0] address;
-    VX_lsu_addr_gen VX_lsu_addr_gen (
-        .base_address (lsu_req_if.base_address),
-        .offset       (lsu_req_if.offset),
-        .address      (address)
-    );
-
     wire[`NUM_THREADS-1:0][31:0]    use_address;
     wire[`NUM_THREADS-1:0][31:0]    use_store_data;
     wire[`NUM_THREADS-1:0]          use_valid;
@@ -40,6 +32,12 @@ module VX_lsu_unit #(
 
     genvar i;
 
+    // Generate Full Addresses
+    wire[`NUM_THREADS-1:0][31:0] full_address;
+    for (i = 0; i < `NUM_THREADS; i++) begin
+        assign full_address[i] = lsu_req_if.base_address[i] + lsu_req_if.offset;
+    end
+
     VX_generic_register #(
         .N(45 + `NW_BITS-1 + 1 + `NUM_THREADS*65)
     ) lsu_buffer (
@@ -47,7 +45,7 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (delay),
         .flush (1'b0),
-        .in    ({address    , lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.curr_PC}),
+        .in    ({full_address,lsu_req_if.store_data, lsu_req_if.valid, lsu_req_if.mem_read, lsu_req_if.mem_write, lsu_req_if.rd, lsu_req_if.warp_num, lsu_req_if.wb, lsu_req_if.curr_PC}),
         .out   ({use_address, use_store_data       , use_valid       , use_mem_read       , use_mem_write       , use_rd       , use_warp_num       , use_wb       , use_pc           })
     );
 

@@ -2,8 +2,8 @@
 
 module VX_inst_multiplex (
     // Inputs
-    VX_frE_to_bckE_req_if bckE_req_if,
-    VX_gpr_data_if        gpr_data_if,
+    VX_backend_req_if     bckE_req_if,
+    VX_gpr_read_if        gpr_read_if,
 
     // Outputs
     VX_exec_unit_req_if   exec_unit_req_if,
@@ -33,8 +33,8 @@ module VX_inst_multiplex (
     // LSU Unit
     assign lsu_req_if.valid        = bckE_req_if.valid & is_mem_mask;
     assign lsu_req_if.warp_num     = bckE_req_if.warp_num;
-    assign lsu_req_if.base_address = gpr_data_if.a_reg_data;
-    assign lsu_req_if.store_data   = gpr_data_if.b_reg_data;
+    assign lsu_req_if.base_address = gpr_read_if.a_reg_data;
+    assign lsu_req_if.store_data   = gpr_read_if.b_reg_data;
 
     assign lsu_req_if.offset       = bckE_req_if.itype_immed;
 
@@ -51,8 +51,8 @@ module VX_inst_multiplex (
     assign exec_unit_req_if.next_PC     = bckE_req_if.next_PC;
     assign exec_unit_req_if.rd          = bckE_req_if.rd;
     assign exec_unit_req_if.wb          = bckE_req_if.wb;
-    assign exec_unit_req_if.a_reg_data  = gpr_data_if.a_reg_data;
-    assign exec_unit_req_if.b_reg_data  = gpr_data_if.b_reg_data;
+    assign exec_unit_req_if.a_reg_data  = gpr_read_if.a_reg_data;
+    assign exec_unit_req_if.b_reg_data  = gpr_read_if.b_reg_data;
     assign exec_unit_req_if.alu_op      = bckE_req_if.alu_op;
     assign exec_unit_req_if.rs1         = bckE_req_if.rs1;
     assign exec_unit_req_if.rs2         = bckE_req_if.rs2;
@@ -72,8 +72,8 @@ module VX_inst_multiplex (
     assign gpu_inst_req_if.is_tmc      = bckE_req_if.is_tmc;
     assign gpu_inst_req_if.is_split    = bckE_req_if.is_split;
     assign gpu_inst_req_if.is_barrier  = bckE_req_if.is_barrier;
-    assign gpu_inst_req_if.a_reg_data  = gpr_data_if.a_reg_data;
-    assign gpu_inst_req_if.rd2         = gpr_data_if.b_reg_data[0];
+    assign gpu_inst_req_if.a_reg_data  = gpr_read_if.a_reg_data;
+    assign gpu_inst_req_if.rd2         = gpr_read_if.b_reg_data[0];
     assign gpu_inst_req_if.next_PC     = bckE_req_if.next_PC;
 
     // CSR Req

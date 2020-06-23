@@ -87,15 +87,15 @@ module VX_pipeline #(
     )  core_icache_rsp_if();
 
     // Front-end to Back-end
-    VX_frE_to_bckE_req_if    bckE_req_if();
+    VX_backend_req_if   bckE_req_if();
 
     // Back-end to Front-end
-    VX_wb_if                 writeback_if(); 
-    VX_branch_rsp_if         branch_rsp_if();
-    VX_jal_rsp_if            jal_rsp_if();   
+    VX_wb_if            writeback_if(); 
+    VX_branch_rsp_if    branch_rsp_if();
+    VX_jal_rsp_if       jal_rsp_if();   
 
     // Warp controls
-    VX_warp_ctl_if           warp_ctl_if();
+    VX_warp_ctl_if      warp_ctl_if();
 
     VX_front_end #(
         .CORE_ID(CORE_ID)

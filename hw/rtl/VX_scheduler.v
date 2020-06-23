@@ -1,17 +1,17 @@
 `include "VX_define.vh"
 
 module VX_scheduler (
-    input wire              clk,
-    input wire              reset,
-    input wire              memory_delay,
-    input wire              exec_delay,
-    input wire              gpr_stage_delay,
+    input wire          clk,
+    input wire          reset,
+    input wire          memory_delay,
+    input wire          exec_delay,
+    input wire          gpr_stage_delay,
 
-    VX_frE_to_bckE_req_if   bckE_req_if,
-    VX_wb_if                writeback_if,
+    VX_backend_req_if   bckE_req_if,
+    VX_wb_if            writeback_if,
 
-    output wire             schedule_delay,
-    output wire             is_empty    
+    output wire         schedule_delay,
+    output wire         is_empty    
 );
     localparam CTVW = `CLOG2(`NUM_WARPS * 32 + 1);
 

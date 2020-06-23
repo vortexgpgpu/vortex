@@ -5,28 +5,28 @@ module VX_front_end #(
 ) (
     `SCOPE_SIGNALS_ISTAGE_IO
 
-    input wire                clk,
-    input wire                reset,
+    input wire              clk,
+    input wire              reset,
 
-    input wire                schedule_delay,
+    input wire              schedule_delay,
 
-    VX_warp_ctl_if            warp_ctl_if,
+    VX_warp_ctl_if          warp_ctl_if,
 
-    VX_cache_core_rsp_if      icache_rsp_if,
-    VX_cache_core_req_if      icache_req_if,
+    VX_cache_core_rsp_if    icache_rsp_if,
+    VX_cache_core_req_if    icache_req_if,
 
-    VX_jal_rsp_if             jal_rsp_if,
-    VX_branch_rsp_if          branch_rsp_if,
+    VX_jal_rsp_if           jal_rsp_if,
+    VX_branch_rsp_if        branch_rsp_if,
 
-    VX_frE_to_bckE_req_if     bckE_req_if,
-    output wire               busy
+    VX_backend_req_if       bckE_req_if,
+    output wire             busy
 );
 
     VX_inst_meta_if        fe_inst_meta_fi();
     VX_inst_meta_if        fe_inst_meta_fi2();
     VX_inst_meta_if        fe_inst_meta_id();
 
-    VX_frE_to_bckE_req_if  frE_to_bckE_req_if();
+    VX_backend_req_if      frE_to_bckE_req_if();
     VX_inst_meta_if        fd_inst_meta_de();
 
     wire total_freeze = schedule_delay;

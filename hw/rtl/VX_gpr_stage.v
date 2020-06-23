@@ -11,7 +11,7 @@ module VX_gpr_stage (
     output wire             gpr_stage_delay,
 
     // decodee inputs
-    VX_frE_to_bckE_req_if   bckE_req_if,
+    VX_backend_req_if       bckE_req_if,
 
     // WriteBack inputs
     VX_wb_if                writeback_if,
@@ -36,26 +36,18 @@ module VX_gpr_stage (
     assign gpr_read_if.warp_num = bckE_req_if.warp_num;
 
 `ifndef ASIC
-    VX_gpr_jal_if gpr_jal_if();
-    assign gpr_jal_if.is_jal  = bckE_req_if.is_jal;
-    assign gpr_jal_if.curr_PC = bckE_req_if.curr_PC;
+    assign gpr_read_if.is_jal  = bckE_req_if.is_jal;
+    assign gpr_read_if.curr_PC = bckE_req_if.curr_PC;
 `else 
-    VX_gpr_jal_if gpr_jal_if();
-    assign gpr_jal_if.is_jal  = exec_unit_req_if.is_jal;
-    assign gpr_jal_if.curr_PC = exec_unit_req_if.curr_PC;
+    assign gpr_read_if.is_jal  = exec_unit_req_if.is_jal;
+    assign gpr_read_if.curr_PC = exec_unit_req_if.curr_PC;
 `endif
-
-    VX_gpr_data_if gpr_datf_if();
 
     VX_gpr_wrapper grp_wrapper (
         .clk            (clk),
         .reset          (reset),
         .writeback_if   (writeback_if),
-        .gpr_read_if    (gpr_read_if),
-        .gpr_jal_if     (gpr_jal_if),
-
-        .a_reg_data     (gpr_datf_if.a_reg_data),
-        .b_reg_data     (gpr_datf_if.b_reg_data)
+        .gpr_read_if    (gpr_read_if)
     );
 
     // Outputs
@@ -66,7 +58,7 @@ module VX_gpr_stage (
 
     VX_inst_multiplex inst_mult(
         .bckE_req_if       (bckE_req_if),
-        .gpr_data_if       (gpr_datf_if),
+        .gpr_read_if       (gpr_read_if),
         .exec_unit_req_if  (exec_unit_req_temp_if),
         .lsu_req_if        (lsu_req_temp_if),
         .gpu_inst_req_if   (gpu_inst_req_temp_if),
