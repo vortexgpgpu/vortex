@@ -16,12 +16,7 @@ namespace Harp {
   public:
     struct Undefined {};
 
-<<<<<<< HEAD
-    ArchDef(const std::string &s, bool cpu_mode = false) 
-      : cpu_mode_(cpu_mode) {
-=======
     ArchDef(const std::string &s, int num_warps = 32, int num_threads = 32) {
->>>>>>> fpga_synthesis
       std::istringstream iss(s.c_str());
             
       wordSize = 4;
