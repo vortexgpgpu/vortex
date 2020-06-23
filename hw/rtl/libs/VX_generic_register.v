@@ -2,7 +2,7 @@
 
 module VX_generic_register #( 
     parameter N, 
-    parameter PassThru = 0
+    parameter PASSTHRU = 0
 ) (
     input wire          clk,
     input wire          reset,
@@ -23,6 +23,6 @@ module VX_generic_register #(
         end
     end
 
-    assign out = PassThru ? in : value;
+    assign out = PASSTHRU ? in : value;
 
 endmodule

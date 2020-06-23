@@ -803,6 +803,8 @@ end
 `ifdef SCOPE
 
 `SCOPE_SIGNALS_DECL
+localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST});
+localparam SCOPE_SR_DEPTH = 2;
 
 `SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
 `SCOPE_ASSIGN(scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
@@ -827,8 +829,6 @@ end
 `SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
 `SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
 
-`STATIC_ASSERT($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}) == 626, "oops!")
-
 wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
                   || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
@@ -839,20 +839,38 @@ wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_snp_rsp_valid && scope_snp_rsp_ready);
 
 wire scope_start = vx_reset;
-wire scope_stop  = 0;
+
+wire [SCOPE_DATAW+1:0] scope_data_in_st[SCOPE_SR_DEPTH-1:0];
+wire [SCOPE_DATAW+1:0] scope_data_in;
+assign scope_data_in_st[0] = {`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST, scope_changed, scope_start};
+assign scope_data_in = scope_data_in_st[SCOPE_SR_DEPTH-1];
+
+genvar i;
+for (i = 1; i < SCOPE_SR_DEPTH; i++) begin
+    VX_generic_register #(
+        .N (SCOPE_DATAW+2)
+    ) scope_sr (
+        .clk   (clk),
+        .reset (SoftReset),
+        .stall (0),
+        .flush (0),
+        .in    (scope_data_in_st[i-1]),
+        .out   (scope_data_in_st[i])
+    );
+end
 
 VX_scope #(
-  .DATAW    ($bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST})),
+  .DATAW    (SCOPE_DATAW),
   .BUSW     (64),
   .SIZE     (4096),
   .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))
 ) scope (
   .clk      (clk),
   .reset    (SoftReset),
-  .start    (scope_start),
-  .stop     (scope_stop),
-  .changed  (scope_changed),
-  .data_in  ({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST}),
+  .start    (scope_data_in[0]),
+  .stop     (0),
+  .changed  (scope_data_in[1]),
+  .data_in  (scope_data_in[SCOPE_DATAW+1:2]),
   .bus_in   (csr_scope_cmd),
   .bus_out  (csr_scope_data),
   .bus_read (csr_scope_read),

@@ -93,7 +93,14 @@ module VX_cache_miss_resrv #(
 
     assign miss_resrv_valid_st0 = dequeue_possible;
     assign miss_resrv_addr_st0  = addr_table[dequeue_index];
-    assign {miss_resrv_data_st0, miss_resrv_tid_st0, miss_resrv_tag_st0, miss_resrv_rw_st0, miss_resrv_byteen_st0, miss_resrv_wsel_st0, miss_resrv_is_snp_st0, miss_resrv_snp_invalidate_st0} = metadata_table[dequeue_index];
+    assign {miss_resrv_data_st0, 
+            miss_resrv_tid_st0, 
+            miss_resrv_tag_st0, 
+            miss_resrv_rw_st0, 
+            miss_resrv_byteen_st0, 
+            miss_resrv_wsel_st0, 
+            miss_resrv_is_snp_st0, 
+            miss_resrv_snp_invalidate_st0} = metadata_table[dequeue_index];
 
     wire mrvq_push = miss_add && enqueue_possible && !from_mrvq;
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;

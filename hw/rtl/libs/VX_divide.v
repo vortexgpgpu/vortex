@@ -104,8 +104,8 @@ module VX_divide #(
                     remainder = 0;
                 end
                 else begin
-                    quotient  = $signed($signed(numer_pipe_end) / $signed(denom_pipe_end));
-                    remainder = $signed($signed(numer_pipe_end) % $signed(denom_pipe_end));
+                    quotient  = $signed(numer_pipe_end) / $signed(denom_pipe_end);
+                    remainder = $signed(numer_pipe_end) % $signed(denom_pipe_end);
                 end
             end
         end

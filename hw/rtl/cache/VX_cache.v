@@ -484,11 +484,6 @@ module VX_cache #(
         .snp_rsp_valid          (snp_rsp_valid),
         .snp_rsp_tag            (snp_rsp_tag),
         .snp_rsp_ready          (snp_rsp_ready)
-    );    
-
-    `SCOPE_ASSIGN(scope_idram_req_valid, per_bank_dram_fill_req_valid[0]);
-    `SCOPE_ASSIGN(scope_idram_req_ready, dram_fill_req_ready);
-    `SCOPE_ASSIGN(scope_idram_rsp_valid, per_bank_core_rsp_valid[0]);
-    `SCOPE_ASSIGN(scope_idram_rsp_ready, per_bank_core_rsp_ready[0]);
+    );
     
 endmodule

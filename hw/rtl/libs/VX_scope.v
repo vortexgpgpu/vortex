@@ -58,21 +58,21 @@ module VX_scope #(
 
 	always @(posedge clk) begin
 		if (reset) begin
+			out_cmd     	<= $bits(out_cmd)'(CMD_GET_VALID);
 			raddr      		<= 0;	
 			waddr      		<= 0;	
+			waddr_end   	<= $bits(waddr)'(SIZE-1);
+			started     	<= 0;
 			start_wait 		<= 0;
 			recording   	<= 0;
-			delay_cntr 		<= 0;
-			read_offset		<= 0;
-			data_valid  	<= 0;
-			out_cmd     	<= $bits(out_cmd)'(CMD_GET_VALID);
 			delay_val   	<= 0;
-			waddr_end   	<= $bits(waddr)'(SIZE-1);
+			delay_cntr 		<= 0;
 			delta       	<= 0;
-			prev_trigger_id <= 0;
-			read_delta  	<= 0;
-			started     	<= 0;
 			delta_flush     <= 0;
+			prev_trigger_id <= 0;
+			read_offset		<= 0;
+			read_delta  	<= 0;
+			data_valid  	<= 0;
 		end else begin
 
 			if (bus_write) begin
@@ -88,12 +88,12 @@ module VX_scope #(
 			end
 
 			if (start && !started) begin		
-				started <= 1;
+				started     <= 1;
+				delta_flush <= 1;	
 				if (0 == delay_val) begin					
 					start_wait  <= 0;
 					recording   <= 1;
-					delay_cntr  <= 0;
-					delta_flush <= 1;						
+					delay_cntr  <= 0;					
 				end else begin
 					start_wait <= 1;
 					recording  <= 0;
@@ -104,9 +104,8 @@ module VX_scope #(
 			if (start_wait) begin				
 				delay_cntr <= delay_cntr - 1;
 				if (1 == delay_cntr) begin				
-					start_wait  <= 0;
-					recording   <= 1;
-					delta_flush <= 1;
+					start_wait <= 0;
+					recording  <= 1;
 				end 
 			end
 
@@ -181,7 +180,7 @@ module VX_scope #(
 `ifdef DBG_PRINT_SCOPE
 	always @(posedge clk) begin
 		if (bus_read) begin
-			$display("%t: scope-read: cmd=%0d, out=0x%0h, addr=%0d", $time, out_cmd, bus_out, raddr);
+			$display("%t: scope-read: cmd=%0d, out=%0h, addr=%0d", $time, out_cmd, bus_out, raddr);
 		end
 		if (bus_write) begin
 			$display("%t: scope-write: cmd=%0d, value=%0d", $time, cmd_type, cmd_data);

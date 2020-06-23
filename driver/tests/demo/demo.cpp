@@ -181,13 +181,11 @@ int main(int argc, char *argv[]) {
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = 0;
+      buf_ptr[i] = 0xffffffff;
     }
   }
   std::cout << "clear destination buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
-
-  
+  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;

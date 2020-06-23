@@ -60,12 +60,12 @@ module VX_generic_queue #(
 
         if (0 == BUFFERED_OUTPUT) begin                
 
-            reg [`LOG2UP(SIZE):0] wr_ptr_r;
             reg [`LOG2UP(SIZE):0] rd_ptr_r;
-
-            wire [`LOG2UP(SIZE)-1:0] wr_ptr_a = wr_ptr_r[`LOG2UP(SIZE)-1:0];
+            reg [`LOG2UP(SIZE):0] wr_ptr_r;
+            
             wire [`LOG2UP(SIZE)-1:0] rd_ptr_a = rd_ptr_r[`LOG2UP(SIZE)-1:0];
-
+            wire [`LOG2UP(SIZE)-1:0] wr_ptr_a = wr_ptr_r[`LOG2UP(SIZE)-1:0];
+            
             always @(posedge clk) begin
                 if (reset) begin
                     rd_ptr_r <= 0;
@@ -108,12 +108,14 @@ module VX_generic_queue #(
 
             always @(posedge clk) begin
                 if (reset) begin
+                    size_r          <= 0;
+                    head_r          <= 0;
+                    curr_r          <= 0;
                     wr_ptr_r        <= 0;
                     rd_ptr_r        <= 0;
                     rd_ptr_next_r   <= 1;
                     empty_r         <= 1;                   
-                    full_r          <= 0;
-                    size_r          <= 0;
+                    full_r          <= 0;                    
                 end else begin
                     if (writing) begin                            
                         data[wr_ptr_r] <= data_in;

@@ -13,8 +13,8 @@ module VX_alu_unit (
     output reg [31:0]  alu_result,
     output reg         alu_stall
 );
-    localparam div_pipeline_len = 20;
-    localparam mul_pipeline_len = 8;
+    localparam DIV_PIPELINE_LEN = 20;
+    localparam MUL_PIPELINE_LEN = 8;
 
     wire[31:0] unsigned_div_result;
     wire[31:0] unsigned_rem_result;
@@ -31,7 +31,7 @@ module VX_alu_unit (
         .WIDTHN(32),
         .WIDTHD(32),
         .SPEED("HIGHEST"),
-        .PIPELINE(div_pipeline_len)
+        .PIPELINE(DIV_PIPELINE_LEN)
     ) unsigned_div (
         .clock(clk),
         .aclr(1'b0),
@@ -48,7 +48,7 @@ module VX_alu_unit (
         .NREP("SIGNED"),
         .DREP("SIGNED"),
         .SPEED("HIGHEST"),
-        .PIPELINE(div_pipeline_len)
+        .PIPELINE(DIV_PIPELINE_LEN)
     ) signed_div (
         .clock(clk),
         .aclr(1'b0),
@@ -65,7 +65,7 @@ module VX_alu_unit (
         .WIDTHP(64),
         .SPEED("HIGHEST"),
         .FORCE_LE("YES"),
-        .PIPELINE(mul_pipeline_len)
+        .PIPELINE(MUL_PIPELINE_LEN)
     ) multiplier (
         .clock(clk),
         .aclr(1'b0),
@@ -93,11 +93,11 @@ module VX_alu_unit (
             `ALU_DIV,
             `ALU_DIVU,
             `ALU_REM,
-            `ALU_REMU:  curr_inst_delay = div_pipeline_len;
+            `ALU_REMU:  curr_inst_delay = DIV_PIPELINE_LEN;
             `ALU_MUL,
             `ALU_MULH,
             `ALU_MULHSU,
-            `ALU_MULHU: curr_inst_delay = mul_pipeline_len;
+            `ALU_MULHU: curr_inst_delay = MUL_PIPELINE_LEN;
             default:    curr_inst_delay = 0;
         endcase // alu_op
     end

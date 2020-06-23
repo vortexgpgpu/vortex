@@ -75,7 +75,7 @@ module cache_simX (
 		.VX_icache_rsp         (VX_icache_rsp),
 		.VX_dcache_req         (VX_dcache_req),
 		.VX_dcache_rsp         (VX_dcache_rsp)
-		);
+	);
 
 	always @(posedge clk, posedge reset) begin
 		if (reset)

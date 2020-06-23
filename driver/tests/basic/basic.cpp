@@ -112,13 +112,24 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   int errors = 0; 
   
   // update source buffer
-  for (uint32_t i = 0; i < num_points; ++i) {
-    ((int32_t*)vx_host_ptr(buffer))[i] = i;
+  {
+    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    for (uint32_t i = 0; i < num_points; ++i) {
+      buf_ptr[i] = i;
+    }
   }
-
-  // write buffer to local memory
-  std::cout << "write buffer to local memory" << std::endl;
+  std::cout << "upload source buffer" << std::endl;
   RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src_ptr, buf_size, 0));
+
+  // clear destination buffer
+  {
+    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    for (uint32_t i = 0; i < num_points; ++i) {
+      buf_ptr[i] = 0xffffffff;
+    }
+  }  
+  std::cout << "clear destination buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
 
   // start device
   std::cout << "start device" << std::endl;
@@ -131,11 +142,6 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   // flush the caches
   std::cout << "flush the caches" << std::endl;
   RT_CHECK(vx_flush_caches(device, kernel_arg.dst_ptr, buf_size));
-
-  // clear destination buffer
-  for (uint32_t i = 0; i < num_points; ++i) {
-    ((int32_t*)vx_host_ptr(buffer))[i] = 0;
-  }
 
   // read buffer from local memory
   std::cout << "read buffer from local memory" << std::endl;

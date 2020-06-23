@@ -111,7 +111,7 @@ module VX_tag_data_access #(
 
     VX_generic_register #(
         .N(1 + 1 + BANK_LINE_SIZE + `TAG_SELECT_BITS + `BANK_LINE_WIDTH), 
-        .PassThru(1)
+        .PASSTHRU(1)
     ) s0_1_c0 (
         .clk   (clk),
         .reset (reset),
