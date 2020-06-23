@@ -105,20 +105,17 @@ module VX_lsu_unit #(
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({dbg_mrq_write_addr, mem_wb_if.curr_PC, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num})
+        .read_data  ({dbg_mrq_write_addr, mem_wb_if.curr_PC, mem_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, mem_wb_if.rd, mem_wb_if.warp_num}),
+        `UNUSED_PIN (empty)
     );
 
     always @(posedge clk) begin
-        if (reset) begin
-            //--
-        end else begin
-            if (mrq_push)  begin
-                mem_rsp_mask[mrq_write_addr] <= use_valid;
-            end    
-            if (mrq_pop_part) begin
-                mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_upd;
-                assert(mrq_read_addr == dbg_mrq_write_addr);
-            end
+        if (mrq_push)  begin
+            mem_rsp_mask[mrq_write_addr] <= use_valid;
+        end    
+        if (mrq_pop_part) begin
+            mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_upd;
+            assert(mrq_read_addr == dbg_mrq_write_addr);
         end
     end
 

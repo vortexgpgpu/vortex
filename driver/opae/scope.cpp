@@ -4,6 +4,7 @@
 #include <chrono>
 #include <vector>
 #include <assert.h>
+#include <VX_config.h>
 #include "scope.h"
 #include "vortex_afu.h"
 
@@ -32,6 +33,20 @@ constexpr int ilog2(int n) {
 static constexpr int NW_BITS = ilog2(NUM_WARPS);
 
 static const scope_signal_t scope_signals[] = {
+
+    { 32, "dram_req_addr" },
+    { 1,  "dram_req_rw" },
+    { 16, "dram_req_byteen" },
+    { 32, "dram_req_data" },
+    { 29, "dram_req_tag" },
+    { 32, "dram_rsp_data" },
+    { 29, "dram_rsp_tag" }, 
+
+    { 32, "snp_req_addr" },
+    { 1,  "snp_req_invalidate" },
+    { 16, "snp_req_tag" },
+    { 16, "snp_rsp_tag" },    
+    
     { NW_BITS, "icache_req_warp_num" },
     { 32, "icache_req_addr" },    
     { NW_BITS, "icache_req_tag" },  
@@ -47,19 +62,6 @@ static const scope_signal_t scope_signals[] = {
     { NW_BITS, "dcache_req_tag" },
     { 32, "dcache_rsp_data" },    
     { NW_BITS, "dcache_rsp_tag" }, 
-
-    { 32, "dram_req_addr" },
-    { 1,  "dram_req_rw" },
-    { 16, "dram_req_byteen" },
-    { 32, "dram_req_data" },
-    { 29, "dram_req_tag" },
-    { 32, "dram_rsp_data" },
-    { 29, "dram_rsp_tag" }, 
-
-    { 32, "snp_req_addr" },
-    { 1,  "snp_req_invalidate" },
-    { 16, "snp_req_tag" },
-    { 16, "snp_rsp_tag" },    
     
     { NW_BITS, "decode_warp_num" },
     { 32, "decode_curr_PC" },
@@ -78,6 +80,16 @@ static const scope_signal_t scope_signals[] = {
     { 32, "writeback_data" },    
 
     ///////////////////////////////////////////////////////////////////////////
+    
+    { 1, "dram_req_valid" },   
+    { 1, "dram_req_ready" },
+    { 1, "dram_rsp_valid" },
+    { 1, "dram_rsp_ready" },
+    
+    { 1, "snp_req_valid" },   
+    { 1, "snp_req_ready" },
+    { 1, "snp_rsp_valid" },
+    { 1, "snp_rsp_ready" },
 
     { 1, "icache_req_valid" },
     { 1, "icache_req_ready" },
@@ -88,16 +100,6 @@ static const scope_signal_t scope_signals[] = {
     { 1, "dcache_req_ready" }, 
     { NUM_THREADS, "dcache_rsp_valid" }, 
     { 1, "dcache_rsp_ready" },
-
-    { 1, "dram_req_valid" },   
-    { 1, "dram_req_ready" },
-    { 1, "dram_rsp_valid" },
-    { 1, "dram_rsp_ready" },
-    
-    { 1, "snp_req_valid" },   
-    { 1, "snp_req_ready" },
-    { 1, "snp_rsp_valid" },
-    { 1, "snp_rsp_ready" },
     
     { NUM_THREADS, "decode_valid" },
     { NUM_THREADS, "execute_valid" },
@@ -107,22 +109,20 @@ static const scope_signal_t scope_signals[] = {
     { 1, "exec_delay" },
     { 1, "gpr_stage_delay" },
     { 1, "busy" },
-
-    { 1, "idram_req_valid" },   
-    { 1, "idram_req_ready" },
-    { 1, "idram_rsp_valid" },
-    { 1, "idram_rsp_ready" },
 };
 
 static const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
 
 int vx_scope_start(fpga_handle hfpga, uint64_t delay) {    
     if (nullptr == hfpga)
-        return -1;
-
-    // set start delay
-    uint64_t cmd_delay = ((delay << 3) | 4);
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, cmd_delay));    
+        return -1;  
+    
+    if (delay != uint64_t(-1)) {
+        // set start delay
+        uint64_t cmd_delay = ((delay << 3) | 4);
+        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, cmd_delay));    
+        std::cout << "scope start delay: " << delay << std::endl;
+    }
 
     return 0;
 }
@@ -130,10 +130,13 @@ int vx_scope_start(fpga_handle hfpga, uint64_t delay) {
 int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {    
     if (nullptr == hfpga)
         return -1;
-
-    // stop recording
-    uint64_t cmd_stop = ((delay << 3) | 5);
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, cmd_stop));
+    
+    if (delay != uint64_t(-1)) {
+        // stop recording
+        uint64_t cmd_stop = ((delay << 3) | 5);
+        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, cmd_stop));
+        std::cout << "scope stop delay: " << delay << std::endl;
+    }
 
     std::ofstream ofs("vx_scope.vcd");
 
@@ -243,10 +246,9 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
                 }                        
             }
         } while ((frame_offset % 64) != 0);
-
     } while (frame_no != max_frames);
 
-    std::cout << "scope trace dump done!" << std::endl;
+    std::cout << "scope trace dump done! - " << (timestamp/2) << " cycles" << std::endl;
 
     // verify data not valid
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 0));

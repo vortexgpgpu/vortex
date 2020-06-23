@@ -107,7 +107,7 @@ module VX_mult #(
         /* * * * * * * * * * * * * * * * * * * * * * */
 
         if (REP == "SIGNED") begin
-            assign result = $signed($signed(dataa_pipe_end)*$signed(datab_pipe_end));
+            assign result = $signed(dataa_pipe_end) * $signed(datab_pipe_end);
         end
         else begin
             assign result = dataa_pipe_end * datab_pipe_end;

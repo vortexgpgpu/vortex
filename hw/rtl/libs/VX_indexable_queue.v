@@ -9,18 +9,18 @@ module VX_indexable_queue #(
     input  wire [DATAW-1:0] write_data,        
     output wire [`LOG2UP(SIZE)-1:0] write_addr,
     input  wire push,    
-    output wire full,
-
     input  wire pop,
+    output wire full,
+    output wire empty,
     input  wire [`LOG2UP(SIZE)-1:0] read_addr,
     output wire [DATAW-1:0] read_data
 );
     reg [DATAW-1:0] data [SIZE-1:0];
-    reg valid [SIZE-1:0];    
+    reg [SIZE-1:0] valid;    
     reg [`LOG2UP(SIZE):0] rd_ptr, wr_ptr;
 
     wire [`LOG2UP(SIZE)-1:0] rd_a, wr_a;
-    wire enqueue, dequeue, empty;
+    wire enqueue, dequeue;
 
     assign rd_a = rd_ptr[`LOG2UP(SIZE)-1:0];
     assign wr_a = wr_ptr[`LOG2UP(SIZE)-1:0];    
@@ -31,10 +31,13 @@ module VX_indexable_queue #(
     assign enqueue = push && ~full;       
     assign dequeue = ~empty && ~valid[rd_a]; // auto-remove when head is invalid
 
+    integer i;
+
     always @(posedge clk) begin
         if (reset) begin
             rd_ptr <= 0;
             wr_ptr <= 0;
+            valid  <= 0;     
         end else begin
             if (enqueue)  begin
                 data[wr_a]  <= write_data;

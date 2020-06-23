@@ -42,19 +42,16 @@ module VX_icache_stage #(
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({dbg_mrq_write_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num})
+        .read_data  ({dbg_mrq_write_addr, fe_inst_meta_id.inst_pc, fe_inst_meta_id.warp_num}),
+        `UNUSED_PIN (empty)
     );    
 
     always @(posedge clk) begin
-        if (reset) begin
-            //--
-        end else begin
-            if (mrq_push) begin
-                valid_threads[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
-            end
-            if (mrq_pop) begin
-                assert(mrq_read_addr == dbg_mrq_write_addr);      
-            end
+        if (mrq_push) begin
+            valid_threads[fe_inst_meta_fi.warp_num] <= fe_inst_meta_fi.valid;                
+        end
+        if (mrq_pop) begin
+            assert(mrq_read_addr == dbg_mrq_write_addr);
         end
     end
 

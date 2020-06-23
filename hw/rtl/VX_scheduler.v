@@ -57,7 +57,7 @@ module VX_scheduler (
 
     reg [CTVW-1:0] count_valid_next = (acquire_rd && ~(release_rd && (0 == valid_wb_new_mask))) ? (count_valid + 1) : 
                                       (~acquire_rd && (release_rd && (0 == valid_wb_new_mask))) ? (count_valid - 1) :
-                                                                     count_valid; 
+                                                                                                  count_valid; 
     
     always @(posedge clk) begin
         if (reset) begin

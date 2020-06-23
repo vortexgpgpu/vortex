@@ -67,24 +67,21 @@ module VX_snp_forwarder #(
         .reset      (reset),
         .write_data ({sfq_write_addr, snp_req_addr, snp_req_invalidate, snp_req_tag}),    
         .write_addr (sfq_write_addr),        
-        .push       (sfq_push),    
-        .full       (sfq_full),
-        .pop        (sfq_pop),
+        .push       (sfq_push), 
+        .pop        (sfq_pop),   
+        .full       (sfq_full),     
         .read_addr  (sfq_read_addr),
-        .read_data  ({dbg_sfq_write_addr, snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag})
+        .read_data  ({dbg_sfq_write_addr, snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag}),
+        `UNUSED_PIN (empty)
     );
 
     always @(posedge clk) begin
-        if (reset) begin
-            //--
-        end else begin
-            if (sfq_push)  begin
-                pending_cntrs[sfq_write_addr] <= NUM_REQUESTS;
-            end      
-            if (fwdin_fire) begin
-                pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
-                assert(sfq_read_addr == dbg_sfq_write_addr);
-            end
+        if (sfq_push)  begin
+            pending_cntrs[sfq_write_addr] <= NUM_REQUESTS;
+        end      
+        if (fwdin_fire) begin
+            pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
+            assert(sfq_read_addr == dbg_sfq_write_addr);
         end
     end
 
