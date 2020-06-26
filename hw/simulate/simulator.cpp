@@ -13,6 +13,10 @@ Simulator::Simulator() {
   // force random values for unitialized signals  
   Verilated::randReset(2);
 
+#ifdef NDEBUG
+  Verilated::assertOn(false);
+#endif
+
   ram_ = nullptr;
   vortex_ = new VVortex();
 
