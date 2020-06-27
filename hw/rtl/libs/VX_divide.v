@@ -58,8 +58,8 @@ module VX_divide #(
                 end
                 else if (clken) begin
                     if (i == 0) begin
-                        numer_pipe[0] <= 0;
-                        denom_pipe[0] <= 0;
+                        numer_pipe[0] <= numer;
+                        denom_pipe[0] <= denom;
                     end else begin
                         numer_pipe[i] <= numer_pipe[i-1];
                         denom_pipe[i] <= denom_pipe[i-1];    

@@ -50,10 +50,7 @@ module VX_tag_data_access #(
     output wire[BANK_LINE_SIZE-1:0]     dirtyb_st1e,
     output wire                         fill_saw_dirty_st1e,
     output wire                         snp_to_mrvq_st1e,
-    output wire                         mrvq_init_ready_state_st1e,
-
-    output wire tag_valid_st1e,
-    output wire tag_match_st1e
+    output wire                         mrvq_init_ready_state_st1e
 );
 
     wire                        read_valid_st1c[STAGE_1_CYCLES-1:0];
@@ -196,9 +193,6 @@ module VX_tag_data_access #(
     assign fill_sent           = miss_st1e;
     assign fill_saw_dirty_st1e = real_writefill && dirty_st1e;
     assign invalidate_line     = snoop_hit_no_pending;
-
-    assign tag_valid_st1e = use_read_valid_st1e;
-    assign tag_match_st1e = tags_match;
 
 endmodule
 

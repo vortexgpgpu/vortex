@@ -50,8 +50,6 @@
         scope_bank_is_mrvq_st1, \
         scope_bank_miss_st1, \
         scope_bank_dirty_st1, \
-        scope_bank_tag_valid_st1, \
-        scope_bank_tag_match_st1, \
         scope_bank_force_miss_st1,
          
     
@@ -159,8 +157,6 @@
         wire scope_bank_is_mrvq_st1; \
         wire scope_bank_miss_st1; \
         wire scope_bank_dirty_st1; \
-        wire scope_bank_tag_valid_st1; \
-        wire scope_bank_tag_match_st1; \
         wire scope_bank_force_miss_st1; \
         wire scope_bank_stall_pipe;        
 
@@ -202,8 +198,6 @@
         output wire scope_bank_is_mrvq_st1, \
         output wire scope_bank_miss_st1, \
         output wire scope_bank_dirty_st1, \
-        output wire scope_bank_tag_valid_st1, \
-        output wire scope_bank_tag_match_st1, \
         output wire scope_bank_force_miss_st1, \
         output wire scope_bank_stall_pipe,
 
@@ -272,8 +266,6 @@
         .scope_bank_is_mrvq_st1 (scope_bank_is_mrvq_st1), \
         .scope_bank_miss_st1    (scope_bank_miss_st1), \
         .scope_bank_dirty_st1   (scope_bank_dirty_st1), \
-        .scope_bank_tag_valid_st1 (scope_bank_tag_valid_st1), \
-        .scope_bank_tag_match_st1 (scope_bank_tag_match_st1), \
         .scope_bank_force_miss_st1 (scope_bank_force_miss_st1), \
         .scope_bank_stall_pipe  (scope_bank_stall_pipe),
 
@@ -288,8 +280,6 @@
         .scope_bank_is_mrvq_st1 (), \
         .scope_bank_miss_st1    (), \
         .scope_bank_dirty_st1   (), \
-        .scope_bank_tag_valid_st1 (), \
-        .scope_bank_tag_match_st1 (), \
         .scope_bank_force_miss_st1 (), \
         .scope_bank_stall_pipe  (), \
         /* verilator lint_on PINCONNECTEMPTY */
@@ -305,8 +295,6 @@
         wire [NUM_BANKS-1:0] scope_per_bank_is_mrvq_st1; \
         wire [NUM_BANKS-1:0] scope_per_bank_miss_st1; \
         wire [NUM_BANKS-1:0] scope_per_bank_dirty_st1; \
-        wire [NUM_BANKS-1:0] scope_per_bank_tag_valid_st1; \
-        wire [NUM_BANKS-1:0] scope_per_bank_tag_match_st1; \
         wire [NUM_BANKS-1:0] scope_per_bank_force_miss_st1; \
         wire [NUM_BANKS-1:0] scope_per_bank_stall_pipe; \
         /* verilator lint_on UNUSED */ \
@@ -319,8 +307,6 @@
         assign scope_bank_is_mrvq_st1 = scope_per_bank_is_mrvq_st1[0]; \
         assign scope_bank_miss_st1 = scope_per_bank_miss_st1[0]; \
         assign scope_bank_dirty_st1 = scope_per_bank_dirty_st1[0]; \
-        assign scope_bank_tag_valid_st1 = scope_per_bank_tag_valid_st1[0]; \
-        assign scope_bank_tag_match_st1 = scope_per_bank_tag_match_st1[0]; \
         assign scope_bank_force_miss_st1 = scope_per_bank_force_miss_st1[0]; \
         assign scope_bank_stall_pipe = scope_per_bank_stall_pipe[0];
 
@@ -334,8 +320,6 @@
         .scope_bank_is_mrvq_st1 (scope_per_bank_is_mrvq_st1[i]), \
         .scope_bank_miss_st1 (scope_per_bank_miss_st1[i]), \
         .scope_bank_dirty_st1 (scope_per_bank_dirty_st1[i]), \
-        .scope_bank_tag_valid_st1 (scope_per_bank_tag_valid_st1[i]), \
-        .scope_bank_tag_match_st1 (scope_per_bank_tag_match_st1[i]), \
         .scope_bank_force_miss_st1 (scope_per_bank_force_miss_st1[i]), \
         .scope_bank_stall_pipe (scope_per_bank_stall_pipe[i]),
  
