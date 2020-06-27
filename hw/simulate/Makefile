@@ -12,8 +12,8 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
 
-#DBG_FLAGS += $(DBG_PRINT_FLAGS)
-#DBG_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_FLAGS += $(DBG_PRINT_FLAGS)
+DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 INCLUDE = -I../rtl/ -I../rtl/libs -I../rtl/interfaces -I../rtl/pipe_regs -I../rtl/cache -I../rtl/simulate
 
