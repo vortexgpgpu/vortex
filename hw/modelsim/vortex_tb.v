@@ -140,7 +140,7 @@ reg[31:0]  io_data;
 			clk = 0;
 		end
 
-		#5 clk <= ~clk;
+		#5 clk <= !clk;
 	end
 
 endmodule

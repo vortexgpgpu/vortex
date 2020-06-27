@@ -56,7 +56,7 @@ module VX_cache_dram_req_arb #(
         .clk          (clk),
         .reset        (reset),
 
-        .dram_req     (dram_req_valid && ~dram_req_rw),
+        .dram_req     (dram_req_valid && !dram_req_rw),
         .dram_req_addr(dram_req_addr),
 
         .pref_pop     (pref_pop),
@@ -91,7 +91,7 @@ module VX_cache_dram_req_arb #(
         .dfqq_full                      (dfqq_full)
     );
 
-    assign dram_fill_req_ready = ~dfqq_full;
+    assign dram_fill_req_ready = !dfqq_full;
 
     wire [`BANK_BITS-1:0] dwb_bank;
     

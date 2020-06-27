@@ -50,14 +50,17 @@ module VX_tag_data_access #(
     output wire[BANK_LINE_SIZE-1:0]     dirtyb_st1e,
     output wire                         fill_saw_dirty_st1e,
     output wire                         snp_to_mrvq_st1e,
-    output wire                         mrvq_init_ready_state_st1e
+    output wire                         mrvq_init_ready_state_st1e,
+
+    output wire tag_valid_st1e,
+    output wire tag_match_st1e
 );
 
-    reg                         read_valid_st1c[STAGE_1_CYCLES-1:0];
-    reg                         read_dirty_st1c[STAGE_1_CYCLES-1:0];
-    reg[BANK_LINE_SIZE-1:0]     read_dirtyb_st1c[STAGE_1_CYCLES-1:0];
-    reg[`TAG_SELECT_BITS-1:0]   read_tag_st1c  [STAGE_1_CYCLES-1:0];
-    reg[`BANK_LINE_WIDTH-1:0]   read_data_st1c [STAGE_1_CYCLES-1:0];
+    wire                        read_valid_st1c[STAGE_1_CYCLES-1:0];
+    wire                        read_dirty_st1c[STAGE_1_CYCLES-1:0];
+    wire[BANK_LINE_SIZE-1:0]    read_dirtyb_st1c[STAGE_1_CYCLES-1:0];
+    wire[`TAG_SELECT_BITS-1:0]  read_tag_st1c  [STAGE_1_CYCLES-1:0];
+    wire[`BANK_LINE_WIDTH-1:0]  read_data_st1c [STAGE_1_CYCLES-1:0];
 
     wire                        qual_read_valid_st1;
     wire                        qual_read_dirty_st1;
@@ -135,7 +138,7 @@ module VX_tag_data_access #(
         );
     end
 
-    assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-1] || ~DRAM_ENABLE; // If shared memory, always valid
+    assign use_read_valid_st1e = read_valid_st1c[STAGE_1_CYCLES-1] || !DRAM_ENABLE; // If shared memory, always valid
     assign use_read_dirty_st1e = read_dirty_st1c[STAGE_1_CYCLES-1] && DRAM_ENABLE && WRITE_ENABLE; // Dirty only applies in Dcache
     assign use_read_tag_st1e   = DRAM_ENABLE ? read_tag_st1c[STAGE_1_CYCLES-1] : writetag_st1e; // Tag is always the same in SM
     assign use_read_dirtyb_st1e= read_dirtyb_st1c[STAGE_1_CYCLES-1];
@@ -177,11 +180,8 @@ module VX_tag_data_access #(
     wire snoop_hit_no_pending = valid_req_st1e &&  is_snp_st1e &&  use_read_valid_st1e && tags_match && (use_read_dirty_st1e || snp_invalidate_st1e) && !force_request_miss_st1e;
     wire req_invalid          = valid_req_st1e && !is_snp_st1e && !use_read_valid_st1e && !writefill_st1e;
     wire req_miss             = valid_req_st1e && !is_snp_st1e &&  use_read_valid_st1e && !writefill_st1e && !tags_match;
-
     wire real_miss            = req_invalid || req_miss;
-
-    wire force_core_miss      = (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e && !real_miss);
-    
+    wire force_core_miss      = (force_request_miss_st1e && !is_snp_st1e && !writefill_st1e && valid_req_st1e && !real_miss);    
     assign snp_to_mrvq_st1e   = valid_req_st1e && is_snp_st1e && force_request_miss_st1e;
     
     // The second term is basically saying always make an entry ready if there's already antoher entry waiting, even if you yourself see a miss
@@ -196,6 +196,9 @@ module VX_tag_data_access #(
     assign fill_sent           = miss_st1e;
     assign fill_saw_dirty_st1e = real_writefill && dirty_st1e;
     assign invalidate_line     = snoop_hit_no_pending;
+
+    assign tag_valid_st1e = use_read_valid_st1e;
+    assign tag_match_st1e = tags_match;
 
 endmodule
 

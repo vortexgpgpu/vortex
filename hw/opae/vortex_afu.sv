@@ -83,6 +83,10 @@ typedef logic [$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:0] t_cci_rdq_data;
 
 state_t state;
 
+`ifdef SCOPE
+`SCOPE_SIGNALS_DECL
+`endif
+
 // Vortex ports ///////////////////////////////////////////////////////////////
 
 logic vx_dram_req_valid;
@@ -384,19 +388,19 @@ assign cci_dram_wr_req_enable = (state == STATE_WRITE)
                              && (cci_dram_wr_req_ctr < csr_data_size);
 
 assign vx_dram_req_enable    = vortex_enabled && (avs_pending_reads < AVS_RD_QUEUE_SIZE);
-assign vx_dram_rd_req_enable = vx_dram_req_enable && vx_dram_req_valid && ~vx_dram_req_rw;
+assign vx_dram_rd_req_enable = vx_dram_req_enable && vx_dram_req_valid && !vx_dram_req_rw;
 assign vx_dram_wr_req_enable = vx_dram_req_enable && vx_dram_req_valid && vx_dram_req_rw;
 
-assign cci_dram_rd_req_fire = cci_dram_rd_req_enable && ~avs_waitrequest;
-assign cci_dram_wr_req_fire = cci_dram_wr_req_enable && ~avs_waitrequest;
+assign cci_dram_rd_req_fire = cci_dram_rd_req_enable && !avs_waitrequest;
+assign cci_dram_wr_req_fire = cci_dram_wr_req_enable && !avs_waitrequest;
 
-assign vx_dram_rd_req_fire  = vx_dram_rd_req_enable && ~avs_waitrequest;
-assign vx_dram_wr_req_fire  = vx_dram_wr_req_enable && ~avs_waitrequest;
+assign vx_dram_rd_req_fire  = vx_dram_rd_req_enable && !avs_waitrequest;
+assign vx_dram_wr_req_fire  = vx_dram_wr_req_enable && !avs_waitrequest;
 
 assign vx_dram_rd_rsp_fire  = vx_dram_rsp_valid && vx_dram_rsp_ready;
 
 assign avs_pending_reads_next = avs_pending_reads 
-                              + (((cci_dram_rd_req_fire || vx_dram_rd_req_fire) && ~avs_rdq_pop) ? 1 :
+                              + (((cci_dram_rd_req_fire || vx_dram_rd_req_fire) && !avs_rdq_pop) ? 1 :
                                  (~(cci_dram_rd_req_fire || vx_dram_rd_req_fire) && avs_rdq_pop) ? -1 : 0);
 
 if (`VX_DRAM_LINE_WIDTH != DRAM_LINE_WIDTH) begin
@@ -575,10 +579,10 @@ assign cci_rdq_push = cci_rd_rsp_fire;
 assign cci_rdq_din  = {cp2af_sRxPort.c0.data, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata)};  
 
 assign cci_pending_reads_next = cci_pending_reads 
-                              + ((cci_rd_req_fire && ~cci_rdq_pop) ? 1 : 
-                                 (~cci_rd_req_fire && cci_rdq_pop) ? -1 : 0);
+                              + ((cci_rd_req_fire && !cci_rdq_pop) ? 1 : 
+                                 (!cci_rd_req_fire && cci_rdq_pop) ? -1 : 0);
 
-assign af2cp_sTxPort.c0.valid = cci_rd_req_enable && ~cci_rd_req_wait;
+assign af2cp_sTxPort.c0.valid = cci_rd_req_enable && !cci_rd_req_wait;
 
 // Send read requests to CCI
 always_ff @(posedge clk) 
@@ -672,12 +676,12 @@ assign cci_wr_req_fire = af2cp_sTxPort.c1.valid && !cp2af_sRxPort.c1TxAlmFull;
 assign cci_wr_rsp_fire = (STATE_READ == state) && cp2af_sRxPort.c1.rspValid;
 
 assign cci_pending_writes_next = cci_pending_writes 
-                               + ((cci_wr_req_fire && ~cci_wr_rsp_fire) ? 1 :
-                                  (~cci_wr_req_fire && cci_wr_rsp_fire) ? -1 : 0);
+                               + ((cci_wr_req_fire && !cci_wr_rsp_fire) ? 1 :
+                                  (!cci_wr_req_fire && cci_wr_rsp_fire) ? -1 : 0);
 
 assign cmd_read_done = (0 == cci_wr_req_ctr) && (0 == cci_pending_writes);
 
-assign af2cp_sTxPort.c1.valid = cci_wr_req_enable && ~avs_rdq_empty;
+assign af2cp_sTxPort.c1.valid = cci_wr_req_enable && !avs_rdq_empty;
 
 // Send write requests to CCI
 always_ff @(posedge clk) 
@@ -798,87 +802,6 @@ begin
   end
 end
 
-// SCOPE //////////////////////////////////////////////////////////////////////
-
-`ifdef SCOPE
-
-`SCOPE_SIGNALS_DECL
-localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST});
-localparam SCOPE_SR_DEPTH = 2;
-
-`SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
-`SCOPE_ASSIGN(scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
-`SCOPE_ASSIGN(scope_dram_req_rw,    vx_dram_req_rw);
-`SCOPE_ASSIGN(scope_dram_req_byteen,vx_dram_req_byteen);
-`SCOPE_ASSIGN(scope_dram_req_data,  vx_dram_req_data[31:0]);
-`SCOPE_ASSIGN(scope_dram_req_tag,   vx_dram_req_tag);
-`SCOPE_ASSIGN(scope_dram_req_ready, vx_dram_req_ready);
-
-`SCOPE_ASSIGN(scope_dram_rsp_valid, vx_dram_rsp_valid);
-`SCOPE_ASSIGN(scope_dram_rsp_data,  vx_dram_rsp_data[31:0]);
-`SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
-`SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
-
-`SCOPE_ASSIGN(scope_snp_req_valid, vx_snp_req_valid);
-`SCOPE_ASSIGN(scope_snp_req_addr,  {vx_snp_req_addr, 4'b0});
-`SCOPE_ASSIGN(scope_snp_req_invalidate, vx_snp_req_invalidate);
-`SCOPE_ASSIGN(scope_snp_req_tag,   vx_snp_req_tag);
-`SCOPE_ASSIGN(scope_snp_req_ready, vx_snp_req_ready);
-
-`SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
-`SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
-`SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
-
-wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
-                  || (scope_icache_rsp_valid && scope_icache_rsp_ready)
-                  || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
-                  || ((| scope_dcache_rsp_valid) && scope_dcache_rsp_ready)
-                  || (scope_dram_req_valid && scope_dram_req_ready)
-                  || (scope_dram_rsp_valid && scope_dram_rsp_ready)
-                  || (scope_snp_req_valid && scope_snp_req_ready)
-                  || (scope_snp_rsp_valid && scope_snp_rsp_ready);
-
-wire scope_start = vx_reset;
-
-wire [SCOPE_DATAW+1:0] scope_data_in_st[SCOPE_SR_DEPTH-1:0];
-wire [SCOPE_DATAW+1:0] scope_data_in;
-assign scope_data_in_st[0] = {`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST, scope_changed, scope_start};
-assign scope_data_in = scope_data_in_st[SCOPE_SR_DEPTH-1];
-
-genvar i;
-for (i = 1; i < SCOPE_SR_DEPTH; i++) begin
-    VX_generic_register #(
-        .N (SCOPE_DATAW+2)
-    ) scope_sr (
-        .clk   (clk),
-        .reset (SoftReset),
-        .stall (0),
-        .flush (0),
-        .in    (scope_data_in_st[i-1]),
-        .out   (scope_data_in_st[i])
-    );
-end
-
-VX_scope #(
-  .DATAW    (SCOPE_DATAW),
-  .BUSW     (64),
-  .SIZE     (4096),
-  .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))
-) scope (
-  .clk      (clk),
-  .reset    (SoftReset),
-  .start    (scope_data_in[0]),
-  .stop     (0),
-  .changed  (scope_data_in[1]),
-  .data_in  (scope_data_in[SCOPE_DATAW+1:2]),
-  .bus_in   (csr_scope_cmd),
-  .bus_out  (csr_scope_data),
-  .bus_read (csr_scope_read),
-  .bus_write(csr_scope_write)
-);
-
-`endif
-
 // Vortex /////////////////////////////////////////////////////////////////////
 
 assign cmd_run_done = !vx_busy;
@@ -887,7 +810,7 @@ Vortex #() vortex (
   `SCOPE_SIGNALS_ISTAGE_BIND
   `SCOPE_SIGNALS_LSU_BIND
   `SCOPE_SIGNALS_CORE_BIND
-  `SCOPE_SIGNALS_ICACHE_BIND
+  `SCOPE_SIGNALS_CACHE_BIND
   `SCOPE_SIGNALS_PIPELINE_BIND
   `SCOPE_SIGNALS_BE_BIND
 
@@ -940,5 +863,93 @@ Vortex #() vortex (
   .busy 				    (vx_busy),
   `UNUSED_PIN       (ebreak)
 );
+
+// SCOPE //////////////////////////////////////////////////////////////////////
+
+`ifdef SCOPE
+
+localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST});
+localparam SCOPE_SR_DEPTH = 2;
+
+`SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
+`SCOPE_ASSIGN(scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
+`SCOPE_ASSIGN(scope_dram_req_rw,    vx_dram_req_rw);
+`SCOPE_ASSIGN(scope_dram_req_byteen,vx_dram_req_byteen);
+`SCOPE_ASSIGN(scope_dram_req_data,  vx_dram_req_data);
+`SCOPE_ASSIGN(scope_dram_req_tag,   vx_dram_req_tag);
+`SCOPE_ASSIGN(scope_dram_req_ready, vx_dram_req_ready);
+
+`SCOPE_ASSIGN(scope_dram_rsp_valid, vx_dram_rsp_valid);
+`SCOPE_ASSIGN(scope_dram_rsp_data,  vx_dram_rsp_data);
+`SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
+`SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
+
+`SCOPE_ASSIGN(scope_snp_req_valid, vx_snp_req_valid);
+`SCOPE_ASSIGN(scope_snp_req_addr,  {vx_snp_req_addr, 4'b0});
+`SCOPE_ASSIGN(scope_snp_req_invalidate, vx_snp_req_invalidate);
+`SCOPE_ASSIGN(scope_snp_req_tag,   vx_snp_req_tag);
+`SCOPE_ASSIGN(scope_snp_req_ready, vx_snp_req_ready);
+
+`SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
+`SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
+`SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
+
+`SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
+`SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
+`SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
+
+wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
+                  || (scope_icache_rsp_valid && scope_icache_rsp_ready)
+                  || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
+                  || ((| scope_dcache_rsp_valid) && scope_dcache_rsp_ready)
+                  || (scope_dram_req_valid && scope_dram_req_ready)
+                  || (scope_dram_rsp_valid && scope_dram_rsp_ready)
+                  || (scope_snp_req_valid && scope_snp_req_ready)
+                  || (scope_snp_rsp_valid && scope_snp_rsp_ready)
+                  || scope_bank_valid_st0
+                  || scope_bank_valid_st1
+                  || scope_bank_valid_st2
+                  || scope_bank_stall_pipe;
+
+wire scope_start = vx_reset;
+
+wire [SCOPE_DATAW+1:0] scope_data_in_st[SCOPE_SR_DEPTH-1:0];
+wire [SCOPE_DATAW+1:0] scope_data_in_ste;
+assign scope_data_in_st[0] = {`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST, scope_changed, scope_start};
+assign scope_data_in_ste = scope_data_in_st[SCOPE_SR_DEPTH-1];
+
+genvar i;
+for (i = 1; i < SCOPE_SR_DEPTH; i++) begin
+    VX_generic_register #(
+        .N (SCOPE_DATAW+2)
+    ) scope_sr (
+        .clk   (clk),
+        .reset (SoftReset),
+        .stall (0),
+        .flush (0),
+        .in    (scope_data_in_st[i-1]),
+        .out   (scope_data_in_st[i])
+    );
+end
+
+VX_scope #(
+  .DATAW    (SCOPE_DATAW),
+  .BUSW     (64),
+  .SIZE     (4096),
+  .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))
+) scope (
+  .clk      (clk),
+  .reset    (SoftReset),
+  .start    (scope_data_in_ste[0]),
+  .stop     (0),
+  .changed  (scope_data_in_ste[1]),
+  .data_in  (scope_data_in_ste[SCOPE_DATAW+1:2]),
+  .bus_in   (csr_scope_cmd),
+  .bus_out  (csr_scope_data),
+  .bus_read (csr_scope_read),
+  .bus_write(csr_scope_write)
+);
+
+`endif
 
 endmodule

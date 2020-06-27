@@ -55,7 +55,7 @@ module VX_scheduler (
 
     wire [`NUM_THREADS-1:0] valid_wb_new_mask = rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid;
 
-    reg [CTVW-1:0] count_valid_next = (acquire_rd && ~(release_rd && (0 == valid_wb_new_mask))) ? (count_valid + 1) : 
+    reg [CTVW-1:0] count_valid_next = (acquire_rd && !(release_rd && (0 == valid_wb_new_mask))) ? (count_valid + 1) : 
                                       (~acquire_rd && (release_rd && (0 == valid_wb_new_mask))) ? (count_valid - 1) :
                                                                                                   count_valid; 
     

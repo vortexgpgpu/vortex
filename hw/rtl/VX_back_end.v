@@ -133,14 +133,16 @@ module VX_back_end #(
 
     `SCOPE_ASSIGN(scope_execute_valid,      exec_unit_req_if.valid);    
     `SCOPE_ASSIGN(scope_execute_warp_num,   exec_unit_req_if.warp_num);
+    `SCOPE_ASSIGN(scope_execute_curr_PC,    exec_unit_req_if.curr_PC);    
     `SCOPE_ASSIGN(scope_execute_rd,         exec_unit_req_if.rd);
-    `SCOPE_ASSIGN(scope_execute_a,          exec_unit_req_if.a_reg_data[0]);
-    `SCOPE_ASSIGN(scope_execute_b,          exec_unit_req_if.b_reg_data[0]);   
+    `SCOPE_ASSIGN(scope_execute_a,          exec_unit_req_if.a_reg_data);
+    `SCOPE_ASSIGN(scope_execute_b,          exec_unit_req_if.b_reg_data);   
         
-    `SCOPE_ASSIGN(scope_writeback_valid,    writeback_if.valid);
-    `SCOPE_ASSIGN(scope_writeback_wb,       writeback_if.wb);    
+    `SCOPE_ASSIGN(scope_writeback_valid,    writeback_if.valid);    
     `SCOPE_ASSIGN(scope_writeback_warp_num, writeback_if.warp_num);
+    `SCOPE_ASSIGN(scope_writeback_curr_PC,  writeback_if.curr_PC);  
+    `SCOPE_ASSIGN(scope_writeback_wb,       writeback_if.wb);      
     `SCOPE_ASSIGN(scope_writeback_rd,       writeback_if.rd);
-    `SCOPE_ASSIGN(scope_writeback_data,     writeback_if.data[0]);
+    `SCOPE_ASSIGN(scope_writeback_data,     writeback_if.data);
 
 endmodule

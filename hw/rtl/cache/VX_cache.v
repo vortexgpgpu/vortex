@@ -65,7 +65,7 @@ module VX_cache #(
     // Snooping forward tag width
     parameter SNP_FWD_TAG_WIDTH             = 1
  ) (
-    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_CACHE_IO
     
     input wire clk,
     input wire reset,
@@ -166,6 +166,8 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_valid;
     wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag;
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
+
+    `SCOPE_SIGNALS_CACHE_BANK_SELECT
 
     wire                         snp_req_valid_qual;    
     wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
@@ -352,28 +354,30 @@ module VX_cache #(
             assign curr_bank_snp_rsp_ready   = per_bank_snp_rsp_ready[i];
             
             VX_bank #(                
-                .BANK_ID              (i),
-                .CACHE_ID             (CACHE_ID),
-                .CACHE_SIZE           (CACHE_SIZE),
-                .BANK_LINE_SIZE       (BANK_LINE_SIZE),
-                .NUM_BANKS            (NUM_BANKS),
-                .WORD_SIZE            (WORD_SIZE),
-                .NUM_REQUESTS         (NUM_REQUESTS),
-                .STAGE_1_CYCLES       (STAGE_1_CYCLES),
-                .CREQ_SIZE            (CREQ_SIZE),
-                .MRVQ_SIZE            (MRVQ_SIZE),
-                .DFPQ_SIZE            (DFPQ_SIZE),
-                .SNRQ_SIZE            (SNRQ_SIZE),
-                .CWBQ_SIZE            (CWBQ_SIZE),
-                .DWBQ_SIZE            (DWBQ_SIZE),
-                .DFQQ_SIZE            (DFQQ_SIZE),
-                .DRAM_ENABLE          (DRAM_ENABLE),
-                .WRITE_ENABLE         (WRITE_ENABLE),
-                .SNOOP_FORWARDING     (SNOOP_FORWARDING),
-                .CORE_TAG_WIDTH       (CORE_TAG_WIDTH),                
-                .CORE_TAG_ID_BITS     (CORE_TAG_ID_BITS),
-                .SNP_REQ_TAG_WIDTH    (SNP_REQ_TAG_WIDTH)
+                .BANK_ID            (i),
+                .CACHE_ID           (CACHE_ID),
+                .CACHE_SIZE         (CACHE_SIZE),
+                .BANK_LINE_SIZE     (BANK_LINE_SIZE),
+                .NUM_BANKS          (NUM_BANKS),
+                .WORD_SIZE          (WORD_SIZE),
+                .NUM_REQUESTS       (NUM_REQUESTS),
+                .STAGE_1_CYCLES     (STAGE_1_CYCLES),
+                .CREQ_SIZE          (CREQ_SIZE),
+                .MRVQ_SIZE          (MRVQ_SIZE),
+                .DFPQ_SIZE          (DFPQ_SIZE),
+                .SNRQ_SIZE          (SNRQ_SIZE),
+                .CWBQ_SIZE          (CWBQ_SIZE),
+                .DWBQ_SIZE          (DWBQ_SIZE),
+                .DFQQ_SIZE          (DFQQ_SIZE),
+                .DRAM_ENABLE        (DRAM_ENABLE),
+                .WRITE_ENABLE       (WRITE_ENABLE),
+                .SNOOP_FORWARDING   (SNOOP_FORWARDING),
+                .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                
+                .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
+                .SNP_REQ_TAG_WIDTH  (SNP_REQ_TAG_WIDTH)
             ) bank (
+                `SCOPE_SIGNALS_CACHE_BANK_BIND
+                
                 .clk                     (clk),
                 .reset                   (reset),                
                 // Core request
@@ -452,11 +456,11 @@ module VX_cache #(
     );    
 
     VX_cache_core_rsp_merge #(
-        .NUM_BANKS              (NUM_BANKS),
-        .WORD_SIZE              (WORD_SIZE),
-        .NUM_REQUESTS           (NUM_REQUESTS),
-        .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),        
-        .CORE_TAG_ID_BITS       (CORE_TAG_ID_BITS)
+        .NUM_BANKS          (NUM_BANKS),
+        .WORD_SIZE          (WORD_SIZE),
+        .NUM_REQUESTS       (NUM_REQUESTS),
+        .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),        
+        .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS)
     ) cache_core_rsp_merge (
         .clk                     (clk),
         .reset                   (reset),       

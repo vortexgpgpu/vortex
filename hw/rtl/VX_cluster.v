@@ -6,7 +6,7 @@ module VX_cluster #(
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
     `SCOPE_SIGNALS_CORE_IO
-    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_CACHE_IO
     `SCOPE_SIGNALS_PIPELINE_IO
     `SCOPE_SIGNALS_BE_IO
 
@@ -120,7 +120,7 @@ module VX_cluster #(
             `SCOPE_SIGNALS_ISTAGE_BIND
             `SCOPE_SIGNALS_LSU_BIND
             `SCOPE_SIGNALS_CORE_BIND
-            `SCOPE_SIGNALS_ICACHE_BIND
+            `SCOPE_SIGNALS_CACHE_BIND
             `SCOPE_SIGNALS_PIPELINE_BIND
             `SCOPE_SIGNALS_BE_BIND
 
@@ -319,7 +319,9 @@ module VX_cluster #(
             .NUM_SNP_REQUESTS       (`NUM_CORES),
             .SNP_REQ_TAG_WIDTH      (`L2SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH      (`DSNP_TAG_WIDTH)
-        ) gpu_l2cache (
+        ) l2cache (
+            `SCOPE_SIGNALS_CACHE_UNBIND
+            
             .clk                (clk),
             .reset              (reset),
 

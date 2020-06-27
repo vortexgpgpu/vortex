@@ -43,6 +43,6 @@ module VX_dcache_arb (
     assign out_core_rsp_if.core_rsp_data  = rsp_select0 ? in0_core_rsp_if.core_rsp_data  : in1_core_rsp_if.core_rsp_data;
     assign out_core_rsp_if.core_rsp_tag   = rsp_select0 ? in0_core_rsp_if.core_rsp_tag   : in1_core_rsp_if.core_rsp_tag;    
     assign in0_core_rsp_if.core_rsp_ready = out_core_rsp_if.core_rsp_ready && rsp_select0; 
-    assign in1_core_rsp_if.core_rsp_ready = out_core_rsp_if.core_rsp_ready && ~rsp_select0; 
+    assign in1_core_rsp_if.core_rsp_ready = out_core_rsp_if.core_rsp_ready && !rsp_select0; 
 
 endmodule
