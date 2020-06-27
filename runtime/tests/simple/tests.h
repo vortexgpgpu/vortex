@@ -1,5 +1,3 @@
-
-
 #ifndef TESTS
 #define TESTS
 

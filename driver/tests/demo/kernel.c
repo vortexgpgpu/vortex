@@ -1,7 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include "intrinsics/vx_intrinsics.h"
-#include "vx_api/vx_api.h"
+#include <stdint.h>
+#include <vx_intrinsics.h>
+#include <vx_spawn.h>
 #include "common.h"
 
 void kernel_body(void* arg) {
@@ -20,10 +19,6 @@ void kernel_body(void* arg) {
 
 void main() {
 	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-	/*printf("stride=%d\n", arg->stride);
-	printf("src0_ptr=0x%src0\n", arg->src0_ptr);
-	printf("src1_ptr=0x%src0\n", arg->src1_ptr);
-	printf("dst_ptr=0x%src0\n", arg->dst_ptr);*/
 	int num_warps = vx_num_warps();
 	int num_threads = vx_num_threads();
 	vx_spawn_warps(num_warps, num_threads, kernel_body, arg);

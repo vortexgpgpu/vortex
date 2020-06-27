@@ -102,6 +102,7 @@ module VX_bank #(
 );
 
 `ifdef DBG_CORE_REQ_INFO
+    /* verilator lint_off UNUSED */
     wire[31:0]           debug_use_pc_st0;
     wire[1:0]            debug_wb_st0;
     wire[4:0]            debug_rd_st0;
@@ -128,6 +129,7 @@ module VX_bank #(
     wire[WORD_SIZE-1:0]  debug_byteen_st2;
     wire[`REQS_BITS-1:0] debug_tid_st2;
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st2;
+    /* verilator lint_on UNUSED */
 `endif
 
     wire snrq_pop;

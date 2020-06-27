@@ -1,5 +1,3 @@
-
-
 all: stub rtlsim simx
 
 stub:

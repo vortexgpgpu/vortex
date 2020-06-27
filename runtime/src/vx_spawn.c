@@ -1,6 +1,5 @@
-#include <VX_config.h>
-#include "../intrinsics/vx_intrinsics.h"
-#include "vx_api.h"
+#include <vx_spawn.h>
+#include <vx_intrinsics.h>
 #include <inttypes.h>
 
 #ifdef __cplusplus

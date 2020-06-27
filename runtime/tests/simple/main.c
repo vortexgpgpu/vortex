@@ -1,8 +1,8 @@
 
-#include "../../intrinsics/vx_intrinsics.h"
-#include "../../io/vx_io.h"
 #include "tests.h"
-#include "../../vx_api/vx_api.h"
+#include <vx_intrinsics.h>
+#include <vx_print.h>
+#include <vx_spawn.h>
 
 
 typedef struct
