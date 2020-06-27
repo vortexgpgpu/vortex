@@ -1,12 +1,12 @@
 
-RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
+RISCV_TOOLCHAIN_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
 
-COMP = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
+COMP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 
 CC_FLAGS = -ffreestanding -O0 -Wl,--gc-sections -nostartfiles -nostdlib -nostartfiles -nodefaultlibs -Wl,-Bstatic,-T,../../startup/vx_link.ld -march=rv32imv -mabi=ilp32
 
-DMP  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
-CPY  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
+DMP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
+CPY  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
 
 # VX_STR  = ../../startup/vx_start.S
@@ -20,7 +20,7 @@ VX_IO   = ../../io/vx_io.S ../../io/vx_io.c
 VX_API  = ../../vx_api/vx_api.c
 VX_FIO  = ../../fileio/fileio.S
 VX_VEC  = vx_vec.s
-LIBS    = $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libc.a $(RISCV_TOOL_PATH)/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+LIBS    = $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/lib/libc.a $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
 
 VX_MAIN = vx_vector_main
 

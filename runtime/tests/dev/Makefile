@@ -1,12 +1,12 @@
 
-RISCV_TOOL_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
+RISCV_TOOLCHAIN_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
 
-COMP = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-gcc
+COMP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 # CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
 CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../../startup/vx_link.ld -ffreestanding -nostartfiles
 
-DMP  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objdump
-CPY  = $(RISCV_TOOL_PATH)/bin/riscv32-unknown-elf-objcopy
+DMP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
+CPY  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
 
 VX_STR  = ../../startup/vx_start.S

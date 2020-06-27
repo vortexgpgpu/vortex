@@ -1,6 +1,6 @@
 LLVM_HOME ?= ~/dev/llvm-project/drops
-TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
-SYSROOT ?= $(TOOLCHAIN_PATH)/riscv32-unknown-elf
+RISCV_TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
+SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
 POCL_CC_PATH ?= $(realpath ../compiler)
 POCL_RT_PATH ?= $(realpath ../runtime)
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
@@ -19,7 +19,7 @@ SRCS = main.cc transpose_gold.cpp
 all: $(PROJECT)
 
 kernel.pocl: kernel.cl
-	TOOLCHAIN_PATH=$(TOOLCHAIN_PATH) SYSROOT=$(SYSROOT) LLVM_HOME=$(LLVM_HOME) VORTEX_RUNTIME_PATH=$(VORTEX_RT_PATH) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_HOME)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
+	RISCV_TOOLCHAIN_PATH=$(RISCV_TOOLCHAIN_PATH) SYSROOT=$(SYSROOT) LLVM_HOME=$(LLVM_HOME) VORTEX_RT_PATH=$(VORTEX_RT_PATH) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_HOME)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -o kernel.pocl kernel.cl
  
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@

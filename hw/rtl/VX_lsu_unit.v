@@ -113,7 +113,7 @@ module VX_lsu_unit #(
         end    
         if (mrq_pop_part) begin
             mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_upd;
-            assert(mrq_read_addr == dbg_mrq_write_addr);
+            assert(mrq_read_addr == dbg_mrq_write_addr);            
         end
     end
 
