@@ -536,7 +536,7 @@ module VX_bank #(
                      || dwbq_push_stall 
                      || dram_fill_req_stall);  
 
-    assign recover_mrvq_state_st2 = miss_add && is_mrvq_st2;  
+    assign recover_mrvq_state_st2 = miss_add_unqual && is_mrvq_st2; // Doesn't need to include the stalls 
 
     wire [`LINE_ADDR_WIDTH-1:0] miss_add_addr  = addr_st2;
     wire [`UP(`WORD_SELECT_WIDTH)-1:0] miss_add_wsel = wsel_st2;
@@ -547,12 +547,12 @@ module VX_bank #(
 
     wire miss_add_is_mrvq = valid_st2 && is_mrvq_st2 && !stall_bank_pipe;
 
-    assign mrvq_init_ready_state_hazard_st0_st1  = miss_add_unqual && qual_is_fill_st0              && (miss_add_addr == qual_addr_st0);
+    assign mrvq_init_ready_state_hazard_st0_st1  = miss_add_unqual && qual_is_fill_st0              && (miss_add_addr == dfpq_addr_st0); // Doesn't need to be muxed to qual, only care about fills
     assign mrvq_init_ready_state_hazard_st1e_st1 = miss_add_unqual && is_fill_st1[STAGE_1_CYCLES-1] && (miss_add_addr == addr_st1e);
 
-    assign mrvq_init_ready_state_st2 = mrvq_init_ready_state_unqual_st2 
-                                    || mrvq_init_ready_state_hazard_st0_st1 
-                                    || mrvq_init_ready_state_hazard_st1e_st1;
+    assign mrvq_init_ready_state_st2 = mrvq_init_ready_state_unqual_st2        // When req was in st1e, either matched with an mrvq entery OR mrvq recovering state 
+                                    || mrvq_init_ready_state_hazard_st0_st1    // If there's a fill in st0 that has the same address as miss_add_addr
+                                    || mrvq_init_ready_state_hazard_st1e_st1;  // If there's a fill in st1 that has the same address as miss_add_addr
 
     VX_cache_miss_resrv #(
         .BANK_ID                (BANK_ID),
