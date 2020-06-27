@@ -23,10 +23,10 @@ SRCS = demo.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
  
-kernel.dump:  kernel.elf
-	$(VX_DP) -D  kernel.elf > kernel.dump
+kernel.dump: kernel.elf
+	$(VX_DP) -D kernel.elf > kernel.dump
 
-kernel.bin:  kernel.elf
+kernel.bin: kernel.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
 kernel.elf: $(VX_SRCS)
