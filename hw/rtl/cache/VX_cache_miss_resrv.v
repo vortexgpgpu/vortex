@@ -23,7 +23,7 @@ module VX_cache_miss_resrv #(
 
     // Miss enqueue
     input wire                          miss_add,
-    input wire                          from_mrvq,
+    input wire                          is_mrvq,
     input wire[`LINE_ADDR_WIDTH-1:0]    miss_add_addr,
     input wire[`UP(`WORD_SELECT_WIDTH)-1:0] miss_add_wsel,
     input wire[`WORD_WIDTH-1:0]         miss_add_data,
@@ -102,11 +102,11 @@ module VX_cache_miss_resrv #(
             miss_resrv_is_snp_st0, 
             miss_resrv_snp_invalidate_st0} = metadata_table[dequeue_index];
 
-    wire mrvq_push = miss_add && enqueue_possible && !from_mrvq;
+    wire mrvq_push = miss_add && enqueue_possible && !is_mrvq;
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
 
-    wire recover_state  =  miss_add && from_mrvq;
-    wire increment_head = !miss_add && from_mrvq;
+    wire recover_state  =  miss_add && is_mrvq;
+    wire increment_head = !miss_add && is_mrvq;
 
     wire update_ready = (|make_ready);
 

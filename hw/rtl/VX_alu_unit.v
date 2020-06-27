@@ -30,11 +30,11 @@ module VX_alu_unit (
     VX_divide #(
         .WIDTHN(32),
         .WIDTHD(32),
-        .SPEED("HIGHEST"),
+        .REP("UNSIGNED"),
         .PIPELINE(DIV_PIPELINE_LEN)
     ) unsigned_div (
-        .clock(clk),
-        .aclr(1'b0),
+        .clk(clk),
+        .reset(reset),
         .clken(1'b1), // TODO this could be disabled on inactive instructions
         .numer(ALU_in1),
         .denom(ALU_in2),
@@ -45,13 +45,11 @@ module VX_alu_unit (
     VX_divide #(
         .WIDTHN(32),
         .WIDTHD(32),
-        .NREP("SIGNED"),
-        .DREP("SIGNED"),
-        .SPEED("HIGHEST"),
+        .REP("SIGNED"),
         .PIPELINE(DIV_PIPELINE_LEN)
     ) signed_div (
-        .clock(clk),
-        .aclr(1'b0),
+        .clk(clk),
+        .reset(reset),
         .clken(1'b1), // TODO this could be disabled on inactive instructions
         .numer(ALU_in1),
         .denom(ALU_in2),
@@ -63,12 +61,11 @@ module VX_alu_unit (
         .WIDTHA(64),
         .WIDTHB(64),
         .WIDTHP(64),
-        .SPEED("HIGHEST"),
-        .FORCE_LE("YES"),
+        .REP("UNSIGNED"),
         .PIPELINE(MUL_PIPELINE_LEN)
     ) multiplier (
-        .clock(clk),
-        .aclr(1'b0),
+        .clk(clk),
+        .reset(reset),
         .clken(1'b1), // TODO this could be disabled on inactive instructions
         .dataa(mul_data_a),
         .datab(mul_data_b),

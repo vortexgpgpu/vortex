@@ -6,7 +6,7 @@ module VX_core #(
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
     `SCOPE_SIGNALS_CORE_IO
-    `SCOPE_SIGNALS_ICACHE_IO
+    `SCOPE_SIGNALS_CACHE_IO
     `SCOPE_SIGNALS_PIPELINE_IO
     `SCOPE_SIGNALS_BE_IO
     
@@ -237,7 +237,7 @@ module VX_core #(
     VX_mem_unit #(
         .CORE_ID(CORE_ID)
     ) mem_unit (
-        `SCOPE_SIGNALS_ICACHE_BIND
+        `SCOPE_SIGNALS_CACHE_BIND
 
         .clk                (clk),
         .reset              (reset),

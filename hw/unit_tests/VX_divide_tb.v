@@ -155,6 +155,6 @@ module VX_tb_divide();
     end
 
     always #1
-        clk = ~clk;
+        clk = !clk;
 
 endmodule: VX_tb_divide

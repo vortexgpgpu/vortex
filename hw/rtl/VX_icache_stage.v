@@ -56,14 +56,14 @@ module VX_icache_stage #(
     end
 
     // Icache Request
-    assign icache_req_if.core_req_valid  = valid_inst && ~mrq_full;
+    assign icache_req_if.core_req_valid  = valid_inst && !mrq_full;
     assign icache_req_if.core_req_rw     = 0;
     assign icache_req_if.core_req_byteen = 4'b1111;
     assign icache_req_if.core_req_addr   = fe_inst_meta_fi.inst_pc[31:2];
     assign icache_req_if.core_req_data   = 0;    
 
     // Can't accept new request
-    assign icache_stage_delay = mrq_full || ~icache_req_if.core_req_ready;
+    assign icache_stage_delay = mrq_full || !icache_req_if.core_req_ready;
 
 `ifdef DBG_CORE_REQ_INFO  
     assign icache_req_if.core_req_tag = {fe_inst_meta_fi.inst_pc, 2'b1, 5'b0, fe_inst_meta_fi.warp_num, mrq_write_addr};
@@ -78,7 +78,7 @@ module VX_icache_stage #(
     assign icache_stage_wid            = fe_inst_meta_id.warp_num;
     
     // Can't accept new response
-    assign icache_rsp_if.core_rsp_ready = ~total_freeze;
+    assign icache_rsp_if.core_rsp_ready = !total_freeze;
 
     `SCOPE_ASSIGN(scope_icache_req_valid, icache_req_if.core_req_valid);
     `SCOPE_ASSIGN(scope_icache_req_warp_num, fe_inst_meta_fi.warp_num);

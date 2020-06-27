@@ -306,7 +306,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
     auto ls_shift = (int)std::log2(line_size);
 
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, (buffer->io_addr + src_offset) >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, (dev_maddr >> ls_shift) ));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr >> ls_shift));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, asize >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_WRITE));
 
@@ -349,7 +349,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
     auto ls_shift = (int)std::log2(line_size);
 
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_IO_ADDR, (buffer->io_addr + dest_offset) >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, (dev_maddr) >> ls_shift));    
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_MEM_ADDR, dev_maddr >> ls_shift));    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA_SIZE, asize >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CMD, CMD_TYPE_READ));
 

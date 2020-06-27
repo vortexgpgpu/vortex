@@ -30,17 +30,17 @@ module VX_matrix_arbiter #(
         for (i = 0; i < N; ++i) begin      
             for (j = 0; j < N; ++j) begin
                 if (j > i) begin
-                    assign pri[j][i] = requests[i] & state[i][j];
+                    assign pri[j][i] = requests[i] && state[i][j];
                 end 
                 else if (j < i) begin
-                    assign pri[j][i] = requests[i] & ~state[j][i];
+                    assign pri[j][i] = requests[i] && !state[j][i];
                 end 
                 else begin
                     assign pri[j][i] = 0;            
                 end
             end
 
-            assign grant_onehot[i] = requests[i] & ~(| pri[i]);
+            assign grant_onehot[i] = requests[i] && !(| pri[i]);
         end
         
         for (i = 0; i < N; ++i) begin      
@@ -50,7 +50,7 @@ module VX_matrix_arbiter #(
                         state[i][j] <= 0;
                     end 
                     else begin
-                        state[i][j] <= (state[i][j] || grant_onehot[j]) && ~grant_onehot[i];
+                        state[i][j] <= (state[i][j] || grant_onehot[j]) && !grant_onehot[i];
                     end
                 end
             end

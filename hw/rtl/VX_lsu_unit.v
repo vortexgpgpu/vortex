@@ -132,7 +132,7 @@ module VX_lsu_unit #(
 `endif
 
     // Can't accept new request
-    assign delay = mrq_full || ~dcache_req_if.core_req_ready;
+    assign delay = mrq_full || !dcache_req_if.core_req_ready;
 
     // Core Response
 
@@ -156,20 +156,20 @@ module VX_lsu_unit #(
     assign mem_wb_if.data  = core_rsp_data;
 
     // Can't accept new response
-    assign dcache_rsp_if.core_rsp_ready = ~no_slot_mem;    
+    assign dcache_rsp_if.core_rsp_ready = !no_slot_mem;    
 
     `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.core_req_valid);    
     `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
     `SCOPE_ASSIGN(scope_dcache_req_curr_PC, use_pc);
-    `SCOPE_ASSIGN(scope_dcache_req_addr,  {dcache_req_if.core_req_addr[0], 2'b0});    
+    `SCOPE_ASSIGN(scope_dcache_req_addr,  use_address);    
     `SCOPE_ASSIGN(scope_dcache_req_rw,    core_req_rw);
-    `SCOPE_ASSIGN(scope_dcache_req_byteen,dcache_req_if.core_req_byteen[0]);
-    `SCOPE_ASSIGN(scope_dcache_req_data,  dcache_req_if.core_req_data[0]);
+    `SCOPE_ASSIGN(scope_dcache_req_byteen,dcache_req_if.core_req_byteen);
+    `SCOPE_ASSIGN(scope_dcache_req_data,  dcache_req_if.core_req_data);
     `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_if.core_req_tag);
     `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_if.core_req_ready);
 
     `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_if.core_rsp_valid);
-    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.core_rsp_data[0]);
+    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.core_rsp_data);
     `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_if.core_rsp_tag);
     `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_if.core_rsp_ready);
     

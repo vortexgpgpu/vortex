@@ -37,9 +37,9 @@ static const scope_signal_t scope_signals[] = {
     { 32, "dram_req_addr" },
     { 1,  "dram_req_rw" },
     { 16, "dram_req_byteen" },
-    { 32, "dram_req_data" },
+    { 128, "dram_req_data" },
     { 29, "dram_req_tag" },
-    { 32, "dram_rsp_data" },
+    { 128, "dram_rsp_data" },
     { 29, "dram_rsp_tag" }, 
 
     { 32, "snp_req_addr" },
@@ -55,12 +55,12 @@ static const scope_signal_t scope_signals[] = {
 
     { NW_BITS, "dcache_req_warp_num" },         
     { 32, "dcache_req_curr_PC" },
-    { 32, "dcache_req_addr" },
+    { 64, "dcache_req_addr" },
     { 1,  "dcache_req_rw" },
-    { 4,  "dcache_req_byteen" },
-    { 32, "dcache_req_data" },
+    { 8,  "dcache_req_byteen" },
+    { 64, "dcache_req_data" },
     { NW_BITS, "dcache_req_tag" },
-    { 32, "dcache_rsp_data" },    
+    { 64, "dcache_rsp_data" },    
     { NW_BITS, "dcache_rsp_tag" }, 
     
     { NW_BITS, "decode_warp_num" },
@@ -70,14 +70,26 @@ static const scope_signal_t scope_signals[] = {
     { 5, "decode_rs2" },    
     
     { NW_BITS, "execute_warp_num" },
+    { 32, "execute_curr_PC" },
     { 5,  "execute_rd" },
-    { 32, "execute_a" },
-    { 32, "execute_b" },    
+    { 64, "execute_a" },
+    { 64, "execute_b" },    
     
     { NW_BITS, "writeback_warp_num" },    
+    { 32, "writeback_curr_PC" },
     { 2,  "writeback_wb" },
     { 5,  "writeback_rd" },
-    { 32, "writeback_data" },    
+    { 64, "writeback_data" },    
+
+    { 32, "bank_addr_st0" },    
+    { 32, "bank_addr_st1" },    
+    { 32, "bank_addr_st2" },      
+    { 1,  "scope_bank_is_mrvq_st1" },
+    { 1,  "scope_bank_miss_st1" },
+    { 1,  "scope_bank_dirty_st1" },
+    { 1,  "scope_bank_tag_valid_st1" },
+    { 1,  "scope_bank_tag_match_st1" },
+    { 1,  "scope_bank_force_miss_st1" },
 
     ///////////////////////////////////////////////////////////////////////////
     
@@ -103,12 +115,18 @@ static const scope_signal_t scope_signals[] = {
     
     { NUM_THREADS, "decode_valid" },
     { NUM_THREADS, "execute_valid" },
-    { NUM_THREADS, "writeback_valid" },    
+    { NUM_THREADS, "writeback_valid" },   
+
     { 1, "schedule_delay" },
     { 1, "memory_delay" },
     { 1, "exec_delay" },
     { 1, "gpr_stage_delay" },
     { 1, "busy" },
+
+    { 1, "bank_valid_st0" },
+    { 1, "bank_valid_st1" },
+    { 1, "bank_valid_st2" },
+    { 1, "bank_stall_pipe" },
 };
 
 static const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);

@@ -28,7 +28,7 @@ module VX_prefetcher #(
     wire current_full;
     wire current_empty;
 
-    assign current_valid = ~current_empty;
+    assign current_valid = !current_empty;
 
     wire update_use = ((use_valid == 0) || ((use_valid-1) == 0)) && current_valid;
 
