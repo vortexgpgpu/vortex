@@ -1,8 +1,6 @@
-
-
 #include "tests.h"
-#include "../../intrinsics/vx_intrinsics.h"
-#include "../../io/vx_io.h"
+#include <vx_intrinsics.h>
+#include <vx_print.h>
 
 int tmc_array[4] = {5,5,5,5};
 

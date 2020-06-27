@@ -84,7 +84,7 @@ int main(int argc, char **argv)
 
 #else
 
-	char test[] = "../../../runtime/tests/simple/vx_simple_main.hex";
+	char test[] = "../../../runtime/tests/simple/vx_simple.hex";
 	//char test[] = "../../../benchmarks/riscv_tests/rv32ui-p-lb.hex";
 	//char test[] = "../../../benchmarks/riscv_tests/rv32ui-p-lw.hex";
 	//char test[] = "../../../benchmarks/riscv_tests/rv32ui-p-sw.hex";
