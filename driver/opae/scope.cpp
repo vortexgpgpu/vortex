@@ -87,8 +87,6 @@ static const scope_signal_t scope_signals[] = {
     { 1,  "scope_bank_is_mrvq_st1" },
     { 1,  "scope_bank_miss_st1" },
     { 1,  "scope_bank_dirty_st1" },
-    { 1,  "scope_bank_tag_valid_st1" },
-    { 1,  "scope_bank_tag_match_st1" },
     { 1,  "scope_bank_force_miss_st1" },
 
     ///////////////////////////////////////////////////////////////////////////

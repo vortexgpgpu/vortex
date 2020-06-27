@@ -412,9 +412,6 @@ module VX_bank #(
     wire                        mrvq_recover_ready_state_st1e;
     wire[`LINE_ADDR_WIDTH-1:0]  addr_st1e;
 
-    wire tag_valid_st1e;
-    wire tag_match_st1e;
-
     assign is_mrvq_st1e        = is_mrvq_st1[STAGE_1_CYCLES-1];
     assign valid_st1e          = valid_st1 [STAGE_1_CYCLES-1];
     assign is_snp_st1e         = is_snp_st1 [STAGE_1_CYCLES-1];
@@ -476,10 +473,7 @@ module VX_bank #(
         .dirtyb_st1e               (dirtyb_st1e),
         .fill_saw_dirty_st1e       (fill_saw_dirty_st1e),
         .snp_to_mrvq_st1e          (snp_to_mrvq_st1e),
-        .mrvq_init_ready_state_st1e(mrvq_init_ready_state_st1e),        
-
-        .tag_valid_st1e            (tag_valid_st1e),
-        .tag_match_st1e            (tag_match_st1e)
+        .mrvq_init_ready_state_st1e(mrvq_init_ready_state_st1e)
     );
 
 `ifdef DBG_CORE_REQ_INFO
@@ -764,8 +758,6 @@ module VX_bank #(
 `SCOPE_ASSIGN(scope_bank_is_mrvq_st1, is_mrvq_st1e);
 `SCOPE_ASSIGN(scope_bank_miss_st1,  miss_st1e);
 `SCOPE_ASSIGN(scope_bank_dirty_st1, dirty_st1e);
-`SCOPE_ASSIGN(scope_bank_tag_valid_st1, tag_valid_st1e);
-`SCOPE_ASSIGN(scope_bank_tag_match_st1, tag_match_st1e);
 `SCOPE_ASSIGN(scope_bank_force_miss_st1, force_request_miss_st1e);
 `SCOPE_ASSIGN(scope_bank_stall_pipe, stall_bank_pipe);
 
