@@ -1,6 +1,7 @@
 LLVM_HOME ?= ~/dev/llvm-project/drops
 RISCV_TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
 SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
+
 POCL_CC_PATH ?= $(realpath ../compiler)
 POCL_RT_PATH ?= $(realpath ../runtime)
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
@@ -40,7 +41,7 @@ run-rtlsim: $(PROJECT) kernel.pocl
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o *.dump .depend 
+	rm -rf $(PROJECT) *.o .depend 
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

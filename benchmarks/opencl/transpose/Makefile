@@ -1,6 +1,7 @@
 LLVM_HOME ?= ~/dev/llvm-project/drops
 RISCV_TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
 SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
+
 POCL_CC_PATH ?= $(realpath ../compiler)
 POCL_RT_PATH ?= $(realpath ../runtime)
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
@@ -8,9 +9,9 @@ VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
 CXXFLAGS += -std=c++11 -O0 -g -fpermissive -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I$(POCLRT_PATH)/include
+CXXFLAGS += -I$(POCL_RT_PATH)/include
 
-LDFLAGS += -L$(POCLRT_PATH)/lib -L$(DRIVER_PATH)/simx -lOpenCL -lvortex
+LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
 
 PROJECT = transpose
 
@@ -25,22 +26,22 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-fpga: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-ase: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	ASE_LOG=0 LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-simx: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 run-rtlsim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCLRT_PATH)/lib:$(DRIVER_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o *.dump .depend 
+	rm -rf $(PROJECT) *.o .depend 
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
