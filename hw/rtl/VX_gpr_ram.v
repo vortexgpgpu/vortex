@@ -54,7 +54,7 @@ module VX_gpr_ram (
         wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] tmp_a;
         wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] tmp_b;
 
-    `ifndef SYN
+    `ifndef SYNTHESIS
         genvar j;
         for (i = 0; i < `NUM_THREADS; i++) begin
             for (j = 0; j < `NUM_GPRS; j++) begin

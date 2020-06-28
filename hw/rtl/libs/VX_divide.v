@@ -3,12 +3,12 @@
 module VX_divide #(
     parameter WIDTHN = 1,
     parameter WIDTHD = 1,
-    parameter REP = "UNSIGNED",
+    parameter NSIGNED = 0,
+    parameter DSIGNED = 0,
     parameter PIPELINE = 0
 ) (
     input wire clk,
     input wire reset,
-    input wire clken,
 
     input [WIDTHN-1:0] numer,
     input [WIDTHD-1:0] denom,
@@ -19,84 +19,90 @@ module VX_divide #(
 
 `ifdef QUARTUS
 
-    lpm_divide #(
-        .LPM_WIDTHN(WIDTHN),
-        .LPM_WIDTHD(WIDTHD),
-        .LPM_NREPRESENTATION(REP),
-        .LPM_DREPRESENTATION(REP),
-        .LPM_PIPELINE(PIPELINE),        
-        .DSP_BLOCK_BALANCING("LOGIC ELEMENTS"),
-        .MAXIMIZE_SPEED(9)
-    ) quartus_divider (
-        .clock(clk),
-        .aclr(reset),
-        .clken(clken),
-        .numer(numer),
-        .denom(denom),
-        .quotient(quotient),
-        .remain(remainder)
+    lpm_divide quartus_div (
+        .clock    (clk),        
+        .numer    (numer),
+        .denom    (denom),
+        .quotient (quotient),
+        .remain   (remainder),
+        .aclr     (1'b0),
+        .clken    (1'b1)
     );
+
+    defparam
+		quartus_div.lpm_type = "LPM_DIVIDE",
+        quartus_div.lpm_widthn = WIDTHN,        
+		quartus_div.lpm_widthd = WIDTHD,		
+		quartus_div.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
+        quartus_div.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
+		quartus_div.lpm_hint = "LPM_REMAINDERPOSITIVE=FALSE,MAXIMIZE_SPEED=9",
+		quartus_div.lpm_pipeline = PIPELINE;	
 
 `else
 
-    wire [WIDTHN-1:0] numer_pipe_end;
-    wire [WIDTHD-1:0] denom_pipe_end;
+    reg [WIDTHN-1:0] quotient_unqual;
+    reg [WIDTHD-1:0] remainder_unqual;
+
+    always @(*) begin   
+    `ifndef SYNTHESIS    
+        // this edge case kills verilator in some cases by causing a division
+        // overflow exception. INT_MIN / -1 (on x86)
+        if (numer == {1'b1, (WIDTHN-1)'(0)}
+         && denom == {WIDTHD{1'b1}}) begin
+            quotient_unqual  = 0;
+            remainder_unqual = 0;
+        end else
+    `endif
+        begin
+            if (NSIGNED && DSIGNED) begin
+                quotient_unqual  = $signed(numer) / $signed(denom);
+                remainder_unqual = $signed(numer) % $signed(denom);
+            end 
+            else if (NSIGNED && !DSIGNED) begin
+                quotient_unqual  = $signed(numer) / denom;
+                remainder_unqual = $signed(numer) % denom;
+            end 
+            else if (!NSIGNED && DSIGNED) begin
+                quotient_unqual  = numer / $signed(denom);
+                remainder_unqual = numer % $signed(denom);
+            end 
+            else begin
+                quotient_unqual  = numer / denom;
+                remainder_unqual = numer % denom;        
+            end
+        end
+    end
 
     if (PIPELINE == 0) begin
-        assign numer_pipe_end = numer;
-        assign denom_pipe_end = denom;
+        assign quotient  = quotient_unqual;
+        assign remainder = remainder_unqual;
     end else begin
-        reg [WIDTHN-1:0] numer_pipe [0:PIPELINE-1];
-        reg [WIDTHD-1:0] denom_pipe [0:PIPELINE-1];
+        reg [WIDTHN-1:0] quotient_pipe [0:PIPELINE-1];
+        reg [WIDTHD-1:0] remainder_pipe [0:PIPELINE-1];
 
         genvar i;
         for (i = 0; i < PIPELINE; i++) begin
             always @(posedge clk) begin
                 if (reset) begin
-                    numer_pipe[i] <= 0;
-                    denom_pipe[i] <= 0;
+                    quotient_pipe[i]  <= 0;
+                    remainder_pipe[i] <= 0;
                 end
-                else if (clken) begin
+                else begin
                     if (i == 0) begin
-                        numer_pipe[0] <= numer;
-                        denom_pipe[0] <= denom;
+                        quotient_pipe[0]  <= quotient_unqual;
+                        remainder_pipe[0] <= remainder_unqual;
                     end else begin
-                        numer_pipe[i] <= numer_pipe[i-1];
-                        denom_pipe[i] <= denom_pipe[i-1];    
+                        quotient_pipe[i]  <= quotient_pipe[i-1];
+                        remainder_pipe[i] <= remainder_pipe[i-1];    
                     end                     
                 end
             end
         end
 
-        assign numer_pipe_end = numer_pipe[PIPELINE-1];
-        assign denom_pipe_end = denom_pipe[PIPELINE-1];
-    end
-
-    always @(*) begin    
-        if (denom_pipe_end == 0) begin
-            quotient  = {WIDTHN{1'b1}};
-            remainder = numer_pipe_end;
-        end
-    `ifndef SYNTHESIS    
-        // this edge case kills verilator in some cases by causing a division
-        // overflow exception. INT_MIN / -1 (on x86)
-        else if (numer_pipe_end == {1'b1, (WIDTHN-1)'(0)}
-              && denom_pipe_end == {WIDTHD{1'b1}}) begin
-            quotient  = 0;
-            remainder = 0;
-        end
-    `endif
-        else begin
-            if (REP == "SIGNED") begin
-                quotient  = $signed(numer_pipe_end) / $signed(denom_pipe_end);
-                remainder = $signed(numer_pipe_end) % $signed(denom_pipe_end);
-            end else begin
-                quotient  = numer_pipe_end / denom_pipe_end;
-                remainder = numer_pipe_end % denom_pipe_end;        
-            end
-        end
-    end
+        assign quotient  = quotient_pipe[PIPELINE-1];
+        assign remainder = remainder_pipe[PIPELINE-1];
+    end    
 
 `endif
 
-endmodule : VX_divide
+endmodule

@@ -4,12 +4,11 @@ module VX_mult #(
     parameter WIDTHA = 1,
     parameter WIDTHB = 1,
     parameter WIDTHP = 1,
-    parameter REP = "UNSIGNED",
+    parameter SIGNED = 0,
     parameter PIPELINE = 0
 ) (
     input               clk,
     input               reset,
-    input               clken,
 
     input [WIDTHA-1:0]  dataa,
     input [WIDTHB-1:0]  datab,
@@ -19,65 +18,59 @@ module VX_mult #(
 
 `ifdef QUARTUS
 
-    lpm_mult #(
-        .LPM_WIDTHA(WIDTHA),
-        .LPM_WIDTHB(WIDTHB),
-        .LPM_WIDTHP(WIDTHP),
-        .LPM_REPRESENTATION(REP),
-        .LPM_PIPELINE(PIPELINE),
-        .DSP_BLOCK_BALANCING("LOGIC ELEMENTS"),
-        .MAXIMIZE_SPEED(9)
-    ) quartus_mult (
-        .clock(clk),
-        .aclr(reset),
-        .clken(clken),
-        .dataa(dataa),
-        .datab(datab),
-        .result(result)
+    lpm_mult quartus_mult (
+        .clock  (clk),
+        .dataa  (dataa),
+        .datab  (datab),
+        .result (result),
+        .aclr   (1'b0),
+        .clken  (1'b1),
+        .sclr   (1'b0),
+        .sum    (1'b0)
     );
 
+    defparam quartus_mult.lpm_type = "LPM_MULT",
+             quartus_mult.lpm_widtha = WIDTHA,
+             quartus_mult.lpm_widthb = WIDTHB,
+             quartus_mult.lpm_widthp = WIDTHP,
+             quartus_mult.lpm_representation = SIGNED ? "SIGNED" : "UNSIGNED",
+             quartus_mult.lpm_pipeline = PIPELINE,
+             quartus_mult.lpm_hint = "MAXIMIZE_SPEED=9";
 `else
-    
-    wire [WIDTHA-1:0] dataa_pipe_end;
-    wire [WIDTHB-1:0] datab_pipe_end;
 
-    if (PIPELINE == 0) begin
-        assign dataa_pipe_end = dataa;
-        assign datab_pipe_end = datab;
+    wire [WIDTHP-1:0] result_unqual;
+
+    if (SIGNED) begin
+        assign result_unqual = $signed(dataa) * $signed(datab);
     end else begin
-        reg [WIDTHA-1:0] dataa_pipe [0:PIPELINE-1];
-        reg [WIDTHB-1:0] datab_pipe [0:PIPELINE-1];
+        assign result_unqual = dataa * datab;
+    end
+    
+    if (PIPELINE == 0) begin
+        assign result = result_unqual;
+    end else begin
+        
+        reg [WIDTHP-1:0] result_pipe [0:PIPELINE-1];     
 
         genvar i;
         for (i = 0; i < PIPELINE; i++) begin
             always @(posedge clk) begin
                 if (reset) begin
-                    dataa_pipe[i] <= 0;
-                    datab_pipe[i] <= 0;
+                    result_pipe[i] <= 0;
                 end
-                else if (clken) begin
+                else begin
                     if (i == 0) begin
-                        dataa_pipe[0] <= dataa;
-                        datab_pipe[0] <= datab;
+                        result_pipe[0] <= result_unqual;
                     end else begin
-                        dataa_pipe[i] <= dataa_pipe[i-1];
-                        datab_pipe[i] <= datab_pipe[i-1];
+                        result_pipe[i] <= result_pipe[i-1];
                     end
                 end
             end
         end
-
-        assign dataa_pipe_end = dataa_pipe[PIPELINE-1];
-        assign datab_pipe_end = datab_pipe[PIPELINE-1];
-    end
-
-    if (REP == "SIGNED") begin
-        assign result = $signed(dataa_pipe_end) * $signed(datab_pipe_end);
-    end
-    else begin
-        assign result = dataa_pipe_end * datab_pipe_end;
+        
+        assign result = result_pipe[PIPELINE-1]; 
     end
 
 `endif
 
-endmodule: VX_mult
+endmodule
