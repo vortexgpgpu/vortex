@@ -644,10 +644,10 @@ module VX_bank #(
     assign core_rsp_valid = !cwbq_empty;
 
     // Enqueue DRAM fill request
-
-    wire dram_fill_req_unqual = miss_add_unqual
+    wire dram_fill_req_fast   = miss_add_unqual; // Completely unqualified hint that we might send a dram_fill_req
+    wire dram_fill_req_unqual = dram_fill_req_fast
                              && (!mrvq_init_ready_state_st2 
-                              || (is_mrvq_st2 && !mrvq_recover_ready_state_st2));
+                              || (is_mrvq_st2 && !mrvq_recover_ready_state_st2)); // If this is set, then we are sure we will be sending a dram_fill_req
 
     assign dram_fill_req_valid = dram_fill_req_unqual 
                               && !(dwbq_push_stall
@@ -655,7 +655,7 @@ module VX_bank #(
                                 || cwbq_push_stall);
 
     assign dram_fill_req_addr  = addr_st2;
-    assign dram_fill_req_stall = dram_fill_req_unqual && !dram_fill_req_ready;
+    assign dram_fill_req_stall = dram_fill_req_fast && !dram_fill_req_ready; // Uses dram_fill_req_fast for critical path
 
     // Enqueue DRAM writeback request
 
