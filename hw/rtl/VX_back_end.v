@@ -76,7 +76,7 @@ module VX_back_end #(
         .clk            (clk),
         .reset          (reset),
         .lsu_req_if     (lsu_req_if),
-        .mem_wb_if      (mem_wb_if),
+        .mem_wb_if_p1   (mem_wb_if),
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
         .delay          (mem_delay),
