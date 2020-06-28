@@ -12,7 +12,7 @@ module VX_lsu_unit #(
     VX_lsu_req_if           lsu_req_if,
 
     // Write back to GPR
-    VX_wb_if                mem_wb_if,
+    VX_wb_if                mem_wb_if_p1,
 
    // Dcache interface
     VX_cache_core_req_if    dcache_req_if,
@@ -20,6 +20,9 @@ module VX_lsu_unit #(
 
     output wire             delay
 );
+
+    VX_wb_if                mem_wb_if;
+
     wire[`NUM_THREADS-1:0][31:0]    use_address;
     wire[`NUM_THREADS-1:0][31:0]    use_store_data;
     wire[`NUM_THREADS-1:0]          use_valid;
@@ -156,7 +159,20 @@ module VX_lsu_unit #(
     assign mem_wb_if.data  = core_rsp_data;
 
     // Can't accept new response
-    assign dcache_rsp_if.core_rsp_ready = !no_slot_mem;    
+    assign dcache_rsp_if.core_rsp_ready = !no_slot_mem & (|mem_wb_if_p1.valid);
+
+
+
+    // From LSU to WB
+    localparam WB_REQ_SIZE = (`NUM_THREADS) + (`NUM_THREADS * 32) + (`NW_BITS) + (5) + (2) + 32;
+    VX_generic_register #(.N(WB_REQ_SIZE)) lsu_to_wb(
+        .clk   (clk),
+        .reset (reset),
+        .stall (no_slot_mem),
+        .flush (1'b0),
+        .in    ({mem_wb_if.valid   , mem_wb_if.data   , mem_wb_if.warp_num   , mem_wb_if.rd   , mem_wb_if.wb   , mem_wb_if.curr_PC   }),
+        .out   ({mem_wb_if_p1.valid, mem_wb_if_p1.data, mem_wb_if_p1.warp_num, mem_wb_if_p1.rd, mem_wb_if_p1.wb, mem_wb_if_p1.curr_PC})
+    );
 
     `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.core_req_valid);    
     `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
