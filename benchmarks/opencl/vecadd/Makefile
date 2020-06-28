@@ -41,7 +41,7 @@ run-rtlsim: $(PROJECT) kernel.pocl
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o *.dump .depend 
+	rm -rf $(PROJECT) *.o .depend 
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
