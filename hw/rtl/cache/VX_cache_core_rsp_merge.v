@@ -35,7 +35,7 @@ module VX_cache_core_rsp_merge #(
 
     wire [`BANK_BITS-1:0] main_bank_index;
 
-    VX_fixed_arbiter #(
+    VX_fair_arbiter #(
         .N(NUM_BANKS)
     ) sel_bank (
         .clk         (clk),
