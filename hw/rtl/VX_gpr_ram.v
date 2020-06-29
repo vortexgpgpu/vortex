@@ -19,16 +19,21 @@ module VX_gpr_ram (
     wire [`NUM_THREADS-1:0] write_enable = writeback_if.valid & {`NUM_THREADS{write_ce && (writeback_if.wb != 0)}};
     
     `ifndef ASIC            
-        
-        reg [`NUM_THREADS-1:0][31:0] ram[31:0];       
-                
         `UNUSED_VAR(reset)
-        
+
+        reg [`NUM_THREADS-1:0][3:0][7:0] ram[31:0];
+
+        wire [4:0] waddr = writeback_if.rd;
+        wire [`NUM_THREADS-1:0][31:0] wdata = writeback_if.data;
+                
         genvar i;        
         for (i = 0; i < `NUM_THREADS; i++) begin
             always @(posedge clk) begin
                 if (write_enable[i]) begin
-                    ram[writeback_if.rd][i] <= writeback_if.data[i];
+                    ram[waddr][i][0] <= wdata[i][07:00];
+                    ram[waddr][i][1] <= wdata[i][15:08];
+                    ram[waddr][i][2] <= wdata[i][23:16];
+                    ram[waddr][i][3] <= wdata[i][31:24];
                 end
             end
         end
