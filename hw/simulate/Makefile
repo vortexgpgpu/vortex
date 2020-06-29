@@ -12,7 +12,7 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
 
-DBG_FLAGS += $(DBG_PRINT_FLAGS)
+#DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 INCLUDE = -I../rtl/ -I../rtl/libs -I../rtl/interfaces -I../rtl/pipe_regs -I../rtl/cache -I../rtl/simulate
@@ -25,7 +25,7 @@ CF += -std=c++11 -fms-extensions -I../..
 
 VF += --language 1800-2009 --assert -Wall -Wpedantic
 VF += -Wno-DECLFILENAME
-VF += --x-initial unique
+VF += --x-initial unique --x-assign unique
 VF += -exe $(SRCS) $(INCLUDE)
 
 DBG += -DVCD_OUTPUT $(DBG_FLAGS)
