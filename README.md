@@ -13,22 +13,22 @@ Specifications
 Directory structure
 -------------------
 
-- /benchmark: containts test benchmarks
+- benchmarks: OpenCL and RISC-V benchmarks
  
-- /docs: contains documentation.
+- docs: documentation.
 
-- /hw: constains hardware sources.
+- hw: hardware sources.
 
-- /driver: contains the driver software.
+- driver: driver software.
 
-- /runtime: contains the runtime software for kernels.
+- runtime: runtime software for kernels.
 
-- /simX: contains a cycle-approximate simulator for Vortex.
+- simX: Vortex cycle-approximate simulator.
 
-- /evaluation: contains the synthesis/perf reports.
+- evaluation: synthesis and performance data.
 
-Basic Instructions to run OpenCL Benchmarks on Vortex
------------------------------------------------------
+Basic Installation
+------------------
 
 Install development tools 
 
@@ -66,8 +66,8 @@ Install Vortex
     $ cd Vortex
     $ make
 
-Run SGEMM OpenCL Benchmark
+Quick Test running SGEMM kernel
 
-    $ cd Vortex/benchmarks/opencl/sgemm
+    $ cd /Vortex/benchmarks/opencl/sgemm
     $ make
     $ make run
