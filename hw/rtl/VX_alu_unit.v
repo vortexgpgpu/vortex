@@ -13,8 +13,8 @@ module VX_alu_unit (
     output reg [31:0]  alu_result,
     output reg         alu_stall
 );
-    localparam DIV_PIPELINE_LEN = 20;
-    localparam MUL_PIPELINE_LEN = 8;
+    localparam DIV_PIPELINE_LEN = 18;
+    localparam MUL_PIPELINE_LEN = 1;
 
     wire[31:0] div_result_unsigned;
     wire[31:0] div_result_signed;
