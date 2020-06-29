@@ -284,7 +284,7 @@ module VX_bank #(
     wire mrvq_pop_unqual = mrvq_valid_st0;
     wire dfpq_pop_unqual = !mrvq_pop_unqual && !dfpq_empty;
     wire reqq_pop_unqual = !mrvq_stop && !mrvq_pop_unqual && !dfpq_pop_unqual && !reqq_empty && reqq_req_st0 && !is_fill_st1[0] && !is_fill_in_pipe;
-    wire snrq_pop_unqual = !mrvq_stop && !reqq_pop_unqual && !reqq_pop_unqual && !mrvq_pop_unqual && !dfpq_pop_unqual && !snrq_empty;
+    wire snrq_pop_unqual = !mrvq_stop && !reqq_pop_unqual && !reqq_pop_unqual && !mrvq_pop_unqual && !dfpq_pop_unqual && !snrq_empty && !reqq_req_st0; // if there's any reqq_req, don't schedule snrq.  
 
     assign mrvq_pop = mrvq_pop_unqual && !stall_bank_pipe && !recover_mrvq_state_st2;
     assign dfpq_pop = dfpq_pop_unqual && !stall_bank_pipe;
