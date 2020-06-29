@@ -25,6 +25,7 @@ module VX_fair_arbiter #(
 
        reg  [N-1:0] requests_use;
        wire [N-1:0] update_value;
+       wire [N-1:0] late_value;
 
        wire         refill;
        wire [N-1:0] refill_value;
@@ -60,8 +61,8 @@ module VX_fair_arbiter #(
             grant_onehot_r[grant_index] = 1;
         end
         assign grant_onehot = grant_onehot_r;    
-       
-        assign update_value = (requests_use & ~grant_onehot_r) | ((refill_original ^ requests) & ~refill_original);
+        assign late_value   =  ((refill_original ^ requests) & ~refill_original);
+        assign update_value = (requests_use & ~grant_onehot_r) | late_value;
 
     end
     
