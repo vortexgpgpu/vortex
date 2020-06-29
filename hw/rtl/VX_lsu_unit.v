@@ -21,7 +21,7 @@ module VX_lsu_unit #(
     output wire             delay
 );
 
-    VX_wb_if                mem_wb_if;
+    VX_wb_if                mem_wb_if();
 
     wire[`NUM_THREADS-1:0][31:0]    use_address;
     wire[`NUM_THREADS-1:0][31:0]    use_store_data;
@@ -160,8 +160,6 @@ module VX_lsu_unit #(
 
     // Can't accept new response
     assign dcache_rsp_if.core_rsp_ready = !no_slot_mem & (|mem_wb_if_p1.valid);
-
-
 
     // From LSU to WB
     localparam WB_REQ_SIZE = (`NUM_THREADS) + (`NUM_THREADS * 32) + (`NW_BITS) + (5) + (2) + 32;

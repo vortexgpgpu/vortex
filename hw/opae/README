@@ -91,4 +91,4 @@ lsof +D build_ase_1c
 make -C pipeline > pipeline/build.log 2>&1 &
 make -C cache > cache/build.log 2>&1 &
 make -C vortex > vortex/build.log 2>&1 &
-make -C pipeline > pipeline/build.log 2>&1 &
+make -C top > top/build.log 2>&1 &
