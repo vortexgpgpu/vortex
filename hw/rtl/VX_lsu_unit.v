@@ -161,8 +161,6 @@ module VX_lsu_unit #(
     // Can't accept new response
     assign dcache_rsp_if.core_rsp_ready = !(no_slot_mem & (|mem_wb_if_p1.valid));
 
-
-
     // From LSU to WB
     localparam WB_REQ_SIZE = (`NUM_THREADS) + (`NUM_THREADS * 32) + (`NW_BITS) + (5) + (2) + 32;
     VX_generic_register #(.N(WB_REQ_SIZE)) lsu_to_wb(

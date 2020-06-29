@@ -4,10 +4,10 @@
 `include "VX_config.vh"
 `include "VX_scope.vh"
 
-// `define QUEUE_FORCE_MLAB 1
-// `define SYN 1
+`define QUEUE_FORCE_MLAB 1
+
+// `define SYNTHESIS 1
 // `define ASIC 1
-// `define SYN_FUNC 1
 
 ///////////////////////////////////////////////////////////////////////////////
 
