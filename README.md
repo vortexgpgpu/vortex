@@ -13,19 +13,19 @@ Specifications
 Directory structure
 -------------------
 
-/benchmarks containts test benchmarks
+- /benchmark: containts test benchmarks
+ 
+- /docs: contains documentation.
 
-/docs contains documentation.
+- /hw: constains hardware sources.
 
-/hw constains hardware sources.
+- /driver: contains the driver software.
 
-/driver contains the driver software.
+- /runtime: contains the runtime software for kernels.
 
-/runtime contains the kernel runtime software.
+- /simX: contains a cycle-approximate simulator for Vortex.
 
-/simX contains a cycle-approximate simulator for Vortex.
-
-/evaluation contains the synthesis/runtime reports.
+- /evaluation: contains the synthesis/perf reports.
 
 Basic Instructions to run OpenCL Benchmarks on Vortex
 -----------------------------------------------------
