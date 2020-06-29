@@ -72,9 +72,9 @@
 
 `define CSR_WIDTH   12
 
-`define DIV_LATENCY 16
+`define DIV_LATENCY 18
 
-`define MUL_LATENCY 1
+`define MUL_LATENCY 2
 
 ///////////////////////////////////////////////////////////////////////////////
 

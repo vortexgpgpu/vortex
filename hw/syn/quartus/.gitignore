@@ -9,3 +9,6 @@
 
 /pipeline/*
 !/pipeline/Makefile
+
+/core/*
+!/core/Makefile
