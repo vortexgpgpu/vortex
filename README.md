@@ -1,6 +1,17 @@
 # Vortex RISC-V GPGPU
 
-Vortex currently supported RISC-V RV32I ISA
+Vortex is a full-system RISCV-based GPGPU processor.
+
+Specifications
+--------------
+
+- Support RISC-V RV32I ISA
+- Fully scalable: 1 to 16 cores with optional L2 and L3 caches
+- OpenCL 1.2 Support 
+- FPGA target: Intel Arria 10 @ 200 MHz peak Freq
+
+Directory structure
+-------------------
 
 /benchmarks containts test benchmarks
 
@@ -12,7 +23,7 @@ Vortex currently supported RISC-V RV32I ISA
 
 /runtime contains the kernel runtime software.
 
-/SimX contains a cycle-approximate simulator for Vortex.
+/simX contains a cycle-approximate simulator for Vortex.
 
 /evaluation contains the synthesis/runtime reports.
 
