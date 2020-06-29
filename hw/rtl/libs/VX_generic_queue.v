@@ -3,7 +3,7 @@
 module VX_generic_queue #(
     parameter DATAW,
     parameter SIZE = 16,
-    parameter BUFFERED_OUTPUT = 1
+    parameter BUFFERED_OUTPUT = (SIZE > 8)
 ) ( 
     input  wire             clk,
     input  wire             reset,
