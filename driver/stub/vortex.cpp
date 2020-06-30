@@ -8,6 +8,10 @@ extern int vx_dev_close(vx_device_h /*hdevice*/) {
     return -1;
 }
 
+extern int vx_dev_caps(vx_device_h /*hdevice*/, unsigned /*caps_id*/, unsigned* /*value*/) {
+    return -1;
+}
+
 extern int vx_alloc_dev_mem(vx_device_h /*hdevice*/, size_t /*size*/, size_t* /*dev_maddr*/) {
     return -1;
 }

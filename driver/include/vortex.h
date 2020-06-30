@@ -21,14 +21,14 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_ALLOC_BASE_ADDR   0x6
 #define VX_CAPS_KERNEL_BASE_ADDR  0x7
 
-// return device configurations
-int vx_dev_caps(int caps_id);
-
 // open the device and connect to it
 int vx_dev_open(vx_device_h* hdevice);
 
 // Close the device when all the operations are done
 int vx_dev_close(vx_device_h hdevice);
+
+// return device configurations
+int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value);
 
 // Allocate shared buffer with device
 int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hbuffer);
@@ -58,10 +58,10 @@ int vx_start(vx_device_h hdevice);
 int vx_ready_wait(vx_device_h hdevice, long long timeout);
 
 // set device constant registers
-int vx_set_regiters(int state, int value);
+int vx_csr_set(vx_device_h hdevice, int address, int value);
 
 // get device constant registers
-int vx_get_regiters(int state, int* value);
+int vx_csr_get(vx_device_h hdevice, int address, int* value);
 
 ////////////////////////////// UTILITY FUNCIONS ///////////////////////////////
 
