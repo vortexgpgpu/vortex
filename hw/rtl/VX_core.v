@@ -70,45 +70,44 @@ module VX_core #(
     input wire [`DCORE_TAG_WIDTH-1:0]       io_rsp_tag,
     output wire                             io_rsp_ready,
 
-    // IO CSR Request
-    input  wire                              csr_io_req_valid,
-    input  wire[`NC_BITS-1:0]                csr_io_req_cid,
-    input  wire[11:0]                        csr_io_req_addr,
-    input  wire                              csr_io_req_rw,
-    input  wire[31:0]                        csr_io_req_data,
-    output wire                              csr_io_req_ready,
+    // CSR I/O Request
+    input  wire                             csr_io_req_valid,
+    input  wire[11:0]                       csr_io_req_addr,
+    input  wire                             csr_io_req_rw,
+    input  wire[31:0]                       csr_io_req_data,
+    output wire                             csr_io_req_ready,
 
-    // IO CSR Response
-    output wire                              csr_io_rsp_valid,
-    output wire[31:0]                        csr_io_rsp_data,
+    // CSR I/O Response
+    output wire                             csr_io_rsp_valid,
+    output wire[31:0]                       csr_io_rsp_data,
+    input wire                              csr_io_rsp_ready,
 
     // Status
     output wire                             busy, 
     output wire                             ebreak
 );
 
+    `UNUSED_VAR(csr_io_rsp_ready)
+
     // IO CSR request
     VX_csr_req_if io_csr_req();
-    wire temp_io_csr_req_valid    = csr_io_req_valid & (csr_io_req_cid == CORE_ID[`NC_BITS-1:0]);
+    wire temp_io_csr_req_valid    = csr_io_req_valid;
     assign io_csr_req.valid       = {`NUM_THREADS{temp_io_csr_req_valid}};
     assign io_csr_req.is_csr      = 1'b1;
     assign io_csr_req.csr_address = csr_io_req_addr; 
     assign io_csr_req.alu_op      = csr_io_req_rw ? `ALU_CSR_RW : `ALU_CSR_RS; 
     assign io_csr_req.csr_mask    = csr_io_req_rw ? csr_io_req_data : 32'b0;
 
-
-
     VX_wb_if io_csr_rsp();
     assign csr_io_req_ready    = io_csr_rsp.is_io;
     assign csr_io_rsp_valid    = io_csr_rsp.valid[0];
     assign csr_io_rsp_data     = io_csr_rsp.data[0];
+    
 `IGNORE_WARNINGS_BEGIN
     wire [4:0]  unused_rd      = io_csr_rsp.rd;
     wire [1:0]  unused_wb      = io_csr_rsp.wb;    
     wire [31:0] unused_curr_PC = io_csr_rsp.curr_PC;    
 `IGNORE_WARNINGS_END
-
-
 
     // Dcache Interfaces   
     VX_cache_dram_req_if #(
@@ -212,7 +211,6 @@ module VX_core #(
 
         .clk(clk),
         .reset(reset),
-
 
         // IO CSR 
         .io_csr_req         (io_csr_req),

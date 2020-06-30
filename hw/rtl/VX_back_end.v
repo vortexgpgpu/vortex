@@ -106,9 +106,9 @@ module VX_back_end #(
 
     VX_csr_req_if issued_csr_req();
 
-    VX_wb_if       csr_pipe_rsp();
+    VX_wb_if csr_pipe_rsp();
 
-    VX_csr_arbiter csr_arbiter (
+    VX_csr_arb csr_arbiter (
         .clk           (clk),
         .reset         (reset),
         .csr_pipe_stall(stall_gpr_csr),
@@ -118,8 +118,7 @@ module VX_back_end #(
 
         .csr_pipe_rsp  (csr_pipe_rsp),
         .csr_wb_if     (csr_wb_if),
-        .csr_io_rsp    (io_csr_rsp)
-    
+        .csr_io_rsp    (io_csr_rsp)    
     );
 
     VX_csr_pipe #(

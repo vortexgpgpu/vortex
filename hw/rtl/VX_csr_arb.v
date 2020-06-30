@@ -1,24 +1,22 @@
 `include "VX_define.vh"
 
-module VX_csr_arbiter (
+module VX_csr_arb (
     input  wire      clk,
     input  wire      reset,
+    
     input  wire      csr_pipe_stall,
     
     VX_csr_req_if    core_csr_req,
-    VX_csr_req_if    io_csr_req,
-    
+    VX_csr_req_if    io_csr_req,    
     VX_csr_req_if    issued_csr_req,
 
     VX_wb_if         csr_pipe_rsp,
     VX_wb_if         csr_wb_if,
     VX_wb_if         csr_io_rsp
-
 );
 
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
-
 
     wire pick_core = (|core_csr_req.valid);
 
@@ -36,8 +34,6 @@ module VX_csr_arbiter (
     assign issued_csr_req.warp_num    = core_csr_req.warp_num;
 	assign issued_csr_req.rd          = core_csr_req.rd;
 	assign issued_csr_req.wb          = core_csr_req.wb;
-
-
 
     // Core Writeback
     
@@ -58,7 +54,5 @@ module VX_csr_arbiter (
     assign csr_io_rsp.wb       = csr_pipe_rsp.wb;    
     assign csr_io_rsp.curr_PC  = csr_pipe_rsp.curr_PC; 
     assign csr_io_rsp.is_io    = !(csr_pipe_stall || pick_core); 
-
-
 
 endmodule

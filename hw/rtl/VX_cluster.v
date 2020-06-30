@@ -56,6 +56,19 @@ module VX_cluster #(
     input wire [`L2CORE_TAG_WIDTH-1:0]      io_rsp_tag,
     output wire                             io_rsp_ready,
 
+    // CSR I/O Request
+    input  wire                             csr_io_req_valid,
+    input  wire [`NC_BITS-1:0]              csr_io_req_coreid,
+    input  wire [11:0]                      csr_io_req_addr,
+    input  wire                             csr_io_req_rw,
+    input  wire [31:0]                      csr_io_req_data,
+    output wire                             csr_io_req_ready,
+
+    // CSR I/O Response
+    output wire                             csr_io_rsp_valid,
+    output wire [31:0]                      csr_io_rsp_data,
+    input wire                              csr_io_rsp_ready,
+
     // Status
     output wire                             busy, 
     output wire                             ebreak
@@ -109,10 +122,22 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0][31:0]                  per_core_io_rsp_data;
     wire [`NUM_CORES-1:0]                        per_core_io_rsp_ready;
 
+    wire [`NUM_CORES-1:0]                        per_core_csr_io_req_valid;
+    wire [`NUM_CORES-1:0][`NC_BITS-1:0]          per_core_csr_io_req_coreid;
+    wire [`NUM_CORES-1:0][11:0]                  per_core_csr_io_req_addr;
+    wire [`NUM_CORES-1:0]                        per_core_csr_io_req_rw;
+    wire [`NUM_CORES-1:0][31:0]                  per_core_csr_io_req_data;
+    wire [`NUM_CORES-1:0]                        per_core_csr_io_req_ready;
+
+    wire [`NUM_CORES-1:0]                        per_core_csr_io_rsp_valid;
+    wire [`NUM_CORES-1:0][31:0]                  per_core_csr_io_rsp_data;
+    wire [`NUM_CORES-1:0]                        per_core_csr_io_rsp_ready;
+
     wire [`NUM_CORES-1:0]                        per_core_busy;
     wire [`NUM_CORES-1:0]                        per_core_ebreak;
 
     genvar i;
+
     for (i = 0; i < `NUM_CORES; i++) begin    
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
@@ -174,18 +199,15 @@ module VX_cluster #(
             .io_rsp_tag         (per_core_io_rsp_tag        [i]),
             .io_rsp_ready       (per_core_io_rsp_ready      [i]),
 
+            .csr_io_req_valid   (per_core_csr_io_req_valid[i] && (per_core_csr_io_req_coreid[i] == `NC_BITS'(i))),
+            .csr_io_req_rw      (per_core_csr_io_req_rw     [i]),
+            .csr_io_req_addr    (per_core_csr_io_req_addr   [i]),
+            .csr_io_req_data    (per_core_csr_io_req_data   [i]),
+            .csr_io_req_ready   (per_core_csr_io_req_ready  [i]),
 
-
-            .csr_io_req_valid  (1'b0),     // Valid CSR IO Request
-            `UNUSED_PIN(csr_io_req_ready), // Core is ready to accept Request
-            `UNUSED_PIN(csr_io_req_cid),   // CORE_ID of the intended request
-            `UNUSED_PIN(csr_io_req_addr),  // ADDRESS of request
-            `UNUSED_PIN(csr_io_req_rw),    // Read=0, Write=1
-            `UNUSED_PIN(csr_io_req_data),  // Data to write
-
-            `UNUSED_PIN(csr_io_rsp_valid), // Core IO Response valid
-            `UNUSED_PIN(csr_io_rsp_data),  // Core IO Response data
-
+            .csr_io_rsp_valid   (per_core_csr_io_rsp_valid  [i]),            
+            .csr_io_rsp_data    (per_core_csr_io_rsp_data   [i]),
+            .csr_io_rsp_ready   (per_core_csr_io_rsp_ready  [i]),
 
             .busy               (per_core_busy              [i]),
             .ebreak             (per_core_ebreak            [i])
@@ -231,6 +253,39 @@ module VX_cluster #(
         .out_mem_rsp_data      (io_rsp_data),
         .out_mem_rsp_ready     (io_rsp_ready)
     );       
+
+    VX_csr_io_arb #(
+        .NUM_REQUESTS (`NUM_CORES)
+    ) csr_io_arb (
+        .clk                    (clk),
+        .reset                  (reset),
+
+        // input requests
+        .in_csr_io_req_valid    (csr_io_req_valid),
+        .in_csr_io_req_coreid   (csr_io_req_coreid),        
+        .in_csr_io_req_addr     (csr_io_req_addr),
+        .in_csr_io_req_rw       (csr_io_req_rw),
+        .in_csr_io_req_data     (csr_io_req_data),
+        .in_csr_io_req_ready    (csr_io_req_ready),
+
+        // input responses
+        .in_csr_io_rsp_valid    (per_core_csr_io_rsp_valid),
+        .in_csr_io_rsp_data     (per_core_csr_io_rsp_data),
+        .in_csr_io_rsp_ready    (per_core_csr_io_rsp_ready),
+
+        // output request
+        .out_csr_io_req_valid   (per_core_csr_io_req_valid),
+        .out_csr_io_req_coreid  (per_core_csr_io_req_coreid),
+        .out_csr_io_req_addr    (per_core_csr_io_req_addr),            
+        .out_csr_io_req_rw      (per_core_csr_io_req_rw),
+        .out_csr_io_req_data    (per_core_csr_io_req_data),  
+        .out_csr_io_req_ready   (per_core_csr_io_req_ready),            
+        
+        // output response
+        .out_csr_io_rsp_valid   (csr_io_rsp_valid),
+        .out_csr_io_rsp_data    (csr_io_rsp_data),
+        .out_csr_io_rsp_ready   (csr_io_rsp_ready)
+    );
     
     assign busy = (| per_core_busy);
     assign ebreak = (& per_core_ebreak);

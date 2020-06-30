@@ -88,7 +88,7 @@ module VX_snp_forwarder #(
     genvar i;
 
     for (i = 0; i < NUM_REQUESTS; i++) begin
-        assign snp_fwdout_valid[i]      = snp_req_valid && !sfq_full;
+        assign snp_fwdout_valid[i]      = snp_req_valid && snp_req_ready;
         assign snp_fwdout_addr[i]       = snp_req_addr;
         assign snp_fwdout_invalidate[i] = snp_req_invalidate;
         assign snp_fwdout_tag[i]        = sfq_write_addr;

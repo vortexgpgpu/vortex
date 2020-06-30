@@ -122,6 +122,17 @@ logic [`VX_SNP_TAG_WIDTH-1:0] vx_snp_rsp_tag;
 `DEBUG_END
 logic vx_snp_rsp_ready;
 
+logic        vx_csr_io_req_valid;
+logic [`NC_BITS-1:0] vx_csr_io_req_coreid;
+logic [11:0] vx_csr_io_req_addr;
+logic        vx_csr_io_req_rw;
+logic [31:0] vx_csr_io_req_data;
+logic        vx_csr_io_req_ready;
+
+logic        vx_csr_io_rsp_valid;
+logic [31:0] vx_csr_io_rsp_data;
+logic        vx_csr_io_rsp_ready;
+
 logic vx_reset;
 logic vx_busy;
 
@@ -156,7 +167,7 @@ logic                      cmd_scope_read;
 logic                      cmd_scope_write;
 `endif
 
-logic [31:0]               cmd_csr_addr;
+logic [11:0]               cmd_csr_addr;
 logic [31:0]               cmd_csr_rdata;  
 logic [31:0]               cmd_csr_wdata;
 
@@ -278,7 +289,7 @@ begin
         end
       `endif
         MMIO_CSR_READ: begin          
-          mmio_tx.data <= cmd_csr_rdata;
+          mmio_tx.data <= 64'(cmd_csr_rdata);
         `ifdef DBG_PRINT_OPAE
           $display("%t: MMIO_CSR_READ: data=%0h", $time, cmd_csr_rdata);
         `endif
@@ -854,20 +865,17 @@ end
 
 // CSRs///////////////////////////////////////////////////////////////////////
 
-assign cmd_csr_read_done = 1;
-assign cmd_csr_write_done = 1;
+assign vx_csr_io_req_valid = (STATE_CSR_READ == state || STATE_CSR_WRITE == state);
+assign vx_csr_io_req_coreid = 0;
+assign vx_csr_io_req_rw   = (STATE_CSR_WRITE == state);
+assign vx_csr_io_req_addr = cmd_csr_addr;
+assign vx_csr_io_req_data = cmd_csr_wdata;
 
-always_comb begin
-  case (cmd_csr_addr)
-    `CSR_VEND_ID : cmd_csr_rdata = `VENDOR_ID;
-    `CSR_ARCH_ID : cmd_csr_rdata = `ARCHITECTURE_ID;
-    `CSR_IMPL_ID : cmd_csr_rdata = `IMPLEMENTATION_ID;
-    `CSR_NT      : cmd_csr_rdata = `NUM_THREADS;
-    `CSR_NW      : cmd_csr_rdata = `NUM_WARPS;
-    `CSR_NC      : cmd_csr_rdata = `NUM_CORES * `NUM_CLUSTERS;
-    default      : cmd_csr_rdata = 0;
-  endcase
-end
+assign cmd_csr_rdata = vx_csr_io_rsp_data;
+assign vx_csr_io_rsp_ready = 1;
+
+assign cmd_csr_read_done  = vx_csr_io_rsp_valid;
+assign cmd_csr_write_done = vx_csr_io_req_ready;
 
 // Vortex /////////////////////////////////////////////////////////////////////
 
@@ -925,6 +933,19 @@ Vortex #() vortex (
   .io_rsp_data      (0),
   .io_rsp_tag       (0),
   `UNUSED_PIN       (io_rsp_ready),
+
+  // CSR I/O Request
+  .csr_io_req_valid (vx_csr_io_req_valid),
+  .csr_io_req_coreid(vx_csr_io_req_coreid),
+  .csr_io_req_addr  (vx_csr_io_req_addr),
+  .csr_io_req_rw    (vx_csr_io_req_rw),
+  .csr_io_req_data  (vx_csr_io_req_data),
+  .csr_io_req_ready (vx_csr_io_req_ready),
+
+  // CSR I/O Response
+  .csr_io_rsp_valid (vx_csr_io_rsp_valid),
+  .csr_io_rsp_data  (vx_csr_io_rsp_data),
+  .csr_io_rsp_ready (vx_csr_io_rsp_ready),
  
   // status
   .busy 				    (vx_busy),
