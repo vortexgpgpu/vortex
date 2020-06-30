@@ -72,6 +72,10 @@
 
 `define CSR_WIDTH   12
 
+`define DIV_LATENCY 18
+
+`define MUL_LATENCY 2
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define BYTE_EN_NO      3'h7 

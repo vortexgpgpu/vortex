@@ -67,6 +67,7 @@ QI:vortex_afu.qsf
 ../rtl/libs/VX_priority_encoder.v
 ../rtl/libs/VX_generic_queue.v
 ../rtl/libs/VX_indexable_queue.v
+../rtl/libs/VX_fair_arbiter.v
 ../rtl/libs/VX_fixed_arbiter.v
 ../rtl/libs/VX_rr_arbiter.v
 ../rtl/libs/VX_countones.v

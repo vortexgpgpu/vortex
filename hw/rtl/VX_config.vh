@@ -8,7 +8,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 1
+`define NUM_CORES 4
 `endif
 
 `ifndef NUM_WARPS
@@ -52,7 +52,7 @@
 `endif
 
 `ifndef L2_ENABLE
-`define L2_ENABLE (`NUM_CORES > 2)
+`define L2_ENABLE 0
 `endif
 
 `ifndef L3_ENABLE
