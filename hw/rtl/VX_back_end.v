@@ -9,6 +9,10 @@ module VX_back_end #(
     input wire clk, 
     input wire reset, 
 
+    // IO CSR
+    VX_csr_req_if          io_csr_req,
+    VX_wb_if               io_csr_rsp,
+
     input wire             schedule_delay,
 
     VX_cache_core_req_if   dcache_req_if,
@@ -30,6 +34,7 @@ module VX_back_end #(
 
     wire                no_slot_mem;
     wire                no_slot_exec;
+
 
     // LSU input + output
     VX_lsu_req_if       lsu_req_if();
@@ -99,15 +104,33 @@ module VX_back_end #(
         .warp_ctl_if    (warp_ctl_if)
     );
 
+    VX_csr_req_if issued_csr_req();
+
+    VX_wb_if       csr_pipe_rsp();
+
+    VX_csr_arbiter csr_arbiter (
+        .clk           (clk),
+        .reset         (reset),
+        .csr_pipe_stall(stall_gpr_csr),
+        .core_csr_req  (csr_req_if),
+        .io_csr_req    (io_csr_req),
+        .issued_csr_req(issued_csr_req),
+
+        .csr_pipe_rsp  (csr_pipe_rsp),
+        .csr_wb_if     (csr_wb_if),
+        .csr_io_rsp    (io_csr_rsp)
+    
+    );
+
     VX_csr_pipe #(
         .CORE_ID(CORE_ID)
     ) csr_pipe (
         .clk            (clk),
         .reset          (reset),
         .no_slot_csr    (no_slot_csr),
-        .csr_req_if     (csr_req_if),
+        .csr_req_if     (issued_csr_req),
         .writeback_if   (writeback_if),
-        .csr_wb_if      (csr_wb_if),
+        .csr_wb_if      (csr_pipe_rsp),
         .stall_gpr_csr  (stall_gpr_csr)
     );
 

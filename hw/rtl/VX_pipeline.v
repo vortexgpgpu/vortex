@@ -12,6 +12,10 @@ module VX_pipeline #(
     input wire                              clk,
     input wire                              reset,
 
+    // IO CSR 
+    VX_csr_req_if                           io_csr_req,
+    VX_wb_if                                io_csr_rsp,
+
     // Dcache core request
     output wire [`NUM_THREADS-1:0]          dcache_req_valid,
     output wire [`NUM_THREADS-1:0]          dcache_req_rw,
@@ -134,6 +138,8 @@ module VX_pipeline #(
 
         .clk             (clk),
         .reset           (reset),
+        .io_csr_req      (io_csr_req),
+        .io_csr_rsp      (io_csr_rsp), 
         .schedule_delay  (schedule_delay),
         .warp_ctl_if     (warp_ctl_if),
         .bckE_req_if     (bckE_req_if),
