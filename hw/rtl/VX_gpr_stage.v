@@ -30,6 +30,9 @@ module VX_gpr_stage (
     wire is_jal          = bckE_req_if.is_jal;
 `DEBUG_END
 
+
+    assign csr_req_if.is_io = 1'b0; // GPR only issues csr requests coming from core
+
     VX_gpr_read_if gpr_read_if();
     assign gpr_read_if.rs1      = bckE_req_if.rs1;
     assign gpr_read_if.rs2      = bckE_req_if.rs2;
@@ -170,6 +173,7 @@ module VX_gpr_stage (
             .in    ({csr_req_temp_if.valid, csr_req_temp_if.warp_num, csr_req_temp_if.rd, csr_req_temp_if.wb, csr_req_temp_if.alu_op, csr_req_temp_if.is_csr, csr_req_temp_if.csr_address, csr_req_temp_if.csr_immed, csr_req_temp_if.csr_mask}),
             .out   ({csr_req_if.valid     , csr_req_if.warp_num     , csr_req_if.rd     , csr_req_if.wb     , csr_req_if.alu_op     , csr_req_if.is_csr     , csr_req_if.csr_address     , csr_req_if.csr_immed     , csr_req_if.csr_mask     })
         );
+
 
 `else 
 

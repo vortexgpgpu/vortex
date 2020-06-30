@@ -174,6 +174,19 @@ module VX_cluster #(
             .io_rsp_tag         (per_core_io_rsp_tag        [i]),
             .io_rsp_ready       (per_core_io_rsp_ready      [i]),
 
+
+
+            .csr_io_req_valid  (1'b0),     // Valid CSR IO Request
+            `UNUSED_PIN(csr_io_req_ready), // Core is ready to accept Request
+            `UNUSED_PIN(csr_io_req_cid),   // CORE_ID of the intended request
+            `UNUSED_PIN(csr_io_req_addr),  // ADDRESS of request
+            `UNUSED_PIN(csr_io_req_rw),    // Read=0, Write=1
+            `UNUSED_PIN(csr_io_req_data),  // Data to write
+
+            `UNUSED_PIN(csr_io_rsp_valid), // Core IO Response valid
+            `UNUSED_PIN(csr_io_rsp_data),  // Core IO Response data
+
+
             .busy               (per_core_busy              [i]),
             .ebreak             (per_core_ebreak            [i])
         );
