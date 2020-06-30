@@ -55,14 +55,14 @@ module VX_csr_pipe #(
     end    
 
     VX_generic_register #(
-        .N(32 + 32 + 12 + 1 + 2 + 5 + (`NW_BITS-1+1) + `NUM_THREADS)
+        .N(32 + 32 + 12 + 1 + 1 + 2 + 5 + (`NW_BITS-1+1) + `NUM_THREADS)
     ) csr_reg_s2 (
         .clk  (clk),
         .reset(reset),
         .stall(no_slot_csr),
         .flush(1'b0),
-        .in   ({csr_req_if.valid, csr_req_if.warp_num, csr_req_if.rd, csr_req_if.wb, csr_req_if.is_csr, csr_req_if.csr_address, csr_read_data   , csr_updated_data   }),
-        .out  ({valid_s2        , warp_num_s2        , rd_s2        , wb_s2        , is_csr_s2        , csr_address_s2        , csr_read_data_s2, csr_updated_data_s2})
+        .in   ({csr_req_if.valid, csr_req_if.warp_num, csr_req_if.rd, csr_req_if.wb, csr_req_if.is_csr, csr_req_if.csr_address, csr_req_if.is_io, csr_read_data   , csr_updated_data   }),
+        .out  ({valid_s2        , warp_num_s2        , rd_s2        , wb_s2        , is_csr_s2        , csr_address_s2        , csr_wb_if.is_io , csr_read_data_s2, csr_updated_data_s2})
     );
 
     assign csr_wb_if.valid     = valid_s2;
