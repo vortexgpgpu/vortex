@@ -43,18 +43,21 @@ module VX_csr_data #(
 
     always @(*) begin
         case (read_addr)
-            `CSR_LWID  : read_data = 32'(warp_num);
-            `CSR_GTID  ,
-            `CSR_GWID  : read_data = CORE_ID * `NUM_WARPS + 32'(warp_num);
-            `CSR_GCID  : read_data = CORE_ID;
-            `CSR_NT    : read_data = `NUM_THREADS;
-            `CSR_NW    : read_data = `NUM_WARPS;
-            `CSR_NC    : read_data = `NUM_CORES * `NUM_CLUSTERS;
-            `CSR_CYCLL : read_data = num_cycles[31:0];
-            `CSR_CYCLH : read_data = num_cycles[63:32];
-            `CSR_INSTL : read_data = num_instrs[31:0];
-            `CSR_INSTH : read_data = num_instrs[63:32];
-            default:     read_data = 32'(csr_table[rd_addr]);
+            `CSR_LWID    : read_data = 32'(warp_num);
+            `CSR_GTID    ,
+            `CSR_GWID    : read_data = CORE_ID * `NUM_WARPS + 32'(warp_num);
+            `CSR_GCID    : read_data = CORE_ID;
+            `CSR_NT      : read_data = `NUM_THREADS;
+            `CSR_NW      : read_data = `NUM_WARPS;
+            `CSR_NC      : read_data = `NUM_CORES * `NUM_CLUSTERS;
+            `CSR_CYCLE_L : read_data = num_cycles[31:0];
+            `CSR_CYCLE_H : read_data = num_cycles[63:32];
+            `CSR_INSTR_L : read_data = num_instrs[31:0];
+            `CSR_INSTR_H : read_data = num_instrs[63:32];
+            `CSR_VEND_ID : read_data = `VENDOR_ID;
+            `CSR_ARCH_ID : read_data = `ARCHITECTURE_ID;
+            `CSR_IMPL_ID : read_data = `IMPLEMENTATION_ID;
+            default      : read_data = 32'(csr_table[rd_addr]);
         endcase
     end  
 
