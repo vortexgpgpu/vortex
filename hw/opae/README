@@ -62,6 +62,7 @@ make ase
 # tests
 ./run_ase.sh build_ase_1c ../../driver/tests/basic/basic
 ./run_ase.sh build_ase_1c ../../driver/tests/demo/demo
+./run_ase.sh build_ase_1c ../../benchmarks/opencl/vecadd/vecadd
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file vortex.vcd
@@ -90,5 +91,6 @@ lsof +D build_ase_1c
 # quick off cache synthesis
 make -C pipeline > pipeline/build.log 2>&1 &
 make -C cache > cache/build.log 2>&1 &
+make -C core > core/build.log 2>&1 &
 make -C vortex > vortex/build.log 2>&1 &
 make -C top > top/build.log 2>&1 &

@@ -9,13 +9,9 @@ double sc_time_stamp() {
   return timestamp;
 }
 
-Simulator::Simulator() {    
-
-#ifdef NDEBUG
+Simulator::Simulator() {  
   // force random values for unitialized signals  
   Verilated::randReset(2);
-  Verilated::assertOn(false);
-#endif
 
   ram_ = nullptr;
   vortex_ = new VVortex();

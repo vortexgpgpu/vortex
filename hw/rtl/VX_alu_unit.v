@@ -13,9 +13,6 @@ module VX_alu_unit (
     output reg [31:0]  alu_result,
     output reg         alu_stall
 );
-    localparam DIV_PIPELINE_LEN = 20;
-    localparam MUL_PIPELINE_LEN = 8;
-
     wire[31:0] div_result_unsigned;
     wire[31:0] div_result_signed;
 
@@ -37,11 +34,11 @@ module VX_alu_unit (
             `ALU_DIV,
             `ALU_DIVU,
             `ALU_REM,
-            `ALU_REMU:  inst_delay = DIV_PIPELINE_LEN;
+            `ALU_REMU:  inst_delay = `DIV_LATENCY;
             `ALU_MUL,
             `ALU_MULH,
             `ALU_MULHSU,
-            `ALU_MULHU: inst_delay = MUL_PIPELINE_LEN;
+            `ALU_MULHU: inst_delay = `MUL_LATENCY;
             default:    inst_delay = 0;
         endcase
     end
@@ -91,7 +88,7 @@ module VX_alu_unit (
         .WIDTHD(32),
         .NSIGNED(0),
         .DSIGNED(0),
-        .PIPELINE(DIV_PIPELINE_LEN)
+        .PIPELINE(`DIV_LATENCY)
     ) udiv (
         .clk(clk),
         .reset(reset),
@@ -106,7 +103,7 @@ module VX_alu_unit (
         .WIDTHD(32),
         .NSIGNED(1),
         .DSIGNED(1),
-        .PIPELINE(DIV_PIPELINE_LEN)
+        .PIPELINE(`DIV_LATENCY)
     ) sdiv (
         .clk(clk),
         .reset(reset),
@@ -124,7 +121,7 @@ module VX_alu_unit (
         .WIDTHB(33),
         .WIDTHP(64),
         .SIGNED(1),
-        .PIPELINE(MUL_PIPELINE_LEN)
+        .PIPELINE(`MUL_LATENCY)
     ) multiplier (
         .clk(clk),
         .reset(reset),

@@ -13,11 +13,11 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
 
-DBG_FLAGS += $(DBG_PRINT_FLAGS)
+#DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
-#CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4
-#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4
+#CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
+#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2
 
 #DEBUG=1
@@ -38,8 +38,7 @@ RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
-VL_FLAGS += --x-initial unique
-VL_FLAGS += --x-assign unique
+VL_FLAGS += --x-initial unique --x-assign unique
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')

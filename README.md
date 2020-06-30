@@ -1,23 +1,34 @@
 # Vortex RISC-V GPGPU
 
-Vortex currently supported RISC-V RV32I ISA
+Vortex is a full-system RISCV-based GPGPU processor.
 
-/benchmarks containts test benchmarks
+Specifications
+--------------
 
-/docs contains documentation.
+- Support RISC-V RV32I ISA
+- Fully scalable: 1 to 16 cores with optional L2 and L3 caches
+- OpenCL 1.2 Support 
+- FPGA target: Intel Arria 10 @ 200 MHz peak Freq
 
-/hw constains hardware sources.
+Directory structure
+-------------------
 
-/driver contains the driver software.
+- benchmarks: OpenCL and RISC-V benchmarks
+ 
+- docs: documentation.
 
-/runtime contains the kernel runtime software.
+- hw: hardware sources.
 
-/SimX contains a cycle-approximate simulator for Vortex.
+- driver: driver software.
 
-/evaluation contains the synthesis/runtime reports.
+- runtime: runtime software for kernels.
 
-Basic Instructions to run OpenCL Benchmarks on Vortex
------------------------------------------------------
+- simX: Vortex cycle-approximate simulator.
+
+- evaluation: synthesis and performance data.
+
+Basic Installation
+------------------
 
 Install development tools 
 
@@ -55,8 +66,8 @@ Install Vortex
     $ cd Vortex
     $ make
 
-Run SGEMM OpenCL Benchmark
+Quick Test running SGEMM kernel
 
-    $ cd Vortex/benchmarks/opencl/sgemm
+    $ cd /Vortex/benchmarks/opencl/sgemm
     $ make
     $ make run
