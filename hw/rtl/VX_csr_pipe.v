@@ -77,6 +77,6 @@ module VX_csr_pipe #(
                                                                    csr_read_data_s2;
     end     
 
-    assign stall_gpr_csr = no_slot_csr && csr_req_if.is_csr && (| csr_req_if.valid);   
+    assign stall_gpr_csr = no_slot_csr;   
 
 endmodule
