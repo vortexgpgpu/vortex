@@ -58,10 +58,10 @@ int vx_start(vx_device_h hdevice);
 int vx_ready_wait(vx_device_h hdevice, long long timeout);
 
 // set device constant registers
-int vx_csr_set(vx_device_h hdevice, int core, int address, int value);
+int vx_csr_set(vx_device_h hdevice, int core, int address, unsigned value);
 
 // get device constant registers
-int vx_csr_get(vx_device_h hdevice, int core, int address, int* value);
+int vx_csr_get(vx_device_h hdevice, int core, int address, unsigned* value);
 
 ////////////////////////////// UTILITY FUNCIONS ///////////////////////////////
 

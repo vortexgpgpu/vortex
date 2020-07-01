@@ -53,10 +53,10 @@
 typedef struct vx_device_ {
     fpga_handle fpga;
     size_t mem_allocation;
-    int implementation_id;
-    int num_cores;
-    int num_warps;
-    int num_threads;
+    unsigned implementation_id;
+    unsigned num_cores;
+    unsigned num_warps;
+    unsigned num_threads;
 } vx_device_t;
 
 typedef struct vx_buffer_ {
@@ -181,6 +181,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
             fpgaClose(accel_handle);
             return ret;
         }
+
+        fprintf(stdout, "DEVCAPS: version=%d, num_cores=%d, num_warps=%d, num_threads=%d\n", 
+                device->implementation_id, device->num_cores, device->num_warps, device->num_threads);
     }
     
 #ifdef SCOPE
@@ -207,6 +210,29 @@ extern int vx_dev_close(vx_device_h hdevice) {
 #ifdef SCOPE
     vx_scope_stop(device->fpga, 0);
 #endif
+
+    {   
+        // Dump performance stats
+        uint64_t instrs, cycles;
+        unsigned value;
+
+        int ret = 0;
+        ret |= vx_csr_get(hdevice, 0, CSR_INSTR_H, &value);
+        instrs = value;
+        ret |= vx_csr_get(hdevice, 0, CSR_INSTR_L, &value);
+        instrs = (instrs << 32) | value;
+      
+        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_H, &value);
+        cycles = value;
+        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_L, &value);
+        cycles = (cycles << 32) | value;
+
+        float IPC = (float)(double(instrs) / double(cycles));
+
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);
+
+        assert(ret == 0);
+    }
 
     fpgaClose(device->fpga);
 
@@ -468,7 +494,7 @@ extern int vx_start(vx_device_h hdevice) {
 }
 
 // set device constant registers
-extern int vx_csr_set(vx_device_h hdevice, int core, int address, int value) {
+extern int vx_csr_set(vx_device_h hdevice, int core, int address, unsigned value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -488,7 +514,7 @@ extern int vx_csr_set(vx_device_h hdevice, int core, int address, int value) {
 }
 
 // get device constant registers
-extern int vx_csr_get(vx_device_h hdevice, int core, int address, int* value) {
+extern int vx_csr_get(vx_device_h hdevice, int core, int address, unsigned* value) {
     if (nullptr == hdevice || nullptr == value)
         return -1;
 
@@ -510,7 +536,7 @@ extern int vx_csr_get(vx_device_h hdevice, int core, int address, int* value) {
 
     uint64_t value64;
     CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_CSR_READ, &value64));
-    *value = (int)value64;
+    *value = (unsigned)value64;
 
     return 0;
 }

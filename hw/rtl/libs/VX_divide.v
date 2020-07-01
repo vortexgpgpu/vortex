@@ -35,7 +35,7 @@ module VX_divide #(
 		quartus_div.lpm_widthd = WIDTHD,		
 		quartus_div.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
         quartus_div.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
-		quartus_div.lpm_hint = "LPM_REMAINDERPOSITIVE=FALSE,MAXIMIZE_SPEED=9",
+		quartus_div.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
 		quartus_div.lpm_pipeline = PIPELINE;	
 
 `else

@@ -881,7 +881,6 @@ assign vx_csr_io_req_rw   = (STATE_CSR_WRITE == state);
 assign vx_csr_io_req_addr = cmd_csr_addr;
 assign vx_csr_io_req_data = cmd_csr_wdata;
 
-assign cmd_csr_rdata = vx_csr_io_rsp_data;
 assign vx_csr_io_rsp_ready = 1;
 
 assign cmd_csr_done = (STATE_CSR_WRITE == state) ? vx_csr_io_req_ready : vx_csr_io_rsp_valid;
@@ -890,6 +889,7 @@ always_ff @(posedge clk)
 begin
   if (SoftReset) begin
     csr_io_req_sent <= 0;
+    cmd_csr_rdata   <= 0;
   end
   else begin
     if (vx_csr_io_req_valid && vx_csr_io_req_ready) begin
@@ -897,6 +897,11 @@ begin
     end
     if (cmd_csr_done) begin
       csr_io_req_sent <= 0;
+    end
+    if ((STATE_CSR_READ == state) 
+      && vx_csr_io_rsp_ready 
+      && vx_csr_io_rsp_valid) begin
+      cmd_csr_rdata <= vx_csr_io_rsp_data;
     end
   end
 end
