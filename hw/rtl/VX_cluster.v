@@ -123,7 +123,6 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                        per_core_io_rsp_ready;
 
     wire [`NUM_CORES-1:0]                        per_core_csr_io_req_valid;
-    wire [`NUM_CORES-1:0][`NC_BITS-1:0]          per_core_csr_io_req_coreid;
     wire [`NUM_CORES-1:0][11:0]                  per_core_csr_io_req_addr;
     wire [`NUM_CORES-1:0]                        per_core_csr_io_req_rw;
     wire [`NUM_CORES-1:0][31:0]                  per_core_csr_io_req_data;
@@ -199,7 +198,7 @@ module VX_cluster #(
             .io_rsp_tag         (per_core_io_rsp_tag        [i]),
             .io_rsp_ready       (per_core_io_rsp_ready      [i]),
 
-            .csr_io_req_valid   (per_core_csr_io_req_valid[i] && (per_core_csr_io_req_coreid[i] == `NC_BITS'(i))),
+            .csr_io_req_valid   (per_core_csr_io_req_valid  [i]),
             .csr_io_req_rw      (per_core_csr_io_req_rw     [i]),
             .csr_io_req_addr    (per_core_csr_io_req_addr   [i]),
             .csr_io_req_data    (per_core_csr_io_req_data   [i]),
@@ -252,7 +251,7 @@ module VX_cluster #(
         .out_mem_rsp_tag       (io_rsp_tag),
         .out_mem_rsp_data      (io_rsp_data),
         .out_mem_rsp_ready     (io_rsp_ready)
-    );       
+    );   
 
     VX_csr_io_arb #(
         .NUM_REQUESTS (`NUM_CORES)
@@ -260,9 +259,10 @@ module VX_cluster #(
         .clk                    (clk),
         .reset                  (reset),
 
+        .request_id             (csr_io_req_coreid), 
+
         // input requests
-        .in_csr_io_req_valid    (csr_io_req_valid),
-        .in_csr_io_req_coreid   (csr_io_req_coreid),        
+        .in_csr_io_req_valid    (csr_io_req_valid),     
         .in_csr_io_req_addr     (csr_io_req_addr),
         .in_csr_io_req_rw       (csr_io_req_rw),
         .in_csr_io_req_data     (csr_io_req_data),
@@ -275,7 +275,6 @@ module VX_cluster #(
 
         // output request
         .out_csr_io_req_valid   (per_core_csr_io_req_valid),
-        .out_csr_io_req_coreid  (per_core_csr_io_req_coreid),
         .out_csr_io_req_addr    (per_core_csr_io_req_addr),            
         .out_csr_io_req_rw      (per_core_csr_io_req_rw),
         .out_csr_io_req_data    (per_core_csr_io_req_data),  

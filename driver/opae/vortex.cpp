@@ -43,6 +43,7 @@
 #define MMIO_MEM_ADDR       (AFU_IMAGE_MMIO_MEM_ADDR * 4)
 #define MMIO_DATA_SIZE      (AFU_IMAGE_MMIO_DATA_SIZE * 4)
 #define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS * 4)
+#define MMIO_CSR_CORE       (AFU_IMAGE_MMIO_CSR_CORE * 4)
 #define MMIO_CSR_ADDR       (AFU_IMAGE_MMIO_CSR_ADDR * 4)
 #define MMIO_CSR_DATA       (AFU_IMAGE_MMIO_CSR_DATA * 4)
 #define MMIO_CSR_READ       (AFU_IMAGE_MMIO_CSR_READ * 4)
@@ -172,10 +173,10 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     {   
         // Load device CAPS
         int ret = 0;
-        ret |= vx_csr_get(device, CSR_IMPL_ID, &device->implementation_id);
-        ret |= vx_csr_get(device, CSR_NC, &device->num_cores);
-        ret |= vx_csr_get(device, CSR_NW, &device->num_warps);
-        ret |= vx_csr_get(device, CSR_NT, &device->num_threads);
+        ret |= vx_csr_get(device, 0, CSR_IMPL_ID, &device->implementation_id);
+        ret |= vx_csr_get(device, 0, CSR_NC, &device->num_cores);
+        ret |= vx_csr_get(device, 0, CSR_NW, &device->num_warps);
+        ret |= vx_csr_get(device, 0, CSR_NT, &device->num_threads);
         if (ret != 0) {
             fpgaClose(accel_handle);
             return ret;
@@ -467,7 +468,7 @@ extern int vx_start(vx_device_h hdevice) {
 }
 
 // set device constant registers
-extern int vx_csr_set(vx_device_h hdevice, int address, int value) {
+extern int vx_csr_set(vx_device_h hdevice, int core, int address, int value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -478,6 +479,7 @@ extern int vx_csr_set(vx_device_h hdevice, int address, int value) {
         return -1;    
   
     // write CSR value
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_ADDR, address));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA, value));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_CSR_WRITE));
@@ -486,7 +488,7 @@ extern int vx_csr_set(vx_device_h hdevice, int address, int value) {
 }
 
 // get device constant registers
-extern int vx_csr_get(vx_device_h hdevice, int address, int* value) {
+extern int vx_csr_get(vx_device_h hdevice, int core, int address, int* value) {
     if (nullptr == hdevice || nullptr == value)
         return -1;
 
@@ -496,7 +498,9 @@ extern int vx_csr_get(vx_device_h hdevice, int address, int* value) {
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;    
 
+    
     // write CSR value    
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_ADDR, address));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_CSR_READ));    
 

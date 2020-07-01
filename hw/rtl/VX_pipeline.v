@@ -12,10 +12,6 @@ module VX_pipeline #(
     input wire                              clk,
     input wire                              reset,
 
-    // IO CSR 
-    VX_csr_req_if                           io_csr_req,
-    VX_wb_if                                io_csr_rsp,
-
     // Dcache core request
     output wire [`NUM_THREADS-1:0]          dcache_req_valid,
     output wire [`NUM_THREADS-1:0]          dcache_req_rw,
@@ -44,7 +40,19 @@ module VX_pipeline #(
     input wire                              icache_rsp_valid,
     input wire [31:0]                       icache_rsp_data,
     input wire [`ICORE_TAG_WIDTH-1:0]       icache_rsp_tag,    
-    output wire                             icache_rsp_ready,      
+    output wire                             icache_rsp_ready,
+    
+    // CSR I/O Request
+    input  wire                             csr_io_req_valid,
+    input  wire[11:0]                       csr_io_req_addr,
+    input  wire                             csr_io_req_rw,
+    input  wire[31:0]                       csr_io_req_data,
+    output wire                             csr_io_req_ready,
+
+    // CSR I/O Response
+    output wire                             csr_io_rsp_valid,
+    output wire[31:0]                       csr_io_rsp_data,
+    input wire                              csr_io_rsp_ready,      
 
     // Status
     output wire                             busy, 
@@ -89,6 +97,20 @@ module VX_pipeline #(
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     )  core_icache_rsp_if();
+
+
+    // CSR I/O
+    VX_csr_io_req_if csr_io_req_if();
+    assign csr_io_req_if.valid = csr_io_req_valid;
+    assign csr_io_req_if.rw    = csr_io_req_rw;
+    assign csr_io_req_if.addr  = csr_io_req_addr;
+    assign csr_io_req_if.data  = csr_io_req_data;
+    assign csr_io_req_ready    = csr_io_req_if.ready;
+
+    VX_csr_io_rsp_if csr_io_rsp_if();
+    assign csr_io_rsp_valid    = csr_io_rsp_if.valid; 
+    assign csr_io_rsp_data     = csr_io_rsp_if.data; 
+    assign csr_io_rsp_if.ready = csr_io_rsp_ready; 
 
     // Front-end to Back-end
     VX_backend_req_if   bckE_req_if();
@@ -138,8 +160,8 @@ module VX_pipeline #(
 
         .clk             (clk),
         .reset           (reset),
-        .io_csr_req      (io_csr_req),
-        .io_csr_rsp      (io_csr_rsp), 
+        .csr_io_req_if   (csr_io_req_if),
+        .csr_io_rsp_if   (csr_io_rsp_if), 
         .schedule_delay  (schedule_delay),
         .warp_ctl_if     (warp_ctl_if),
         .bckE_req_if     (bckE_req_if),

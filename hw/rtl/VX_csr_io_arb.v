@@ -4,12 +4,13 @@ module VX_csr_io_arb #(
     parameter NUM_REQUESTS = 1,
     parameter REQS_BITS = `CLOG2(NUM_REQUESTS)
 ) (
-    input wire clk,
-    input wire reset,
+    input wire                              clk,
+    input wire                              reset,
+        
+    input wire [REQS_BITS-1:0]              request_id,
 
     // input requests    
     input wire                              in_csr_io_req_valid,
-    input wire [`NC_BITS-1:0]               in_csr_io_req_coreid,
     input wire [11:0]                       in_csr_io_req_addr,
     input wire                              in_csr_io_req_rw,
     input wire [31:0]                       in_csr_io_req_data,
@@ -22,7 +23,6 @@ module VX_csr_io_arb #(
 
     // output request
     output wire [NUM_REQUESTS-1:0]          out_csr_io_req_valid,
-    output wire [NUM_REQUESTS-1:0][`NC_BITS-1:0] out_csr_io_req_coreid,
     output wire [NUM_REQUESTS-1:0][11:0]    out_csr_io_req_addr,
     output wire [NUM_REQUESTS-1:0]          out_csr_io_req_rw,
     output wire [NUM_REQUESTS-1:0][31:0]    out_csr_io_req_data,
@@ -39,7 +39,6 @@ module VX_csr_io_arb #(
         `UNUSED_VAR (reset)
 
         assign out_csr_io_req_valid  = in_csr_io_req_valid;
-        assign out_csr_io_req_coreid = in_csr_io_req_coreid;
         assign out_csr_io_req_rw     = in_csr_io_req_rw;        
         assign out_csr_io_req_addr   = in_csr_io_req_addr;
         assign out_csr_io_req_data   = in_csr_io_req_data;
@@ -50,6 +49,17 @@ module VX_csr_io_arb #(
         assign in_csr_io_rsp_ready   = out_csr_io_rsp_ready;
 
     end else begin
+
+        genvar i;
+
+        for (i = 0; i < NUM_REQUESTS; i++) begin                
+            assign out_csr_io_req_valid[i]  = in_csr_io_req_valid && (request_id == `REQS_BITS'(i));
+            assign out_csr_io_req_rw[i]     = in_csr_io_req_rw;
+            assign out_csr_io_req_addr[i]   = in_csr_io_req_addr;
+            assign out_csr_io_req_data[i]   = in_csr_io_req_data;            
+        end
+
+        assign in_csr_io_req_ready = out_csr_io_req_ready[request_id];
 
         reg [REQS_BITS-1:0] bus_rsp_sel;
 
@@ -65,20 +75,11 @@ module VX_csr_io_arb #(
         );
 
         assign out_csr_io_rsp_valid = in_csr_io_rsp_valid [bus_rsp_sel];
-        assign out_csr_io_rsp_data  = in_csr_io_rsp_data [bus_rsp_sel];
-        assign in_csr_io_rsp_ready [bus_rsp_sel] = out_csr_io_rsp_ready;
+        assign out_csr_io_rsp_data  = in_csr_io_rsp_data [bus_rsp_sel];       
 
-        genvar i;
-        
-        for (i = 0; i < NUM_REQUESTS; i++) begin                
-            assign out_csr_io_req_valid[i]  = in_csr_io_req_valid && in_csr_io_req_ready;
-            assign out_csr_io_req_coreid[i] = in_csr_io_req_coreid;
-            assign out_csr_io_req_rw[i]     = in_csr_io_req_rw;
-            assign out_csr_io_req_addr[i]   = in_csr_io_req_addr;
-            assign out_csr_io_req_data[i]   = in_csr_io_req_data;            
+        for (i = 0; i < NUM_REQUESTS; i++) begin
+            assign in_csr_io_rsp_ready[i] = out_csr_io_rsp_ready && (bus_rsp_sel == `REQS_BITS'(i));
         end
-
-        assign in_csr_io_req_ready = (& out_csr_io_req_ready);
         
     end
 

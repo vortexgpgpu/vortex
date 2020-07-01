@@ -288,6 +288,7 @@
 `define VX_DRAM_TAG_WIDTH       `L3DRAM_TAG_WIDTH
 `define VX_SNP_TAG_WIDTH        `L3SNP_TAG_WIDTH    
 `define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
+`define VX_CSR_ID_WIDTH         `CLOG2(`NUM_CLUSTERS * `NUM_CORES)
 
 `define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 

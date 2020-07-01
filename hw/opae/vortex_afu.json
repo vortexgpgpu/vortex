@@ -19,9 +19,10 @@
       "mmio-status":      18,   
       "mmio-scope-read":  20,
       "mmio-scope-write": 22,
-      "mmio-csr-addr":    24,
-      "mmio-csr-data":    26,
-      "mmio-csr-read":    28,
+      "mmio-csr-core":    24,
+      "mmio-csr-addr":    26,
+      "mmio-csr-data":    28,
+      "mmio-csr-read":    30,
 
       "afu-top-interface":
          {

@@ -69,6 +69,7 @@ localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
 localparam MMIO_SCOPE_READ    = `AFU_IMAGE_MMIO_SCOPE_READ;
 localparam MMIO_SCOPE_WRITE   = `AFU_IMAGE_MMIO_SCOPE_WRITE;
 
+localparam MMIO_CSR_CORE      = `AFU_IMAGE_MMIO_CSR_CORE;
 localparam MMIO_CSR_ADDR      = `AFU_IMAGE_MMIO_CSR_ADDR;
 localparam MMIO_CSR_DATA      = `AFU_IMAGE_MMIO_CSR_DATA;
 localparam MMIO_CSR_READ      = `AFU_IMAGE_MMIO_CSR_READ;
@@ -123,7 +124,7 @@ logic [`VX_SNP_TAG_WIDTH-1:0] vx_snp_rsp_tag;
 logic vx_snp_rsp_ready;
 
 logic        vx_csr_io_req_valid;
-logic [`NC_BITS-1:0] vx_csr_io_req_coreid;
+logic [`VX_CSR_ID_WIDTH-1:0] vx_csr_io_req_coreid;
 logic [11:0] vx_csr_io_req_addr;
 logic        vx_csr_io_req_rw;
 logic [31:0] vx_csr_io_req_data;
@@ -167,6 +168,7 @@ logic                      cmd_scope_read;
 logic                      cmd_scope_write;
 `endif
 
+logic [`VX_CSR_ID_WIDTH-1:0] cmd_csr_core;
 logic [11:0]               cmd_csr_addr;
 logic [31:0]               cmd_csr_rdata;  
 logic [31:0]               cmd_csr_wdata;
@@ -238,6 +240,12 @@ begin
         `endif
         end
       `endif
+        MMIO_CSR_CORE: begin          
+          cmd_csr_core <= $bits(cmd_csr_core)'(cp2af_sRxPort.c0.data);          
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: MMIO_CSR_CORE: %0h", $time, $bits(cmd_csr_core)'(cp2af_sRxPort.c0.data));
+        `endif
+        end
         MMIO_CSR_ADDR: begin          
           cmd_csr_addr <= $bits(cmd_csr_addr)'(cp2af_sRxPort.c0.data);          
         `ifdef DBG_PRINT_OPAE
@@ -306,8 +314,7 @@ end
 logic cmd_read_done;
 logic cmd_write_done;
 logic cmd_clflush_done;
-logic cmd_csr_read_done;
-logic cmd_csr_write_done;
+logic cmd_csr_done;
 logic cmd_run_done;
 
 always_ff @(posedge clk) 
@@ -395,13 +402,13 @@ begin
       end
 
       STATE_CSR_READ: begin
-        if (cmd_csr_read_done) begin
+        if (cmd_csr_done) begin
           state <= STATE_IDLE;
         end
       end
 
       STATE_CSR_WRITE: begin
-        if (cmd_csr_write_done) begin
+        if (cmd_csr_done) begin
           state <= STATE_IDLE;
         end
       end
@@ -865,8 +872,11 @@ end
 
 // CSRs///////////////////////////////////////////////////////////////////////
 
-assign vx_csr_io_req_valid = (STATE_CSR_READ == state || STATE_CSR_WRITE == state);
-assign vx_csr_io_req_coreid = 0;
+logic csr_io_req_sent;
+
+assign vx_csr_io_req_valid = !csr_io_req_sent 
+                          && ((STATE_CSR_READ == state || STATE_CSR_WRITE == state));
+assign vx_csr_io_req_coreid = cmd_csr_core;
 assign vx_csr_io_req_rw   = (STATE_CSR_WRITE == state);
 assign vx_csr_io_req_addr = cmd_csr_addr;
 assign vx_csr_io_req_data = cmd_csr_wdata;
@@ -874,8 +884,22 @@ assign vx_csr_io_req_data = cmd_csr_wdata;
 assign cmd_csr_rdata = vx_csr_io_rsp_data;
 assign vx_csr_io_rsp_ready = 1;
 
-assign cmd_csr_read_done  = vx_csr_io_rsp_valid;
-assign cmd_csr_write_done = vx_csr_io_req_ready;
+assign cmd_csr_done = (STATE_CSR_WRITE == state) ? vx_csr_io_req_ready : vx_csr_io_rsp_valid;
+
+always_ff @(posedge clk) 
+begin
+  if (SoftReset) begin
+    csr_io_req_sent <= 0;
+  end
+  else begin
+    if (vx_csr_io_req_valid && vx_csr_io_req_ready) begin
+      csr_io_req_sent <= 1;
+    end
+    if (cmd_csr_done) begin
+      csr_io_req_sent <= 0;
+    end
+  end
+end
 
 // Vortex /////////////////////////////////////////////////////////////////////
 
@@ -890,7 +914,7 @@ Vortex #() vortex (
   `SCOPE_SIGNALS_BE_BIND
 
   .clk              (clk),
-  .reset            (vx_reset),
+  .reset            (SoftReset | vx_reset),
 
   // DRAM request 
   .dram_req_valid   (vx_dram_req_valid),
