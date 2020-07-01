@@ -104,7 +104,7 @@ module VX_decode(
     assign is_lui       = (curr_opcode == `INST_LUI);
     assign is_auipc     = (curr_opcode == `INST_AUIPC);
     assign is_csr       = (curr_opcode == `INST_SYS) && (func3 != 0);
-    assign is_csr_immed = (is_csr) && (func3[2] == 1);
+    assign is_csr_immed = is_csr && (func3[2] == 1);
 
     assign is_gpgpu     = (curr_opcode == `INST_GPGPU);
 

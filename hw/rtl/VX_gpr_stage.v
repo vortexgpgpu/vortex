@@ -30,7 +30,6 @@ module VX_gpr_stage (
     wire is_jal          = bckE_req_if.is_jal;
 `DEBUG_END
 
-
     assign csr_req_if.is_io = 1'b0; // GPR only issues csr requests coming from core
 
     VX_gpr_read_if gpr_read_if();
