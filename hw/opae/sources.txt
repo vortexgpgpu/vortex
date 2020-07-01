@@ -48,6 +48,8 @@ QI:vortex_afu.qsf
 ../rtl/interfaces/VX_cache_snp_req_if.v
 ../rtl/interfaces/VX_cache_snp_rsp_if.v
 ../rtl/interfaces/VX_csr_req_if.v
+../rtl/interfaces/VX_csr_io_req_if.v
+../rtl/interfaces/VX_csr_io_rsp_if.v
 ../rtl/interfaces/VX_exec_unit_req_if.v
 ../rtl/interfaces/VX_backend_req_if.v
 ../rtl/interfaces/VX_gpr_read_if.v
@@ -90,6 +92,8 @@ QI:vortex_afu.qsf
 ../rtl/VX_writeback.v
 ../rtl/VX_csr_pipe.v
 ../rtl/VX_csr_data.v
+../rtl/VX_csr_arb.v
+../rtl/VX_csr_io_arb.v
 ../rtl/VX_warp_sched.v
 ../rtl/VX_gpr_ram.v
 ../rtl/VX_gpr_stage.v

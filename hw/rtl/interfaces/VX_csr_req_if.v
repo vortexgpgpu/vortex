@@ -15,9 +15,8 @@ interface VX_csr_req_if ();
     wire                csr_immed;
     wire [31:0]         csr_mask;
 
-`IGNORE_WARNINGS_BEGIN
-    wire                is_io;
-`IGNORE_WARNINGS_END
+    wire                is_io;    
+
 endinterface
 
 `endif

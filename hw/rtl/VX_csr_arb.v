@@ -3,56 +3,52 @@
 module VX_csr_arb (
     input  wire      clk,
     input  wire      reset,
-    
-    input  wire      csr_pipe_stall,
-    
-    VX_csr_req_if    core_csr_req,
-    VX_csr_req_if    io_csr_req,    
-    VX_csr_req_if    issued_csr_req,
 
-    VX_wb_if         csr_pipe_rsp,
+    input wire csr_pipe_stall,
+    
+    VX_csr_req_if    csr_core_req_if,
+    VX_csr_io_req_if csr_io_req_if,    
+    VX_csr_req_if    issued_csr_req_if,
+
+    VX_wb_if         csr_pipe_rsp_if,
     VX_wb_if         csr_wb_if,
-    VX_wb_if         csr_io_rsp
+    VX_csr_io_rsp_if csr_io_rsp_if
 );
 
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
-    wire pick_core = (|core_csr_req.valid);
+    wire pick_core = (| csr_core_req_if.valid);
 
     // Which request to pick
-    assign issued_csr_req.is_io       = !pick_core;
+    assign issued_csr_req_if.is_io       = !pick_core;
    
     // Mux between core and io
-	assign issued_csr_req.valid       = pick_core ? core_csr_req.valid       : io_csr_req.valid;
-    assign issued_csr_req.is_csr      = pick_core ? core_csr_req.is_csr      : io_csr_req.is_csr;
-	assign issued_csr_req.alu_op      = pick_core ? core_csr_req.alu_op      : io_csr_req.alu_op;
-	assign issued_csr_req.csr_address = pick_core ? core_csr_req.csr_address : io_csr_req.csr_address;
-	assign issued_csr_req.csr_mask    = pick_core ? core_csr_req.csr_mask    : io_csr_req.csr_mask;
+	assign issued_csr_req_if.valid       = pick_core ? csr_core_req_if.valid       : {`NUM_THREADS{csr_io_req_if.valid}};
+    assign issued_csr_req_if.is_csr      = pick_core ? csr_core_req_if.is_csr      : 1'b1;
+	assign issued_csr_req_if.alu_op      = pick_core ? csr_core_req_if.alu_op      : (csr_io_req_if.rw ? `ALU_CSR_RW : `ALU_CSR_RS);
+	assign issued_csr_req_if.csr_address = pick_core ? csr_core_req_if.csr_address : csr_io_req_if.addr;
+	assign issued_csr_req_if.csr_mask    = pick_core ? csr_core_req_if.csr_mask    : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
+
+    assign csr_io_req_if.ready = !(csr_pipe_stall || pick_core);
 
     // Core arguments
-    assign issued_csr_req.warp_num    = core_csr_req.warp_num;
-	assign issued_csr_req.rd          = core_csr_req.rd;
-	assign issued_csr_req.wb          = core_csr_req.wb;
+    assign issued_csr_req_if.warp_num    = csr_core_req_if.warp_num;
+	assign issued_csr_req_if.rd          = csr_core_req_if.rd;
+	assign issued_csr_req_if.wb          = csr_core_req_if.wb;
 
-    // Core Writeback
+    // Core Writeback    
+    assign csr_wb_if.valid    = csr_pipe_rsp_if.valid & {`NUM_THREADS{~csr_pipe_rsp_if.is_io}};
+    assign csr_wb_if.data     = csr_pipe_rsp_if.data; 
+    assign csr_wb_if.warp_num = csr_pipe_rsp_if.warp_num;
+    assign csr_wb_if.rd       = csr_pipe_rsp_if.rd;
+    assign csr_wb_if.wb       = csr_pipe_rsp_if.wb;    
+    assign csr_wb_if.curr_PC  = csr_pipe_rsp_if.curr_PC;   
     
-    assign csr_wb_if.valid    = csr_pipe_rsp.valid & {`NUM_THREADS{~csr_pipe_rsp.is_io}};
-    assign csr_wb_if.data     = csr_pipe_rsp.data; 
-    assign csr_wb_if.warp_num = csr_pipe_rsp.warp_num;
-    assign csr_wb_if.rd       = csr_pipe_rsp.rd;
-    assign csr_wb_if.wb       = csr_pipe_rsp.wb;    
-    assign csr_wb_if.curr_PC  = csr_pipe_rsp.curr_PC;    
-    assign csr_wb_if.is_io    = 1'b0; 
-    
-    // CSR IO WB
-
-    assign csr_io_rsp.valid    = csr_pipe_rsp.valid & {`NUM_THREADS{csr_pipe_rsp.is_io}};
-    assign csr_io_rsp.data     = csr_pipe_rsp.data; 
-    assign csr_io_rsp.warp_num = csr_pipe_rsp.warp_num;
-    assign csr_io_rsp.rd       = csr_pipe_rsp.rd;
-    assign csr_io_rsp.wb       = csr_pipe_rsp.wb;    
-    assign csr_io_rsp.curr_PC  = csr_pipe_rsp.curr_PC; 
-    assign csr_io_rsp.is_io    = !(csr_pipe_stall || pick_core); 
+    // CSR I/O response
+    assign csr_io_rsp_if.valid = csr_pipe_rsp_if.valid[0] & csr_pipe_rsp_if.is_io;
+    assign csr_io_rsp_if.data  = csr_pipe_rsp_if.data[0]; 
+    wire x = csr_io_rsp_if.ready;
+    `UNUSED_VAR(x)
 
 endmodule

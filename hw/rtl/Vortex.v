@@ -56,7 +56,7 @@ module Vortex (
 
     // CSR I/O Request
     input  wire                             csr_io_req_valid,
-    input  wire [`NC_BITS-1:0]              csr_io_req_coreid,
+    input  wire [`VX_CSR_ID_WIDTH-1:0]      csr_io_req_coreid,
     input  wire [11:0]                      csr_io_req_addr,
     input  wire                             csr_io_req_rw,
     input  wire [31:0]                      csr_io_req_data,
@@ -74,7 +74,7 @@ module Vortex (
     if (`NUM_CLUSTERS == 1) begin
 
         VX_cluster #(
-            .CLUSTER_ID(`L3CACHE_ID)
+            .CLUSTER_ID(0)
         ) cluster (
             `SCOPE_SIGNALS_ISTAGE_BIND
             `SCOPE_SIGNALS_LSU_BIND
@@ -148,8 +148,8 @@ module Vortex (
         wire                                            l3_core_req_ready;
   
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_valid;        
-        wire [`NUM_CLUSTERS-1:0][`L3DRAM_LINE_WIDTH-1:0] per_cluster_dram_rsp_data;
-        wire [`NUM_CLUSTERS-1:0][`L3DRAM_TAG_WIDTH-1:0]  per_cluster_dram_rsp_tag; 
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_rsp_data;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_rsp_tag; 
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_ready;
 
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_valid;
@@ -176,7 +176,6 @@ module Vortex (
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_ready;
 
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_req_valid;
-        wire [`NUM_CLUSTERS-1:0][`NC_BITS-1:0]           per_cluster_csr_io_req_coreid;
         wire [`NUM_CLUSTERS-1:0][11:0]                   per_cluster_csr_io_req_addr;
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_req_rw;
         wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_csr_io_req_data;
@@ -188,6 +187,9 @@ module Vortex (
 
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_ebreak;
+
+        wire [`CLOG2(`NUM_CLUSTERS)-1:0] csr_io_request_id = `CLOG2(`NUM_CLUSTERS)'(csr_io_req_coreid >> `CLOG2(`NUM_CLUSTERS));
+        wire [`NC_BITS-1:0] per_cluster_csr_io_req_coreid = `NC_BITS'(csr_io_req_coreid);
 
         genvar i;
         for (i = 0; i < `NUM_CLUSTERS; i++) begin        
@@ -241,7 +243,7 @@ module Vortex (
                 .io_rsp_ready       (per_cluster_io_rsp_ready   [i]),
 
                 .csr_io_req_valid   (per_cluster_csr_io_req_valid[i]),
-                .csr_io_req_coreid  (per_cluster_csr_io_req_coreid[i]),
+                .csr_io_req_coreid  (per_cluster_csr_io_req_coreid),
                 .csr_io_req_rw      (per_cluster_csr_io_req_rw  [i]),
                 .csr_io_req_addr    (per_cluster_csr_io_req_addr[i]),
                 .csr_io_req_data    (per_cluster_csr_io_req_data[i]),
@@ -302,9 +304,10 @@ module Vortex (
             .clk                    (clk),
             .reset                  (reset),
 
+            .request_id             (csr_io_request_id),
+
             // input requests
-            .in_csr_io_req_valid    (csr_io_req_valid),
-            .in_csr_io_req_coreid   (csr_io_req_coreid),        
+            .in_csr_io_req_valid    (csr_io_req_valid),    
             .in_csr_io_req_addr     (csr_io_req_addr),
             .in_csr_io_req_rw       (csr_io_req_rw),
             .in_csr_io_req_data     (csr_io_req_data),
@@ -317,7 +320,6 @@ module Vortex (
 
             // output request
             .out_csr_io_req_valid   (per_cluster_csr_io_req_valid),
-            .out_csr_io_req_coreid  (per_cluster_csr_io_req_coreid),
             .out_csr_io_req_addr    (per_cluster_csr_io_req_addr),            
             .out_csr_io_req_rw      (per_cluster_csr_io_req_rw),
             .out_csr_io_req_data    (per_cluster_csr_io_req_data),  

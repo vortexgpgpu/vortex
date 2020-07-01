@@ -70,46 +70,22 @@ module VX_core #(
     input wire [`DCORE_TAG_WIDTH-1:0]       io_rsp_tag,
     output wire                             io_rsp_ready,
 
-    // CSR I/O Request
+    // CSR I/O request
     input  wire                             csr_io_req_valid,
-    input  wire[11:0]                       csr_io_req_addr,
+    input  wire [11:0]                      csr_io_req_addr,
     input  wire                             csr_io_req_rw,
-    input  wire[31:0]                       csr_io_req_data,
+    input  wire [31:0]                      csr_io_req_data,
     output wire                             csr_io_req_ready,
 
-    // CSR I/O Response
+    // CSR I/O response
     output wire                             csr_io_rsp_valid,
-    output wire[31:0]                       csr_io_rsp_data,
+    output wire [31:0]                      csr_io_rsp_data,
     input wire                              csr_io_rsp_ready,
 
     // Status
     output wire                             busy, 
     output wire                             ebreak
 );
-
-    `UNUSED_VAR(csr_io_rsp_ready)
-
-    // IO CSR request
-    VX_csr_req_if io_csr_req();
-    wire temp_io_csr_req_valid    = csr_io_req_valid;
-    assign io_csr_req.valid       = {`NUM_THREADS{temp_io_csr_req_valid}};
-    assign io_csr_req.is_csr      = 1'b1;
-    assign io_csr_req.csr_address = csr_io_req_addr; 
-    assign io_csr_req.alu_op      = csr_io_req_rw ? `ALU_CSR_RW : `ALU_CSR_RS; 
-    assign io_csr_req.csr_mask    = csr_io_req_rw ? csr_io_req_data : 32'b0;
-
-    VX_wb_if io_csr_rsp();
-    assign csr_io_req_ready    = io_csr_rsp.is_io;
-    assign csr_io_rsp_valid    = io_csr_rsp.valid[0];
-    assign csr_io_rsp_data     = io_csr_rsp.data[0];
-    
-`IGNORE_WARNINGS_BEGIN
-    wire [4:0]  unused_rd      = io_csr_rsp.rd;
-    wire [1:0]  unused_wb      = io_csr_rsp.wb;    
-    wire [31:0] unused_curr_PC = io_csr_rsp.curr_PC;    
-`IGNORE_WARNINGS_END
-
-    // Dcache Interfaces   
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
         .DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH),
@@ -212,10 +188,6 @@ module VX_core #(
         .clk(clk),
         .reset(reset),
 
-        // IO CSR 
-        .io_csr_req         (io_csr_req),
-        .io_csr_rsp         (io_csr_rsp), 
-
         // Dcache core request
         .dcache_req_valid   (core_dcache_req_if.core_req_valid),
         .dcache_req_rw      (core_dcache_req_if.core_req_rw),
@@ -245,6 +217,18 @@ module VX_core #(
         .icache_rsp_data    (core_icache_rsp_if.core_rsp_data),
         .icache_rsp_tag     (core_icache_rsp_if.core_rsp_tag),
         .icache_rsp_ready   (core_icache_rsp_if.core_rsp_ready),     
+
+        // CSR I/O request
+        .csr_io_req_valid   (csr_io_req_valid),
+        .csr_io_req_rw      (csr_io_req_rw),
+        .csr_io_req_addr    (csr_io_req_addr),
+        .csr_io_req_data    (csr_io_req_data),
+        .csr_io_req_ready   (csr_io_req_ready),
+
+        // CSR I/O response
+        .csr_io_rsp_valid   (csr_io_rsp_valid),            
+        .csr_io_rsp_data    (csr_io_rsp_data),
+        .csr_io_rsp_ready   (csr_io_rsp_ready),
 
         // Status
         .busy(busy), 
