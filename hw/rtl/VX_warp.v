@@ -9,7 +9,7 @@ module VX_warp (
     input  wire[`NUM_THREADS-1:0] thread_mask,
     input  wire       change_mask,
     input  wire       jal,
-    input  wire[31:0] jal_dest,
+    input  wire[31:0] dest,
     input  wire       branch_dir,
     input  wire[31:0] branch_dest,
     input  wire       wspawn,
@@ -43,7 +43,7 @@ module VX_warp (
 
     always @(*) begin
         if (jal == 1'b1) begin
-            temp_PC = jal_dest;
+            temp_PC = dest;
         end else if (branch_dir) begin
             temp_PC = branch_dest;
         end else begin
