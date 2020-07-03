@@ -41,8 +41,8 @@ module VX_mem_unit # (
     ) core_dcache_rsp_qual_if(), core_smem_rsp_if();
 
     // select shared memory address
-    wire is_smem_addr = (({core_dcache_req_if.core_req_addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
-    wire smem_select = (| core_dcache_req_if.core_req_valid) ? is_smem_addr : 0;
+    wire is_smem_addr = (({core_dcache_req_if.addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
+    wire smem_select = (| core_dcache_req_if.valid) ? is_smem_addr : 0;
 
     VX_dcache_arb dcache_smem_arb (
         .req_select       (smem_select),
@@ -84,19 +84,19 @@ module VX_mem_unit # (
         .reset              (reset),
 
         // Core request
-        .core_req_valid     (core_smem_req_if.core_req_valid),
-        .core_req_rw        (core_smem_req_if.core_req_rw),
-        .core_req_byteen    (core_smem_req_if.core_req_byteen),
-        .core_req_addr      (core_smem_req_if.core_req_addr),
-        .core_req_data      (core_smem_req_if.core_req_data),        
-        .core_req_tag       (core_smem_req_if.core_req_tag),
-        .core_req_ready     (core_smem_req_if.core_req_ready),
+        .core_req_valid     (core_smem_req_if.valid),
+        .core_req_rw        (core_smem_req_if.rw),
+        .core_req_byteen    (core_smem_req_if.byteen),
+        .core_req_addr      (core_smem_req_if.addr),
+        .core_req_data      (core_smem_req_if.data),        
+        .core_req_tag       (core_smem_req_if.tag),
+        .core_req_ready     (core_smem_req_if.ready),
 
         // Core response
-        .core_rsp_valid     (core_smem_rsp_if.core_rsp_valid),
-        .core_rsp_data      (core_smem_rsp_if.core_rsp_data),
-        .core_rsp_tag       (core_smem_rsp_if.core_rsp_tag),
-        .core_rsp_ready     (core_smem_rsp_if.core_rsp_ready),
+        .core_rsp_valid     (core_smem_rsp_if.valid),
+        .core_rsp_data      (core_smem_rsp_if.data),
+        .core_rsp_tag       (core_smem_rsp_if.tag),
+        .core_rsp_ready     (core_smem_rsp_if.ready),
 
         // DRAM request
         `UNUSED_PIN (dram_req_valid),
@@ -169,46 +169,46 @@ module VX_mem_unit # (
         .reset              (reset),
 
         // Core req
-        .core_req_valid     (core_dcache_req_qual_if.core_req_valid),
-        .core_req_rw        (core_dcache_req_qual_if.core_req_rw),
-        .core_req_byteen    (core_dcache_req_qual_if.core_req_byteen),
-        .core_req_addr      (core_dcache_req_qual_if.core_req_addr),
-        .core_req_data      (core_dcache_req_qual_if.core_req_data),        
-        .core_req_tag       (core_dcache_req_qual_if.core_req_tag),
-        .core_req_ready     (core_dcache_req_qual_if.core_req_ready),
+        .core_req_valid     (core_dcache_req_qual_if.valid),
+        .core_req_rw        (core_dcache_req_qual_if.rw),
+        .core_req_byteen    (core_dcache_req_qual_if.byteen),
+        .core_req_addr      (core_dcache_req_qual_if.addr),
+        .core_req_data      (core_dcache_req_qual_if.data),        
+        .core_req_tag       (core_dcache_req_qual_if.tag),
+        .core_req_ready     (core_dcache_req_qual_if.ready),
 
         // Core response
-        .core_rsp_valid     (core_dcache_rsp_qual_if.core_rsp_valid),
-        .core_rsp_data      (core_dcache_rsp_qual_if.core_rsp_data),
-        .core_rsp_tag       (core_dcache_rsp_qual_if.core_rsp_tag),
-        .core_rsp_ready     (core_dcache_rsp_qual_if.core_rsp_ready),
+        .core_rsp_valid     (core_dcache_rsp_qual_if.valid),
+        .core_rsp_data      (core_dcache_rsp_qual_if.data),
+        .core_rsp_tag       (core_dcache_rsp_qual_if.tag),
+        .core_rsp_ready     (core_dcache_rsp_qual_if.ready),
 
         // DRAM request
-        .dram_req_valid     (dcache_dram_req_if.dram_req_valid),
-        .dram_req_rw        (dcache_dram_req_if.dram_req_rw),        
-        .dram_req_byteen    (dcache_dram_req_if.dram_req_byteen),        
-        .dram_req_addr      (dcache_dram_req_if.dram_req_addr),
-        .dram_req_data      (dcache_dram_req_if.dram_req_data),
-        .dram_req_tag       (dcache_dram_req_if.dram_req_tag),
-        .dram_req_ready     (dcache_dram_req_if.dram_req_ready),
+        .dram_req_valid     (dcache_dram_req_if.valid),
+        .dram_req_rw        (dcache_dram_req_if.rw),        
+        .dram_req_byteen    (dcache_dram_req_if.byteen),        
+        .dram_req_addr      (dcache_dram_req_if.addr),
+        .dram_req_data      (dcache_dram_req_if.data),
+        .dram_req_tag       (dcache_dram_req_if.tag),
+        .dram_req_ready     (dcache_dram_req_if.ready),
 
         // DRAM response
-        .dram_rsp_valid     (dcache_dram_rsp_if.dram_rsp_valid),        
-        .dram_rsp_data      (dcache_dram_rsp_if.dram_rsp_data),
-        .dram_rsp_tag       (dcache_dram_rsp_if.dram_rsp_tag),
-        .dram_rsp_ready     (dcache_dram_rsp_if.dram_rsp_ready),
+        .dram_rsp_valid     (dcache_dram_rsp_if.valid),        
+        .dram_rsp_data      (dcache_dram_rsp_if.data),
+        .dram_rsp_tag       (dcache_dram_rsp_if.tag),
+        .dram_rsp_ready     (dcache_dram_rsp_if.ready),
 
         // Snoop request
-        .snp_req_valid      (dcache_snp_req_if.snp_req_valid),
-        .snp_req_addr       (dcache_snp_req_if.snp_req_addr),
-        .snp_req_invalidate (dcache_snp_req_if.snp_req_invalidate),
-        .snp_req_tag        (dcache_snp_req_if.snp_req_tag),
-        .snp_req_ready      (dcache_snp_req_if.snp_req_ready),
+        .snp_req_valid      (dcache_snp_req_if.valid),
+        .snp_req_addr       (dcache_snp_req_if.addr),
+        .snp_req_invalidate (dcache_snp_req_if.invalidate),
+        .snp_req_tag        (dcache_snp_req_if.tag),
+        .snp_req_ready      (dcache_snp_req_if.ready),
 
         // Snoop response
-        .snp_rsp_valid      (dcache_snp_rsp_if.snp_rsp_valid),
-        .snp_rsp_tag        (dcache_snp_rsp_if.snp_rsp_tag),
-        .snp_rsp_ready      (dcache_snp_rsp_if.snp_rsp_ready),
+        .snp_rsp_valid      (dcache_snp_rsp_if.valid),
+        .snp_rsp_tag        (dcache_snp_rsp_if.tag),
+        .snp_rsp_ready      (dcache_snp_rsp_if.ready),
         
         // Snoop forward out
         `UNUSED_PIN (snp_fwdout_valid),
@@ -253,34 +253,34 @@ module VX_mem_unit # (
         .reset                 (reset),
 
         // Core request
-        .core_req_valid        (core_icache_req_if.core_req_valid),
-        .core_req_rw           (core_icache_req_if.core_req_rw),
-        .core_req_byteen       (core_icache_req_if.core_req_byteen),
-        .core_req_addr         (core_icache_req_if.core_req_addr),
-        .core_req_data         (core_icache_req_if.core_req_data),        
-        .core_req_tag          (core_icache_req_if.core_req_tag),
-        .core_req_ready        (core_icache_req_if.core_req_ready),
+        .core_req_valid        (core_icache_req_if.valid),
+        .core_req_rw           (core_icache_req_if.rw),
+        .core_req_byteen       (core_icache_req_if.byteen),
+        .core_req_addr         (core_icache_req_if.addr),
+        .core_req_data         (core_icache_req_if.data),        
+        .core_req_tag          (core_icache_req_if.tag),
+        .core_req_ready        (core_icache_req_if.ready),
 
         // Core response
-        .core_rsp_valid        (core_icache_rsp_if.core_rsp_valid),
-        .core_rsp_data         (core_icache_rsp_if.core_rsp_data),
-        .core_rsp_tag          (core_icache_rsp_if.core_rsp_tag),
-        .core_rsp_ready        (core_icache_rsp_if.core_rsp_ready),
+        .core_rsp_valid        (core_icache_rsp_if.valid),
+        .core_rsp_data         (core_icache_rsp_if.data),
+        .core_rsp_tag          (core_icache_rsp_if.tag),
+        .core_rsp_ready        (core_icache_rsp_if.ready),
 
         // DRAM Req
-        .dram_req_valid        (icache_dram_req_if.dram_req_valid),
-        .dram_req_rw           (icache_dram_req_if.dram_req_rw),        
-        .dram_req_byteen       (icache_dram_req_if.dram_req_byteen),        
-        .dram_req_addr         (icache_dram_req_if.dram_req_addr),
-        .dram_req_data         (icache_dram_req_if.dram_req_data),
-        .dram_req_tag          (icache_dram_req_if.dram_req_tag),
-        .dram_req_ready        (icache_dram_req_if.dram_req_ready),        
+        .dram_req_valid        (icache_dram_req_if.valid),
+        .dram_req_rw           (icache_dram_req_if.rw),        
+        .dram_req_byteen       (icache_dram_req_if.byteen),        
+        .dram_req_addr         (icache_dram_req_if.addr),
+        .dram_req_data         (icache_dram_req_if.data),
+        .dram_req_tag          (icache_dram_req_if.tag),
+        .dram_req_ready        (icache_dram_req_if.ready),        
 
         // DRAM response
-        .dram_rsp_valid        (icache_dram_rsp_if.dram_rsp_valid),        
-        .dram_rsp_data         (icache_dram_rsp_if.dram_rsp_data),
-        .dram_rsp_tag          (icache_dram_rsp_if.dram_rsp_tag),
-        .dram_rsp_ready        (icache_dram_rsp_if.dram_rsp_ready),
+        .dram_rsp_valid        (icache_dram_rsp_if.valid),        
+        .dram_rsp_data         (icache_dram_rsp_if.data),
+        .dram_rsp_tag          (icache_dram_rsp_if.tag),
+        .dram_rsp_ready        (icache_dram_rsp_if.ready),
 
         // Snoop request
         .snp_req_valid         (0),

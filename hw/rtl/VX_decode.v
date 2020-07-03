@@ -12,7 +12,7 @@ module VX_decode(
 );
     wire               in_valid        = (| fd_inst_meta_de.valid);
     wire[31:0]         in_instruction  = fd_inst_meta_de.instruction;
-    wire[31:0]         in_curr_PC      = fd_inst_meta_de.inst_pc;
+    wire[31:0]         in_curr_PC      = fd_inst_meta_de.curr_PC;
     wire[`NW_BITS-1:0] in_warp_num     = fd_inst_meta_de.warp_num;
 
     assign frE_to_bckE_req_if.curr_PC = in_curr_PC;
@@ -114,8 +114,8 @@ module VX_decode(
     assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
     assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
 
-    assign join_if.is_join       = is_join && in_valid;
-    assign join_if.join_warp_num = in_warp_num;
+    assign join_if.is_join  = is_join && in_valid;
+    assign join_if.warp_num = in_warp_num;
 
     assign frE_to_bckE_req_if.is_wspawn  = is_wspawn;
     assign frE_to_bckE_req_if.is_tmc     = is_tmc;

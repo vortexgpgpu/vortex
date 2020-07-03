@@ -8,10 +8,10 @@ interface VX_cache_dram_rsp_if #(
     parameter DRAM_TAG_WIDTH  = 1
 ) ();
 
-    wire                        dram_rsp_valid;
-    wire [DRAM_LINE_WIDTH-1:0]  dram_rsp_data;
-    wire [DRAM_TAG_WIDTH-1:0]   dram_rsp_tag;  
-    wire                        dram_rsp_ready;      
+    wire                        valid;
+    wire [DRAM_LINE_WIDTH-1:0]  data;
+    wire [DRAM_TAG_WIDTH-1:0]   tag;  
+    wire                        ready;      
 
 endinterface
 

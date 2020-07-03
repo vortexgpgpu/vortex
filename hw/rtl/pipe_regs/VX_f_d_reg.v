@@ -20,8 +20,8 @@ module VX_f_d_reg (
         .reset (reset),
         .stall (stall),
         .flush (flush),
-        .in    ({fe_inst_meta_fd.instruction, fe_inst_meta_fd.inst_pc, fe_inst_meta_fd.warp_num, fe_inst_meta_fd.valid}),
-        .out   ({fd_inst_meta_de.instruction, fd_inst_meta_de.inst_pc, fd_inst_meta_de.warp_num, fd_inst_meta_de.valid})
+        .in    ({fe_inst_meta_fd.instruction, fe_inst_meta_fd.curr_PC, fe_inst_meta_fd.warp_num, fe_inst_meta_fd.valid}),
+        .out   ({fd_inst_meta_de.instruction, fd_inst_meta_de.curr_PC, fd_inst_meta_de.warp_num, fd_inst_meta_de.valid})
     );
 
 endmodule

@@ -5,6 +5,9 @@
 
 interface VX_backend_req_if ();
 
+    wire [`NUM_THREADS-1:0]  valid;
+    wire [`NW_BITS-1:0]      warp_num;
+    wire [31:0]              curr_PC;
     wire [11:0]              csr_address;
     wire                     is_csr;
     wire                     csr_immed;
@@ -20,14 +23,11 @@ interface VX_backend_req_if ();
     wire [`BYTE_EN_BITS-1:0] mem_write;
     wire [2:0]               branch_type;
     wire [19:0]              upper_immed;
-    wire [31:0]              curr_PC;
     wire                     is_etype;
     wire                     is_jal;
     wire                     jal;
     wire [31:0]              jal_offset;
-    wire [31:0]              next_PC;
-    wire [`NUM_THREADS-1:0]  valid;
-    wire [`NW_BITS-1:0]      warp_num;
+    wire [31:0]              next_PC;    
 
     // GPGPU stuff
     wire                     is_wspawn;

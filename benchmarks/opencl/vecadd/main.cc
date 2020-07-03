@@ -4,7 +4,7 @@
 #include <CL/opencl.h>
 #include <string.h>
 
-#define SIZE 4
+#define SIZE 4096
 #define NUM_WORK_GROUPS 2
 #define KERNEL_NAME "vecadd"
 

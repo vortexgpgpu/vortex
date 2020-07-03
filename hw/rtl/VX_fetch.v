@@ -57,7 +57,7 @@ module VX_fetch (
 
         // Join
         .is_join           (join_if.is_join),
-        .join_warp_num     (join_if.join_warp_num),
+        .join_warp_num     (join_if.warp_num),
 
         // Split
         .is_split          (warp_ctl_if.is_split),
@@ -70,13 +70,13 @@ module VX_fetch (
         // JAL
         .jal              (jal_rsp_if.jal),
         .jal_dest         (jal_rsp_if.jal_dest),
-        .jal_warp_num     (jal_rsp_if.jal_warp_num),
+        .jal_warp_num     (jal_rsp_if.warp_num),
 
         // Branch
         .branch_valid     (branch_rsp_if.valid_branch),
         .branch_dir       (branch_rsp_if.branch_dir),
         .branch_dest      (branch_rsp_if.branch_dest),
-        .branch_warp_num  (branch_rsp_if.branch_warp_num),
+        .branch_warp_num  (branch_rsp_if.warp_num),
 
         // Outputs
         .thread_mask      (thread_mask),
@@ -89,7 +89,7 @@ module VX_fetch (
     assign fe_inst_meta_fi.warp_num    = warp_num;
     assign fe_inst_meta_fi.valid       = thread_mask;
     assign fe_inst_meta_fi.instruction = 32'h0;
-    assign fe_inst_meta_fi.inst_pc     = warp_pc;
+    assign fe_inst_meta_fi.curr_PC     = warp_pc;
 
 `DEBUG_BEGIN
     wire start_mat_add = scheduled_warp && (warp_pc == 32'h80000ed8) && (warp_num == 0);

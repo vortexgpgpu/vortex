@@ -83,14 +83,14 @@ module VX_lsu_unit #(
     wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr, dbg_mrq_write_addr;
     wire mrq_full;
 
-    wire mrq_push = (| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready
+    wire mrq_push = (| dcache_req_if.valid) && dcache_req_if.ready
                  && (0 == core_req_rw); // only push read requests
 
-    wire mrq_pop_part = (| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready;    
+    wire mrq_pop_part = (| dcache_rsp_if.valid) && dcache_rsp_if.ready;    
     
-    assign mrq_read_addr = dcache_rsp_if.core_rsp_tag[0][`LOG2UP(`DCREQ_SIZE)-1:0];    
+    assign mrq_read_addr = dcache_rsp_if.tag[0][`LOG2UP(`DCREQ_SIZE)-1:0];    
 
-    wire [`NUM_THREADS-1:0] mem_rsp_mask_upd = mem_rsp_mask[mrq_read_addr] & ~dcache_rsp_if.core_rsp_valid;
+    wire [`NUM_THREADS-1:0] mem_rsp_mask_upd = mem_rsp_mask[mrq_read_addr] & ~dcache_rsp_if.valid;
 
     wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_upd);    
 
@@ -122,20 +122,20 @@ module VX_lsu_unit #(
 
     // Core Request
 
-    assign dcache_req_if.core_req_valid = use_valid & {`NUM_THREADS{~mrq_full}};
-    assign dcache_req_if.core_req_rw    = {`NUM_THREADS{core_req_rw}};
-    assign dcache_req_if.core_req_byteen= mem_req_byteen;
-    assign dcache_req_if.core_req_addr  = mem_req_addr;
-    assign dcache_req_if.core_req_data  = mem_req_data;  
+    assign dcache_req_if.valid = use_valid & {`NUM_THREADS{~mrq_full}};
+    assign dcache_req_if.rw    = {`NUM_THREADS{core_req_rw}};
+    assign dcache_req_if.byteen= mem_req_byteen;
+    assign dcache_req_if.addr  = mem_req_addr;
+    assign dcache_req_if.data  = mem_req_data;  
 
 `ifdef DBG_CORE_REQ_INFO
-    assign dcache_req_if.core_req_tag = {use_pc, use_wb, use_rd, use_warp_num, mrq_write_addr};
+    assign dcache_req_if.tag = {use_pc, use_wb, use_rd, use_warp_num, mrq_write_addr};
 `else
-    assign dcache_req_if.core_req_tag = mrq_write_addr;
+    assign dcache_req_if.tag = mrq_write_addr;
 `endif
 
     // Can't accept new request
-    assign delay = mrq_full || !dcache_req_if.core_req_ready;
+    assign delay = mrq_full || !dcache_req_if.ready;
 
     // Core Response
 
@@ -143,7 +143,7 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][31:0] rsp_data_shifted;
     
     for (i = 0; i < `NUM_THREADS; ++i) begin        
-        assign rsp_data_shifted[i] = (dcache_rsp_if.core_rsp_data[i] >> mem_rsp_offset[i]);
+        assign rsp_data_shifted[i] = (dcache_rsp_if.data[i] >> mem_rsp_offset[i]);
         always @(*) begin
             case (core_rsp_mem_read)
                 `BYTE_EN_SB: core_rsp_data[i] = rsp_data_shifted[i][7]  ? (rsp_data_shifted[i] | 32'hFFFFFF00) : (rsp_data_shifted[i] & 32'h000000FF);      
@@ -155,11 +155,11 @@ module VX_lsu_unit #(
         end
     end   
 
-    assign mem_wb_if.valid = dcache_rsp_if.core_rsp_valid;
+    assign mem_wb_if.valid = dcache_rsp_if.valid;
     assign mem_wb_if.data  = core_rsp_data;
 
     // Can't accept new response
-    assign dcache_rsp_if.core_rsp_ready = !(no_slot_mem & (|mem_wb_if_p1.valid));
+    assign dcache_rsp_if.ready = !(no_slot_mem & (|mem_wb_if_p1.valid));
 
     // From LSU to WB
     localparam WB_REQ_SIZE = (`NUM_THREADS) + (`NUM_THREADS * 32) + (`NW_BITS) + (5) + (2) + 32;
@@ -172,28 +172,28 @@ module VX_lsu_unit #(
         .out   ({mem_wb_if_p1.valid, mem_wb_if_p1.data, mem_wb_if_p1.warp_num, mem_wb_if_p1.rd, mem_wb_if_p1.wb, mem_wb_if_p1.curr_PC})
     );
 
-    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.core_req_valid);    
+    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.valid);    
     `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
     `SCOPE_ASSIGN(scope_dcache_req_curr_PC, use_pc);
     `SCOPE_ASSIGN(scope_dcache_req_addr,  use_address);    
     `SCOPE_ASSIGN(scope_dcache_req_rw,    core_req_rw);
-    `SCOPE_ASSIGN(scope_dcache_req_byteen,dcache_req_if.core_req_byteen);
-    `SCOPE_ASSIGN(scope_dcache_req_data,  dcache_req_if.core_req_data);
-    `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_if.core_req_tag);
-    `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_if.core_req_ready);
+    `SCOPE_ASSIGN(scope_dcache_req_byteen,dcache_req_if.byteen);
+    `SCOPE_ASSIGN(scope_dcache_req_data,  dcache_req_if.data);
+    `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_if.tag);
+    `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_if.ready);
 
-    `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_if.core_rsp_valid);
-    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.core_rsp_data);
-    `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_if.core_rsp_tag);
-    `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_if.core_rsp_ready);
+    `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_if.valid);
+    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.data);
+    `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_if.tag);
+    `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_if.ready);
     
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
-        if ((| dcache_req_if.core_req_valid) && dcache_req_if.core_req_ready) begin
+        if ((| dcache_req_if.valid) && dcache_req_if.ready) begin
             $display("%t: D%0d$ req: valid=%b, addr=%0h, tag=%0h, r=%0d, w=%0d, pc=%0h, rd=%0d, warp=%0d, byteen=%0h, data=%0h", 
                      $time, CORE_ID, use_valid, use_address, mrq_write_addr, use_mem_read, use_mem_write, use_pc, use_rd, use_warp_num, mem_req_byteen, mem_req_data);
         end
-        if ((| dcache_rsp_if.core_rsp_valid) && dcache_rsp_if.core_rsp_ready) begin
+        if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D%0d$ rsp: valid=%b, tag=%0h, pc=%0h, rd=%0d, warp=%0d, data=%0h", 
                      $time, CORE_ID, mem_wb_if.valid, mrq_read_addr, mem_wb_if.curr_PC, mem_wb_if.rd, mem_wb_if.warp_num, mem_wb_if.data);
         end
