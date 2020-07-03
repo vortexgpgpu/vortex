@@ -67,7 +67,7 @@ module VX_back_end #(
         // End new
         .memory_delay       (mem_delay),
         .exec_delay         (exec_delay),
-        .gpr_stage_delay    (gpr_stage_delay)
+        .delay              (gpr_stage_delay)
     );
 
     assign ebreak = exec_unit_req_if.is_etype && (| exec_unit_req_if.valid);

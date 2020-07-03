@@ -8,7 +8,7 @@ interface VX_backend_req_if ();
     wire [`NUM_THREADS-1:0]  valid;
     wire [`NW_BITS-1:0]      warp_num;
     wire [31:0]              curr_PC;
-    wire [11:0]              csr_address;
+    wire [11:0]              csr_addr;
     wire                     is_csr;
     wire                     csr_immed;
     wire [31:0]              csr_mask;

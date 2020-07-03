@@ -24,7 +24,7 @@ module VX_csr_arb (
 	assign issued_csr_req_if.valid       = pick_core ? csr_core_req_if.valid       : {`NUM_THREADS{csr_io_req_if.valid}};
     assign issued_csr_req_if.is_csr      = pick_core ? csr_core_req_if.is_csr      : 1'b1;
 	assign issued_csr_req_if.alu_op      = pick_core ? csr_core_req_if.alu_op      : (csr_io_req_if.rw ? `ALU_CSR_RW : `ALU_CSR_RS);
-	assign issued_csr_req_if.csr_address = pick_core ? csr_core_req_if.csr_address : csr_io_req_if.addr;	
+	assign issued_csr_req_if.csr_addr    = pick_core ? csr_core_req_if.csr_addr : csr_io_req_if.addr;	
     assign issued_csr_req_if.csr_immed   = pick_core ? csr_core_req_if.csr_immed   : 0;  
     assign issued_csr_req_if.csr_mask    = pick_core ? csr_core_req_if.csr_mask    : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
     assign issued_csr_req_if.is_io       = !pick_core;

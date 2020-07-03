@@ -11,7 +11,7 @@ interface VX_csr_req_if ();
     wire [1:0]          wb;
     wire [4:0]          alu_op;
     wire                is_csr;
-    wire [11:0]         csr_address;
+    wire [11:0]         csr_addr;
     wire                csr_immed;
     wire [31:0]         csr_mask;
 

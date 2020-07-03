@@ -204,7 +204,7 @@ module VX_decode(
     assign csr_cond1 = func3 != 3'h0;
     assign csr_cond2 = u_12  >= 12'h2;
 
-    assign frE_to_bckE_req_if.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
+    assign frE_to_bckE_req_if.csr_addr = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
 
     // ITYPE IMEED
     assign alu_shift_i       = (func3 == 3'h1) || (func3 == 3'h5);
