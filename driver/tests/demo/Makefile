@@ -36,7 +36,7 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../stub -lvortex -o $@
 
 run-fpga: $(PROJECT)
-	LD_LIBRARY_PATH=../../opae:$(LD_LIBRARY_PATH) ./$(PROJECT) -n 128
+	LD_LIBRARY_PATH=../../opae:$(LD_LIBRARY_PATH) ./$(PROJECT) -n 16
 
 run-ase: $(PROJECT)
 	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) -n 16

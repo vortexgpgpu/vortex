@@ -5,9 +5,9 @@
 
 interface VX_branch_rsp_if ();
 
-    wire                valid_branch;
-    wire                branch_dir;
-    wire [31:0]         branch_dest;
+    wire                valid;
+    wire                dir;
+    wire [31:0]         dest;
     wire [`NW_BITS-1:0] warp_num;
 
 endinterface

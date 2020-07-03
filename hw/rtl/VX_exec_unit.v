@@ -115,15 +115,15 @@ module VX_exec_unit (
     assign inst_exec_wb_if.curr_PC  = in_curr_PC;
 
     // Jal rsp
-    assign jal_rsp_temp_if.jal      = in_jal;
-    assign jal_rsp_temp_if.jal_dest = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
+    assign jal_rsp_temp_if.valid    = in_jal;
+    assign jal_rsp_temp_if.dest     = $signed(in_a_reg_data[jal_branch_use_index]) + $signed(in_jal_offset);
     assign jal_rsp_temp_if.warp_num = exec_unit_req_if.warp_num;
 
     // Branch rsp
-    assign branch_rsp_temp_if.valid_branch  = (exec_unit_req_if.branch_type != `BR_NO) && (| exec_unit_req_if.valid);
-    assign branch_rsp_temp_if.branch_dir    = temp_branch_dir;
-    assign branch_rsp_temp_if.warp_num      = exec_unit_req_if.warp_num;
-    assign branch_rsp_temp_if.branch_dest   = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
+    assign branch_rsp_temp_if.valid    = (exec_unit_req_if.branch_type != `BR_NO) && (| exec_unit_req_if.valid);
+    assign branch_rsp_temp_if.dir      = temp_branch_dir;
+    assign branch_rsp_temp_if.warp_num = exec_unit_req_if.warp_num;
+    assign branch_rsp_temp_if.dest     = $signed(exec_unit_req_if.curr_PC) + ($signed(exec_unit_req_if.itype_immed) << 1); // itype_immed = branch_offset
 
     VX_generic_register #(
         .N(33 + `NW_BITS-1 + 1)
@@ -132,8 +132,8 @@ module VX_exec_unit (
         .reset (reset),
         .stall (1'b0),
         .flush (1'b0),
-        .in    ({jal_rsp_temp_if.jal, jal_rsp_temp_if.jal_dest, jal_rsp_temp_if.warp_num}),
-        .out   ({jal_rsp_if.jal     , jal_rsp_if.jal_dest     , jal_rsp_if.warp_num})
+        .in    ({jal_rsp_temp_if.valid, jal_rsp_temp_if.dest, jal_rsp_temp_if.warp_num}),
+        .out   ({jal_rsp_if.valid     , jal_rsp_if.dest     , jal_rsp_if.warp_num})
     );
 
     VX_generic_register #(
@@ -143,8 +143,8 @@ module VX_exec_unit (
         .reset (reset),
         .stall (1'b0),
         .flush (1'b0),
-        .in    ({branch_rsp_temp_if.valid_branch, branch_rsp_temp_if.branch_dir, branch_rsp_temp_if.warp_num, branch_rsp_temp_if.branch_dest}),
-        .out   ({branch_rsp_if.valid_branch     , branch_rsp_if.branch_dir     , branch_rsp_if.warp_num     , branch_rsp_if.branch_dest     })
+        .in    ({branch_rsp_temp_if.valid, branch_rsp_temp_if.dir, branch_rsp_temp_if.warp_num, branch_rsp_temp_if.dest}),
+        .out   ({branch_rsp_if.valid     , branch_rsp_if.dir     , branch_rsp_if.warp_num     , branch_rsp_if.dest     })
     );
 
 endmodule : VX_exec_unit

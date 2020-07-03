@@ -44,7 +44,7 @@ module VX_warp_sched (
 
     // JAL
     input wire                        jal,
-    input wire[31:0]                  jal_dest,
+    input wire[31:0]                  dest,
     input wire[`NW_BITS-1:0]          jal_warp_num,
 
     // Branch
@@ -203,7 +203,7 @@ module VX_warp_sched (
 
             // Jal
             if (jal) begin
-                warp_pcs[jal_warp_num]     <= jal_dest;
+                warp_pcs[jal_warp_num]     <= dest;
                 warp_stalled[jal_warp_num] <= 0;
             end
 

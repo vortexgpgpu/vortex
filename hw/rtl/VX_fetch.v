@@ -68,14 +68,14 @@ module VX_fetch (
         .split_warp_num    (warp_ctl_if.warp_num),
 
         // JAL
-        .jal              (jal_rsp_if.jal),
-        .jal_dest         (jal_rsp_if.jal_dest),
+        .jal              (jal_rsp_if.valid),
+        .dest             (jal_rsp_if.dest),
         .jal_warp_num     (jal_rsp_if.warp_num),
 
         // Branch
-        .branch_valid     (branch_rsp_if.valid_branch),
-        .branch_dir       (branch_rsp_if.branch_dir),
-        .branch_dest      (branch_rsp_if.branch_dest),
+        .branch_valid     (branch_rsp_if.valid),
+        .branch_dir       (branch_rsp_if.dir),
+        .branch_dest      (branch_rsp_if.dest),
         .branch_warp_num  (branch_rsp_if.warp_num),
 
         // Outputs
