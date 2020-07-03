@@ -176,31 +176,31 @@ module VX_pipeline #(
         .ebreak          (ebreak)
     );
 
-    assign dcache_req_valid  = core_dcache_req_if.core_req_valid;
-    assign dcache_req_rw     = core_dcache_req_if.core_req_rw;
-    assign dcache_req_byteen = core_dcache_req_if.core_req_byteen;
-    assign dcache_req_addr   = core_dcache_req_if.core_req_addr;
-    assign dcache_req_data   = core_dcache_req_if.core_req_data;
-    assign dcache_req_tag    = core_dcache_req_if.core_req_tag;
-    assign core_dcache_req_if.core_req_ready = dcache_req_ready;
+    assign dcache_req_valid  = core_dcache_req_if.valid;
+    assign dcache_req_rw     = core_dcache_req_if.rw;
+    assign dcache_req_byteen = core_dcache_req_if.byteen;
+    assign dcache_req_addr   = core_dcache_req_if.addr;
+    assign dcache_req_data   = core_dcache_req_if.data;
+    assign dcache_req_tag    = core_dcache_req_if.tag;
+    assign core_dcache_req_if.ready = dcache_req_ready;
 
-    assign core_dcache_rsp_if.core_rsp_valid = dcache_rsp_valid;
-    assign core_dcache_rsp_if.core_rsp_data  = dcache_rsp_data;
-    assign core_dcache_rsp_if.core_rsp_tag   = dcache_rsp_tag;
-    assign dcache_rsp_ready = core_dcache_rsp_if.core_rsp_ready;
+    assign core_dcache_rsp_if.valid = dcache_rsp_valid;
+    assign core_dcache_rsp_if.data  = dcache_rsp_data;
+    assign core_dcache_rsp_if.tag   = dcache_rsp_tag;
+    assign dcache_rsp_ready = core_dcache_rsp_if.ready;
 
-    assign icache_req_valid  = core_icache_req_if.core_req_valid;
-    assign icache_req_rw     = core_icache_req_if.core_req_rw;
-    assign icache_req_byteen = core_icache_req_if.core_req_byteen;
-    assign icache_req_addr   = core_icache_req_if.core_req_addr;
-    assign icache_req_data   = core_icache_req_if.core_req_data;
-    assign icache_req_tag    = core_icache_req_if.core_req_tag;
-    assign core_icache_req_if.core_req_ready = icache_req_ready;
+    assign icache_req_valid  = core_icache_req_if.valid;
+    assign icache_req_rw     = core_icache_req_if.rw;
+    assign icache_req_byteen = core_icache_req_if.byteen;
+    assign icache_req_addr   = core_icache_req_if.addr;
+    assign icache_req_data   = core_icache_req_if.data;
+    assign icache_req_tag    = core_icache_req_if.tag;
+    assign core_icache_req_if.ready = icache_req_ready;
 
-    assign core_icache_rsp_if.core_rsp_valid = icache_rsp_valid;
-    assign core_icache_rsp_if.core_rsp_data  = icache_rsp_data;
-    assign core_icache_rsp_if.core_rsp_tag   = icache_rsp_tag;
-    assign icache_rsp_ready = core_icache_rsp_if.core_rsp_ready;
+    assign core_icache_rsp_if.valid = icache_rsp_valid;
+    assign core_icache_rsp_if.data  = icache_rsp_data;
+    assign core_icache_rsp_if.tag   = icache_rsp_tag;
+    assign icache_rsp_ready = core_icache_rsp_if.ready;
 
     `SCOPE_ASSIGN(scope_busy, busy); 
     `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);    

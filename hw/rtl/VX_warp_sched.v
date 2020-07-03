@@ -282,8 +282,6 @@ module VX_warp_sched (
     end
     endgenerate
 
-    // wire should_stall = stall || (jal && (warp_to_schedule == jal_warp_num)) || (branch_dir && (warp_to_schedule == branch_warp_num));
-
     wire should_jal = (jal && (warp_to_schedule == jal_warp_num));
     wire should_bra = (branch_valid && branch_dir && (warp_to_schedule == branch_warp_num));
 
@@ -308,7 +306,7 @@ module VX_warp_sched (
     assign use_active = (count_visible_active != 0) ? visible_active : (warp_active & (~warp_stalled) & (~total_barrier_stall) & (~warp_lock));
 
     // Choosing a warp to schedule
-    VX_rr_arbiter #(
+    VX_fixed_arbiter #(
         .N(`NUM_WARPS)
     ) choose_schedule (
         .clk         (clk),

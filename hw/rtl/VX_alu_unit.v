@@ -119,7 +119,7 @@ module VX_alu_unit (
     VX_mult #(
         .WIDTHA(33),
         .WIDTHB(33),
-        .WIDTHP(66),
+        .WIDTHP(64),
         .SIGNED(1),
         .PIPELINE(`MUL_LATENCY)
     ) multiplier (
