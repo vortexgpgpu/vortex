@@ -25,7 +25,7 @@ module VX_alu_unit (
     wire[31:0] alu_in2 = (src_rs2 == `RS2_IMMED) ? itype_immed : src_b;
 
     wire[31:0] upper_immed_s = {upper_immed, {12{1'b0}}};
-
+    
     reg [7:0] inst_delay;
     reg [7:0] curr_inst_delay;
         
@@ -70,7 +70,6 @@ module VX_alu_unit (
             `ALU_SUBU:      alu_result = (alu_in1 >= alu_in2) ? 32'h0 : 32'hffffffff;
             `ALU_LUI:       alu_result = upper_immed_s;
             `ALU_AUIPC:     alu_result = $signed(curr_PC) + $signed(upper_immed_s);
-            // TODO: profitable to roll these exceptional cases into inst_delay_tmp to avoid pipeline when possible?
             `ALU_MUL:       alu_result = mul_result[31:0];
             `ALU_MULH:      alu_result = mul_result[63:32];
             `ALU_MULHSU:    alu_result = mul_result[63:32];
@@ -80,7 +79,7 @@ module VX_alu_unit (
             `ALU_REM:       alu_result = (alu_in2 == 0) ? alu_in1 : rem_result_signed;
             `ALU_REMU:      alu_result = (alu_in2 == 0) ? alu_in1 : rem_result_unsigned;
             default:        alu_result = 32'h0;
-        endcase // alu_op
+        endcase
     end
 
     VX_divide #(

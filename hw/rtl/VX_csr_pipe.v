@@ -73,7 +73,7 @@ module VX_csr_pipe #(
     for (i = 0; i < `NUM_THREADS; i++) begin
         assign csr_wb_if.data[i] = (csr_addr_s2 == `CSR_LTID) ? i : 
                                    (csr_addr_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
-                                                                   csr_read_data_s2;
+                                                                csr_read_data_s2;
     end     
 
     assign stall_gpr_csr = no_slot_csr && csr_req_if.is_csr && (| csr_req_if.valid);   

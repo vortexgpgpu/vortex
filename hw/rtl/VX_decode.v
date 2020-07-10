@@ -227,7 +227,7 @@ module VX_decode(
         case (curr_opcode)
             `INST_B: begin
                 // $display("BRANCH IN DECODE");
-                temp_branch_stall = 1'b1 && in_valid;
+                temp_branch_stall = in_valid;
                 case (func3)
                     3'h0: temp_branch_type = `BR_EQ;
                     3'h1: temp_branch_type = `BR_NE;
@@ -240,15 +240,15 @@ module VX_decode(
             end
             `INST_JAL: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b1 && in_valid;
+                temp_branch_stall = in_valid;
             end
             `INST_JALR: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b1 && in_valid;
+                temp_branch_stall = in_valid;
             end
             default: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b0 && in_valid;
+                temp_branch_stall = 1'b0;
             end
         endcase
     end

@@ -1,14 +1,14 @@
 `include "VX_define.vh"
 
 module VX_warp_sched (
-    input wire                       clk,    // Clock
-    input wire                       reset,
-    input wire                       stall,
+    input wire                        clk,
+    input wire                        reset,
+    input wire                        stall,
 
     // Wspawn
-    input wire                       wspawn,
-    input wire[31:0]                 wsapwn_pc,
-    input wire[`NUM_WARPS-1:0]       wspawn_new_active,
+    input wire                        wspawn,
+    input wire[31:0]                  wsapwn_pc,
+    input wire[`NUM_WARPS-1:0]        wspawn_new_active,
 
     // CTM
     input  wire                       ctm,
@@ -28,38 +28,38 @@ module VX_warp_sched (
 
     // WSTALL
     input  wire                       wstall,
-    input  wire[`NW_BITS-1:0]         wstall_warp_num,
+    input  wire [`NW_BITS-1:0]        wstall_warp_num,
 
     // Split
     input wire                        is_split,
     input wire                        dont_split,
-    input wire[`NUM_THREADS-1:0]      split_new_mask,
-    input wire[`NUM_THREADS-1:0]      split_later_mask,
-    input wire[31:0]                  split_save_pc,    
-    input wire[`NW_BITS-1:0]          split_warp_num,
+    input wire [`NUM_THREADS-1:0]     split_new_mask,
+    input wire [`NUM_THREADS-1:0]     split_later_mask,
+    input wire [31:0]                 split_save_pc,    
+    input wire [`NW_BITS-1:0]         split_warp_num,
 
     // Join
     input wire                        is_join,
-    input wire[`NW_BITS-1:0]          join_warp_num,
+    input wire [`NW_BITS-1:0]         join_warp_num,
 
     // JAL
     input wire                        jal,
-    input wire[31:0]                  dest,
-    input wire[`NW_BITS-1:0]          jal_warp_num,
+    input wire [31:0]                 dest,
+    input wire [`NW_BITS-1:0]         jal_warp_num,
 
     // Branch
     input wire                        branch_valid,
     input wire                        branch_dir,
-    input wire[31:0]                  branch_dest,
-    input wire[`NW_BITS-1:0]          branch_warp_num,
+    input wire [31:0]                 branch_dest,
+    input wire [`NW_BITS-1:0]         branch_warp_num,
 
-    output wire[`NUM_THREADS-1:0]     thread_mask,
-    output wire[`NW_BITS-1:0]         warp_num,
-    output wire[31:0]                 warp_pc,
+    output wire [`NUM_THREADS-1:0]    thread_mask,
+    output wire [`NW_BITS-1:0]        warp_num,
+    output wire [31:0]                warp_pc,
     output wire                       busy,
     output wire                       scheduled_warp,
 
-    input  wire[`NW_BITS-1:0]         icache_stage_wid,
+    input  wire [`NW_BITS-1:0]        icache_stage_wid,
     input  wire                       icache_stage_response
 );
     wire update_use_wspawn;
@@ -209,18 +209,18 @@ module VX_warp_sched (
 
             // Branch
             if (branch_valid) begin
-                if (branch_dir) warp_pcs[branch_warp_num] <= branch_dest;
+                if (branch_dir) begin
+                    warp_pcs[branch_warp_num] <= branch_dest;
+                end
                 warp_stalled[branch_warp_num] <= 0;
             end
 
             // Lock/Release
             if (scheduled_warp && !stall) begin
                 warp_lock[warp_num] <= 1'b1;
-                // warp_lock <= {`NUM_WARPS{1'b1}};
             end
             if (icache_stage_response) begin
                 warp_lock[icache_stage_wid] <= 1'b0;
-                // warp_lock <= {`NUM_WARPS{1'b0}};
             end
 
         end
