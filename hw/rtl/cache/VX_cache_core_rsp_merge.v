@@ -29,12 +29,7 @@ module VX_cache_core_rsp_merge #(
     input  wire                                             core_rsp_ready
 );
 
-    reg [NUM_BANKS-1:0] per_bank_core_rsp_pop_unqual;
-    
-    assign per_bank_core_rsp_ready = per_bank_core_rsp_pop_unqual & {NUM_BANKS{core_rsp_ready}};
-
     wire [`BANK_BITS-1:0] main_bank_index;
-    wire                  grant_valid;
     VX_fair_arbiter #(
         .N(NUM_BANKS)
     ) sel_bank (
@@ -42,9 +37,13 @@ module VX_cache_core_rsp_merge #(
         .reset       (reset),
         .requests    (per_bank_core_rsp_valid),
         .grant_index (main_bank_index),
-        .grant_valid (grant_valid),
+        `UNUSED_PIN  (grant_valid),
         `UNUSED_PIN  (grant_onehot)
     );
+
+    reg [NUM_BANKS-1:0] per_bank_core_rsp_pop_unqual;
+    
+    assign per_bank_core_rsp_ready = per_bank_core_rsp_pop_unqual & {NUM_BANKS{core_rsp_ready}};
 
     integer i;
 
@@ -54,7 +53,7 @@ module VX_cache_core_rsp_merge #(
             core_rsp_valid = 0;
             core_rsp_data = 0;
             for (i = 0; i < NUM_BANKS; i++) begin 
-                if (grant_valid &&  per_bank_core_rsp_valid[i]                
+                if (per_bank_core_rsp_valid[i]                
                  && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == per_bank_core_rsp_tag[main_bank_index][CORE_TAG_ID_BITS-1:0])) begin            
                     core_rsp_valid[per_bank_core_rsp_tid[i]] = 1;     
                     core_rsp_data[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
@@ -70,7 +69,7 @@ module VX_cache_core_rsp_merge #(
             core_rsp_data  = 0;
             core_rsp_tag   = 0;
             for (i = 0; i < NUM_BANKS; i++) begin 
-                if (grant_valid && per_bank_core_rsp_valid[i] 
+                if (per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid[per_bank_core_rsp_tid[i]]                     
                  && ((main_bank_index == `BANK_BITS'(i)) 
                   || (per_bank_core_rsp_tid[i] != per_bank_core_rsp_tid[main_bank_index]))) begin            

@@ -15,18 +15,18 @@ module VX_exec_unit (
     output wire           delay
 );
 
-    wire[`NUM_THREADS-1:0][31:0] in_a_reg_data;
-    wire[`NUM_THREADS-1:0][31:0] in_b_reg_data;
-    wire[4:0]            in_alu_op;
-    wire                 in_rs2_src;
-    wire[31:0]           in_itype_immed;
+    wire [`NUM_THREADS-1:0][31:0] in_a_reg_data;
+    wire [`NUM_THREADS-1:0][31:0] in_b_reg_data;
+    wire [4:0]  in_alu_op;
+    wire        in_rs2_src;
+    wire [31:0] in_itype_immed;
 `DEBUG_BEGIN
-    wire[2:0]            in_branch_type;
+    wire [2:0]  in_branch_type;
 `DEBUG_END
-    wire[19:0]           in_upper_immed;
-    wire                 in_jal;
-    wire[31:0]           in_jal_offset;
-    wire[31:0]           in_curr_PC;
+    wire [19:0] in_upper_immed;
+    wire        in_jal;
+    wire [31:0] in_jal_offset;
+    wire [31:0] in_curr_PC;
 
     assign in_a_reg_data  = exec_unit_req_if.a_reg_data;
     assign in_b_reg_data  = exec_unit_req_if.b_reg_data;
@@ -39,12 +39,12 @@ module VX_exec_unit (
     assign in_jal_offset  = exec_unit_req_if.jal_offset;
     assign in_curr_PC     = exec_unit_req_if.curr_PC;
 
-    wire[`NUM_THREADS-1:0][31:0]  alu_result;
-    wire[`NUM_THREADS-1:0]  alu_stall;
+    wire [`NUM_THREADS-1:0][31:0] alu_result;
+    wire [`NUM_THREADS-1:0] alu_stall;
 
     genvar i;
     generate
-        for (i = 0; i < `NUM_THREADS; i++) begin : alu_defs
+        for (i = 0; i < `NUM_THREADS; i++) begin
             VX_alu_unit alu_unit (
                 .clk            (clk),
                 .reset          (reset),
@@ -65,20 +65,17 @@ module VX_exec_unit (
 
     assign delay = no_slot_exec || internal_stall;
 
-`DEBUG_BEGIN
     wire [$clog2(`NUM_THREADS)-1:0] jal_branch_use_index;
-    wire jal_branch_found_valid;
-`DEBUG_END
 
     VX_priority_encoder #(
         .N(`NUM_THREADS)
     ) choose_alu_result (
-        .data_in   (exec_unit_req_if.valid),
-        .data_out  (jal_branch_use_index),
-        .valid_out (jal_branch_found_valid)
+        .data_in  (exec_unit_req_if.valid),
+        .data_out (jal_branch_use_index),
+        `UNUSED_PIN (valid_out)
     );
 
-    wire[31:0] branch_use_alu_result = alu_result[jal_branch_use_index];
+    wire [31:0] branch_use_alu_result = alu_result[jal_branch_use_index];
 
     reg temp_branch_dir;
     always @(*)
@@ -95,7 +92,7 @@ module VX_exec_unit (
         endcase // in_branch_type
     end
 
-    wire[`NUM_THREADS-1:0][31:0] duplicate_PC_data;
+    wire [`NUM_THREADS-1:0][31:0] duplicate_PC_data;
 
     generate
         for (i = 0; i < `NUM_THREADS; i++) begin
