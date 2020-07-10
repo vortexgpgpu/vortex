@@ -59,7 +59,7 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][3:0]  mem_req_byteen;
     wire [`NUM_THREADS-1:0][31:0] mem_req_data;
 
-    for (i = 0; i < `NUM_THREADS; ++i) begin  
+    for (i = 0; i < `NUM_THREADS; i++) begin  
         assign mem_req_addr[i]   = full_address[i][31:2];        
         assign mem_req_offset[i] = full_address[i][1:0];
         assign mem_req_byteen[i] = wmask << full_address[i][1:0];
@@ -148,7 +148,7 @@ module VX_lsu_unit #(
     reg  [`NUM_THREADS-1:0][31:0] core_rsp_data;
     wire [`NUM_THREADS-1:0][31:0] rsp_data_shifted;
     
-    for (i = 0; i < `NUM_THREADS; ++i) begin        
+    for (i = 0; i < `NUM_THREADS; i++) begin        
         assign rsp_data_shifted[i] = dcache_rsp_if.data[i] >> {mem_rsp_offset[i], 3'b0};
         always @(*) begin
             case (core_rsp_mem_read)

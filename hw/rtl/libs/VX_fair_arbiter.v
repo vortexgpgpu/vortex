@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_fair_arbiter #(
-    parameter N = 0
+    parameter N = 1
 ) (
     input  wire                  clk,
     input  wire                  reset,

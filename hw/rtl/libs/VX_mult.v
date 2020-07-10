@@ -7,13 +7,12 @@ module VX_mult #(
     parameter SIGNED = 0,
     parameter PIPELINE = 0
 ) (
-    input               clk,
-    input               reset,
+    input wire clk,
+    input wire reset,
 
-    input [WIDTHA-1:0]  dataa,
-    input [WIDTHB-1:0]  datab,
-
-    output reg [WIDTHP-1:0] result
+    input wire [WIDTHA-1:0]  dataa,
+    input wire [WIDTHB-1:0]  datab,
+    output wire [WIDTHP-1:0] result
 );
 
 `ifdef QUARTUS
