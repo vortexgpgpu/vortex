@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_priority_encoder #( 
-    parameter N
+    parameter N = 1
 ) (
     input  wire [N-1:0]         data_in,
     output reg [`LOG2UP(N)-1:0] data_out,

@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_rr_arbiter #(
-    parameter N = 0
+    parameter N = 1
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -29,9 +29,9 @@ module VX_rr_arbiter #(
         integer i, j;   
 
         always @(*) begin
-            for (i = 0; i < N; ++i) begin  
+            for (i = 0; i < N; i++) begin  
                 grant_table[i] = `CLOG2(N)'(i);    
-                for (j = 0; j < N; ++j) begin    
+                for (j = 0; j < N; j++) begin    
                     if (requests[(i+j) % N]) begin                        
                         grant_table[i] = `CLOG2(N)'((i+j) % N);
                     end

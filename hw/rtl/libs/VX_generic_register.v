@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_generic_register #( 
-    parameter N, 
+    parameter N = 1, 
     parameter PASSTHRU = 0
 ) (
     input wire          clk,
