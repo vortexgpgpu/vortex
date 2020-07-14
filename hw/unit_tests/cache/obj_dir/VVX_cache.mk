@@ -33,14 +33,15 @@ VM_PREFIX = VVX_cache
 VM_MODPREFIX = VVX_cache
 # User CFLAGS (from -CFLAGS on Verilator command line)
 VM_USER_CFLAGS = \
-	-std=c++11 -fms-extensions -I../.. -DNDEBUG -DCACHE_SIZE=4096 -DWORD_SIZE=4 -DBANK_LINE_SIZE=16 -DNUM_BANKS=4 -DWORD_SIZE=4 -DCREQ_SIZE=4 -DMRVQ_SIZE=16 -DDFPQ_SIZE=16 -DSNRQ_SIZE=16 -DCWBQ_SIZE=4 -DDWBQ_SIZE=4 -DFQQ_SIZE=4 \
+	-std=c++11 -fms-extensions -I../.. -DNDEBUG -DCACHE_SIZE=4096 -DWORD_SIZE=4 -DBANK_LINE_SIZE=16 -DNUM_BANKS=4 -DCREQ_SIZE=4 -DMRVQ_SIZE=16 -DDFPQ_SIZE=16 -DSNRQ_SIZE=16 -DCWBQ_SIZE=4 -DDWBQ_SIZE=4 -DFQQ_SIZE=4 \
 
 # User LDLIBS (from -LDFLAGS on Verilator command line)
 VM_USER_LDLIBS = \
 
 # User .cpp files (from .cpp's on Verilator command line)
 VM_USER_CLASSES = \
-	cache_sim \
+	cachesim \
+	testbench \
 
 # User .cpp directories (from .cpp's on Verilator command line)
 VM_USER_DIR = \
@@ -56,7 +57,9 @@ include $(VERILATOR_ROOT)/include/verilated.mk
 ### Executable rules... (from --exe)
 VPATH += $(VM_USER_DIR)
 
-cache_sim.o: cache_sim.cpp
+cachesim.o: cachesim.cpp
+	$(OBJCACHE) $(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OPT_FAST) -c -o $@ $<
+testbench.o: testbench.cpp
 	$(OBJCACHE) $(CXX) $(CXXFLAGS) $(CPPFLAGS) $(OPT_FAST) -c -o $@ $<
 
 ### Link rules... (from --exe)
