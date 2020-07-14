@@ -20,9 +20,9 @@ int main(int argc, char **argv)
   cachesim.set_core_req();
 
   for (int i = 0; i < 100; ++i){
-    /*if(i == 1){
+    if(i == 1){
       cachesim.clear_req();
-    }*/
+    }
     cachesim.step();
     cachesim.get_core_rsp();
   }
@@ -30,11 +30,11 @@ int main(int argc, char **argv)
   // read block
   cachesim.set_core_req2();
   for (int i = 0; i < 100; ++i){
-    /*if(i == 1){
+    if(i == 1){
       //read block from cache
       cachesim.clear_req();
 
-    }*/
+    }
     cachesim.step();
     cachesim.get_core_rsp();
   } 
