@@ -1,31 +1,34 @@
+RISCV_TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
+VORTEX_RT_PATH ?= $(wildcard ../..)
 
-RISCV_TOOLCHAIN_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
+CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
+AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
+DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
+CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-COMP     = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-# CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,linker.ld -ffreestanding -nostdlib
-CC_FLAGS = -march=rv32im -mabi=ilp32 -O0 -Wl,-Bstatic,-T,../../startup/vx_link.ld
+CFLAGS += -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld
+CFLAGS += -nostartfiles -ffreestanding -fno-exceptions -Wl,--gc-sections 
+CFLAGS += -I$(VORTEX_RT_PATH)/include
 
-DMP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-CPY  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
+LDFLAGS += $(VORTEX_RT_PATH)/libvortexrt.a
 
+PROJECT = hello
 
-NEWLIB  = ../../newlib/newlib.c
-VX_STR  = 
-VX_INT  = ../../intrinsics/vx_intrinsics.S
-VX_IO   = 
-VX_API  = 
-VX_FIO  = 
-LIBS    = $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/lib/libc.a $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/lib/libstdc++.a -static-libgcc -lgcc
+SRCS = hello.cpp
 
-VX_MAIN = hello
+all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).dump
 
-all: HEX DUMP ELF
+$(PROJECT).dump: $(PROJECT).elf
+	$(DP) -D $(PROJECT).elf > $(PROJECT).dump
 
-DUMP: ELF
-	$(DMP) -D $(VX_MAIN).elf > $(VX_MAIN).dump
+$(PROJECT).hex: $(PROJECT).elf
+	$(CP) -O ihex $(PROJECT).elf $(PROJECT).hex
 
-HEX: ELF
-	$(CPY) -O ihex $(VX_MAIN).elf $(VX_MAIN).hex
+$(PROJECT).elf: $(SRCS)
+	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
-ELF: 
-	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_MAIN).cpp $(LIBS) -Iinclude -o $(VX_MAIN).elf
+.depend: $(SRCS)
+	$(CC) $(CFLAGS) -MM $^ > .depend;
+
+clean:
+	rm -rf *.elf *.hex *.dump .depend 
