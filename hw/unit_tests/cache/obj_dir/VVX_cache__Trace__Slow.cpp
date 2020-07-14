@@ -490,28 +490,27 @@ void VVX_cache::traceInitThis__1(VVX_cache__Syms* __restrict vlSymsp, VerilatedV
         vcdp->declArray(c+2217,"VX_cache cache_core_rsp_merge core_rsp_data", false,-1, 127,0);
         vcdp->declQuad(c+2249,"VX_cache cache_core_rsp_merge core_rsp_tag", false,-1, 41,0);
         vcdp->declBit(c+24673,"VX_cache cache_core_rsp_merge core_rsp_ready", false,-1);
-        vcdp->declBus(c+2265,"VX_cache cache_core_rsp_merge per_bank_core_rsp_pop_unqual", false,-1, 3,0);
-        vcdp->declBus(c+2273,"VX_cache cache_core_rsp_merge main_bank_index", false,-1, 1,0);
-        vcdp->declBit(c+2281,"VX_cache cache_core_rsp_merge grant_valid", false,-1);
+        vcdp->declBus(c+2265,"VX_cache cache_core_rsp_merge main_bank_index", false,-1, 1,0);
+        vcdp->declBus(c+2273,"VX_cache cache_core_rsp_merge per_bank_core_rsp_pop_unqual", false,-1, 3,0);
         vcdp->declBus(c+25129,"VX_cache cache_core_rsp_merge i", false,-1, 31,0);
         vcdp->declBus(c+25081,"VX_cache cache_core_rsp_merge sel_bank N", false,-1, 31,0);
         vcdp->declBit(c+24489,"VX_cache cache_core_rsp_merge sel_bank clk", false,-1);
         vcdp->declBit(c+24497,"VX_cache cache_core_rsp_merge sel_bank reset", false,-1);
         vcdp->declBus(c+1097,"VX_cache cache_core_rsp_merge sel_bank requests", false,-1, 3,0);
-        vcdp->declBus(c+2273,"VX_cache cache_core_rsp_merge sel_bank grant_index", false,-1, 1,0);
-        vcdp->declBus(c+2289,"VX_cache cache_core_rsp_merge sel_bank grant_onehot", false,-1, 3,0);
-        vcdp->declBit(c+2281,"VX_cache cache_core_rsp_merge sel_bank grant_valid", false,-1);
+        vcdp->declBus(c+2265,"VX_cache cache_core_rsp_merge sel_bank grant_index", false,-1, 1,0);
+        vcdp->declBus(c+2281,"VX_cache cache_core_rsp_merge sel_bank grant_onehot", false,-1, 3,0);
+        vcdp->declBit(c+2289,"VX_cache cache_core_rsp_merge sel_bank grant_valid", false,-1);
         vcdp->declBus(c+10577,"VX_cache cache_core_rsp_merge sel_bank genblk2 requests_use", false,-1, 3,0);
         vcdp->declBus(c+2297,"VX_cache cache_core_rsp_merge sel_bank genblk2 update_value", false,-1, 3,0);
         vcdp->declBus(c+2305,"VX_cache cache_core_rsp_merge sel_bank genblk2 late_value", false,-1, 3,0);
         vcdp->declBit(c+10585,"VX_cache cache_core_rsp_merge sel_bank genblk2 refill", false,-1);
         vcdp->declBus(c+1097,"VX_cache cache_core_rsp_merge sel_bank genblk2 refill_value", false,-1, 3,0);
         vcdp->declBus(c+10593,"VX_cache cache_core_rsp_merge sel_bank genblk2 refill_original", false,-1, 3,0);
-        vcdp->declBus(c+2289,"VX_cache cache_core_rsp_merge sel_bank genblk2 grant_onehot_r", false,-1, 3,0);
+        vcdp->declBus(c+2281,"VX_cache cache_core_rsp_merge sel_bank genblk2 grant_onehot_r", false,-1, 3,0);
         vcdp->declBus(c+25081,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder N", false,-1, 31,0);
         vcdp->declBus(c+10577,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder data_in", false,-1, 3,0);
-        vcdp->declBus(c+2273,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder data_out", false,-1, 1,0);
-        vcdp->declBit(c+2281,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder valid_out", false,-1);
+        vcdp->declBus(c+2265,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder data_out", false,-1, 1,0);
+        vcdp->declBit(c+2289,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder valid_out", false,-1);
         vcdp->declBus(c+2313,"VX_cache cache_core_rsp_merge sel_bank genblk2 priority_encoder i", false,-1, 31,0);
         vcdp->declBus(c+25081,"VX_cache snp_rsp_arb NUM_BANKS", false,-1, 31,0);
         vcdp->declBus(c+25073,"VX_cache snp_rsp_arb BANK_LINE_SIZE", false,-1, 31,0);
@@ -3414,10 +3413,10 @@ void VVX_cache::traceFullThis__1(VVX_cache__Syms* __restrict vlSymsp, VerilatedV
                                                  & ((IData)(0x2aU) 
                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))))
                                  : VL_ULL(0))),42);
-        vcdp->fullBus(c+2265,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual),4);
-        vcdp->fullBus(c+2273,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index),2);
-        vcdp->fullBit(c+2281,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid));
-        vcdp->fullBus(c+2289,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r),4);
+        vcdp->fullBus(c+2265,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index),2);
+        vcdp->fullBus(c+2273,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual),4);
+        vcdp->fullBus(c+2281,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r),4);
+        vcdp->fullBit(c+2289,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid));
         vcdp->fullBus(c+2297,((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__requests_use) 
                                 & (~ (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r))) 
                                | (((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__refill_original) 
