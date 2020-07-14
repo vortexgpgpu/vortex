@@ -7,13 +7,12 @@ module VX_mult #(
     parameter SIGNED = 0,
     parameter PIPELINE = 0
 ) (
-    input               clk,
-    input               reset,
+    input wire clk,
+    input wire reset,
 
-    input [WIDTHA-1:0]  dataa,
-    input [WIDTHB-1:0]  datab,
-
-    output reg [WIDTHP-1:0] result
+    input wire [WIDTHA-1:0]  dataa,
+    input wire [WIDTHB-1:0]  datab,
+    output wire [WIDTHP-1:0] result
 );
 
 `ifdef QUARTUS
@@ -23,9 +22,9 @@ module VX_mult #(
         .dataa  (dataa),
         .datab  (datab),
         .result (result),
+        .sclr   (reset),
         .aclr   (1'b0),
         .clken  (1'b1),
-        .sclr   (1'b0),
         .sum    (1'b0)
     );
 
@@ -35,7 +34,7 @@ module VX_mult #(
              quartus_mult.lpm_widthp = WIDTHP,
              quartus_mult.lpm_representation = SIGNED ? "SIGNED" : "UNSIGNED",
              quartus_mult.lpm_pipeline = PIPELINE,
-             quartus_mult.lpm_hint = "MAXIMIZE_SPEED=9";
+             quartus_mult.lpm_hint = "DEDICATED_MULTIPLIER_CIRCUITRY=YES,MAXIMIZE_SPEED=9";
 `else
 
     wire [WIDTHP-1:0] result_unqual;

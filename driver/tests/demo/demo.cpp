@@ -110,19 +110,20 @@ int main(int argc, char *argv[]) {
     count = 1;
   }
 
-  uint32_t max_cores   = vx_dev_caps(VX_CAPS_MAX_CORES);
-  uint32_t max_warps   = vx_dev_caps(VX_CAPS_MAX_WARPS);
-  uint32_t max_threads = vx_dev_caps(VX_CAPS_MAX_THREADS);
+  // open device connection
+  std::cout << "open device connection" << std::endl;  
+  RT_CHECK(vx_dev_open(&device));
+
+  unsigned max_cores, max_warps, max_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
   uint32_t num_points = count * max_cores * max_warps * max_threads;
   uint32_t buf_size = num_points * sizeof(uint32_t);
 
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
-
-  // open device connection
-  std::cout << "open device connection" << std::endl;  
-  RT_CHECK(vx_dev_open(&device));
 
   // upload program
   std::cout << "upload program" << std::endl;  

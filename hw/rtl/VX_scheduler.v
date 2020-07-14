@@ -51,6 +51,7 @@ module VX_scheduler (
     integer i, w;
 
     wire acquire_rd = (| bckE_req_if.valid) && (bckE_req_if.wb != 0) && (bckE_req_if.rd != 0) && !schedule_delay;
+    
     wire release_rd = (| writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd != 0);
 
     wire [`NUM_THREADS-1:0] valid_wb_new_mask = rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid;
