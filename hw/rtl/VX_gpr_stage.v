@@ -8,7 +8,7 @@ module VX_gpr_stage (
     input  wire             memory_delay,
     input  wire             exec_delay,
     input  wire             stall_gpr_csr,
-    output wire             gpr_stage_delay,
+    output wire             delay,
 
     // decodee inputs
     VX_backend_req_if       bckE_req_if,
@@ -29,6 +29,8 @@ module VX_gpr_stage (
     wire is_load         = (bckE_req_if.mem_read  != `BYTE_EN_NO);
     wire is_jal          = bckE_req_if.is_jal;
 `DEBUG_END
+
+    assign csr_req_if.is_io = 1'b0; // GPR only issues csr requests coming from core
 
     VX_gpr_read_if gpr_read_if();
     assign gpr_read_if.rs1      = bckE_req_if.rs1;
@@ -79,7 +81,7 @@ module VX_gpr_stage (
 
     wire stall_csr = stall_gpr_csr && bckE_req_if.is_csr && (| bckE_req_if.valid);
 
-    assign gpr_stage_delay = stall_lsu || stall_exec || stall_csr;
+    assign delay = stall_lsu || stall_exec || stall_csr;
 
 `ifdef ASIC
         wire delayed_lsu_last_cycle;
@@ -97,10 +99,10 @@ module VX_gpr_stage (
         );
 
         wire [`NUM_THREADS-1:0][31:0] temp_store_data;
-        wire [`NUM_THREADS-1:0][31:0] temp_base_address; // A reg data
+        wire [`NUM_THREADS-1:0][31:0] temp_base_addr; // A reg data
 
         wire [`NUM_THREADS-1:0][31:0] real_store_data;
-        wire [`NUM_THREADS-1:0][31:0] real_base_address; // A reg data
+        wire [`NUM_THREADS-1:0][31:0] real_base_addr; // A reg data
 
         wire store_curr_real = !delayed_lsu_last_cycle && stall_lsu;
 
@@ -111,15 +113,15 @@ module VX_gpr_stage (
             .reset (reset),
             .stall (!store_curr_real),
             .flush (stall_rest),
-            .in    ({real_store_data, real_base_address}),
-            .out   ({temp_store_data, temp_base_address})
+            .in    ({real_store_data, real_base_addr}),
+            .out   ({temp_store_data, temp_base_addr})
         );
 
-        assign real_store_data   = lsu_req_temp_if.store_data;
-        assign real_base_address = lsu_req_temp_if.base_address;
+        assign real_store_data = lsu_req_temp_if.store_data;
+        assign real_base_addr  = lsu_req_temp_if.base_addr;
 
-        assign lsu_req_if.store_data   = (delayed_lsu_last_cycle) ? temp_store_data   : real_store_data;
-        assign lsu_req_if.base_address = (delayed_lsu_last_cycle) ? temp_base_address : real_base_address;
+        assign lsu_req_if.store_data = (delayed_lsu_last_cycle) ? temp_store_data   : real_store_data;
+        assign lsu_req_if.base_addr  = (delayed_lsu_last_cycle) ? temp_base_addr : real_base_addr;
 
         VX_generic_register #(
             .N(77 + `NW_BITS-1 + 1 + (`NUM_THREADS))
@@ -139,11 +141,11 @@ module VX_gpr_stage (
             .reset (reset),
             .stall (stall_exec),
             .flush (flush_exec),
-            .in    ({exec_unit_req_temp_if.valid, exec_unit_req_temp_if.warp_num, exec_unit_req_temp_if.curr_PC, exec_unit_req_temp_if.next_PC, exec_unit_req_temp_if.rd, exec_unit_req_temp_if.wb, exec_unit_req_temp_if.alu_op, exec_unit_req_temp_if.rs1, exec_unit_req_temp_if.rs2, exec_unit_req_temp_if.rs2_src, exec_unit_req_temp_if.itype_immed, exec_unit_req_temp_if.upper_immed, exec_unit_req_temp_if.branch_type, exec_unit_req_temp_if.is_jal, exec_unit_req_temp_if.jal, exec_unit_req_temp_if.jal_offset, exec_unit_req_temp_if.is_etype, exec_unit_req_temp_if.wspawn, exec_unit_req_temp_if.is_csr, exec_unit_req_temp_if.csr_address, exec_unit_req_temp_if.csr_immed, exec_unit_req_temp_if.csr_mask}),
-            .out   ({exec_unit_req_if.valid     , exec_unit_req_if.warp_num     , exec_unit_req_if.curr_PC     , exec_unit_req_if.next_PC     , exec_unit_req_if.rd     , exec_unit_req_if.wb     , exec_unit_req_if.alu_op     , exec_unit_req_if.rs1     , exec_unit_req_if.rs2     , exec_unit_req_if.rs2_src     , exec_unit_req_if.itype_immed     , exec_unit_req_if.upper_immed     , exec_unit_req_if.branch_type     , exec_unit_req_if.is_jal     , exec_unit_req_if.jal     , exec_unit_req_if.jal_offset     , exec_unit_req_if.is_etype     , exec_unit_req_if.wspawn     , exec_unit_req_if.is_csr     , exec_unit_req_if.csr_address     , exec_unit_req_if.csr_immed     , exec_unit_req_if.csr_mask     })
+            .in    ({exec_unit_req_temp_if.valid, exec_unit_req_temp_if.warp_num, exec_unit_req_temp_if.curr_PC, exec_unit_req_temp_if.next_PC, exec_unit_req_temp_if.rd, exec_unit_req_temp_if.wb, exec_unit_req_temp_if.alu_op, exec_unit_req_temp_if.rs1, exec_unit_req_temp_if.rs2, exec_unit_req_temp_if.rs2_src, exec_unit_req_temp_if.itype_immed, exec_unit_req_temp_if.upper_immed, exec_unit_req_temp_if.branch_type, exec_unit_req_temp_if.is_jal, exec_unit_req_temp_if.jal, exec_unit_req_temp_if.jal_offset, exec_unit_req_temp_if.is_etype, exec_unit_req_temp_if.wspawn, exec_unit_req_temp_if.is_csr, exec_unit_req_temp_if.csr_addr, exec_unit_req_temp_if.csr_immed, exec_unit_req_temp_if.csr_mask}),
+            .out   ({exec_unit_req_if.valid     , exec_unit_req_if.warp_num     , exec_unit_req_if.curr_PC     , exec_unit_req_if.next_PC     , exec_unit_req_if.rd     , exec_unit_req_if.wb     , exec_unit_req_if.alu_op     , exec_unit_req_if.rs1     , exec_unit_req_if.rs2     , exec_unit_req_if.rs2_src     , exec_unit_req_if.itype_immed     , exec_unit_req_if.upper_immed     , exec_unit_req_if.branch_type     , exec_unit_req_if.is_jal     , exec_unit_req_if.jal     , exec_unit_req_if.jal_offset     , exec_unit_req_if.is_etype     , exec_unit_req_if.wspawn     , exec_unit_req_if.is_csr     , exec_unit_req_if.csr_addr     , exec_unit_req_if.csr_immed     , exec_unit_req_if.csr_mask     })
         );
 
-        assign exec_unit_req_if.a_reg_data = real_base_address;
+        assign exec_unit_req_if.a_reg_data = real_base_addr;
         assign exec_unit_req_if.b_reg_data = real_store_data;
 
         VX_generic_register #(
@@ -157,7 +159,7 @@ module VX_gpr_stage (
             .out   ({gpu_inst_req_if.valid     , gpu_inst_req_if.warp_num     , gpu_inst_req_if.is_wspawn     , gpu_inst_req_if.is_tmc     , gpu_inst_req_if.is_split     , gpu_inst_req_if.is_barrier     , gpu_inst_req_if.next_PC     })
         );
 
-        assign gpu_inst_req_if.a_reg_data = real_base_address;
+        assign gpu_inst_req_if.a_reg_data = real_base_addr;
         assign gpu_inst_req_if.rd2        = real_store_data;
 
         VX_generic_register #(
@@ -167,9 +169,10 @@ module VX_gpr_stage (
             .reset (reset),
             .stall (stall_gpr_csr),
             .flush (flush_rest),
-            .in    ({csr_req_temp_if.valid, csr_req_temp_if.warp_num, csr_req_temp_if.rd, csr_req_temp_if.wb, csr_req_temp_if.alu_op, csr_req_temp_if.is_csr, csr_req_temp_if.csr_address, csr_req_temp_if.csr_immed, csr_req_temp_if.csr_mask}),
-            .out   ({csr_req_if.valid     , csr_req_if.warp_num     , csr_req_if.rd     , csr_req_if.wb     , csr_req_if.alu_op     , csr_req_if.is_csr     , csr_req_if.csr_address     , csr_req_if.csr_immed     , csr_req_if.csr_mask     })
+            .in    ({csr_req_temp_if.valid, csr_req_temp_if.warp_num, csr_req_temp_if.rd, csr_req_temp_if.wb, csr_req_temp_if.alu_op, csr_req_temp_if.is_csr, csr_req_temp_if.csr_addr, csr_req_temp_if.csr_immed, csr_req_temp_if.csr_mask}),
+            .out   ({csr_req_if.valid     , csr_req_if.warp_num     , csr_req_if.rd     , csr_req_if.wb     , csr_req_if.alu_op     , csr_req_if.is_csr     , csr_req_if.csr_addr     , csr_req_if.csr_immed     , csr_req_if.csr_mask     })
         );
+
 
 `else 
 
@@ -181,8 +184,8 @@ module VX_gpr_stage (
         .reset (reset),
         .stall (stall_lsu),
         .flush (flush_lsu),
-        .in    ({lsu_req_temp_if.valid, lsu_req_temp_if.curr_PC, lsu_req_temp_if.warp_num, lsu_req_temp_if.store_data, lsu_req_temp_if.base_address, lsu_req_temp_if.offset, lsu_req_temp_if.mem_read, lsu_req_temp_if.mem_write, lsu_req_temp_if.rd, lsu_req_temp_if.wb}),
-        .out   ({lsu_req_if.valid     , lsu_req_if.curr_PC     , lsu_req_if.warp_num     , lsu_req_if.store_data     , lsu_req_if.base_address     , lsu_req_if.offset     , lsu_req_if.mem_read     , lsu_req_if.mem_write     , lsu_req_if.rd     , lsu_req_if.wb     })
+        .in    ({lsu_req_temp_if.valid, lsu_req_temp_if.curr_PC, lsu_req_temp_if.warp_num, lsu_req_temp_if.store_data, lsu_req_temp_if.base_addr, lsu_req_temp_if.offset, lsu_req_temp_if.mem_read, lsu_req_temp_if.mem_write, lsu_req_temp_if.rd, lsu_req_temp_if.wb}),
+        .out   ({lsu_req_if.valid     , lsu_req_if.curr_PC     , lsu_req_if.warp_num     , lsu_req_if.store_data     , lsu_req_if.base_addr     , lsu_req_if.offset     , lsu_req_if.mem_read     , lsu_req_if.mem_write     , lsu_req_if.rd     , lsu_req_if.wb     })
     );
 
     VX_generic_register #(
@@ -192,8 +195,8 @@ module VX_gpr_stage (
         .reset (reset),
         .stall (stall_exec),
         .flush (flush_exec),
-        .in    ({exec_unit_req_temp_if.valid, exec_unit_req_temp_if.warp_num, exec_unit_req_temp_if.curr_PC, exec_unit_req_temp_if.next_PC, exec_unit_req_temp_if.rd, exec_unit_req_temp_if.wb, exec_unit_req_temp_if.a_reg_data, exec_unit_req_temp_if.b_reg_data, exec_unit_req_temp_if.alu_op, exec_unit_req_temp_if.rs1, exec_unit_req_temp_if.rs2, exec_unit_req_temp_if.rs2_src, exec_unit_req_temp_if.itype_immed, exec_unit_req_temp_if.upper_immed, exec_unit_req_temp_if.branch_type, exec_unit_req_temp_if.is_jal, exec_unit_req_temp_if.jal, exec_unit_req_temp_if.jal_offset, exec_unit_req_temp_if.is_etype, exec_unit_req_temp_if.wspawn, exec_unit_req_temp_if.is_csr, exec_unit_req_temp_if.csr_address, exec_unit_req_temp_if.csr_immed, exec_unit_req_temp_if.csr_mask}),
-        .out   ({exec_unit_req_if.valid     , exec_unit_req_if.warp_num     , exec_unit_req_if.curr_PC     , exec_unit_req_if.next_PC     , exec_unit_req_if.rd     , exec_unit_req_if.wb     , exec_unit_req_if.a_reg_data     , exec_unit_req_if.b_reg_data     , exec_unit_req_if.alu_op     , exec_unit_req_if.rs1     , exec_unit_req_if.rs2     , exec_unit_req_if.rs2_src     , exec_unit_req_if.itype_immed     , exec_unit_req_if.upper_immed     , exec_unit_req_if.branch_type     , exec_unit_req_if.is_jal     , exec_unit_req_if.jal     , exec_unit_req_if.jal_offset     , exec_unit_req_if.is_etype     , exec_unit_req_if.wspawn     , exec_unit_req_if.is_csr     , exec_unit_req_if.csr_address     , exec_unit_req_if.csr_immed     , exec_unit_req_if.csr_mask     })
+        .in    ({exec_unit_req_temp_if.valid, exec_unit_req_temp_if.warp_num, exec_unit_req_temp_if.curr_PC, exec_unit_req_temp_if.next_PC, exec_unit_req_temp_if.rd, exec_unit_req_temp_if.wb, exec_unit_req_temp_if.a_reg_data, exec_unit_req_temp_if.b_reg_data, exec_unit_req_temp_if.alu_op, exec_unit_req_temp_if.rs1, exec_unit_req_temp_if.rs2, exec_unit_req_temp_if.rs2_src, exec_unit_req_temp_if.itype_immed, exec_unit_req_temp_if.upper_immed, exec_unit_req_temp_if.branch_type, exec_unit_req_temp_if.is_jal, exec_unit_req_temp_if.jal, exec_unit_req_temp_if.jal_offset, exec_unit_req_temp_if.is_etype, exec_unit_req_temp_if.wspawn, exec_unit_req_temp_if.is_csr, exec_unit_req_temp_if.csr_addr, exec_unit_req_temp_if.csr_immed, exec_unit_req_temp_if.csr_mask}),
+        .out   ({exec_unit_req_if.valid     , exec_unit_req_if.warp_num     , exec_unit_req_if.curr_PC     , exec_unit_req_if.next_PC     , exec_unit_req_if.rd     , exec_unit_req_if.wb     , exec_unit_req_if.a_reg_data     , exec_unit_req_if.b_reg_data     , exec_unit_req_if.alu_op     , exec_unit_req_if.rs1     , exec_unit_req_if.rs2     , exec_unit_req_if.rs2_src     , exec_unit_req_if.itype_immed     , exec_unit_req_if.upper_immed     , exec_unit_req_if.branch_type     , exec_unit_req_if.is_jal     , exec_unit_req_if.jal     , exec_unit_req_if.jal_offset     , exec_unit_req_if.is_etype     , exec_unit_req_if.wspawn     , exec_unit_req_if.is_csr     , exec_unit_req_if.csr_addr     , exec_unit_req_if.csr_immed     , exec_unit_req_if.csr_mask     })
     );
 
     VX_generic_register #(
@@ -214,8 +217,8 @@ module VX_gpr_stage (
         .reset (reset),
         .stall (stall_gpr_csr),
         .flush (flush_rest),
-        .in    ({csr_req_temp_if.valid, csr_req_temp_if.warp_num, csr_req_temp_if.rd, csr_req_temp_if.wb, csr_req_temp_if.alu_op, csr_req_temp_if.is_csr, csr_req_temp_if.csr_address, csr_req_temp_if.csr_immed, csr_req_temp_if.csr_mask}),
-        .out   ({csr_req_if.valid     , csr_req_if.warp_num     , csr_req_if.rd     , csr_req_if.wb     , csr_req_if.alu_op     , csr_req_if.is_csr     , csr_req_if.csr_address     , csr_req_if.csr_immed     , csr_req_if.csr_mask     })
+        .in    ({csr_req_temp_if.valid, csr_req_temp_if.warp_num, csr_req_temp_if.rd, csr_req_temp_if.wb, csr_req_temp_if.alu_op, csr_req_temp_if.is_csr, csr_req_temp_if.csr_addr, csr_req_temp_if.csr_immed, csr_req_temp_if.csr_mask}),
+        .out   ({csr_req_if.valid     , csr_req_if.warp_num     , csr_req_if.rd     , csr_req_if.wb     , csr_req_if.alu_op     , csr_req_if.is_csr     , csr_req_if.csr_addr     , csr_req_if.csr_immed     , csr_req_if.csr_mask     })
     );
 
 `endif

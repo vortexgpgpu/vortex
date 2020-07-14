@@ -53,19 +53,26 @@ localparam CCI_RW_QUEUE_SIZE  = 1024;
 localparam AFU_ID_L           = 16'h0002;      // AFU ID Lower
 localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher 
 
-localparam CMD_TYPE_READ      = `AFU_IMAGE_CMD_TYPE_READ;
-localparam CMD_TYPE_WRITE     = `AFU_IMAGE_CMD_TYPE_WRITE;
-localparam CMD_TYPE_RUN       = `AFU_IMAGE_CMD_TYPE_RUN;
-localparam CMD_TYPE_CLFLUSH   = `AFU_IMAGE_CMD_TYPE_CLFLUSH;
+localparam CMD_MEM_READ       = `AFU_IMAGE_CMD_MEM_READ;
+localparam CMD_MEM_WRITE      = `AFU_IMAGE_CMD_MEM_WRITE;
+localparam CMD_RUN            = `AFU_IMAGE_CMD_RUN;
+localparam CMD_CLFLUSH        = `AFU_IMAGE_CMD_CLFLUSH;
+localparam CMD_CSR_READ       = `AFU_IMAGE_CMD_CSR_READ;
+localparam CMD_CSR_WRITE      = `AFU_IMAGE_CMD_CSR_WRITE;
 
-localparam MMIO_CSR_CMD       = `AFU_IMAGE_MMIO_CSR_CMD; 
-localparam MMIO_CSR_IO_ADDR   = `AFU_IMAGE_MMIO_CSR_IO_ADDR;
-localparam MMIO_CSR_MEM_ADDR  = `AFU_IMAGE_MMIO_CSR_MEM_ADDR;
-localparam MMIO_CSR_DATA_SIZE = `AFU_IMAGE_MMIO_CSR_DATA_SIZE;
-localparam MMIO_CSR_STATUS    = `AFU_IMAGE_MMIO_CSR_STATUS;
+localparam MMIO_CMD_TYPE      = `AFU_IMAGE_MMIO_CMD_TYPE; 
+localparam MMIO_IO_ADDR       = `AFU_IMAGE_MMIO_IO_ADDR;
+localparam MMIO_MEM_ADDR      = `AFU_IMAGE_MMIO_MEM_ADDR;
+localparam MMIO_DATA_SIZE     = `AFU_IMAGE_MMIO_DATA_SIZE;
+localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
 
-localparam MMIO_CSR_SCOPE_CMD = `AFU_IMAGE_MMIO_CSR_SCOPE_CMD;
-localparam MMIO_CSR_SCOPE_DATA= `AFU_IMAGE_MMIO_CSR_SCOPE_DATA;
+localparam MMIO_SCOPE_READ    = `AFU_IMAGE_MMIO_SCOPE_READ;
+localparam MMIO_SCOPE_WRITE   = `AFU_IMAGE_MMIO_SCOPE_WRITE;
+
+localparam MMIO_CSR_CORE      = `AFU_IMAGE_MMIO_CSR_CORE;
+localparam MMIO_CSR_ADDR      = `AFU_IMAGE_MMIO_CSR_ADDR;
+localparam MMIO_CSR_DATA      = `AFU_IMAGE_MMIO_CSR_DATA;
+localparam MMIO_CSR_READ      = `AFU_IMAGE_MMIO_CSR_READ;
 
 logic [127:0] afu_id = `AFU_ACCEL_UUID;
 
@@ -75,7 +82,9 @@ typedef enum logic[3:0] {
   STATE_WRITE,
   STATE_START,
   STATE_RUN, 
-  STATE_CLFLUSH
+  STATE_CLFLUSH,
+  STATE_CSR_READ,
+  STATE_CSR_WRITE
 } state_t;
 
 typedef logic [$clog2(CCI_RD_WINDOW_SIZE)-1:0] t_cci_rdq_tag;
@@ -114,6 +123,17 @@ logic [`VX_SNP_TAG_WIDTH-1:0] vx_snp_rsp_tag;
 `DEBUG_END
 logic vx_snp_rsp_ready;
 
+logic        vx_csr_io_req_valid;
+logic [`VX_CSR_ID_WIDTH-1:0] vx_csr_io_req_coreid;
+logic [11:0] vx_csr_io_req_addr;
+logic        vx_csr_io_req_rw;
+logic [31:0] vx_csr_io_req_data;
+logic        vx_csr_io_req_ready;
+
+logic        vx_csr_io_rsp_valid;
+logic [31:0] vx_csr_io_rsp_data;
+logic        vx_csr_io_rsp_ready;
+
 logic vx_reset;
 logic vx_busy;
 
@@ -134,19 +154,24 @@ logic avs_rdq_empty;
 logic avs_rdq_full;
 `DEBUG_END
 
-// CSR variables //////////////////////////////////////////////////////////////
+// CMD variables //////////////////////////////////////////////////////////////
 
-logic [2:0]                csr_cmd;
-t_ccip_clAddr              csr_io_addr;
-logic[DRAM_ADDR_WIDTH-1:0] csr_mem_addr;
-logic[DRAM_ADDR_WIDTH-1:0] csr_data_size;
+logic [2:0]                cmd_type;
+t_ccip_clAddr              cmd_io_addr;
+logic[DRAM_ADDR_WIDTH-1:0] cmd_mem_addr;
+logic[DRAM_ADDR_WIDTH-1:0] cmd_data_size;
 
 `ifdef SCOPE
-logic [63:0]               csr_scope_cmd;  
-logic [63:0]               csr_scope_data;
-logic                      csr_scope_read;
-logic                      csr_scope_write;
+logic [63:0]               cmd_scope_rdata;
+logic [63:0]               cmd_scope_wdata;  
+logic                      cmd_scope_read;
+logic                      cmd_scope_write;
 `endif
+
+logic [`VX_CSR_ID_WIDTH-1:0] cmd_csr_core;
+logic [11:0]               cmd_csr_addr;
+logic [31:0]               cmd_csr_rdata;  
+logic [31:0]               cmd_csr_wdata;
 
 // MMIO controller ////////////////////////////////////////////////////////////
 
@@ -159,9 +184,9 @@ t_if_ccip_c2_Tx mmio_tx;
 assign af2cp_sTxPort.c2 = mmio_tx;
 
 `ifdef SCOPE
-assign csr_scope_cmd   = 64'(cp2af_sRxPort.c0.data);
-assign csr_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CSR_SCOPE_CMD == mmio_hdr.address);
-assign csr_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_CSR_SCOPE_DATA == mmio_hdr.address);
+assign cmd_scope_wdata = 64'(cp2af_sRxPort.c0.data);
+assign cmd_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_SCOPE_READ == mmio_hdr.address);
+assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mmio_hdr.address);
 `endif
 
 always_ff @(posedge clk) 
@@ -170,57 +195,69 @@ begin
     mmio_tx.hdr         <= 0;
     mmio_tx.data        <= 0;
     mmio_tx.mmioRdValid <= 0;
-    csr_cmd             <= 0;
-    csr_io_addr         <= 0;
-    csr_mem_addr        <= 0;
-    csr_data_size       <= 0;
+    cmd_type            <= 0;
+    cmd_io_addr         <= 0;
+    cmd_mem_addr        <= 0;
+    cmd_data_size       <= 0;
   end
   else begin
 
-    csr_cmd             <= 0;
+    cmd_type            <= 0;
     mmio_tx.mmioRdValid <= 0;
 
     // serve MMIO write request
     if (cp2af_sRxPort.c0.mmioWrValid)
     begin
       case (mmio_hdr.address)
-        MMIO_CSR_IO_ADDR: begin                     
-          csr_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);          
+        MMIO_IO_ADDR: begin                     
+          cmd_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);          
         `ifdef DBG_PRINT_OPAE 
-          $display("%t: CSR_IO_ADDR: 0x%0h", $time, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
+          $display("%t: MMIO_IO_ADDR: 0x%0h", $time, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
         `endif
         end
-        MMIO_CSR_MEM_ADDR: begin          
-          csr_mem_addr <= t_local_mem_addr'(cp2af_sRxPort.c0.data);                  
+        MMIO_MEM_ADDR: begin          
+          cmd_mem_addr <= t_local_mem_addr'(cp2af_sRxPort.c0.data);                  
         `ifdef DBG_PRINT_OPAE
-          $display("%t: CSR_MEM_ADDR: 0x%0h", $time, t_local_mem_addr'(cp2af_sRxPort.c0.data));
+          $display("%t: MMIO_MEM_ADDR: 0x%0h", $time, t_local_mem_addr'(cp2af_sRxPort.c0.data));
         `endif
         end
-        MMIO_CSR_DATA_SIZE: begin          
-          csr_data_size <= $bits(csr_data_size)'(cp2af_sRxPort.c0.data);          
+        MMIO_DATA_SIZE: begin          
+          cmd_data_size <= $bits(cmd_data_size)'(cp2af_sRxPort.c0.data);          
         `ifdef DBG_PRINT_OPAE
-          $display("%t: CSR_DATA_SIZE: %0d", $time, $bits(csr_data_size)'(cp2af_sRxPort.c0.data));
+          $display("%t: MMIO_DATA_SIZE: %0d", $time, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
         `endif
         end
-        MMIO_CSR_CMD: begin          
-          csr_cmd <= $bits(csr_cmd)'(cp2af_sRxPort.c0.data);
+        MMIO_CMD_TYPE: begin          
+          cmd_type <= $bits(cmd_type)'(cp2af_sRxPort.c0.data);
         `ifdef DBG_PRINT_OPAE
-          $display("%t: CSR_CMD: %0d", $time, $bits(csr_cmd)'(cp2af_sRxPort.c0.data));
+          $display("%t: MMIO_CMD_TYPE: %0d", $time, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
         `endif
         end
       `ifdef SCOPE
-        MMIO_CSR_SCOPE_CMD: begin          
+        MMIO_SCOPE_WRITE: begin          
         `ifdef DBG_PRINT_OPAE
-          $display("%t: CSR_SCOPE_CMD: %0h", $time, 64'(cp2af_sRxPort.c0.data));
+          $display("%t: MMIO_SCOPE_WRITE: %0h", $time, 64'(cp2af_sRxPort.c0.data));
         `endif
         end
       `endif
-        default: begin
-           // user-defined CSRs
-           //if (mmio_hdr.addres >= MMIO_CSR_USER) begin
-             // write Vortex CRS
-           //end
-        end 
+        MMIO_CSR_CORE: begin          
+          cmd_csr_core <= $bits(cmd_csr_core)'(cp2af_sRxPort.c0.data);          
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: MMIO_CSR_CORE: %0h", $time, $bits(cmd_csr_core)'(cp2af_sRxPort.c0.data));
+        `endif
+        end
+        MMIO_CSR_ADDR: begin          
+          cmd_csr_addr <= $bits(cmd_csr_addr)'(cp2af_sRxPort.c0.data);          
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: MMIO_CSR_ADDR: %0h", $time, $bits(cmd_csr_addr)'(cp2af_sRxPort.c0.data));
+        `endif
+        end
+        MMIO_CSR_DATA: begin          
+          cmd_csr_wdata <= $bits(cmd_csr_wdata)'(cp2af_sRxPort.c0.data);          
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: MMIO_CSR_DATA: %0h", $time, $bits(cmd_csr_wdata)'(cp2af_sRxPort.c0.data));
+        `endif
+        end
       endcase
     end
 
@@ -243,22 +280,28 @@ begin
         AFU_ID_H: mmio_tx.data <= afu_id[127:64]; // afu id hi
         16'h0006: mmio_tx.data <= 64'h0; // next AFU
         16'h0008: mmio_tx.data <= 64'h0; // reserved
-        MMIO_CSR_STATUS: begin
+        MMIO_STATUS: begin
         `ifdef DBG_PRINT_OPAE
           if (state != state_t'(mmio_tx.data)) begin
-            $display("%t: STATUS: state=%0d", $time, state);
+            $display("%t: MMIO_STATUS: state=%0d", $time, state);
           end
         `endif
           mmio_tx.data <= 64'(state);
         end  
       `ifdef SCOPE
-        MMIO_CSR_SCOPE_DATA: begin          
-          mmio_tx.data <= csr_scope_data;
+        MMIO_SCOPE_READ: begin          
+          mmio_tx.data <= cmd_scope_rdata;
         `ifdef DBG_PRINT_OPAE
-          $display("%t: SCOPE: data=%0h", $time, csr_scope_data);
+          $display("%t: MMIO_SCOPE_READ: data=%0h", $time, cmd_scope_rdata);
         `endif
         end
       `endif
+        MMIO_CSR_READ: begin          
+          mmio_tx.data <= 64'(cmd_csr_rdata);
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: MMIO_CSR_READ: data=%0h", $time, cmd_csr_rdata);
+        `endif
+        end
         default: mmio_tx.data <= 64'h0;
       endcase
       mmio_tx.mmioRdValid <= 1; // post response
@@ -271,6 +314,7 @@ end
 logic cmd_read_done;
 logic cmd_write_done;
 logic cmd_clflush_done;
+logic cmd_csr_done;
 logic cmd_run_done;
 
 always_ff @(posedge clk) 
@@ -285,31 +329,43 @@ begin
 
     case (state)
       STATE_IDLE: begin             
-        case (csr_cmd)
-          CMD_TYPE_READ: begin     
+        case (cmd_type)
+          CMD_MEM_READ: begin     
           `ifdef DBG_PRINT_OPAE
-            $display("%t: STATE READ: ia=%0h da=%0h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            $display("%t: STATE READ: ia=%0h addr=%0h size=%0d", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_READ;   
           end 
-          CMD_TYPE_WRITE: begin      
+          CMD_MEM_WRITE: begin      
           `ifdef DBG_PRINT_OPAE
-            $display("%t: STATE WRITE: ia=%0h da=%0h sz=%0d", $time, csr_io_addr, csr_mem_addr, csr_data_size);
+            $display("%t: STATE WRITE: ia=%0h addr=%0h size=%0d", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_WRITE;
           end
-          CMD_TYPE_RUN: begin        
+          CMD_RUN: begin        
           `ifdef DBG_PRINT_OPAE
             $display("%t: STATE START", $time);
           `endif
             vx_reset <= 1;
             state <= STATE_START;                    
           end
-          CMD_TYPE_CLFLUSH: begin
+          CMD_CLFLUSH: begin
           `ifdef DBG_PRINT_OPAE
-            $display("%t: STATE CFLUSH: da=%0h sz=%0d", $time, csr_mem_addr, csr_data_size);
+            $display("%t: STATE CFLUSH: addr=%0h size=%0d", $time, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_CLFLUSH;
+          end
+          CMD_CSR_READ: begin
+          `ifdef DBG_PRINT_OPAE
+            $display("%t: STATE CSR_READ: addr=%0h", $time, cmd_csr_addr);
+          `endif
+            state <= STATE_CSR_READ;
+          end
+          CMD_CSR_WRITE: begin
+          `ifdef DBG_PRINT_OPAE
+            $display("%t: STATE CSR_WRITE: addr=%0h data=%0d", $time, cmd_csr_addr, cmd_csr_wdata);
+          `endif
+            state <= STATE_CSR_WRITE;
           end
           default: begin
             state <= state;
@@ -341,6 +397,18 @@ begin
 
       STATE_CLFLUSH: begin
         if (cmd_clflush_done) begin
+          state <= STATE_IDLE;
+        end
+      end
+
+      STATE_CSR_READ: begin
+        if (cmd_csr_done) begin
+          state <= STATE_IDLE;
+        end
+      end
+
+      STATE_CSR_WRITE: begin
+        if (cmd_csr_done) begin
           state <= STATE_IDLE;
         end
       end
@@ -385,7 +453,7 @@ assign cci_dram_rd_req_enable = (state == STATE_READ)
 
 assign cci_dram_wr_req_enable = (state == STATE_WRITE)
                              && !cci_rdq_empty 
-                             && (cci_dram_wr_req_ctr < csr_data_size);
+                             && (cci_dram_wr_req_ctr < cmd_data_size);
 
 assign vx_dram_req_enable    = vortex_enabled && (avs_pending_reads < AVS_RD_QUEUE_SIZE);
 assign vx_dram_rd_req_enable = vx_dram_req_enable && vx_dram_req_valid && !vx_dram_req_rw;
@@ -414,19 +482,19 @@ end
 always_comb 
 begin        
   case (state)
-    CMD_TYPE_READ:  avs_address = cci_dram_rd_req_addr;
-    CMD_TYPE_WRITE: avs_address = cci_dram_wr_req_addr + ((DRAM_ADDR_WIDTH)'(t_cci_rdq_tag'(cci_rdq_dout)));
+    CMD_MEM_READ:  avs_address = cci_dram_rd_req_addr;
+    CMD_MEM_WRITE: avs_address = cci_dram_wr_req_addr + ((DRAM_ADDR_WIDTH)'(t_cci_rdq_tag'(cci_rdq_dout)));
     default:        avs_address = vx_dram_req_addr[`VX_DRAM_ADDR_WIDTH-1:`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH];
   endcase
 
   case (state)
-    CMD_TYPE_READ:  avs_byteenable = 64'hffffffffffffffff;
-    CMD_TYPE_WRITE: avs_byteenable = 64'hffffffffffffffff;
+    CMD_MEM_READ:  avs_byteenable = 64'hffffffffffffffff;
+    CMD_MEM_WRITE: avs_byteenable = 64'hffffffffffffffff;
     default:        avs_byteenable = vx_dram_req_byteen_;
   endcase
 
   case (state)
-    CMD_TYPE_WRITE: avs_writedata = cci_rdq_dout[$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:$bits(t_cci_rdq_tag)];
+    CMD_MEM_WRITE: avs_writedata = cci_rdq_dout[$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:$bits(t_cci_rdq_tag)];
     default:        avs_writedata = (DRAM_LINE_WIDTH)'(vx_dram_req_data) << vx_dram_req_offset;
   endcase
 end
@@ -434,7 +502,7 @@ end
 assign avs_read  = cci_dram_rd_req_enable || vx_dram_rd_req_enable;
 assign avs_write = cci_dram_wr_req_enable || vx_dram_wr_req_enable;
 
-assign cmd_write_done = (cci_dram_wr_req_ctr >= csr_data_size);
+assign cmd_write_done = (cci_dram_wr_req_ctr >= cmd_data_size);
 
 always_ff @(posedge clk) 
 begin
@@ -451,12 +519,12 @@ begin
   else begin
     
     if (state == STATE_IDLE) begin
-      if (CMD_TYPE_READ == csr_cmd) begin
-        cci_dram_rd_req_addr <= csr_mem_addr;
-        cci_dram_rd_req_ctr  <= csr_data_size;
+      if (CMD_MEM_READ == cmd_type) begin
+        cci_dram_rd_req_addr <= cmd_mem_addr;
+        cci_dram_rd_req_ctr  <= cmd_data_size;
       end 
-      else if (CMD_TYPE_WRITE == csr_cmd) begin
-        cci_dram_wr_req_addr <= csr_mem_addr;
+      else if (CMD_MEM_WRITE == cmd_type) begin
+        cci_dram_wr_req_addr <= cmd_mem_addr;
         cci_dram_wr_req_ctr  <= 0;
       end
     end
@@ -598,17 +666,17 @@ begin
   else begin      
     
     if ((STATE_IDLE == state) 
-    &&  (CMD_TYPE_WRITE == csr_cmd)) begin
-      cci_rd_req_addr   <= csr_io_addr;
+    &&  (CMD_MEM_WRITE == cmd_type)) begin
+      cci_rd_req_addr   <= cmd_io_addr;
       cci_rd_req_ctr    <= 0;
       cci_rd_rsp_ctr    <= 0;
       cci_pending_reads <= 0;
-      cci_rd_req_enable <= (csr_data_size != 0);
+      cci_rd_req_enable <= (cmd_data_size != 0);
       cci_rd_req_wait   <= 0;
     end
 
     cci_rd_req_enable <= (STATE_WRITE == state)                       
-                      && (cci_rd_req_ctr_next < csr_data_size)
+                      && (cci_rd_req_ctr_next < cmd_data_size)
                       && (cci_pending_reads_next < CCI_RD_QUEUE_SIZE);    
 
     if (cci_rd_req_fire) begin  
@@ -618,7 +686,7 @@ begin
         cci_rd_req_wait <= 1;   // end current request batch
       end 
     `ifdef DBG_PRINT_OPAE
-      $display("%t: CCI Rd Req: addr=%0h, rem=%0d, pending=%0d", $time, cci_rd_req_addr, (csr_data_size - cci_rd_req_ctr_next), cci_pending_reads_next);
+      $display("%t: CCI Rd Req: addr=%0h, rem=%0d, pending=%0d", $time, cci_rd_req_addr, (cmd_data_size - cci_rd_req_ctr_next), cci_pending_reads_next);
     `endif
     end
 
@@ -695,9 +763,9 @@ begin
   else begin
     
     if ((STATE_IDLE == state) 
-    &&  (CMD_TYPE_READ == csr_cmd)) begin
-      cci_wr_req_addr    <= csr_io_addr;
-      cci_wr_req_ctr     <= csr_data_size;
+    &&  (CMD_MEM_READ == cmd_type)) begin
+      cci_wr_req_addr    <= cmd_io_addr;
+      cci_wr_req_ctr     <= cmd_data_size;
       cci_pending_writes <= 0;
     end    
 
@@ -733,11 +801,11 @@ logic [`VX_DRAM_ADDR_WIDTH-1:0] snp_rsp_ctr, snp_rsp_ctr_next;
 logic vx_snp_req_fire, vx_snp_rsp_fire;
 
 if (`VX_DRAM_LINE_WIDTH != DRAM_LINE_WIDTH) begin
-  assign snp_req_baseaddr = {csr_mem_addr, (`VX_DRAM_ADDR_WIDTH - DRAM_ADDR_WIDTH)'(0)};
-  assign snp_req_size     = {csr_data_size, (`VX_DRAM_ADDR_WIDTH - DRAM_ADDR_WIDTH)'(0)};
+  assign snp_req_baseaddr = {cmd_mem_addr, (`VX_DRAM_ADDR_WIDTH - DRAM_ADDR_WIDTH)'(0)};
+  assign snp_req_size     = {cmd_data_size, (`VX_DRAM_ADDR_WIDTH - DRAM_ADDR_WIDTH)'(0)};
 end else begin
-  assign snp_req_baseaddr = csr_mem_addr;
-  assign snp_req_size     = csr_data_size;
+  assign snp_req_baseaddr = cmd_mem_addr;
+  assign snp_req_size     = cmd_data_size;
 end
 
 assign vx_snp_req_fire  = vx_snp_req_valid && vx_snp_req_ready;
@@ -761,7 +829,7 @@ begin
   else begin
 
     if ((STATE_IDLE == state) 
-    &&  (CMD_TYPE_CLFLUSH == csr_cmd)) begin
+    &&  (CMD_CLFLUSH == cmd_type)) begin
       vx_snp_req_addr  <= snp_req_baseaddr;
       vx_snp_req_tag   <= 0;
       snp_req_ctr      <= 0;
@@ -802,6 +870,42 @@ begin
   end
 end
 
+// CSRs///////////////////////////////////////////////////////////////////////
+
+logic csr_io_req_sent;
+
+assign vx_csr_io_req_valid = !csr_io_req_sent 
+                          && ((STATE_CSR_READ == state || STATE_CSR_WRITE == state));
+assign vx_csr_io_req_coreid = cmd_csr_core;
+assign vx_csr_io_req_rw   = (STATE_CSR_WRITE == state);
+assign vx_csr_io_req_addr = cmd_csr_addr;
+assign vx_csr_io_req_data = cmd_csr_wdata;
+
+assign vx_csr_io_rsp_ready = 1;
+
+assign cmd_csr_done = (STATE_CSR_WRITE == state) ? vx_csr_io_req_ready : vx_csr_io_rsp_valid;
+
+always_ff @(posedge clk) 
+begin
+  if (SoftReset) begin
+    csr_io_req_sent <= 0;
+    cmd_csr_rdata   <= 0;
+  end
+  else begin
+    if (vx_csr_io_req_valid && vx_csr_io_req_ready) begin
+      csr_io_req_sent <= 1;
+    end
+    if (cmd_csr_done) begin
+      csr_io_req_sent <= 0;
+    end
+    if ((STATE_CSR_READ == state) 
+      && vx_csr_io_rsp_ready 
+      && vx_csr_io_rsp_valid) begin
+      cmd_csr_rdata <= vx_csr_io_rsp_data;
+    end
+  end
+end
+
 // Vortex /////////////////////////////////////////////////////////////////////
 
 assign cmd_run_done = !vx_busy;
@@ -815,7 +919,7 @@ Vortex #() vortex (
   `SCOPE_SIGNALS_BE_BIND
 
   .clk              (clk),
-  .reset            (vx_reset),
+  .reset            (SoftReset | vx_reset),
 
   // DRAM request 
   .dram_req_valid   (vx_dram_req_valid),
@@ -858,6 +962,19 @@ Vortex #() vortex (
   .io_rsp_data      (0),
   .io_rsp_tag       (0),
   `UNUSED_PIN       (io_rsp_ready),
+
+  // CSR I/O Request
+  .csr_io_req_valid (vx_csr_io_req_valid),
+  .csr_io_req_coreid(vx_csr_io_req_coreid),
+  .csr_io_req_addr  (vx_csr_io_req_addr),
+  .csr_io_req_rw    (vx_csr_io_req_rw),
+  .csr_io_req_data  (vx_csr_io_req_data),
+  .csr_io_req_ready (vx_csr_io_req_ready),
+
+  // CSR I/O Response
+  .csr_io_rsp_valid (vx_csr_io_rsp_valid),
+  .csr_io_rsp_data  (vx_csr_io_rsp_data),
+  .csr_io_rsp_ready (vx_csr_io_rsp_ready),
  
   // status
   .busy 				    (vx_busy),
@@ -944,10 +1061,10 @@ VX_scope #(
   .stop     (0),
   .changed  (scope_data_in_ste[1]),
   .data_in  (scope_data_in_ste[SCOPE_DATAW+1:2]),
-  .bus_in   (csr_scope_cmd),
-  .bus_out  (csr_scope_data),
-  .bus_read (csr_scope_read),
-  .bus_write(csr_scope_write)
+  .bus_in   (cmd_scope_wdata),
+  .bus_out  (cmd_scope_rdata),
+  .bus_read (cmd_scope_read),
+  .bus_write(cmd_scope_write)
 );
 
 `endif

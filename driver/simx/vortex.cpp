@@ -11,13 +11,16 @@
 #include <core.h>
 #include <VX_config.h>
 
-#define PAGE_SIZE 4096
+#define CACHE_LINESIZE  64
+#define PAGE_SIZE       4096
+#define ALLOC_BASE_ADDR 0x10000000
+#define LOCAL_MEM_SIZE  0xffffffff
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static size_t align_size(size_t size) {
-    uint32_t cache_block_size = vx_dev_caps(VX_CAPS_CACHE_LINESIZE);
-    return cache_block_size * ((size + cache_block_size - 1) / cache_block_size);
+inline size_t align_size(size_t size, size_t alignment) {        
+    assert(0 == (alignment & (alignment - 1)));
+    return (size + alignment - 1) & ~(alignment - 1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -29,7 +32,7 @@ public:
     vx_buffer(size_t size, vx_device* device) 
         : size_(size)
         , device_(device) {
-        auto aligned_asize = align_size(size);
+        auto aligned_asize = align_size(size, CACHE_LINESIZE);
         data_ = malloc(aligned_asize);
     }
 
@@ -65,7 +68,7 @@ public:
         : is_done_(false)
         , is_running_(false)
         , thread_(__thread_proc__, this)  {
-        mem_allocation_ = vx_dev_caps(VX_CAPS_ALLOC_BASE_ADDR);
+        mem_allocation_ = ALLOC_BASE_ADDR;
     }
 
     ~vx_device() {
@@ -77,8 +80,8 @@ public:
     }
 
     int alloc_local_mem(size_t size, size_t* dev_maddr) {
-        auto asize = align_size(size);
-        auto dev_mem_size = vx_dev_caps(VX_CAPS_LOCAL_MEM_SIZE);
+        auto dev_mem_size = LOCAL_MEM_SIZE;
+        auto asize = align_size(size, CACHE_LINESIZE);        
         if (mem_allocation_ + asize > dev_mem_size)
             return -1;
         *dev_maddr = mem_allocation_;
@@ -87,7 +90,7 @@ public:
     }
 
     int upload(void* src, size_t dest_addr, size_t size, size_t src_offset) {
-        auto asize = align_size(size);
+        auto asize = align_size(size, CACHE_LINESIZE);
         if (dest_addr + asize > ram_.size())
             return -1;
 
@@ -101,7 +104,7 @@ public:
     }
 
     int download(const void* dest, size_t src_addr, size_t size, size_t dest_offset) {
-        size_t asize = align_size(size);
+        size_t asize = align_size(size, CACHE_LINESIZE);
         if (src_addr + asize > ram_.size())
             return -1;
 
@@ -212,6 +215,44 @@ extern int vx_dev_close(vx_device_h hdevice) {
     vx_device *device = ((vx_device*)hdevice);
 
     delete device;
+
+    return 0;
+}
+
+extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
+    if (nullptr == hdevice)
+        return  -1;
+
+    switch (caps_id) {
+    case VX_CAPS_VERSION:
+        *value = IMPLEMENTATION_ID;
+        break;
+    case VX_CAPS_MAX_CORES:
+        *value = NUM_CORES;        
+        break;
+    case VX_CAPS_MAX_WARPS:
+        *value = NUM_WARPS;
+        break;
+    case VX_CAPS_MAX_THREADS:
+        *value = NUM_THREADS;
+        break;
+    case VX_CAPS_CACHE_LINESIZE:
+        *value = CACHE_LINESIZE;
+        break;
+    case VX_CAPS_LOCAL_MEM_SIZE:
+        *value = LOCAL_MEM_SIZE;
+        break;
+    case VX_CAPS_ALLOC_BASE_ADDR:
+        *value = ALLOC_BASE_ADDR;
+        break;
+    case VX_CAPS_KERNEL_BASE_ADDR:
+        *value = STARTUP_ADDR;
+        break;
+    default:
+        std::cout << "invalid caps id: " << caps_id << std::endl;
+        std::abort();
+        return -1;
+    }
 
     return 0;
 }

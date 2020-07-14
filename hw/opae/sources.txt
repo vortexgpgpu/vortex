@@ -48,6 +48,8 @@ QI:vortex_afu.qsf
 ../rtl/interfaces/VX_cache_snp_req_if.v
 ../rtl/interfaces/VX_cache_snp_rsp_if.v
 ../rtl/interfaces/VX_csr_req_if.v
+../rtl/interfaces/VX_csr_io_req_if.v
+../rtl/interfaces/VX_csr_io_rsp_if.v
 ../rtl/interfaces/VX_exec_unit_req_if.v
 ../rtl/interfaces/VX_backend_req_if.v
 ../rtl/interfaces/VX_gpr_read_if.v
@@ -67,6 +69,7 @@ QI:vortex_afu.qsf
 ../rtl/libs/VX_priority_encoder.v
 ../rtl/libs/VX_generic_queue.v
 ../rtl/libs/VX_indexable_queue.v
+../rtl/libs/VX_fair_arbiter.v
 ../rtl/libs/VX_fixed_arbiter.v
 ../rtl/libs/VX_rr_arbiter.v
 ../rtl/libs/VX_countones.v
@@ -89,6 +92,8 @@ QI:vortex_afu.qsf
 ../rtl/VX_writeback.v
 ../rtl/VX_csr_pipe.v
 ../rtl/VX_csr_data.v
+../rtl/VX_csr_arb.v
+../rtl/VX_csr_io_arb.v
 ../rtl/VX_warp_sched.v
 ../rtl/VX_gpr_ram.v
 ../rtl/VX_gpr_stage.v
@@ -98,10 +103,9 @@ QI:vortex_afu.qsf
 ../rtl/VX_inst_multiplex.v
 ../rtl/VX_dcache_arb.v
 ../rtl/VX_mem_arb.v
-
-../rtl/pipe_regs/VX_f_d_reg.v
-../rtl/pipe_regs/VX_i_d_reg.v
-../rtl/pipe_regs/VX_d_e_reg.v
+../rtl/VX_f_d_reg.v
+../rtl/VX_i_d_reg.v
+../rtl/VX_d_e_reg.v
 
 ccip_interface_reg.sv
 ccip_std_afu.sv

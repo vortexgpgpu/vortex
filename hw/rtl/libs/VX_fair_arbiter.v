@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_fair_arbiter #(
-    parameter N = 0
+    parameter N = 1
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -11,7 +11,6 @@ module VX_fair_arbiter #(
     output wire                  grant_valid
   );
 
-
     if (N == 1)  begin        
         
         `UNUSED_VAR (clk)
@@ -20,8 +19,7 @@ module VX_fair_arbiter #(
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
-    end else begin
-    
+    end else begin    
 
        reg  [N-1:0] requests_use;
        wire [N-1:0] update_value;
@@ -48,7 +46,7 @@ module VX_fair_arbiter #(
         
         reg [N-1:0] grant_onehot_r; 
 
-        VX_priority_encoder # (
+        VX_priority_encoder #(
             .N(N)
         ) priority_encoder (
             .data_in   (requests_use),
@@ -61,7 +59,7 @@ module VX_fair_arbiter #(
             grant_onehot_r[grant_index] = 1;
         end
         assign grant_onehot = grant_onehot_r;    
-        assign late_value   =  ((refill_original ^ requests) & ~refill_original);
+        assign late_value   = ((refill_original ^ requests) & ~refill_original);
         assign update_value = (requests_use & ~grant_onehot_r) | late_value;
 
     end

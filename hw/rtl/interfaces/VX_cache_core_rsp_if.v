@@ -10,10 +10,10 @@ interface VX_cache_core_rsp_if #(
     parameter CORE_TAG_ID_BITS = 0
 ) ();
 
-    wire [NUM_REQUESTS-1:0]                     core_rsp_valid;
-    wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]    core_rsp_data;
-    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag;    
-    wire                                        core_rsp_ready;      
+    wire [NUM_REQUESTS-1:0]                            valid;
+    wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]           data;
+    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] tag;    
+    wire                                               ready;      
 
 endinterface
 

@@ -59,21 +59,33 @@
 `define L3_ENABLE (`NUM_CLUSTERS > 1)
 `endif
 
-`define CSR_LTID    12'h020
-`define CSR_LWID    12'h021
-`define CSR_GTID    12'hF14 // reserved Hardware Thread ID (mhartid)
-`define CSR_GWID    12'h023
-`define CSR_GCID    12'h024
-`define CSR_NT      12'h025
-`define CSR_NW      12'h026
-`define CSR_NC      12'h027
+// Configuration Values =======================================================
 
-`define CSR_CYCLL   12'hC00
-`define CSR_CYCLH   12'hC80
-`define CSR_INSTL   12'hC02
-`define CSR_INSTH   12'hC82
+`define VENDOR_ID           0
+`define ARCHITECTURE_ID     0
+`define IMPLEMENTATION_ID   0
 
-// ========================= Dcache Configurable Knobs ========================
+// CSR Addresses ==============================================================
+
+`define CSR_VEND_ID     12'hF11
+`define CSR_ARCH_ID     12'hF12
+`define CSR_IMPL_ID     12'hF13
+`define CSR_GTID        12'hF14
+
+`define CSR_LTID        12'h020
+`define CSR_LWID        12'h021
+`define CSR_GWID        12'h023
+`define CSR_GCID        12'h024
+`define CSR_NT          12'h025
+`define CSR_NW          12'h026
+`define CSR_NC          12'h027
+
+`define CSR_CYCLE_L     12'hC00
+`define CSR_CYCLE_H     12'hC80
+`define CSR_INSTR_L     12'hC02
+`define CSR_INSTR_H     12'hC82
+
+// Dcache Configurable Knobs ==================================================
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
@@ -144,7 +156,7 @@
 `define DPRFQ_STRIDE 0
 `endif
 
-// ========================== Icache Configurable Knobs =======================
+// Icache Configurable Knobs ==================================================
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
@@ -210,7 +222,7 @@
 `define IPRFQ_STRIDE 0
 `endif
 
-// =========================== SM Configurable Knobs ==========================
+// SM Configurable Knobs ======================================================
 
 // Size of cache in bytes
 `ifndef SCACHE_SIZE
@@ -247,7 +259,7 @@
 `define SCWBQ_SIZE `SCREQ_SIZE
 `endif
 
-// ======================== L2cache Configurable Knobs ========================
+// L2cache Configurable Knobs =================================================
 
 // Size of cache in bytes
 `ifndef L2CACHE_SIZE
@@ -318,7 +330,7 @@
 `define L2PRFQ_STRIDE 0
 `endif
 
-// ======================== L3cache Configurable Knobs ========================
+// L3cache Configurable Knobs =================================================
 
 // Size of cache in bytes
 `ifndef L3CACHE_SIZE

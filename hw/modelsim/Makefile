@@ -69,8 +69,8 @@ SRC = \
 ../rtl/cache/VX_generic_pe.v \
 ../rtl/cache/cache_set.v \
 ../rtl/cache/VX_cache_data_per_index.v \
-../rtl/pipe_regs/VX_d_e_reg.v \
-../rtl/pipe_regs/VX_f_d_reg.v \
+../rtl/VX_d_e_reg.v \
+../rtl/VX_f_d_reg.v \
 ../models/memory/cln28hpm/rf2_128x128_wm1/rf2_128x128_wm1.v \
 ../models/memory/cln28hpm/rf2_256x128_wm1/rf2_256x128_wm1.v \
 ../models/memory/cln28hpm/rf2_256x19_wm0/rf2_256x19_wm0.v \
