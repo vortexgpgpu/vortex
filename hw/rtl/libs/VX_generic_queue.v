@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_generic_queue #(
-    parameter DATAW,
+    parameter DATAW = 1,
     parameter SIZE = 16,
     parameter BUFFERED_OUTPUT = 1
 ) ( 
@@ -15,7 +15,7 @@ module VX_generic_queue #(
     output wire             full,      
     output wire [`LOG2UP(SIZE+1)-1:0] size
 ); 
-    `STATIC_ASSERT(`ISPOW2(SIZE), "must be 0 or power of 2!");
+    `STATIC_ASSERT(`ISPOW2(SIZE), "must be 0 or power of 2!")
 
     reg [`LOG2UP(SIZE+1)-1:0] size_r;        
     wire                      reading;

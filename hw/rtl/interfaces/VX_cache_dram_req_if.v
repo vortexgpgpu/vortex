@@ -9,13 +9,13 @@ interface VX_cache_dram_req_if #(
     parameter DRAM_TAG_WIDTH  = 1
 ) ();
 
-    wire                        dram_req_valid;
-    wire                        dram_req_rw;    
-    wire [(DRAM_LINE_WIDTH/8)-1:0] dram_req_byteen;
-    wire [DRAM_ADDR_WIDTH-1:0]  dram_req_addr;
-    wire [DRAM_LINE_WIDTH-1:0]  dram_req_data;  
-    wire [DRAM_TAG_WIDTH-1:0]   dram_req_tag;    
-    wire                        dram_req_ready;
+    wire                           valid;
+    wire                           rw;    
+    wire [(DRAM_LINE_WIDTH/8)-1:0] byteen;
+    wire [DRAM_ADDR_WIDTH-1:0]     addr;
+    wire [DRAM_LINE_WIDTH-1:0]     data;  
+    wire [DRAM_TAG_WIDTH-1:0]      tag;    
+    wire                           ready;
 
 endinterface
 

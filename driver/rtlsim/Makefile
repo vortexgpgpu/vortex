@@ -34,7 +34,7 @@ TOP = Vortex
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
-RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/pipe_regs -I../../hw/rtl/cache
+RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/cache
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
@@ -56,8 +56,10 @@ endif
 # AFU
 ifdef AFU
     TOP = vortex_afu_sim
-	VL_FLAGS += -DNOPAE -DSCOPE
-	CFLAGS += -DNOPAE -DSCOPE
+	VL_FLAGS += -DNOPAE
+	CFLAGS += -DNOPAE
+	#VL_FLAGS += -DSCOPE
+	#CFLAGS += -DSCOPE
 	RTL_INCLUDE += -I../../hw/opae  -I../../hw/opae/ccip
 endif
 

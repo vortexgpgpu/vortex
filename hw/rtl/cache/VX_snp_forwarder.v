@@ -37,7 +37,7 @@ module VX_snp_forwarder #(
     input wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdin_tag,
     output wire [NUM_REQUESTS-1:0]      snp_fwdin_ready
 );
-    `STATIC_ASSERT(NUM_REQUESTS > 1, "invalid value");
+    `STATIC_ASSERT(NUM_REQUESTS > 1, "invalid value")
 
     reg [`REQS_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
     
@@ -88,7 +88,7 @@ module VX_snp_forwarder #(
     genvar i;
 
     for (i = 0; i < NUM_REQUESTS; i++) begin
-        assign snp_fwdout_valid[i]      = snp_req_valid && !sfq_full;
+        assign snp_fwdout_valid[i]      = snp_req_valid && snp_req_ready;
         assign snp_fwdout_addr[i]       = snp_req_addr;
         assign snp_fwdout_invalidate[i] = snp_req_invalidate;
         assign snp_fwdout_tag[i]        = sfq_write_addr;

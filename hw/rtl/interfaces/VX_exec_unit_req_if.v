@@ -38,7 +38,7 @@ interface VX_exec_unit_req_if ();
 
     // CSR info
     wire                is_csr;
-    wire [11:0]         csr_address;
+    wire [11:0]         csr_addr;
     wire                csr_immed;
     wire [31:0]         csr_mask;
 
