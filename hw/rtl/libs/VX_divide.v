@@ -10,11 +10,11 @@ module VX_divide #(
     input wire clk,
     input wire reset,
 
-    input [WIDTHN-1:0] numer,
-    input [WIDTHD-1:0] denom,
+    input wire [WIDTHN-1:0] numer,
+    input wire [WIDTHD-1:0] denom,
 
-    output reg [WIDTHN-1:0] quotient,
-    output reg [WIDTHD-1:0] remainder
+    output wire [WIDTHN-1:0] quotient,
+    output wire [WIDTHD-1:0] remainder
 );
 
 `ifdef QUARTUS
@@ -35,8 +35,8 @@ module VX_divide #(
 		quartus_div.lpm_widthd = WIDTHD,		
 		quartus_div.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
         quartus_div.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
-		quartus_div.lpm_hint = "LPM_REMAINDERPOSITIVE=FALSE,MAXIMIZE_SPEED=9",
-		quartus_div.lpm_pipeline = PIPELINE;	
+		quartus_div.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
+		quartus_div.lpm_pipeline = PIPELINE;
 
 `else
 

@@ -13,9 +13,6 @@ module VX_alu_unit (
     output reg [31:0]  alu_result,
     output reg         alu_stall
 );
-    localparam DIV_PIPELINE_LEN = 18;
-    localparam MUL_PIPELINE_LEN = 1;
-
     wire[31:0] div_result_unsigned;
     wire[31:0] div_result_signed;
 
@@ -28,7 +25,7 @@ module VX_alu_unit (
     wire[31:0] alu_in2 = (src_rs2 == `RS2_IMMED) ? itype_immed : src_b;
 
     wire[31:0] upper_immed_s = {upper_immed, {12{1'b0}}};
-
+    
     reg [7:0] inst_delay;
     reg [7:0] curr_inst_delay;
         
@@ -37,11 +34,11 @@ module VX_alu_unit (
             `ALU_DIV,
             `ALU_DIVU,
             `ALU_REM,
-            `ALU_REMU:  inst_delay = DIV_PIPELINE_LEN;
+            `ALU_REMU:  inst_delay = `DIV_LATENCY;
             `ALU_MUL,
             `ALU_MULH,
             `ALU_MULHSU,
-            `ALU_MULHU: inst_delay = MUL_PIPELINE_LEN;
+            `ALU_MULHU: inst_delay = `MUL_LATENCY;
             default:    inst_delay = 0;
         endcase
     end
@@ -73,7 +70,6 @@ module VX_alu_unit (
             `ALU_SUBU:      alu_result = (alu_in1 >= alu_in2) ? 32'h0 : 32'hffffffff;
             `ALU_LUI:       alu_result = upper_immed_s;
             `ALU_AUIPC:     alu_result = $signed(curr_PC) + $signed(upper_immed_s);
-            // TODO: profitable to roll these exceptional cases into inst_delay_tmp to avoid pipeline when possible?
             `ALU_MUL:       alu_result = mul_result[31:0];
             `ALU_MULH:      alu_result = mul_result[63:32];
             `ALU_MULHSU:    alu_result = mul_result[63:32];
@@ -83,7 +79,7 @@ module VX_alu_unit (
             `ALU_REM:       alu_result = (alu_in2 == 0) ? alu_in1 : rem_result_signed;
             `ALU_REMU:      alu_result = (alu_in2 == 0) ? alu_in1 : rem_result_unsigned;
             default:        alu_result = 32'h0;
-        endcase // alu_op
+        endcase
     end
 
     VX_divide #(
@@ -91,7 +87,7 @@ module VX_alu_unit (
         .WIDTHD(32),
         .NSIGNED(0),
         .DSIGNED(0),
-        .PIPELINE(DIV_PIPELINE_LEN)
+        .PIPELINE(`DIV_LATENCY)
     ) udiv (
         .clk(clk),
         .reset(reset),
@@ -106,7 +102,7 @@ module VX_alu_unit (
         .WIDTHD(32),
         .NSIGNED(1),
         .DSIGNED(1),
-        .PIPELINE(DIV_PIPELINE_LEN)
+        .PIPELINE(`DIV_LATENCY)
     ) sdiv (
         .clk(clk),
         .reset(reset),
@@ -124,7 +120,7 @@ module VX_alu_unit (
         .WIDTHB(33),
         .WIDTHP(64),
         .SIGNED(1),
-        .PIPELINE(MUL_PIPELINE_LEN)
+        .PIPELINE(`MUL_LATENCY)
     ) multiplier (
         .clk(clk),
         .reset(reset),

@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_matrix_arbiter #(
-    parameter N = 0
+    parameter N = 1
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -27,8 +27,8 @@ module VX_matrix_arbiter #(
 
         genvar i, j;           
 
-        for (i = 0; i < N; ++i) begin      
-            for (j = 0; j < N; ++j) begin
+        for (i = 0; i < N; i++) begin      
+            for (j = 0; j < N; j++) begin
                 if (j > i) begin
                     assign pri[j][i] = requests[i] && state[i][j];
                 end 
@@ -43,8 +43,8 @@ module VX_matrix_arbiter #(
             assign grant_onehot[i] = requests[i] && !(| pri[i]);
         end
         
-        for (i = 0; i < N; ++i) begin      
-            for (j = i + 1; j < N; ++j) begin
+        for (i = 0; i < N; i++) begin      
+            for (j = i + 1; j < N; j++) begin
                 always @(posedge clk) begin                       
                     if (reset) begin         
                         state[i][j] <= 0;

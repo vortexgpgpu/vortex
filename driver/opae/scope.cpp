@@ -18,8 +18,8 @@
      return -1;                                     \
    } while (false)
 
-#define MMIO_CSR_SCOPE_CMD      (AFU_IMAGE_MMIO_CSR_SCOPE_CMD * 4)
-#define MMIO_CSR_SCOPE_DATA     (AFU_IMAGE_MMIO_CSR_SCOPE_DATA * 4)
+#define MMIO_SCOPE_READ     (AFU_IMAGE_MMIO_SCOPE_READ * 4)
+#define MMIO_SCOPE_WRITE    (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
 struct scope_signal_t {
     int width;
@@ -136,7 +136,7 @@ int vx_scope_start(fpga_handle hfpga, uint64_t delay) {
     if (delay != uint64_t(-1)) {
         // set start delay
         uint64_t cmd_delay = ((delay << 3) | 4);
-        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, cmd_delay));    
+        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_delay));    
         std::cout << "scope start delay: " << delay << std::endl;
     }
 
@@ -150,7 +150,7 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     if (delay != uint64_t(-1)) {
         // stop recording
         uint64_t cmd_stop = ((delay << 3) | 5);
-        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, cmd_stop));
+        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
         std::cout << "scope stop delay: " << delay << std::endl;
     }
 
@@ -170,9 +170,9 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     uint64_t frame_width, max_frames, data_valid;    
 
     // wait for recording to terminate
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 0));
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 0));
     do {        
-        CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));        
+        CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &data_valid));        
         if (data_valid)
             break;
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -180,15 +180,15 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
 
     std::cout << "scope trace dump begin..." << std::endl;    
 
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 2));
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &frame_width));
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 2));
+    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &frame_width));
     std::cout << "scope::frame_width=" << std::dec << frame_width << std::endl;
 
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 3));
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &max_frames));
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 3));
+    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &max_frames));
     std::cout << "scope::max_frames=" << std::dec << max_frames << std::endl;    
 
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 1));
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 1));
 
     if (fwidth != (int)frame_width) {   
         std::cerr << "invalid frame_width: expecting " << std::dec << fwidth << "!" << std::endl;
@@ -209,7 +209,7 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
         ofs << "b1 0" << std::endl;
         
         uint64_t delta;
-        fpga_result res = fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &delta);
+        fpga_result res = fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &delta);
         assert(res == FPGA_OK);
 
         while (delta != 0) {
@@ -228,14 +228,14 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     do {
         if (frame_no == (max_frames-1)) {
             // verify last frame is valid
-            CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 0));
-            CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));  
+            CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 0));
+            CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &data_valid));  
             assert(data_valid == 1);
-            CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 1));
+            CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 1));
         }
 
         uint64_t word;
-        CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &word));
+        CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &word));
         
         do {          
             int signal_width = scope_signals[signal_id-1].width;
@@ -267,8 +267,8 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     std::cout << "scope trace dump done! - " << (timestamp/2) << " cycles" << std::endl;
 
     // verify data not valid
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_CSR_SCOPE_CMD, 0));
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_CSR_SCOPE_DATA, &data_valid));  
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, 0));
+    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &data_valid));  
     assert(data_valid == 0);
 
     return 0;

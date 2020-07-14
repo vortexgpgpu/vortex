@@ -17,7 +17,7 @@ module VX_csr_pipe #(
     wire[4:0]       rd_s2;
     wire[1:0]       wb_s2;
     wire            is_csr_s2;
-    wire[`CSR_ADDR_SIZE-1:0] csr_address_s2;
+    wire[`CSR_ADDR_SIZE-1:0] csr_addr_s2;
     wire[31:0]      csr_read_data_s2;
     wire[31:0]      csr_updated_data_s2;
 
@@ -29,17 +29,16 @@ module VX_csr_pipe #(
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
-        .read_addr      (csr_req_if.csr_address),
+        .read_addr      (csr_req_if.csr_addr),
         .read_data      (csr_read_data_unqual),
         .write_enable   (is_csr_s2),
         .write_data     (csr_updated_data_s2[`CSR_WIDTH-1:0]),
-        .write_addr     (csr_address_s2), 
+        .write_addr     (csr_addr_s2), 
         .warp_num       (csr_req_if.warp_num),
         .wb_valid       (| writeback_if.valid)
     );
 
-    // wire hazard = (csr_address_s2 == csr_req_if.csr_address) & (warp_num_s2 == csr_req_if.warp_num) & |(valid_s2) & is_csr_s2;
-    wire car_hazard = (csr_address_s2 == csr_req_if.csr_address) & (warp_num_s2 == csr_req_if.warp_num) & |(valid_s2) & is_csr_s2;
+    wire car_hazard = (csr_addr_s2 == csr_req_if.csr_addr) & (warp_num_s2 == csr_req_if.warp_num) & |(valid_s2) & is_csr_s2;
 
     assign csr_read_data = car_hazard ? csr_updated_data_s2 : csr_read_data_unqual; 
 
@@ -55,14 +54,14 @@ module VX_csr_pipe #(
     end    
 
     VX_generic_register #(
-        .N(32 + 32 + 12 + 1 + 2 + 5 + (`NW_BITS-1+1) + `NUM_THREADS)
+        .N(32 + 32 + 12 + 1 + 1 + 2 + 5 + (`NW_BITS-1+1) + `NUM_THREADS)
     ) csr_reg_s2 (
         .clk  (clk),
         .reset(reset),
         .stall(no_slot_csr),
         .flush(1'b0),
-        .in   ({csr_req_if.valid, csr_req_if.warp_num, csr_req_if.rd, csr_req_if.wb, csr_req_if.is_csr, csr_req_if.csr_address, csr_read_data   , csr_updated_data   }),
-        .out  ({valid_s2        , warp_num_s2        , rd_s2        , wb_s2        , is_csr_s2        , csr_address_s2        , csr_read_data_s2, csr_updated_data_s2})
+        .in   ({csr_req_if.valid, csr_req_if.warp_num, csr_req_if.rd, csr_req_if.wb, csr_req_if.is_csr, csr_req_if.csr_addr, csr_req_if.is_io, csr_read_data   , csr_updated_data   }),
+        .out  ({valid_s2        , warp_num_s2        , rd_s2        , wb_s2        , is_csr_s2        , csr_addr_s2        , csr_wb_if.is_io , csr_read_data_s2, csr_updated_data_s2})
     );
 
     assign csr_wb_if.valid     = valid_s2;
@@ -72,9 +71,9 @@ module VX_csr_pipe #(
 
     genvar i;
     for (i = 0; i < `NUM_THREADS; i++) begin
-        assign csr_wb_if.data[i] = (csr_address_s2 == `CSR_LTID) ? i : 
-                                   (csr_address_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
-                                                                   csr_read_data_s2;
+        assign csr_wb_if.data[i] = (csr_addr_s2 == `CSR_LTID) ? i : 
+                                   (csr_addr_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
+                                                                csr_read_data_s2;
     end     
 
     assign stall_gpr_csr = no_slot_csr && csr_req_if.is_csr && (| csr_req_if.valid);   

@@ -12,7 +12,7 @@ module VX_decode(
 );
     wire               in_valid        = (| fd_inst_meta_de.valid);
     wire[31:0]         in_instruction  = fd_inst_meta_de.instruction;
-    wire[31:0]         in_curr_PC      = fd_inst_meta_de.inst_pc;
+    wire[31:0]         in_curr_PC      = fd_inst_meta_de.curr_PC;
     wire[`NW_BITS-1:0] in_warp_num     = fd_inst_meta_de.warp_num;
 
     assign frE_to_bckE_req_if.curr_PC = in_curr_PC;
@@ -104,7 +104,7 @@ module VX_decode(
     assign is_lui       = (curr_opcode == `INST_LUI);
     assign is_auipc     = (curr_opcode == `INST_AUIPC);
     assign is_csr       = (curr_opcode == `INST_SYS) && (func3 != 0);
-    assign is_csr_immed = (is_csr) && (func3[2] == 1);
+    assign is_csr_immed = is_csr && (func3[2] == 1);
 
     assign is_gpgpu     = (curr_opcode == `INST_GPGPU);
 
@@ -114,8 +114,8 @@ module VX_decode(
     assign is_split     = is_gpgpu && (func3 == 2); // Goes to BE
     assign is_join      = is_gpgpu && (func3 == 3); // Doesn't go to BE
 
-    assign join_if.is_join       = is_join && in_valid;
-    assign join_if.join_warp_num = in_warp_num;
+    assign join_if.is_join  = is_join && in_valid;
+    assign join_if.warp_num = in_warp_num;
 
     assign frE_to_bckE_req_if.is_wspawn  = is_wspawn;
     assign frE_to_bckE_req_if.is_tmc     = is_tmc;
@@ -204,7 +204,7 @@ module VX_decode(
     assign csr_cond1 = func3 != 3'h0;
     assign csr_cond2 = u_12  >= 12'h2;
 
-    assign frE_to_bckE_req_if.csr_address = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
+    assign frE_to_bckE_req_if.csr_addr = (csr_cond1 && csr_cond2) ? u_12 : 12'h55;
 
     // ITYPE IMEED
     assign alu_shift_i       = (func3 == 3'h1) || (func3 == 3'h5);
@@ -227,7 +227,7 @@ module VX_decode(
         case (curr_opcode)
             `INST_B: begin
                 // $display("BRANCH IN DECODE");
-                temp_branch_stall = 1'b1 && in_valid;
+                temp_branch_stall = in_valid;
                 case (func3)
                     3'h0: temp_branch_type = `BR_EQ;
                     3'h1: temp_branch_type = `BR_NE;
@@ -240,15 +240,15 @@ module VX_decode(
             end
             `INST_JAL: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b1 && in_valid;
+                temp_branch_stall = in_valid;
             end
             `INST_JALR: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b1 && in_valid;
+                temp_branch_stall = in_valid;
             end
             default: begin
                 temp_branch_type  = `BR_NO;
-                temp_branch_stall = 1'b0 && in_valid;
+                temp_branch_stall = 1'b0;
             end
         endcase
     end

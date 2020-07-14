@@ -33,7 +33,7 @@ module VX_inst_multiplex (
     // LSU Unit
     assign lsu_req_if.valid        = bckE_req_if.valid & is_mem_mask;
     assign lsu_req_if.warp_num     = bckE_req_if.warp_num;
-    assign lsu_req_if.base_address = gpr_read_if.a_reg_data;
+    assign lsu_req_if.base_addr    = gpr_read_if.a_reg_data;
     assign lsu_req_if.store_data   = gpr_read_if.b_reg_data;
 
     assign lsu_req_if.offset       = bckE_req_if.itype_immed;
@@ -83,7 +83,7 @@ module VX_inst_multiplex (
     assign csr_req_if.wb              = bckE_req_if.wb;
     assign csr_req_if.alu_op          = bckE_req_if.alu_op;
     assign csr_req_if.is_csr          = bckE_req_if.is_csr;
-    assign csr_req_if.csr_address     = bckE_req_if.csr_address;
+    assign csr_req_if.csr_addr        = bckE_req_if.csr_addr;
     assign csr_req_if.csr_immed       = bckE_req_if.csr_immed;
     assign csr_req_if.csr_mask        = bckE_req_if.csr_mask;
 

@@ -1,8 +1,8 @@
 `include "VX_define.vh"
 
 module VX_indexable_queue #(
-    parameter DATAW,
-    parameter SIZE
+    parameter DATAW = 1,
+    parameter SIZE = 1
 ) (
     input  wire clk,
     input  wire reset,

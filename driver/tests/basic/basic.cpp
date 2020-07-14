@@ -179,17 +179,18 @@ int main(int argc, char *argv[]) {
     count = 1;
   }
 
-  uint32_t max_cores = vx_dev_caps(VX_CAPS_MAX_CORES);
+  // open device connection
+  std::cout << "open device connection" << std::endl;
+  RT_CHECK(vx_dev_open(&device));
+  
+  unsigned max_cores;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
   uint32_t num_points = max_cores * count;
   uint32_t num_blocks = (num_points * sizeof(uint32_t) + 63) / 64;
   uint32_t buf_size = num_blocks * 64;
 
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
-
-  // open device connection
-  std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
 
   // allocate device memory
   RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));

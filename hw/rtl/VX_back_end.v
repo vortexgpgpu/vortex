@@ -9,6 +9,9 @@ module VX_back_end #(
     input wire clk, 
     input wire reset, 
 
+    VX_csr_io_req_if       csr_io_req_if,
+    VX_csr_io_rsp_if       csr_io_rsp_if,
+
     input wire             schedule_delay,
 
     VX_cache_core_req_if   dcache_req_if,
@@ -30,6 +33,7 @@ module VX_back_end #(
 
     wire                no_slot_mem;
     wire                no_slot_exec;
+
 
     // LSU input + output
     VX_lsu_req_if       lsu_req_if();
@@ -63,7 +67,7 @@ module VX_back_end #(
         // End new
         .memory_delay       (mem_delay),
         .exec_delay         (exec_delay),
-        .gpr_stage_delay    (gpr_stage_delay)
+        .delay              (gpr_stage_delay)
     );
 
     assign ebreak = exec_unit_req_if.is_etype && (| exec_unit_req_if.valid);
@@ -76,7 +80,7 @@ module VX_back_end #(
         .clk            (clk),
         .reset          (reset),
         .lsu_req_if     (lsu_req_if),
-        .mem_wb_if_p1   (mem_wb_if),
+        .mem_wb_if      (mem_wb_if),
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
         .delay          (mem_delay),
@@ -99,15 +103,34 @@ module VX_back_end #(
         .warp_ctl_if    (warp_ctl_if)
     );
 
+    VX_csr_req_if issued_csr_req_if();
+
+    VX_wb_if csr_pipe_rsp_if();
+
+    VX_csr_arb csr_arb (
+        .clk              (clk),
+        .reset            (reset),
+
+        .csr_pipe_stall   (stall_gpr_csr),
+
+        .csr_core_req_if  (csr_req_if),
+        .csr_io_req_if    (csr_io_req_if),
+        .issued_csr_req_if(issued_csr_req_if),
+
+        .csr_pipe_rsp_if  (csr_pipe_rsp_if),
+        .csr_wb_if        (csr_wb_if),
+        .csr_io_rsp_if    (csr_io_rsp_if)    
+    );
+
     VX_csr_pipe #(
         .CORE_ID(CORE_ID)
     ) csr_pipe (
         .clk            (clk),
         .reset          (reset),
         .no_slot_csr    (no_slot_csr),
-        .csr_req_if     (csr_req_if),
+        .csr_req_if     (issued_csr_req_if),
         .writeback_if   (writeback_if),
-        .csr_wb_if      (csr_wb_if),
+        .csr_wb_if      (csr_pipe_rsp_if),
         .stall_gpr_csr  (stall_gpr_csr)
     );
 
