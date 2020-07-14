@@ -117,9 +117,9 @@ VL_MODULE(VVX_cache) {
         CData/*0:0*/ VX_cache__DOT__cache_dram_req_arb__DOT__dram_fill_arb__DOT__dfqq_queue__DOT__genblk3__DOT__genblk2__DOT__bypass_r;
         CData/*3:0*/ VX_cache__DOT__cache_dram_req_arb__DOT__dram_fill_arb__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r;
         CData/*3:0*/ VX_cache__DOT__cache_dram_req_arb__DOT__sel_dwb__DOT__genblk2__DOT__grant_onehot_r;
-        CData/*3:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual;
         CData/*1:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index;
-        CData/*0:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid;
+        CData/*3:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual;
+        CData/*0:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid;
         CData/*3:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__requests_use;
         CData/*3:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__update_value;
         CData/*0:0*/ VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__refill;
@@ -864,7 +864,7 @@ VL_MODULE(VVX_cache) {
     static CData/*0:0*/ __Vtable2_VX_cache__DOT__cache_dram_req_arb__DOT__dwb_valid[16];
     static IData/*31:0*/ __Vtable2_VX_cache__DOT__cache_dram_req_arb__DOT__sel_dwb__DOT__genblk2__DOT__priority_encoder__DOT__i[16];
     static CData/*1:0*/ __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index[16];
-    static CData/*0:0*/ __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[16];
+    static CData/*0:0*/ __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[16];
     static IData/*31:0*/ __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i[16];
     static CData/*1:0*/ __Vtable4_VX_cache__DOT__snp_rsp_arb__DOT__fsq_bank[16];
     static CData/*0:0*/ __Vtable4_VX_cache__DOT__snp_rsp_arb__DOT__fsq_valid[16];

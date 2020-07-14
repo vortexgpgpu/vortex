@@ -13,7 +13,7 @@ CData/*1:0*/ VVX_cache::__Vtable2_VX_cache__DOT__cache_dram_req_arb__DOT__dwb_ba
 CData/*0:0*/ VVX_cache::__Vtable2_VX_cache__DOT__cache_dram_req_arb__DOT__dwb_valid[16];
 IData/*31:0*/ VVX_cache::__Vtable2_VX_cache__DOT__cache_dram_req_arb__DOT__sel_dwb__DOT__genblk2__DOT__priority_encoder__DOT__i[16];
 CData/*1:0*/ VVX_cache::__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index[16];
-CData/*0:0*/ VVX_cache::__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[16];
+CData/*0:0*/ VVX_cache::__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[16];
 IData/*31:0*/ VVX_cache::__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i[16];
 CData/*1:0*/ VVX_cache::__Vtable4_VX_cache__DOT__snp_rsp_arb__DOT__fsq_bank[16];
 CData/*0:0*/ VVX_cache::__Vtable4_VX_cache__DOT__snp_rsp_arb__DOT__fsq_valid[16];
@@ -1307,8 +1307,8 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index 
         = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index
         [vlTOPp->__Vtableidx3];
-    vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid 
-        = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid
+    vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid 
+        = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid
         [vlTOPp->__Vtableidx3];
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i 
         = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i
@@ -2944,8 +2944,7 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))))
                              : VL_ULL(0));
     vlTOPp->core_rsp_valid = 0U;
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+    if (((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
          & ((0xffU & vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[0U]) 
             == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
@@ -2971,115 +2970,100 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
                                   | ((IData)(1U) << 
                                      (3U & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid))));
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 1U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                   << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
-                                                >> 0xaU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 1U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                               << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
+                                            >> 0xaU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         vlTOPp->core_rsp_valid = ((IData)(vlTOPp->core_rsp_valid) 
                                   | ((IData)(1U) << 
                                      (3U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                             >> 2U))));
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 2U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                   << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                               >> 0x14U))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 2U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                               << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                                           >> 0x14U))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         vlTOPp->core_rsp_valid = ((IData)(vlTOPp->core_rsp_valid) 
                                   | ((IData)(1U) << 
                                      (3U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                             >> 4U))));
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 3U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
-                                   << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                             >> 0x1eU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 3U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
+                               << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                                         >> 0x1eU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         vlTOPp->core_rsp_valid = ((IData)(vlTOPp->core_rsp_valid) 
                                   | ((IData)(1U) << 
                                      (3U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
@@ -3089,8 +3073,7 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
     vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data[1U] = 0U;
     vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data[2U] = 0U;
     vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data[3U] = 0U;
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+    if (((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
          & ((0xffU & vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[0U]) 
             == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
@@ -3116,121 +3099,105 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
                                        << 5U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[0U]);
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 1U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                   << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
-                                                >> 0xaU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 1U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                               << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
+                                            >> 0xaU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         VL_ASSIGNSEL_WIII(32,(0x60U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                        << 3U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[1U]);
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 2U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                   << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                               >> 0x14U))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 2U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                               << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                                           >> 0x14U))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         VL_ASSIGNSEL_WIII(32,(0x60U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                        << 1U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[2U]);
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 3U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
-                                   << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                             >> 0x1eU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 3U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
+                               << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                                         >> 0x1eU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         VL_ASSIGNSEL_WIII(32,(0x60U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                        >> 1U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[3U]);
     }
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((0xeU & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-               & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
               & ((0xffU & vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[0U]) 
                  == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
                                          * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
@@ -3256,8 +3223,7 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
                       : 0U))));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((0xdU & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (0xfffffffeU & ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-                               << 1U) & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | (0xfffffffeU & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
                              & (((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
                                             << 0x16U) 
                                            | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
@@ -3298,8 +3264,7 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
                                       : 0U)) << 1U))));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((0xbU & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (0xfffffffcU & ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-                               << 2U) & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | (0xfffffffcU & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
                              & (((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
                                             << 0xcU) 
                                            | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
@@ -3340,8 +3305,7 @@ void VVX_cache::_settle__TOP__3(VVX_cache__Syms* __restrict vlSymsp) {
                                       : 0U)) << 2U))));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((7U & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (0xfffffff8U & ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-                               << 3U) & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | (0xfffffff8U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
                              & (((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
                                             << 2U) 
                                            | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
@@ -19351,8 +19315,8 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index 
         = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index
         [vlTOPp->__Vtableidx3];
-    vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid 
-        = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid
+    vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid 
+        = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid
         [vlTOPp->__Vtableidx3];
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i 
         = vlTOPp->__Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i
@@ -20069,8 +20033,7 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))))
                              : VL_ULL(0));
     vlTOPp->core_rsp_valid = 0U;
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+    if (((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
          & ((0xffU & vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[0U]) 
             == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
@@ -20096,115 +20059,100 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
                                   | ((IData)(1U) << 
                                      (3U & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid))));
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 1U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                   << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
-                                                >> 0xaU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 1U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                               << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
+                                            >> 0xaU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         vlTOPp->core_rsp_valid = ((IData)(vlTOPp->core_rsp_valid) 
                                   | ((IData)(1U) << 
                                      (3U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                             >> 2U))));
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 2U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                   << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                               >> 0x14U))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 2U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                               << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                                           >> 0x14U))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         vlTOPp->core_rsp_valid = ((IData)(vlTOPp->core_rsp_valid) 
                                   | ((IData)(1U) << 
                                      (3U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                             >> 4U))));
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 3U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
-                                   << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                             >> 0x1eU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 3U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
+                               << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                                         >> 0x1eU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         vlTOPp->core_rsp_valid = ((IData)(vlTOPp->core_rsp_valid) 
                                   | ((IData)(1U) << 
                                      (3U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
@@ -20214,8 +20162,7 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
     vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data[1U] = 0U;
     vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data[2U] = 0U;
     vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data[3U] = 0U;
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+    if (((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
          & ((0xffU & vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[0U]) 
             == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
@@ -20241,113 +20188,98 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
                                        << 5U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[0U]);
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 1U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                   << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
-                                                >> 0xaU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 1U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                               << 0x16U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
+                                            >> 0xaU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         VL_ASSIGNSEL_WIII(32,(0x60U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                        << 3U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[1U]);
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 2U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                   << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
-                                               >> 0x14U))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 2U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                               << 0xcU) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
+                                           >> 0x14U))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         VL_ASSIGNSEL_WIII(32,(0x60U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                        << 1U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[2U]);
     }
-    if ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-          & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
-             >> 3U)) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
-                                   << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
-                                             >> 0x1eU))) 
-                        == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
-                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                             ? (0xffU & (((0U == (0x1fU 
-                                                  & ((IData)(0x2aU) 
-                                                     * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
-                                           ? 0U : (
-                                                   vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                                   ((IData)(1U) 
-                                                    + 
-                                                    (7U 
-                                                     & (((IData)(0x2aU) 
-                                                         * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                        >> 5U)))] 
-                                                   << 
-                                                   ((IData)(0x20U) 
-                                                    - 
-                                                    (0x1fU 
-                                                     & ((IData)(0x2aU) 
-                                                        * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
-                                         | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
-                                            (7U & (
-                                                   ((IData)(0x2aU) 
-                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
-                                                   >> 5U))] 
-                                            >> (0x1fU 
-                                                & ((IData)(0x2aU) 
-                                                   * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
-                             : 0U)))) {
+    if ((((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
+          >> 3U) & ((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
+                               << 2U) | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
+                                         >> 0x1eU))) 
+                    == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
+                                            * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                         ? (0xffU & (((0U == (0x1fU 
+                                              & ((IData)(0x2aU) 
+                                                 * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
+                                       ? 0U : (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                               ((IData)(1U) 
+                                                + (7U 
+                                                   & (((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                                      >> 5U)))] 
+                                               << ((IData)(0x20U) 
+                                                   - 
+                                                   (0x1fU 
+                                                    & ((IData)(0x2aU) 
+                                                       * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))) 
+                                     | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[
+                                        (7U & (((IData)(0x2aU) 
+                                                * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)) 
+                                               >> 5U))] 
+                                        >> (0x1fU & 
+                                            ((IData)(0x2aU) 
+                                             * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))))
+                         : 0U)))) {
         VL_ASSIGNSEL_WIII(32,(0x60U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_tid) 
                                        >> 1U)), vlTOPp->VX_cache__DOT____Vcellout__cache_core_rsp_merge__core_rsp_data, 
                           vlTOPp->VX_cache__DOT__per_bank_core_rsp_data[3U]);
@@ -20358,8 +20290,7 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
            | ((IData)(1U) << (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((0xeU & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-               & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
               & ((0xffU & vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[0U]) 
                  == ((0xa7U >= (0xffU & ((IData)(0x2aU) 
                                          * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index))))
@@ -20385,8 +20316,7 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
                       : 0U))));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((0xdU & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (0xfffffffeU & ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-                               << 1U) & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | (0xfffffffeU & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
                              & (((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
                                             << 0x16U) 
                                            | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[1U] 
@@ -20427,8 +20357,7 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
                                       : 0U)) << 1U))));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((0xbU & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (0xfffffffcU & ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-                               << 2U) & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | (0xfffffffcU & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
                              & (((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
                                             << 0xcU) 
                                            | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[2U] 
@@ -20469,8 +20398,7 @@ VL_INLINE_OPT void VVX_cache::_sequent__TOP__4(VVX_cache__Syms* __restrict vlSym
                                       : 0U)) << 2U))));
     vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual 
         = ((7U & (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual)) 
-           | (0xfffffff8U & ((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid) 
-                               << 3U) & (IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid)) 
+           | (0xfffffff8U & ((IData)(vlTOPp->VX_cache__DOT__per_bank_core_rsp_valid) 
                              & (((0xffU & ((vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[4U] 
                                             << 2U) 
                                            | (vlTOPp->VX_cache__DOT__per_bank_core_rsp_tag[3U] 
@@ -27083,9 +27011,9 @@ void VVX_cache::_ctor_var_reset() {
     VX_cache__DOT__cache_dram_req_arb__DOT__dram_fill_arb__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i = VL_RAND_RESET_I(32);
     VX_cache__DOT__cache_dram_req_arb__DOT__sel_dwb__DOT__genblk2__DOT__grant_onehot_r = VL_RAND_RESET_I(4);
     VX_cache__DOT__cache_dram_req_arb__DOT__sel_dwb__DOT__genblk2__DOT__priority_encoder__DOT__i = VL_RAND_RESET_I(32);
-    VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual = VL_RAND_RESET_I(4);
     VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index = VL_RAND_RESET_I(2);
-    VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid = VL_RAND_RESET_I(1);
+    VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual = VL_RAND_RESET_I(4);
+    VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid = VL_RAND_RESET_I(1);
     VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__requests_use = VL_RAND_RESET_I(4);
     VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__update_value = VL_RAND_RESET_I(4);
     VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__refill = VL_RAND_RESET_I(1);
@@ -28079,22 +28007,22 @@ void VVX_cache::_ctor_var_reset() {
     __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index[13] = 0U;
     __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index[14] = 1U;
     __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index[15] = 0U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[0] = 0U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[1] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[2] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[3] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[4] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[5] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[6] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[7] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[8] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[9] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[10] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[11] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[12] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[13] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[14] = 1U;
-    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid[15] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[0] = 0U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[1] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[2] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[3] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[4] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[5] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[6] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[7] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[8] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[9] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[10] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[11] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[12] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[13] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[14] = 1U;
+    __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid[15] = 1U;
     __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i[0] = 0xffffffffU;
     __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i[1] = 0xffffffffU;
     __Vtable3_VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__priority_encoder__DOT__i[2] = 0xffffffffU;

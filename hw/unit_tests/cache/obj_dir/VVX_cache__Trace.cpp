@@ -564,10 +564,10 @@ void VVX_cache::traceChgThis__4(VVX_cache__Syms* __restrict vlSymsp, VerilatedVc
                                                 & ((IData)(0x2aU) 
                                                    * (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index)))))))
                                 : VL_ULL(0))),42);
-        vcdp->chgBus(c+2265,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual),4);
-        vcdp->chgBus(c+2273,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index),2);
-        vcdp->chgBit(c+2281,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__grant_valid));
-        vcdp->chgBus(c+2289,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r),4);
+        vcdp->chgBus(c+2265,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__main_bank_index),2);
+        vcdp->chgBus(c+2273,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__per_bank_core_rsp_pop_unqual),4);
+        vcdp->chgBus(c+2281,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r),4);
+        vcdp->chgBit(c+2289,(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__grant_valid));
         vcdp->chgBus(c+2297,((((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__requests_use) 
                                & (~ (IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__grant_onehot_r))) 
                               | (((IData)(vlTOPp->VX_cache__DOT__cache_core_rsp_merge__DOT__sel_bank__DOT__genblk2__DOT__refill_original) 
