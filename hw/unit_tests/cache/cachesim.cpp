@@ -77,20 +77,11 @@ void CacheSim::run(){
 #ifndef NDEBUG
   std::cout << timestamp << ": [sim] run()" << std::endl;
 #endif
-  // reset the device
-  this->reset();
   this->step();
 
   // execute program
-  while (!core_req_vec_.empty()) {
-
-    for(int i = 0; i < 10; ++i){
-      if(i == 1){
-        this->clear_req(); //invalidate reqs
-      }
+  for(int i = 0; i < 1000; ++i){ //should be while requests aren't responded to
       this->step();
-    }
-
   }
 }
 
@@ -111,48 +102,10 @@ bool CacheSim::get_core_rsp_ready(){
   return cache_->core_rsp_ready; 
 }
 
-void CacheSim::set_core_req(){
-  cache_->core_req_valid = 0xf; 
-  cache_->core_req_rw = 0xf; 
-  cache_->core_req_byteen = 0xffff;   
-  cache_->core_req_addr[0] = 0x00;
-  cache_->core_req_addr[1] = 0xab;
-  cache_->core_req_addr[2] = 0xcd;
-  cache_->core_req_addr[3] = 0xe1;  
-  cache_->core_req_data[0] = 0xffffffff;
-  cache_->core_req_data[1] = 0x11111111;
-  cache_->core_req_data[2] = 0x22222222;
-  cache_->core_req_data[3] = 0x33333333;  
-  cache_->core_req_tag = 0xff;
-}
-
-void CacheSim::set_core_req2(){
-  cache_->core_req_valid = 0xf; //b1000
-  cache_->core_req_rw = 0x0; //b0000
-  cache_->core_req_byteen = 0xffff;   
-  cache_->core_req_addr[0] = 0x00;
-  cache_->core_req_addr[1] = 0xab;
-  cache_->core_req_addr[2] = 0xcd;
-  cache_->core_req_addr[3] = 0xe1;  
-  cache_->core_req_data[0] = 0x1111111;
-  cache_->core_req_data[1] = 0x4444444;
-  cache_->core_req_data[2] = 0x5555555;
-  cache_->core_req_data[3] = 0x6666666;
-  cache_->core_req_tag = 0xff;
-}
-
-
 void CacheSim::eval_reqs(){
   //check to see if cache is accepting reqs
   if(!core_req_vec_.empty() && cache_->core_req_ready){
     core_req_t *req = core_req_vec_.front();
-
-    std::cout << "Display Req Data Contents " << std::endl; 
-
-    std::cout << std::hex << "Data[0]: " << req->data[0] << std::endl; 
-    std::cout << std::hex << "Data[1]: " << req->data[1] << std::endl; 
-    std::cout << std::hex << "Data[2]: " << req->data[2] << std::endl; 
-    std::cout << std::hex << "Data[3]: " << req->data[3] << std::endl; 
 
     cache_->core_req_valid = req->valid;
     cache_->core_req_rw = req->rw; 
@@ -170,12 +123,9 @@ void CacheSim::eval_reqs(){
 
     cache_->core_req_tag = req->tag; 
 
-
-    std::cout << "Display Cache Data inputs: " << std::endl;  
-    get_core_req();
-
     core_req_vec_.pop();
-    std::cout << "Req Popped" << std::endl; 
+  } else {
+    clear_req();
   }
 }
 
