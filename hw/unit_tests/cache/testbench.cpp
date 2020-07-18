@@ -11,24 +11,47 @@ int main(int argc, char **argv)
   RAM ram;
 	CacheSim cachesim;
   cachesim.attach_ram(&ram);
-  
+
+  unsigned int addr[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
+  unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
+  //write req
+  core_req_t* write = new core_req_t;
+  write->valid = 0xf;
+  write->rw = 0xf;
+  write->byteen = 0xffff;
+  write->addr = addr; 
+  write->data = data;
+  write->tag = 0xff;
+
+  //read req
+  core_req_t* read = new core_req_t;
+  read->valid = 0xf;
+  read->rw = 0;
+  read->byteen = 0xffff;
+  read->addr = addr;
+  read->data = addr; 
+  read->tag = 0xff;
   
 	// reset the device
   cachesim.reset();
 
+  //queue reqs
+  cachesim.send_req(write);
+  cachesim.send_req(read);
+  cachesim.step();
+  //cachesim.get_core_req();
   //write block to cache
-  cachesim.set_core_req();
+ // cachesim.set_core_req();
 
   for (int i = 0; i < 100; ++i){
-    if(i == 1){
+    /*if(i == 1){
       cachesim.clear_req();
-    }
+    }*/
     cachesim.step();
-    cachesim.get_core_rsp();
   }
-  
+  cachesim.get_core_req();
   // read block
-  cachesim.set_core_req2();
+  //cachesim.set_core_req2();
   for (int i = 0; i < 100; ++i){
     if(i == 1){
       //read block from cache
@@ -36,18 +59,7 @@ int main(int argc, char **argv)
 
     }
     cachesim.step();
-    cachesim.get_core_rsp();
   } 
   
-  /*
-  core_req_t *write;
-  write->valid = 1;
-  //write.tag = 0xff; //TODO: make a reasonable tag
-  //write.addr[0] = 0x11111111; 
-  //write.addr[1] = 0x22222222;
-  //write.addr[2] = 0x33333333;
-  //write.addr[3] = 0x44444444;
-  //write.
-  */
 	return 0;
 }
