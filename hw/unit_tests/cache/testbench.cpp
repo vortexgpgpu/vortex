@@ -24,7 +24,6 @@ int main(int argc, char **argv)
   RAM ram;
 	CacheSim cachesim;
   cachesim.attach_ram(&ram);
-  cachesim.reset();
 
   unsigned int addr[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
   unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
@@ -47,14 +46,21 @@ int main(int argc, char **argv)
   read->addr = addr;
   read->data = addr; 
   read->tag = 0xff;
+  
+	// reset the device
+  cachesim.reset();
 
   //queue reqs
   cachesim.send_req(write);
   cachesim.send_req(read);
 
   cachesim.run(); 
-  for(int i = 0; i < 100; ++i){
-    cachesim.step();
+
+  bool check = cachesim.assert_equal(data, write->tag);
+  if(check){
+    std::cout << "PASSED" << std::endl;
+  } else {
+    std::cout << "FAILED" << std::endl;
   }
 
 	return 0;

@@ -51,17 +51,21 @@ void CacheSim::reset() {
   this->step();
   cache_->reset = 0;
   this->step();
+
   dram_rsp_vec_.clear();
+  //clear req and rsp vecs
   
 }
 
 void CacheSim::step() {
+  //toggle clock
   cache_->clk = 0;
   this->eval();
 
   cache_->clk = 1;
   this->eval();
 
+  //handle core and dram reqs and rsps
   this->eval_reqs();
   this->eval_rsps();
   this->eval_dram_bus();
@@ -76,33 +80,19 @@ void CacheSim::eval() {
 }
 
 void CacheSim::run(){
-//#ifndef NDEBUG
+#ifndef NDEBUG
   std::cout << timestamp << ": [sim] run()" << std::endl;
-
-  // reset the device
-  this->reset();
-
-//#endif
-
+#endif
   this->step();
-  int valid = 15; 
-  // execute program
 
-  while (!core_req_vec_.empty()) {
-
-    for(int i = 0; i < 10; ++i){
-      
-      this->step();
-    }
-}
-/*
-  while(valid > 10){ 
+  int valid = 300; 
+  
+  while (valid > -1) {
       this->step();
       if(!cache_->core_req_valid && !cache_->core_rsp_valid){
-        valid--;
+        valid--; 
       }
   }
-  */
 }
 
 void CacheSim::clear_req(){
@@ -149,7 +139,6 @@ void CacheSim::eval_reqs(){
    
   } else {
     clear_req();
-
   }
 }
 
@@ -238,6 +227,21 @@ void CacheSim::eval_dram_bus() {
   }
 
   cache_->dram_req_ready = ~dram_stalled;
+}
+
+bool CacheSim::assert_equal(unsigned int* data, unsigned int tag){
+  int check = 0;
+  unsigned int *rsp = core_rsp_vec_.at(tag);
+  for (int i = 0; i < 4; ++i){
+    for (int j = 0; j < 4; ++j){
+      if (data[i] == rsp[j]){
+        check++;
+      }
+    }
+  }
+
+  return check; 
+
 }
 
 //DEBUG
