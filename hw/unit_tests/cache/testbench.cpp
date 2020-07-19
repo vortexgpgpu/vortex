@@ -5,19 +5,6 @@
 
 #define VCD_OUTPUT 1
 
-void check_match(unsigned int *data, unsigned int *rsp, char &check){
-  for(int i =0; i < 4; ++i){
-    for(int j = 0; j < 4; ++j){
-      std::cout << data[i] << std::endl;
-      std::cout << rsp[j] << std::endl; 
-      if (data[i] == rsp[j]){
-          check = check | i; 
-          std::cout << std::hex << check << std::endl;  
-      }
-    }
-  }
-}
-
 int main(int argc, char **argv)
 {
   //init
