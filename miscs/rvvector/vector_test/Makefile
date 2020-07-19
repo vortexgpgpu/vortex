@@ -12,9 +12,9 @@ CFLAGS += -I$(VORTEX_RT_PATH)/include
 
 LDFLAGS += $(VORTEX_RT_PATH)/libvortexrt.a
 
-PROJECT = hello
+PROJECT = vx_vector_main
 
-SRCS = hello.cpp
+SRCS = vx_vector_main.c vx_vec.s 
 
 all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).dump
 

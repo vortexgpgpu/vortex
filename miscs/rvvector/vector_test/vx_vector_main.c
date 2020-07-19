@@ -1,4 +1,4 @@
-#include "../../intrinsics/vx_intrinsics.h"
+#include <vx_intrinsics.h>
 #include "vx_vec.h"
 
 int main()
