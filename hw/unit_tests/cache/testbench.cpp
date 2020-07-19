@@ -11,7 +11,6 @@ int main(int argc, char **argv)
   RAM ram;
 	CacheSim cachesim;
   cachesim.attach_ram(&ram);
-  cachesim.reset();
 
   unsigned int addr[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
   unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
@@ -32,12 +31,35 @@ int main(int argc, char **argv)
   read->addr = addr;
   read->data = addr; 
   read->tag = 0xff;
+  
+	// reset the device
+  cachesim.reset();
 
   //queue reqs
   cachesim.send_req(write);
   cachesim.send_req(read);
+  cachesim.step();
+  //cachesim.get_core_req();
+  //write block to cache
+ // cachesim.set_core_req();
 
-  cachesim.run(); 
+  for (int i = 0; i < 100; ++i){
+    /*if(i == 1){
+      cachesim.clear_req();
+    }*/
+    cachesim.step();
+  }
+  cachesim.get_core_req();
+  // read block
+  //cachesim.set_core_req2();
+  for (int i = 0; i < 100; ++i){
+    if(i == 1){
+      //read block from cache
+      cachesim.clear_req();
 
+    }
+    cachesim.step();
+  } 
+  
 	return 0;
 }
