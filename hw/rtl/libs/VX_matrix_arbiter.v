@@ -56,7 +56,7 @@ module VX_matrix_arbiter #(
             end
         end
 
-        VX_encoder_onehot #(
+        VX_onehot_encoder #(
             .N(N)
         ) encoder (
             .onehot (grant_onehot),

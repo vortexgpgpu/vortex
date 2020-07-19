@@ -3,6 +3,8 @@
 module VX_divide #(
     parameter WIDTHN = 1,
     parameter WIDTHD = 1,
+    parameter WIDTHQ = 1,
+    parameter WIDTHR = 1,
     parameter NSIGNED = 0,
     parameter DSIGNED = 0,
     parameter PIPELINE = 0
@@ -13,18 +15,21 @@ module VX_divide #(
     input wire [WIDTHN-1:0] numer,
     input wire [WIDTHD-1:0] denom,
 
-    output wire [WIDTHN-1:0] quotient,
-    output wire [WIDTHD-1:0] remainder
+    output wire [WIDTHQ-1:0] quotient,
+    output wire [WIDTHR-1:0] remainder
 );
 
 `ifdef QUARTUS
+
+    wire [WIDTHN-1:0] quotient_unqual;
+    wire [WIDTHD-1:0] remainder_unqual;
 
     lpm_divide quartus_div (
         .clock    (clk),        
         .numer    (numer),
         .denom    (denom),
-        .quotient (quotient),
-        .remain   (remainder),
+        .quotient (quotient_unqual),
+        .remain   (remainder_unqual),
         .aclr     (1'b0),
         .clken    (1'b1)
     );
@@ -38,6 +43,9 @@ module VX_divide #(
 		quartus_div.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
 		quartus_div.lpm_pipeline = PIPELINE;
 
+    assign quotient  = quotient_unqual[WIDTHQ-1:0];
+    assign remainder = remainder_unqual[WIDTHR-1:0];
+
 `else
 
     reg [WIDTHN-1:0] quotient_unqual;
@@ -47,7 +55,7 @@ module VX_divide #(
     `ifndef SYNTHESIS    
         // this edge case kills verilator in some cases by causing a division
         // overflow exception. INT_MIN / -1 (on x86)
-        if (numer == {1'b1, (WIDTHN-1)'(0)}
+        if (numer == {1'b1, (WIDTHN-1)'(1'b0)}
          && denom == {WIDTHD{1'b1}}) begin
             quotient_unqual  = 0;
             remainder_unqual = 0;
@@ -74,8 +82,8 @@ module VX_divide #(
     end
 
     if (PIPELINE == 0) begin
-        assign quotient  = quotient_unqual;
-        assign remainder = remainder_unqual;
+        assign quotient  = quotient_unqual[WIDTHQ-1:0];
+        assign remainder = remainder_unqual[WIDTHR-1:0];
     end else begin
         reg [WIDTHN-1:0] quotient_pipe [0:PIPELINE-1];
         reg [WIDTHD-1:0] remainder_pipe [0:PIPELINE-1];
@@ -99,8 +107,8 @@ module VX_divide #(
             end
         end
 
-        assign quotient  = quotient_pipe[PIPELINE-1];
-        assign remainder = remainder_pipe[PIPELINE-1];
+        assign quotient  = quotient_pipe[PIPELINE-1][WIDTHQ-1:0];
+        assign remainder = remainder_pipe[PIPELINE-1][WIDTHR-1:0];
     end    
 
 `endif

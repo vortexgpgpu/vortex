@@ -52,6 +52,7 @@ private:
 
   void eval_dram_bus();
   void eval_io_bus();
+  void eval_csr_bus();
   void eval_snp_bus();
   
   std::vector<dram_req_t> dram_rsp_vec_;

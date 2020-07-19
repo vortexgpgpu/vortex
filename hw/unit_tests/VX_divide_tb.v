@@ -2,13 +2,13 @@
 
 module VX_tb_divide();
 
-    `ifdef TRACE
+`ifdef TRACE
     initial
     begin
     $dumpfile("trace.vcd");
     $dumpvars(0,test);
     end
-    `endif
+`endif
 
     reg clk;
     reg rst;
@@ -23,6 +23,8 @@ module VX_tb_divide();
             VX_divide#(
                 .WIDTHN(32),
                 .WIDTHD(32),
+                .WIDTHQ(32),
+                .WIDTHR(32),
                 .PIPELINE(i)
             ) div(
                 .clock(clk),
@@ -157,4 +159,4 @@ module VX_tb_divide();
     always #1
         clk = !clk;
 
-endmodule: VX_tb_divide
+endmodule

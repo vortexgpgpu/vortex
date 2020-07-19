@@ -1,4 +1,3 @@
-
 `ifndef VX_JOIN_IF
 `define VX_JOIN_IF
 

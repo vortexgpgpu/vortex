@@ -15,7 +15,7 @@ module VX_csr_data #(
 `IGNORE_WARNINGS_END
     input wire[`CSR_WIDTH-1:0]      write_data,
     input wire[`NW_BITS-1:0]        warp_num,
-    input wire                      wb_valid
+    input wire                      notify_commit
 );
     reg [`CSR_WIDTH-1:0] csr_table[`NUM_CSRS-1:0];
 
@@ -35,7 +35,7 @@ module VX_csr_data #(
                 csr_table[wr_addr] <= write_data;
             end
             num_cycles <= num_cycles + 1;
-            if (wb_valid) begin
+            if (notify_commit) begin
                 num_instrs <= num_instrs + 1;
             end
         end
@@ -57,6 +57,7 @@ module VX_csr_data #(
             `CSR_VEND_ID : read_data = `VENDOR_ID;
             `CSR_ARCH_ID : read_data = `ARCHITECTURE_ID;
             `CSR_IMPL_ID : read_data = `IMPLEMENTATION_ID;
+            `CSR_MISA    : read_data = `ISA_CODE;
             default      : read_data = 32'(csr_table[rd_addr]);
         endcase
     end  

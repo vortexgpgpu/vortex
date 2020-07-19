@@ -250,7 +250,7 @@ module VX_core #(
     assign dcache_snp_req_if.addr       = snp_req_addr;
     assign dcache_snp_req_if.invalidate = snp_req_invalidate;
     assign dcache_snp_req_if.tag        = snp_req_tag;
-    assign snp_req_ready                        = dcache_snp_req_if.ready;
+    assign snp_req_ready                = dcache_snp_req_if.ready;
 
     assign snp_rsp_valid = dcache_snp_rsp_if.valid;
     assign snp_rsp_tag   = dcache_snp_rsp_if.tag;
@@ -283,18 +283,20 @@ module VX_core #(
         .icache_dram_rsp_if (icache_dram_rsp_if)
     );
 
-    // select io address
+    // select io bus
     wire is_io_addr = ({core_dcache_req_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
-    wire io_select = (| core_dcache_req_if.valid) ? is_io_addr : 0;
+    wire io_req_select = (| core_dcache_req_if.valid) ? is_io_addr : 0;
+    wire io_rsp_select = (| arb_io_rsp_if.valid);
 
-    VX_dcache_arb dcache_io_arb (
-        .req_select       (io_select),
-        .in_core_req_if   (core_dcache_req_if),
-        .out0_core_req_if (arb_dcache_req_if),
-        .out1_core_req_if (arb_io_req_if),  
-        .in0_core_rsp_if  (arb_dcache_rsp_if),
-        .in1_core_rsp_if  (arb_io_rsp_if),    
-        .out_core_rsp_if  (core_dcache_rsp_if)
+    VX_dcache_arb dcache_io_arb (        
+        .core_req_in_if   (core_dcache_req_if),
+        .core_req_out0_if (arb_dcache_req_if),
+        .core_req_out1_if (arb_io_req_if),  
+        .core_rsp_in0_if  (arb_dcache_rsp_if),
+        .core_rsp_in1_if  (arb_io_rsp_if),    
+        .core_rsp_out_if  (core_dcache_rsp_if),
+        .select_req       (io_req_select),
+        .select_rsp       (io_rsp_select)
     );
     
 endmodule

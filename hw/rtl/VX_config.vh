@@ -59,6 +59,10 @@
 `define L3_ENABLE (`NUM_CLUSTERS > 1)
 `endif
 
+`ifndef EXT_M_ENABLE
+`define EXT_M_ENABLE 1
+`endif
+
 // Configuration Values =======================================================
 
 `define VENDOR_ID           0
@@ -84,6 +88,8 @@
 `define CSR_CYCLE_H     12'hC80
 `define CSR_INSTR_L     12'hC02
 `define CSR_INSTR_H     12'hC82
+
+`define CSR_MISA        12'h301
 
 // Dcache Configurable Knobs ==================================================
 

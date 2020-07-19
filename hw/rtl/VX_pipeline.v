@@ -58,16 +58,6 @@ module VX_pipeline #(
     output wire                             busy, 
     output wire                             ebreak
 );
-
-`DEBUG_BEGIN
-    wire scheduler_empty;
-`DEBUG_END
-
-    wire memory_delay;
-    wire exec_delay;
-    wire gpr_stage_delay;
-    wire schedule_delay;
-
     // Dcache
     VX_cache_core_req_if #(
         .NUM_REQUESTS(`NUM_THREADS), 
@@ -98,7 +88,6 @@ module VX_pipeline #(
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     )  core_icache_rsp_if();
 
-
     // CSR I/O
     VX_csr_io_req_if csr_io_req_if();
     assign csr_io_req_if.valid = csr_io_req_valid;
@@ -112,69 +101,95 @@ module VX_pipeline #(
     assign csr_io_rsp_data     = csr_io_rsp_if.data; 
     assign csr_io_rsp_if.ready = csr_io_rsp_ready; 
 
-    // Front-end to Back-end
-    VX_backend_req_if   bckE_req_if();
-
-    // Back-end to Front-end
-    VX_wb_if            writeback_if(); 
+    VX_decode_if        decode_if();
+    VX_execute_if       execute_if();    
     VX_branch_rsp_if    branch_rsp_if();
-    VX_jal_rsp_if       jal_rsp_if();   
-
-    // Warp controls
     VX_warp_ctl_if      warp_ctl_if();
+    VX_ifetch_rsp_if    ifetch_rsp_if();
+    VX_wb_if            writeback_if();     
+    VX_wstall_if        wstall_if();
+    VX_join_if          join_if();
+    VX_wb_if            alu_wb_if();
+    VX_wb_if            branch_wb_if();
+    VX_wb_if            lsu_wb_if();        
+    VX_wb_if            csr_wb_if(); 
+    VX_wb_if            mul_wb_if();     
 
-    VX_front_end #(
+    wire notify_commit;    
+    
+    VX_fetch #(
         .CORE_ID(CORE_ID)
-    ) front_end (
-        `SCOPE_SIGNALS_ISTAGE_BIND
-
+    ) fetch (
         .clk            (clk),
         .reset          (reset),
-        .warp_ctl_if    (warp_ctl_if),
-        .bckE_req_if    (bckE_req_if),
-        .schedule_delay (schedule_delay),
-        .icache_rsp_if  (core_icache_rsp_if),
         .icache_req_if  (core_icache_req_if),
-        .jal_rsp_if     (jal_rsp_if),
+        .icache_rsp_if  (core_icache_rsp_if), 
+        .wstall_if      (wstall_if),
+        .join_if        (join_if),        
+        .warp_ctl_if    (warp_ctl_if),
         .branch_rsp_if  (branch_rsp_if),
+        .ifetch_rsp_if  (ifetch_rsp_if),
         .busy           (busy)
     );
 
-    VX_scheduler scheduler (
+    VX_decode #(
+        .CORE_ID(CORE_ID)
+    ) decode (
+        .clk            (clk),
+        .reset          (reset),        
+        .ifetch_rsp_if  (ifetch_rsp_if),
+        .decode_if      (decode_if),
+        .wstall_if      (wstall_if),
+        .join_if        (join_if)
+    );
+
+    VX_issue #(
+        .CORE_ID(CORE_ID)
+    ) issue (
+        .clk            (clk),
+        .reset          (reset),        
+        .decode_if      (decode_if),
+        .writeback_if   (writeback_if),
+        .execute_if     (execute_if),
+        `UNUSED_PIN     (is_empty)
+    );
+
+    VX_execute #(
+        .CORE_ID(CORE_ID)
+    ) execute (
+        `SCOPE_SIGNALS_LSU_BIND
+        .clk            (clk),
+        .reset          (reset),    
+        .dcache_req_if  (core_dcache_req_if),
+        .dcache_rsp_if  (core_dcache_rsp_if),
+        .csr_io_req_if  (csr_io_req_if),
+        .csr_io_rsp_if  (csr_io_rsp_if),                 
+        .execute_if     (execute_if),
+        .writeback_if   (writeback_if),
+        .warp_ctl_if    (warp_ctl_if),
+        .branch_rsp_if  (branch_rsp_if),        
+        .alu_wb_if      (alu_wb_if),
+        .branch_wb_if   (branch_wb_if),
+        .lsu_wb_if      (lsu_wb_if),        
+        .csr_wb_if      (csr_wb_if),
+        .mul_wb_if      (mul_wb_if),
+        .notify_commit  (notify_commit),
+        .ebreak         (ebreak)
+    );    
+
+    VX_writeback #(
+        .CORE_ID(CORE_ID)
+    ) writeback (
         .clk            (clk),
         .reset          (reset),
-        .memory_delay   (memory_delay),
-        .exec_delay     (exec_delay),
-        .gpr_stage_delay(gpr_stage_delay),
-        .bckE_req_if    (bckE_req_if),
+        .alu_wb_if      (alu_wb_if),
+        .branch_wb_if   (branch_wb_if),
+        .lsu_wb_if      (lsu_wb_if),        
+        .csr_wb_if      (csr_wb_if),
+        .mul_wb_if      (mul_wb_if),
         .writeback_if   (writeback_if),
-        .schedule_delay (schedule_delay),
-        .is_empty       (scheduler_empty)
-    );
-
-    VX_back_end #(
-        .CORE_ID(CORE_ID)
-    ) back_end (
-        `SCOPE_SIGNALS_LSU_BIND
-        `SCOPE_SIGNALS_BE_BIND
-
-        .clk             (clk),
-        .reset           (reset),
-        .csr_io_req_if   (csr_io_req_if),
-        .csr_io_rsp_if   (csr_io_rsp_if), 
-        .schedule_delay  (schedule_delay),
-        .warp_ctl_if     (warp_ctl_if),
-        .bckE_req_if     (bckE_req_if),
-        .jal_rsp_if      (jal_rsp_if),
-        .branch_rsp_if   (branch_rsp_if),    
-        .dcache_req_if   (core_dcache_req_if),
-        .dcache_rsp_if   (core_dcache_rsp_if),
-        .writeback_if    (writeback_if),
-        .mem_delay       (memory_delay),
-        .exec_delay      (exec_delay),
-        .gpr_stage_delay (gpr_stage_delay),        
-        .ebreak          (ebreak)
-    );
+        .notify_commit  (notify_commit)
+    );   
 
     assign dcache_req_valid  = core_dcache_req_if.valid;
     assign dcache_req_rw     = core_dcache_req_if.rw;
@@ -204,17 +219,14 @@ module VX_pipeline #(
 
     `SCOPE_ASSIGN(scope_busy, busy); 
     `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);    
-    `SCOPE_ASSIGN(scope_memory_delay, memory_delay);
+    `SCOPE_ASSIGN(scope_mem_delay, mem_delay);
     `SCOPE_ASSIGN(scope_exec_delay, exec_delay);
-    `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_stage_delay);
+    `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_delay);
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
-        if ((| writeback_if.valid) && (writeback_if.wb != 0)) begin
-            $display("%t: Core%0d-WB: warp=%0d, rd=%0d, data=%0h", $time, CORE_ID, writeback_if.warp_num, writeback_if.rd, writeback_if.data);
-        end
-        if (schedule_delay || memory_delay || exec_delay || gpr_stage_delay) begin
-            $display("%t: Core%0d-Delay: sched=%b, mem=%b, exec=%b, gpr=%b ", $time, CORE_ID, schedule_delay, memory_delay, exec_delay, gpr_stage_delay);
+        if ((| execute_if.valid) && (~execute_if.alu_ready || ~execute_if.br_ready || ~execute_if.lsu_ready || ~execute_if.csr_ready  || ~execute_if.mul_ready || ~execute_if.gpu_ready)) begin
+            $display("%t: Core%0d-stall: warp=%0d, PC=%0h, alu=%b, br=%b, lsu=%b, csr=%b, mul=%b, gpu=%b", $time, CORE_ID, execute_if.warp_num, execute_if.curr_PC, ~execute_if.alu_ready, ~execute_if.br_ready, ~execute_if.lsu_ready, ~execute_if.csr_ready, ~execute_if.mul_ready, ~execute_if.gpu_ready);
         end
     end
 `endif

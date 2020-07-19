@@ -1,48 +1,50 @@
 `include "VX_define.vh"
 
 module VX_dcache_arb (
-    input wire req_select,
-
     // input request
-    VX_cache_core_req_if    in_core_req_if,
+    VX_cache_core_req_if    core_req_in_if,
 
     // output 0 request
-    VX_cache_core_req_if    out0_core_req_if,
+    VX_cache_core_req_if    core_req_out0_if,
 
     // output 1 request
-    VX_cache_core_req_if    out1_core_req_if,
+    VX_cache_core_req_if    core_req_out1_if,
 
     // input 0 response
-    VX_cache_core_rsp_if    in0_core_rsp_if,
+    VX_cache_core_rsp_if    core_rsp_in0_if,
 
     // input 1 response
-    VX_cache_core_rsp_if    in1_core_rsp_if,
+    VX_cache_core_rsp_if    core_rsp_in1_if,
 
     // output response
-    VX_cache_core_rsp_if    out_core_rsp_if
+    VX_cache_core_rsp_if    core_rsp_out_if,
+
+    // bus select    
+    input wire select_req,
+    input wire select_rsp
 );
-    assign out0_core_req_if.valid  = in_core_req_if.valid & {`NUM_THREADS{~req_select}};        
-    assign out0_core_req_if.rw     = in_core_req_if.rw;
-    assign out0_core_req_if.byteen = in_core_req_if.byteen;
-    assign out0_core_req_if.addr   = in_core_req_if.addr;
-    assign out0_core_req_if.data   = in_core_req_if.data;
-    assign out0_core_req_if.tag    = in_core_req_if.tag;    
+    // select request
+    assign core_req_out0_if.valid  = core_req_in_if.valid & {`NUM_THREADS{~select_req}};        
+    assign core_req_out0_if.rw     = core_req_in_if.rw;
+    assign core_req_out0_if.byteen = core_req_in_if.byteen;
+    assign core_req_out0_if.addr   = core_req_in_if.addr;
+    assign core_req_out0_if.data   = core_req_in_if.data;
+    assign core_req_out0_if.tag    = core_req_in_if.tag;    
 
-    assign out1_core_req_if.valid  = in_core_req_if.valid & {`NUM_THREADS{req_select}};        
-    assign out1_core_req_if.rw     = in_core_req_if.rw;
-    assign out1_core_req_if.byteen = in_core_req_if.byteen;
-    assign out1_core_req_if.addr   = in_core_req_if.addr;
-    assign out1_core_req_if.data   = in_core_req_if.data;
-    assign out1_core_req_if.tag    = in_core_req_if.tag;    
+    assign core_req_out1_if.valid  = core_req_in_if.valid & {`NUM_THREADS{select_req}};        
+    assign core_req_out1_if.rw     = core_req_in_if.rw;
+    assign core_req_out1_if.byteen = core_req_in_if.byteen;
+    assign core_req_out1_if.addr   = core_req_in_if.addr;
+    assign core_req_out1_if.data   = core_req_in_if.data;
+    assign core_req_out1_if.tag    = core_req_in_if.tag;    
 
-    assign in_core_req_if.ready = req_select ? out1_core_req_if.ready : out0_core_req_if.ready;
+    assign core_req_in_if.ready = select_req ? core_req_out1_if.ready : core_req_out0_if.ready;
 
-    wire rsp_select0 = (| in0_core_rsp_if.valid);
-
-    assign out_core_rsp_if.valid = rsp_select0 ? in0_core_rsp_if.valid : in1_core_rsp_if.valid;
-    assign out_core_rsp_if.data  = rsp_select0 ? in0_core_rsp_if.data  : in1_core_rsp_if.data;
-    assign out_core_rsp_if.tag   = rsp_select0 ? in0_core_rsp_if.tag   : in1_core_rsp_if.tag;    
-    assign in0_core_rsp_if.ready = out_core_rsp_if.ready && rsp_select0; 
-    assign in1_core_rsp_if.ready = out_core_rsp_if.ready && !rsp_select0; 
+    // select response
+    assign core_rsp_out_if.valid = select_rsp ? core_rsp_in1_if.valid : core_rsp_in0_if.valid;
+    assign core_rsp_out_if.data  = select_rsp ? core_rsp_in1_if.data  : core_rsp_in0_if.data;
+    assign core_rsp_out_if.tag   = select_rsp ? core_rsp_in1_if.tag   : core_rsp_in0_if.tag;    
+    assign core_rsp_in0_if.ready = core_rsp_out_if.ready && ~select_rsp; 
+    assign core_rsp_in1_if.ready = core_rsp_out_if.ready && select_rsp; 
 
 endmodule

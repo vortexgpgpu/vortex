@@ -6,12 +6,13 @@
 interface VX_wb_if ();
 
     wire [`NUM_THREADS-1:0]         valid;
-    wire [`NUM_THREADS-1:0][31:0]	data; 
     wire [`NW_BITS-1:0]             warp_num;
-    wire [4:0]                      rd;
-    wire [1:0]                      wb;    
     wire [31:0]                     curr_PC;  
+    wire [`NUM_THREADS-1:0][31:0]	data; 
+    wire [`NR_BITS-1:0]             rd;
+    wire [`WB_BITS-1:0]             wb;        
     wire                            is_io;
+    wire                            ready;
 
 endinterface
 
