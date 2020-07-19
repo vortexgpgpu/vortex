@@ -58,7 +58,7 @@ public:
   //display funcs
 
   void get_dram_req();
-  void get_core_rsp();
+  void get_core_rsp(unsigned int (&rsp)[4]);
   void get_core_req();
   bool get_core_req_ready();
   bool get_core_rsp_ready();
@@ -75,6 +75,7 @@ private:
   
   std::queue<core_req_t*> core_req_vec_; 
   std::vector<dram_req_t> dram_rsp_vec_;
+  std::map<unsigned int, unsigned int*> core_rsp_vec_;
   int dram_rsp_active_;
 
   uint32_t snp_req_active_;

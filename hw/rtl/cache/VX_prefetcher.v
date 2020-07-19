@@ -5,7 +5,7 @@ module VX_prefetcher #(
     parameter BANK_LINE_SIZE          = 0,
     // Size of a word in bytes
     parameter WORD_SIZE               = 0,    
-    parameter PRFQ_SIZE               = 0,
+    parameter PRFQ_SIZE               = 1,
     parameter PRFQ_STRIDE             = 0
 ) (
     input wire                          clk,

@@ -5,15 +5,31 @@
 
 #define VCD_OUTPUT 1
 
+void check_match(unsigned int *data, unsigned int *rsp, char &check){
+  for(int i =0; i < 4; ++i){
+    for(int j = 0; j < 4; ++j){
+      std::cout << data[i] << std::endl;
+      std::cout << rsp[j] << std::endl; 
+      if (data[i] == rsp[j]){
+          check = check | i; 
+          std::cout << std::hex << check << std::endl;  
+      }
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
   //init
   RAM ram;
 	CacheSim cachesim;
   cachesim.attach_ram(&ram);
+  cachesim.reset();
 
   unsigned int addr[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
   unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
+  unsigned int rsp[4] = {0,0,0,0};
+  char responded = 0;
   //write req
   core_req_t* write = new core_req_t;
   write->valid = 0xf;
@@ -31,35 +47,15 @@ int main(int argc, char **argv)
   read->addr = addr;
   read->data = addr; 
   read->tag = 0xff;
-  
-	// reset the device
-  cachesim.reset();
 
   //queue reqs
   cachesim.send_req(write);
   cachesim.send_req(read);
-  cachesim.step();
-  //cachesim.get_core_req();
-  //write block to cache
- // cachesim.set_core_req();
 
-  for (int i = 0; i < 100; ++i){
-    /*if(i == 1){
-      cachesim.clear_req();
-    }*/
+  cachesim.run(); 
+  for(int i = 0; i < 100; ++i){
     cachesim.step();
   }
-  cachesim.get_core_req();
-  // read block
-  //cachesim.set_core_req2();
-  for (int i = 0; i < 100; ++i){
-    if(i == 1){
-      //read block from cache
-      cachesim.clear_req();
 
-    }
-    cachesim.step();
-  } 
-  
 	return 0;
 }
