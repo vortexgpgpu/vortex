@@ -32,7 +32,7 @@ typedef struct {
   unsigned byteen;
   unsigned *addr;
   unsigned *data;
-  unsigned tag;
+  unsigned int tag;
 } core_req_t;
 
 class CacheSim {
@@ -51,9 +51,7 @@ public:
   void run();  //run until all reqs are empty
   void clear_req(); 
   void send_req(core_req_t *req);
-
-  void set_core_req();
-  void set_core_req2();
+  bool assert_equal(unsigned int* data, unsigned int tag);
 
   //display funcs
 
