@@ -130,8 +130,8 @@ module VX_cache #(
 `ifdef DBG_CORE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire[31:0]           debug_core_req_use_pc;
-    wire[1:0]            debug_core_req_wb;    
-    wire[4:0]            debug_core_req_rd;
+    wire[`WB_BITS-1:0]   debug_core_req_wb;    
+    wire[`NR_BITS-1:0]   debug_core_req_rd;
     wire[`NW_BITS-1:0]   debug_core_req_warp_num;
     wire[`LOG2UP(CREQ_SIZE)-1:0] debug_core_req_idx;
     /* verilator lint_on UNUSED */

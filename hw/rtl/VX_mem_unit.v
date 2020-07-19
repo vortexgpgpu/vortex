@@ -40,18 +40,20 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
     ) core_dcache_rsp_qual_if(), core_smem_rsp_if();
 
-    // select shared memory address
-    wire is_smem_addr = (({core_dcache_req_if.addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
-    wire smem_select = (| core_dcache_req_if.valid) ? is_smem_addr : 0;
+    // select shared memory bus
+    wire is_smem_addr    = (({core_dcache_req_if.addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
+    wire smem_req_select = (| core_dcache_req_if.valid) ? is_smem_addr : 0;
+    wire smem_rsp_select = (| core_smem_rsp_if.valid);
 
-    VX_dcache_arb dcache_smem_arb (
-        .req_select       (smem_select),
-        .in_core_req_if   (core_dcache_req_if),
-        .out0_core_req_if (core_dcache_req_qual_if),
-        .out1_core_req_if (core_smem_req_if),    
-        .in0_core_rsp_if  (core_dcache_rsp_qual_if),
-        .in1_core_rsp_if  (core_smem_rsp_if),    
-        .out_core_rsp_if  (core_dcache_rsp_if)
+    VX_dcache_arb dcache_smem_arb (        
+        .core_req_in_if   (core_dcache_req_if),
+        .core_req_out0_if (core_dcache_req_qual_if),
+        .core_req_out1_if (core_smem_req_if),    
+        .core_rsp_in0_if  (core_dcache_rsp_qual_if),
+        .core_rsp_in1_if  (core_smem_rsp_if),    
+        .core_rsp_out_if  (core_dcache_rsp_if),
+        .select_req       (smem_req_select),
+        .select_rsp       (smem_rsp_select)
     );
 
     VX_cache #(

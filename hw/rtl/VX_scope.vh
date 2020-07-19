@@ -74,7 +74,7 @@
         scope_execute_valid, \
         scope_writeback_valid, \
         scope_schedule_delay, \
-        scope_memory_delay, \
+        scope_mem_delay, \
         scope_exec_delay, \
         scope_gpr_stage_delay, \
         scope_busy, \
@@ -127,26 +127,26 @@
         wire scope_busy; \
         wire scope_snp_rsp_ready; \
         wire scope_schedule_delay; \
-        wire scope_memory_delay; \
+        wire scope_mem_delay; \
         wire scope_exec_delay; \
         wire scope_gpr_stage_delay; \
         wire [`NUM_THREADS-1:0]  scope_decode_valid; \
         wire [`NW_BITS-1:0]  scope_decode_warp_num; \
         wire [31:0] scope_decode_curr_PC; \
         wire        scope_decode_is_jal; \
-        wire [4:0]  scope_decode_rs1; \
-        wire [4:0]  scope_decode_rs2; \
+        wire [`NR_BITS-1:0] scope_decode_rs1; \
+        wire [`NR_BITS-1:0] scope_decode_rs2; \
         wire [`NUM_THREADS-1:0]  scope_execute_valid; \
         wire [`NW_BITS-1:0]  scope_execute_warp_num; \
         wire [31:0] scope_execute_curr_PC; \
-        wire [4:0]  scope_execute_rd; \
+        wire [`NR_BITS-1:0]  scope_execute_rd; \
         wire [63:0] scope_execute_a; \
         wire [63:0] scope_execute_b; \
         wire [`NUM_THREADS-1:0]  scope_writeback_valid; \
         wire [`NW_BITS-1:0]  scope_writeback_warp_num; \
         wire [31:0] scope_writeback_curr_PC; \
-        wire [1:0]  scope_writeback_wb; \
-        wire [4:0]  scope_writeback_rd; \
+        wire [`WB_BITS-1:0] scope_writeback_wb; \
+        wire [`NR_BITS-1:0] scope_writeback_rd; \
         wire [63:0] scope_writeback_data; \
         wire scope_bank_valid_st0; \
         wire scope_bank_valid_st1; \
@@ -204,7 +204,7 @@
     `define SCOPE_SIGNALS_PIPELINE_IO \
         output wire scope_busy, \
         output wire scope_schedule_delay, \
-        output wire scope_memory_delay, \
+        output wire scope_mem_delay, \
         output wire scope_exec_delay, \
         output wire scope_gpr_stage_delay,
 
@@ -213,19 +213,19 @@
         output wire [`NW_BITS-1:0] scope_decode_warp_num, \
         output wire [31:0] scope_decode_curr_PC, \
         output wire        scope_decode_is_jal, \
-        output wire [4:0]  scope_decode_rs1, \
-        output wire [4:0]  scope_decode_rs2, \
+        output wire [`NR_BITS-1:0]  scope_decode_rs1, \
+        output wire [`NR_BITS-1:0]  scope_decode_rs2, \
         output wire [`NUM_THREADS-1:0]  scope_execute_valid, \
         output wire [`NW_BITS-1:0]  scope_execute_warp_num, \
         output wire [31:0] scope_execute_curr_PC, \
-        output wire [4:0]  scope_execute_rd, \
+        output wire [`NR_BITS-1:0]  scope_execute_rd, \
         output wire [63:0] scope_execute_a, \
         output wire [63:0] scope_execute_b, \
         output wire [`NUM_THREADS-1:0]  scope_writeback_valid, \
         output wire [`NW_BITS-1:0]  scope_writeback_warp_num, \
         output wire [31:0] scope_writeback_curr_PC, \
-        output wire [1:0]  scope_writeback_wb, \
-        output wire [4:0]  scope_writeback_rd, \
+        output wire [`WB_BITS-1:0]  scope_writeback_wb, \
+        output wire [`NR_BITS-1:0]  scope_writeback_rd, \
         output wire [63:0] scope_writeback_data,
 
     `define SCOPE_SIGNALS_ISTAGE_BIND \
@@ -326,7 +326,7 @@
     `define SCOPE_SIGNALS_PIPELINE_BIND \
         .scope_busy             (scope_busy), \
         .scope_schedule_delay   (scope_schedule_delay), \
-        .scope_memory_delay     (scope_memory_delay), \
+        .scope_mem_delay     (scope_mem_delay), \
         .scope_exec_delay       (scope_exec_delay), \
         .scope_gpr_stage_delay  (scope_gpr_stage_delay),
 

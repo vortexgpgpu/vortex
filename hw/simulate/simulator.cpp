@@ -13,6 +13,9 @@ Simulator::Simulator() {
   // force random values for unitialized signals  
   Verilated::randReset(2);
 
+  // Turn off assertion before reset
+  Verilated::assertOn(false);
+
   ram_ = nullptr;
   vortex_ = new VVortex();
 
@@ -49,6 +52,9 @@ void Simulator::reset() {
   vortex_->reset = 0;
 
   dram_rsp_vec_.clear();
+
+  // Turn on assertion after reset
+  Verilated::assertOn(true);
 }
 
 void Simulator::step() {
@@ -60,6 +66,7 @@ void Simulator::step() {
 
   this->eval_dram_bus();
   this->eval_io_bus();
+  this->eval_csr_bus();
   this->eval_snp_bus();
 }
 
@@ -157,6 +164,15 @@ void Simulator::eval_io_bus() {
   vortex_->io_rsp_valid = 0;
 }
 
+void Simulator::eval_csr_bus() {
+  vortex_->csr_io_req_valid = 0;
+  vortex_->csr_io_req_coreid = 0;
+  vortex_->csr_io_req_addr = 0;
+  vortex_->csr_io_req_rw = 0;
+  vortex_->csr_io_req_data = 0;  
+  vortex_->csr_io_rsp_ready = 1;
+}
+
 void Simulator::eval_snp_bus() {
   if (snp_req_active_) {       
     if (vortex_->snp_rsp_valid) {      
@@ -241,18 +257,17 @@ bool Simulator::run() {
 
   // check riscv-tests PASSED/FAILED status
 #if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
-  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->writeback->last_data_wb & 0xf;
 #else
 #if (NUM_CLUSTERS == 1)
-  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->writeback->last_data_wb & 0xf;
 #else
-  int status = (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->back_end->writeback->last_data_wb & 0xf;
+  int status = (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->writeback->last_data_wb & 0xf;
 #endif
 #endif
 
   return (status == 1);
 }
-
 
 void Simulator::load_bin(const char* program_file) {
   if (ram_ == nullptr)

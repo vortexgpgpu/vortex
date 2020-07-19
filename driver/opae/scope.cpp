@@ -116,9 +116,9 @@ static const scope_signal_t scope_signals[] = {
     { NUM_THREADS, "writeback_valid" },   
 
     { 1, "schedule_delay" },
-    { 1, "memory_delay" },
+    { 1, "mem_delay" },
     { 1, "exec_delay" },
-    { 1, "gpr_stage_delay" },
+    { 1, "gpr_delay" },
     { 1, "busy" },
 
     { 1, "bank_valid_st0" },

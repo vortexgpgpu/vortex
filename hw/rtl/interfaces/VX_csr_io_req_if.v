@@ -5,11 +5,11 @@
 
 interface VX_csr_io_req_if ();
 
-    wire        valid;
-    wire        rw;
-    wire [11:0] addr;
-    wire [31:0] data;
-    wire        ready;
+    wire                    valid;
+    wire [`CSR_ADDR_SIZE-1:0] addr;
+    wire                    rw;
+    wire [31:0]             data;
+    wire                    ready;
     
 endinterface
 

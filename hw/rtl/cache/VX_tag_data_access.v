@@ -116,7 +116,7 @@ module VX_tag_data_access #(
         .clk   (clk),
         .reset (reset),
         .stall (stall),
-        .flush (1'b0),
+        .flush (0),
         .in    ({qual_read_valid_st1, qual_read_dirty_st1, qual_read_dirtyb_st1, qual_read_tag_st1, qual_read_data_st1}),
         .out   ({read_valid_st1c[0],  read_dirty_st1c[0],  read_dirtyb_st1c[0],  read_tag_st1c[0],  read_data_st1c[0]})
     );
@@ -129,7 +129,7 @@ module VX_tag_data_access #(
             .clk   (clk),
             .reset (reset),
             .stall (stall),
-            .flush (1'b0),
+            .flush (0),
             .in    ({read_valid_st1c[i-1], read_dirty_st1c[i-1], read_dirtyb_st1c[i-1], read_tag_st1c[i-1], read_data_st1c[i-1]}),
             .out   ({read_valid_st1c[i],   read_dirty_st1c[i],   read_dirtyb_st1c[i],   read_tag_st1c[i],   read_data_st1c[i]})
         );

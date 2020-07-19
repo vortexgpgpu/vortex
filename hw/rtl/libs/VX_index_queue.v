@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_indexable_queue #(
+module VX_index_queue #(
     parameter DATAW = 1,
     parameter SIZE = 1
 ) (

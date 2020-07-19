@@ -5,12 +5,12 @@
 
 int main(int argc, char **argv)
 {
-//#define ALL_TESTS
+#define ALL_TESTS
 #ifdef ALL_TESTS
 	bool passed = true;
 
   std::string tests[] = {
-	 	"../../../benchmarks/riscv_tests/rv32ui-p-add.hex",
+    "../../../benchmarks/riscv_tests/rv32ui-p-add.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-addi.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-and.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-andi.hex",
@@ -67,12 +67,14 @@ int main(int argc, char **argv)
 		Simulator simulator;
 		simulator.attach_ram(&ram);
 		simulator.load_ihex(test.c_str());
-		bool curr = simulator.run();
+		bool status = simulator.run();
 
-		if (curr) std::cerr << GREEN << "Test Passed: " << test << std::endl;
-		if (!curr) std::cerr << RED   << "Test Failed: " << test << std::endl;
+		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
+		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
 		std::cerr << DEFAULT;
-		passed = passed && curr;
+		passed = passed && status;
+		if (!passed)
+			break;
 	}
 
 	std::cerr << DEFAULT << "\n***************************************\n";
@@ -95,12 +97,12 @@ int main(int argc, char **argv)
 	Simulator simulator;
 	simulator.attach_ram(&ram);
 	simulator.load_ihex(test);
-	bool curr = simulator.run();
+	bool status = simulator.run();
 
-	if (curr) std::cerr << GREEN << "Test Passed: " << test << std::endl;
-	if (!curr) std::cerr << RED   << "Test Failed: " << test << std::endl;
+	if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
+	if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
 
-  return !curr;
+  return !status;
 
 #endif
 }

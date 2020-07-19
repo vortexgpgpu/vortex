@@ -1,4 +1,3 @@
-
 `ifndef VX_WARP_CTL_IF
 `define VX_WARP_CTL_IF
 
@@ -7,6 +6,7 @@
 interface VX_warp_ctl_if ();
 
     wire [`NW_BITS-1:0]     warp_num;
+
     wire                    change_mask;
     wire [`NUM_THREADS-1:0] thread_mask;
 
@@ -16,16 +16,13 @@ interface VX_warp_ctl_if ();
 
     wire                    whalt;
 
-    // barrier
     wire                    is_barrier;
-    wire [31:0]             barrier_id;
-    wire [$clog2(`NUM_WARPS):0] num_warps;
+    wire [`NB_BITS-1:0]     barrier_id;
+    wire [`NW_BITS:0]       num_warps;
 
     wire                    is_split;
-    wire                 	dont_split;
-`IGNORE_WARNINGS_BEGIN
-    wire [`NW_BITS-1:0]     split_warp_num;
-`IGNORE_WARNINGS_END
+    wire                 	do_split;
+
     wire [`NUM_THREADS-1:0] split_new_mask;
     wire [`NUM_THREADS-1:0] split_later_mask;
     wire [31:0]             split_save_pc;

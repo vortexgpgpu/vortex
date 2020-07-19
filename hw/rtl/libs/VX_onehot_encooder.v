@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_encoder_onehot #(
+module VX_onehot_encoder #(
     parameter N = 6
 ) (
     input wire [N-1:0] onehot,    

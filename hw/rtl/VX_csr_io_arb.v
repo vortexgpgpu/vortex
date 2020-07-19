@@ -2,7 +2,7 @@
 
 module VX_csr_io_arb #(
     parameter NUM_REQUESTS = 1,
-    parameter REQS_BITS = `CLOG2(NUM_REQUESTS)
+    parameter REQS_BITS = `LOG2UP(NUM_REQUESTS)
 ) (
     input wire                              clk,
     input wire                              reset,
@@ -37,6 +37,7 @@ module VX_csr_io_arb #(
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_VAR (request_id)
 
         assign out_csr_io_req_valid  = in_csr_io_req_valid;
         assign out_csr_io_req_rw     = in_csr_io_req_rw;        

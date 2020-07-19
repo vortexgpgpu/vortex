@@ -1,89 +1,112 @@
 `include "VX_define.vh"
 
-module VX_writeback (
-    input wire          clk,
-    input wire          reset,
+module VX_writeback #(
+    parameter CORE_ID = 0
+) (
+    input wire  clk,
+    input wire  reset,
 
-    // Mem WB info
-    VX_wb_if            mem_wb_if,
+    // inputs
+    VX_wb_if    alu_wb_if,
+    VX_wb_if    branch_wb_if,
+    VX_wb_if    lsu_wb_if,  
+    VX_wb_if    mul_wb_if,    
+    VX_wb_if    csr_wb_if,
 
-    // EXEC Unit WB info
-    VX_wb_if            inst_exec_wb_if,
-
-    // CSR Unit WB info
-    VX_wb_if            csr_wb_if,
-
-    // Actual WB to GPR
-    VX_wb_if            writeback_if,
-    output wire         no_slot_mem,
-    output wire         no_slot_exec,
-    output wire         no_slot_csr
+    // outputs
+    VX_wb_if    writeback_if,
+    output wire notify_commit
 );
 
-    VX_wb_if writeback_tmp_if();
+    wire br_valid  = (| branch_wb_if.valid);
+    wire lsu_valid = (| lsu_wb_if.valid);
+    wire mul_valid = (| mul_wb_if.valid);
+    wire alu_valid = (| alu_wb_if.valid);
+    wire csr_valid = (| csr_wb_if.valid);
 
-    wire exec_wb = (inst_exec_wb_if.wb != 0) && (| inst_exec_wb_if.valid);
-    wire mem_wb  = (mem_wb_if.wb       != 0) && (| mem_wb_if.valid);
-    wire csr_wb  = (csr_wb_if.wb       != 0) && (| csr_wb_if.valid);
+    VX_wb_if writeback_tmp_if();    
 
-    assign no_slot_mem  = mem_wb && (exec_wb || csr_wb);
-    assign no_slot_csr  = csr_wb && exec_wb;    
-    assign no_slot_exec = 0;
+    assign writeback_tmp_if.valid =  br_valid ? branch_wb_if.valid :
+                                    lsu_valid ? lsu_wb_if.valid :
+                                    mul_valid ? mul_wb_if.valid :             
+                                    alu_valid ? alu_wb_if.valid :                            
+                                    csr_valid ? csr_wb_if.valid :                                                 
+                                                0;     
 
-    assign writeback_tmp_if.data     = exec_wb ? inst_exec_wb_if.data :
-                                       csr_wb  ? csr_wb_if.data       :
-                                       mem_wb  ? mem_wb_if.data       :
-                                                 0;
+    assign writeback_tmp_if.warp_num = br_valid ? branch_wb_if.warp_num :
+                                    lsu_valid ? lsu_wb_if.warp_num :
+                                    mul_valid ? mul_wb_if.warp_num :   
+                                    alu_valid ? alu_wb_if.warp_num :                            
+                                    csr_valid ? csr_wb_if.warp_num :                           
+                                    
+                                                0;   
 
-    assign writeback_tmp_if.valid    = exec_wb ? inst_exec_wb_if.valid :
-                                       csr_wb  ? csr_wb_if.valid       :
-                                       mem_wb  ? mem_wb_if.valid       :
-                                                 0;    
+    assign writeback_tmp_if.curr_PC = br_valid ? branch_wb_if.curr_PC :
+                                    lsu_valid ? lsu_wb_if.curr_PC :
+                                    mul_valid ? mul_wb_if.curr_PC :    
+                                    alu_valid ? alu_wb_if.curr_PC :                            
+                                    csr_valid ? csr_wb_if.curr_PC :                                                                                      
+                                                0;
 
-    assign writeback_tmp_if.rd       = exec_wb ? inst_exec_wb_if.rd :
-                                       csr_wb  ? csr_wb_if.rd       :
-                                       mem_wb  ? mem_wb_if.rd       :
-                                                 0;
+    assign writeback_tmp_if.data =   br_valid ? branch_wb_if.data :
+                                    lsu_valid ? lsu_wb_if.data :
+                                    mul_valid ? mul_wb_if.data :                           
+                                    alu_valid ? alu_wb_if.data :                            
+                                    csr_valid ? csr_wb_if.data :                                                               
+                                                0;
 
-    assign writeback_tmp_if.wb       = exec_wb ? inst_exec_wb_if.wb :
-                                       csr_wb  ? csr_wb_if.wb       :
-                                       mem_wb  ? mem_wb_if.wb       :
-                                                 0;   
+    assign writeback_tmp_if.rd =     br_valid ? branch_wb_if.rd :
+                                    lsu_valid ? lsu_wb_if.rd :
+                                    mul_valid ? mul_wb_if.rd :                           
+                                    alu_valid ? alu_wb_if.rd :                            
+                                    csr_valid ? csr_wb_if.rd :                                                               
+                                                0;
 
-    assign writeback_tmp_if.warp_num = exec_wb ? inst_exec_wb_if.warp_num :
-                                       csr_wb  ? csr_wb_if.warp_num       :
-                                       mem_wb  ? mem_wb_if.warp_num       :
-                                                 0;   
+    assign writeback_tmp_if.wb =     br_valid ? branch_wb_if.wb :
+                                    lsu_valid ? lsu_wb_if.wb :
+                                    alu_valid ? alu_wb_if.wb :                            
+                                    csr_valid ? csr_wb_if.wb :                           
+                                    mul_valid ? mul_wb_if.wb :                           
+                                                0; 
 
-    assign writeback_tmp_if.curr_PC  = exec_wb ? inst_exec_wb_if.curr_PC  :
-                                       csr_wb  ? 32'hdeadbeef             :
-                                       mem_wb  ? mem_wb_if.curr_PC        :
-                                                 32'hdeadbeef;
-
-    wire [`NUM_THREADS-1:0][31:0] use_wb_data;
+    wire stall = ~writeback_if.ready && (| writeback_if.valid);
 
     VX_generic_register #(
-        .N(39 + `NW_BITS-1 + 1 + `NUM_THREADS*33)
-    ) wb_register (
-        .clk  (clk),
-        .reset(reset),
-        .stall(1'b0),
-        .flush(1'b0),
-        .in   ({writeback_tmp_if.data, writeback_tmp_if.valid, writeback_tmp_if.rd, writeback_tmp_if.wb, writeback_tmp_if.warp_num, writeback_tmp_if.curr_PC}),
-        .out  ({use_wb_data,           writeback_if.valid,     writeback_if.rd,     writeback_if.wb,     writeback_if.warp_num,     writeback_if.curr_PC})
+        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + (`NUM_THREADS * 32) + `WB_BITS)
+    ) wb_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall),
+        .flush (0),
+        .in    ({writeback_tmp_if.valid, writeback_tmp_if.warp_num, writeback_tmp_if.curr_PC, writeback_tmp_if.rd, writeback_tmp_if.data, writeback_tmp_if.wb}),
+        .out   ({writeback_if.valid,     writeback_if.warp_num,     writeback_if.curr_PC,     writeback_if.rd,     writeback_if.data,     writeback_if.wb})
     );
 
-    reg [31:0] last_data_wb /* verilator public */;
+    assign branch_wb_if.ready = !stall;    
+    assign lsu_wb_if.ready    = !stall && !br_valid;    
+    assign mul_wb_if.ready    = !stall && !br_valid && !lsu_valid;
+    assign alu_wb_if.ready    = !stall && !br_valid && !lsu_valid && !mul_valid;    
+    assign csr_wb_if.ready    = !stall && !br_valid && !lsu_valid && !mul_valid && !alu_valid;    
+    
+    assign notify_commit = (| writeback_tmp_if.valid) && ~stall;
 
+    // special workaround to control RISC-V benchmarks termination on Verilator
+    reg [31:0] last_data_wb /* verilator public */;
     always @(posedge clk) begin
-        if ( (| writeback_if.valid) && (writeback_if.wb != 0) && (writeback_if.rd == 28)) begin
-            last_data_wb <= use_wb_data[0];
+        if (notify_commit && (writeback_tmp_if.wb != 0) && (writeback_tmp_if.rd == 28)) begin
+            last_data_wb <= writeback_tmp_if.data[0];
         end
     end
 
-    assign writeback_if.data = use_wb_data;
+`ifdef DBG_PRINT_PIPELINE
+    always @(posedge clk) begin
+        if ((| writeback_tmp_if.valid) && ~stall) begin
+            $display("%t: Core%0d-WB: warp=%0d, PC=%0h, rd=%0d, wb=%0d, data=%0h", $time, CORE_ID, writeback_tmp_if.warp_num, writeback_tmp_if.curr_PC, writeback_tmp_if.rd, writeback_tmp_if.wb, writeback_tmp_if.data);
+        end 
+    end
+`endif
 
-endmodule : VX_writeback
+endmodule
 
 
 

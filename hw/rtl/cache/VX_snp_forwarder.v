@@ -59,7 +59,7 @@ module VX_snp_forwarder #(
     assign sfq_push = snp_req_valid && !sfq_full && fwdout_ready;       
     assign sfq_pop  = snp_rsp_valid;
 
-    VX_indexable_queue #(
+    VX_index_queue #(
         .DATAW (`LOG2UP(SNRQ_SIZE) + 1 +`DRAM_ADDR_WIDTH+SNP_REQ_TAG_WIDTH),
         .SIZE  (SNRQ_SIZE)
     ) snp_fwd_queue (
