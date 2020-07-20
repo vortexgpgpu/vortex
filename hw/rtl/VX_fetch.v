@@ -13,7 +13,7 @@ module VX_fetch #(
     // inputs
     VX_wstall_if        wstall_if,
     VX_join_if          join_if,
-    VX_branch_rsp_if    branch_rsp_if,
+    VX_branch_ctl_if    branch_ctl_if,
     VX_warp_ctl_if      warp_ctl_if,
 
     // outputs
@@ -32,7 +32,7 @@ module VX_fetch #(
         .warp_ctl_if      (warp_ctl_if),
         .wstall_if        (wstall_if),
         .join_if          (join_if),
-        .branch_rsp_if    (branch_rsp_if),
+        .branch_ctl_if    (branch_ctl_if),
         .ifetch_req_if    (ifetch_req_if),
         .ifetch_rsp_if    (ifetch_rsp_if),
         .busy             (busy)

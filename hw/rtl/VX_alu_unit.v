@@ -10,7 +10,7 @@ module VX_alu_unit #(
     VX_alu_req_if   alu_req_if,
 
     // Outputs
-    VX_wb_if        alu_wb_if
+    VX_commit_if    alu_commit_if
 );    
     wire [`NUM_THREADS-1:0][31:0] alu_result;            
     wire [`NUM_THREADS-1:0][32:0] sub_result; 
@@ -48,7 +48,7 @@ module VX_alu_unit #(
         end       
     end
 
-    wire stall = ~alu_wb_if.ready && (| alu_wb_if.valid);
+    wire stall = ~alu_commit_if.ready && (| alu_commit_if.valid);
 
     VX_generic_register #(
         .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + `WB_BITS + (`NUM_THREADS * 32)),
@@ -57,8 +57,8 @@ module VX_alu_unit #(
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({alu_req_if.valid, alu_req_if.warp_num, alu_req_if.curr_PC, alu_req_if.rd, alu_req_if.wb, alu_result}),
-        .out   ({alu_wb_if.valid,  alu_wb_if.warp_num,  alu_wb_if.curr_PC,  alu_wb_if.rd,  alu_wb_if.wb,  alu_wb_if.data})
+        .in    ({alu_req_if.valid,    alu_req_if.warp_num,    alu_req_if.curr_PC,    alu_req_if.rd,    alu_req_if.wb,    alu_result}),
+        .out   ({alu_commit_if.valid, alu_commit_if.warp_num, alu_commit_if.curr_PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data})
     );    
 
     assign alu_req_if.ready = ~stall;

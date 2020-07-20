@@ -12,17 +12,17 @@ module VX_gpr_ram (
 ); 
     `ifndef ASIC           
 
-        reg [`NUM_THREADS-1:0][3:0][7:0] ram [31:0];       
+        reg [`NUM_THREADS-1:0][3:0][7:0] ram [`NUM_REGS-1:0];       
 
         integer i;
 
         initial begin          
             // initialize r0 to 0  
             for (i = 0; i < `NUM_THREADS; i++) begin
-                ram[i][0] = 0; 
-                ram[i][1] = 0;
-                ram[i][2] = 0;
-                ram[i][3] = 0;
+                ram[0][i][0] = 0; 
+                ram[0][i][1] = 0;
+                ram[0][i][2] = 0;
+                ram[0][i][3] = 0;
             end
         end
                 

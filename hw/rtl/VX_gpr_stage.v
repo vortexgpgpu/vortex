@@ -6,9 +6,9 @@ module VX_gpr_stage #(
     input wire      clk,
     input wire      reset,
 
-    // inputs
-    VX_execute_if   execute_if,
+    // inputs    
     VX_wb_if        writeback_if,
+    VX_execute_if   execute_if,
 
     // outputs
     VX_alu_req_if   alu_req_if,
@@ -38,7 +38,7 @@ module VX_gpr_stage #(
 
     generate        
         for (i = 0; i < `NUM_WARPS; i++) begin
-            assign we[i] = writeback_if.valid & {`NUM_THREADS{(writeback_if.wb != 0) && (i == writeback_if.warp_num)}};
+            assign we[i] = writeback_if.valid & {`NUM_THREADS{(i == writeback_if.warp_num)}};
             VX_gpr_ram gpr_ram (
                 .clk      (clk),
                 .we       (we[i]),                

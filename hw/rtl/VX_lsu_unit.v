@@ -16,7 +16,7 @@ module VX_lsu_unit #(
     VX_lsu_req_if   lsu_req_if,
 
     // outputs
-    VX_wb_if        lsu_wb_if
+    VX_commit_if    lsu_commit_if
 );
 
     wire [`NUM_THREADS-1:0]       use_valid;
@@ -108,7 +108,7 @@ module VX_lsu_unit #(
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({dbg_mrq_write_addr, lsu_wb_if.curr_PC, lsu_wb_if.wb, mem_rsp_offset, core_rsp_mem_read, lsu_wb_if.rd, lsu_wb_if.warp_num}),
+        .read_data  ({dbg_mrq_write_addr, lsu_commit_if.curr_PC, lsu_commit_if.wb, mem_rsp_offset, core_rsp_mem_read, lsu_commit_if.rd, lsu_commit_if.warp_num}),
         `UNUSED_PIN (empty)
     );
 
@@ -151,11 +151,11 @@ module VX_lsu_unit #(
         end
     end   
 
-    assign lsu_wb_if.valid = dcache_rsp_if.valid;
-    assign lsu_wb_if.data  = core_rsp_data;
+    assign lsu_commit_if.valid = dcache_rsp_if.valid;
+    assign lsu_commit_if.data  = core_rsp_data;
 
     // Can accept new cache response
-    assign dcache_rsp_if.ready = lsu_wb_if.ready;
+    assign dcache_rsp_if.ready = lsu_commit_if.ready;
 
     `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.valid);    
     `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
@@ -180,7 +180,7 @@ module VX_lsu_unit #(
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d rsp: valid=%b, warp=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 
-                     $time, CORE_ID, lsu_wb_if.valid, lsu_wb_if.warp_num, lsu_wb_if.curr_PC, mrq_read_addr, lsu_wb_if.rd, lsu_wb_if.data);
+                     $time, CORE_ID, lsu_commit_if.valid, lsu_commit_if.warp_num, lsu_commit_if.curr_PC, mrq_read_addr, lsu_commit_if.rd, lsu_commit_if.data);
         end
     end
 `endif

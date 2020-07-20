@@ -9,7 +9,7 @@ module VX_warp_sched #(
     VX_warp_ctl_if      warp_ctl_if,
     VX_wstall_if        wstall_if,
     VX_join_if          join_if,
-    VX_branch_rsp_if    branch_rsp_if,
+    VX_branch_ctl_if    branch_ctl_if,
 
     VX_ifetch_rsp_if    ifetch_rsp_if,
     VX_ifetch_req_if    ifetch_req_if,
@@ -158,11 +158,11 @@ module VX_warp_sched #(
             end
 
             // Branch
-            if (branch_rsp_if.valid) begin
-                if (branch_rsp_if.taken) begin
-                    warp_pcs[branch_rsp_if.warp_num] <= branch_rsp_if.dest;
+            if (branch_ctl_if.valid) begin
+                if (branch_ctl_if.taken) begin
+                    warp_pcs[branch_ctl_if.warp_num] <= branch_ctl_if.dest;
                 end
-                warp_stalled[branch_rsp_if.warp_num] <= 0;
+                warp_stalled[branch_ctl_if.warp_num] <= 0;
             end
 
             // Lock/Release
@@ -230,7 +230,7 @@ module VX_warp_sched #(
         );
     end    
 
-    wire should_bra = (branch_rsp_if.valid && branch_rsp_if.taken && (warp_to_schedule == branch_rsp_if.warp_num));
+    wire should_bra = (branch_ctl_if.valid && branch_ctl_if.taken && (warp_to_schedule == branch_ctl_if.warp_num));
 
     assign hazard = should_bra && schedule;
 
@@ -244,7 +244,7 @@ module VX_warp_sched #(
 
     assign warp_pc     = real_use_wspawn ? use_wspawn_pc : warp_pcs[warp_to_schedule];
     
-    assign thread_mask = (global_stall) ? 0 : (real_use_wspawn ? `NUM_THREADS'b1 : thread_masks[warp_to_schedule]);
+    assign thread_mask = global_stall ? 0 : (real_use_wspawn ? `NUM_THREADS'(1) : thread_masks[warp_to_schedule]);
 
     assign warp_num    = warp_to_schedule;
 

@@ -7,7 +7,8 @@ module VX_gpu_unit #(
     VX_gpu_req_if   gpu_req_if,
 
     // Output
-    VX_warp_ctl_if  warp_ctl_if
+    VX_warp_ctl_if  warp_ctl_if,
+    VX_commit_if    gpu_commit_if
 );
     wire [`NUM_THREADS-1:0] curr_valids = gpu_req_if.valid;
     wire is_wspawn = (gpu_req_if.gpu_op == `GPU_WSPAWN);
@@ -75,5 +76,11 @@ module VX_gpu_unit #(
     assign warp_ctl_if.split_save_pc    = gpu_req_if.next_PC;
 
     assign gpu_req_if.ready = 1'b1; // has no stalls
+
+    // commit
+    assign gpu_commit_if.valid    = gpu_req_if.valid;
+    assign gpu_commit_if.warp_num = gpu_req_if.warp_num;
+    assign gpu_commit_if.curr_PC  = gpu_req_if.curr_PC;
+    assign gpu_commit_if.wb       = `WB_NO;    
 
 endmodule

@@ -3,8 +3,7 @@
 module VX_csr_data #(
     parameter CORE_ID = 0
 ) (
-    input wire clk,    // Clock
-    input wire reset,
+    input wire clk,
 
     input wire[`CSR_ADDR_SIZE-1:0]  read_addr,
     output reg[31:0]                read_data,
@@ -15,29 +14,18 @@ module VX_csr_data #(
 `IGNORE_WARNINGS_END
     input wire[`CSR_WIDTH-1:0]      write_data,
     input wire[`NW_BITS-1:0]        warp_num,
-    input wire                      notify_commit
+    VX_perf_cntrs_if                perf_cntrs_if
 );
     reg [`CSR_WIDTH-1:0] csr_table[`NUM_CSRS-1:0];
-
-    reg [63:0] num_cycles, num_instrs;
 
     // cast address to physical CSR range
     wire [$clog2(`NUM_CSRS)-1:0] rd_addr, wr_addr;
     assign rd_addr = $size(rd_addr)'(read_addr);
-    assign wr_addr = $size(wr_addr)'(write_addr);
+    assign wr_addr = $size(wr_addr)'(write_addr);    
 
     always @(posedge clk) begin
-       if (reset) begin
-            num_cycles <= 0;
-            num_instrs <= 0;
-        end else begin
-            if (write_enable) begin
-                csr_table[wr_addr] <= write_data;
-            end
-            num_cycles <= num_cycles + 1;
-            if (notify_commit) begin
-                num_instrs <= num_instrs + 1;
-            end
+        if (write_enable) begin
+            csr_table[wr_addr] <= write_data;
         end
     end
 
@@ -50,10 +38,10 @@ module VX_csr_data #(
             `CSR_NT      : read_data = `NUM_THREADS;
             `CSR_NW      : read_data = `NUM_WARPS;
             `CSR_NC      : read_data = `NUM_CORES * `NUM_CLUSTERS;
-            `CSR_CYCLE_L : read_data = num_cycles[31:0];
-            `CSR_CYCLE_H : read_data = num_cycles[63:32];
-            `CSR_INSTR_L : read_data = num_instrs[31:0];
-            `CSR_INSTR_H : read_data = num_instrs[63:32];
+            `CSR_CYCLE_L : read_data = perf_cntrs_if.total_cycles[31:0];
+            `CSR_CYCLE_H : read_data = perf_cntrs_if.total_cycles[63:32];
+            `CSR_INSTR_L : read_data = perf_cntrs_if.total_instrs[31:0];
+            `CSR_INSTR_H : read_data = perf_cntrs_if.total_instrs[63:32];
             `CSR_VEND_ID : read_data = `VENDOR_ID;
             `CSR_ARCH_ID : read_data = `ARCHITECTURE_ID;
             `CSR_IMPL_ID : read_data = `IMPLEMENTATION_ID;
