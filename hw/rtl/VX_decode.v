@@ -92,7 +92,7 @@ module VX_decode  #(
 
     // BRANCH
     always @(*) begin
-        br_op = `BR_OTHER;
+        br_op = `BR_EQ;
         case (opcode)
             `INST_B: begin
                 case (func3)
@@ -192,20 +192,20 @@ module VX_decode  #(
     assign decode_tmp_if.curr_PC  = ifetch_rsp_if.curr_PC;
     assign decode_tmp_if.next_PC  = ifetch_rsp_if.curr_PC + 32'h4;
 
-    assign decode_tmp_if.ex_type  = is_br ? `EX_BR :                                            
-                                        is_lsu ? `EX_LSU :
-                                            is_csr ? `EX_CSR :
-                                                is_mul ? `EX_MUL :
-                                                    is_gpu ? `EX_GPU :
+    assign decode_tmp_if.ex_type  = is_lsu ? `EX_LSU :
+                                        is_csr ? `EX_CSR :
+                                            is_mul ? `EX_MUL :
+                                                is_gpu ? `EX_GPU :
+                                                    is_br ? `EX_ALU :
                                                         (is_rtype || is_itype || is_lui || is_auipc) ? `EX_ALU :
                                                             `EX_NOP;
 
-    assign decode_tmp_if.instr_op = is_br ? `OP_BITS'(br_op) :
-                                        is_lsu ? `OP_BITS'(lsu_op) :
-                                            is_csr ? `OP_BITS'(csr_op) :
-                                                is_mul ? `OP_BITS'(mul_op) :
-                                                    is_gpu ? `OP_BITS'(gpu_op) :
-                                                         (is_rtype || is_itype || is_lui || is_auipc) ? `OP_BITS'(alu_op) :
+    assign decode_tmp_if.instr_op = is_lsu ? `OP_BITS'(lsu_op) :
+                                        is_csr ? `OP_BITS'(csr_op) :
+                                            is_mul ? `OP_BITS'(mul_op) :
+                                                is_gpu ? `OP_BITS'(gpu_op) :
+                                                    is_br ? `OP_BITS'({1'b1, br_op}) :
+                                                        (is_rtype || is_itype || is_lui || is_auipc) ? `OP_BITS'(alu_op) :
                                                             0; 
 
     assign decode_tmp_if.rd  = rd;
@@ -219,7 +219,7 @@ module VX_decode  #(
                                         is_csr ? 32'(u_12) :
                                             src2_imm;
 
-    assign decode_tmp_if.rs1_is_PC = is_auipc;
+    assign decode_tmp_if.rs1_is_PC  = is_auipc;
 
     assign decode_tmp_if.rs2_is_imm = is_itype || is_lui || is_auipc || is_csr_imm;   
 
@@ -269,7 +269,6 @@ module VX_decode  #(
 
             // trap unsupported instructions
             assert(~(~stall && (decode_tmp_if.ex_type == `EX_ALU) && `ALU_OP(decode_tmp_if.instr_op) == `ALU_OTHER));
-            assert(~(~stall && (decode_tmp_if.ex_type == `EX_BR)  && `BR_OP(decode_tmp_if.instr_op)  == `BR_OTHER));
             assert(~(~stall && (decode_tmp_if.ex_type == `EX_CSR) && `CSR_OP(decode_tmp_if.instr_op) == `CSR_OTHER));
             assert(~(~stall && (decode_tmp_if.ex_type == `EX_GPU) && `GPU_OP(decode_tmp_if.instr_op) == `GPU_OTHER));
         end

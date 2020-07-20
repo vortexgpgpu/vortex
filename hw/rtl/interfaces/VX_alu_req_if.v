@@ -13,6 +13,9 @@ interface VX_alu_req_if ();
 
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
     wire [`NUM_THREADS-1:0][31:0] rs2_data;
+
+    wire [31:0]             offset;
+    wire [31:0]             next_PC;
     
     wire [`NR_BITS-1:0]     rd;    
     wire [`WB_BITS-1:0]     wb;

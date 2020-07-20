@@ -8,7 +8,6 @@ module VX_gpr_mux (
 
     // outputs
     VX_alu_req_if   alu_req_if,
-    VX_branch_req_if branch_req_if,
     VX_lsu_req_if   lsu_req_if,
     VX_csr_req_if   csr_req_if,
     VX_mul_req_if   mul_req_if,
@@ -16,7 +15,6 @@ module VX_gpr_mux (
 );
 
     wire[`NUM_THREADS-1:0] is_alu = {`NUM_THREADS{execute_if.ex_type == `EX_ALU}};
-    wire[`NUM_THREADS-1:0] is_br  = {`NUM_THREADS{execute_if.ex_type == `EX_BR}};    
     wire[`NUM_THREADS-1:0] is_lsu = {`NUM_THREADS{execute_if.ex_type == `EX_LSU}};
     wire[`NUM_THREADS-1:0] is_csr = {`NUM_THREADS{execute_if.ex_type == `EX_CSR}};
     wire[`NUM_THREADS-1:0] is_mul = {`NUM_THREADS{execute_if.ex_type == `EX_MUL}};
@@ -31,18 +29,8 @@ module VX_gpr_mux (
     assign alu_req_if.wb          = execute_if.wb;
     assign alu_req_if.rs1_data    = rs1_data;
     assign alu_req_if.rs2_data    = rs2_data;    
-
-    // BR unit
-    assign branch_req_if.valid    = execute_if.valid & is_br;
-    assign branch_req_if.warp_num = execute_if.warp_num;
-    assign branch_req_if.curr_PC  = execute_if.curr_PC;    
-    assign branch_req_if.br_op    = `BR_OP(execute_if.instr_op);
-    assign branch_req_if.offset   = execute_if.imm;
-    assign branch_req_if.next_PC  = execute_if.next_PC;
-    assign branch_req_if.rs1_data = rs1_data;
-    assign branch_req_if.rs2_data = rs2_data;    
-    assign branch_req_if.rd       = execute_if.rd;
-    assign branch_req_if.wb       = execute_if.wb;
+    assign alu_req_if.offset      = execute_if.imm;
+    assign alu_req_if.next_PC     = execute_if.next_PC;
 
     // LSU unit
     assign lsu_req_if.valid       = execute_if.valid & is_lsu;

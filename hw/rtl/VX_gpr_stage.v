@@ -12,7 +12,6 @@ module VX_gpr_stage #(
 
     // outputs
     VX_alu_req_if   alu_req_if,
-    VX_branch_req_if branch_req_if,
     VX_lsu_req_if   lsu_req_if,    
     VX_csr_req_if   csr_req_if,
     VX_mul_req_if   mul_req_if,    
@@ -53,7 +52,6 @@ module VX_gpr_stage #(
     endgenerate
 
     VX_alu_req_if   alu_req_tmp_if();
-    VX_branch_req_if branch_req_tmp_if();
     VX_lsu_req_if   lsu_req_tmp_if();
     VX_csr_req_if   csr_req_tmp_if();
     VX_mul_req_if   mul_req_tmp_if();
@@ -64,7 +62,6 @@ module VX_gpr_stage #(
         .rs1_data      (rs1_data),
         .rs2_data      (rs2_data),
         .alu_req_if    (alu_req_if),
-        .branch_req_if (branch_req_tmp_if),
         .lsu_req_if    (lsu_req_tmp_if),        
         .csr_req_if    (csr_req_tmp_if),
         .mul_req_if    (mul_req_tmp_if),
@@ -72,7 +69,6 @@ module VX_gpr_stage #(
     );  
 
     wire stall_alu = ~alu_req_if.ready && (| alu_req_if.valid); 
-    wire stall_br  = ~branch_req_if.ready && (| branch_req_if.valid);
     wire stall_lsu = ~lsu_req_if.ready && (| lsu_req_if.valid);
     wire stall_csr = ~csr_req_if.ready && (| csr_req_if.valid);
     wire stall_mul = ~mul_req_if.ready && (| mul_req_if.valid);
@@ -87,17 +83,6 @@ module VX_gpr_stage #(
         .flush (0),
         .in    ({alu_req_tmp_if.valid, alu_req_tmp_if.warp_num, alu_req_tmp_if.curr_PC, alu_req_tmp_if.alu_op, alu_req_tmp_if.rs1_data, alu_req_tmp_if.rs2_data, alu_req_tmp_if.rd, alu_req_tmp_if.wb}),
         .out   ({alu_req_if.valid,     alu_req_if.warp_num,     alu_req_if.curr_PC,     alu_req_if.alu_op,     alu_req_if.rs1_data,     alu_req_if.rs2_data,     alu_req_if.rd,     alu_req_if.wb})
-    );
-
-    VX_generic_register #(
-        .N(`NUM_THREADS +`NW_BITS + 32 + 32 + `BR_BITS + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + 32 + `NR_BITS + `WB_BITS)
-    ) br_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall_br),
-        .flush (0),
-        .in    ({branch_req_tmp_if.valid, branch_req_tmp_if.warp_num, branch_req_tmp_if.curr_PC, branch_req_tmp_if.next_PC, branch_req_tmp_if.br_op, branch_req_tmp_if.rs1_data, branch_req_tmp_if.rs2_data, branch_req_tmp_if.offset, branch_req_tmp_if.rd, branch_req_tmp_if.wb}),
-        .out   ({branch_req_if.valid,     branch_req_if.warp_num,     branch_req_if.curr_PC,     branch_req_if.next_PC,     branch_req_if.br_op,     branch_req_if.rs1_data,     branch_req_if.rs2_data,     branch_req_if.offset,     branch_req_if.rd,     branch_req_if.wb})
     );
 
     VX_generic_register #(
@@ -145,7 +130,6 @@ module VX_gpr_stage #(
     );
     
     assign execute_if.alu_ready = ~stall_alu;
-    assign execute_if.br_ready  = ~stall_br;
     assign execute_if.lsu_ready = ~stall_lsu;
     assign execute_if.csr_ready = ~stall_csr;
     assign execute_if.mul_ready = ~stall_mul;
@@ -159,8 +143,7 @@ module VX_gpr_stage #(
             $display("%t: Core%0d-GPR: warp=%0d, PC=%0h, a=%0h, b=%0h", $time, CORE_ID, execute_if.warp_num, execute_if.curr_PC, rs1_data, rs2_data);
 
             // scheduler ensures the destination execute unit is ready (garanteed by the scheduler)
-            assert((execute_if.ex_type != `EX_ALU) || alu_req_if.ready);        
-            assert((execute_if.ex_type != `EX_BR)  || branch_req_if.ready);
+            assert((execute_if.ex_type != `EX_ALU) || alu_req_if.ready);       
             assert((execute_if.ex_type != `EX_LSU) || lsu_req_if.ready);
             assert((execute_if.ex_type != `EX_CSR) || csr_req_if.ready);
             assert((execute_if.ex_type != `EX_MUL) || mul_req_if.ready);

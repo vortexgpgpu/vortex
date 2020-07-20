@@ -95,35 +95,12 @@
 `define INST_SYS    7'b1110011
 `define INST_GPU    7'b1101011
 
-`define OP_BITS     4
-
-`define ALU_ADD     4'h0
-`define ALU_SUB     4'h1
-`define ALU_SLL     4'h2
-`define ALU_SRL     4'h3
-`define ALU_SRA     4'h4
-`define ALU_SLT     4'h5
-`define ALU_SLTU    4'h6
-`define ALU_XOR     4'h7
-`define ALU_OR      4'h8
-`define ALU_AND     4'h9
-`define ALU_LUI     4'hA
-`define ALU_AUIPC   4'hB
-`define ALU_OTHER   4'hF
-`define ALU_BITS    4
-`define ALU_OP(x)   x[`ALU_BITS-1:0]
-
-`define MUL_MUL     3'h0
-`define MUL_MULH    3'h1
-`define MUL_MULHSU  3'h2
-`define MUL_MULHU   3'h3
-`define MUL_DIV     3'h4
-`define MUL_DIVU    3'h5
-`define MUL_REM     3'h6
-`define MUL_REMU    3'h7
-`define MUL_BITS    3
-`define MUL_OP(x)   x[`MUL_BITS-1:0]
-`define IS_DIV_OP(x) x[2]
+`define BYTEEN_SB   3'h0 
+`define BYTEEN_SH   3'h1
+`define BYTEEN_SW   3'h2
+`define BYTEEN_UB   3'h4
+`define BYTEEN_UH   3'h5
+`define BYTEEN_BITS 3
 
 `define BR_EQ       4'h0
 `define BR_NE       4'h1
@@ -138,16 +115,63 @@
 `define BR_MRET     4'hA
 `define BR_SRET     4'hB
 `define BR_DRET     4'hC
-`define BR_OTHER    4'hF
 `define BR_BITS     4
-`define BR_OP(x)    x[`BR_BITS-1:0]
 
-`define BYTEEN_SB   3'h0 
-`define BYTEEN_SH   3'h1
-`define BYTEEN_SW   3'h2
-`define BYTEEN_UB   3'h4
-`define BYTEEN_UH   3'h5
-`define BYTEEN_BITS 3
+`define OP_BITS     5
+
+`define ALU_ADD     5'h00
+`define ALU_SUB     5'h01
+`define ALU_SLL     5'h02
+`define ALU_SRL     5'h03
+`define ALU_SRA     5'h04
+`define ALU_SLT     5'h05
+`define ALU_SLTU    5'h06
+`define ALU_XOR     5'h07
+`define ALU_OR      5'h08
+`define ALU_AND     5'h09
+`define ALU_LUI     5'h0A
+`define ALU_AUIPC   5'h0B
+`define ALU_BEQ     {1'b1, `BR_EQ}
+`define ALU_BNE     {1'b1, `BR_NE}
+`define ALU_BLT     {1'b1, `BR_LT}
+`define ALU_BGE     {1'b1, `BR_GE}
+`define ALU_BLTU    {1'b1, `BR_LTU}
+`define ALU_BGEU    {1'b1, `BR_GEU}
+`define ALU_JAL     {1'b1, `BR_JAL}
+`define ALU_JALR    {1'b1, `BR_JALR}
+`define ALU_ECALL   {1'b1, `BR_ECALL}
+`define ALU_EBREAK  {1'b1, `BR_EBREAK}
+`define ALU_MRET    {1'b1, `BR_MRET}
+`define ALU_SRET    {1'b1, `BR_SRET}
+`define ALU_DRET    {1'b1, `BR_DRET}
+`define ALU_OTHER   5'h1F
+`define ALU_BITS    5
+`define ALU_OP(x)   x[`ALU_BITS-1:0]
+`define BR_OP(x)    x[`BR_BITS-1:0]
+`define IS_BR_OP(x) x[4]
+
+`define MUL_MUL     3'h0
+`define MUL_MULH    3'h1
+`define MUL_MULHSU  3'h2
+`define MUL_MULHU   3'h3
+`define MUL_DIV     3'h4
+`define MUL_DIVU    3'h5
+`define MUL_REM     3'h6
+`define MUL_REMU    3'h7
+`define MUL_BITS    3
+`define MUL_OP(x)   x[`MUL_BITS-1:0]
+`define IS_DIV_OP(x) x[2]
+
+`define LSU_LB      {1'b0, `BYTEEN_SB}
+`define LSU_LH      {1'b0, `BYTEEN_SH}
+`define LSU_LW      {1'b0, `BYTEEN_SW}
+`define LSU_LBU     {1'b0, `BYTEEN_UB}
+`define LSU_LHU     {1'b0, `BYTEEN_UH}
+`define LSU_SB      {1'b1, `BYTEEN_SB}
+`define LSU_SH      {1'b1, `BYTEEN_SH}
+`define LSU_SW      {1'b1, `BYTEEN_SW}
+`define LSU_SBU     {1'b1, `BYTEEN_UB}
+`define LSU_SHU     {1'b1, `BYTEEN_UH}
 `define LSU_BITS    4
 `define LSU_RW(x)   x[3]
 `define LSU_BE(x)   x[2:0]
@@ -170,14 +194,13 @@
 
 `define EX_NOP      3'h0
 `define EX_ALU      3'h1
-`define EX_BR       3'h2
-`define EX_MUL      3'h3
-`define EX_LSU      3'h4
-`define EX_CSR      3'h5
-`define EX_GPU      3'h6
+`define EX_MUL      3'h2
+`define EX_LSU      3'h3
+`define EX_CSR      3'h4
+`define EX_GPU      3'h5
 `define EX_BITS     3
 
-`define NUM_EXS     6
+`define NUM_EXS     5
 `define NE_BITS     `LOG2UP(`NUM_EXS)
 
 `define WB_NO       2'h0
@@ -371,8 +394,7 @@ task print_ex_type;
     input [`EX_BITS-1:0] ex;
     begin     
         case (ex)
-            `EX_ALU: $write("ALU");
-            `EX_BR:  $write("BR");            
+            `EX_ALU: $write("ALU");     
             `EX_LSU: $write("LSU");
             `EX_CSR: $write("CSR");
             `EX_MUL: $write("MUL");
@@ -401,32 +423,27 @@ task print_instr_op;
                 `ALU_AND:   $write("AND");
                 `ALU_LUI:   $write("LUI");
                 `ALU_AUIPC: $write("AUIPC");
+                `ALU_BEQ:   $write("EQ");
+                `ALU_BNE:   $write("NE");
+                `ALU_BLT:   $write("LT");
+                `ALU_BGE:   $write("GE");
+                `ALU_BLTU:  $write("LTU");
+                `ALU_BGEU:  $write("GEU");           
+                `ALU_JAL:   $write("JAL");
+                `ALU_JALR:  $write("JALR");
+                `ALU_ECALL: $write("ECALL");
+                `ALU_EBREAK:$write("EBREAK");    
+                `ALU_MRET:  $write("MRET");    
+                `ALU_SRET:  $write("SRET");    
+                `ALU_DRET:  $write("DRET");    
                 default:    $write("?");
             endcase
         end
-        `EX_BR: begin
-            case (`BR_BITS'(op))
-                `BR_EQ:     $write("EQ");
-                `BR_NE:     $write("NE");
-                `BR_LT:     $write("LT");
-                `BR_GE:     $write("GE");
-                `BR_LTU:    $write("LTU");
-                `BR_GEU:    $write("GEU");           
-                `BR_JAL:    $write("JAL");
-                `BR_JALR:   $write("JALR");
-                `BR_ECALL:  $write("ECALL");
-                `BR_EBREAK: $write("EBREAK");    
-                `BR_MRET:   $write("MRET");    
-                `BR_SRET:   $write("SRET");    
-                `BR_DRET:   $write("DRET");    
-                default:    $write("?");              
-            endcase
-        end 
         `EX_MUL: begin
             case (`MUL_BITS'(op))
                 `MUL_MUL:   $write("MUL");
                 `MUL_MULH:  $write("MULH");
-                `MUL_MULHSU: $write("MULHSU");
+                `MUL_MULHSU:$write("MULHSU");
                 `MUL_MULHU: $write("MULHU");
                 `MUL_DIV:   $write("DIV");
                 `MUL_DIVU:  $write("DIVU");
@@ -437,17 +454,17 @@ task print_instr_op;
         end
         `EX_LSU: begin
             case (`LSU_BITS'(op))
-                4'b0000: $write("LB");
-                4'b0001: $write("LH");
-                4'b0010: $write("LW");
-                4'b0100: $write("LBU");
-                4'b0101: $write("LHU");
-                4'b1000: $write("SB");
-                4'b1001: $write("SH");
-                4'b1010: $write("SW");
-                4'b1100: $write("SBU");
-                4'b1101: $write("SHU");
-                default: $write("?");
+                `LSU_LB:  $write("LB");
+                `LSU_LH:  $write("LH");
+                `LSU_LW:  $write("LW");
+                `LSU_LBU: $write("LBU");
+                `LSU_LHU: $write("LHU");
+                `LSU_SB:  $write("SB");
+                `LSU_SH:  $write("SH");
+                `LSU_SW:  $write("SW");
+                `LSU_SBU: $write("SBU");
+                `LSU_SHU: $write("SHU");
+                default:  $write("?");
             endcase
         end
         `EX_CSR: begin
@@ -461,7 +478,7 @@ task print_instr_op;
         `EX_GPU: begin
             case (`GPU_BITS'(op))
                 `GPU_TMC:   $write("TMC");
-                `GPU_WSPAWN: $write("WSPAWN");
+                `GPU_WSPAWN:$write("WSPAWN");
                 `GPU_SPLIT: $write("SPLIT");
                 `GPU_JOIN:  $write("JOIN");
                 `GPU_BAR:   $write("BAR");

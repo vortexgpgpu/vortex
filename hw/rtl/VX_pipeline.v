@@ -107,7 +107,6 @@ module VX_pipeline #(
     VX_warp_ctl_if      warp_ctl_if();
     VX_ifetch_rsp_if    ifetch_rsp_if();
     VX_alu_req_if       alu_req_if();
-    VX_branch_req_if    branch_req_if();
     VX_lsu_req_if       lsu_req_if();
     VX_csr_req_if       csr_req_if();
     VX_mul_req_if       mul_req_if();  
@@ -116,7 +115,6 @@ module VX_pipeline #(
     VX_wstall_if        wstall_if();
     VX_join_if          join_if();
     VX_commit_if        alu_commit_if();
-    VX_commit_if        branch_commit_if();
     VX_commit_if        lsu_commit_if();        
     VX_commit_if        csr_commit_if(); 
     VX_commit_if        mul_commit_if();     
@@ -158,7 +156,6 @@ module VX_pipeline #(
         .writeback_if   (writeback_if),
 
         .alu_req_if     (alu_req_if),
-        .branch_req_if  (branch_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
         .mul_req_if     (mul_req_if),
@@ -181,7 +178,6 @@ module VX_pipeline #(
         .perf_cntrs_if  (perf_cntrs_if),                 
         
         .alu_req_if     (alu_req_if),
-        .branch_req_if  (branch_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
         .mul_req_if     (mul_req_if),
@@ -190,7 +186,6 @@ module VX_pipeline #(
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),        
         .alu_commit_if  (alu_commit_if),
-        .branch_commit_if(branch_commit_if),
         .lsu_commit_if  (lsu_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
@@ -206,7 +201,6 @@ module VX_pipeline #(
         .reset          (reset),
 
         .alu_commit_if  (alu_commit_if),
-        .branch_commit_if(branch_commit_if),
         .lsu_commit_if  (lsu_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),

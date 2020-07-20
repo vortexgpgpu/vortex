@@ -10,7 +10,6 @@ module VX_issue #(
     VX_wb_if            writeback_if,
     
     VX_alu_req_if       alu_req_if,
-    VX_branch_req_if    branch_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,
     VX_mul_req_if       mul_req_if,    
@@ -39,7 +38,6 @@ module VX_issue #(
         .writeback_if   (writeback_if),
 
         .alu_req_if     (alu_req_if),
-        .branch_req_if  (branch_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
         .mul_req_if     (mul_req_if),
