@@ -10,7 +10,7 @@ module VX_mul_unit #(
     VX_mul_req_if   mul_req_if,
 
     // Outputs
-    VX_wb_if        mul_wb_if
+    VX_commit_if    mul_commit_if
 );    
     wire [`NUM_THREADS-1:0][31:0] alu_result;      
     wire [`NUM_THREADS-1:0][63:0] mul_result;
@@ -71,7 +71,7 @@ module VX_mul_unit #(
                 `MUL_DIV,       
                 `MUL_DIVU:  alu_result[i] = (alu_in2[i] == 0) ? 32'hffffffff : div_result[i];            
                 `MUL_REM,       
-                `MUL_REMU:  alu_result[i] = (alu_in2 == 0) ? alu_in1[i] : rem_result[i];
+                `MUL_REMU:  alu_result[i] = (alu_in2[i] == 0) ? alu_in1[i] : rem_result[i];
                 default:    alu_result[i] = alu_in1[i] + alu_in2[i]; // ADD, LUI, AUIPC, FENCE
             endcase
         end       
@@ -104,7 +104,7 @@ module VX_mul_unit #(
 
     wire pipeline_stall = ~result_avail && (| mul_req_if.valid);
     
-    wire stall = (~mul_wb_if.ready && (| mul_wb_if.valid)) 
+    wire stall = (~mul_commit_if.ready && (| mul_commit_if.valid)) 
               || pipeline_stall;
 
     VX_generic_register #(
@@ -115,7 +115,7 @@ module VX_mul_unit #(
         .stall (stall),
         .flush (0),
         .in    ({mul_req_if.valid, mul_req_if.warp_num, mul_req_if.curr_PC, mul_req_if.rd, mul_req_if.wb, alu_result}),
-        .out   ({mul_wb_if.valid,  mul_wb_if.warp_num,  mul_wb_if.curr_PC,  mul_wb_if.rd,  mul_wb_if.wb,  mul_wb_if.data})
+        .out   ({mul_commit_if.valid,  mul_commit_if.warp_num,  mul_commit_if.curr_PC,  mul_commit_if.rd,  mul_commit_if.wb,  mul_commit_if.data})
     );    
 
     assign mul_req_if.ready = ~stall;

@@ -12,11 +12,11 @@ module VX_csr_arb (
     VX_csr_req_if    csr_req_if,
 
     // input
-    VX_wb_if         csr_rsp_if,     
+    VX_commit_if     csr_rsp_if,     
 
     // outputs
     VX_csr_io_rsp_if csr_io_rsp_if,
-    VX_wb_if         csr_wb_if
+    VX_commit_if     csr_commit_if
 );
 
     `UNUSED_VAR (clk)
@@ -42,13 +42,13 @@ module VX_csr_arb (
     assign csr_io_rsp_if.valid  = csr_rsp_if.valid[0] & csr_rsp_if.is_io;
     assign csr_io_rsp_if.data   = csr_rsp_if.data[0];  
 
-    assign csr_wb_if.valid      = csr_rsp_if.valid & {`NUM_THREADS{~csr_rsp_if.is_io}};
-    assign csr_wb_if.warp_num   = csr_rsp_if.warp_num;
-    assign csr_wb_if.curr_PC    = csr_rsp_if.curr_PC;
-    assign csr_wb_if.data       = csr_rsp_if.data; 
-    assign csr_wb_if.rd         = csr_rsp_if.rd;
-    assign csr_wb_if.wb         = csr_rsp_if.wb;        
+    assign csr_commit_if.valid      = csr_rsp_if.valid & {`NUM_THREADS{~csr_rsp_if.is_io}};
+    assign csr_commit_if.warp_num   = csr_rsp_if.warp_num;
+    assign csr_commit_if.curr_PC    = csr_rsp_if.curr_PC;
+    assign csr_commit_if.data       = csr_rsp_if.data; 
+    assign csr_commit_if.rd         = csr_rsp_if.rd;
+    assign csr_commit_if.wb         = csr_rsp_if.wb;        
 
-    assign csr_rsp_if.ready     = csr_rsp_if.is_io ? csr_io_rsp_if.ready : csr_wb_if.ready;
+    assign csr_rsp_if.ready     = csr_rsp_if.is_io ? csr_io_rsp_if.ready : csr_commit_if.ready;
 
 endmodule

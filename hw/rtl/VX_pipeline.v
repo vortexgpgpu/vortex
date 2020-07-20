@@ -101,22 +101,27 @@ module VX_pipeline #(
     assign csr_io_rsp_data     = csr_io_rsp_if.data; 
     assign csr_io_rsp_if.ready = csr_io_rsp_ready; 
 
+    VX_perf_cntrs_if    perf_cntrs_if();
     VX_decode_if        decode_if();
-    VX_execute_if       execute_if();    
-    VX_branch_rsp_if    branch_rsp_if();
+    VX_branch_ctl_if    branch_ctl_if();
     VX_warp_ctl_if      warp_ctl_if();
     VX_ifetch_rsp_if    ifetch_rsp_if();
+    VX_alu_req_if       alu_req_if();
+    VX_branch_req_if    branch_req_if();
+    VX_lsu_req_if       lsu_req_if();
+    VX_csr_req_if       csr_req_if();
+    VX_mul_req_if       mul_req_if();  
+    VX_gpu_req_if       gpu_req_if();
     VX_wb_if            writeback_if();     
     VX_wstall_if        wstall_if();
     VX_join_if          join_if();
-    VX_wb_if            alu_wb_if();
-    VX_wb_if            branch_wb_if();
-    VX_wb_if            lsu_wb_if();        
-    VX_wb_if            csr_wb_if(); 
-    VX_wb_if            mul_wb_if();     
+    VX_commit_if        alu_commit_if();
+    VX_commit_if        branch_commit_if();
+    VX_commit_if        lsu_commit_if();        
+    VX_commit_if        csr_commit_if(); 
+    VX_commit_if        mul_commit_if();     
+    VX_commit_if        gpu_commit_if();     
 
-    wire notify_commit;    
-    
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
@@ -127,7 +132,7 @@ module VX_pipeline #(
         .wstall_if      (wstall_if),
         .join_if        (join_if),        
         .warp_ctl_if    (warp_ctl_if),
-        .branch_rsp_if  (branch_rsp_if),
+        .branch_ctl_if  (branch_ctl_if),
         .ifetch_rsp_if  (ifetch_rsp_if),
         .busy           (busy)
     );
@@ -148,10 +153,16 @@ module VX_pipeline #(
     ) issue (
         .clk            (clk),
         .reset          (reset),        
+
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
-        .execute_if     (execute_if),
-        `UNUSED_PIN     (is_empty)
+
+        .alu_req_if     (alu_req_if),
+        .branch_req_if  (branch_req_if),
+        .lsu_req_if     (lsu_req_if),        
+        .csr_req_if     (csr_req_if),
+        .mul_req_if     (mul_req_if),
+        .gpu_req_if     (gpu_req_if)
     );
 
     VX_execute #(
@@ -160,35 +171,49 @@ module VX_pipeline #(
         `SCOPE_SIGNALS_LSU_BIND
         .clk            (clk),
         .reset          (reset),    
+        
         .dcache_req_if  (core_dcache_req_if),
         .dcache_rsp_if  (core_dcache_rsp_if),
+        
         .csr_io_req_if  (csr_io_req_if),
-        .csr_io_rsp_if  (csr_io_rsp_if),                 
-        .execute_if     (execute_if),
-        .writeback_if   (writeback_if),
+        .csr_io_rsp_if  (csr_io_rsp_if),
+
+        .perf_cntrs_if  (perf_cntrs_if),                 
+        
+        .alu_req_if     (alu_req_if),
+        .branch_req_if  (branch_req_if),
+        .lsu_req_if     (lsu_req_if),        
+        .csr_req_if     (csr_req_if),
+        .mul_req_if     (mul_req_if),
+        .gpu_req_if     (gpu_req_if),
+
         .warp_ctl_if    (warp_ctl_if),
-        .branch_rsp_if  (branch_rsp_if),        
-        .alu_wb_if      (alu_wb_if),
-        .branch_wb_if   (branch_wb_if),
-        .lsu_wb_if      (lsu_wb_if),        
-        .csr_wb_if      (csr_wb_if),
-        .mul_wb_if      (mul_wb_if),
-        .notify_commit  (notify_commit),
+        .branch_ctl_if  (branch_ctl_if),        
+        .alu_commit_if  (alu_commit_if),
+        .branch_commit_if(branch_commit_if),
+        .lsu_commit_if  (lsu_commit_if),        
+        .csr_commit_if  (csr_commit_if),
+        .mul_commit_if  (mul_commit_if),
+        .gpu_commit_if  (gpu_commit_if),        
+        
         .ebreak         (ebreak)
     );    
 
-    VX_writeback #(
+    VX_commit #(
         .CORE_ID(CORE_ID)
-    ) writeback (
+    ) commit (
         .clk            (clk),
         .reset          (reset),
-        .alu_wb_if      (alu_wb_if),
-        .branch_wb_if   (branch_wb_if),
-        .lsu_wb_if      (lsu_wb_if),        
-        .csr_wb_if      (csr_wb_if),
-        .mul_wb_if      (mul_wb_if),
+
+        .alu_commit_if  (alu_commit_if),
+        .branch_commit_if(branch_commit_if),
+        .lsu_commit_if  (lsu_commit_if),        
+        .csr_commit_if  (csr_commit_if),
+        .mul_commit_if  (mul_commit_if),
+        .gpu_commit_if  (gpu_commit_if),
+        
         .writeback_if   (writeback_if),
-        .notify_commit  (notify_commit)
+        .perf_cntrs_if  (perf_cntrs_if)
     );   
 
     assign dcache_req_valid  = core_dcache_req_if.valid;
@@ -222,13 +247,5 @@ module VX_pipeline #(
     `SCOPE_ASSIGN(scope_mem_delay, mem_delay);
     `SCOPE_ASSIGN(scope_exec_delay, exec_delay);
     `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_delay);
-
-`ifdef DBG_PRINT_PIPELINE
-    always @(posedge clk) begin
-        if ((| execute_if.valid) && (~execute_if.alu_ready || ~execute_if.br_ready || ~execute_if.lsu_ready || ~execute_if.csr_ready  || ~execute_if.mul_ready || ~execute_if.gpu_ready)) begin
-            $display("%t: Core%0d-stall: warp=%0d, PC=%0h, alu=%b, br=%b, lsu=%b, csr=%b, mul=%b, gpu=%b", $time, CORE_ID, execute_if.warp_num, execute_if.curr_PC, ~execute_if.alu_ready, ~execute_if.br_ready, ~execute_if.lsu_ready, ~execute_if.csr_ready, ~execute_if.mul_ready, ~execute_if.gpu_ready);
-        end
-    end
-`endif
 
 endmodule

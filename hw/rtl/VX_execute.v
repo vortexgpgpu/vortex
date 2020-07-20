@@ -17,43 +17,29 @@ module VX_execute #(
     VX_cache_core_req_if dcache_req_if,
     VX_cache_core_rsp_if dcache_rsp_if,
 
-    // inputs
-    VX_execute_if       execute_if,
-    VX_wb_if            writeback_if,
+    // perf
+    VX_perf_cntrs_if    perf_cntrs_if,
+
+    // inputs    
+    VX_alu_req_if       alu_req_if,
+    VX_branch_req_if    branch_req_if,
+    VX_lsu_req_if       lsu_req_if,    
+    VX_csr_req_if       csr_req_if,
+    VX_mul_req_if       mul_req_if,    
+    VX_gpu_req_if       gpu_req_if,
     
     // outputs
-    VX_branch_rsp_if    branch_rsp_if,    
+    VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
-    VX_wb_if            alu_wb_if,
-    VX_wb_if            branch_wb_if,
-    VX_wb_if            lsu_wb_if,    
-    VX_wb_if            csr_wb_if,
-    VX_wb_if            mul_wb_if,
-
-    input wire          notify_commit,
+    VX_commit_if        alu_commit_if,
+    VX_commit_if        branch_commit_if,
+    VX_commit_if        lsu_commit_if,    
+    VX_commit_if        csr_commit_if,
+    VX_commit_if        mul_commit_if,
+    VX_commit_if        gpu_commit_if,
+    
     output wire         ebreak
 );
-    VX_alu_req_if   alu_req_if();
-    VX_branch_req_if branch_req_if();
-    VX_csr_req_if   csr_req_if();
-    VX_lsu_req_if   lsu_req_if();
-    VX_mul_req_if   mul_req_if();
-    VX_gpu_req_if   gpu_req_if();
-
-    VX_gpr_stage #(
-        .CORE_ID(CORE_ID)
-    ) gpr_stage (
-        .clk            (clk),
-        .reset          (reset),
-        .writeback_if   (writeback_if),
-        .execute_if     (execute_if),        
-        .alu_req_if     (alu_req_if),
-        .branch_req_if  (branch_req_if),
-        .lsu_req_if     (lsu_req_if),        
-        .csr_req_if     (csr_req_if),
-        .mul_req_if     (mul_req_if),
-        .gpu_req_if     (gpu_req_if)
-    );
 
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
@@ -61,7 +47,7 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),
         .alu_req_if     (alu_req_if),
-        .alu_wb_if      (alu_wb_if)
+        .alu_commit_if  (alu_commit_if)
     );
 
     VX_branch_unit #(
@@ -70,8 +56,8 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),
         .branch_req_if  (branch_req_if),        
-        .branch_rsp_if  (branch_rsp_if),
-        .branch_wb_if   (branch_wb_if)
+        .branch_ctl_if  (branch_ctl_if),
+        .branch_commit_if(branch_commit_if)
     );
 
     VX_lsu_unit #(
@@ -83,19 +69,19 @@ module VX_execute #(
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
         .lsu_req_if     (lsu_req_if),
-        .lsu_wb_if      (lsu_wb_if)
+        .lsu_commit_if  (lsu_commit_if)
     );
 
     VX_csr_pipe #(
         .CORE_ID(CORE_ID)
     ) csr_pipe (
         .clk            (clk),
-        .reset          (reset),
-        .csr_req_if     (csr_req_if),   
-        .csr_io_req_if  (csr_io_req_if),    
-        .csr_wb_if      (csr_wb_if),
+        .reset          (reset),    
+        .perf_cntrs_if  (perf_cntrs_if),    
+        .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
-        .notify_commit  (notify_commit)
+        .csr_req_if     (csr_req_if),   
+        .csr_commit_if  (csr_commit_if)
     );
 
     VX_mul_unit #(
@@ -104,14 +90,15 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),
         .mul_req_if     (mul_req_if),
-        .mul_wb_if      (mul_wb_if)
+        .mul_commit_if  (mul_commit_if)    
     );
 
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
     ) gpu_unit (
         .gpu_req_if     (gpu_req_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .gpu_commit_if  (gpu_commit_if)
     );
 
     assign ebreak = (| branch_req_if.valid) && (branch_req_if.br_op == `BR_EBREAK || branch_req_if.br_op == `BR_ECALL);

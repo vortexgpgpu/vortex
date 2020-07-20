@@ -2,7 +2,7 @@
 
 module VX_gpr_mux (
     // inputs
-    VX_execute_if execute_if,
+    VX_execute_if   execute_if,
     input wire [`NUM_THREADS-1:0][31:0] rs1_data,
     input wire [`NUM_THREADS-1:0][31:0] rs2_data,
 
@@ -80,9 +80,10 @@ module VX_gpr_mux (
     // GPU unit
     assign gpu_req_if.valid       = execute_if.valid & is_gpu;
     assign gpu_req_if.warp_num    = execute_if.warp_num;
-    assign gpu_req_if.next_PC     = execute_if.next_PC;
+    assign gpu_req_if.curr_PC     = execute_if.curr_PC;
     assign gpu_req_if.gpu_op      = `GPU_OP(execute_if.instr_op);
     assign gpu_req_if.rs1_data    = rs1_data;
     assign gpu_req_if.rs2_data    = rs2_data[0];
+    assign gpu_req_if.next_PC     = execute_if.next_PC;
     
 endmodule

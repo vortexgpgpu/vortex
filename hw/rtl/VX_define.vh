@@ -173,10 +173,12 @@
 `define EX_BR       3'h2
 `define EX_MUL      3'h3
 `define EX_LSU      3'h4
-`define EX_FPU      3'h5
-`define EX_CSR      3'h6
-`define EX_GPU      3'h7
+`define EX_CSR      3'h5
+`define EX_GPU      3'h6
 `define EX_BITS     3
+
+`define NUM_EXS     6
+`define NE_BITS     `LOG2UP(`NUM_EXS)
 
 `define WB_NO       2'h0
 `define WB_ALU      2'h1
@@ -374,7 +376,6 @@ task print_ex_type;
             `EX_LSU: $write("LSU");
             `EX_CSR: $write("CSR");
             `EX_MUL: $write("MUL");
-            `EX_FPU: $write("FPU");
             `EX_GPU: $write("GPU");
             default: $write("NOP");
         endcase

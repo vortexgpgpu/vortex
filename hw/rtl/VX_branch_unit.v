@@ -10,8 +10,8 @@ module VX_branch_unit #(
     VX_branch_req_if    branch_req_if,
 
     // Outputs    
-    VX_branch_rsp_if    branch_rsp_if,
-    VX_wb_if            branch_wb_if
+    VX_branch_ctl_if    branch_ctl_if,
+    VX_commit_if        branch_commit_if
 );
 
     wire [`NT_BITS-1:0] br_result_index;
@@ -19,7 +19,7 @@ module VX_branch_unit #(
     VX_priority_encoder #(
         .N(`NUM_THREADS)
     ) choose_alu_result (
-        .data_in  (alu_req_if.valid),
+        .data_in  (branch_req_if.valid),
         .data_out (br_result_index),
         `UNUSED_PIN (valid_out)
     );
@@ -53,7 +53,7 @@ module VX_branch_unit #(
     wire [31:0] base_addr = (br_op == `BR_JALR) ? rs1_data : branch_req_if.curr_PC;
     wire [31:0] br_dest   = $signed(base_addr) + $signed(branch_req_if.offset);
 
-    wire stall = (~branch_wb_if.ready && (| branch_wb_if.valid));                               
+    wire stall = (~branch_commit_if.ready && (| branch_commit_if.valid));                               
 
     VX_generic_register #(
         .N(1 + `NW_BITS + 1 + 32)
@@ -63,7 +63,7 @@ module VX_branch_unit #(
         .stall (stall),
         .flush (0),
         .in    ({in_valid,            branch_req_if.warp_num,  br_taken,            br_dest}),
-        .out   ({branch_rsp_if.valid, branch_rsp_if.warp_num,  branch_rsp_if.taken, branch_rsp_if.dest})
+        .out   ({branch_ctl_if.valid, branch_ctl_if.warp_num,  branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
     VX_generic_register #(
@@ -74,7 +74,7 @@ module VX_branch_unit #(
         .stall (stall),
         .flush (0),
         .in    ({branch_req_if.valid, branch_req_if.warp_num, branch_req_if.curr_PC, branch_req_if.rd, branch_req_if.wb, {`NUM_THREADS{branch_req_if.next_PC}}}),
-        .out   ({branch_wb_if.valid,  branch_wb_if.warp_num,  branch_wb_if.curr_PC,  branch_wb_if.rd,  branch_wb_if.wb,  branch_wb_if.data})
+        .out   ({branch_commit_if.valid,  branch_commit_if.warp_num,  branch_commit_if.curr_PC,  branch_commit_if.rd,  branch_commit_if.wb,  branch_commit_if.data})
     );    
 
     assign branch_req_if.ready = ~stall;

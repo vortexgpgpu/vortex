@@ -22,7 +22,7 @@ int main(int argc, char **argv)
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-bltu.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-bne.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-jal.hex",
-	 	"../../../benchmarks/riscv_tests/rv32ui-p-jalr.hex",		
+	 	"../../../benchmarks/riscv_tests/rv32ui-p-jalr.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-lb.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-lbu.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-lh.hex",
