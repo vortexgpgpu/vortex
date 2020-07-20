@@ -29,7 +29,6 @@ module VX_scheduler  #(
 
     wire ex_stalled = (| decode_if.valid) 
                    && ((!execute_if.alu_ready && (decode_if.ex_type == `EX_ALU))
-                    || (!execute_if.br_ready  && (decode_if.ex_type == `EX_BR))
                     || (!execute_if.lsu_ready && (decode_if.ex_type == `EX_LSU))
                     || (!execute_if.csr_ready && (decode_if.ex_type == `EX_CSR))
                     || (!execute_if.mul_ready && (decode_if.ex_type == `EX_MUL))

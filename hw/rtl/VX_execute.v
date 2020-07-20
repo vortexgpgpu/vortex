@@ -22,7 +22,6 @@ module VX_execute #(
 
     // inputs    
     VX_alu_req_if       alu_req_if,
-    VX_branch_req_if    branch_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,
     VX_mul_req_if       mul_req_if,    
@@ -32,7 +31,6 @@ module VX_execute #(
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
     VX_commit_if        alu_commit_if,
-    VX_commit_if        branch_commit_if,
     VX_commit_if        lsu_commit_if,    
     VX_commit_if        csr_commit_if,
     VX_commit_if        mul_commit_if,
@@ -47,17 +45,8 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),
         .alu_req_if     (alu_req_if),
-        .alu_commit_if  (alu_commit_if)
-    );
-
-    VX_branch_unit #(
-        .CORE_ID(CORE_ID)
-    ) branch_unit (
-        .clk            (clk),
-        .reset          (reset),
-        .branch_req_if  (branch_req_if),        
         .branch_ctl_if  (branch_ctl_if),
-        .branch_commit_if(branch_commit_if)
+        .alu_commit_if  (alu_commit_if)
     );
 
     VX_lsu_unit #(
@@ -101,7 +90,7 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    assign ebreak = (| branch_req_if.valid) && (branch_req_if.br_op == `BR_EBREAK || branch_req_if.br_op == `BR_ECALL);
+    assign ebreak = (| alu_req_if.valid) && (alu_req_if.alu_op == `ALU_EBREAK || alu_req_if.alu_op == `ALU_ECALL);
 
     `SCOPE_ASSIGN(scope_decode_valid,       decode_if.valid);
     `SCOPE_ASSIGN(scope_decode_warp_num,    decode_if.warp_num);

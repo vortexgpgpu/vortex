@@ -21,8 +21,7 @@ interface VX_execute_if ();
 
     wire [`WB_BITS-1:0]     wb;
 
-    wire                    alu_ready;    
-    wire                    br_ready;
+    wire                    alu_ready;  
     wire                    mul_ready;
     wire                    lsu_ready;  
     wire                    csr_ready;

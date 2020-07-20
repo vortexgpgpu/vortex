@@ -8,7 +8,6 @@ module VX_commit #(
 
     // inputs
     VX_commit_if    alu_commit_if,
-    VX_commit_if    branch_commit_if,
     VX_commit_if    lsu_commit_if,  
     VX_commit_if    mul_commit_if,    
     VX_commit_if    csr_commit_if,
@@ -21,7 +20,6 @@ module VX_commit #(
 
     wire [`NUM_EXS-1:0] commited_mask;
     assign commited_mask = {((| alu_commit_if.valid) && alu_commit_if.ready),
-                            ((| branch_commit_if.valid) && branch_commit_if.ready),
                             ((| lsu_commit_if.valid) && lsu_commit_if.ready),
                             ((| mul_commit_if.valid) && mul_commit_if.ready),
                             ((| csr_commit_if.valid) && csr_commit_if.ready),
@@ -64,7 +62,6 @@ module VX_commit #(
         .reset          (reset),
 
         .alu_commit_if  (alu_commit_if),
-        .branch_commit_if(branch_commit_if),
         .lsu_commit_if  (lsu_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
@@ -75,22 +72,19 @@ module VX_commit #(
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if ((| alu_commit_if.valid) && alu_commit_if.ready) begin
-            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, alu_commit_if.warp_num, alu_commit_if.curr_PC, alu_commit_if.wb, alu_commit_if.rd, alu_commit_if.data);
-        end
-        if ((| branch_commit_if.valid) && branch_commit_if.ready) begin
-            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, branch_commit_if.warp_num, branch_commit_if.curr_PC, branch_commit_if.wb, branch_commit_if.rd, branch_commit_if.data);
+            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, ex=ALU, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, alu_commit_if.warp_num, alu_commit_if.curr_PC, alu_commit_if.wb, alu_commit_if.rd, alu_commit_if.data);
         end
         if ((| lsu_commit_if.valid) && lsu_commit_if.ready) begin
-            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, lsu_commit_if.warp_num, lsu_commit_if.curr_PC, lsu_commit_if.wb, lsu_commit_if.rd, lsu_commit_if.data);
+            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, ex=LSU, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, lsu_commit_if.warp_num, lsu_commit_if.curr_PC, lsu_commit_if.wb, lsu_commit_if.rd, lsu_commit_if.data);
         end
         if ((| mul_commit_if.valid) && mul_commit_if.ready) begin
-            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, mul_commit_if.warp_num, mul_commit_if.curr_PC, mul_commit_if.wb, mul_commit_if.rd, mul_commit_if.data);
+            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, ex=MUL, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, mul_commit_if.warp_num, mul_commit_if.curr_PC, mul_commit_if.wb, mul_commit_if.rd, mul_commit_if.data);
         end
         if ((| csr_commit_if.valid) && csr_commit_if.ready) begin
-            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, csr_commit_if.warp_num, csr_commit_if.curr_PC, csr_commit_if.wb, csr_commit_if.rd, csr_commit_if.data);
+            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, ex=CSR, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, csr_commit_if.warp_num, csr_commit_if.curr_PC, csr_commit_if.wb, csr_commit_if.rd, csr_commit_if.data);
         end
         if ((| gpu_commit_if.valid) && gpu_commit_if.ready) begin
-            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, gpu_commit_if.warp_num, gpu_commit_if.curr_PC, gpu_commit_if.wb, gpu_commit_if.rd, gpu_commit_if.data);
+            $display("%t: Core%0d-commit: warp=%0d, PC=%0h, ex=GPU, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, gpu_commit_if.warp_num, gpu_commit_if.curr_PC, gpu_commit_if.wb, gpu_commit_if.rd, gpu_commit_if.data);
         end
     end
 `endif
