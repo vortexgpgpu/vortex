@@ -21,7 +21,7 @@
 
 typedef struct {
   int cycles_left;  
-  uint8_t *data;
+  std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
   unsigned tag;
 } dram_req_t;
 
