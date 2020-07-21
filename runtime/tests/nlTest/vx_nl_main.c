@@ -1,9 +1,5 @@
 
-#include "../../intrinsics/vx_intrinsics.h"
-#include "../../io/vx_io.h"
-#include "../common/tests.h"
-#include "../../vx_api/vx_api.h"
-#include "../../fileio/fileio.h"
+#include <vx_intrinsics.h>
 
 // #include <utlist.h>
 #include <string.h>
