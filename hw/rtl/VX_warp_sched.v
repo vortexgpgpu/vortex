@@ -18,7 +18,6 @@ module VX_warp_sched #(
 );
     wire update_use_wspawn;
     wire update_visible_active;
-    wire scheduled_warp;
 
     wire [(1+32+`NUM_THREADS-1):0] ipdom[`NUM_WARPS-1:0];
 

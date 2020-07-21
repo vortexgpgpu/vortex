@@ -76,7 +76,7 @@
 
 `define CSR_WIDTH   12
 
-`define DIV_LATENCY 2
+`define DIV_LATENCY 21
 
 `define MUL_LATENCY 2
 
@@ -389,6 +389,8 @@
 `define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
+
+
 
 task print_ex_type;
     input [`EX_BITS-1:0] ex;
