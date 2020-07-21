@@ -20,7 +20,7 @@ module VX_warp_sched #(
     wire update_visible_active;
     wire scheduled_warp;
 
-    wire [(1+32+`NUM_THREADS-1):0] d[`NUM_WARPS-1:0];
+    wire [(1+32+`NUM_THREADS-1):0] ipdom[`NUM_WARPS-1:0];
 
     wire                    join_fall;
     wire [31:0]             join_pc;
@@ -71,9 +71,8 @@ module VX_warp_sched #(
 
     wire stall;
 
-    integer i;
-    
     always @(posedge clk) begin
+        integer i;
         if (reset) begin
             for (i = 0; i < `NUM_BARRIERS; i++) begin
                 barrier_stall_mask[i] <= 0;
@@ -99,9 +98,9 @@ module VX_warp_sched #(
         end else begin
             
             if (warp_ctl_if.wspawn) begin
-                warp_active    <= warp_ctl_if.wspawn_new_active;
-                use_wspawn_pc  <= warp_ctl_if.wspawn_pc;
-                use_wspawn     <= warp_ctl_if.wspawn_new_active & (~`NUM_WARPS'b1);
+                warp_active   <= warp_ctl_if.wspawn_new_active;
+                use_wspawn_pc <= warp_ctl_if.wspawn_pc;
+                use_wspawn    <= warp_ctl_if.wspawn_new_active & (~`NUM_WARPS'(1));
             end
 
             if (warp_ctl_if.is_barrier) begin
@@ -205,13 +204,12 @@ module VX_warp_sched #(
     wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0, thread_masks[warp_ctl_if.warp_num]};
     wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, warp_ctl_if.split_save_pc, warp_ctl_if.split_later_mask};
 
-    assign {join_fall, join_pc, join_tm} = d[join_if.warp_num];
+    assign {join_fall, join_pc, join_tm} = ipdom[join_if.warp_num];
 
-    genvar j;
-
-    for (j = 0; j < `NUM_WARPS; j++) begin : stacks
-        wire correct_warp_s = (j == warp_ctl_if.warp_num);
-        wire correct_warp_j = (j == join_if.warp_num);
+    genvar i;
+    for (i = 0; i < `NUM_WARPS; i++) begin : stacks
+        wire correct_warp_s = (i == warp_ctl_if.warp_num);
+        wire correct_warp_j = (i == join_if.warp_num);
 
         wire push = (warp_ctl_if.is_split && warp_ctl_if.do_split) && correct_warp_s;
         wire pop  = join_if.is_join && correct_warp_j;
@@ -224,11 +222,11 @@ module VX_warp_sched #(
             .reset(reset),
             .push (push),
             .pop  (pop),
-            .d    (d[i]),
+            .d    (ipdom[i]),
             .q1   (q1),
             .q2   (q2)
         );
-    end    
+    end
 
     wire should_bra = (branch_ctl_if.valid && branch_ctl_if.taken && (warp_to_schedule == branch_ctl_if.warp_num));
 

@@ -89,7 +89,7 @@ module VX_alu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + 1 + 32)
-    ) rsp_reg (
+    ) branch_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),

@@ -20,12 +20,10 @@ module VX_generic_register #(
         reg [(N-1):0] value;
 
         always @(posedge clk) begin
-            if (reset) begin
+            if (reset || flush) begin
                 value <= N'(0);
             end else if (~stall) begin
                 value <= in;
-            end else if (flush) begin
-                value <= N'(0);
             end
         end
 

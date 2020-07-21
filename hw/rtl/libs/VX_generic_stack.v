@@ -1,7 +1,7 @@
 
 module VX_generic_stack #(
-    parameter WIDTH = 40,
-    parameter DEPTH = 2
+    parameter WIDTH = 1,
+    parameter DEPTH = 1
 ) (
     input  wire              clk,
     input  wire              reset,

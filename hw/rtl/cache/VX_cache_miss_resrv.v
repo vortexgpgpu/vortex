@@ -78,13 +78,11 @@ module VX_cache_miss_resrv #(
     reg [MRVQ_SIZE-1:0] make_ready_push;
     reg [MRVQ_SIZE-1:0] valid_address_match;
 
-    genvar i;
-    generate         
-        for (i = 0; i < MRVQ_SIZE; i++) begin
-            assign valid_address_match[i] = valid_table[i] ? (addr_table[i] == fill_addr_st1) : 0;
-            assign make_ready[i]          = is_fill_st1 && valid_address_match[i];
-        end
-    endgenerate
+    genvar i;    
+    for (i = 0; i < MRVQ_SIZE; i++) begin
+        assign valid_address_match[i] = valid_table[i] ? (addr_table[i] == fill_addr_st1) : 0;
+        assign make_ready[i]          = is_fill_st1 && valid_address_match[i];
+    end
 
     assign pending_hazard = |(valid_address_match);
 

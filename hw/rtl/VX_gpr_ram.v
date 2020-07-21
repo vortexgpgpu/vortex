@@ -36,6 +36,7 @@ module VX_gpr_ram (
                 end
             end
             assert(~(|we) || (waddr != 0)); // ensure r0 is never written!
+            assert(0 == ram[0]);
         end
         
         assign rs1_data = ram[rs1];
