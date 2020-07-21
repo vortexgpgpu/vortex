@@ -58,6 +58,7 @@ void CacheSim::reset() {
 }
 
 void CacheSim::step() {
+  std::cout << timestamp << ": [sim] step()" << std::endl;
   //toggle clock
   cache_->clk = 0;
   this->eval();
@@ -69,6 +70,7 @@ void CacheSim::step() {
   this->eval_reqs();
   this->eval_rsps();
   this->eval_dram_bus();
+  timestamp++;
 }
 
 void CacheSim::eval() {
@@ -80,14 +82,15 @@ void CacheSim::eval() {
 }
 
 void CacheSim::run(){
-#ifndef NDEBUG
-  std::cout << timestamp << ": [sim] run()" << std::endl;
-#endif
+//#ifndef NDEBUG
+  
+//#endif
   this->step();
 
   int valid = 300; 
   
   while (valid > -1) {
+
       this->step();
       if(!cache_->core_req_valid && !cache_->core_rsp_valid){
         valid--; 
