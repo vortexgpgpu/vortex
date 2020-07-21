@@ -11,7 +11,7 @@ double sc_time_stamp() {
 
 Simulator::Simulator() {  
   // force random values for unitialized signals  
-  Verilated::randReset(2);
+  Verilated::randReset(1);
 
   // Turn off assertion before reset
   Verilated::assertOn(false);
@@ -105,9 +105,8 @@ void Simulator::eval_dram_bus() {
   if (!dram_rsp_active_) {
     if (dequeue_index != -1) {
       vortex_->dram_rsp_valid = 1;
-      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].data, GLOBAL_BLOCK_SIZE);
-      vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;    
-      free(dram_rsp_vec_[dequeue_index].data);
+      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].block.data(), GLOBAL_BLOCK_SIZE);
+      vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;   
       dram_rsp_vec_.erase(dram_rsp_vec_.begin() + dequeue_index);
       dram_rsp_active_ = true;
     } else {
@@ -141,9 +140,8 @@ void Simulator::eval_dram_bus() {
       } else {
         dram_req_t dram_req;
         dram_req.cycles_left = DRAM_LATENCY;     
-        dram_req.data = (uint8_t*)malloc(GLOBAL_BLOCK_SIZE);
         dram_req.tag = vortex_->dram_req_tag;
-        ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.data);
+        ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.block.data());
         dram_rsp_vec_.push_back(dram_req);
       } 
     }    
