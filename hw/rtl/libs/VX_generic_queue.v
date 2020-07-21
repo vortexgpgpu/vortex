@@ -1,8 +1,8 @@
 `include "VX_define.vh"
 
 module VX_generic_queue #(
-    parameter DATAW = 1,
-    parameter SIZE = 16,
+    parameter DATAW = 0,
+    parameter SIZE = 1,
     parameter BUFFERED_OUTPUT = 1
 ) ( 
     input  wire             clk,
