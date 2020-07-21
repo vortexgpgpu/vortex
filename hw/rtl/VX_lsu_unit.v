@@ -30,6 +30,7 @@ module VX_lsu_unit #(
     wire [`NW_BITS-1:0]           use_warp_num;
     wire [`WB_BITS-1:0]           use_wb;
     wire [31:0]                   use_pc;
+    wire                          mrq_full;
 
     genvar i;
 
@@ -83,8 +84,7 @@ module VX_lsu_unit #(
     wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, dbg_mrq_write_addr;
     wire [`NUM_THREADS-1:0][1:0] mem_rsp_offset;
     wire [`BYTEEN_BITS-1:0] core_rsp_mem_read;      
-    wire mrq_full;
-
+    
     wire mrq_push = (| dcache_req_if.valid) && dcache_req_if.ready
                  && (0 == use_req_rw); // only push read requests
 
