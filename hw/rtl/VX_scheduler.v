@@ -8,8 +8,12 @@ module VX_scheduler  #(
 
     VX_decode_if    decode_if,
     VX_wb_if        writeback_if,  
-      
-    VX_execute_if   execute_if,
+    input wire      alu_busy,
+    input wire      lsu_busy,
+    input wire      csr_busy,
+    input wire      mul_busy,
+    input wire      gpu_busy,      
+    output wire     schedule_delay,
     output wire     is_empty    
 );
     localparam CTVW = `CLOG2(`NUM_WARPS * 32 + 1);
@@ -28,13 +32,13 @@ module VX_scheduler  #(
     wire rename_valid = (| decode_if.valid) && (rs1_rename_qual || rs2_rename_qual || rd_rename_qual);    
 
     wire ex_stalled = (| decode_if.valid) 
-                   && ((!execute_if.alu_ready && (decode_if.ex_type == `EX_ALU))
-                    || (!execute_if.lsu_ready && (decode_if.ex_type == `EX_LSU))
-                    || (!execute_if.csr_ready && (decode_if.ex_type == `EX_CSR))
-                    || (!execute_if.mul_ready && (decode_if.ex_type == `EX_MUL))
-                    || (!execute_if.gpu_ready && (decode_if.ex_type == `EX_GPU)));
+                   && ((alu_busy && (decode_if.ex_type == `EX_ALU))
+                    || (lsu_busy && (decode_if.ex_type == `EX_LSU))
+                    || (csr_busy && (decode_if.ex_type == `EX_CSR))
+                    || (mul_busy && (decode_if.ex_type == `EX_MUL))
+                    || (gpu_busy && (decode_if.ex_type == `EX_GPU)));
 
-    wire stall = rename_valid || ex_stalled;
+    wire stall = ex_stalled || rename_valid;
 
     wire acquire_rd = (| decode_if.valid) && (decode_if.wb != 0) && ~stall;
     
@@ -67,19 +71,18 @@ module VX_scheduler  #(
         end
     end
 
-    VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + `EX_BITS + `OP_BITS + `WB_BITS),
-    ) schedule_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (0),
-        .in    ({decode_if.valid,  decode_if.warp_num,  decode_if.curr_PC,  decode_if.next_PC,  decode_if.rd,  decode_if.rs1,  decode_if.rs2,  decode_if.imm,  decode_if.rs1_is_PC,  decode_if.rs2_is_imm,  decode_if.ex_type,  decode_if.instr_op,  decode_if.wb}),
-        .out   ({execute_if.valid, execute_if.warp_num, execute_if.curr_PC, execute_if.next_PC, execute_if.rd, execute_if.rs1, execute_if.rs2, execute_if.imm, execute_if.rs1_is_PC, execute_if.rs2_is_imm, execute_if.ex_type, execute_if.instr_op, execute_if.wb})
-    ); 
-
     assign decode_if.ready = ~stall;
 
+    assign schedule_delay = stall;
+
     assign is_empty = (0 == count_valid);
+
+`ifdef DBG_PRINT_PIPELINE
+    always @(posedge clk) begin
+        if (stall) begin
+            $display("%t: Core%0d-stall: warp=%0d, PC=%0h, rd=%0d, wb=%0d, rename=%b%b%b, alu=%b, lsu=%b, csr=%b, mul=%b, gpu=%b", $time, CORE_ID, decode_if.warp_num, decode_if.curr_PC, decode_if.rd, decode_if.wb, rd_rename_qual, rs1_rename_qual, rs2_rename_qual, alu_busy, lsu_busy, csr_busy, mul_busy, gpu_busy);        
+        end
+    end
+`endif
 
 endmodule

@@ -61,9 +61,9 @@ module VX_execute #(
         .lsu_commit_if  (lsu_commit_if)
     );
 
-    VX_csr_pipe #(
+    VX_csr_unit #(
         .CORE_ID(CORE_ID)
-    ) csr_pipe (
+    ) csr_unit (
         .clk            (clk),
         .reset          (reset),    
         .perf_cntrs_if  (perf_cntrs_if),    

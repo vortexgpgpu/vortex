@@ -107,13 +107,15 @@ module VX_mul_unit #(
     wire stall = (~mul_commit_if.ready && (| mul_commit_if.valid)) 
               || pipeline_stall;
 
+    wire flush = mul_commit_if.ready && pipeline_stall;
+
     VX_generic_register #(
         .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + `WB_BITS + (`NUM_THREADS * 32)),
     ) mul_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
-        .flush (0),
+        .flush (flush),
         .in    ({mul_req_if.valid, mul_req_if.warp_num, mul_req_if.curr_PC, mul_req_if.rd, mul_req_if.wb, alu_result}),
         .out   ({mul_commit_if.valid,  mul_commit_if.warp_num,  mul_commit_if.curr_PC,  mul_commit_if.rd,  mul_commit_if.wb,  mul_commit_if.data})
     );    

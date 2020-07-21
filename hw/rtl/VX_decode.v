@@ -235,10 +235,10 @@ module VX_decode  #(
                                         is_ltype ? `WB_MEM :                                        
                                             `WB_NO;    
 
-    assign join_if.is_join  = is_gpu && (gpu_op == `GPU_JOIN) && in_valid;
+    assign join_if.is_join  = in_valid && is_gpu && (gpu_op == `GPU_JOIN);
     assign join_if.warp_num = ifetch_rsp_if.warp_num;
 
-    assign wstall_if.wstall = (is_br || is_gpu) && in_valid;
+    assign wstall_if.wstall = in_valid && (is_btype || is_jal || is_jalr || (is_gpu && (gpu_op == `GPU_TMC || gpu_op == `GPU_SPLIT || gpu_op == `GPU_BAR)));
     assign wstall_if.warp_num = ifetch_rsp_if.warp_num;
 
     wire stall = ~decode_if.ready && (| decode_if.valid);   

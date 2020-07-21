@@ -16,12 +16,11 @@ module VX_gpu_unit #(
     wire is_split  = (gpu_req_if.gpu_op == `GPU_SPLIT);
     wire is_bar    = (gpu_req_if.gpu_op == `GPU_BAR);
 
-    wire [`NUM_THREADS-1:0] tmc_new_mask;
-    wire all_threads = `NUM_THREADS < gpu_req_if.rs1_data[0];
-    
+    wire [`NUM_THREADS-1:0] tmc_new_mask;    
+
     genvar i;
     for (i = 0; i < `NUM_THREADS; i++) begin : tmc_new_mask_init
-        assign tmc_new_mask[i] = all_threads ? 1 : i < gpu_req_if.rs1_data[0];
+        assign tmc_new_mask[i] = (i < gpu_req_if.rs1_data[0]);
     end
 
     wire valid_inst = (| curr_valids);
@@ -35,11 +34,10 @@ module VX_gpu_unit #(
 
     wire wspawn = is_wspawn && valid_inst;
     wire [31:0] wspawn_pc = gpu_req_if.rs2_data;
-    wire all_active = `NUM_WARPS < gpu_req_if.rs1_data[0];
     wire [`NUM_WARPS-1:0] wspawn_new_active;
 
     for (i = 0; i < `NUM_WARPS; i++) begin : wspawn_new_active_init
-        assign wspawn_new_active[i] = all_active ? 1 : i < gpu_req_if.rs1_data[0];
+        assign wspawn_new_active[i] = (i < gpu_req_if.rs1_data[0]);
     end
 
     assign warp_ctl_if.is_barrier = is_bar && valid_inst;
@@ -75,12 +73,14 @@ module VX_gpu_unit #(
     assign warp_ctl_if.split_later_mask = split_new_later_mask;
     assign warp_ctl_if.split_save_pc    = gpu_req_if.next_PC;
 
-    assign gpu_req_if.ready = 1'b1; // has no stalls
+    assign gpu_req_if.ready = gpu_commit_if.ready;
 
     // commit
     assign gpu_commit_if.valid    = gpu_req_if.valid;
     assign gpu_commit_if.warp_num = gpu_req_if.warp_num;
     assign gpu_commit_if.curr_PC  = gpu_req_if.curr_PC;
     assign gpu_commit_if.wb       = `WB_NO;    
+    assign gpu_commit_if.rd       = 0;
+    assign gpu_commit_if.data     = 0;
 
 endmodule
