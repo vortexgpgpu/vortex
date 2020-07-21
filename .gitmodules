@@ -1,0 +1,3 @@
+[submodule "hw/rtl/fp_cores/fpu_div_sqrt_mvp"]
+	path = hw/rtl/fp_cores/fpu_div_sqrt_mvp
+	url = https://github.com/pulp-platform/fpu_div_sqrt_mvp.git
