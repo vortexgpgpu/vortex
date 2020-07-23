@@ -19,12 +19,13 @@ module VX_execute #(
 
     // perf
     VX_perf_cntrs_if    perf_cntrs_if,
-
+    
     // inputs    
     VX_alu_req_if       alu_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,
     VX_mul_req_if       mul_req_if,    
+    VX_fpu_req_if       fpu_req_if,    
     VX_gpu_req_if       gpu_req_if,
     
     // outputs
@@ -34,10 +35,13 @@ module VX_execute #(
     VX_commit_if        lsu_commit_if,    
     VX_commit_if        csr_commit_if,
     VX_commit_if        mul_commit_if,
+    VX_commit_if        fpu_commit_if,
     VX_commit_if        gpu_commit_if,
     
     output wire         ebreak
 );
+    VX_fpu_to_csr_if    fpu_to_csr_if();
+    VX_fpu_from_csr_if  fpu_from_csr_if();
 
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
@@ -67,6 +71,7 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),    
         .perf_cntrs_if  (perf_cntrs_if),    
+        .fpu_to_csr_if  (fpu_to_csr_if),
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
@@ -80,6 +85,17 @@ module VX_execute #(
         .reset          (reset),
         .mul_req_if     (mul_req_if),
         .mul_commit_if  (mul_commit_if)    
+    );
+
+    VX_fpu_unit #(
+        .CORE_ID(CORE_ID)
+    ) fpu_unit (
+        .clk            (clk),
+        .reset          (reset),        
+        .fpu_req_if     (fpu_req_if),
+        .fpu_from_csr_if(fpu_from_csr_if),
+        .fpu_to_csr_if  (fpu_to_csr_if),
+        .fpu_commit_if  (fpu_commit_if)    
     );
 
     VX_gpu_unit #(

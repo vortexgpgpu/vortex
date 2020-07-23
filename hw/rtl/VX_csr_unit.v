@@ -6,7 +6,8 @@ module VX_csr_unit #(
     input wire          clk,
     input wire          reset,
 
-    VX_perf_cntrs_if    perf_cntrs_if,    
+    VX_perf_cntrs_if    perf_cntrs_if,   
+    VX_fpu_to_csr_if    fpu_to_csr_if, 
     
     VX_csr_io_req_if    csr_io_req_if,    
     VX_csr_io_rsp_if    csr_io_rsp_if,
@@ -17,15 +18,23 @@ module VX_csr_unit #(
     VX_csr_req_if       csr_pipe_req_if();
     VX_commit_if        csr_pipe_commit_if();
 
+    wire                select_io_req = (| csr_io_req_if.valid);
+    wire                select_io_rsp;
+
     VX_csr_arb csr_arb (
         .clk              (clk),
         .reset            (reset),
+
         .csr_core_req_if  (csr_req_if),
         .csr_io_req_if    (csr_io_req_if),
         .csr_req_if       (csr_pipe_req_if),
+
         .csr_rsp_if       (csr_pipe_commit_if),
         .csr_io_rsp_if    (csr_io_rsp_if),        
-        .csr_commit_if    (csr_commit_if) 
+        .csr_commit_if    (csr_commit_if),
+
+        .select_io_req    (select_io_req),
+        .select_io_rsp    (select_io_rsp)
     ); 
 
     wire [`CSR_ADDR_SIZE-1:0] csr_addr_s2;
@@ -68,14 +77,14 @@ module VX_csr_unit #(
     wire stall = ~csr_pipe_commit_if.ready && (| csr_pipe_commit_if.valid);
 
     VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + `WB_BITS + `CSR_ADDR_SIZE + 1 + 32 + 32)
+        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + 1 + `CSR_ADDR_SIZE + 1 + 32 + 32)
     ) csr_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({csr_pipe_req_if.valid, csr_pipe_req_if.warp_num, csr_pipe_req_if.curr_PC, csr_pipe_req_if.rd, csr_pipe_req_if.wb, csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data,    csr_updated_data}),
-        .out   ({csr_pipe_commit_if.valid,  csr_pipe_commit_if.warp_num,  csr_pipe_commit_if.curr_PC,  csr_pipe_commit_if.rd,  csr_pipe_commit_if.wb,  csr_addr_s2,              csr_pipe_commit_if.is_io,  csr_read_data_s2, csr_updated_data_s2})
+        .in    ({csr_pipe_req_if.valid,    csr_pipe_req_if.warp_num,    csr_pipe_req_if.curr_PC,    csr_pipe_req_if.rd,    csr_pipe_req_if.wb,    csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data,    csr_updated_data}),
+        .out   ({csr_pipe_commit_if.valid, csr_pipe_commit_if.warp_num, csr_pipe_commit_if.curr_PC, csr_pipe_commit_if.rd, csr_pipe_commit_if.wb, csr_addr_s2,              select_io_rsp,         csr_read_data_s2, csr_updated_data_s2})
     );
 
     genvar i;

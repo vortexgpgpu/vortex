@@ -12,7 +12,7 @@ echo "inc_list=$inc_list"
 {
     # read design sources
     for dir in $dir_list; do
-        for file in $(find $dir -name '*.v' -o -name '*.sv' -type f) 
+        for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f) 
         do
             echo "read_verilog -sv $inc_list $file"
         done

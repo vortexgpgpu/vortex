@@ -19,12 +19,19 @@ interface VX_decode_if ();
     wire [31:0]             imm;    
 
     wire                    rs1_is_PC;
-    wire                    rs2_is_imm;   
+    wire                    rs2_is_imm;  
 
     wire                    use_rs1;
     wire                    use_rs2; 
 
-    wire [`WB_BITS-1:0]     wb;
+    // FP states
+    wire [`NR_BITS-1:0]     rs3;
+    wire                    use_rs3;
+    wire                    rs1_is_fp;
+    wire                    rs2_is_fp;
+    wire [`FRM_BITS-1:0]    frm;    
+
+    wire                    wb;
 
     wire                    ready;
 
