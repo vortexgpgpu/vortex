@@ -12,7 +12,7 @@ module VX_mul_unit #(
     // Outputs
     VX_commit_if    mul_commit_if
 );    
-    wire [`NUM_THREADS-1:0][31:0] alu_result;      
+    reg [`NUM_THREADS-1:0][31:0] alu_result;      
     wire [`NUM_THREADS-1:0][63:0] mul_result;
     wire [`NUM_THREADS-1:0][31:0] div_result;
     wire [`NUM_THREADS-1:0][31:0] rem_result;
@@ -36,7 +36,7 @@ module VX_mul_unit #(
             .WIDTHB(33),
             .WIDTHP(64),
             .SIGNED(1),
-            .PIPELINE(`MUL_LATENCY)
+            .PIPELINE(`LATENCY_IMUL)
         ) multiplier (
             .clk(clk),
             .reset(reset),
@@ -52,7 +52,7 @@ module VX_mul_unit #(
             .WIDTHR(32),
             .NSIGNED(1),
             .DSIGNED(1),
-            .PIPELINE(`DIV_LATENCY)
+            .PIPELINE(`LATENCY_IDIV)
         ) sdiv (
             .clk(clk),
             .reset(reset),
@@ -77,9 +77,11 @@ module VX_mul_unit #(
         end       
     end  
 
+    wire stall;
+
     reg result_avail;
     reg [4:0] pending_ctr;
-    wire [4:0] instr_delay = `IS_DIV_OP(alu_op) ? `DIV_LATENCY : `MUL_LATENCY;
+    wire [4:0] instr_delay = `IS_DIV_OP(alu_op) ? `LATENCY_IDIV : `LATENCY_IMUL;
 
     always @(posedge clk) begin
         if (reset) begin     
@@ -104,13 +106,13 @@ module VX_mul_unit #(
 
     wire pipeline_stall = ~result_avail && (| mul_req_if.valid);
     
-    wire stall = (~mul_commit_if.ready && (| mul_commit_if.valid)) 
-              || pipeline_stall;
+    assign stall = (~mul_commit_if.ready && (| mul_commit_if.valid)) 
+                || pipeline_stall;
 
     wire flush = mul_commit_if.ready && pipeline_stall;
 
     VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + `WB_BITS + (`NUM_THREADS * 32)),
+        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
     ) mul_reg (
         .clk   (clk),
         .reset (reset),

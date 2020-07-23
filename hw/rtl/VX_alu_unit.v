@@ -1,4 +1,6 @@
 `include "VX_define.vh"
+`include "fpnew_pkg.sv"
+`include "defs_div_sqrt_mvp.sv"
 
 module VX_alu_unit #(
     parameter CORE_ID = 0
@@ -13,7 +15,7 @@ module VX_alu_unit #(
     VX_branch_ctl_if branch_ctl_if,
     VX_commit_if    alu_commit_if
 );    
-    wire [`NUM_THREADS-1:0][31:0] alu_result;            
+    reg [`NUM_THREADS-1:0][31:0] alu_result;            
     wire [`NUM_THREADS-1:0][32:0] sub_result; 
     wire [`NUM_THREADS-1:0][32:0] shift_result;
 
@@ -99,7 +101,7 @@ module VX_alu_unit #(
     );
 
     VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + `WB_BITS + (`NUM_THREADS * 32)),
+        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
     ) alu_reg (
         .clk   (clk),
         .reset (reset),

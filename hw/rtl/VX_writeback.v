@@ -9,17 +9,19 @@ module VX_writeback #(
     // inputs
     VX_commit_if    alu_commit_if,
     VX_commit_if    lsu_commit_if,  
-    VX_commit_if    mul_commit_if,    
+    VX_commit_if    mul_commit_if,
+    VX_commit_if    fpu_commit_if,    
     VX_commit_if    csr_commit_if,
 
     // outputs
     VX_wb_if        writeback_if
 );
 
-    wire lsu_valid = (| lsu_commit_if.valid) && (lsu_commit_if.wb != `WB_NO);
-    wire mul_valid = (| mul_commit_if.valid) && (mul_commit_if.wb != `WB_NO);
-    wire alu_valid = (| alu_commit_if.valid) && (alu_commit_if.wb != `WB_NO);
-    wire csr_valid = (| csr_commit_if.valid) && (csr_commit_if.wb != `WB_NO);
+    wire alu_valid = (| alu_commit_if.valid) && alu_commit_if.wb;
+    wire lsu_valid = (| lsu_commit_if.valid) && lsu_commit_if.wb;
+    wire csr_valid = (| csr_commit_if.valid) && csr_commit_if.wb;
+    wire mul_valid = (| mul_commit_if.valid) && mul_commit_if.wb;
+    wire fpu_valid = (| fpu_commit_if.valid) && fpu_commit_if.wb;
 
     VX_wb_if writeback_tmp_if();    
 
@@ -47,23 +49,26 @@ module VX_writeback #(
                                     csr_valid ? csr_commit_if.rd :                                                               
                                                 0;
 
+    assign writeback_tmp_if.is_fp = fpu_valid && fpu_commit_if.ready;
+
     wire stall = ~writeback_if.ready && (| writeback_if.valid);
 
     VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + `NR_BITS + (`NUM_THREADS * 32))
+        .N(`NUM_THREADS + `NW_BITS + `NR_BITS + (`NUM_THREADS * 32) + 1)
     ) wb_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({writeback_tmp_if.valid, writeback_tmp_if.warp_num, writeback_tmp_if.rd, writeback_tmp_if.data}),
-        .out   ({writeback_if.valid,     writeback_if.warp_num,     writeback_if.rd,     writeback_if.data})
+        .in    ({writeback_tmp_if.valid, writeback_tmp_if.warp_num, writeback_tmp_if.rd, writeback_tmp_if.data, writeback_tmp_if.is_fp}),
+        .out   ({writeback_if.valid,     writeback_if.warp_num,     writeback_if.rd,     writeback_if.data,     writeback_if.is_fp})
     );
 
     assign lsu_commit_if.ready = !stall;    
-    assign mul_commit_if.ready = !stall && !lsu_valid;
-    assign alu_commit_if.ready = !stall && !lsu_valid && !mul_valid;    
-    assign csr_commit_if.ready = !stall && !lsu_valid && !mul_valid && !alu_valid;    
+    assign fpu_commit_if.ready = !stall && !lsu_valid;   
+    assign mul_commit_if.ready = !stall && !lsu_valid && !fpu_valid;
+    assign alu_commit_if.ready = !stall && !lsu_valid && !fpu_valid && !mul_valid;    
+    assign csr_commit_if.ready = !stall && !lsu_valid && !fpu_valid && !mul_valid && !alu_valid;    
     
     // special workaround to control RISC-V benchmarks termination on Verilator
     reg [31:0] last_data_wb /* verilator public */;
