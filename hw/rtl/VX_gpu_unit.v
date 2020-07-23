@@ -79,7 +79,7 @@ module VX_gpu_unit #(
     assign gpu_commit_if.valid    = gpu_req_if.valid;
     assign gpu_commit_if.warp_num = gpu_req_if.warp_num;
     assign gpu_commit_if.curr_PC  = gpu_req_if.curr_PC;
-    assign gpu_commit_if.wb       = `WB_NO;    
+    assign gpu_commit_if.wb       = 0;    
     assign gpu_commit_if.rd       = 0;
     assign gpu_commit_if.data     = 0;
 

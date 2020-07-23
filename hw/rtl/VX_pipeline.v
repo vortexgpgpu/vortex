@@ -110,6 +110,7 @@ module VX_pipeline #(
     VX_lsu_req_if       lsu_req_if();
     VX_csr_req_if       csr_req_if();
     VX_mul_req_if       mul_req_if();  
+    VX_fpu_req_if       fpu_req_if(); 
     VX_gpu_req_if       gpu_req_if();
     VX_wb_if            writeback_if();     
     VX_wstall_if        wstall_if();
@@ -118,6 +119,7 @@ module VX_pipeline #(
     VX_commit_if        lsu_commit_if();        
     VX_commit_if        csr_commit_if(); 
     VX_commit_if        mul_commit_if();     
+    VX_commit_if        fpu_commit_if();     
     VX_commit_if        gpu_commit_if();     
 
     VX_fetch #(
@@ -159,6 +161,7 @@ module VX_pipeline #(
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
         .mul_req_if     (mul_req_if),
+        .fpu_req_if     (fpu_req_if),
         .gpu_req_if     (gpu_req_if)
     );
 
@@ -181,6 +184,7 @@ module VX_pipeline #(
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
         .mul_req_if     (mul_req_if),
+        .fpu_req_if     (fpu_req_if),
         .gpu_req_if     (gpu_req_if),
 
         .warp_ctl_if    (warp_ctl_if),
@@ -189,6 +193,7 @@ module VX_pipeline #(
         .lsu_commit_if  (lsu_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
+        .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),        
         
         .ebreak         (ebreak)
@@ -204,6 +209,7 @@ module VX_pipeline #(
         .lsu_commit_if  (lsu_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
+        .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),
         
         .writeback_if   (writeback_if),

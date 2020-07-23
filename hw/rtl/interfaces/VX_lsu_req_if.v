@@ -12,7 +12,7 @@ interface VX_lsu_req_if ();
     wire                            rw; 
     wire [`BYTEEN_BITS-1:0]         byteen;
         
-    wire [`WB_BITS-1:0]             wb; 
+    wire                            wb; 
     wire [`NR_BITS-1:0]             rd; 
 
     wire [`NUM_THREADS-1:0][31:0]   store_data;
