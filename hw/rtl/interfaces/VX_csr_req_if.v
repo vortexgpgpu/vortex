@@ -15,7 +15,7 @@ interface VX_csr_req_if ();
     wire [31:0]             csr_mask;
 
     wire [`NR_BITS-1:0]     rd;
-    wire [`WB_BITS-1:0]     wb;
+    wire                    wb;
     wire                    is_io;  
     
     wire                    ready;

@@ -28,7 +28,7 @@ module VX_lsu_unit #(
     wire [`BYTEEN_BITS-1:0]       mem_byteen; 
     wire [`NR_BITS-1:0]           use_rd;
     wire [`NW_BITS-1:0]           use_warp_num;
-    wire [`WB_BITS-1:0]           use_wb;
+    wire                          use_wb;
     wire [31:0]                   use_pc;
     wire                          mrq_full;
 
@@ -69,7 +69,7 @@ module VX_lsu_unit #(
 `IGNORE_WARNINGS_END
 
     VX_generic_register #(
-        .N(`NUM_THREADS + (`NUM_THREADS * 32) + `BYTEEN_BITS + 1 + (`NUM_THREADS * (30 + 2 + 4 + 32)) +  `NR_BITS + `NW_BITS + `WB_BITS + 32)
+        .N(`NUM_THREADS + (`NUM_THREADS * 32) + `BYTEEN_BITS + 1 + (`NUM_THREADS * (30 + 2 + 4 + 32)) +  `NR_BITS + `NW_BITS + 1 + 32)
     ) mem_req_reg (
         .clk   (clk),
         .reset (reset),
@@ -97,7 +97,7 @@ module VX_lsu_unit #(
     wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_upd);    
 
     VX_index_queue #(
-        .DATAW (`LOG2UP(`DCREQ_SIZE) + 32 + `WB_BITS + (`NUM_THREADS * 2) + `BYTEEN_BITS + `NR_BITS + `NW_BITS),
+        .DATAW (`LOG2UP(`DCREQ_SIZE) + 32 + 1 + (`NUM_THREADS * 2) + `BYTEEN_BITS + `NR_BITS + `NW_BITS),
         .SIZE  (`DCREQ_SIZE)
     ) mem_req_queue (
         .clk        (clk),
