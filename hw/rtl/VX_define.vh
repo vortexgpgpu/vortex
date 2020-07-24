@@ -25,10 +25,14 @@
 
 `define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
                               /* verilator lint_off PINCONNECTEMPTY */ \
+                              /* verilator lint_off WIDTH */ \
+                              /* verilator lint_off UNOPTFLAT */ \
                               /* verilator lint_off DECLFILENAME */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
                               /* verilator lint_on PINCONNECTEMPTY */ \
+                              /* verilator lint_on WIDTH */ \
+                              /* verilator lint_on UNOPTFLAT */ \
                               /* verilator lint_on DECLFILENAME */
 
 `define UNUSED_VAR(x) /* verilator lint_off UNUSED */ \
@@ -76,9 +80,14 @@
 
 `define CSR_WIDTH   12
 
-`define DIV_LATENCY 21
+`define LATENCY_IDIV 21
 
-`define MUL_LATENCY 2
+`define LATENCY_IMUL 2
+
+`define LATENCY_FMULADD  2
+`define LATENCY_FDIVSQRT 2
+`define LATENCY_FCONV    2
+`define LATENCY_FNONCOMP 1
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -93,6 +102,15 @@
 `define INST_R      7'b0110011
 `define INST_F      7'b0001111
 `define INST_SYS    7'b1110011
+
+`define INST_FL     7'b0000111 
+`define INST_FS     7'b0100111 
+`define INST_FCI    7'b1010011 
+`define INST_FMADD  7'b1000011  
+`define INST_FMSUB  7'b1000111
+`define INST_FNMSUB 7'b1001011
+`define INST_FNMADD 7'b1001111 
+
 `define INST_GPU    7'b1101011
 
 `define BYTEEN_SB   3'h0 
@@ -150,18 +168,6 @@
 `define BR_OP(x)    x[`BR_BITS-1:0]
 `define IS_BR_OP(x) x[4]
 
-`define MUL_MUL     3'h0
-`define MUL_MULH    3'h1
-`define MUL_MULHSU  3'h2
-`define MUL_MULHU   3'h3
-`define MUL_DIV     3'h4
-`define MUL_DIVU    3'h5
-`define MUL_REM     3'h6
-`define MUL_REMU    3'h7
-`define MUL_BITS    3
-`define MUL_OP(x)   x[`MUL_BITS-1:0]
-`define IS_DIV_OP(x) x[2]
-
 `define LSU_LB      {1'b0, `BYTEEN_SB}
 `define LSU_LH      {1'b0, `BYTEEN_SH}
 `define LSU_LW      {1'b0, `BYTEEN_SW}
@@ -183,6 +189,53 @@
 `define CSR_BITS    2
 `define CSR_OP(x)   x[`CSR_BITS-1:0]
 
+`define MUL_MUL     3'h0
+`define MUL_MULH    3'h1
+`define MUL_MULHSU  3'h2
+`define MUL_MULHU   3'h3
+`define MUL_DIV     3'h4
+`define MUL_DIVU    3'h5
+`define MUL_REM     3'h6
+`define MUL_REMU    3'h7
+`define MUL_BITS    3
+`define MUL_OP(x)   x[`MUL_BITS-1:0]
+`define IS_DIV_OP(x) x[2]
+
+`define FPU_ADD     5'h00 
+`define FPU_SUB     5'h01 
+`define FPU_MUL     5'h02 
+`define FPU_DIV     5'h03 
+`define FPU_SQRT    5'h04 
+`define FPU_MADD    5'h05 
+`define FPU_MSUB    5'h06   
+`define FPU_NMSUB   5'h07   
+`define FPU_NMADD   5'h08 
+`define FPU_SGNJ    5'h09  // FSGNJ
+`define FPU_SGNJN   5'h0A  // FSGNJN
+`define FPU_SGNJX   5'h0B  // FSGNJX
+`define FPU_MIN     5'h0C  // FMIN.S 
+`define FPU_MAX     5'h0D  // FMAX.S
+`define FPU_CVTWS   5'h0E  // FCVT.W.S
+`define FPU_CVTWUS  5'h0F  // FCVT.WU.S
+`define FPU_CVTSW   5'h10  // FCVT.S.W
+`define FPU_CVTSWU  5'h11  // FCVT.S.WU
+`define FPU_MVXW    5'h12  // MOV FP from fpReg to integer reg
+`define FPU_MVWX    5'h13  // MOV FP from integer reg to fpReg
+`define FPU_CLASS   5'h14  
+`define FPU_CMP     5'h15
+`define FPU_OTHER   5'h1f
+`define FPU_BITS    5
+`define FPU_OP(x)   x[`FPU_BITS-1:0]
+
+`define FRM_RNE    3'b000
+`define FRM_RTZ    3'b001
+`define FRM_RDN    3'b010
+`define FRM_RUP    3'b011  // positive inf
+`define FRM_RMM    3'b100
+`define FRM_DYN    3'b111
+`define FRM_BITS   3
+`define FFG_BITS   5
+
 `define GPU_TMC     3'h0
 `define GPU_WSPAWN  3'h1 
 `define GPU_SPLIT   3'h2
@@ -194,20 +247,15 @@
 
 `define EX_NOP      3'h0
 `define EX_ALU      3'h1
-`define EX_MUL      3'h2
-`define EX_LSU      3'h3
-`define EX_CSR      3'h4
-`define EX_GPU      3'h5
+`define EX_LSU      3'h2
+`define EX_CSR      3'h3
+`define EX_MUL      3'h4
+`define EX_FPU      3'h5
+`define EX_GPU      3'h6
 `define EX_BITS     3
 
-`define NUM_EXS     5
+`define NUM_EXS     6
 `define NE_BITS     `LOG2UP(`NUM_EXS)
-
-`define WB_NO       2'h0
-`define WB_ALU      2'h1
-`define WB_MEM      2'h2
-`define WB_JAL      2'h3
-`define WB_BITS     2
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -216,14 +264,14 @@
                 | (0 <<  2) // C - Compressed extension \
                 | (0 <<  3) // D - Double precsision floating-point extension \
                 | (0 <<  4) // E - RV32E base ISA \
-                | (0 <<  5) // F - Single precsision floating-point extension \
+    | (`EXT_F_ENABLE <<  5) // F - Single precsision floating-point extension \
                 | (0 <<  6) // G - Additional standard extensions present \
                 | (0 <<  7) // H - Hypervisor mode implemented \
                 | (1 <<  8) // I - RV32I/64I/128I base ISA \
                 | (0 <<  9) // J - Reserved \
                 | (0 << 10) // K - Reserved \
                 | (0 << 11) // L - Tentatively reserved for Bit operations extension \
-                | (1 << 12) // M - Integer Multiply/Divide extension \
+    | (`EXT_M_ENABLE << 12) // M - Integer Multiply/Divide extension \
                 | (0 << 13) // N - User level interrupts supported \
                 | (0 << 14) // O - Reserved \
                 | (0 << 15) // P - Tentatively reserved for Packed-SIMD extension \
@@ -241,7 +289,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef DBG_CORE_REQ_INFO          // pc,  wb,        rd,        warp_num
-`define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + `WB_BITS + `NR_BITS + `NW_BITS)
+`define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 1 + `NR_BITS + `NW_BITS)
 `else
 `define DEBUG_CORE_REQ_MDATA_WIDTH  0
 `endif
@@ -490,18 +538,6 @@ task print_instr_op;
         default:;    
     endcase        
   end
-endtask
-
-task print_wb;
-    input [`WB_BITS-1:0] wb;
-    begin     
-        case (wb)
-            `WB_ALU: $write("ALU");
-            `WB_MEM: $write("MEM");
-            `WB_JAL: $write("JAL");
-            default: $write("NO");
-        endcase
-    end      
 endtask
 
 `endif

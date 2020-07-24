@@ -65,13 +65,13 @@ module VX_snp_forwarder #(
     ) snp_fwd_queue (
         .clk        (clk),
         .reset      (reset),
-        .write_data ({sfq_write_addr, snp_req_addr, snp_req_invalidate, snp_req_tag}),    
+        .write_data ({snp_req_addr, snp_req_invalidate, snp_req_tag}),    
         .write_addr (sfq_write_addr),        
         .push       (sfq_push), 
         .pop        (sfq_pop),   
         .full       (sfq_full),     
         .read_addr  (sfq_read_addr),
-        .read_data  ({dbg_sfq_write_addr, snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag}),
+        .read_data  ({snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag}),
         `UNUSED_PIN (empty)
     );
 
@@ -81,7 +81,6 @@ module VX_snp_forwarder #(
         end      
         if (fwdin_fire) begin
             pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
-            assert(sfq_read_addr == dbg_sfq_write_addr);
         end
     end
 

@@ -23,7 +23,7 @@ module VX_icache_stage #(
 
     wire valid_inst = (| ifetch_req_if.valid);
 
-    wire [`LOG2UP(`ICREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr, dbg_mrq_write_addr;
+    wire [`LOG2UP(`ICREQ_SIZE)-1:0] mrq_write_addr, mrq_read_addr;
     wire mrq_full;
 
     wire mrq_push = icache_req_if.valid && icache_req_if.ready;    
@@ -32,27 +32,24 @@ module VX_icache_stage #(
     assign mrq_read_addr = icache_rsp_if.tag[0][`LOG2UP(`ICREQ_SIZE)-1:0];    
 
     VX_index_queue #(
-        .DATAW (`LOG2UP(`ICREQ_SIZE) + 32 + `NW_BITS),
+        .DATAW (32 + `NW_BITS),
         .SIZE  (`ICREQ_SIZE)
     ) mem_req_queue (
         .clk        (clk),
         .reset      (reset),        
-        .write_data ({mrq_write_addr, ifetch_req_if.curr_PC, ifetch_req_if.warp_num}),    
+        .write_data ({ifetch_req_if.curr_PC, ifetch_req_if.warp_num}),    
         .write_addr (mrq_write_addr),        
         .push       (mrq_push),    
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({dbg_mrq_write_addr, ifetch_rsp_if.curr_PC, ifetch_rsp_if.warp_num}),
+        .read_data  ({ifetch_rsp_if.curr_PC, ifetch_rsp_if.warp_num}),
         `UNUSED_PIN (empty)
     );    
 
     always @(posedge clk) begin
         if (mrq_push) begin
             valid_threads[ifetch_req_if.warp_num] <= ifetch_req_if.valid;                
-        end
-        if (mrq_pop) begin
-            assert(mrq_read_addr == dbg_mrq_write_addr);
         end
     end
 
@@ -67,7 +64,7 @@ module VX_icache_stage #(
     assign ifetch_req_if.ready = !mrq_full && icache_req_if.ready;
 
 `ifdef DBG_CORE_REQ_INFO  
-    assign icache_req_if.tag = {ifetch_req_if.curr_PC, 2'b1, 5'b0, ifetch_req_if.warp_num, mrq_write_addr};
+    assign icache_req_if.tag = {ifetch_req_if.curr_PC, 1'b0, 5'b0, ifetch_req_if.warp_num, mrq_write_addr};
 `else
     assign icache_req_if.tag = mrq_write_addr;
 `endif

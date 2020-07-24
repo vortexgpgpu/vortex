@@ -35,7 +35,7 @@ module VX_execute #(
     VX_commit_if        lsu_commit_if,    
     VX_commit_if        csr_commit_if,
     VX_commit_if        mul_commit_if,
-    VX_commit_if        fpu_commit_if,
+    VX_commit_fp_if     fpu_commit_if,
     VX_commit_if        gpu_commit_if,
     
     output wire         ebreak
@@ -72,6 +72,7 @@ module VX_execute #(
         .reset          (reset),    
         .perf_cntrs_if  (perf_cntrs_if),    
         .fpu_to_csr_if  (fpu_to_csr_if),
+        .fpu_from_csr_if(fpu_from_csr_if), 
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   

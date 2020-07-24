@@ -6,7 +6,9 @@ module VX_csr_unit #(
     input wire          clk,
     input wire          reset,
 
-    VX_perf_cntrs_if    perf_cntrs_if,   
+    VX_perf_cntrs_if    perf_cntrs_if, 
+
+    VX_fpu_from_csr_if  fpu_from_csr_if,  
     VX_fpu_to_csr_if    fpu_to_csr_if, 
     
     VX_csr_io_req_if    csr_io_req_if,    
@@ -48,13 +50,16 @@ module VX_csr_unit #(
         .CORE_ID(CORE_ID)
     ) csr_data (
         .clk            (clk),
+        .reset          (reset),
+        .perf_cntrs_if  (perf_cntrs_if),
+        .fpu_to_csr_if  (fpu_to_csr_if),
+        .fpu_from_csr_if(fpu_from_csr_if), 
         .read_addr      (csr_pipe_req_if.csr_addr),
         .read_data      (csr_read_data_unqual),
         .write_enable   (is_csr_s2),
         .write_data     (csr_updated_data_s2[`CSR_WIDTH-1:0]),
         .write_addr     (csr_addr_s2), 
-        .warp_num       (csr_pipe_req_if.warp_num),
-        .perf_cntrs_if  (perf_cntrs_if)
+        .warp_num       (csr_pipe_req_if.warp_num)        
     );
 
     wire csr_hazard = (csr_addr_s2 == csr_pipe_req_if.csr_addr)

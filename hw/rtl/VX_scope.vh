@@ -145,7 +145,7 @@
         wire [`NUM_THREADS-1:0]  scope_writeback_valid; \
         wire [`NW_BITS-1:0]  scope_writeback_warp_num; \
         wire [31:0] scope_writeback_curr_PC; \
-        wire [`WB_BITS-1:0] scope_writeback_wb; \
+        wire                scope_writeback_wb; \
         wire [`NR_BITS-1:0] scope_writeback_rd; \
         wire [63:0] scope_writeback_data; \
         wire scope_bank_valid_st0; \
@@ -224,7 +224,7 @@
         output wire [`NUM_THREADS-1:0]  scope_writeback_valid, \
         output wire [`NW_BITS-1:0]  scope_writeback_warp_num, \
         output wire [31:0] scope_writeback_curr_PC, \
-        output wire [`WB_BITS-1:0]  scope_writeback_wb, \
+        output wire                 scope_writeback_wb, \
         output wire [`NR_BITS-1:0]  scope_writeback_rd, \
         output wire [63:0] scope_writeback_data,
 

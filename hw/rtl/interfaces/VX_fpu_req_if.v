@@ -14,6 +14,7 @@ interface VX_fpu_req_if ();
 
     wire                    wb;
     wire [`NR_BITS-1:0]     rd;
+    wire                    rd_is_fp;
 
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
     wire [`NUM_THREADS-1:0][31:0] rs2_data;

@@ -106,7 +106,7 @@ module VX_bank #(
 `ifdef DBG_CORE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire[31:0]           debug_use_pc_st0;
-    wire[`WB_BITS-1:0]   debug_wb_st0;
+    wire                 debug_wb_st0;
     wire[`NR_BITS-1:0]   debug_rd_st0;
     wire[`NW_BITS-1:0]   debug_warp_num_st0;
     wire                 debug_rw_st0;    
@@ -115,7 +115,7 @@ module VX_bank #(
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st0;
 
     wire[31:0]           debug_use_pc_st1e;
-    wire[`WB_BITS-1:0]   debug_wb_st1e;
+    wire                 debug_wb_st1e;
     wire[`NR_BITS-1:0]   debug_rd_st1e;
     wire[`NW_BITS-1:0]   debug_warp_num_st1e;
     wire                 debug_rw_st1e;    
@@ -124,7 +124,7 @@ module VX_bank #(
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1e;
 
     wire[31:0]           debug_use_pc_st2;
-    wire[`WB_BITS-1:0]   debug_wb_st2;
+    wire                 debug_wb_st2;
     wire[`NR_BITS-1:0]   debug_rd_st2;
     wire[`NW_BITS-1:0]   debug_warp_num_st2;
     wire                 debug_rw_st2;    

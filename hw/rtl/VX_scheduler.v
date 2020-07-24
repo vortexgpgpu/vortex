@@ -20,14 +20,17 @@ module VX_scheduler  #(
 );
     localparam CTVW = `CLOG2(`NUM_WARPS * `NUM_REGS + 1);
 
-    reg [`NUM_REGS-1:0][`NUM_THREADS-1:0] rename_table [`NUM_WARPS-1:0];
-    reg [`NUM_REGS-1:0] busy_table [`NUM_WARPS-1:0];
-    reg [CTVW-1:0] count_valid;    
+    reg [`NUM_THREADS-1:0] rename_table [`NUM_WARPS-1:0][(`NUM_REGS*2)-1:0];
+    reg busy_table [`NUM_WARPS-1:0][(`NUM_REGS*2)-1:0];
+    reg [CTVW-1:0] count_valid;
+
+    reg [`NR_BITS:0] read_rd  = {decode_if.rd_is_fp, decode_if.rd};
+    reg [`NR_BITS:0] write_rd = {writeback_if.rd_is_fp, writeback_if.rd};
     
-    wire rs1_rename = busy_table[decode_if.warp_num][decode_if.rs1];
-    wire rs2_rename = busy_table[decode_if.warp_num][decode_if.rs2];
-    wire rs3_rename = busy_table[decode_if.warp_num][decode_if.rs3];
-    wire rd_rename  = busy_table[decode_if.warp_num][decode_if.rd];
+    wire rs1_rename = busy_table[decode_if.warp_num][{decode_if.rs1_is_fp, decode_if.rs1}];
+    wire rs2_rename = busy_table[decode_if.warp_num][{decode_if.rs1_is_fp, decode_if.rs2}];
+    wire rs3_rename = busy_table[decode_if.warp_num][{1'b1, decode_if.rs3}];
+    wire rd_rename  = busy_table[decode_if.warp_num][read_rd];
 
     wire rs1_rename_qual = rs1_rename && decode_if.use_rs1;
     wire rs2_rename_qual = rs2_rename && decode_if.use_rs2;
@@ -50,7 +53,7 @@ module VX_scheduler  #(
     
     wire release_rd = (| writeback_if.valid);
 
-    wire [`NUM_THREADS-1:0] valid_wb_new_mask = rename_table[writeback_if.warp_num][writeback_if.rd] & ~writeback_if.valid;
+    wire [`NUM_THREADS-1:0] valid_wb_new_mask = rename_table[writeback_if.warp_num][write_rd] & ~writeback_if.valid;
 
     reg [CTVW-1:0] count_valid_next = (acquire_rd && !(release_rd && (0 == valid_wb_new_mask))) ? (count_valid + 1) : 
                                       (~acquire_rd && (release_rd && (0 == valid_wb_new_mask))) ? (count_valid - 1) :
@@ -67,13 +70,13 @@ module VX_scheduler  #(
             count_valid  <= 0;
         end else begin
             if (acquire_rd) begin
-                rename_table[decode_if.warp_num][decode_if.rd] <= decode_if.valid;
-                busy_table[decode_if.warp_num][decode_if.rd] <= 1;                
+                rename_table[decode_if.warp_num][read_rd] <= decode_if.valid;
+                busy_table[decode_if.warp_num][read_rd] <= 1;                
             end       
             if (release_rd) begin
-                assert(rename_table[writeback_if.warp_num][writeback_if.rd] != 0);
-                rename_table[writeback_if.warp_num][writeback_if.rd] <= valid_wb_new_mask;
-                busy_table[writeback_if.warp_num][writeback_if.rd]   <= (| valid_wb_new_mask);
+                assert(rename_table[writeback_if.warp_num][write_rd] != 0);
+                rename_table[writeback_if.warp_num][write_rd] <= valid_wb_new_mask;
+                busy_table[writeback_if.warp_num][write_rd]   <= (| valid_wb_new_mask);
             end            
             count_valid <= count_valid_next;
         end
