@@ -81,7 +81,7 @@ module VX_lsu_unit #(
 
     reg [`NUM_THREADS-1:0] mem_rsp_mask[`DCREQ_SIZE-1:0]; 
 
-    wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr, dbg_mrq_write_addr;
+    wire [`LOG2UP(`DCREQ_SIZE)-1:0] mrq_write_addr;
     wire [`NUM_THREADS-1:0][1:0] mem_rsp_offset;
     wire [`BYTEEN_BITS-1:0] core_rsp_mem_read;      
     
@@ -97,18 +97,18 @@ module VX_lsu_unit #(
     wire mrq_pop = mrq_pop_part && (0 == mem_rsp_mask_upd);    
 
     VX_index_queue #(
-        .DATAW (`LOG2UP(`DCREQ_SIZE) + 32 + 1 + (`NUM_THREADS * 2) + `BYTEEN_BITS + `NR_BITS + `NW_BITS),
+        .DATAW (32 + 1 + (`NUM_THREADS * 2) + `BYTEEN_BITS + `NR_BITS + `NW_BITS),
         .SIZE  (`DCREQ_SIZE)
     ) mem_req_queue (
         .clk        (clk),
         .reset      (reset),
-        .write_data ({mrq_write_addr, use_pc, use_wb, use_req_offset, mem_byteen, use_rd, use_warp_num}),    
+        .write_data ({use_pc, use_wb, use_req_offset, mem_byteen, use_rd, use_warp_num}),    
         .write_addr (mrq_write_addr),        
         .push       (mrq_push),    
         .full       (mrq_full),
         .pop        (mrq_pop),
         .read_addr  (mrq_read_addr),
-        .read_data  ({dbg_mrq_write_addr, lsu_commit_if.curr_PC, lsu_commit_if.wb, mem_rsp_offset, core_rsp_mem_read, lsu_commit_if.rd, lsu_commit_if.warp_num}),
+        .read_data  ({lsu_commit_if.curr_PC, lsu_commit_if.wb, mem_rsp_offset, core_rsp_mem_read, lsu_commit_if.rd, lsu_commit_if.warp_num}),
         `UNUSED_PIN (empty)
     );
 
@@ -117,8 +117,7 @@ module VX_lsu_unit #(
             mem_rsp_mask[mrq_write_addr] <= use_valid;
         end    
         if (mrq_pop_part) begin
-            mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_upd;
-            assert(($time < 2) || mrq_read_addr == dbg_mrq_write_addr);            
+            mem_rsp_mask[mrq_read_addr] <= mem_rsp_mask_upd;          
         end
     end
 

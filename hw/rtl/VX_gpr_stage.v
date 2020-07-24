@@ -34,7 +34,7 @@ module VX_gpr_stage #(
         // Int GPRs
         VX_gpr_ram gpr_int_ram (
             .clk      (clk),
-            .we       (we[i] & {`NUM_THREADS{~writeback_if.is_fp}}),                
+            .we       (we[i] & {`NUM_THREADS{~writeback_if.rd_is_fp}}),                
             .waddr    (writeback_if.rd),
             .wdata    (writeback_if.data),
             .rs1      (raddr1),
@@ -46,7 +46,7 @@ module VX_gpr_stage #(
         // FP GPRs
         VX_gpr_ram gpr_fp_ram (
             .clk      (clk),
-            .we       (we[i] & {`NUM_THREADS{writeback_if.is_fp}}),                
+            .we       (we[i] & {`NUM_THREADS{writeback_if.rd_is_fp}}),                
             .waddr    (writeback_if.rd),
             .wdata    (writeback_if.data),
             .rs1      (raddr1),

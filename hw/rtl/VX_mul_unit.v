@@ -75,7 +75,7 @@ module VX_mul_unit #(
                 default:    alu_result[i] = alu_in1[i] + alu_in2[i]; // ADD, LUI, AUIPC, FENCE
             endcase
         end       
-    end  
+    end 
 
     wire stall;
 

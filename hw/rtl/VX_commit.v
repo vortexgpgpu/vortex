@@ -11,7 +11,7 @@ module VX_commit #(
     VX_commit_if    lsu_commit_if,  
     VX_commit_if    mul_commit_if,    
     VX_commit_if    csr_commit_if,
-    VX_commit_if    fpu_commit_if,
+    VX_commit_fp_if fpu_commit_if,
     VX_commit_if    gpu_commit_if,
 
     // outputs
@@ -70,7 +70,7 @@ module VX_commit #(
         .fpu_commit_if  (fpu_commit_if),
         
         .writeback_if   (writeback_if)
-    );
+    );    
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin

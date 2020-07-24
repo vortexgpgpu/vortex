@@ -214,14 +214,14 @@ module VX_decode  #(
                 7'h04: fpu_op = `FPU_SUB;
                 7'h08: fpu_op = `FPU_MUL;
                 7'h0C: fpu_op = `FPU_DIV;
-                7'h2C: fpu_op = `FPU_SQRT;
+                7'h10: fpu_op = (func3[1]) ? `FPU_SGNJX : ((func3[0]) ? `FPU_SGNJN : `FPU_SGNJ);
                 7'h14: fpu_op = (func3 == 3'h0) ? `FPU_MIN    : `FPU_MAX;
+                7'h2C: fpu_op = `FPU_SQRT;
+                7'h50: fpu_op = `FPU_CMP;   // wb to intReg
                 7'h60: fpu_op = (instr[20])     ? `FPU_CVTWUS : `FPU_CVTWS; // doesn't need rs2, and read rs1 from fpReg, WB to intReg
                 7'h68: fpu_op = (instr[20])     ? `FPU_CVTSWU : `FPU_CVTSW; // doesn't need rs2, and read rs1 from intReg
-                7'h70: fpu_op = (func3 == 3'h0) ? `FPU_MVXW   : `FPU_CLASS;        // both wb to intReg
-                7'h78: fpu_op = `FPU_MVWX;
-                7'h50: fpu_op = `FPU_CMP;   // wb to intReg
-                7'h10: fpu_op = (func3[1]) ? `FPU_SGNJX : ((func3[0]) ? `FPU_SGNJN : `FPU_SGNJ);
+                7'h70: fpu_op = (func3 == 3'h0) ? `FPU_MVXW   : `FPU_CLASS; // both wb to intReg
+                7'h78: fpu_op = `FPU_MVWX;              
                 default:;
             endcase
         end
@@ -283,15 +283,15 @@ module VX_decode  #(
 
     assign decode_tmp_if.use_rs2 = (decode_tmp_if.rs2 != 0) 
                                 && (is_btype || is_stype || is_rtype || (is_gpu && (gpu_op == `GPU_BAR || gpu_op == `GPU_WSPAWN)));
-      
-    assign decode_tmp_if.rs1_is_fp = (is_fci && ((func7 != 7'h68) && (fpu_op != `FPU_MVWX)) || is_fr4);
+
+    assign decode_tmp_if.rd_is_fp  = is_fpu && ~(is_fci && ((func7 == 7'h50) || (func7 == 7'h60) || (func7 == 7'h70)));
+    assign decode_tmp_if.rs1_is_fp = is_fci && ((func7 != 7'h68) && (fpu_op != `FPU_MVWX)) || is_fr4;
     assign decode_tmp_if.rs2_is_fp = is_fs || (is_fci && ((func7 != 7'h60) && (func7  !=  7'h68)) || is_fr4);
     assign decode_tmp_if.rs3       = rs3;
     assign decode_tmp_if.use_rs3   = is_fr4;
     assign decode_tmp_if.frm       = func3;
 
-    assign decode_tmp_if.wb = (is_fpu && (is_fl || (is_fci && ((func7 != 7'h50) || (func7 != 7'h70) || (func7 != 7'h60))) || is_fr4)) 
-                           || (~is_fpu && (rd != 0) && (is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype));    
+    assign decode_tmp_if.wb = is_fpu || ((rd != 0) && (is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype));    
 
     assign join_if.is_join  = in_valid && is_gpu && (gpu_op == `GPU_JOIN);
     assign join_if.warp_num = ifetch_rsp_if.warp_num;

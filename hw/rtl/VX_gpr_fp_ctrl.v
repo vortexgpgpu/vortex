@@ -50,7 +50,7 @@ module VX_gpr_fp_ctrl (
 			if (decode_if.rs1_is_fp) begin
 				tmp_rs1_data <= rs1_fp_data;
             end else begin
-				tmp_rs1_data <= decode_if.rs1_is_PC ? {`NUM_THREADS{decode_if.curr_PC}}  : rs1_int_data;
+				tmp_rs1_data <= decode_if.rs1_is_PC ? {`NUM_THREADS{decode_if.curr_PC}} : rs1_int_data;
             end
 		end
 	end

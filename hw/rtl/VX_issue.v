@@ -64,7 +64,7 @@ module VX_issue #(
     VX_fpu_req_if   fpu_req_tmp_if();
     VX_gpu_req_if   gpu_req_tmp_if();    
 
-    VX_issue_mux issue_mux (
+    VX_issue_demux issue_demux (
         .decode_if     (decode_if),
         .gpr_data_if   (gpr_data_if),
         .alu_req_if    (alu_req_tmp_if),
@@ -134,14 +134,14 @@ module VX_issue #(
     );
 
     VX_generic_register #(
-        .N(`NUM_THREADS +`NW_BITS + 32 + `FPU_BITS + 1 + `NR_BITS + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + `FRM_BITS)
+        .N(`NUM_THREADS +`NW_BITS + 32 + `FPU_BITS + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + `FRM_BITS)
     ) fpu_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_fpu),
         .flush (flush_fpu),
-        .in    ({fpu_req_tmp_if.valid, fpu_req_tmp_if.warp_num, fpu_req_tmp_if.curr_PC, fpu_req_tmp_if.fpu_op, fpu_req_tmp_if.wb, fpu_req_tmp_if.rd, fpu_req_tmp_if.rs1_data, fpu_req_tmp_if.rs2_data, fpu_req_tmp_if.rs3_data, fpu_req_tmp_if.frm}),
-        .out   ({fpu_req_if.valid,     fpu_req_if.warp_num,     fpu_req_if.curr_PC,     fpu_req_if.fpu_op,     fpu_req_if.wb,     fpu_req_if.rd,     fpu_req_if.rs1_data,     fpu_req_if.rs2_data,     fpu_req_if.rs3_data,     fpu_req_if.frm})
+        .in    ({fpu_req_tmp_if.valid, fpu_req_tmp_if.warp_num, fpu_req_tmp_if.curr_PC, fpu_req_tmp_if.fpu_op, fpu_req_tmp_if.wb, fpu_req_tmp_if.rd, fpu_req_tmp_if.rd_is_fp, fpu_req_tmp_if.rs1_data, fpu_req_tmp_if.rs2_data, fpu_req_tmp_if.rs3_data, fpu_req_tmp_if.frm}),
+        .out   ({fpu_req_if.valid,     fpu_req_if.warp_num,     fpu_req_if.curr_PC,     fpu_req_if.fpu_op,     fpu_req_if.wb,     fpu_req_if.rd,     fpu_req_if.rd_is_fp,     fpu_req_if.rs1_data,     fpu_req_if.rs2_data,     fpu_req_if.rs3_data,     fpu_req_if.frm})
     );
 
     VX_generic_register #(

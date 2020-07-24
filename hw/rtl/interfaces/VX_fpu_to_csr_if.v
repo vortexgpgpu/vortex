@@ -5,7 +5,6 @@
 
 interface VX_fpu_to_csr_if ();
 
-`IGNORE_WARNINGS_BEGIN
 	wire valid;
 
 	wire [`NW_BITS-1:0] warp_num;
@@ -15,8 +14,6 @@ interface VX_fpu_to_csr_if ();
 	wire fflags_OF;
 	wire fflags_UF;
 	wire fflags_NX;
-
-`IGNORE_WARNINGS_END
 
 endinterface
 

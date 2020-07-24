@@ -63,6 +63,10 @@
 `define EXT_M_ENABLE 1
 `endif
 
+`ifndef EXT_F_ENABLE
+`define EXT_F_ENABLE 1
+`endif
+
 // Configuration Values =======================================================
 
 `define VENDOR_ID           0
@@ -70,6 +74,10 @@
 `define IMPLEMENTATION_ID   0
 
 // CSR Addresses ==============================================================
+
+`define CSR_FFLAGS      12'hF01
+`define CSR_FRM         12'hF02
+`define CSR_FCSR        12'hF03
 
 `define CSR_VEND_ID     12'hF11
 `define CSR_ARCH_ID     12'hF12
@@ -90,6 +98,16 @@
 `define CSR_INSTR_H     12'hC82
 
 `define CSR_MISA        12'h301
+
+// Size of MUL Request Queue Size
+`ifndef MULRQ_SIZE
+`define MULRQ_SIZE 8
+`endif
+
+// Size of FPU Request Queue Size
+`ifndef FPURQ_SIZE
+`define FPURQ_SIZE 8
+`endif
 
 // Dcache Configurable Knobs ==================================================
 
@@ -407,5 +425,4 @@
 `define L3PRFQ_STRIDE 0
 `endif
 
- // VX_CONFIG
 `endif

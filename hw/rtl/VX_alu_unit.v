@@ -1,6 +1,4 @@
 `include "VX_define.vh"
-`include "fpnew_pkg.sv"
-`include "defs_div_sqrt_mvp.sv"
 
 module VX_alu_unit #(
     parameter CORE_ID = 0
