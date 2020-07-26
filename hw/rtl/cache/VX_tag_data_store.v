@@ -1,6 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_tag_data_structure #(
+module VX_tag_data_store #(
     // Size of cache in bytes
     parameter CACHE_SIZE                    = 0, 
     // Size of line inside a bank in bytes

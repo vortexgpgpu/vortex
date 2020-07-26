@@ -39,10 +39,6 @@
 `define SHARED_MEM_BASE_ADDR 32'h6FFFF000
 `endif
 
-`ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 20'h6FFFF
-`endif
-
 `ifndef IO_BUS_BASE_ADDR
 `define IO_BUS_BASE_ADDR 32'hFFFFFF00
 `endif
@@ -59,13 +55,9 @@
 `define L3_ENABLE (`NUM_CLUSTERS > 1)
 `endif
 
-`ifndef EXT_M_ENABLE
-`define EXT_M_ENABLE 1
-`endif
+`define EXT_M_ENABLE
 
-`ifndef EXT_F_ENABLE
-`define EXT_F_ENABLE 1
-`endif
+// define EXT_F_ENABLE 
 
 // Configuration Values =======================================================
 
@@ -109,6 +101,11 @@
 `define FPURQ_SIZE 8
 `endif
 
+// Size of issue queue
+`ifndef ISSUEQ_SIZE
+`define ISSUEQ_SIZE (8 + `NUM_WARPS)
+`endif
+
 // Dcache Configurable Knobs ==================================================
 
 // Size of cache in bytes
@@ -148,12 +145,12 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef DDFPQ_SIZE
-`define DDFPQ_SIZE 16
+`define DDFPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
 `ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 16
+`define DSNRQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -173,7 +170,7 @@
 
 // Prefetcher
 `ifndef DPRFQ_SIZE
-`define DPRFQ_SIZE 16
+`define DPRFQ_SIZE 8
 `endif
 
 `ifndef DPRFQ_STRIDE
@@ -219,7 +216,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef IDFPQ_SIZE
-`define IDFPQ_SIZE 16
+`define IDFPQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -229,7 +226,7 @@
 
 // Dram Writeback Queue Size
 `ifndef IDWBQ_SIZE
-`define IDWBQ_SIZE 16
+`define IDWBQ_SIZE 8
 `endif
 
 // Dram Fill Req Queue Size
@@ -239,7 +236,7 @@
 
 // Prefetcher
 `ifndef IPRFQ_SIZE
-`define IPRFQ_SIZE 16
+`define IPRFQ_SIZE 8
 `endif
 
 `ifndef IPRFQ_STRIDE
@@ -312,7 +309,7 @@
 
 // Core Request Queue Size
 `ifndef L2CREQ_SIZE
-`define L2CREQ_SIZE 16
+`define L2CREQ_SIZE 8
 `endif
 
 // Miss Reserv Queue Knob
@@ -322,12 +319,12 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef L2DFPQ_SIZE
-`define L2DFPQ_SIZE 16
+`define L2DFPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
 `ifndef L2SNRQ_SIZE
-`define L2SNRQ_SIZE 16
+`define L2SNRQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -337,7 +334,7 @@
 
 // Dram Writeback Queue Size
 `ifndef L2DWBQ_SIZE
-`define L2DWBQ_SIZE 16
+`define L2DWBQ_SIZE 8
 `endif
 
 // Dram Fill Req Queue Size
@@ -347,7 +344,7 @@
 
 // Prefetcher
 `ifndef L2PRFQ_SIZE
-`define L2PRFQ_SIZE 16
+`define L2PRFQ_SIZE 8
 `endif
 
 `ifndef L2PRFQ_STRIDE
@@ -383,7 +380,7 @@
 
 // Core Request Queue Size
 `ifndef L3CREQ_SIZE
-`define L3CREQ_SIZE 16
+`define L3CREQ_SIZE 8
 `endif
 
 // Miss Reserv Queue Knob
@@ -393,12 +390,12 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef L3DFPQ_SIZE
-`define L3DFPQ_SIZE 16
+`define L3DFPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
 `ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 16
+`define L3SNRQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -408,7 +405,7 @@
 
 // Dram Writeback Queue Size
 `ifndef L3DWBQ_SIZE
-`define L3DWBQ_SIZE 16
+`define L3DWBQ_SIZE 8
 `endif
 
 // Dram Fill Req Queue Size
@@ -418,7 +415,7 @@
 
 // Prefetcher
 `ifndef L3PRFQ_SIZE
-`define L3PRFQ_SIZE 16
+`define L3PRFQ_SIZE 8
 `endif
 
 `ifndef L3PRFQ_STRIDE

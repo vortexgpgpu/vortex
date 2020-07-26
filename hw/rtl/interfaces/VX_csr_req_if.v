@@ -5,7 +5,8 @@
 
 interface VX_csr_req_if ();
 
-    wire [`NUM_THREADS-1:0] valid;
+    wire                    valid;
+    wire [`ISTAG_BITS-1:0]  issue_tag;
     wire [`NW_BITS-1:0]     warp_num;
     wire [31:0]             curr_PC;  
 

@@ -12,6 +12,7 @@ module VX_divide #(
     input wire clk,
     input wire reset,
 
+    input wire clk_en,
     input wire [WIDTHN-1:0] numer,
     input wire [WIDTHD-1:0] denom,
 
@@ -31,7 +32,7 @@ module VX_divide #(
         .quotient (quotient_unqual),
         .remain   (remainder_unqual),
         .aclr     (1'b0),
-        .clken    (1'b1)
+        .clken    (clk_en)
     );
 
     defparam
@@ -43,8 +44,8 @@ module VX_divide #(
 		quartus_div.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
 		quartus_div.lpm_pipeline = PIPELINE;
 
-    assign quotient  = quotient_unqual[WIDTHQ-1:0];
-    assign remainder = remainder_unqual[WIDTHR-1:0];
+    assign quotient  = quotient_unqual [WIDTHQ-1:0];
+    assign remainder = remainder_unqual [WIDTHR-1:0];
 
 `else
 
@@ -82,8 +83,8 @@ module VX_divide #(
     end
 
     if (PIPELINE == 0) begin
-        assign quotient  = quotient_unqual[WIDTHQ-1:0];
-        assign remainder = remainder_unqual[WIDTHR-1:0];
+        assign quotient  = quotient_unqual [WIDTHQ-1:0];
+        assign remainder = remainder_unqual [WIDTHR-1:0];
     end else begin
         reg [WIDTHN-1:0] quotient_pipe [0:PIPELINE-1];
         reg [WIDTHD-1:0] remainder_pipe [0:PIPELINE-1];
@@ -95,14 +96,14 @@ module VX_divide #(
                     quotient_pipe[i]  <= 0;
                     remainder_pipe[i] <= 0;
                 end
-                else begin
+                else if (clk_en) begin
                     if (i == 0) begin
-                        quotient_pipe[0]  <= quotient_unqual;
-                        remainder_pipe[0] <= remainder_unqual;
+                        quotient_pipe[i]  <= quotient_unqual;
+                        remainder_pipe[i] <= remainder_unqual;
                     end else begin
                         quotient_pipe[i]  <= quotient_pipe[i-1];
-                        remainder_pipe[i] <= remainder_pipe[i-1];    
-                    end                     
+                        remainder_pipe[i] <= remainder_pipe[i-1];
+                    end                    
                 end
             end
         end

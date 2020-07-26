@@ -35,7 +35,7 @@ module VX_execute #(
     VX_commit_if        lsu_commit_if,    
     VX_commit_if        csr_commit_if,
     VX_commit_if        mul_commit_if,
-    VX_commit_fp_if     fpu_commit_if,
+    VX_commit_if        fpu_commit_if,
     VX_commit_if        gpu_commit_if,
     
     output wire         ebreak
@@ -79,15 +79,21 @@ module VX_execute #(
         .csr_commit_if  (csr_commit_if)
     );
 
+`ifdef EXT_M_ENABLE
     VX_mul_unit #(
         .CORE_ID(CORE_ID)
     ) mul_unit (
         .clk            (clk),
         .reset          (reset),
-        .mul_req_if     (mul_req_if),
-        .mul_commit_if  (mul_commit_if)    
+        .alu_req_if     (mul_req_if),
+        .alu_commit_if  (mul_commit_if)    
     );
+`else
+    assign mul_req_if.ready    = 0;
+    assign mul_commit_if.valid = 0;
+`endif
 
+`ifdef EXT_F_ENABLE
     VX_fpu_unit #(
         .CORE_ID(CORE_ID)
     ) fpu_unit (
@@ -98,6 +104,11 @@ module VX_execute #(
         .fpu_to_csr_if  (fpu_to_csr_if),
         .fpu_commit_if  (fpu_commit_if)    
     );
+`else
+    assign fpu_req_if.ready    = 0;
+    assign fpu_commit_if.valid = 0;
+    assign fpu_to_csr_if.valid = 0;
+`endif
 
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
@@ -107,7 +118,7 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    assign ebreak = (| alu_req_if.valid) && (alu_req_if.alu_op == `ALU_EBREAK || alu_req_if.alu_op == `ALU_ECALL);
+    assign ebreak = alu_req_if.valid && (alu_req_if.alu_op == `ALU_EBREAK || alu_req_if.alu_op == `ALU_ECALL);
 
     `SCOPE_ASSIGN(scope_decode_valid,       decode_if.valid);
     `SCOPE_ASSIGN(scope_decode_warp_num,    decode_if.warp_num);

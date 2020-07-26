@@ -26,7 +26,8 @@ module VX_csr_arb (
     `UNUSED_VAR (reset)
 
     // requests
-	assign csr_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : {`NUM_THREADS{csr_io_req_if.valid}};
+	assign csr_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : csr_io_req_if.valid;
+    assign csr_req_if.issue_tag = (~select_io_req) ? csr_core_req_if.issue_tag : 0;    
     assign csr_req_if.warp_num  = (~select_io_req) ? csr_core_req_if.warp_num : 0;    
     assign csr_req_if.curr_PC   = (~select_io_req) ? csr_core_req_if.curr_PC  : 0;
 	assign csr_req_if.csr_op    = (~select_io_req) ? csr_core_req_if.csr_op   : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
@@ -40,15 +41,12 @@ module VX_csr_arb (
     assign csr_io_req_if.ready   = csr_req_if.ready && select_io_req;   
     
     // responses
-    assign csr_io_rsp_if.valid  = csr_rsp_if.valid[0] & select_io_rsp;
+    assign csr_io_rsp_if.valid  = csr_rsp_if.valid & select_io_rsp;
     assign csr_io_rsp_if.data   = csr_rsp_if.data[0];  
 
-    assign csr_commit_if.valid    = csr_rsp_if.valid & {`NUM_THREADS{~select_io_rsp}};
-    assign csr_commit_if.warp_num = csr_rsp_if.warp_num;
-    assign csr_commit_if.curr_PC  = csr_rsp_if.curr_PC;
-    assign csr_commit_if.data     = csr_rsp_if.data; 
-    assign csr_commit_if.rd       = csr_rsp_if.rd;
-    assign csr_commit_if.wb       = csr_rsp_if.wb;        
+    assign csr_commit_if.valid    = csr_rsp_if.valid & ~select_io_rsp;
+    assign csr_commit_if.issue_tag= csr_rsp_if.issue_tag;
+    assign csr_commit_if.data     = csr_rsp_if.data;    
 
     assign csr_rsp_if.ready = select_io_rsp ? csr_io_rsp_if.ready : csr_commit_if.ready;
 

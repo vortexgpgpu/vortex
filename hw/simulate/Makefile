@@ -15,7 +15,7 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
 
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
-DBG_FLAGS += -DDBG_CORE_REQ_INFO
+#DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 INCLUDE = -I../rtl/ -I../rtl/libs -I../rtl/interfaces -I../rtl/cache -I../rtl/fp_cores -I../rtl/simulate 
 
@@ -35,7 +35,6 @@ VF += -cc Vortex.v -top-module Vortex
 VF += verilator.vlt
 
 DBG += -DVCD_OUTPUT $(DBG_FLAGS)
-DBG += -DDBG_CORE_REQ_INFO
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 

@@ -3,18 +3,18 @@
 
 `include "VX_define.vh"
 
+`ifndef EXTF_F_ENABLE
+    `IGNORE_WARNINGS_BEGIN
+`endif
+
 interface VX_fpu_req_if ();
 
-    wire [`NUM_THREADS-1:0] valid;    
+    wire                    valid;    
+    wire [`ISTAG_BITS-1:0]  issue_tag;
     wire [`NW_BITS-1:0]     warp_num;
-    wire [31:0]             curr_PC;
     
     wire [`FPU_BITS-1:0]    fpu_op;
     wire [`FRM_BITS-1:0]    frm;
-
-    wire                    wb;
-    wire [`NR_BITS-1:0]     rd;
-    wire                    rd_is_fp;
 
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
     wire [`NUM_THREADS-1:0][31:0] rs2_data;

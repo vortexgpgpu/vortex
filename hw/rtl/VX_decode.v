@@ -15,7 +15,7 @@ module VX_decode  #(
     VX_wstall_if        wstall_if,
     VX_join_if          join_if
 );
-    wire        in_valid = (| ifetch_rsp_if.valid);
+    wire        in_valid = ifetch_rsp_if.valid;
     wire [31:0] instr    = ifetch_rsp_if.instr;
 
     reg [`ALU_BITS-1:0] alu_op;
@@ -167,9 +167,8 @@ module VX_decode  #(
     end
 
     // MUL   
-
+`ifdef EXT_M_ENABLE
     wire is_mul = is_rtype && (func7 == 7'h1); 
-
     always @(*) begin
         mul_op = `MUL_MUL;
         case (func3)
@@ -184,9 +183,15 @@ module VX_decode  #(
             default:; 
         endcase
     end
+`else
+    wire is_mul = 0;
+    always @(*) begin
+        mul_op = `MUL_MUL;
+    end
+`endif
 
     // FPU
-
+`ifdef EXT_F_ENABLE
     wire is_fl     = (opcode == `INST_FL) && ((func3 == 2));
     wire is_fs     = (opcode == `INST_FS) && ((func3 == 2));
     wire is_fci    = (opcode == `INST_FCI);
@@ -226,6 +231,15 @@ module VX_decode  #(
             endcase
         end
     end
+`else
+    wire is_fs     = 0;
+    wire is_fci    = 0;
+    wire is_fr4    = 0;
+    wire is_fpu    = 0;    
+    always @(*) begin
+        fpu_op = `FPU_OTHER;
+    end
+`endif
 
     // GPU
 
@@ -243,10 +257,11 @@ module VX_decode  #(
 
     VX_decode_if decode_tmp_if();
 
-    assign decode_tmp_if.valid    = ifetch_rsp_if.valid;
-    assign decode_tmp_if.warp_num = ifetch_rsp_if.warp_num;
-    assign decode_tmp_if.curr_PC  = ifetch_rsp_if.curr_PC;
-    assign decode_tmp_if.next_PC  = ifetch_rsp_if.curr_PC + 32'h4;
+    assign decode_tmp_if.valid      = ifetch_rsp_if.valid;
+    assign decode_tmp_if.warp_num   = ifetch_rsp_if.warp_num;
+    assign decode_tmp_if.thread_mask= ifetch_rsp_if.thread_mask;
+    assign decode_tmp_if.curr_PC    = ifetch_rsp_if.curr_PC;
+    assign decode_tmp_if.next_PC    = ifetch_rsp_if.curr_PC + 32'h4;
 
     assign decode_tmp_if.ex_type  = is_lsu ? `EX_LSU :
                                         is_csr ? `EX_CSR :
@@ -299,29 +314,29 @@ module VX_decode  #(
     assign wstall_if.wstall = in_valid && (is_btype || is_jal || is_jalr || (is_gpu && (gpu_op == `GPU_TMC || gpu_op == `GPU_SPLIT || gpu_op == `GPU_BAR)));
     assign wstall_if.warp_num = ifetch_rsp_if.warp_num;
 
-    wire stall = ~decode_if.ready && (| decode_if.valid); 
+    wire stall = ~decode_if.ready && decode_if.valid; 
 
     VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + 1 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + 1 + 1 + `FRM_BITS)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + 1 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + 1 + 1 + 1 + `FRM_BITS)
     ) decode_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({decode_tmp_if.valid, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.ex_type, decode_tmp_if.instr_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp, decode_tmp_if.frm}),
-        .out   ({decode_if.valid,     decode_if.warp_num,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.use_rs1,     decode_if.use_rs2,     decode_if.ex_type,     decode_if.instr_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.rs1_is_fp,     decode_if.rs2_is_fp,     decode_if.frm})
+        .in    ({decode_tmp_if.valid, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.ex_type, decode_tmp_if.instr_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp, decode_tmp_if.rd_is_fp, decode_tmp_if.frm}),
+        .out   ({decode_if.valid,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.use_rs1,     decode_if.use_rs2,     decode_if.ex_type,     decode_if.instr_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.rs1_is_fp,     decode_if.rs2_is_fp,     decode_if.rd_is_fp,     decode_if.frm})
     ); 
 
     assign ifetch_rsp_if.ready = ~stall;
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
-        if ((| decode_tmp_if.valid) && ~stall) begin
+        if (decode_tmp_if.valid && ~stall) begin
             $write("%t: Core%0d-Decode: warp=%0d, PC=%0h, ex=", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC);
             print_ex_type(decode_tmp_if.ex_type);
             $write(", op=");
             print_instr_op(decode_tmp_if.ex_type, decode_tmp_if.instr_op);
-            $write(", wb=%b, rd=%0d, rs1=%0d, rs2=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_rs1=%b, use_rs2=%b\n", decode_tmp_if.wb, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2);                        
+            $write(", tmask=%b, wb=%b, rd=%0d, rd_is_fp=%b, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_rs1=%b, use_rs2=%b, use_rs3=%b\n", decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, decode_tmp_if.rd_is_fp, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.rs3, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.use_rs3);                        
 
             // trap unsupported instructions
             assert(~(~stall && (decode_tmp_if.ex_type == `EX_ALU) && `ALU_OP(decode_tmp_if.instr_op) == `ALU_OTHER));

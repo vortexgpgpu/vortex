@@ -19,6 +19,7 @@ Simulator::Simulator() {
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
   trace_ = new VerilatedVcdC;
+  trace_->set_time_unit("1ns");
   vortex_->trace(trace_, 99);
   trace_->open("trace.vcd");
 #endif  

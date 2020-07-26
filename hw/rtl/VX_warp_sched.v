@@ -97,9 +97,9 @@ module VX_warp_sched #(
         end else begin
             
             if (warp_ctl_if.wspawn) begin
-                warp_active   <= warp_ctl_if.wspawn_new_active;
+                warp_active   <= warp_ctl_if.wspawn_wmask;                
+                use_wspawn    <= warp_ctl_if.wspawn_wmask & (~`NUM_WARPS'(1));
                 use_wspawn_pc <= warp_ctl_if.wspawn_pc;
-                use_wspawn    <= warp_ctl_if.wspawn_new_active & (~`NUM_WARPS'(1));
             end
 
             if (warp_ctl_if.is_barrier) begin
@@ -112,6 +112,10 @@ module VX_warp_sched #(
             end else if (warp_ctl_if.change_mask) begin
                 thread_masks[warp_ctl_if.warp_num] <= warp_ctl_if.thread_mask;
                 warp_stalled[warp_ctl_if.warp_num] <= 0;
+                if (0 == warp_ctl_if.thread_mask) begin
+                    warp_active[warp_ctl_if.warp_num]    <= 0;
+                    visible_active[warp_ctl_if.warp_num] <= 0;
+                end
             end else if (join_if.is_join && !didnt_split) begin
                 if (!join_fall) begin
                     warp_pcs[join_if.warp_num] <= join_pc;
@@ -126,12 +130,7 @@ module VX_warp_sched #(
                 end else begin
                     didnt_split                <= 1;
                 end
-            end
-            
-            if (warp_ctl_if.whalt) begin
-                warp_active[warp_ctl_if.warp_num]    <= 0;
-                visible_active[warp_ctl_if.warp_num] <= 0;
-            end
+            end          
 
             if (update_use_wspawn) begin
                 use_wspawn[warp_to_schedule]   <= 0;
@@ -167,7 +166,7 @@ module VX_warp_sched #(
             if (scheduled_warp && !stall) begin
                 warp_lock[warp_num] <= 1;
             end
-            if ((| ifetch_rsp_if.valid) && ifetch_rsp_if.ready) begin
+            if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
                 warp_lock[ifetch_rsp_if.warp_num] <= 0;
             end
 
@@ -192,7 +191,7 @@ module VX_warp_sched #(
 
     assign b_mask = barrier_stall_mask[warp_ctl_if.barrier_id][`NUM_WARPS-1:0];
     
-    assign reached_barrier_limit = (b_count == warp_ctl_if.num_warps);
+    assign reached_barrier_limit = (b_count == warp_ctl_if.barrier_num_warps);
 
     assign wstall_this_cycle = wstall_if.wstall && (wstall_if.warp_num == warp_to_schedule); // Maybe bug
 
@@ -263,17 +262,17 @@ module VX_warp_sched #(
         `UNUSED_PIN  (grant_onehot)
     );    
 
-    assign stall = ~ifetch_req_if.ready && (| ifetch_req_if.valid);    
+    assign stall = ~ifetch_req_if.ready && ifetch_req_if.valid;    
 
     VX_generic_register #( 
-        .N(`NUM_THREADS + 32 + `NW_BITS)
+        .N(1 + `NUM_THREADS + 32 + `NW_BITS)
     ) fetch_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({thread_mask,         warp_pc,               warp_num}),
-        .out   ({ifetch_req_if.valid, ifetch_req_if.curr_PC, ifetch_req_if.warp_num})
+        .in    ({(| thread_mask),     thread_mask,               warp_pc,               warp_num}),
+        .out   ({ifetch_req_if.valid, ifetch_req_if.thread_mask, ifetch_req_if.curr_PC, ifetch_req_if.warp_num})
     );
 
     assign busy = (warp_active != 0); 
