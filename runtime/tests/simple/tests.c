@@ -126,15 +126,3 @@ void intrinsics_tests()
 	vx_print_str("test_spawn\n");
 	test_wsapwn();
 }
-
-
-
-
-
-
-
-
-
-
-
-

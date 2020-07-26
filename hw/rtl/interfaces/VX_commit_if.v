@@ -5,12 +5,9 @@
 
 interface VX_commit_if ();
 
-    wire [`NUM_THREADS-1:0]         valid;
-    wire [`NW_BITS-1:0]             warp_num;
-    wire [31:0]                     curr_PC;  
-    wire [`NUM_THREADS-1:0][31:0]	data; 
-    wire [`NR_BITS-1:0]             rd;
-    wire                            wb;           
+    wire                            valid;
+    wire [`ISTAG_BITS-1:0]          issue_tag;     
+    wire [`NUM_THREADS-1:0][31:0]	data;         
     wire                            ready;
 
 endinterface

@@ -14,7 +14,7 @@ module VX_fpu_unit #(
     VX_fpu_from_csr_if  fpu_from_csr_if,
     
 	// outputs        
-    VX_commit_fp_if     fpu_commit_if,
+    VX_commit_if        fpu_commit_if,
     VX_fpu_to_csr_if    fpu_to_csr_if
 );    
     localparam FOP_BITS  = fpnew_pkg::OP_BITS;
@@ -98,6 +98,8 @@ module VX_fpu_unit #(
 
     assign fpu_operands = {fpu_req_if.rs3_data, fpu_req_if.rs2_data, fpu_req_if.rs1_data};
 
+`DISABLE_TRACING
+
     fpnew_top #( 
         .Features       (FPU_FEATURES),
         .Implementation (FPU_IMPLEMENTATION),
@@ -125,47 +127,28 @@ module VX_fpu_unit #(
         `UNUSED_PIN     (busy_o)
     );
 
-    wire req_push = fpu_req_if.valid && fpu_req_if.ready;    
-    wire req_pop  = fpu_out_valid && fpu_out_ready;
-    wire req_full;  
+`ENABLE_TRACING
 
-    wire [`NUM_THREADS-1:0] rsp_valid;
-    wire [`NW_BITS-1:0] rsp_warp_num;
-    wire [31:0] rsp_curr_PC;
-    wire rsp_wb;
-    wire [`NR_BITS-1:0] rsp_rd;
-    wire rsp_rd_is_fp;
+    reg [`NW_BITS-1:0] rsp_warp_num_buf [`ISSUEQ_SIZE];
 
-    VX_index_queue #(
-        .DATAW (`NUM_THREADS + `NW_BITS + 32 + 1 + `NR_BITS + 1),
-        .SIZE  (`FPURQ_SIZE)
-    ) fpu_req_queue (
-        .clk        (clk),
-        .reset      (reset),
-        .write_data ({fpu_req_if.valid, fpu_req_if.warp_num, fpu_req_if.curr_PC, fpu_req_if.wb, fpu_req_if.rd, fpu_req_if.rd_is_fp}),
-        .write_addr (fpu_in_tag),        
-        .push       (req_push),    
-        .full       (req_full),
-        .pop        (req_pop),
-        .read_addr  (fpu_out_tag),
-        .read_data  ({rsp_valid, rsp_warp_num, rsp_curr_PC, rsp_wb, rsp_rd, rsp_rd_is_fp}),
-        `UNUSED_PIN (empty)
-    );
+    assign fpu_in_valid = fpu_req_if.valid;
+    assign fpu_in_tag   = fpu_req_if.issue_tag;
 
-    assign fpu_in_valid = (| fpu_req_if.valid) && ~req_full;
-    assign fpu_req_if.ready = fpu_in_ready && ~req_full;
+    always @(posedge clk) begin
+        if (fpu_req_if.valid && fpu_req_if.ready) begin
+            rsp_warp_num_buf[fpu_in_tag] <= fpu_req_if.warp_num;
+        end
+    end
 
-    assign fpu_commit_if.valid    = rsp_valid & {`NUM_THREADS{fpu_out_valid}};
-    assign fpu_commit_if.warp_num = rsp_warp_num;
-    assign fpu_commit_if.curr_PC  = rsp_curr_PC;
-    assign fpu_commit_if.data     = fpu_result;
-    assign fpu_commit_if.wb       = rsp_wb;
-    assign fpu_commit_if.rd       = rsp_rd;
-    assign fpu_commit_if.rd_is_fp = rsp_rd_is_fp;
-    assign fpu_out_ready          = fpu_commit_if.ready;
+    assign fpu_req_if.ready = fpu_in_ready;
 
-    assign fpu_to_csr_if.valid     = fpu_out_valid;
-    assign fpu_to_csr_if.warp_num  = rsp_warp_num;
+    assign fpu_commit_if.valid     = fpu_out_valid;
+    assign fpu_commit_if.issue_tag = fpu_out_tag;
+    assign fpu_commit_if.data      = fpu_result;
+    assign fpu_out_ready           = fpu_commit_if.ready;
+    
+    assign fpu_to_csr_if.valid     = fpu_out_valid && fpu_req_if.ready;
+    assign fpu_to_csr_if.warp_num  = rsp_warp_num_buf[fpu_out_tag];
     assign fpu_to_csr_if.fflags_NV = fpu_status.NV;
     assign fpu_to_csr_if.fflags_DZ = fpu_status.DZ;
     assign fpu_to_csr_if.fflags_OF = fpu_status.OF;

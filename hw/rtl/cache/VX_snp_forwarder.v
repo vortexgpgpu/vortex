@@ -41,8 +41,8 @@ module VX_snp_forwarder #(
 
     reg [`REQS_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
     
-    wire [`LOG2UP(SNRQ_SIZE)-1:0] sfq_write_addr, sfq_read_addr, dbg_sfq_write_addr;
-    wire sfq_push, sfq_pop, sfq_full;
+    wire [`LOG2UP(SNRQ_SIZE)-1:0] sfq_write_addr, sfq_read_addr;
+    wire sfq_acquire, sfq_release, sfq_full;
 
     wire fwdin_valid;
     wire [`LOG2UP(SNRQ_SIZE)-1:0] fwdin_tag;
@@ -56,27 +56,26 @@ module VX_snp_forwarder #(
     
     assign sfq_read_addr = fwdin_tag;
     
-    assign sfq_push = snp_req_valid && !sfq_full && fwdout_ready;       
-    assign sfq_pop  = snp_rsp_valid;
+    assign sfq_acquire = snp_req_valid && !sfq_full && fwdout_ready;       
+    assign sfq_release = snp_rsp_valid;
 
-    VX_index_queue #(
-        .DATAW (`LOG2UP(SNRQ_SIZE) + 1 +`DRAM_ADDR_WIDTH+SNP_REQ_TAG_WIDTH),
+    VX_cam_buffer #(
+        .DATAW (`DRAM_ADDR_WIDTH + 1 + SNP_REQ_TAG_WIDTH),
         .SIZE  (SNRQ_SIZE)
-    ) snp_fwd_queue (
-        .clk        (clk),
-        .reset      (reset),
-        .write_data ({snp_req_addr, snp_req_invalidate, snp_req_tag}),    
-        .write_addr (sfq_write_addr),        
-        .push       (sfq_push), 
-        .pop        (sfq_pop),   
-        .full       (sfq_full),     
-        .read_addr  (sfq_read_addr),
-        .read_data  ({snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag}),
-        `UNUSED_PIN (empty)
+    ) snp_fwd_buffer (
+        .clk            (clk),
+        .reset          (reset),
+        .write_data     ({snp_req_addr, snp_req_invalidate, snp_req_tag}),    
+        .write_addr     (sfq_write_addr),        
+        .acquire_slot   (sfq_acquire), 
+        .release_slot   (sfq_release),           
+        .read_addr      (sfq_read_addr),
+        .read_data      ({snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag}),
+        .full           (sfq_full)
     );
 
     always @(posedge clk) begin
-        if (sfq_push)  begin
+        if (sfq_acquire)  begin
             pending_cntrs[sfq_write_addr] <= NUM_REQUESTS;
         end      
         if (fwdin_fire) begin

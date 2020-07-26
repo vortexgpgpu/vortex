@@ -3,6 +3,7 @@
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>
+#include <VX_config.h>
 
 
 typedef struct
@@ -100,7 +101,7 @@ int main()
 	test_wsapwn();
 
 	vx_print_str("Shared Memory test\n");
-	unsigned * ptr = (unsigned *) 0xFFFF0000;
+	unsigned * ptr = (unsigned *) SHARED_MEM_BASE_ADDR;
 	unsigned value = 0;
 	for (int i = 0; i < 5; i++)
 	{
@@ -112,7 +113,6 @@ int main()
 		vx_print_str("-------------------\n");
 		value++;
 		ptr++;
-
 	}
 
 	vx_print_str("vx_spawn_warps mat_add_kernel\n");

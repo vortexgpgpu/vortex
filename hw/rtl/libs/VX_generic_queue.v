@@ -1,9 +1,9 @@
 `include "VX_define.vh"
 
 module VX_generic_queue #(
-    parameter DATAW = 1,
-    parameter SIZE = 16,
-    parameter BUFFERED_OUTPUT = 1
+    parameter DATAW    = 1,
+    parameter SIZE     = 16,
+    parameter BUFFERED = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -58,7 +58,7 @@ module VX_generic_queue #(
         reg [DATAW-1:0] data [SIZE-1:0];
     `endif
 
-        if (0 == BUFFERED_OUTPUT) begin                
+        if (0 == BUFFERED) begin                
 
             reg [`LOG2UP(SIZE):0] rd_ptr_r;
             reg [`LOG2UP(SIZE):0] wr_ptr_r;

@@ -7,31 +7,58 @@ module VX_mul_unit #(
     input wire reset,
     
     // Inputs
-    VX_mul_req_if   mul_req_if,
+    VX_mul_req_if   alu_req_if,
 
     // Outputs
-    VX_commit_if    mul_commit_if
+    VX_commit_if    alu_commit_if
 );    
-    reg [`NUM_THREADS-1:0][31:0] alu_result;      
-    wire [`NUM_THREADS-1:0][63:0] mul_result;
-    wire [`NUM_THREADS-1:0][31:0] div_result;
-    wire [`NUM_THREADS-1:0][31:0] rem_result;
+   
+    wire [`MUL_BITS-1:0]          alu_op  = alu_req_if.mul_op;
+    wire [`NUM_THREADS-1:0][31:0] alu_in1 = alu_req_if.rs1_data;
+    wire [`NUM_THREADS-1:0][31:0] alu_in2 = alu_req_if.rs2_data;
 
-    wire [`MUL_BITS-1:0]          alu_op  = mul_req_if.mul_op;
-    wire [`NUM_THREADS-1:0][31:0] alu_in1 = mul_req_if.rs1_data;
-    wire [`NUM_THREADS-1:0][31:0] alu_in2 = mul_req_if.rs2_data;
+    wire [`NUM_THREADS-1:0][31:0] mul_result, div_result;
 
-    genvar i;
+    wire stall_mul, stall_div;
+
+    wire is_mul_op = (alu_op == `MUL_MUL);    
+    wire is_div_op = (alu_op == `MUL_DIV || alu_op == `MUL_DIVU);    
+    
+    reg [`NUM_THREADS-1:0]  is_div_op_in;
+    wire [`NUM_THREADS-1:0] is_div_op_out;
+    wire is_mul_op_out;
+
+    genvar i;    
 
     for (i = 0; i < `NUM_THREADS; i++) begin    
 
         wire [32:0] mul_in1 = {(alu_op != `MUL_MULHU)                          & alu_in1[i][31], alu_in1[i]};
         wire [32:0] mul_in2 = {(alu_op != `MUL_MULHU && alu_op != `MUL_MULHSU) & alu_in2[i][31], alu_in2[i]};
-    
-        wire [32:0] div_in1 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in1[i][31], alu_in1[i]};
-        wire [32:0] div_in2 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in2[i][31], alu_in2[i]};
 
-        VX_mult #(
+        reg [32:0] div_in1, div_in2;
+
+        // handle divide by zero
+        always @(*) begin
+            is_div_op_in[i] = is_div_op;
+            div_in1 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in1[i][31], alu_in1[i]};
+            div_in2 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in2[i][31], alu_in2[i]};    
+
+            if (0 == alu_in2[i]) begin
+                if (is_div_op) begin
+                    div_in1 = {1'b0, 32'hFFFFFFFF}; // quotient = (0xFFFFFFFF / 1)                 
+                    div_in2 = 1; 
+                end else begin                    
+                    is_div_op_in[i] = 1; // remainder = (in1 / 1)
+                    div_in2 = 1; 
+                end                
+            end
+        end        
+
+        wire [63:0] mul_result_tmp;
+        wire [31:0] div_result_tmp;
+        wire [31:0] rem_result_tmp;
+
+        VX_multiplier #(
             .WIDTHA(33),
             .WIDTHB(33),
             .WIDTHP(64),
@@ -40,9 +67,10 @@ module VX_mul_unit #(
         ) multiplier (
             .clk(clk),
             .reset(reset),
+            .clk_en(~stall_mul),
             .dataa(mul_in1),
             .datab(mul_in2),
-            .result(mul_result[i])
+            .result(mul_result_tmp)
         );
 
         VX_divide #(
@@ -53,75 +81,58 @@ module VX_mul_unit #(
             .NSIGNED(1),
             .DSIGNED(1),
             .PIPELINE(`LATENCY_IDIV)
-        ) sdiv (
+        ) divide (
             .clk(clk),
             .reset(reset),
+            .clk_en(~stall_div),
             .numer(div_in1),
             .denom(div_in2),
-            .quotient(div_result[i]),
-            .remainder(rem_result[i])
+            .quotient(div_result_tmp),
+            .remainder(rem_result_tmp)
         );
-        
-        always @(*) begin
-            case (alu_op)    
-                `MUL_MUL:   alu_result[i] = mul_result[i][31:0];
-                `MUL_MULH,      
-                `MUL_MULHSU,    
-                `MUL_MULHU: alu_result[i] = mul_result[i][63:32];            
-                `MUL_DIV,       
-                `MUL_DIVU:  alu_result[i] = (alu_in2[i] == 0) ? 32'hffffffff : div_result[i];            
-                `MUL_REM,       
-                `MUL_REMU:  alu_result[i] = (alu_in2[i] == 0) ? alu_in1[i] : rem_result[i];
-                default:    alu_result[i] = alu_in1[i] + alu_in2[i]; // ADD, LUI, AUIPC, FENCE
-            endcase
-        end       
+
+        assign mul_result[i] = is_mul_op_out    ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
+        assign div_result[i] = is_div_op_out[i] ? div_result_tmp       : rem_result_tmp;
     end 
 
-    wire stall;
+    wire mul_valid_out;
+    wire div_valid_out;    
 
-    reg result_avail;
-    reg [4:0] pending_ctr;
-    wire [4:0] instr_delay = `IS_DIV_OP(alu_op) ? `LATENCY_IDIV : `LATENCY_IMUL;
+    wire [`ISTAG_BITS-1:0] mul_issue_tag;
+    wire [`ISTAG_BITS-1:0] div_issue_tag;    
 
-    always @(posedge clk) begin
-        if (reset) begin     
-            result_avail <= 0;       
-            pending_ctr  <= 0;
-        end else begin         
-            if (result_avail && !stall) begin
-                result_avail <= 0;
-                pending_ctr  <= 0;
-            end
-            if ((| mul_req_if.valid) && (pending_ctr == 0)) begin  
-                pending_ctr <= instr_delay - 1;
-                if (instr_delay == 1)
-                    result_avail <= 1;
-            end else if (pending_ctr != 0) begin
-                pending_ctr <= pending_ctr - 1; 
-                if (pending_ctr == 1)
-                    result_avail <= 1;
-            end            
-        end        
-    end  
+    VX_shift_register #(
+        .DATAW(1 + `ISTAG_BITS + 1),
+        .DEPTH(`LATENCY_IMUL)
+    ) mul_delay (
+        .clk(clk),
+        .reset(reset),
+        .enable(~stall_mul),
+        .in({alu_req_if.valid && ~`IS_DIV_OP(alu_op), alu_req_if.issue_tag, is_mul_op}),
+        .out({mul_valid_out, mul_issue_tag, is_mul_op_out})
+    );
 
-    wire pipeline_stall = ~result_avail && (| mul_req_if.valid);
+    VX_shift_register #(
+        .DATAW(1 + `ISTAG_BITS + `NUM_THREADS),
+        .DEPTH(`LATENCY_IDIV)
+    ) div_delay (
+        .clk(clk),
+        .reset(reset),
+        .enable(~stall_div),
+        .in({alu_req_if.valid && `IS_DIV_OP(alu_op), alu_req_if.issue_tag, is_div_op_in}),
+        .out({div_valid_out, div_issue_tag, is_div_op_out})
+    );
+
+    wire stall_out   = (~alu_commit_if.ready && alu_commit_if.valid);
+    assign stall_mul = stall_out;
+    assign stall_div = stall_out 
+                    || (mul_valid_out && div_valid_out); // arbitration prioritizes MUL
+
+    // can accept new request?
+    assign alu_req_if.ready = ~(stall_mul || stall_div);
+
+    assign alu_commit_if.valid     = mul_valid_out || div_valid_out;
+    assign alu_commit_if.issue_tag = mul_valid_out ? mul_issue_tag : div_issue_tag;
+    assign alu_commit_if.data      = mul_valid_out ? mul_result : div_result;
     
-    assign stall = (~mul_commit_if.ready && (| mul_commit_if.valid)) 
-                || pipeline_stall;
-
-    wire flush = mul_commit_if.ready && pipeline_stall;
-
-    VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
-    ) mul_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (flush),
-        .in    ({mul_req_if.valid, mul_req_if.warp_num, mul_req_if.curr_PC, mul_req_if.rd, mul_req_if.wb, alu_result}),
-        .out   ({mul_commit_if.valid,  mul_commit_if.warp_num,  mul_commit_if.curr_PC,  mul_commit_if.rd,  mul_commit_if.wb,  mul_commit_if.data})
-    );    
-
-    assign mul_req_if.ready = ~stall;
-
 endmodule

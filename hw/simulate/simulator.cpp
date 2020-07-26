@@ -11,7 +11,7 @@ double sc_time_stamp() {
 
 Simulator::Simulator() {  
   // force random values for unitialized signals  
-  Verilated::randReset(1);
+  Verilated::randReset(2);
 
   // Turn off assertion before reset
   Verilated::assertOn(false);
@@ -24,7 +24,8 @@ Simulator::Simulator() {
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  trace_ = new VerilatedVcdC;
+  trace_ = new VerilatedVcdC();
+  trace_->set_time_unit("1ns");
   vortex_->trace(trace_, 99);
   trace_->open("trace.vcd");
 #endif  

@@ -5,7 +5,8 @@
 
 interface VX_wb_if ();
 
-    wire [`NUM_THREADS-1:0]         valid;
+    wire                            valid;
+    wire [`NUM_THREADS-1:0]         thread_mask;
     wire [`NW_BITS-1:0]             warp_num;     
     wire [`NR_BITS-1:0]             rd;
     wire                            rd_is_fp;

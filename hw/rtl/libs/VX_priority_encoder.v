@@ -8,6 +8,7 @@ module VX_priority_encoder #(
     output reg                  valid_out
 );
     integer i;
+    
     always @(*) begin
         data_out = 0;
         valid_out = 0;

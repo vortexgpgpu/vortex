@@ -3,6 +3,10 @@
 
 `include "VX_define.vh"
 
+`ifndef EXTF_F_ENABLE
+    `IGNORE_WARNINGS_BEGIN
+`endif
+
 interface VX_fpu_from_csr_if ();
 
 	wire [`NW_BITS-1:0] warp_num;

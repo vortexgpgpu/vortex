@@ -81,14 +81,14 @@ Disassembly of section .text:
 80000114:	3a8000ef          	jal	ra,800004bc <test_wsapwn>
 80000118:	80001537          	lui	a0,0x80001
 8000011c:	ddc50513          	addi	a0,a0,-548 # 80000ddc <__global_pointer$+0xfffff5d4>
-80000120:	ffff0437          	lui	s0,0xffff0
+80000120:	6ffff437          	lui	s0,0x6ffff
 80000124:	628000ef          	jal	ra,8000074c <vx_print_str>
 80000128:	00000493          	li	s1,0
 8000012c:	80001b37          	lui	s6,0x80001
 80000130:	80001ab7          	lui	s5,0x80001
 80000134:	80001a37          	lui	s4,0x80001
 80000138:	800019b7          	lui	s3,0x80001
-8000013c:	01440913          	addi	s2,s0,20 # ffff0014 <__global_pointer$+0x7ffee80c>
+8000013c:	01440913          	addi	s2,s0,20 # 6ffff014 <_start-0x10000fec>
 80000140:	00942023          	sw	s1,0(s0)
 80000144:	00040593          	mv	a1,s0
 80000148:	df0b0513          	addi	a0,s6,-528 # 80000df0 <__global_pointer$+0xfffff5e8>

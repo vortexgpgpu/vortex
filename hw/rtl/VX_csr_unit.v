@@ -20,7 +20,7 @@ module VX_csr_unit #(
     VX_csr_req_if       csr_pipe_req_if();
     VX_commit_if        csr_pipe_commit_if();
 
-    wire                select_io_req = (| csr_io_req_if.valid);
+    wire                select_io_req = csr_io_req_if.valid;
     wire                select_io_rsp;
 
     VX_csr_arb csr_arb (
@@ -44,7 +44,7 @@ module VX_csr_unit #(
     wire [31:0] csr_updated_data_s2;
     wire [31:0] csr_read_data_unqual;
 
-    wire is_csr_s2 = (| csr_pipe_commit_if.valid);
+    wire is_csr_s2 = csr_pipe_commit_if.valid;
 
     VX_csr_data #(
         .CORE_ID(CORE_ID)
@@ -62,8 +62,10 @@ module VX_csr_unit #(
         .warp_num       (csr_pipe_req_if.warp_num)        
     );
 
+    wire [`NW_BITS-1:0] warp_num_s2;
+
     wire csr_hazard = (csr_addr_s2 == csr_pipe_req_if.csr_addr)
-                   && (csr_pipe_commit_if.warp_num == csr_pipe_req_if.warp_num) 
+                   && (warp_num_s2 == csr_pipe_req_if.warp_num) 
                    && is_csr_s2;
 
     wire [31:0] csr_read_data = csr_hazard ? csr_updated_data_s2 : csr_read_data_unqual; 
@@ -79,24 +81,24 @@ module VX_csr_unit #(
         endcase
     end   
 
-    wire stall = ~csr_pipe_commit_if.ready && (| csr_pipe_commit_if.valid);
+    wire stall = ~csr_pipe_commit_if.ready && csr_pipe_commit_if.valid;
 
     VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + 32 + `NR_BITS + 1 + `CSR_ADDR_SIZE + 1 + 32 + 32)
+        .N(1 + `ISTAG_BITS + `NW_BITS + `CSR_ADDR_SIZE + 1 + 32 + 32)
     ) csr_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({csr_pipe_req_if.valid,    csr_pipe_req_if.warp_num,    csr_pipe_req_if.curr_PC,    csr_pipe_req_if.rd,    csr_pipe_req_if.wb,    csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data,    csr_updated_data}),
-        .out   ({csr_pipe_commit_if.valid, csr_pipe_commit_if.warp_num, csr_pipe_commit_if.curr_PC, csr_pipe_commit_if.rd, csr_pipe_commit_if.wb, csr_addr_s2,              select_io_rsp,         csr_read_data_s2, csr_updated_data_s2})
+        .in    ({csr_pipe_req_if.valid,    csr_pipe_req_if.issue_tag,    csr_pipe_req_if.warp_num, csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data,    csr_updated_data}),
+        .out   ({csr_pipe_commit_if.valid, csr_pipe_commit_if.issue_tag, warp_num_s2,              csr_addr_s2,              select_io_rsp,         csr_read_data_s2, csr_updated_data_s2})
     );
 
     genvar i;
     for (i = 0; i < `NUM_THREADS; i++) begin
         assign csr_pipe_commit_if.data[i] = (csr_addr_s2 == `CSR_LTID) ? i : 
-                                        (csr_addr_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
-                                                                      csr_read_data_s2;
+                                            (csr_addr_s2 == `CSR_GTID) ? (csr_read_data_s2 * `NUM_THREADS + i) : 
+                                                                          csr_read_data_s2;
     end         
 
     assign csr_pipe_req_if.ready = ~stall;

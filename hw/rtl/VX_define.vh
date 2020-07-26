@@ -27,12 +27,14 @@
                               /* verilator lint_off PINCONNECTEMPTY */ \
                               /* verilator lint_off WIDTH */ \
                               /* verilator lint_off UNOPTFLAT */ \
+                              /* verilator lint_off UNDRIVEN */ \
                               /* verilator lint_off DECLFILENAME */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
                               /* verilator lint_on PINCONNECTEMPTY */ \
                               /* verilator lint_on WIDTH */ \
                               /* verilator lint_on UNOPTFLAT */ \
+                              /* verilator lint_on UNDRIVEN */ \
                               /* verilator lint_on DECLFILENAME */
 
 `define UNUSED_VAR(x) /* verilator lint_off UNUSED */ \
@@ -49,6 +51,9 @@
     generate                        \
         if (!(cond)) $error(msg);   \
     endgenerate
+
+`define ENABLE_TRACING  /* verilator tracing_on */
+`define DISABLE_TRACING /* verilator tracing_off */
 
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
@@ -80,8 +85,9 @@
 
 `define CSR_WIDTH   12
 
-`define LATENCY_IDIV 21
+`define ISTAG_BITS  `LOG2UP(`ISSUEQ_SIZE)
 
+`define LATENCY_IDIV 21
 `define LATENCY_IMUL 2
 
 `define LATENCY_FMULADD  2
@@ -259,19 +265,31 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifdef EXT_M_ENABLE
+    `define ISA_EXT_M (1 << 12)
+`else
+    `define ISA_EXT_M 0
+`endif
+
+`ifdef EXT_F_ENABLE
+    `define ISA_EXT_F (1 << 5)
+`else
+    `define ISA_EXT_F 0
+`endif
+
 `define ISA_CODE  (0 <<  0) // A - Atomic Instructions extension \
                 | (0 <<  1) // B - Tentatively reserved for Bit operations extension  \
                 | (0 <<  2) // C - Compressed extension \
                 | (0 <<  3) // D - Double precsision floating-point extension \
                 | (0 <<  4) // E - RV32E base ISA \
-    | (`EXT_F_ENABLE <<  5) // F - Single precsision floating-point extension \
+                |`ISA_EXT_F // F - Single precsision floating-point extension \
                 | (0 <<  6) // G - Additional standard extensions present \
                 | (0 <<  7) // H - Hypervisor mode implemented \
                 | (1 <<  8) // I - RV32I/64I/128I base ISA \
                 | (0 <<  9) // J - Reserved \
                 | (0 << 10) // K - Reserved \
                 | (0 << 11) // L - Tentatively reserved for Bit operations extension \
-    | (`EXT_M_ENABLE << 12) // M - Integer Multiply/Divide extension \
+                |`ISA_EXT_M // M - Integer Multiply/Divide extension \
                 | (0 << 13) // N - User level interrupts supported \
                 | (0 << 14) // O - Reserved \
                 | (0 << 15) // P - Tentatively reserved for Packed-SIMD extension \
@@ -288,7 +306,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CORE_REQ_INFO          // pc,  wb,        rd,        warp_num
+`ifdef DBG_CORE_REQ_INFO          // pc,  wb, rd,        warp_num
 `define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 1 + `NR_BITS + `NW_BITS)
 `else
 `define DEBUG_CORE_REQ_MDATA_WIDTH  0
@@ -300,7 +318,7 @@
 `define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
 
 // TAG sharing enable       
-`define DCORE_TAG_ID_BITS   `LOG2UP(`DCREQ_SIZE)
+`define DCORE_TAG_ID_BITS   `ISTAG_BITS
 
 // Core request tag bits
 `define DCORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `DCORE_TAG_ID_BITS)
@@ -335,7 +353,7 @@
 `define ICORE_BYTEEN_WIDTH `DWORD_SIZE
 
 // TAG sharing enable       
-`define ICORE_TAG_ID_BITS   `LOG2UP(`ICREQ_SIZE)
+`define ICORE_TAG_ID_BITS   `NW_BITS
 
 // Core request tag bits
 `define ICORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `ICORE_TAG_ID_BITS)
@@ -438,8 +456,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-
-
 task print_ex_type;
     input [`EX_BITS-1:0] ex;
     begin     
@@ -488,20 +504,7 @@ task print_instr_op;
                 `ALU_DRET:  $write("DRET");    
                 default:    $write("?");
             endcase
-        end
-        `EX_MUL: begin
-            case (`MUL_BITS'(op))
-                `MUL_MUL:   $write("MUL");
-                `MUL_MULH:  $write("MULH");
-                `MUL_MULHSU:$write("MULHSU");
-                `MUL_MULHU: $write("MULHU");
-                `MUL_DIV:   $write("DIV");
-                `MUL_DIVU:  $write("DIVU");
-                `MUL_REM:   $write("REM");
-                `MUL_REMU:  $write("REMU");
-                default:    $write("?");
-            endcase
-        end
+        end        
         `EX_LSU: begin
             case (`LSU_BITS'(op))
                 `LSU_LB:  $write("LB");
@@ -523,6 +526,45 @@ task print_instr_op;
                 `CSR_RS: $write("CSRS");
                 `CSR_RC: $write("CSRC");
                 default: $write("?");
+            endcase
+        end
+        `EX_MUL: begin
+            case (`MUL_BITS'(op))
+                `MUL_MUL:   $write("MUL");
+                `MUL_MULH:  $write("MULH");
+                `MUL_MULHSU:$write("MULHSU");
+                `MUL_MULHU: $write("MULHU");
+                `MUL_DIV:   $write("DIV");
+                `MUL_DIVU:  $write("DIVU");
+                `MUL_REM:   $write("REM");
+                `MUL_REMU:  $write("REMU");
+                default:    $write("?");
+            endcase
+        end
+        `EX_FPU: begin
+            case (`FPU_BITS'(op))
+                `FPU_ADD:   $write("ADD");
+                `FPU_SUB:   $write("SUB");
+                `FPU_MUL:   $write("MUL");
+                `FPU_DIV:   $write("DIV");
+                `FPU_SQRT:  $write("SQRT");
+                `FPU_MADD:  $write("MADD");
+                `FPU_NMSUB: $write("NMSUB");
+                `FPU_NMADD: $write("NMADD");
+                `FPU_SGNJ:  $write("SGNJ");
+                `FPU_SGNJN: $write("SGNJN");
+                `FPU_SGNJX: $write("SGNJX");
+                `FPU_MIN:   $write("MIN");
+                `FPU_MAX:   $write("MAX");
+                `FPU_CVTWS: $write("CVTWS");
+                `FPU_CVTWUS:$write("CVTWUS");
+                `FPU_CVTSW: $write("CVTSW");
+                `FPU_CVTSWU:$write("CVTSWU");
+                `FPU_MVXW:  $write("MVXW");
+                `FPU_MVWX:  $write("MVWX");
+                `FPU_CLASS: $write("CLASS");
+                `FPU_CMP:   $write("CMP");
+                default:    $write("?");
             endcase
         end
         `EX_GPU: begin
