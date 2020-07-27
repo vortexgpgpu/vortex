@@ -39,6 +39,13 @@ module VX_writeback #(
                                     mul_valid ? commit_is_if.mul_data.warp_num :                            
                                     fpu_valid ? commit_is_if.fpu_data.warp_num :  
                                                 0;
+
+    assign writeback_tmp_if.curr_PC = alu_valid ? commit_is_if.alu_data.curr_PC :
+                                    lsu_valid ? commit_is_if.lsu_data.curr_PC :   
+                                    csr_valid ? commit_is_if.csr_data.curr_PC :   
+                                    mul_valid ? commit_is_if.mul_data.curr_PC :                            
+                                    fpu_valid ? commit_is_if.fpu_data.curr_PC :  
+                                                0;
     
     assign writeback_tmp_if.thread_mask = alu_valid ? commit_is_if.alu_data.thread_mask :
                                     lsu_valid ? commit_is_if.lsu_data.thread_mask :   
@@ -55,7 +62,7 @@ module VX_writeback #(
                                                 0;
 
     assign writeback_tmp_if.rd_is_fp = alu_valid ? 0 :
-                                       lsu_valid ? 0 :                            
+                                       lsu_valid ? commit_is_if.lsu_data.rd_is_fp :                            
                                        csr_valid ? 0 :                                                               
                                        mul_valid ? 0 :                           
                                        fpu_valid ? commit_is_if.fpu_data.rd_is_fp :                          
@@ -71,14 +78,14 @@ module VX_writeback #(
     wire stall = ~writeback_if.ready && writeback_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1)
+        .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1)
     ) wb_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({writeback_tmp_if.valid, writeback_tmp_if.warp_num, writeback_tmp_if.thread_mask, writeback_tmp_if.rd, writeback_tmp_if.rd_is_fp, writeback_tmp_if.data}),
-        .out   ({writeback_if.valid,     writeback_if.warp_num,     writeback_if.thread_mask,     writeback_if.rd,     writeback_if.rd_is_fp,     writeback_if.data})
+        .in    ({writeback_tmp_if.valid, writeback_tmp_if.warp_num, writeback_tmp_if.curr_PC, writeback_tmp_if.thread_mask, writeback_tmp_if.rd, writeback_tmp_if.rd_is_fp, writeback_tmp_if.data}),
+        .out   ({writeback_if.valid,     writeback_if.warp_num,     writeback_if.curr_PC,     writeback_if.thread_mask,     writeback_if.rd,     writeback_if.rd_is_fp,     writeback_if.data})
     );
 
     assign alu_commit_if.ready = !stall;    

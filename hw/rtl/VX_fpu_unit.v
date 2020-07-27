@@ -49,6 +49,7 @@ module VX_fpu_unit #(
     wire [`LOG2UP(`FPURQ_SIZE)-1:0] fpu_in_tag, fpu_out_tag;
     
     wire [2:0][`NUM_THREADS-1:0][31:0] fpu_operands;   
+    assign fpu_operands = {fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data};
 
     wire [FMTF_BITS-1:0] fpu_src_fmt = fpnew_pkg::FP32;
     wire [FMTF_BITS-1:0] fpu_dst_fmt = fpnew_pkg::FP32;
@@ -88,15 +89,13 @@ module VX_fpu_unit #(
             `FPU_CVTWUS:begin fpu_op = fpnew_pkg::ADD;  fpu_op_mod = 1; end
             `FPU_CVTSW: fpu_op = fpnew_pkg::I2F;
             `FPU_CVTSWU:begin fpu_op = fpnew_pkg::I2F;  fpu_op_mod = 1; end
-            `FPU_MVXW:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; end
-            `FPU_MVWX:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; end
+            `FPU_MVXW:  begin fpu_op = fpnew_pkg::SGNJ; fpu_op_mod = 1; fpu_rnd = `FRM_RUP; end
+            `FPU_MVWX:  begin fpu_op = fpnew_pkg::SGNJ; fpu_op_mod = 0; fpu_rnd = `FRM_RUP; end
             `FPU_CLASS: fpu_op = fpnew_pkg::CLASSIFY;
             `FPU_CMP:   fpu_op = fpnew_pkg::CMP;
             default:;
         endcase
-    end
-
-    assign fpu_operands = {fpu_req_if.rs3_data, fpu_req_if.rs2_data, fpu_req_if.rs1_data};
+    end   
 
 `DISABLE_TRACING
 

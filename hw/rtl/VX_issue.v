@@ -74,8 +74,8 @@ module VX_issue #(
         .reset (reset),
         .stall (stall),
         .flush (flush),
-        .in    ({decode_if.valid,     issue_tag,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.use_rs1,     decode_if.use_rs2,     decode_if.ex_type,     decode_if.instr_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.rs1_is_fp,     decode_if.rs2_is_fp,     decode_if.frm,    gpr_data_if.rs1_data,      gpr_data_if.rs2_data,     gpr_data_if.rs3_data}),
-        .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.ex_type, decode_tmp_if.instr_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp, decode_tmp_if.frm, gpr_data_tmp_if.rs1_data, gpr_data_tmp_if.rs2_data, gpr_data_tmp_if.rs3_data})
+        .in    ({decode_if.valid,     issue_tag,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.use_rs1,     decode_if.use_rs2,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.rs1_is_fp,     decode_if.rs2_is_fp,     decode_if.frm,    gpr_data_if.rs1_data,      gpr_data_if.rs2_data,     gpr_data_if.rs3_data}),
+        .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp, decode_tmp_if.frm, gpr_data_tmp_if.rs1_data, gpr_data_tmp_if.rs2_data, gpr_data_tmp_if.rs3_data})
     );
 
     VX_issue_demux issue_demux (
@@ -92,22 +92,22 @@ module VX_issue #(
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
-        if (alu_req_if.valid && ~stall) begin
+        if (alu_req_if.valid && alu_req_if.ready) begin
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=ALU, istag=%0d, tmask=%b, wb=%d, rd=%0d, rs1_data=%0h, rs2_data=%0h, offset=%0h, next_PC=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, alu_req_if.rs1_data, alu_req_if.rs2_data, alu_req_if.offset, alu_req_if.next_PC);   
         end
-        if (lsu_req_if.valid && ~stall) begin
-            $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=LSU, istag=%0d, tmask=%b, wb=%0d, rd=%0d, byteen=%b, baddr=%0h, offset=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, lsu_req_if.rw, decode_tmp_if.rd, decode_tmp_if.wb, lsu_req_if.byteen, lsu_req_if.base_addr, lsu_req_if.offset);   
+        if (lsu_req_if.valid && lsu_req_if.ready) begin
+            $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=LSU, istag=%0d, tmask=%b, wb=%0b, rd=%0d, rw=%b, byteen=%b, baddr=%0h, offset=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, lsu_req_if.rw, lsu_req_if.byteen, lsu_req_if.base_addr, lsu_req_if.offset);   
         end
-        if (csr_req_if.valid && ~stall) begin
+        if (csr_req_if.valid && csr_req_if.ready) begin
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=CSR, istag=%0d, tmask=%b, wb=%d, rd=%0d, addr=%0h, mask=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, csr_req_if.csr_addr, csr_req_if.csr_mask);   
         end
-        if (mul_req_if.valid && ~stall) begin
+        if (mul_req_if.valid && mul_req_if.ready) begin
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=MUL, istag=%0d, tmask=%b, wb=%d, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, mul_req_if.rs1_data, mul_req_if.rs2_data);   
         end
-        if (fpu_req_if.valid && ~stall) begin
+        if (fpu_req_if.valid && fpu_req_if.ready) begin
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=FPU, istag=%0d, tmask=%b, wb=%d, rd=%0d, frm=%0h, rs1_data=%0h, rs2_data=%0h, rs3_data=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, fpu_req_if.frm, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data);   
         end
-        if (gpu_req_if.valid && ~stall) begin
+        if (gpu_req_if.valid && gpu_req_if.ready) begin
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=GPU, istag=%0d, tmask=%b, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, gpu_req_if.rs1_data, gpu_req_if.rs2_data);   
         end
     end

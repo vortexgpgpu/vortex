@@ -101,21 +101,21 @@
 `define INST_AUIPC  7'b0010111
 `define INST_JAL    7'b1101111
 `define INST_JALR   7'b1100111
-`define INST_B      7'b1100011
-`define INST_L      7'b0000011
-`define INST_S      7'b0100011
-`define INST_I      7'b0010011
-`define INST_R      7'b0110011
-`define INST_F      7'b0001111
-`define INST_SYS    7'b1110011
+`define INST_B      7'b1100011 // branch instructions
+`define INST_L      7'b0000011 // load instructions
+`define INST_S      7'b0100011 // store instructions
+`define INST_I      7'b0010011 // immediate instructions
+`define INST_R      7'b0110011 // register instructions
+`define INST_F      7'b0001111 // Fence instructions
+`define INST_SYS    7'b1110011 // system instructions
 
-`define INST_FL     7'b0000111 
-`define INST_FS     7'b0100111 
-`define INST_FCI    7'b1010011 
+`define INST_FL     7'b0000111 // float load instruction
+`define INST_FS     7'b0100111 // float store  instruction
 `define INST_FMADD  7'b1000011  
 `define INST_FMSUB  7'b1000111
 `define INST_FNMSUB 7'b1001011
 `define INST_FNMADD 7'b1001111 
+`define INST_FCI    7'b1010011 // float common instructions
 
 `define INST_GPU    7'b1101011
 
@@ -236,7 +236,7 @@
 `define FRM_RNE    3'b000
 `define FRM_RTZ    3'b001
 `define FRM_RDN    3'b010
-`define FRM_RUP    3'b011  // positive inf
+`define FRM_RUP    3'b011
 `define FRM_RMM    3'b100
 `define FRM_DYN    3'b111
 `define FRM_BITS   3
@@ -464,13 +464,14 @@ task print_ex_type;
             `EX_LSU: $write("LSU");
             `EX_CSR: $write("CSR");
             `EX_MUL: $write("MUL");
+            `EX_FPU: $write("FPU");
             `EX_GPU: $write("GPU");
             default: $write("NOP");
         endcase
     end      
 endtask
 
-task print_instr_op;
+task print_ex_op;
   input [`EX_BITS-1:0] ex;
   input [`OP_BITS-1:0] op;
   begin
@@ -489,12 +490,12 @@ task print_instr_op;
                 `ALU_AND:   $write("AND");
                 `ALU_LUI:   $write("LUI");
                 `ALU_AUIPC: $write("AUIPC");
-                `ALU_BEQ:   $write("EQ");
-                `ALU_BNE:   $write("NE");
-                `ALU_BLT:   $write("LT");
-                `ALU_BGE:   $write("GE");
-                `ALU_BLTU:  $write("LTU");
-                `ALU_BGEU:  $write("GEU");           
+                `ALU_BEQ:   $write("BEQ");
+                `ALU_BNE:   $write("BNE");
+                `ALU_BLT:   $write("BLT");
+                `ALU_BGE:   $write("BGE");
+                `ALU_BLTU:  $write("BLTU");
+                `ALU_BGEU:  $write("BGEU");           
                 `ALU_JAL:   $write("JAL");
                 `ALU_JALR:  $write("JALR");
                 `ALU_ECALL: $write("ECALL");
@@ -580,6 +581,21 @@ task print_instr_op;
         default:;    
     endcase        
   end
+endtask
+
+task print_frm;
+    input [`FRM_BITS-1:0] frm;
+    begin     
+        case (frm)
+            `FRM_RNE: $write("RNE");     
+            `FRM_RTZ: $write("RTZ");
+            `FRM_RDN: $write("RDN");
+            `FRM_RUP: $write("RUP");
+            `FRM_RMM: $write("RMM");
+            `FRM_DYN: $write("DYN");
+            default: $write("?");
+        endcase
+    end      
 endtask
 
 `endif
