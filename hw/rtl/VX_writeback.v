@@ -10,19 +10,19 @@ module VX_writeback #(
     VX_commit_if    alu_commit_if,
     VX_commit_if    lsu_commit_if,  
     VX_commit_if    mul_commit_if,
-    VX_commit_if    fpu_commit_if,    
+    VX_fpu_to_cmt_if fpu_commit_if,    
     VX_commit_if    csr_commit_if,
-    VX_commit_is_if commit_is_if,
+    VX_cmt_to_issue_if cmt_to_issue_if,
 
     // outputs
     VX_wb_if        writeback_if
 );
 
-    wire alu_valid = alu_commit_if.valid && commit_is_if.alu_data.wb;
-    wire lsu_valid = lsu_commit_if.valid && commit_is_if.lsu_data.wb;
-    wire csr_valid = csr_commit_if.valid && commit_is_if.csr_data.wb;
-    wire mul_valid = mul_commit_if.valid && commit_is_if.mul_data.wb;
-    wire fpu_valid = fpu_commit_if.valid && commit_is_if.fpu_data.wb;
+    wire alu_valid = alu_commit_if.valid && cmt_to_issue_if.alu_data.wb;
+    wire lsu_valid = lsu_commit_if.valid && cmt_to_issue_if.lsu_data.wb;
+    wire csr_valid = csr_commit_if.valid && cmt_to_issue_if.csr_data.wb;
+    wire mul_valid = mul_commit_if.valid && cmt_to_issue_if.mul_data.wb;
+    wire fpu_valid = fpu_commit_if.valid && cmt_to_issue_if.fpu_data.wb;
 
     VX_wb_if writeback_tmp_if();    
 
@@ -33,39 +33,39 @@ module VX_writeback #(
                                     fpu_valid ? fpu_commit_if.valid :                                                 
                                                 0;     
 
-    assign writeback_tmp_if.warp_num = alu_valid ? commit_is_if.alu_data.warp_num :
-                                    lsu_valid ? commit_is_if.lsu_data.warp_num :   
-                                    csr_valid ? commit_is_if.csr_data.warp_num :   
-                                    mul_valid ? commit_is_if.mul_data.warp_num :                            
-                                    fpu_valid ? commit_is_if.fpu_data.warp_num :  
+    assign writeback_tmp_if.warp_num = alu_valid ? cmt_to_issue_if.alu_data.warp_num :
+                                    lsu_valid ? cmt_to_issue_if.lsu_data.warp_num :   
+                                    csr_valid ? cmt_to_issue_if.csr_data.warp_num :   
+                                    mul_valid ? cmt_to_issue_if.mul_data.warp_num :                            
+                                    fpu_valid ? cmt_to_issue_if.fpu_data.warp_num :  
                                                 0;
 
-    assign writeback_tmp_if.curr_PC = alu_valid ? commit_is_if.alu_data.curr_PC :
-                                    lsu_valid ? commit_is_if.lsu_data.curr_PC :   
-                                    csr_valid ? commit_is_if.csr_data.curr_PC :   
-                                    mul_valid ? commit_is_if.mul_data.curr_PC :                            
-                                    fpu_valid ? commit_is_if.fpu_data.curr_PC :  
+    assign writeback_tmp_if.curr_PC = alu_valid ? cmt_to_issue_if.alu_data.curr_PC :
+                                    lsu_valid ? cmt_to_issue_if.lsu_data.curr_PC :   
+                                    csr_valid ? cmt_to_issue_if.csr_data.curr_PC :   
+                                    mul_valid ? cmt_to_issue_if.mul_data.curr_PC :                            
+                                    fpu_valid ? cmt_to_issue_if.fpu_data.curr_PC :  
                                                 0;
     
-    assign writeback_tmp_if.thread_mask = alu_valid ? commit_is_if.alu_data.thread_mask :
-                                    lsu_valid ? commit_is_if.lsu_data.thread_mask :   
-                                    csr_valid ? commit_is_if.csr_data.thread_mask :   
-                                    mul_valid ? commit_is_if.mul_data.thread_mask :                            
-                                    fpu_valid ? commit_is_if.fpu_data.thread_mask :  
+    assign writeback_tmp_if.thread_mask = alu_valid ? cmt_to_issue_if.alu_data.thread_mask :
+                                    lsu_valid ? cmt_to_issue_if.lsu_data.thread_mask :   
+                                    csr_valid ? cmt_to_issue_if.csr_data.thread_mask :   
+                                    mul_valid ? cmt_to_issue_if.mul_data.thread_mask :                            
+                                    fpu_valid ? cmt_to_issue_if.fpu_data.thread_mask :  
                                                 0;
 
-    assign writeback_tmp_if.rd =    alu_valid ? commit_is_if.alu_data.rd :
-                                    lsu_valid ? commit_is_if.lsu_data.rd :                           
-                                    csr_valid ? commit_is_if.csr_data.rd :                           
-                                    mul_valid ? commit_is_if.mul_data.rd :                            
-                                    fpu_valid ? commit_is_if.fpu_data.rd :                                                               
+    assign writeback_tmp_if.rd =    alu_valid ? cmt_to_issue_if.alu_data.rd :
+                                    lsu_valid ? cmt_to_issue_if.lsu_data.rd :                           
+                                    csr_valid ? cmt_to_issue_if.csr_data.rd :                           
+                                    mul_valid ? cmt_to_issue_if.mul_data.rd :                            
+                                    fpu_valid ? cmt_to_issue_if.fpu_data.rd :                                                               
                                                 0;
 
     assign writeback_tmp_if.rd_is_fp = alu_valid ? 0 :
-                                       lsu_valid ? commit_is_if.lsu_data.rd_is_fp :                            
+                                       lsu_valid ? cmt_to_issue_if.lsu_data.rd_is_fp :                            
                                        csr_valid ? 0 :                                                               
                                        mul_valid ? 0 :                           
-                                       fpu_valid ? commit_is_if.fpu_data.rd_is_fp :                          
+                                       fpu_valid ? cmt_to_issue_if.fpu_data.rd_is_fp :                          
                                                    0; 
 
     assign writeback_tmp_if.data =  alu_valid ? alu_commit_if.data :
@@ -94,11 +94,11 @@ module VX_writeback #(
     assign mul_commit_if.ready = !stall && !alu_valid && !lsu_valid && !csr_valid;    
     assign fpu_commit_if.ready = !stall && !alu_valid && !lsu_valid && !csr_valid && !mul_valid;    
     
-    // special workaround to control RISC-V benchmarks termination on Verilator
-    reg [31:0] last_data_wb /* verilator public */;
+    // special workaround to get RISC-V tests Pass status on Verilator
+    reg [31:0] last_data_wb [`NUM_REGS-1:0] /* verilator public */;
     always @(posedge clk) begin
-        if (writeback_tmp_if.valid && ~stall && (writeback_tmp_if.rd == 28)) begin
-            last_data_wb <= writeback_tmp_if.data[0];
+        if (writeback_tmp_if.valid && ~stall) begin
+            last_data_wb[writeback_tmp_if.rd] <= writeback_tmp_if.data[0];
         end
     end
 

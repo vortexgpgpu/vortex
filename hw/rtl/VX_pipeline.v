@@ -101,7 +101,7 @@ module VX_pipeline #(
     assign csr_io_rsp_data     = csr_io_rsp_if.data; 
     assign csr_io_rsp_if.ready = csr_io_rsp_ready; 
 
-    VX_perf_cntrs_if    perf_cntrs_if();
+    VX_cmt_to_csr_if    cmt_to_csr_if();
     VX_decode_if        decode_if();
     VX_branch_ctl_if    branch_ctl_if();
     VX_warp_ctl_if      warp_ctl_if();
@@ -113,14 +113,14 @@ module VX_pipeline #(
     VX_fpu_req_if       fpu_req_if(); 
     VX_gpu_req_if       gpu_req_if();
     VX_wb_if            writeback_if();     
-    VX_commit_is_if     commit_is_if();
+    VX_cmt_to_issue_if  cmt_to_issue_if();
     VX_wstall_if        wstall_if();
     VX_join_if          join_if();
     VX_commit_if        alu_commit_if();
     VX_commit_if        lsu_commit_if();        
     VX_commit_if        csr_commit_if(); 
     VX_commit_if        mul_commit_if();     
-    VX_commit_if        fpu_commit_if();     
+    VX_fpu_to_cmt_if    fpu_commit_if();     
     VX_commit_if        gpu_commit_if();     
 
     VX_fetch #(
@@ -157,7 +157,7 @@ module VX_pipeline #(
 
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
-        .commit_is_if   (commit_is_if),
+        .cmt_to_issue_if   (cmt_to_issue_if),
 
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
@@ -180,7 +180,7 @@ module VX_pipeline #(
         .csr_io_req_if  (csr_io_req_if),
         .csr_io_rsp_if  (csr_io_rsp_if),
 
-        .perf_cntrs_if  (perf_cntrs_if),                 
+        .cmt_to_csr_if  (cmt_to_csr_if),                 
         
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
@@ -214,9 +214,9 @@ module VX_pipeline #(
         .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),
         
-        .commit_is_if   (commit_is_if),
+        .cmt_to_issue_if(cmt_to_issue_if),
         .writeback_if   (writeback_if),
-        .perf_cntrs_if  (perf_cntrs_if)
+        .cmt_to_csr_if  (cmt_to_csr_if)
     );   
 
     assign dcache_req_valid  = core_dcache_req_if.valid;

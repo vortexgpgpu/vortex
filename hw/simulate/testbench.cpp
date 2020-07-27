@@ -9,9 +9,8 @@ int main(int argc, char **argv)
 #ifdef ALL_TESTS
 	bool passed = true;
 
-  std::string tests[] = {
-		"../../../benchmarks/riscv_tests/rv32uf-p-fadd.hex",
-    /*"../../../benchmarks/riscv_tests/rv32ui-p-add.hex",
+  std::string tests[] = {/*
+	  "../../../benchmarks/riscv_tests/rv32ui-p-add.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-addi.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-and.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-andi.hex",
@@ -58,20 +57,23 @@ int main(int argc, char **argv)
 	 	"../../../benchmarks/riscv_tests/rv32um-p-mulhu.hex",
 	 	"../../../benchmarks/riscv_tests/rv32um-p-rem.hex",
 	 	"../../../benchmarks/riscv_tests/rv32um-p-remu.hex",
-#endif
+#endif*/
+	 };
+
+	 std::string tests_fp[] = {
 #ifdef EXT_F_ENABLE
-		"../../../benchmarks/riscv_tests/rv32uf-p-fadd.hex",
-		"../../../benchmarks/riscv_tests/rv32uf-p-fdiv.hex",
-		"../../../benchmarks/riscv_tests/rv32uf-p-fmadd.hex"		
-		"../../../benchmarks/riscv_tests/rv32uf-p-fmin.hex",
-		"../../../benchmarks/riscv_tests/rv32uf-p-fcmp.hex",
+		//"../../../benchmarks/riscv_tests/rv32uf-p-fadd.hex",
+		//"../../../benchmarks/riscv_tests/rv32uf-p-fdiv.hex",
+		//"../../../benchmarks/riscv_tests/rv32uf-p-fmadd.hex",		
+		//"../../../benchmarks/riscv_tests/rv32uf-p-fmin.hex",
+		//"../../../benchmarks/riscv_tests/rv32uf-p-fcmp.hex",
 		"../../../benchmarks/riscv_tests/rv32uf-p-fclass.hex",		
 		"../../../benchmarks/riscv_tests/rv32uf-p-ldst.hex",	 
 		"../../../benchmarks/riscv_tests/rv32uf-p-fcvt.hex",
 		"../../../benchmarks/riscv_tests/rv32uf-p-fcvt_w.hex",
 		"../../../benchmarks/riscv_tests/rv32uf-p-move.hex",	
 		"../../../benchmarks/riscv_tests/rv32uf-p-recoding.hex",		
-#endif*/
+#endif
 	 };
 
 	for (std::string test : tests) {
@@ -83,7 +85,30 @@ int main(int argc, char **argv)
 		Simulator simulator;
 		simulator.attach_ram(&ram);
 		simulator.load_ihex(test.c_str());
-		bool status = simulator.run();
+		simulator.run();
+
+		bool status = (1 == simulator.get_status(28));
+
+		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
+		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
+		std::cerr << DEFAULT;
+		passed = passed && status;
+		if (!passed)
+			break;
+	}
+
+	for (std::string test : tests_fp) {
+		std::cerr << DEFAULT << "\n---------------------------------------\n";
+
+		std::cerr << test << std::endl;
+
+		RAM ram;
+		Simulator simulator;
+		simulator.attach_ram(&ram);
+		simulator.load_ihex(test.c_str());
+		simulator.run();
+
+		bool status = (1 == simulator.get_status(3));
 
 		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
 		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
@@ -113,7 +138,9 @@ int main(int argc, char **argv)
 	Simulator simulator;
 	simulator.attach_ram(&ram);
 	simulator.load_ihex(test);
-	bool status = simulator.run();
+  simulator.run();
+
+	bool status = (1 == simulator.get_status(28));
 
 	if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
 	if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;

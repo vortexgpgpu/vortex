@@ -1,5 +1,5 @@
-`ifndef VX_FPU_FROM_CSR_IF
-`define VX_FPU_FROM_CSR_IF
+`ifndef VX_CSR_TO_FPU_IF
+`define VX_CSR_TO_FPU_IF
 
 `include "VX_define.vh"
 
@@ -7,9 +7,9 @@
     `IGNORE_WARNINGS_BEGIN
 `endif
 
-interface VX_fpu_from_csr_if ();
+interface VX_csr_to_fpu_if ();
 
-	wire [`NW_BITS-1:0] warp_num;
+	wire [`NW_BITS-1:0]  warp_num;
 	wire [`FRM_BITS-1:0] frm;
 
 endinterface

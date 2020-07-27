@@ -43,7 +43,8 @@ public:
 
   void attach_ram(RAM* ram);
 
-  bool run();  
+  void run();  
+  int get_status(int reg);  
   void print_stats(std::ostream& out);
 
 private:  

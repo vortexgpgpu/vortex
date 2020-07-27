@@ -233,12 +233,12 @@
 `define FPU_BITS    5
 `define FPU_OP(x)   x[`FPU_BITS-1:0]
 
-`define FRM_RNE    3'b000
-`define FRM_RTZ    3'b001
-`define FRM_RDN    3'b010
-`define FRM_RUP    3'b011
-`define FRM_RMM    3'b100
-`define FRM_DYN    3'b111
+`define FRM_RNE    3'b000  // round to nearest even
+`define FRM_RTZ    3'b001  // round to zero
+`define FRM_RDN    3'b010  // round to -inf
+`define FRM_RUP    3'b011  // round to +inf
+`define FRM_RMM    3'b100  // round to nearest max magnitude
+`define FRM_DYN    3'b111  // dynamic mode
 `define FRM_BITS   3
 `define FFG_BITS   5
 

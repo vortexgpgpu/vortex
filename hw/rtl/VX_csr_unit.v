@@ -6,10 +6,8 @@ module VX_csr_unit #(
     input wire          clk,
     input wire          reset,
 
-    VX_perf_cntrs_if    perf_cntrs_if, 
-
-    VX_fpu_from_csr_if  fpu_from_csr_if,  
-    VX_fpu_to_csr_if    fpu_to_csr_if, 
+    VX_cmt_to_csr_if    cmt_to_csr_if, 
+    VX_csr_to_fpu_if    csr_to_fpu_if,  
     
     VX_csr_io_req_if    csr_io_req_if,    
     VX_csr_io_rsp_if    csr_io_rsp_if,
@@ -51,9 +49,8 @@ module VX_csr_unit #(
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
-        .perf_cntrs_if  (perf_cntrs_if),
-        .fpu_to_csr_if  (fpu_to_csr_if),
-        .fpu_from_csr_if(fpu_from_csr_if), 
+        .cmt_to_csr_if  (cmt_to_csr_if),
+        .csr_to_fpu_if  (csr_to_fpu_if), 
         .read_addr      (csr_pipe_req_if.csr_addr),
         .read_data      (csr_read_data_unqual),
         .write_enable   (is_csr_s2),
