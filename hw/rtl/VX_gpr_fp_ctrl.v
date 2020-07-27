@@ -36,7 +36,7 @@ module VX_gpr_fp_ctrl (
 		if (reset) begin
 			multi_cyc_state <= 0;
         end else if (!schedule_delay) begin
-			multi_cyc_state <= decode_if.use_rs3 && (multi_cyc_state == 0);
+			multi_cyc_state <= decode_if.use_rs3 && (0 == multi_cyc_state);
         end else begin
 			multi_cyc_state <= 0;
         end
@@ -70,9 +70,9 @@ module VX_gpr_fp_ctrl (
 
 	// outputs
 	
-    assign gpr_delay = (multi_cyc_state == 0) && decode_if.use_rs3;
+    assign gpr_delay = decode_if.use_rs3 && (0 == multi_cyc_state);
 
-	assign raddr1 = multi_cyc_state ? decode_if.rs3 : decode_if.rs1 ;
+	assign raddr1 = multi_cyc_state ? decode_if.rs3 : decode_if.rs1;
 	assign raddr2 = decode_if.rs2;
 
 	always @(*) begin

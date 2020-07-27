@@ -20,7 +20,6 @@ module VX_gpr_stage #(
 
     wire [`NUM_THREADS-1:0][31:0] rs1_int_data [`NUM_WARPS-1:0];
     wire [`NUM_THREADS-1:0][31:0] rs2_int_data [`NUM_WARPS-1:0]; 
-    wire [`NUM_THREADS-1:0] we [`NUM_WARPS-1:0];
 
     wire [`NR_BITS-1:0] raddr1;
 	wire [`NR_BITS-1:0] raddr2;
@@ -28,10 +27,10 @@ module VX_gpr_stage #(
     genvar i;
 
     for (i = 0; i < `NUM_WARPS; i++) begin
-        assign we[i] = writeback_if.thread_mask & {`NUM_THREADS{~writeback_if.rd_is_fp && (i == writeback_if.warp_num)}};                
+        wire [`NUM_WARPS-1:0] we = writeback_if.thread_mask & {`NUM_THREADS{writeback_if.valid && ~writeback_if.rd_is_fp && (i == writeback_if.warp_num)}};                
         VX_gpr_ram gpr_int_ram (
             .clk      (clk),
-            .we       (we[i]),                
+            .we       (we),                
             .waddr    (writeback_if.rd),
             .wdata    (writeback_if.data),
             .rs1      (raddr1),
@@ -47,10 +46,10 @@ module VX_gpr_stage #(
     wire [`NUM_THREADS-1:0][31:0] rs2_fp_data [`NUM_WARPS-1:0]; 
 
     for (i = 0; i < `NUM_WARPS; i++) begin        
-        assign we[i] = writeback_if.thread_mask & {`NUM_THREADS{writeback_if.rd_is_fp && (i == writeback_if.warp_num)}};
+        wire [`NUM_WARPS-1:0] we = writeback_if.thread_mask & {`NUM_THREADS{writeback_if.valid && writeback_if.rd_is_fp && (i == writeback_if.warp_num)}};
         VX_gpr_ram gpr_fp_ram (
             .clk      (clk),
-            .we       (we[i]),                
+            .we       (we),                
             .waddr    (writeback_if.rd),
             .wdata    (writeback_if.data),
             .rs1      (raddr1),

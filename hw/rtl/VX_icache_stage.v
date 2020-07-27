@@ -77,7 +77,7 @@ module VX_icache_stage #(
             $display("%t: I$%0d req: warp=%0d, PC=%0h", $time, CORE_ID, ifetch_req_if.warp_num, ifetch_req_if.curr_PC);
         end
         if (icache_rsp_if.valid && icache_rsp_if.ready) begin
-            $display("%t: I$%0d rsp: warp=%0d, PC=%0h, instr=%0h", $time, CORE_ID, ifetch_rsp_if.warp_num, ifetch_req_if.curr_PC, ifetch_rsp_if.instr);
+            $display("%t: I$%0d rsp: warp=%0d, PC=%0h, instr=%0h", $time, CORE_ID, ifetch_rsp_if.warp_num, ifetch_rsp_if.curr_PC, ifetch_rsp_if.instr);
         end
     end
 `endif

@@ -102,6 +102,22 @@ module VX_scheduler  #(
 
     wire ib_acquire = decode_if.valid && ~stall;
 
+    `DEBUG_BLOCK(
+        wire [`NW_BITS-1:0]    cis_alu_warp_num     = commit_is_if.alu_data.warp_num;
+        wire [`NUM_THREADS-1:0] cis_alu_thread_mask = commit_is_if.alu_data.thread_mask;
+        wire [31:0]            cis_alu_curr_PC      = commit_is_if.alu_data.curr_PC;
+        wire [`NR_BITS-1:0]    cis_alu_rd           = commit_is_if.alu_data.rd;
+        wire                   cis_alu_rd_is_fp     = commit_is_if.alu_data.rd_is_fp;
+        wire                   cis_alu_wb           = commit_is_if.alu_data.wb;
+
+        wire [`NW_BITS-1:0]    cis_fpu_warp_num     = commit_is_if.fpu_data.warp_num;
+        wire [`NUM_THREADS-1:0] cis_fpu_thread_mask = commit_is_if.fpu_data.thread_mask;
+        wire [31:0]            cis_fpu_curr_PC      = commit_is_if.fpu_data.curr_PC;
+        wire [`NR_BITS-1:0]    cis_fpu_rd           = commit_is_if.fpu_data.rd;
+        wire                   cis_fpu_rd_is_fp     = commit_is_if.fpu_data.rd_is_fp;
+        wire                   cis_fpu_wb           = commit_is_if.fpu_data.wb;
+    )
+
     VX_cam_buffer #(
         .DATAW  ($bits(is_data_t)),
         .SIZE   (`ISSUEQ_SIZE),

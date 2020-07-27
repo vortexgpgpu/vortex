@@ -10,7 +10,8 @@ int main(int argc, char **argv)
 	bool passed = true;
 
   std::string tests[] = {
-    "../../../benchmarks/riscv_tests/rv32ui-p-add.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-fadd.hex",
+    /*"../../../benchmarks/riscv_tests/rv32ui-p-add.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-addi.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-and.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-andi.hex",
@@ -48,6 +49,7 @@ int main(int argc, char **argv)
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-sw.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-xor.hex",
 	 	"../../../benchmarks/riscv_tests/rv32ui-p-xori.hex",
+#ifdef EXT_M_ENABLE
 	 	"../../../benchmarks/riscv_tests/rv32um-p-div.hex",
 	 	"../../../benchmarks/riscv_tests/rv32um-p-divu.hex",
 	 	"../../../benchmarks/riscv_tests/rv32um-p-mul.hex",
@@ -55,7 +57,21 @@ int main(int argc, char **argv)
 	 	"../../../benchmarks/riscv_tests/rv32um-p-mulhsu.hex",
 	 	"../../../benchmarks/riscv_tests/rv32um-p-mulhu.hex",
 	 	"../../../benchmarks/riscv_tests/rv32um-p-rem.hex",
-	 	"../../../benchmarks/riscv_tests/rv32um-p-remu.hex"
+	 	"../../../benchmarks/riscv_tests/rv32um-p-remu.hex",
+#endif
+#ifdef EXT_F_ENABLE
+		"../../../benchmarks/riscv_tests/rv32uf-p-fadd.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-fdiv.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-fmadd.hex"		
+		"../../../benchmarks/riscv_tests/rv32uf-p-fmin.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-fcmp.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-fclass.hex",		
+		"../../../benchmarks/riscv_tests/rv32uf-p-ldst.hex",	 
+		"../../../benchmarks/riscv_tests/rv32uf-p-fcvt.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-fcvt_w.hex",
+		"../../../benchmarks/riscv_tests/rv32uf-p-move.hex",	
+		"../../../benchmarks/riscv_tests/rv32uf-p-recoding.hex",		
+#endif*/
 	 };
 
 	for (std::string test : tests) {

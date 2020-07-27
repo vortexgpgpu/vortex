@@ -12,7 +12,7 @@ interface VX_decode_if ();
     wire [31:0]             next_PC;   
 
     wire [`EX_BITS-1:0]     ex_type;    
-    wire [`OP_BITS-1:0]     instr_op; 
+    wire [`OP_BITS-1:0]     ex_op; 
 
     wire [`NR_BITS-1:0]     rd;
     wire [`NR_BITS-1:0]     rs1;
