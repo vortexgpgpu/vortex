@@ -6,9 +6,8 @@ module VX_csr_data #(
     input wire clk,
     input wire reset,
 
-    VX_perf_cntrs_if                perf_cntrs_if,
-    VX_fpu_from_csr_if              fpu_from_csr_if,  
-    VX_fpu_to_csr_if                fpu_to_csr_if, 
+    VX_cmt_to_csr_if                cmt_to_csr_if,
+    VX_csr_to_fpu_if                csr_to_fpu_if,  
 
     input wire[`NW_BITS-1:0]        warp_num,
 
@@ -33,11 +32,11 @@ module VX_csr_data #(
     assign wr_addr = $size(wr_addr)'(write_addr); 
 
     wire [`FFG_BITS-1:0] fflags_update;   
-    assign fflags_update[4] = fpu_to_csr_if.fflags_NV;
-	assign fflags_update[3] = fpu_to_csr_if.fflags_DZ;
-	assign fflags_update[2] = fpu_to_csr_if.fflags_OF;
-	assign fflags_update[1] = fpu_to_csr_if.fflags_UF;
-	assign fflags_update[0] = fpu_to_csr_if.fflags_NX;
+    assign fflags_update[4] = cmt_to_csr_if.fflags_NV;
+	assign fflags_update[3] = cmt_to_csr_if.fflags_DZ;
+	assign fflags_update[2] = cmt_to_csr_if.fflags_OF;
+	assign fflags_update[1] = cmt_to_csr_if.fflags_UF;
+	assign fflags_update[0] = cmt_to_csr_if.fflags_NX;
 
     integer i;
 
@@ -68,9 +67,23 @@ module VX_csr_data #(
                         csr_table[wr_addr] <= write_data;                                
                     end
 				endcase                
-            end else if (fpu_to_csr_if.valid) begin
-                fflags_table[fpu_to_csr_if.warp_num][`FFG_BITS-1:0] <= fflags_update;
-				 fcsr_table[fpu_to_csr_if.warp_num][`FFG_BITS-1:0]  <= fflags_update;
+            end else if (cmt_to_csr_if.upd_fflags) begin
+                fflags_table[cmt_to_csr_if.fpu_warp_num][`FFG_BITS-1:0] <= fflags_update;
+				 fcsr_table[cmt_to_csr_if.fpu_warp_num][`FFG_BITS-1:0]  <= fflags_update;
+            end
+        end
+    end
+
+    reg [63:0] total_cycles, total_instrs;
+    
+    always @(posedge clk) begin
+       if (reset) begin
+            total_cycles <= 0;
+            total_instrs <= 0;
+        end else begin
+            total_cycles <= total_cycles + 1;
+            if (cmt_to_csr_if.valid) begin
+                total_instrs <= total_instrs + 64'(cmt_to_csr_if.num_commits);
             end
         end
     end
@@ -87,10 +100,10 @@ module VX_csr_data #(
             `CSR_NT      : read_data = `NUM_THREADS;
             `CSR_NW      : read_data = `NUM_WARPS;
             `CSR_NC      : read_data = `NUM_CORES * `NUM_CLUSTERS;
-            `CSR_CYCLE_L : read_data = perf_cntrs_if.total_cycles[31:0];
-            `CSR_CYCLE_H : read_data = perf_cntrs_if.total_cycles[63:32];
-            `CSR_INSTR_L : read_data = perf_cntrs_if.total_instrs[31:0];
-            `CSR_INSTR_H : read_data = perf_cntrs_if.total_instrs[63:32];
+            `CSR_CYCLE_L : read_data = total_cycles[31:0];
+            `CSR_CYCLE_H : read_data = total_cycles[63:32];
+            `CSR_INSTR_L : read_data = total_instrs[31:0];
+            `CSR_INSTR_H : read_data = total_instrs[63:32];
             `CSR_VEND_ID : read_data = `VENDOR_ID;
             `CSR_ARCH_ID : read_data = `ARCHITECTURE_ID;
             `CSR_IMPL_ID : read_data = `IMPLEMENTATION_ID;
@@ -99,6 +112,6 @@ module VX_csr_data #(
         endcase
     end 
 
-    assign fpu_from_csr_if.frm = frm_table[fpu_from_csr_if.warp_num]; 
+    assign csr_to_fpu_if.frm = frm_table[csr_to_fpu_if.warp_num]; 
 
 endmodule

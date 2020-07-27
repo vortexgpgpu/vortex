@@ -3,22 +3,21 @@
 module VX_scheduler  #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire          clk,
+    input wire          reset,
 
-    VX_decode_if    decode_if,
-    VX_wb_if        writeback_if,  
-    VX_commit_is_if commit_is_if,
-    input wire      gpr_busy,
-    input wire      alu_busy,
-    input wire      lsu_busy,
-    input wire      csr_busy,
-    input wire      mul_busy,
-    input wire      fpu_busy,
-    input wire      gpu_busy,      
+    VX_decode_if        decode_if,
+    VX_wb_if            writeback_if,  
+    VX_cmt_to_issue_if  cmt_to_issue_if,
+    input wire          gpr_busy,
+    input wire          alu_busy,
+    input wire          lsu_busy,
+    input wire          csr_busy,
+    input wire          mul_busy,
+    input wire          fpu_busy,
+    input wire          gpu_busy,      
     output wire [`ISTAG_BITS-1:0] issue_tag,
-    output wire     schedule_delay,
-    output wire     is_empty    
+    output wire         is_empty    
 );
     localparam CTVW = `CLOG2(`NUM_WARPS * `NUM_REGS + 1);
 
@@ -53,7 +52,7 @@ module VX_scheduler  #(
     wire rs3_inuse_qual = rs3_inuse && decode_if.use_rs3;
     wire rd_inuse_qual  = rd_inuse  && decode_if.wb;
 
-    wire rename_valid = (rs1_inuse_qual || rs2_inuse_qual || rs3_inuse_qual || rd_inuse_qual);    
+    wire inuse_valid = (rd_inuse_qual || rs1_inuse_qual || rs2_inuse_qual || rs3_inuse_qual);    
 
     wire ex_stalled = ((gpr_busy) 
                     || (alu_busy && (decode_if.ex_type == `EX_ALU))
@@ -63,9 +62,9 @@ module VX_scheduler  #(
                     || (fpu_busy && (decode_if.ex_type == `EX_FPU))
                     || (gpu_busy && (decode_if.ex_type == `EX_GPU)));
 
-    wire iq_full;
+    wire issue_buf_full;
 
-    wire stall = (ex_stalled || rename_valid || iq_full) && decode_if.valid;
+    wire stall = (ex_stalled || inuse_valid || issue_buf_full) && decode_if.valid;
 
     wire acquire_rd = decode_if.valid && (decode_if.wb != 0) && ~stall;
     
@@ -85,7 +84,7 @@ module VX_scheduler  #(
                     inuse_table[w][i]   <= 0;
                 end
             end            
-            count_valid  <= 0;
+            count_valid <= 0;
         end else begin
             if (acquire_rd) begin
                 inuse_registers[decode_if.warp_num][read_rd] <= decode_if.thread_mask;
@@ -103,19 +102,19 @@ module VX_scheduler  #(
     wire ib_acquire = decode_if.valid && ~stall;
 
     `DEBUG_BLOCK(
-        wire [`NW_BITS-1:0]    cis_alu_warp_num     = commit_is_if.alu_data.warp_num;
-        wire [`NUM_THREADS-1:0] cis_alu_thread_mask = commit_is_if.alu_data.thread_mask;
-        wire [31:0]            cis_alu_curr_PC      = commit_is_if.alu_data.curr_PC;
-        wire [`NR_BITS-1:0]    cis_alu_rd           = commit_is_if.alu_data.rd;
-        wire                   cis_alu_rd_is_fp     = commit_is_if.alu_data.rd_is_fp;
-        wire                   cis_alu_wb           = commit_is_if.alu_data.wb;
+        wire [`NW_BITS-1:0]    cis_alu_warp_num     = cmt_to_issue_if.alu_data.warp_num;
+        wire [`NUM_THREADS-1:0] cis_alu_thread_mask = cmt_to_issue_if.alu_data.thread_mask;
+        wire [31:0]            cis_alu_curr_PC      = cmt_to_issue_if.alu_data.curr_PC;
+        wire [`NR_BITS-1:0]    cis_alu_rd           = cmt_to_issue_if.alu_data.rd;
+        wire                   cis_alu_rd_is_fp     = cmt_to_issue_if.alu_data.rd_is_fp;
+        wire                   cis_alu_wb           = cmt_to_issue_if.alu_data.wb;
 
-        wire [`NW_BITS-1:0]    cis_fpu_warp_num     = commit_is_if.fpu_data.warp_num;
-        wire [`NUM_THREADS-1:0] cis_fpu_thread_mask = commit_is_if.fpu_data.thread_mask;
-        wire [31:0]            cis_fpu_curr_PC      = commit_is_if.fpu_data.curr_PC;
-        wire [`NR_BITS-1:0]    cis_fpu_rd           = commit_is_if.fpu_data.rd;
-        wire                   cis_fpu_rd_is_fp     = commit_is_if.fpu_data.rd_is_fp;
-        wire                   cis_fpu_wb           = commit_is_if.fpu_data.wb;
+        wire [`NW_BITS-1:0]    cis_fpu_warp_num     = cmt_to_issue_if.fpu_data.warp_num;
+        wire [`NUM_THREADS-1:0] cis_fpu_thread_mask = cmt_to_issue_if.fpu_data.thread_mask;
+        wire [31:0]            cis_fpu_curr_PC      = cmt_to_issue_if.fpu_data.curr_PC;
+        wire [`NR_BITS-1:0]    cis_fpu_rd           = cmt_to_issue_if.fpu_data.rd;
+        wire                   cis_fpu_rd_is_fp     = cmt_to_issue_if.fpu_data.rd_is_fp;
+        wire                   cis_fpu_wb           = cmt_to_issue_if.fpu_data.wb;
     )
 
     VX_cam_buffer #(
@@ -128,22 +127,22 @@ module VX_scheduler  #(
         .write_data     ({decode_if.warp_num, decode_if.thread_mask, decode_if.curr_PC, decode_if.rd, decode_if.rd_is_fp, decode_if.wb}),    
         .write_addr     (issue_tag),        
         .acquire_slot   (ib_acquire), 
-        .release_slot   ({commit_is_if.alu_valid, commit_is_if.lsu_valid, commit_is_if.csr_valid, commit_is_if.mul_valid, commit_is_if.fpu_valid, commit_is_if.gpu_valid}),           
-        .read_addr      ({commit_is_if.alu_tag,   commit_is_if.lsu_tag,   commit_is_if.csr_tag,   commit_is_if.mul_tag,   commit_is_if.fpu_tag,   commit_is_if.gpu_tag}),
-        .read_data      ({commit_is_if.alu_data,  commit_is_if.lsu_data,  commit_is_if.csr_data,  commit_is_if.mul_data,  commit_is_if.fpu_data,  commit_is_if.gpu_data}),
-        .full           (iq_full)
+        .release_slot   ({cmt_to_issue_if.alu_valid, cmt_to_issue_if.lsu_valid, cmt_to_issue_if.csr_valid, cmt_to_issue_if.mul_valid, cmt_to_issue_if.fpu_valid, cmt_to_issue_if.gpu_valid}),           
+        .read_addr      ({cmt_to_issue_if.alu_tag,   cmt_to_issue_if.lsu_tag,   cmt_to_issue_if.csr_tag,   cmt_to_issue_if.mul_tag,   cmt_to_issue_if.fpu_tag,   cmt_to_issue_if.gpu_tag}),
+        .read_data      ({cmt_to_issue_if.alu_data,  cmt_to_issue_if.lsu_data,  cmt_to_issue_if.csr_data,  cmt_to_issue_if.mul_data,  cmt_to_issue_if.fpu_data,  cmt_to_issue_if.gpu_data}),
+        .full           (issue_buf_full)
     );
 
     assign decode_if.ready = ~stall;
-
-    assign schedule_delay = stall;
 
     assign is_empty = (0 == count_valid);
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (stall) begin
-            $display("%t: Core%0d-stall: warp=%0d, PC=%0h, rd=%0d, wb=%0d, iq_full=%b, inuse=%b%b%b%b, alu=%b, lsu=%b, csr=%b, mul=%b, fpu=%b, gpu=%b", $time, CORE_ID, decode_if.warp_num, decode_if.curr_PC, decode_if.rd, decode_if.wb, iq_full, rd_inuse_qual, rs1_inuse_qual, rs2_inuse_qual, rs3_inuse_qual, alu_busy, lsu_busy, csr_busy, mul_busy, fpu_busy, gpu_busy);        
+            $display("%t: Core%0d-stall: warp=%0d, PC=%0h, rd=%0d, wb=%0d, ib_full=%b, inuse=%b%b%b%b, gpr=%b, alu=%b, lsu=%b, csr=%b, mul=%b, fpu=%b, gpu=%b", 
+                    $time, CORE_ID, decode_if.warp_num, decode_if.curr_PC, decode_if.rd, decode_if.wb, issue_buf_full, rd_inuse_qual, rs1_inuse_qual, 
+                    rs2_inuse_qual, rs3_inuse_qual, gpr_busy, alu_busy, lsu_busy, csr_busy, mul_busy, fpu_busy, gpu_busy);        
         end
     end
 `endif

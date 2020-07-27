@@ -7,14 +7,10 @@ module VX_gpr_stage #(
     input wire      reset,
 
     // inputs    
-    VX_wb_if        writeback_if,
-    VX_decode_if    decode_if,    
+    VX_wb_if        writeback_if,  
 
     // outputs
-    VX_gpr_data_if  gpr_data_if,
-
-    input wire      schedule_delay,
-    output wire     gpr_delay
+    VX_gpr_read_if  gpr_read_if
 );
     `UNUSED_VAR (reset)
 
@@ -63,27 +59,24 @@ module VX_gpr_stage #(
         .clk           (clk),
         .reset         (reset),
 
-        //inputs
-        .decode_if      (decode_if), 	
-        .rs1_int_data   (rs1_int_data[decode_if.warp_num]),
-        .rs2_int_data   (rs2_int_data[decode_if.warp_num]),			
-        .rs1_fp_data    (rs1_fp_data[decode_if.warp_num]),
-        .rs2_fp_data    (rs2_fp_data[decode_if.warp_num]),
+        //inputs	
+        .rs1_int_data   (rs1_int_data[gpr_read_if.warp_num]),
+        .rs2_int_data   (rs2_int_data[gpr_read_if.warp_num]),			
+        .rs1_fp_data    (rs1_fp_data[gpr_read_if.warp_num]),
+        .rs2_fp_data    (rs2_fp_data[gpr_read_if.warp_num]),
 
         // outputs
         .raddr1         (raddr1),
         .raddr2         (raddr2),
-        .gpr_data_if    (gpr_data_if),
-        .schedule_delay (schedule_delay),
-        .gpr_delay      (gpr_delay)
+        .gpr_read_if    (gpr_read_if)
     );
 
 `else
-    assign raddr1 = decode_if.rs1;
-    assign raddr2 = decode_if.rs2;
-    assign gpr_data_if.rs1_data = rs1_int_data[decode_if.warp_num];
-    assign gpr_data_if.rs2_data = rs2_int_data[decode_if.warp_num];
-    assign gpr_data_if.rs3_data = 0;
+    assign raddr1 = gpr_read_if.rs1;
+    assign raddr2 = gpr_read_if.rs2;
+    assign gpr_read_if.rs1_data = rs1_int_data[gpr_read_if.warp_num];
+    assign gpr_read_if.rs2_data = rs2_int_data[gpr_read_if.warp_num];
+    assign gpr_read_if.rs3_data = 0;
     assign gpr_delay = 0;
     `UNUSED_VAR (schedule_delay)
 `endif

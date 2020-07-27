@@ -67,9 +67,9 @@
 
 // CSR Addresses ==============================================================
 
-`define CSR_FFLAGS      12'hF01
-`define CSR_FRM         12'hF02
-`define CSR_FCSR        12'hF03
+`define CSR_FFLAGS      12'h001
+`define CSR_FRM         12'h002
+`define CSR_FCSR        12'h003
 
 `define CSR_VEND_ID     12'hF11
 `define CSR_ARCH_ID     12'hF12

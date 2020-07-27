@@ -237,7 +237,7 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   #endif  
 }
 
-bool Simulator::run() {
+void Simulator::run() {
 #ifndef NDEBUG
   std::cout << timestamp << ": [sim] run()" << std::endl;
 #endif 
@@ -252,20 +252,18 @@ bool Simulator::run() {
   }
 
   // wait 5 cycles to flush the pipeline
-  this->wait(5);
+  this->wait(5);  
+}
 
+int Simulator::get_status(int reg) {
   // check riscv-tests PASSED/FAILED status
-#if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
-  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb & 0xf;
-#else
-#if (NUM_CLUSTERS == 1)
-  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb & 0xf;
-#else
-  int status = (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb & 0xf;
-#endif
-#endif
-
-  return (status == 1);
+  #if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
+    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb[reg];
+  #elif (NUM_CLUSTERS == 1)
+    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb[reg];
+  #else
+    return (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb[reg];
+  #endif
 }
 
 void Simulator::load_bin(const char* program_file) {

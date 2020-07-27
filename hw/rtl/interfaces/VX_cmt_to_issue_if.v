@@ -1,5 +1,5 @@
-`ifndef VX_COMMIT_IS_IF
-`define VX_COMMIT_IS_IF
+`ifndef VX_CMT_TO_ISSUE_IF
+`define VX_CMT_TO_ISSUE_IF
 
 `include "VX_define.vh"
 
@@ -13,7 +13,7 @@ typedef struct packed {
 } is_data_t;
 
 
-interface VX_commit_is_if ();
+interface VX_cmt_to_issue_if ();
 
     wire alu_valid;
     wire lsu_valid;
