@@ -7,5 +7,3 @@ lint_off -rule UNUSED -file "../rtl/fp_cores/fpnew/*"
 lint_off -rule LITENDIAN -file "../rtl/fp_cores/fpnew/*"
 lint_off -rule IMPORTSTAR -file "../rtl/fp_cores/fpnew/*"
 lint_off -rule PINCONNECTEMPTY -file "../rtl/fp_cores/fpnew/*"
-
-//lint_off -rule CASEINCOMPLETE -file "../rtl/fp_cores/fpnew/*"

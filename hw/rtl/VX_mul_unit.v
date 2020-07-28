@@ -7,10 +7,10 @@ module VX_mul_unit #(
     input wire reset,
     
     // Inputs
-    VX_mul_req_if   alu_req_if,
+    VX_mul_req_if     alu_req_if,
 
     // Outputs
-    VX_commit_if    alu_commit_if
+    VX_exu_to_cmt_if  alu_commit_if
 );    
    
     wire [`MUL_BITS-1:0]          alu_op  = alu_req_if.mul_op;

@@ -9,14 +9,14 @@ module VX_lsu_unit #(
     input wire reset,
 
    // Dcache interface
-    VX_cache_core_req_if    dcache_req_if,
-    VX_cache_core_rsp_if    dcache_rsp_if,
+    VX_cache_core_req_if dcache_req_if,
+    VX_cache_core_rsp_if dcache_rsp_if,
 
     // inputs
-    VX_lsu_req_if   lsu_req_if,
+    VX_lsu_req_if       lsu_req_if,
 
     // outputs
-    VX_commit_if    lsu_commit_if
+    VX_exu_to_cmt_if    lsu_commit_if
 );
 
     wire                          use_valid;
@@ -61,8 +61,7 @@ module VX_lsu_unit #(
         assign mem_req_data[i]   = lsu_req_if.store_data[i] << {mem_req_offset[i], 3'b0};
     end     
 
-    wire store_stalled;
-    wire stall_in = store_stalled || ~dcache_req_if.ready;
+    wire stall_in = ~dcache_req_if.ready;
 
     // Can accept new request?
     assign lsu_req_if.ready = ~stall_in; 
@@ -124,7 +123,7 @@ module VX_lsu_unit #(
     end
 
     // Core Request
-    assign dcache_req_if.valid  = {`NUM_THREADS{use_valid && ~store_stalled}} & use_thread_mask;
+    assign dcache_req_if.valid  = {`NUM_THREADS{use_valid}} & use_thread_mask;
     assign dcache_req_if.rw     = {`NUM_THREADS{use_req_rw}};
     assign dcache_req_if.byteen = use_req_byteen;
     assign dcache_req_if.addr   = use_req_addr;
@@ -151,17 +150,14 @@ module VX_lsu_unit #(
     end   
 
     wire is_store_rsp = dcache_req_fire && use_req_rw;
-    wire is_load_rsp  = (| dcache_rsp_if.valid) && (0 == mem_rsp_mask_n);    
-
-    assign store_stalled = use_req_rw && (~lsu_commit_if.ready 
-                                       || is_load_rsp); // arbitration prioritizes LOAD
+    wire is_load_rsp  = (| dcache_rsp_if.valid) && (0 == mem_rsp_mask_n);
 
     assign lsu_commit_if.valid     = is_load_rsp || is_store_rsp;
-    assign lsu_commit_if.issue_tag = is_load_rsp ? rsp_issue_tag : use_issue_tag;
+    assign lsu_commit_if.issue_tag = is_store_rsp ? use_issue_tag : rsp_issue_tag;
     assign lsu_commit_if.data      = mem_rsp_data | mem_rsp_data_all;
 
-    // Can accept new cache response
-    assign dcache_rsp_if.ready = lsu_commit_if.ready;
+    // Can accept new cache response?
+    assign dcache_rsp_if.ready = lsu_commit_if.ready && ~is_store_rsp; // STORE has priority
 
     // scope registration
     `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.valid);   
@@ -187,8 +183,8 @@ module VX_lsu_unit #(
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
         if ((| dcache_req_if.valid) && dcache_req_if.ready) begin
-            $display("%t: D$%0d req: valid=%b, warp=%0d, PC=%0h, addr=%0h, tag=%0h, rd=%0d, rw=%0b, byteen=%0h, data=%0h", 
-                     $time, CORE_ID, dcache_req_if.valid, use_warp_num, use_pc, use_address, dcache_req_if.tag, use_rd, dcache_req_if.rw, dcache_req_if.byteen, dcache_req_if.data);
+            $display("%t: D$%0d req: warp=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, rw=%0b, byteen=%0h, data=%0h", 
+                     $time, CORE_ID, use_warp_num, use_pc, dcache_req_if.valid, use_address, dcache_req_if.tag, use_rd, dcache_req_if.rw, dcache_req_if.byteen, dcache_req_if.data);
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d rsp: valid=%b, warp=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 

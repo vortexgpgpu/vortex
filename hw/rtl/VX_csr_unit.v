@@ -13,10 +13,10 @@ module VX_csr_unit #(
     VX_csr_io_rsp_if    csr_io_rsp_if,
     
     VX_csr_req_if       csr_req_if,   
-    VX_commit_if        csr_commit_if
+    VX_exu_to_cmt_if    csr_commit_if
 );
     VX_csr_req_if       csr_pipe_req_if();
-    VX_commit_if        csr_pipe_commit_if();
+    VX_exu_to_cmt_if    csr_pipe_commit_if();
 
     wire                select_io_req = csr_io_req_if.valid;
     wire                select_io_rsp;

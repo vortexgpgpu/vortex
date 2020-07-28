@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 	simulator.load_ihex(test);
   simulator.run();
 
-	bool status = (1 == simulator.get_last_wb_value(28));
+	bool status = (1 == simulator.get_last_wb_value(3));
 
 	if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
 	if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;

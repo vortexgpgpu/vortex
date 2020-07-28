@@ -111,6 +111,8 @@ module VX_fpu_unit #(
         endcase
     end   
 
+`DISABLE_TRACING
+
     fpnew_top #( 
         .Features       (FPU_FEATURES),
         .Implementation (FPU_IMPLEMENTATION),
@@ -137,6 +139,8 @@ module VX_fpu_unit #(
         .out_ready_i    (fpu_out_ready),
         `UNUSED_PIN     (busy_o)
     );
+
+`ENABLE_TRACING
 
     reg [`NUM_THREADS-1:0][31:0] fpu_result_qual;
 
@@ -168,6 +172,7 @@ module VX_fpu_unit #(
     assign fpu_in_valid = fpu_req_if.valid;
     assign fpu_in_tag   = fpu_req_if.issue_tag;
 
+    // can accept new request?
     assign fpu_req_if.ready = fpu_in_ready;
 
     assign fpu_commit_if.valid     = fpu_out_valid;
