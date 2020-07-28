@@ -125,6 +125,7 @@
 `define BYTEEN_UB   3'h4
 `define BYTEEN_UH   3'h5
 `define BYTEEN_BITS 3
+`define BYTEEN_TYPE(x) x[1:0]
 
 `define BR_EQ       4'h0
 `define BR_NE       4'h1
