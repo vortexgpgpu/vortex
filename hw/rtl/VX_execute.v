@@ -31,12 +31,12 @@ module VX_execute #(
     // outputs
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
-    VX_commit_if        alu_commit_if,
-    VX_commit_if        lsu_commit_if,    
-    VX_commit_if        csr_commit_if,
-    VX_commit_if        mul_commit_if,
+    VX_exu_to_cmt_if    alu_commit_if,
+    VX_exu_to_cmt_if    lsu_commit_if,    
+    VX_exu_to_cmt_if    csr_commit_if,
+    VX_exu_to_cmt_if    mul_commit_if,
     VX_fpu_to_cmt_if    fpu_commit_if,
-    VX_commit_if        gpu_commit_if,
+    VX_exu_to_cmt_if    gpu_commit_if,
     
     output wire         ebreak
 );

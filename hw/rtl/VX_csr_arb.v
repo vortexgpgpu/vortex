@@ -12,10 +12,10 @@ module VX_csr_arb (
     VX_csr_req_if    csr_req_if,
 
     // input
-    VX_commit_if     csr_rsp_if,     
+    VX_exu_to_cmt_if csr_rsp_if,     
 
     // outputs
-    VX_commit_if     csr_commit_if,
+    VX_exu_to_cmt_if csr_commit_if,
     VX_csr_io_rsp_if csr_io_rsp_if,    
 
     input wire       select_io_req,

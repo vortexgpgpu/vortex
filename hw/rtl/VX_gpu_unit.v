@@ -4,11 +4,11 @@ module VX_gpu_unit #(
     parameter CORE_ID = 0
 ) (
     // Input
-    VX_gpu_req_if   gpu_req_if,
+    VX_gpu_req_if    gpu_req_if,
 
     // Output
-    VX_warp_ctl_if  warp_ctl_if,
-    VX_commit_if    gpu_commit_if
+    VX_warp_ctl_if   warp_ctl_if,
+    VX_exu_to_cmt_if gpu_commit_if
 );
     
     wire is_wspawn = (gpu_req_if.gpu_op == `GPU_WSPAWN);

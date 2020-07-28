@@ -1,9 +1,9 @@
-`ifndef VX_COMMIT_IF
-`define VX_COMMIT_IF
+`ifndef VX_EXU_TO_CMT_IF
+`define VX_EXU_TO_CMT_IF
 
 `include "VX_define.vh"
 
-interface VX_commit_if ();
+interface VX_exu_to_cmt_if ();
 
     wire                            valid;
     wire [`ISTAG_BITS-1:0]          issue_tag;     

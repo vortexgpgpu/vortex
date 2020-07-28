@@ -3,16 +3,16 @@
 module VX_commit #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire          clk,
+    input wire          reset,
 
     // inputs
-    VX_commit_if        alu_commit_if,
-    VX_commit_if        lsu_commit_if,  
-    VX_commit_if        mul_commit_if,    
-    VX_commit_if        csr_commit_if,
+    VX_exu_to_cmt_if    alu_commit_if,
+    VX_exu_to_cmt_if    lsu_commit_if,  
+    VX_exu_to_cmt_if    mul_commit_if,    
+    VX_exu_to_cmt_if    csr_commit_if,
     VX_fpu_to_cmt_if    fpu_commit_if,
-    VX_commit_if        gpu_commit_if,
+    VX_exu_to_cmt_if    gpu_commit_if,
 
     // outputs
     VX_cmt_to_issue_if  cmt_to_issue_if,
@@ -31,7 +31,7 @@ module VX_commit #(
 
     wire [`NE_BITS:0] num_commits;
 
-     VX_countones #(
+    VX_countones #(
         .N(`NUM_EXS)
     ) valids_counter (
         .valids(commited_mask),
