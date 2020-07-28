@@ -20,12 +20,12 @@ module VX_writeback #(
 );
 
     reg [`NUM_THREADS-1:0][31:0] wb_data [`ISSUEQ_SIZE-1:0];
-    reg [`NW_BITS-1:0] wb_warp_num [`ISSUEQ_SIZE-1:0];
-    reg [`NUM_THREADS-1:0] wb_thread_mask [`ISSUEQ_SIZE-1:0];
-    reg [31:0] wb_curr_PC [`ISSUEQ_SIZE-1:0];
-    reg [`NR_BITS-1:0] wb_rd [`ISSUEQ_SIZE-1:0];
-    reg wb_rd_is_fp [`ISSUEQ_SIZE-1:0];
-    reg [`ISSUEQ_SIZE-1:0] wb_pending;
+    reg [`NW_BITS-1:0]           wb_warp_num [`ISSUEQ_SIZE-1:0];
+    reg [`NUM_THREADS-1:0]       wb_thread_mask [`ISSUEQ_SIZE-1:0];
+    reg [31:0]                   wb_curr_PC [`ISSUEQ_SIZE-1:0];
+    reg [`NR_BITS-1:0]           wb_rd [`ISSUEQ_SIZE-1:0];
+    reg                          wb_rd_is_fp [`ISSUEQ_SIZE-1:0];
+    reg [`ISSUEQ_SIZE-1:0]       wb_pending;
 
     wire [`ISTAG_BITS-1:0] wb_index;
     wire wb_valid, wb_valid_unqual;
