@@ -65,20 +65,20 @@ run-ase-4c:
 	cd $(ASE_BUILD_DIR)_4c && make sim
 
 clean-ase-1c:
-	rm -rf $(ASE_BUILD_DIR)_1c
+	rm -rf $(ASE_BUILD_DIR)_1c sources.txt
 
 clean-ase-2c:
-	rm -rf $(ASE_BUILD_DIR)_2c
+	rm -rf $(ASE_BUILD_DIR)_2c sources.txt
 
 clean-ase-4c:
-	rm -rf $(ASE_BUILD_DIR)_4c
+	rm -rf $(ASE_BUILD_DIR)_4c sources.txt
 
 clean-fpga-1c:
-	rm -rf $(FPGA_BUILD_DIR)_1c
+	rm -rf $(FPGA_BUILD_DIR)_1c sources.txt
 	
 clean-fpga-2c:
-	rm -rf $(FPGA_BUILD_DIR)_2c
+	rm -rf $(FPGA_BUILD_DIR)_2c sources.txt
 
 clean-fpga-4c:
-	rm -rf $(FPGA_BUILD_DIR)_4c
+	rm -rf $(FPGA_BUILD_DIR)_4c sources.txt
 
