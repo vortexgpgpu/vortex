@@ -26,7 +26,7 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][1:0]  use_req_offset;    
     wire [`NUM_THREADS-1:0][3:0]  use_req_byteen;
     wire [`NUM_THREADS-1:0][31:0] use_req_data;    
-    wire [`BYTEEN_BITS-1:0]       use_req_fullbyteen; 
+    wire [1:0]                    use_req_sext; 
     wire [`NR_BITS-1:0]           use_rd;
     wire [`NW_BITS-1:0]           use_warp_num;
     wire [`ISTAG_BITS-1:0]        use_issue_tag;
@@ -40,19 +40,28 @@ module VX_lsu_unit #(
         assign full_address[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
     end
 
-    reg [3:0] wmask;
+    reg [1:0] mem_req_sext;
     always @(*) begin
         case (lsu_req_if.byteen)
-            0:       wmask = 4'b0001;   
-            1:       wmask = 4'b0011;
-            default: wmask = 4'b1111;
+            `BYTEEN_SB: mem_req_sext = 2'h1;   
+            `BYTEEN_SH: mem_req_sext = 2'h2;
+            default:    mem_req_sext = 2'h0;
         endcase
     end
 
     wire [`NUM_THREADS-1:0][29:0] mem_req_addr;    
     wire [`NUM_THREADS-1:0][1:0]  mem_req_offset;    
-    wire [`NUM_THREADS-1:0][3:0]  mem_req_byteen;
+    wire [`NUM_THREADS-1:0][3:0]  mem_req_byteen;    
     wire [`NUM_THREADS-1:0][31:0] mem_req_data;
+
+    reg [3:0] wmask;
+    always @(*) begin
+        case (`BYTEEN_TYPE(lsu_req_if.byteen))
+            0:       wmask = 4'b0001;   
+            1:       wmask = 4'b0011;
+            default: wmask = 4'b1111;
+        endcase
+    end
 
     for (i = 0; i < `NUM_THREADS; i++) begin  
         assign mem_req_addr[i]   = full_address[i][31:2];        
@@ -71,35 +80,35 @@ module VX_lsu_unit #(
 `IGNORE_WARNINGS_END
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + `ISTAG_BITS + (`NUM_THREADS * 32) + `BYTEEN_BITS + 1 + (`NUM_THREADS * (30 + 2 + 4 + 32)) +  `NR_BITS + 1 + 32)
+        .N(1 + `NW_BITS + `NUM_THREADS + `ISTAG_BITS + (`NUM_THREADS * 32) + 2 + 1 + (`NUM_THREADS * (30 + 2 + 4 + 32)) +  `NR_BITS + 1 + 32)
     ) lsu_req_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_in),
         .flush (0),
-        .in    ({lsu_req_if.valid, lsu_req_if.warp_num, lsu_req_if.thread_mask, lsu_req_if.issue_tag, full_address, lsu_req_if.byteen,  lsu_req_if.rw, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.curr_PC}),
-        .out   ({use_valid,        use_warp_num,        use_thread_mask,        use_issue_tag,        use_address,  use_req_fullbyteen, use_req_rw,    use_req_addr, use_req_offset, use_req_byteen, use_req_data, use_rd,        use_wb,        use_pc})
+        .in    ({lsu_req_if.valid, lsu_req_if.warp_num, lsu_req_if.thread_mask, lsu_req_if.issue_tag, full_address, mem_req_sext,  lsu_req_if.rw, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.curr_PC}),
+        .out   ({use_valid,        use_warp_num,        use_thread_mask,        use_issue_tag,        use_address,  use_req_sext, use_req_rw,    use_req_addr, use_req_offset, use_req_byteen, use_req_data, use_rd,        use_wb,        use_pc})
     );
 
-    reg [`NUM_THREADS-1:0] mem_rsp_mask_buf [`ISSUEQ_SIZE-1:0]; 
+    reg [`NUM_THREADS-1:0]      mem_rsp_mask_buf [`ISSUEQ_SIZE-1:0]; 
     reg [`NUM_THREADS-1:0][1:0] mem_rsp_offset_buf [`ISSUEQ_SIZE-1:0];
-    reg [`BYTEEN_BITS-1:0] mem_rsp_fullbyteen_buf [`ISSUEQ_SIZE-1:0];  
+    reg [1:0]                   mem_rsp_sext_buf [`ISSUEQ_SIZE-1:0];  
     reg [`NUM_THREADS-1:0][31:0] mem_rsp_data_all_buf [`ISSUEQ_SIZE-1:0];
-    reg [`NW_BITS-1:0] mem_rsp_warp_num_buf [`ISSUEQ_SIZE-1:0];
-    reg [31:0] mem_rsp_curr_PC_buf [`ISSUEQ_SIZE-1:0];
-    reg [`NR_BITS-1:0] mem_rsp_rd_buf [`ISSUEQ_SIZE-1:0];
+    reg [`NW_BITS-1:0]          mem_rsp_warp_num_buf [`ISSUEQ_SIZE-1:0];
+    reg [31:0]                  mem_rsp_curr_PC_buf [`ISSUEQ_SIZE-1:0];
+    reg [`NR_BITS-1:0]          mem_rsp_rd_buf [`ISSUEQ_SIZE-1:0];
 
-    reg [`NUM_THREADS-1:0][31:0] mem_rsp_data;  
+    reg [`NUM_THREADS-1:0][31:0] mem_rsp_data_curr;  
 
     wire [`ISTAG_BITS-1:0] rsp_issue_tag = dcache_rsp_if.tag[0][`ISTAG_BITS-1:0];    
 
-    wire [`NUM_THREADS-1:0] mem_rsp_mask = mem_rsp_mask_buf [rsp_issue_tag]; 
-    wire [`NUM_THREADS-1:0][1:0] mem_rsp_offset = mem_rsp_offset_buf [rsp_issue_tag]; 
-    wire [`BYTEEN_BITS-1:0] mem_rsp_fullbyteen = mem_rsp_fullbyteen_buf [rsp_issue_tag]; 
+    wire [`NUM_THREADS-1:0]     mem_rsp_mask       = mem_rsp_mask_buf [rsp_issue_tag]; 
+    wire [`NUM_THREADS-1:0][1:0] mem_rsp_offset    = mem_rsp_offset_buf [rsp_issue_tag]; 
+    wire [1:0]                  mem_rsp_sext       = mem_rsp_sext_buf [rsp_issue_tag]; 
     wire [`NUM_THREADS-1:0][31:0] mem_rsp_data_all = mem_rsp_data_all_buf [rsp_issue_tag]; 
-    wire [`NW_BITS-1:0] mem_rsp_warp_num = mem_rsp_warp_num_buf [rsp_issue_tag]; 
-    wire [31:0] mem_rsp_curr_PC = mem_rsp_curr_PC_buf [rsp_issue_tag]; 
-    wire [`NR_BITS-1:0] mem_rsp_rd = mem_rsp_rd_buf [rsp_issue_tag]; 
+    wire [`NW_BITS-1:0]         mem_rsp_warp_num   = mem_rsp_warp_num_buf [rsp_issue_tag]; 
+    wire [31:0]                 mem_rsp_curr_PC    = mem_rsp_curr_PC_buf [rsp_issue_tag]; 
+    wire [`NR_BITS-1:0]         mem_rsp_rd         = mem_rsp_rd_buf [rsp_issue_tag]; 
 
     wire [`NUM_THREADS-1:0] mem_rsp_mask_n = mem_rsp_mask & ~dcache_rsp_if.valid;
 
@@ -108,17 +117,17 @@ module VX_lsu_unit #(
 
     always @(posedge clk) begin
         if (dcache_req_fire && (0 == use_req_rw))  begin
-            mem_rsp_mask_buf[use_issue_tag]       <= use_thread_mask;
-            mem_rsp_offset_buf[use_issue_tag]     <= use_req_offset;
-            mem_rsp_fullbyteen_buf[use_issue_tag] <= use_req_fullbyteen;
-            mem_rsp_data_all_buf[use_issue_tag]   <= 0;   
-            mem_rsp_warp_num_buf[use_issue_tag]   <= use_warp_num;   
-            mem_rsp_curr_PC_buf[use_issue_tag]    <= use_pc;   
-            mem_rsp_rd_buf[use_issue_tag]         <= use_rd;   
+            mem_rsp_mask_buf [use_issue_tag]     <= use_thread_mask;
+            mem_rsp_offset_buf [use_issue_tag]   <= use_req_offset;
+            mem_rsp_sext_buf [use_issue_tag]     <= use_req_sext;
+            mem_rsp_data_all_buf [use_issue_tag] <= 0;   
+            mem_rsp_warp_num_buf [use_issue_tag] <= use_warp_num;   
+            mem_rsp_curr_PC_buf [use_issue_tag]  <= use_pc;   
+            mem_rsp_rd_buf [use_issue_tag]       <= use_rd;   
         end    
         if (dcache_rsp_fire) begin
-            mem_rsp_mask_buf[rsp_issue_tag] <= mem_rsp_mask_n;   
-            mem_rsp_data_all_buf[rsp_issue_tag] <= mem_rsp_data_all | mem_rsp_data;
+            mem_rsp_mask_buf [rsp_issue_tag] <= mem_rsp_mask_n;   
+            mem_rsp_data_all_buf [rsp_issue_tag] <= mem_rsp_data_all | mem_rsp_data_curr;
         end
     end
 
@@ -137,16 +146,14 @@ module VX_lsu_unit #(
 
     // Core Response   
     for (i = 0; i < `NUM_THREADS; i++) begin        
-        wire [15:0] rsp_data_shifted = 16'(dcache_rsp_if.data[i] >> {mem_rsp_offset[i], 3'b0});
+        wire [31:0] rsp_data_shifted = dcache_rsp_if.data[i] >> {mem_rsp_offset[i], 3'b0};
         always @(*) begin
-            case (mem_rsp_fullbyteen)
-                `BYTEEN_SB: mem_rsp_data[i] = {{24{rsp_data_shifted[7]}}, rsp_data_shifted[7:0]};  
-                `BYTEEN_UB: mem_rsp_data[i] = 32'(rsp_data_shifted[7:0]);      
-                `BYTEEN_SH: mem_rsp_data[i] = {{16{rsp_data_shifted[15]}}, rsp_data_shifted[15:0]};                
-                `BYTEEN_UH: mem_rsp_data[i] = 32'(rsp_data_shifted[15:0]);
-                default:    mem_rsp_data[i] = dcache_rsp_if.data[i];  
+            case (mem_rsp_sext)
+                  1: mem_rsp_data_curr[i] = {{24{rsp_data_shifted[7]}}, rsp_data_shifted[7:0]};  
+                  2: mem_rsp_data_curr[i] = {{16{rsp_data_shifted[15]}}, rsp_data_shifted[15:0]};
+            default: mem_rsp_data_curr[i] = rsp_data_shifted;     
             endcase
-        end
+        end        
     end   
 
     wire is_store_rsp = dcache_req_fire && use_req_rw;
@@ -154,7 +161,7 @@ module VX_lsu_unit #(
 
     assign lsu_commit_if.valid     = is_load_rsp || is_store_rsp;
     assign lsu_commit_if.issue_tag = is_store_rsp ? use_issue_tag : rsp_issue_tag;
-    assign lsu_commit_if.data      = mem_rsp_data | mem_rsp_data_all;
+    assign lsu_commit_if.data      = mem_rsp_data_curr | mem_rsp_data_all;
 
     // Can accept new cache response?
     assign dcache_rsp_if.ready = lsu_commit_if.ready && ~is_store_rsp; // STORE has priority
