@@ -5,8 +5,6 @@
 
 int main(int argc, char *argv[])
 {
-//#define ALL_TESTS
-//#ifdef ALL_TESTS
 	if(argc == 1) {
 		bool passed = true;
 
@@ -84,8 +82,7 @@ int main(int argc, char *argv[])
 		return !passed;
 	}
 
-//#else
-	if (argc >= 2) {
+	else {
 		char* test = argv[2];
 	
   		std::cerr << test << std::endl;
@@ -101,5 +98,5 @@ int main(int argc, char *argv[])
 
 		return !curr;
 	}
-//#endif
+
 }
