@@ -94,11 +94,11 @@ module VX_writeback #(
     assign mul_commit_if.ready = !stall && !alu_valid && !lsu_valid && !csr_valid;    
     assign fpu_commit_if.ready = !stall && !alu_valid && !lsu_valid && !csr_valid && !mul_valid;    
     
-    // special workaround to get RISC-V tests Pass status on Verilator
-    reg [31:0] last_data_wb [`NUM_REGS-1:0] /* verilator public */;
+    // special workaround to get RISC-V tests Pass/Fail status
+    reg [31:0] last_wb_value [`NUM_REGS-1:0] /* verilator public */;
     always @(posedge clk) begin
         if (writeback_tmp_if.valid && ~stall) begin
-            last_data_wb[writeback_tmp_if.rd] <= writeback_tmp_if.data[0];
+            last_wb_value[writeback_tmp_if.rd] <= writeback_tmp_if.data[0];
         end
     end
 

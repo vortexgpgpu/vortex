@@ -44,7 +44,7 @@ public:
   void attach_ram(RAM* ram);
 
   void run();  
-  int get_status(int reg);  
+  int get_last_wb_value(int reg);  
   void print_stats(std::ostream& out);
 
 private:  
