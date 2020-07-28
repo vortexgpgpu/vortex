@@ -59,10 +59,13 @@ module VX_fpu_unit #(
     assign csr_to_fpu_if.warp_num = fpu_req_if.warp_num;
     wire [`FRM_BITS-1:0] real_frm = (fpu_req_if.frm == `FRM_DYN) ? csr_to_fpu_if.frm : fpu_req_if.frm;
 
+    wire is_class_op_i, is_class_op_o;
+    assign is_class_op_i = (fpu_req_if.fpu_op == `FPU_CLASS);
+
     reg [FOP_BITS-1:0] fpu_op;
     reg [`FRM_BITS-1:0] fpu_rnd;
     reg fpu_op_mod;
-    reg fflags_en, fflags_en_o;
+    reg fflags_en, fflags_en_o;    
 
     always @(*) begin
         fpu_op     = fpnew_pkg::SGNJ;
@@ -108,12 +111,10 @@ module VX_fpu_unit #(
         endcase
     end   
 
-`DISABLE_TRACING
-
     fpnew_top #( 
         .Features       (FPU_FEATURES),
         .Implementation (FPU_IMPLEMENTATION),
-        .TagType        (logic[`LOG2UP(`FPURQ_SIZE)-1+1:0])
+        .TagType        (logic[`LOG2UP(`FPURQ_SIZE)-1+2:0])
     ) fpnew_core (
         .clk_i          (clk),
         .rst_ni         (1'b1),
@@ -125,19 +126,44 @@ module VX_fpu_unit #(
         .dst_fmt_i      (fpu_dst_fmt),
         .int_fmt_i      (fpu_int_fmt),
         .vectorial_op_i (1'b1),
-        .tag_i          ({fflags_en, fpu_in_tag}),
+        .tag_i          ({fpu_in_tag, fflags_en, is_class_op_i}),
         .in_valid_i     (fpu_in_valid),
         .in_ready_o     (fpu_in_ready),
         .flush_i        (reset),
         .result_o       (fpu_result),
         .status_o       (fpu_status),
-        .tag_o          ({fflags_en_o, fpu_out_tag}),
+        .tag_o          ({fpu_out_tag, fflags_en_o, is_class_op_o}),
         .out_valid_o    (fpu_out_valid),
         .out_ready_i    (fpu_out_ready),
         `UNUSED_PIN     (busy_o)
     );
 
-`ENABLE_TRACING
+    reg [`NUM_THREADS-1:0][31:0] fpu_result_qual;
+
+    always @(8) begin
+        // unpack classify mask result
+        if (is_class_op_o) begin            
+            integer i;
+            for (i = 0; i < `NUM_THREADS; i++) begin
+                integer l = i / 4;
+                integer w = i % 4;
+                integer class_mask = fpu_result[l][w * 8 +: 8];
+
+                fpu_result_qual[i][0] = class_mask[7] & class_mask[0];
+                fpu_result_qual[i][1] = class_mask[7] & class_mask[1];
+                fpu_result_qual[i][2] = class_mask[7] & class_mask[2];
+                fpu_result_qual[i][3] = class_mask[7] & class_mask[3];
+                fpu_result_qual[i][4] = class_mask[6] & class_mask[3];
+                fpu_result_qual[i][5] = class_mask[6] & class_mask[2];
+                fpu_result_qual[i][6] = class_mask[6] & class_mask[1];
+                fpu_result_qual[i][7] = class_mask[6] & class_mask[0];
+                fpu_result_qual[i][8] = class_mask[4];
+                fpu_result_qual[i][9] = class_mask[5];
+            end
+        end else begin
+            fpu_result_qual = fpu_result;
+        end
+    end
 
     assign fpu_in_valid = fpu_req_if.valid;
     assign fpu_in_tag   = fpu_req_if.issue_tag;
@@ -146,7 +172,7 @@ module VX_fpu_unit #(
 
     assign fpu_commit_if.valid     = fpu_out_valid;
     assign fpu_commit_if.issue_tag = fpu_out_tag;
-    assign fpu_commit_if.data      = fpu_result;
+    assign fpu_commit_if.data      = fpu_result_qual;
     
     assign fpu_commit_if.upd_fflags = fflags_en_o;
     assign fpu_commit_if.fflags_NV = fpu_status.NV;

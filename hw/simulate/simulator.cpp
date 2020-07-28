@@ -255,14 +255,11 @@ void Simulator::run() {
   this->wait(5);  
 }
 
-int Simulator::get_status(int reg) {
-  // check riscv-tests PASSED/FAILED status
-  #if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
-    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb[reg];
-  #elif (NUM_CLUSTERS == 1)
-    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb[reg];
+int Simulator::get_last_wb_value(int reg) {
+  #if (NUM_CLUSTERS == 1)
+    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
   #else
-    return (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb[reg];
+    return (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
   #endif
 }
 
