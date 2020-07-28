@@ -1,4 +1,6 @@
 
+`include "VX_platform.vh"
+
 module VX_generic_stack #(
     parameter WIDTH = 1,
     parameter DEPTH = 1

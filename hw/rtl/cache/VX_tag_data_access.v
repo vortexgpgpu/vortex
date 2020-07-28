@@ -141,11 +141,14 @@ module VX_tag_data_access #(
     assign use_read_tag_st1e   = DRAM_ENABLE ? read_tag_st1c[STAGE_1_CYCLES-1] : writetag_st1e; // Tag is always the same in SM
     assign use_read_dirtyb_st1e= read_dirtyb_st1c[STAGE_1_CYCLES-1];
     assign use_read_data_st1e  = read_data_st1c[STAGE_1_CYCLES-1];
-
-    for (i = 0; i < WORD_SIZE; i++) begin
-        if (`WORD_SELECT_WIDTH != 0) begin
-            assign readword_st1e[i * 8 +: 8] = use_read_data_st1e[wordsel_st1e * `WORD_WIDTH +: `WORD_WIDTH][i * 8 +: 8] & {8{mem_byteen_st1e[i]}};
-        end else begin
+    
+    if (`WORD_SELECT_WIDTH != 0) begin
+        wire [`WORD_WIDTH-1:0] readword = use_read_data_st1e[wordsel_st1e * `WORD_WIDTH +: `WORD_WIDTH];
+        for (i = 0; i < WORD_SIZE; i++) begin
+            assign readword_st1e[i * 8 +: 8] = readword[i * 8 +: 8] & {8{mem_byteen_st1e[i]}};
+        end
+    end else begin
+        for (i = 0; i < WORD_SIZE; i++) begin
             assign readword_st1e[i * 8 +: 8] = use_read_data_st1e[i * 8 +: 8] & {8{mem_byteen_st1e[i]}};
         end
     end

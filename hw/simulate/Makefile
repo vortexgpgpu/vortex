@@ -29,8 +29,8 @@ CF += -std=c++11 -fms-extensions -I../..
 VF += --language 1800-2009 --assert -Wall -Wpedantic
 VF += -Wno-DECLFILENAME
 VF += --x-initial unique --x-assign unique
-VF += -exe $(SRCS) $(INCLUDE)
-VF += -cc Vortex.v -top-module Vortex
+VF += --exe $(SRCS) $(INCLUDE)
+VF += --cc Vortex.v --top-module Vortex
 VF += verilator.vlt
 
 DBG += -DVCD_OUTPUT $(DBG_FLAGS)

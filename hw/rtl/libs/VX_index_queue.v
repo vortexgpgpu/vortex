@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_index_queue #(
     parameter DATAW = 1,

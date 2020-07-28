@@ -72,7 +72,7 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 	
 $(PROJECT): $(SRCS)
-	verilator --exe --cc $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
+	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	make -j -C obj_dir -f V$(TOP).mk
 
 clean:

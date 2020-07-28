@@ -77,8 +77,18 @@ module VX_gpr_stage #(
     assign gpr_read_if.rs1_data = rs1_int_data[gpr_read_if.warp_num];
     assign gpr_read_if.rs2_data = rs2_int_data[gpr_read_if.warp_num];
     assign gpr_read_if.rs3_data = 0;
-    assign gpr_delay = 0;
-    `UNUSED_VAR (schedule_delay)
+    assign gpr_read_if.ready = 1;
+    
+    wire valid = gpr_read_if.valid;
+    wire rs1_is_fp = gpr_read_if.rs1_is_fp; 
+    wire rs2_is_fp = gpr_read_if.rs2_is_fp;
+    wire use_rs3 = gpr_read_if.use_rs3; 
+    wire [`NR_BITS-1:0] rs3 = gpr_read_if.rs3;
+    `UNUSED_VAR (valid);
+    `UNUSED_VAR (rs1_is_fp);
+    `UNUSED_VAR (rs2_is_fp);
+    `UNUSED_VAR (use_rs3);
+    `UNUSED_VAR (rs3);
 `endif
 
     assign writeback_if.ready = 1'b1;

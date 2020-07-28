@@ -51,13 +51,16 @@ module VX_issue_demux (
     assign csr_req_if.is_io       = 1'b0;
 
     // MUL unit
+`ifdef EXT_M_ENABLE    
     assign mul_req_if.valid       = decode_if.valid && (decode_if.ex_type == `EX_MUL);
     assign mul_req_if.issue_tag   = issue_tag;
     assign mul_req_if.mul_op      = `MUL_OP(decode_if.ex_op);
     assign mul_req_if.rs1_data    = gpr_read_if.rs1_data;
     assign mul_req_if.rs2_data    = gpr_read_if.rs2_data;   
+`endif
 
     // FPU unit
+`ifdef EXT_F_ENABLE    
     assign fpu_req_if.valid       = decode_if.valid && (decode_if.ex_type == `EX_FPU);
     assign fpu_req_if.issue_tag   = issue_tag;
     assign fpu_req_if.warp_num    = decode_if.warp_num;
@@ -66,6 +69,7 @@ module VX_issue_demux (
     assign fpu_req_if.rs2_data    = gpr_read_if.rs2_data;    
     assign fpu_req_if.rs3_data    = gpr_read_if.rs3_data;    
     assign fpu_req_if.frm         = decode_if.frm;
+`endif
 
     // GPU unit
     assign gpu_req_if.valid       = decode_if.valid && (decode_if.ex_type == `EX_GPU);
