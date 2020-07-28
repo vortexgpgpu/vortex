@@ -1,5 +1,5 @@
-
 `include "VX_define.vh"
+`include "VX_print_instr.vh"
 
 module VX_decode  #(
     parameter CORE_ID = 0

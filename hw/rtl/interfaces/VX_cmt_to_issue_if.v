@@ -3,16 +3,6 @@
 
 `include "VX_define.vh"
 
-typedef struct packed {
-    logic [`NW_BITS-1:0]    warp_num;
-    logic [`NUM_THREADS-1:0] thread_mask;
-    logic [31:0]            curr_PC;
-    logic [`NR_BITS-1:0]    rd;
-    logic                   rd_is_fp;
-    logic                   wb;
-} is_data_t;
-
-
 interface VX_cmt_to_issue_if ();
 
     wire alu_valid;

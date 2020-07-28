@@ -121,12 +121,12 @@ module VX_fpu_unit #(
         .clk_i          (clk),
         .rst_ni         (1'b1),
         .operands_i     (fpu_operands),
-        .rnd_mode_i     (fpu_rnd),
-        .op_i           (fpu_op),
+        .rnd_mode_i     (fpnew_pkg::roundmode_e'(fpu_rnd)),
+        .op_i           (fpnew_pkg::operation_e'(fpu_op)),
         .op_mod_i       (fpu_op_mod),
-        .src_fmt_i      (fpu_src_fmt),
-        .dst_fmt_i      (fpu_dst_fmt),
-        .int_fmt_i      (fpu_int_fmt),
+        .src_fmt_i      (fpnew_pkg::fp_format_e'(fpu_src_fmt)),
+        .dst_fmt_i      (fpnew_pkg::fp_format_e'(fpu_dst_fmt)),
+        .int_fmt_i      (fpnew_pkg::int_format_e'(fpu_int_fmt)),
         .vectorial_op_i (1'b1),
         .tag_i          ({fpu_in_tag, fflags_en, is_class_op_i}),
         .in_valid_i     (fpu_in_valid),
@@ -149,9 +149,9 @@ module VX_fpu_unit #(
         if (is_class_op_o) begin            
             integer i;
             for (i = 0; i < `NUM_THREADS; i++) begin
-                integer l = i / 4;
-                integer w = i % 4;
-                integer class_mask = fpu_result[l][w * 8 +: 8];
+                automatic integer l = i / 4;
+                automatic integer w = i % 4;
+                automatic integer class_mask = fpu_result[l][w * 8 +: 8];
 
                 fpu_result_qual[i][0] = class_mask[7] & class_mask[0];
                 fpu_result_qual[i][1] = class_mask[7] & class_mask[1];

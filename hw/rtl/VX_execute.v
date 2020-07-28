@@ -88,8 +88,10 @@ module VX_execute #(
         .alu_commit_if  (mul_commit_if)    
     );
 `else
-    assign mul_req_if.ready    = 0;
-    assign mul_commit_if.valid = 0;
+    assign mul_req_if.ready        = 0;
+    assign mul_commit_if.valid     = 0;
+    assign mul_commit_if.issue_tag = 0;
+    assign mul_commit_if.data      = 0;
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -103,9 +105,16 @@ module VX_execute #(
         .fpu_commit_if  (fpu_commit_if)    
     );
 `else
-    assign fpu_req_if.ready    = 0;
-    assign fpu_commit_if.valid = 0;
-    assign fpu_to_csr_if.valid = 0;
+    assign fpu_req_if.ready         = 0;
+    assign fpu_commit_if.valid      = 0;
+    assign fpu_commit_if.issue_tag  = 0;
+    assign fpu_commit_if.data       = 0;
+    assign fpu_commit_if.upd_fflags = 0;
+    assign fpu_commit_if.fflags_NV  = 0;
+    assign fpu_commit_if.fflags_DZ  = 0;
+    assign fpu_commit_if.fflags_OF  = 0;
+    assign fpu_commit_if.fflags_UF  = 0;
+    assign fpu_commit_if.fflags_NX  = 0;
 `endif
 
     VX_gpu_unit #(

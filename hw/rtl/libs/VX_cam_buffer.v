@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_cam_buffer #(
     parameter DATAW    = 1,
@@ -43,7 +43,7 @@ module VX_cam_buffer #(
             if (release_slot[i]) begin
                 free_slots_n[read_addr[i]] = 1;                
             end
-            assign read_data[i] = entries[read_addr[i]];            
+            read_data[i] = entries[read_addr[i]];            
         end
     end    
 

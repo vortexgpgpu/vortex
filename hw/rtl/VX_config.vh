@@ -57,7 +57,7 @@
 
 `define EXT_M_ENABLE
 
-`define EXT_F_ENABLE
+//`define EXT_F_ENABLE
 
 // Configuration Values =======================================================
 

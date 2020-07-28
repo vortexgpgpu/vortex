@@ -65,8 +65,6 @@ module VX_commit #(
     assign cmt_to_issue_if.fpu_tag = fpu_commit_if.issue_tag;
     assign cmt_to_issue_if.gpu_tag = gpu_commit_if.issue_tag;
 
-    assign gpu_commit_if.ready = 1'b1; // doesn't writeback
-
     VX_writeback #(
         .CORE_ID(CORE_ID)
     ) writeback (
@@ -77,9 +75,10 @@ module VX_commit #(
         .lsu_commit_if  (lsu_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
-        .fpu_commit_if  (fpu_commit_if),        
-        .cmt_to_issue_if(cmt_to_issue_if),
-        
+        .fpu_commit_if  (fpu_commit_if),    
+        .gpu_commit_if  (gpu_commit_if),
+        .cmt_to_issue_if(cmt_to_issue_if),  
+
         .writeback_if   (writeback_if)
     );
 
