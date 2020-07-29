@@ -25,20 +25,45 @@ module VX_writeback #(
     reg [31:0]                   wb_curr_PC [`ISSUEQ_SIZE-1:0];
     reg [`NR_BITS-1:0]           wb_rd [`ISSUEQ_SIZE-1:0];
     reg                          wb_rd_is_fp [`ISSUEQ_SIZE-1:0];
-    reg [`ISSUEQ_SIZE-1:0]       wb_pending;
+    reg [`ISSUEQ_SIZE-1:0]       wb_pending, wb_pending_n;
 
-    wire [`ISTAG_BITS-1:0] wb_index;
-    wire wb_valid, wb_valid_unqual;
+    reg [`ISTAG_BITS-1:0] wb_index;
+    wire [`ISTAG_BITS-1:0] wb_index_n;
+    
+    reg wb_valid;
+    wire wb_valid_n;
+
+    always @(*) begin
+        wb_pending_n = wb_pending;   
+
+        if (wb_valid) begin
+            wb_pending_n[wb_index] = 0;    
+        end
+
+        if (alu_commit_if.valid) begin
+            wb_pending_n [alu_commit_if.issue_tag] = cmt_to_issue_if.alu_data.wb;
+        end
+        if (lsu_commit_if.valid) begin
+            wb_pending_n [lsu_commit_if.issue_tag] = cmt_to_issue_if.lsu_data.wb;
+        end
+        if (csr_commit_if.valid) begin
+            wb_pending_n [csr_commit_if.issue_tag] = cmt_to_issue_if.csr_data.wb;
+        end
+        if (mul_commit_if.valid) begin
+            wb_pending_n [mul_commit_if.issue_tag] = cmt_to_issue_if.mul_data.wb;
+        end
+        if (fpu_commit_if.valid) begin
+            wb_pending_n [fpu_commit_if.issue_tag] = cmt_to_issue_if.fpu_data.wb;
+        end        
+    end
 
     VX_priority_encoder #(
         .N(`ISSUEQ_SIZE)
-    ) free_slots_encoder (
-        .data_in   (wb_pending),
-        .data_out  (wb_index),
-        .valid_out (wb_valid_unqual)
+    ) wb_select (
+        .data_in   (wb_pending_n),
+        .data_out  (wb_index_n),
+        .valid_out (wb_valid_n)
     );
-
-    assign wb_valid = wb_valid_unqual && writeback_if.ready;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -51,7 +76,6 @@ module VX_writeback #(
                 wb_curr_PC [alu_commit_if.issue_tag]    <= cmt_to_issue_if.alu_data.curr_PC;
                 wb_rd [alu_commit_if.issue_tag]         <= cmt_to_issue_if.alu_data.rd;
                 wb_rd_is_fp [alu_commit_if.issue_tag]   <= cmt_to_issue_if.alu_data.rd_is_fp;
-                wb_pending [alu_commit_if.issue_tag]    <= cmt_to_issue_if.alu_data.wb;
             end
             if (lsu_commit_if.valid) begin
                 wb_data [lsu_commit_if.issue_tag]       <= lsu_commit_if.data;
@@ -60,7 +84,6 @@ module VX_writeback #(
                 wb_curr_PC [lsu_commit_if.issue_tag]    <= cmt_to_issue_if.lsu_data.curr_PC;
                 wb_rd [lsu_commit_if.issue_tag]         <= cmt_to_issue_if.lsu_data.rd;
                 wb_rd_is_fp [lsu_commit_if.issue_tag]   <= cmt_to_issue_if.lsu_data.rd_is_fp;
-                wb_pending [lsu_commit_if.issue_tag]    <= cmt_to_issue_if.lsu_data.wb;
             end
             if (csr_commit_if.valid) begin
                 wb_data [csr_commit_if.issue_tag]       <= csr_commit_if.data;
@@ -69,7 +92,6 @@ module VX_writeback #(
                 wb_curr_PC [csr_commit_if.issue_tag]    <= cmt_to_issue_if.csr_data.curr_PC;
                 wb_rd [csr_commit_if.issue_tag]         <= cmt_to_issue_if.csr_data.rd;
                 wb_rd_is_fp [csr_commit_if.issue_tag]   <= cmt_to_issue_if.csr_data.rd_is_fp;
-                wb_pending [csr_commit_if.issue_tag]    <= cmt_to_issue_if.csr_data.wb;
             end
             if (mul_commit_if.valid) begin
                 wb_data [mul_commit_if.issue_tag]       <= mul_commit_if.data;
@@ -78,7 +100,6 @@ module VX_writeback #(
                 wb_curr_PC [mul_commit_if.issue_tag]    <= cmt_to_issue_if.mul_data.curr_PC;
                 wb_rd [mul_commit_if.issue_tag]         <= cmt_to_issue_if.mul_data.rd;
                 wb_rd_is_fp [mul_commit_if.issue_tag]   <= cmt_to_issue_if.mul_data.rd_is_fp;
-                wb_pending [mul_commit_if.issue_tag]    <= cmt_to_issue_if.mul_data.wb;
             end
             if (fpu_commit_if.valid) begin
                 wb_data [fpu_commit_if.issue_tag]       <= fpu_commit_if.data;
@@ -87,16 +108,16 @@ module VX_writeback #(
                 wb_curr_PC [fpu_commit_if.issue_tag]    <= cmt_to_issue_if.fpu_data.curr_PC;
                 wb_rd [fpu_commit_if.issue_tag]         <= cmt_to_issue_if.fpu_data.rd;
                 wb_rd_is_fp [fpu_commit_if.issue_tag]   <= cmt_to_issue_if.fpu_data.rd_is_fp;
-                wb_pending [fpu_commit_if.issue_tag]    <= cmt_to_issue_if.fpu_data.wb;
             end 
-            if (wb_valid) begin
-                wb_pending [wb_index] <= 0;
-            end        
+
+            wb_pending <= wb_pending_n;
+            wb_index   <= wb_index_n;
+            wb_valid   <= wb_valid_n && writeback_if.ready;
         end        
     end 
 
     // writeback request
-    assign writeback_if.valid       = wb_pending [wb_index];
+    assign writeback_if.valid       = wb_valid;
     assign writeback_if.warp_num    = wb_warp_num [wb_index];
     assign writeback_if.thread_mask = wb_thread_mask [wb_index];
     assign writeback_if.curr_PC     = wb_curr_PC [wb_index];
