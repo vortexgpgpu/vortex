@@ -21,16 +21,12 @@ interface VX_decode_if ();
 
     wire                    rs1_is_PC;
     wire                    rs2_is_imm;  
-
-    wire                    use_rs1;
-    wire                    use_rs2; 
+    
+    wire [`NUM_REGS-1:0]    reg_use_mask;
 
     // FP states
     wire [`NR_BITS-1:0]     rs3;
-    wire                    use_rs3;
-    wire                    rd_is_fp;
-    wire                    rs1_is_fp;
-    wire                    rs2_is_fp;    
+    wire                    use_rs3; 
     wire [`FRM_BITS-1:0]    frm;    
 
     wire                    wb;

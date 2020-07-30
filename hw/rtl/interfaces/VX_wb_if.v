@@ -14,8 +14,8 @@ interface VX_wb_if ();
 `IGNORE_WARNINGS_END
 
     wire [`NR_BITS-1:0]             rd;
-    wire                            rd_is_fp;
     wire [`NUM_THREADS-1:0][31:0]	data;     
+    
     wire                            ready;
 
 endinterface

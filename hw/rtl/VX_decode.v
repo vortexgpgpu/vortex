@@ -35,10 +35,10 @@ module VX_decode  #(
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20]; 
 
-    wire [`NR_BITS-1:0] rd  = instr[11:7];
-    wire [`NR_BITS-1:0] rs1 = instr[19:15];
-    wire [`NR_BITS-1:0] rs2 = instr[24:20];     
-    wire [`NR_BITS-1:0] rs3 = instr[31:27];
+    wire [4:0] rd  = instr[11:7];
+    wire [4:0] rs1 = instr[19:15];
+    wire [4:0] rs2 = instr[24:20];     
+    wire [4:0] rs3 = instr[31:27];
 
     // opcode types
     wire is_rtype = (opcode == `INST_R);
@@ -202,7 +202,7 @@ module VX_decode  #(
     wire is_fcvtf  = is_fci && (func7 == 7'h68); // convert to float
     wire is_fmvcls = is_fci && (func7 == 7'h70 || func7 == 7'h78); // move + class
     wire is_fr4    = is_fmadd || is_fmsub || is_fnmsub || is_fnmadd;
-    wire is_fpu    = (is_fl || is_fs || is_fci || is_fr4);
+    wire is_fpu    = (is_fl || is_fs || is_fci || is_fr4);   
 
     always @(*) begin    
         fpu_op = `FPU_OTHER;    
@@ -242,7 +242,8 @@ module VX_decode  #(
     wire is_fcvtf   = 0;
     wire is_fmvcls  = 0;
     wire is_fr4     = 0;
-    wire is_fpu     = 0;    
+    wire is_fpu     = 0;   
+
     always @(*) begin
         fpu_op = `FPU_OTHER;
     end
@@ -271,6 +272,29 @@ module VX_decode  #(
         endcase
     end
 
+    ///////////////////////////////////////////////////////////////////////////
+
+    wire use_rd = (is_fl || is_fci || is_fr4) 
+               || ((rd != 0) && (is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype));
+
+    wire use_rs1 = is_fpu 
+                || is_gpu
+                || ((is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || ~is_csr_imm || is_gpu) && (rs1 != 0));
+
+    wire use_rs2 = (is_fpu && ~(is_fl || (fpu_op == `FPU_SQRT) || is_fcvti || is_fcvtf || is_fmvcls))
+                || (is_gpu && (gpu_op == `GPU_BAR || gpu_op == `GPU_WSPAWN))
+                || ((is_btype || is_stype || is_rtype) && (rs2 != 0));
+
+    wire use_rs3 = is_fr4;
+
+    wire rd_is_fp  = is_fpu && ~(is_fcmp || is_fcvti || (fpu_op == `FPU_MVXW || fpu_op == `FPU_CLASS));
+    wire rs1_is_fp = is_fr4 || (is_fci && ~(is_fcvtf || (fpu_op == `FPU_MVWX)));
+    wire rs2_is_fp = is_fs || is_fr4 || is_fci;
+
+    wire [4:0] rs1_qual = is_lui ? 5'h0 : rs1;
+
+    ///////////////////////////////////////////////////////////////////////////
+
     VX_decode_if decode_tmp_if();
 
     assign decode_tmp_if.valid      = ifetch_rsp_if.valid;
@@ -297,9 +321,26 @@ module VX_decode  #(
                                                         (is_rtype || is_itype || is_lui || is_auipc) ? `OP_BITS'(alu_op) :
                                                             0; 
 
-    assign decode_tmp_if.rd  = rd;
-    assign decode_tmp_if.rs1 = is_lui ? `NR_BITS'(0) : rs1;
-    assign decode_tmp_if.rs2 = rs2;
+    assign decode_tmp_if.wb = use_rd;
+
+    `ifdef EXT_F_ENABLE
+        assign decode_tmp_if.rd  = {rd_is_fp,  rd};
+        assign decode_tmp_if.rs1 = {rs1_is_fp, rs1_qual};
+        assign decode_tmp_if.rs2 = {rs2_is_fp, rs2};
+        assign decode_tmp_if.rs3 = {1'b1,      rs3};
+    `else
+        assign decode_tmp_if.rd  = rd;
+        assign decode_tmp_if.rs1 = rs1_qual;
+        assign decode_tmp_if.rs2 = rs2;
+        assign decode_tmp_if.rs3 = rs3;
+    `endif
+
+    assign decode_tmp_if.use_rs3 = use_rs3;
+    
+    assign decode_tmp_if.reg_use_mask = ((`NUM_REGS)'(use_rd)  << rd) 
+                                      | ((`NUM_REGS)'(use_rs1) << rs1_qual) 
+                                      | ((`NUM_REGS)'(use_rs2) << rs2)
+                                      | ((`NUM_REGS)'(use_rs3) << rs3);
 
     assign decode_tmp_if.imm = (is_lui || is_auipc) ? {upper_imm, 12'(0)} : 
                                     (is_jal || is_jalr || is_jals) ? jalx_offset :
@@ -308,26 +349,8 @@ module VX_decode  #(
 
     assign decode_tmp_if.rs1_is_PC  = is_auipc;
     assign decode_tmp_if.rs2_is_imm = is_itype || is_lui || is_auipc || is_csr_imm; 
-
-    assign decode_tmp_if.use_rs1 = is_fpu 
-                                || is_gpu
-                                || ((is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || ~is_csr_imm || is_gpu) 
-                                 && (decode_tmp_if.rs1 != 0));
-
-    assign decode_tmp_if.use_rs2 = (is_fpu && ~(is_fl || (fpu_op == `FPU_SQRT) || is_fcvti || is_fcvtf || is_fmvcls))
-                                || (is_gpu && (gpu_op == `GPU_BAR || gpu_op == `GPU_WSPAWN))
-                                || ((is_btype || is_stype || is_rtype) 
-                                 && (decode_tmp_if.rs2 != 0));
-
-    assign decode_tmp_if.rd_is_fp  = is_fpu && ~(is_fcmp || is_fcvti || (fpu_op == `FPU_MVXW || fpu_op == `FPU_CLASS));
-    assign decode_tmp_if.rs1_is_fp = is_fr4 || (is_fci && ~(is_fcvtf || (fpu_op == `FPU_MVWX)));
-    assign decode_tmp_if.rs2_is_fp = is_fs || is_fr4 || is_fci;
-    assign decode_tmp_if.rs3       = rs3;
-    assign decode_tmp_if.use_rs3   = is_fr4;
-    assign decode_tmp_if.frm       = func3;
-
-    assign decode_tmp_if.wb = (is_fl || is_fci || is_fr4) 
-                           || ((rd != 0) && (is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype));    
+    
+    assign decode_tmp_if.frm = func3;
 
     assign join_if.is_join  = in_valid && is_gpu && (gpu_op == `GPU_JOIN);
     assign join_if.warp_num = ifetch_rsp_if.warp_num;
@@ -338,14 +361,14 @@ module VX_decode  #(
     wire stall = ~decode_if.ready && decode_if.valid; 
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + 1 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + 1 + 1 + 1 + `FRM_BITS)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + 1 + `FRM_BITS + `NUM_REGS)
     ) decode_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({decode_tmp_if.valid, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp, decode_tmp_if.rd_is_fp, decode_tmp_if.frm}),
-        .out   ({decode_if.valid,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.use_rs1,     decode_if.use_rs2,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.rs1_is_fp,     decode_if.rs2_is_fp,     decode_if.rd_is_fp,     decode_if.frm})
+        .in    ({decode_tmp_if.valid, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.frm, decode_tmp_if.reg_use_mask}),
+        .out   ({decode_if.valid,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.frm,     decode_if.reg_use_mask})
     ); 
 
     assign ifetch_rsp_if.ready = ~stall;
@@ -357,7 +380,7 @@ module VX_decode  #(
             print_ex_type(decode_tmp_if.ex_type);
             $write(", op=");
             print_ex_op(decode_tmp_if.ex_type, decode_tmp_if.ex_op);
-            $write(", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_rs1=%b, use_rs2=%b, use_rs3=%b, rd_is_fp=%b, rs1_is_fp=%b, rs2_is_fp=%b, frm=", decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.rs3, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.use_rs3, decode_tmp_if.rd_is_fp,decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp);                        
+            $write(", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, frm=", decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.rs3, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm);                        
             print_frm(decode_tmp_if.frm);
             $write("\n"); 
 
