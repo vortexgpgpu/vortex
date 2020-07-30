@@ -28,7 +28,7 @@
 `endif
 
 `ifndef NUM_CSRS
-`define NUM_CSRS 1024
+`define NUM_CSRS 64
 `endif
 
 `ifndef STARTUP_ADDR
@@ -57,7 +57,7 @@
 
 `define EXT_M_ENABLE
 
-//`define EXT_F_ENABLE
+`define EXT_F_ENABLE
 
 // Configuration Values =======================================================
 

@@ -23,8 +23,6 @@ module VX_issue #(
     assign gpr_read_if.rs1       = decode_if.rs1;
     assign gpr_read_if.rs2       = decode_if.rs2;
     assign gpr_read_if.rs3       = decode_if.rs3;
-    assign gpr_read_if.rs1_is_fp = decode_if.rs1_is_fp;
-    assign gpr_read_if.rs2_is_fp = decode_if.rs2_is_fp;
     assign gpr_read_if.use_rs3   = decode_if.use_rs3;
 
     wire [`ISTAG_BITS-1:0] issue_tag, issue_tmp_tag;
@@ -52,8 +50,7 @@ module VX_issue #(
         .mul_busy       (mul_busy),
         .fpu_busy       (fpu_busy),
         .gpu_busy       (gpu_busy),  
-        .issue_tag      (issue_tag),       
-        `UNUSED_PIN     (is_empty)
+        .issue_tag      (issue_tag)
     );
 
     VX_gpr_stage #(
@@ -72,14 +69,14 @@ module VX_issue #(
     wire flush = alu_req_if.ready && ~decode_if.ready;  
 
     VX_generic_register #(
-        .N(1 + `ISTAG_BITS + `NW_BITS + `NUM_THREADS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + 1 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + 1 + 1 + `FRM_BITS + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + (`NUM_THREADS * 32))
-    ) decode_reg (
+        .N(1 + `ISTAG_BITS + `NW_BITS + `NUM_THREADS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + `FRM_BITS + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + (`NUM_THREADS * 32))
+    ) issue_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (flush),
-        .in    ({decode_if.valid,     issue_tag,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.use_rs1,     decode_if.use_rs2,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.rs1_is_fp,     decode_if.rs2_is_fp,     decode_if.frm,    gpr_read_if.rs1_data,      gpr_read_if.rs2_data,     gpr_read_if.rs3_data}),
-        .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.use_rs1, decode_tmp_if.use_rs2, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.rs1_is_fp, decode_tmp_if.rs2_is_fp, decode_tmp_if.frm, gpr_data_tmp_if.rs1_data, gpr_data_tmp_if.rs2_data, gpr_data_tmp_if.rs3_data})
+        .in    ({decode_if.valid,     issue_tag,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.frm,    gpr_read_if.rs1_data,      gpr_read_if.rs2_data,     gpr_read_if.rs3_data}),
+        .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.frm, gpr_data_tmp_if.rs1_data, gpr_data_tmp_if.rs2_data, gpr_data_tmp_if.rs3_data})
     );
 
     VX_issue_demux issue_demux (

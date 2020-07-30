@@ -24,7 +24,6 @@ module VX_writeback #(
     reg [`NUM_THREADS-1:0]       wb_thread_mask [`ISSUEQ_SIZE-1:0];
     reg [31:0]                   wb_curr_PC [`ISSUEQ_SIZE-1:0];
     reg [`NR_BITS-1:0]           wb_rd [`ISSUEQ_SIZE-1:0];
-    reg                          wb_rd_is_fp [`ISSUEQ_SIZE-1:0];
     reg [`ISSUEQ_SIZE-1:0]       wb_pending, wb_pending_n;
 
     reg [`ISTAG_BITS-1:0] wb_index;
@@ -75,7 +74,6 @@ module VX_writeback #(
                 wb_thread_mask [alu_commit_if.issue_tag] <= cmt_to_issue_if.alu_data.thread_mask;
                 wb_curr_PC [alu_commit_if.issue_tag]    <= cmt_to_issue_if.alu_data.curr_PC;
                 wb_rd [alu_commit_if.issue_tag]         <= cmt_to_issue_if.alu_data.rd;
-                wb_rd_is_fp [alu_commit_if.issue_tag]   <= cmt_to_issue_if.alu_data.rd_is_fp;
             end
             if (lsu_commit_if.valid) begin
                 wb_data [lsu_commit_if.issue_tag]       <= lsu_commit_if.data;
@@ -83,7 +81,6 @@ module VX_writeback #(
                 wb_thread_mask [lsu_commit_if.issue_tag] <= cmt_to_issue_if.lsu_data.thread_mask;
                 wb_curr_PC [lsu_commit_if.issue_tag]    <= cmt_to_issue_if.lsu_data.curr_PC;
                 wb_rd [lsu_commit_if.issue_tag]         <= cmt_to_issue_if.lsu_data.rd;
-                wb_rd_is_fp [lsu_commit_if.issue_tag]   <= cmt_to_issue_if.lsu_data.rd_is_fp;
             end
             if (csr_commit_if.valid) begin
                 wb_data [csr_commit_if.issue_tag]       <= csr_commit_if.data;
@@ -91,7 +88,6 @@ module VX_writeback #(
                 wb_thread_mask [csr_commit_if.issue_tag] <= cmt_to_issue_if.csr_data.thread_mask;
                 wb_curr_PC [csr_commit_if.issue_tag]    <= cmt_to_issue_if.csr_data.curr_PC;
                 wb_rd [csr_commit_if.issue_tag]         <= cmt_to_issue_if.csr_data.rd;
-                wb_rd_is_fp [csr_commit_if.issue_tag]   <= cmt_to_issue_if.csr_data.rd_is_fp;
             end
             if (mul_commit_if.valid) begin
                 wb_data [mul_commit_if.issue_tag]       <= mul_commit_if.data;
@@ -99,7 +95,6 @@ module VX_writeback #(
                 wb_thread_mask [mul_commit_if.issue_tag] <= cmt_to_issue_if.mul_data.thread_mask;
                 wb_curr_PC [mul_commit_if.issue_tag]    <= cmt_to_issue_if.mul_data.curr_PC;
                 wb_rd [mul_commit_if.issue_tag]         <= cmt_to_issue_if.mul_data.rd;
-                wb_rd_is_fp [mul_commit_if.issue_tag]   <= cmt_to_issue_if.mul_data.rd_is_fp;
             end
             if (fpu_commit_if.valid) begin
                 wb_data [fpu_commit_if.issue_tag]       <= fpu_commit_if.data;
@@ -107,7 +102,6 @@ module VX_writeback #(
                 wb_thread_mask [fpu_commit_if.issue_tag] <= cmt_to_issue_if.fpu_data.thread_mask;
                 wb_curr_PC [fpu_commit_if.issue_tag]    <= cmt_to_issue_if.fpu_data.curr_PC;
                 wb_rd [fpu_commit_if.issue_tag]         <= cmt_to_issue_if.fpu_data.rd;
-                wb_rd_is_fp [fpu_commit_if.issue_tag]   <= cmt_to_issue_if.fpu_data.rd_is_fp;
             end 
 
             wb_pending <= wb_pending_n;
@@ -122,7 +116,6 @@ module VX_writeback #(
     assign writeback_if.thread_mask = wb_thread_mask [wb_index];
     assign writeback_if.curr_PC     = wb_curr_PC [wb_index];
     assign writeback_if.rd          = wb_rd [wb_index];
-    assign writeback_if.rd_is_fp    = wb_rd_is_fp [wb_index];
     assign writeback_if.data        = wb_data [wb_index];    
 
     // commit back-pressure

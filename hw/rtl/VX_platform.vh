@@ -1,6 +1,8 @@
 `ifndef VX_PLATFORM
 `define VX_PLATFORM
 
+///////////////////////////////////////////////////////////////////////////////
+
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
                            x \
@@ -44,6 +46,12 @@
 
 `define ENABLE_TRACING  /* verilator tracing_on */
 `define DISABLE_TRACING /* verilator tracing_off */
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define USE_FAST_BRAM (* syn_ramstyle = "mlab" *)
+
+///////////////////////////////////////////////////////////////////////////////
 
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))

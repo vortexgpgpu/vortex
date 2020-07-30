@@ -7,7 +7,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define QUEUE_FORCE_MLAB 1
 // `define SYNTHESIS 1
 // `define ASIC 1
 
@@ -23,7 +22,11 @@
 
 `define REQS_BITS   `LOG2UP(NUM_REQUESTS)
 
+`ifdef EXT_F_ENABLE
+`define NUM_REGS    64
+`else
 `define NUM_REGS    32
+`endif
 
 `define NR_BITS    `LOG2UP(`NUM_REGS)
 
@@ -33,7 +36,9 @@
 
 `define ISTAG_BITS  `LOG2UP(`ISSUEQ_SIZE)
 
-`define LATENCY_IDIV 23
+///////////////////////////////////////////////////////////////////////////////
+
+`define LATENCY_IDIV 24
 `define LATENCY_IMUL 2
 
 `define LATENCY_FMULADD  2
@@ -408,7 +413,6 @@ typedef struct packed {
     logic [`NUM_THREADS-1:0] thread_mask;
     logic [31:0]            curr_PC;
     logic [`NR_BITS-1:0]    rd;
-    logic                   rd_is_fp;
     logic                   wb;
 } is_data_t;
 

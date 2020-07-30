@@ -46,9 +46,9 @@ module VX_alu_unit #(
                 default:    alu_result[i] = alu_in1[i] + alu_in2[i]; // ADD, LUI, AUIPC
             endcase
         end       
-    end
+    end        
 
-    wire [`NT_BITS-1:0] br_result_index;
+    wire [`NT_BITS-1:0] br_result_index, br_result_index_o;
 
     VX_priority_encoder #(
         .N(`NUM_THREADS)
@@ -58,15 +58,35 @@ module VX_alu_unit #(
         `UNUSED_PIN (valid_out)
     );
 
-    wire [32:0] br_result = sub_result[br_result_index];
-    wire br_sign  = br_result[32];
+    wire [`BR_BITS-1:0] br_op = `IS_BR_OP(alu_req_if.alu_op) ? `BR_OP(alu_req_if.alu_op) : 0;
+    wire [`BR_BITS-1:0] br_op_o;
+
+    wire [31:0] br_addr = (br_op == `BR_JALR) ? alu_req_if.rs1_data[br_result_index] : alu_req_if.curr_PC;
+    wire [31:0] br_dest = $signed(br_addr) + $signed(alu_req_if.offset);
+
+    wire is_jal = (alu_op == `ALU_JAL || alu_op == `ALU_JALR);    
+    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result;
+
+    wire stall = ~alu_commit_if.ready && alu_commit_if.valid;
+
+    VX_generic_register #(
+        .N(1 + `NW_BITS + `ISTAG_BITS + (`NUM_THREADS * 32) + `BR_BITS + 32 + `NT_BITS)
+    ) alu_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall),
+        .flush (0),
+        .in    ({alu_req_if.valid,    alu_req_if.warp_num,    alu_req_if.issue_tag,    alu_jal_result,     br_op,   br_dest,            br_result_index}),
+        .out   ({alu_commit_if.valid, branch_ctl_if.warp_num, alu_commit_if.issue_tag, alu_commit_if.data, br_op_o, branch_ctl_if.dest, br_result_index_o})
+    );    
+
+    wire [31:0] br_result = alu_commit_if.data[br_result_index_o];
+    wire br_sign  = br_result[31];
     wire br_nzero = (| br_result[31:0]);
-    
-    wire [`BR_BITS-1:0] br_op = `BR_OP(alu_req_if.alu_op);
     
     reg br_taken;
     always @(*) begin
-        case (br_op)            
+        case (br_op_o)            
             `BR_NE:  br_taken = br_nzero;
             `BR_EQ:  br_taken = ~br_nzero;
             `BR_LT, 
@@ -75,39 +95,10 @@ module VX_alu_unit #(
             `BR_GEU: br_taken = ~br_sign;
             default: br_taken = 1'b1;
         endcase
-    end
+    end    
 
-    wire [31:0] br_addr = (br_op == `BR_JALR) ? alu_req_if.rs1_data[br_result_index] : alu_req_if.curr_PC;
-    wire [31:0] br_dest = $signed(br_addr) + $signed(alu_req_if.offset);
-    
-    wire is_jal = (alu_op == `ALU_JAL || alu_op == `ALU_JALR);
-    wire is_br_valid = `IS_BR_OP(alu_op) && alu_req_if.valid;
-
-    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result;
-
-    wire stall = ~alu_commit_if.ready && alu_commit_if.valid;
-
-    VX_generic_register #(
-        .N(1 + `NW_BITS + 1 + 32)
-    ) branch_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (0),
-        .in    ({is_br_valid,         alu_req_if.warp_num,    br_taken,            br_dest}),
-        .out   ({branch_ctl_if.valid, branch_ctl_if.warp_num, branch_ctl_if.taken, branch_ctl_if.dest})
-    );
-
-    VX_generic_register #(
-        .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32))
-    ) alu_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (0),
-        .in    ({alu_req_if.valid,    alu_req_if.issue_tag,    alu_jal_result}),
-        .out   ({alu_commit_if.valid, alu_commit_if.issue_tag, alu_commit_if.data})
-    );    
+    assign branch_ctl_if.valid = alu_req_if.valid && (br_op_o != 0);
+    assign branch_ctl_if.taken = br_taken;
 
     assign alu_req_if.ready = ~stall;
 

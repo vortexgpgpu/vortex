@@ -13,10 +13,7 @@ interface VX_gpr_read_if ();
     wire [`NR_BITS-1:0]     rs2;  
     wire [`NR_BITS-1:0]     rs3;
     
-    wire                    use_rs3;
-    
-    wire                    rs1_is_fp;
-    wire                    rs2_is_fp;    
+    wire                    use_rs3;   
 
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
     wire [`NUM_THREADS-1:0][31:0] rs2_data;

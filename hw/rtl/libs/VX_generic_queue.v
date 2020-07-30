@@ -52,11 +52,7 @@ module VX_generic_queue #(
 
     end else begin // (SIZE > 1)
 
-    `ifdef QUEUE_FORCE_MLAB
-        (* syn_ramstyle = "mlab" *) reg [DATAW-1:0] data [SIZE-1:0];
-    `else
-        reg [DATAW-1:0] data [SIZE-1:0];
-    `endif
+        `USE_FAST_BRAM reg [DATAW-1:0] data [SIZE-1:0];
 
         if (0 == BUFFERED) begin                
 

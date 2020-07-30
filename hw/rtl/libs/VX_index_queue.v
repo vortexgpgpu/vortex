@@ -15,7 +15,7 @@ module VX_index_queue #(
     input  wire [`LOG2UP(SIZE)-1:0] read_addr,
     output wire [DATAW-1:0] read_data
 );
-    reg [DATAW-1:0] data [SIZE-1:0];
+    `USE_FAST_BRAM reg [DATAW-1:0] data [SIZE-1:0];
     reg [SIZE-1:0] valid;    
     reg [`LOG2UP(SIZE):0] rd_ptr, wr_ptr;
 

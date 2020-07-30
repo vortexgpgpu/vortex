@@ -53,7 +53,7 @@ module VX_gpu_unit #(
     wire[`NUM_THREADS-1:0] split_new_use_mask;
     wire[`NUM_THREADS-1:0] split_new_later_mask;
 
-    for (i = 0; i < `NUM_THREADS; i++) begin : masks_init
+    for (i = 0; i < `NUM_THREADS; i++) begin
         wire curr_bool = (gpu_req_if.rs1_data[i] == 32'b1);
         assign split_new_use_mask[i]   = gpu_req_if.thread_mask[i] & (curr_bool);
         assign split_new_later_mask[i] = gpu_req_if.thread_mask[i] & (!curr_bool);

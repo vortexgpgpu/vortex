@@ -205,24 +205,26 @@ module VX_warp_sched #(
     assign {join_fall, join_pc, join_tm} = ipdom[join_if.warp_num];
 
     genvar i;
-    for (i = 0; i < `NUM_WARPS; i++) begin : stacks
+    for (i = 0; i < `NUM_WARPS; i++) begin
         wire correct_warp_s = (i == warp_ctl_if.warp_num);
         wire correct_warp_j = (i == join_if.warp_num);
 
         wire push = (warp_ctl_if.is_split && warp_ctl_if.do_split) && correct_warp_s;
         wire pop  = join_if.is_join && correct_warp_j;
 
-        VX_generic_stack #(
+        VX_ipdom_stack #(
             .WIDTH(1+32+`NUM_THREADS), 
-            .DEPTH($clog2(`NUM_THREADS)+1)
-        ) ipdom_stack(
+            .DEPTH(`NT_BITS+1)
+        ) ipdom_stack (
             .clk  (clk),
             .reset(reset),
             .push (push),
             .pop  (pop),
             .d    (ipdom[i]),
             .q1   (q1),
-            .q2   (q2)
+            .q2   (q2),
+            `UNUSED_PIN (empty),
+            `UNUSED_PIN (full)
         );
     end
 
