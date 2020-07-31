@@ -1,9 +1,9 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_generic_queue #(
-    parameter DATAW = 0,
-    parameter SIZE = 1,
-    parameter BUFFERED_OUTPUT = 1
+    parameter DATAW    = 1,
+    parameter SIZE     = 16,
+    parameter BUFFERED = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -52,13 +52,9 @@ module VX_generic_queue #(
 
     end else begin // (SIZE > 1)
 
-    `ifdef QUEUE_FORCE_MLAB
-        (* syn_ramstyle = "mlab" *) reg [DATAW-1:0] data [SIZE-1:0];
-    `else
-        reg [DATAW-1:0] data [SIZE-1:0];
-    `endif
+        `USE_FAST_BRAM reg [DATAW-1:0] data [SIZE-1:0];
 
-        if (0 == BUFFERED_OUTPUT) begin                
+        if (0 == BUFFERED) begin                
 
             reg [`LOG2UP(SIZE):0] rd_ptr_r;
             reg [`LOG2UP(SIZE):0] wr_ptr_r;

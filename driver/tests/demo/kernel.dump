@@ -97,7 +97,7 @@ Disassembly of section .text:
 80000134:	0005006b          	0x5006b
 80000138:	00002197          	auipc	gp,0x2
 8000013c:	d3818193          	addi	gp,gp,-712 # 80001e70 <__global_pointer$>
-80000140:	f14025f3          	csrr	a1,mhartid
+80000140:	022025f3          	csrr	a1,0x22
 80000144:	00a59593          	slli	a1,a1,0xa
 80000148:	02002673          	csrr	a2,0x20
 8000014c:	00261613          	slli	a2,a2,0x2
@@ -145,7 +145,7 @@ Disassembly of section .text:
 800001ac:	00008067          	ret
 
 800001b0 <vx_thread_gid>:
-800001b0:	f1402573          	csrr	a0,mhartid
+800001b0:	02202573          	csrr	a0,0x22
 800001b4:	00008067          	ret
 
 800001b8 <vx_core_id>:

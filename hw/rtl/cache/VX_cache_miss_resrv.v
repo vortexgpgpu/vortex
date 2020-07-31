@@ -41,7 +41,7 @@ module VX_cache_miss_resrv #(
     input wire                          is_fill_st1,
     input wire[`LINE_ADDR_WIDTH-1:0]    fill_addr_st1,
 
-    output wire                         pending_hazard,
+    output wire                         pending_hazard_st1,
 
     // Miss dequeue
     input  wire                         miss_resrv_pop,
@@ -84,7 +84,7 @@ module VX_cache_miss_resrv #(
         assign make_ready[i]          = is_fill_st1 && valid_address_match[i];
     end
 
-    assign pending_hazard = |(valid_address_match);
+    assign pending_hazard_st1 = |(valid_address_match);
 
     wire                          dequeue_possible = valid_table[schedule_ptr] && ready_table[schedule_ptr];
     wire [`LOG2UP(MRVQ_SIZE)-1:0] dequeue_index    = schedule_ptr;

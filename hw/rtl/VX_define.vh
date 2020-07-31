@@ -1,60 +1,14 @@
 `ifndef VX_DEFINE
 `define VX_DEFINE
 
+`include "VX_platform.vh"
 `include "VX_config.vh"
 `include "VX_scope.vh"
 
-`define QUEUE_FORCE_MLAB 1
+///////////////////////////////////////////////////////////////////////////////
 
 // `define SYNTHESIS 1
 // `define ASIC 1
-
-///////////////////////////////////////////////////////////////////////////////
-
-`ifndef NDEBUG
-    `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
-                           x \
-                           /* verilator lint_on UNUSED */
-`else
-    `define DEBUG_BLOCK(x)
-`endif
-
-`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
-
-`define DEBUG_END   /* verilator lint_on UNUSED */     
-
-`define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
-                              /* verilator lint_off PINCONNECTEMPTY */ \
-                              /* verilator lint_off DECLFILENAME */
-
-`define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
-                              /* verilator lint_on PINCONNECTEMPTY */ \
-                              /* verilator lint_on DECLFILENAME */
-
-`define UNUSED_VAR(x) /* verilator lint_off UNUSED */ \
-                      wire [$bits(x)-1:0] __``x``__ = x; \
-                      /* verilator lint_on UNUSED */
-
-`define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
-                       . x () \
-                       /* verilator lint_on PINCONNECTEMPTY */
-
-`define STRINGIFY(x) `"x`"
-
-`define STATIC_ASSERT(cond, msg)    \
-    generate                        \
-        if (!(cond)) $error(msg);   \
-    endgenerate
-
-`define CLOG2(x)    $clog2(x)
-`define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
-`define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
-`define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
-
-`define MIN(x, y)   ((x < y) ? (x) : (y))
-`define MAX(x, y)   ((x > y) ? (x) : (y))
-
-`define UP(x)       (((x) > 0) ? x : 1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -68,17 +22,29 @@
 
 `define REQS_BITS   `LOG2UP(NUM_REQUESTS)
 
+`ifdef EXT_F_ENABLE
+`define NUM_REGS    64
+`else
 `define NUM_REGS    32
+`endif
 
 `define NR_BITS    `LOG2UP(`NUM_REGS)
 
-`define CSR_ADDR_SIZE 12
+`define CSR_ADDR_BITS 12
 
 `define CSR_WIDTH   12
 
-`define DIV_LATENCY 2
+`define ISTAG_BITS  `LOG2UP(`ISSUEQ_SIZE)
 
-`define MUL_LATENCY 2
+///////////////////////////////////////////////////////////////////////////////
+
+`define LATENCY_IDIV    24
+`define LATENCY_IMUL    2
+
+`define LATENCY_FMULADD  2
+`define LATENCY_FDIVSQRT 2
+`define LATENCY_FCONV    2
+`define LATENCY_FNONCOMP 1
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -86,13 +52,22 @@
 `define INST_AUIPC  7'b0010111
 `define INST_JAL    7'b1101111
 `define INST_JALR   7'b1100111
-`define INST_B      7'b1100011
-`define INST_L      7'b0000011
-`define INST_S      7'b0100011
-`define INST_I      7'b0010011
-`define INST_R      7'b0110011
-`define INST_F      7'b0001111
-`define INST_SYS    7'b1110011
+`define INST_B      7'b1100011 // branch instructions
+`define INST_L      7'b0000011 // load instructions
+`define INST_S      7'b0100011 // store instructions
+`define INST_I      7'b0010011 // immediate instructions
+`define INST_R      7'b0110011 // register instructions
+`define INST_F      7'b0001111 // Fence instructions
+`define INST_SYS    7'b1110011 // system instructions
+
+`define INST_FL     7'b0000111 // float load instruction
+`define INST_FS     7'b0100111 // float store  instruction
+`define INST_FMADD  7'b1000011  
+`define INST_FMSUB  7'b1000111
+`define INST_FNMSUB 7'b1001011
+`define INST_FNMADD 7'b1001111 
+`define INST_FCI    7'b1010011 // float common instructions
+
 `define INST_GPU    7'b1101011
 
 `define BYTEEN_SB   3'h0 
@@ -101,6 +76,7 @@
 `define BYTEEN_UB   3'h4
 `define BYTEEN_UH   3'h5
 `define BYTEEN_BITS 3
+`define BYTEEN_TYPE(x) x[1:0]
 
 `define BR_EQ       4'h0
 `define BR_NE       4'h1
@@ -115,6 +91,7 @@
 `define BR_MRET     4'hA
 `define BR_SRET     4'hB
 `define BR_DRET     4'hC
+`define BR_NO       4'hF
 `define BR_BITS     4
 
 `define OP_BITS     5
@@ -150,18 +127,6 @@
 `define BR_OP(x)    x[`BR_BITS-1:0]
 `define IS_BR_OP(x) x[4]
 
-`define MUL_MUL     3'h0
-`define MUL_MULH    3'h1
-`define MUL_MULHSU  3'h2
-`define MUL_MULHU   3'h3
-`define MUL_DIV     3'h4
-`define MUL_DIVU    3'h5
-`define MUL_REM     3'h6
-`define MUL_REMU    3'h7
-`define MUL_BITS    3
-`define MUL_OP(x)   x[`MUL_BITS-1:0]
-`define IS_DIV_OP(x) x[2]
-
 `define LSU_LB      {1'b0, `BYTEEN_SB}
 `define LSU_LH      {1'b0, `BYTEEN_SH}
 `define LSU_LW      {1'b0, `BYTEEN_SW}
@@ -183,6 +148,53 @@
 `define CSR_BITS    2
 `define CSR_OP(x)   x[`CSR_BITS-1:0]
 
+`define MUL_MUL     3'h0
+`define MUL_MULH    3'h1
+`define MUL_MULHSU  3'h2
+`define MUL_MULHU   3'h3
+`define MUL_DIV     3'h4
+`define MUL_DIVU    3'h5
+`define MUL_REM     3'h6
+`define MUL_REMU    3'h7
+`define MUL_BITS    3
+`define MUL_OP(x)   x[`MUL_BITS-1:0]
+`define IS_DIV_OP(x) x[2]
+
+`define FPU_ADD     5'h00 
+`define FPU_SUB     5'h01 
+`define FPU_MUL     5'h02 
+`define FPU_DIV     5'h03 
+`define FPU_SQRT    5'h04 
+`define FPU_MADD    5'h05 
+`define FPU_MSUB    5'h06   
+`define FPU_NMSUB   5'h07   
+`define FPU_NMADD   5'h08 
+`define FPU_SGNJ    5'h09  // FSGNJ
+`define FPU_SGNJN   5'h0A  // FSGNJN
+`define FPU_SGNJX   5'h0B  // FSGNJX
+`define FPU_MIN     5'h0C  // FMIN.S 
+`define FPU_MAX     5'h0D  // FMAX.S
+`define FPU_CVTWS   5'h0E  // FCVT.W.S
+`define FPU_CVTWUS  5'h0F  // FCVT.WU.S
+`define FPU_CVTSW   5'h10  // FCVT.S.W
+`define FPU_CVTSWU  5'h11  // FCVT.S.WU
+`define FPU_MVXW    5'h12  // MOV FP from fpReg to integer reg
+`define FPU_MVWX    5'h13  // MOV FP from integer reg to fpReg
+`define FPU_CLASS   5'h14  
+`define FPU_CMP     5'h15
+`define FPU_OTHER   5'h1f
+`define FPU_BITS    5
+`define FPU_OP(x)   x[`FPU_BITS-1:0]
+
+`define FRM_RNE    3'b000  // round to nearest even
+`define FRM_RTZ    3'b001  // round to zero
+`define FRM_RDN    3'b010  // round to -inf
+`define FRM_RUP    3'b011  // round to +inf
+`define FRM_RMM    3'b100  // round to nearest max magnitude
+`define FRM_DYN    3'b111  // dynamic mode
+`define FRM_BITS   3
+`define FFG_BITS   5
+
 `define GPU_TMC     3'h0
 `define GPU_WSPAWN  3'h1 
 `define GPU_SPLIT   3'h2
@@ -194,36 +206,43 @@
 
 `define EX_NOP      3'h0
 `define EX_ALU      3'h1
-`define EX_MUL      3'h2
-`define EX_LSU      3'h3
-`define EX_CSR      3'h4
-`define EX_GPU      3'h5
+`define EX_LSU      3'h2
+`define EX_CSR      3'h3
+`define EX_MUL      3'h4
+`define EX_FPU      3'h5
+`define EX_GPU      3'h6
 `define EX_BITS     3
 
-`define NUM_EXS     5
+`define NUM_EXS     6
 `define NE_BITS     `LOG2UP(`NUM_EXS)
 
-`define WB_NO       2'h0
-`define WB_ALU      2'h1
-`define WB_MEM      2'h2
-`define WB_JAL      2'h3
-`define WB_BITS     2
-
 ///////////////////////////////////////////////////////////////////////////////
+
+`ifdef EXT_M_ENABLE
+    `define ISA_EXT_M (1 << 12)
+`else
+    `define ISA_EXT_M 0
+`endif
+
+`ifdef EXT_F_ENABLE
+    `define ISA_EXT_F (1 << 5)
+`else
+    `define ISA_EXT_F 0
+`endif
 
 `define ISA_CODE  (0 <<  0) // A - Atomic Instructions extension \
                 | (0 <<  1) // B - Tentatively reserved for Bit operations extension  \
                 | (0 <<  2) // C - Compressed extension \
                 | (0 <<  3) // D - Double precsision floating-point extension \
                 | (0 <<  4) // E - RV32E base ISA \
-                | (0 <<  5) // F - Single precsision floating-point extension \
+                |`ISA_EXT_F // F - Single precsision floating-point extension \
                 | (0 <<  6) // G - Additional standard extensions present \
                 | (0 <<  7) // H - Hypervisor mode implemented \
                 | (1 <<  8) // I - RV32I/64I/128I base ISA \
                 | (0 <<  9) // J - Reserved \
                 | (0 << 10) // K - Reserved \
                 | (0 << 11) // L - Tentatively reserved for Bit operations extension \
-                | (1 << 12) // M - Integer Multiply/Divide extension \
+                |`ISA_EXT_M // M - Integer Multiply/Divide extension \
                 | (0 << 13) // N - User level interrupts supported \
                 | (0 << 14) // O - Reserved \
                 | (0 << 15) // P - Tentatively reserved for Packed-SIMD extension \
@@ -240,8 +259,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CORE_REQ_INFO          // pc,  wb,        rd,        warp_num
-`define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + `WB_BITS + `NR_BITS + `NW_BITS)
+`ifdef DBG_CORE_REQ_INFO          // pc,  wb, rd,        warp_num
+`define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 1 + `NR_BITS + `NW_BITS)
 `else
 `define DEBUG_CORE_REQ_MDATA_WIDTH  0
 `endif
@@ -252,7 +271,7 @@
 `define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
 
 // TAG sharing enable       
-`define DCORE_TAG_ID_BITS   `LOG2UP(`DCREQ_SIZE)
+`define DCORE_TAG_ID_BITS   `ISTAG_BITS
 
 // Core request tag bits
 `define DCORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `DCORE_TAG_ID_BITS)
@@ -287,7 +306,7 @@
 `define ICORE_BYTEEN_WIDTH `DWORD_SIZE
 
 // TAG sharing enable       
-`define ICORE_TAG_ID_BITS   `LOG2UP(`ICREQ_SIZE)
+`define ICORE_TAG_ID_BITS   `NW_BITS
 
 // Core request tag bits
 `define ICORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `ICORE_TAG_ID_BITS)
@@ -390,116 +409,12 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-task print_ex_type;
-    input [`EX_BITS-1:0] ex;
-    begin     
-        case (ex)
-            `EX_ALU: $write("ALU");     
-            `EX_LSU: $write("LSU");
-            `EX_CSR: $write("CSR");
-            `EX_MUL: $write("MUL");
-            `EX_GPU: $write("GPU");
-            default: $write("NOP");
-        endcase
-    end      
-endtask
-
-task print_instr_op;
-  input [`EX_BITS-1:0] ex;
-  input [`OP_BITS-1:0] op;
-  begin
-      case (ex)
-        `EX_ALU: begin
-            case (`ALU_BITS'(op))
-                `ALU_ADD:   $write("ADD");
-                `ALU_SUB:   $write("SUB");
-                `ALU_SLL:   $write("SLL");
-                `ALU_SRL:   $write("SRL");
-                `ALU_SRA:   $write("SRA");
-                `ALU_SLT:   $write("SLT");
-                `ALU_SLTU:  $write("SLTU");
-                `ALU_XOR:   $write("XOR");
-                `ALU_OR:    $write("OR");
-                `ALU_AND:   $write("AND");
-                `ALU_LUI:   $write("LUI");
-                `ALU_AUIPC: $write("AUIPC");
-                `ALU_BEQ:   $write("EQ");
-                `ALU_BNE:   $write("NE");
-                `ALU_BLT:   $write("LT");
-                `ALU_BGE:   $write("GE");
-                `ALU_BLTU:  $write("LTU");
-                `ALU_BGEU:  $write("GEU");           
-                `ALU_JAL:   $write("JAL");
-                `ALU_JALR:  $write("JALR");
-                `ALU_ECALL: $write("ECALL");
-                `ALU_EBREAK:$write("EBREAK");    
-                `ALU_MRET:  $write("MRET");    
-                `ALU_SRET:  $write("SRET");    
-                `ALU_DRET:  $write("DRET");    
-                default:    $write("?");
-            endcase
-        end
-        `EX_MUL: begin
-            case (`MUL_BITS'(op))
-                `MUL_MUL:   $write("MUL");
-                `MUL_MULH:  $write("MULH");
-                `MUL_MULHSU:$write("MULHSU");
-                `MUL_MULHU: $write("MULHU");
-                `MUL_DIV:   $write("DIV");
-                `MUL_DIVU:  $write("DIVU");
-                `MUL_REM:   $write("REM");
-                `MUL_REMU:  $write("REMU");
-                default:    $write("?");
-            endcase
-        end
-        `EX_LSU: begin
-            case (`LSU_BITS'(op))
-                `LSU_LB:  $write("LB");
-                `LSU_LH:  $write("LH");
-                `LSU_LW:  $write("LW");
-                `LSU_LBU: $write("LBU");
-                `LSU_LHU: $write("LHU");
-                `LSU_SB:  $write("SB");
-                `LSU_SH:  $write("SH");
-                `LSU_SW:  $write("SW");
-                `LSU_SBU: $write("SBU");
-                `LSU_SHU: $write("SHU");
-                default:  $write("?");
-            endcase
-        end
-        `EX_CSR: begin
-            case (`CSR_BITS'(op))
-                `CSR_RW: $write("CSRW");
-                `CSR_RS: $write("CSRS");
-                `CSR_RC: $write("CSRC");
-                default: $write("?");
-            endcase
-        end
-        `EX_GPU: begin
-            case (`GPU_BITS'(op))
-                `GPU_TMC:   $write("TMC");
-                `GPU_WSPAWN:$write("WSPAWN");
-                `GPU_SPLIT: $write("SPLIT");
-                `GPU_JOIN:  $write("JOIN");
-                `GPU_BAR:   $write("BAR");
-                default:    $write("?");
-            endcase
-        end    
-        default:;    
-    endcase        
-  end
-endtask
-
-task print_wb;
-    input [`WB_BITS-1:0] wb;
-    begin     
-        case (wb)
-            `WB_ALU: $write("ALU");
-            `WB_MEM: $write("MEM");
-            `WB_JAL: $write("JAL");
-            default: $write("NO");
-        endcase
-    end      
-endtask
+typedef struct packed {
+    logic [`NW_BITS-1:0]    warp_num;
+    logic [`NUM_THREADS-1:0] thread_mask;
+    logic [31:0]            curr_PC;
+    logic [`NR_BITS-1:0]    rd;
+    logic                   wb;
+} is_data_t;
 
 `endif

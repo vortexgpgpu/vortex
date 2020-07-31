@@ -1,3 +1,6 @@
+
+`include "VX_platform.vh"
+
 module VX_countones #(
     parameter N = 10
 ) (

@@ -3,73 +3,137 @@
 module VX_writeback #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire          clk,
+    input wire          reset,
 
     // inputs
-    VX_commit_if    alu_commit_if,
-    VX_commit_if    lsu_commit_if,  
-    VX_commit_if    mul_commit_if,    
-    VX_commit_if    csr_commit_if,
+    VX_exu_to_cmt_if    alu_commit_if,
+    VX_exu_to_cmt_if    lsu_commit_if,  
+    VX_exu_to_cmt_if    csr_commit_if,
+    VX_exu_to_cmt_if    mul_commit_if,
+    VX_fpu_to_cmt_if    fpu_commit_if,        
+    VX_exu_to_cmt_if    gpu_commit_if,
+    VX_cmt_to_issue_if  cmt_to_issue_if,
 
     // outputs
-    VX_wb_if        writeback_if
+    VX_wb_if            writeback_if
 );
 
-    wire lsu_valid = (| lsu_commit_if.valid) && (lsu_commit_if.wb != `WB_NO);
-    wire mul_valid = (| mul_commit_if.valid) && (mul_commit_if.wb != `WB_NO);
-    wire alu_valid = (| alu_commit_if.valid) && (alu_commit_if.wb != `WB_NO);
-    wire csr_valid = (| csr_commit_if.valid) && (csr_commit_if.wb != `WB_NO);
+    reg [`NUM_THREADS-1:0][31:0] wb_data [`ISSUEQ_SIZE-1:0];
+    reg [`NW_BITS-1:0]           wb_warp_num [`ISSUEQ_SIZE-1:0];
+    reg [`NUM_THREADS-1:0]       wb_thread_mask [`ISSUEQ_SIZE-1:0];
+    reg [31:0]                   wb_curr_PC [`ISSUEQ_SIZE-1:0];
+    reg [`NR_BITS-1:0]           wb_rd [`ISSUEQ_SIZE-1:0];
 
-    VX_wb_if writeback_tmp_if();    
+    reg [`ISSUEQ_SIZE-1:0] wb_pending;
+    reg [`ISSUEQ_SIZE-1:0] wb_pending_n;
+    reg [`ISTAG_BITS-1:0]  wb_index;
+    wire [`ISTAG_BITS-1:0] wb_index_n;
+    
+    reg wb_valid;
+    wire wb_valid_n;
 
-    assign writeback_tmp_if.valid = lsu_valid ? lsu_commit_if.valid :
-                                    mul_valid ? mul_commit_if.valid :             
-                                    alu_valid ? alu_commit_if.valid :                            
-                                    csr_valid ? csr_commit_if.valid :                                                 
-                                                0;     
+    always @(*) begin
+        wb_pending_n = wb_pending;   
 
-    assign writeback_tmp_if.warp_num = lsu_valid ? lsu_commit_if.warp_num :
-                                    mul_valid ? mul_commit_if.warp_num :   
-                                    alu_valid ? alu_commit_if.warp_num :                            
-                                    csr_valid ? csr_commit_if.warp_num :  
-                                                0; 
+        if (wb_valid) begin
+            wb_pending_n[wb_index] = 0;    
+        end
 
-    assign writeback_tmp_if.data =  lsu_valid ? lsu_commit_if.data :
-                                    mul_valid ? mul_commit_if.data :                           
-                                    alu_valid ? alu_commit_if.data :                            
-                                    csr_valid ? csr_commit_if.data :                                                               
-                                                0;
+        if (alu_commit_if.valid) begin
+            wb_pending_n [alu_commit_if.issue_tag] = cmt_to_issue_if.alu_data.wb;
+        end
+        if (lsu_commit_if.valid) begin
+            wb_pending_n [lsu_commit_if.issue_tag] = cmt_to_issue_if.lsu_data.wb;
+        end
+        if (csr_commit_if.valid) begin
+            wb_pending_n [csr_commit_if.issue_tag] = cmt_to_issue_if.csr_data.wb;
+        end
+        if (mul_commit_if.valid) begin
+            wb_pending_n [mul_commit_if.issue_tag] = cmt_to_issue_if.mul_data.wb;
+        end
+        if (fpu_commit_if.valid) begin
+            wb_pending_n [fpu_commit_if.issue_tag] = cmt_to_issue_if.fpu_data.wb;
+        end        
+    end
 
-    assign writeback_tmp_if.rd =    lsu_valid ? lsu_commit_if.rd :
-                                    mul_valid ? mul_commit_if.rd :                           
-                                    alu_valid ? alu_commit_if.rd :                            
-                                    csr_valid ? csr_commit_if.rd :                                                               
-                                                0;
-
-    wire stall = ~writeback_if.ready && (| writeback_if.valid);
-
-    VX_generic_register #(
-        .N(`NUM_THREADS + `NW_BITS + `NR_BITS + (`NUM_THREADS * 32))
-    ) wb_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (0),
-        .in    ({writeback_tmp_if.valid, writeback_tmp_if.warp_num, writeback_tmp_if.rd, writeback_tmp_if.data}),
-        .out   ({writeback_if.valid,     writeback_if.warp_num,     writeback_if.rd,     writeback_if.data})
+    VX_priority_encoder #(
+        .N(`ISSUEQ_SIZE)
+    ) wb_select (
+        .data_in   (wb_pending_n),
+        .data_out  (wb_index_n),
+        .valid_out (wb_valid_n)
     );
 
-    assign lsu_commit_if.ready = !stall;    
-    assign mul_commit_if.ready = !stall && !lsu_valid;
-    assign alu_commit_if.ready = !stall && !lsu_valid && !mul_valid;    
-    assign csr_commit_if.ready = !stall && !lsu_valid && !mul_valid && !alu_valid;    
-    
-    // special workaround to control RISC-V benchmarks termination on Verilator
-    reg [31:0] last_data_wb /* verilator public */;
     always @(posedge clk) begin
-        if ((| writeback_tmp_if.valid) && ~stall && (writeback_tmp_if.rd == 28)) begin
-            last_data_wb <= writeback_tmp_if.data[0];
+        if (reset) begin
+            wb_pending <= 0;
+            wb_index   <= 0;
+            wb_valid   <= 0;  
+        end else begin
+            if (alu_commit_if.valid) begin
+                wb_data [alu_commit_if.issue_tag]       <= alu_commit_if.data;
+                wb_warp_num [alu_commit_if.issue_tag]   <= cmt_to_issue_if.alu_data.warp_num;
+                wb_thread_mask [alu_commit_if.issue_tag] <= cmt_to_issue_if.alu_data.thread_mask;
+                wb_curr_PC [alu_commit_if.issue_tag]    <= cmt_to_issue_if.alu_data.curr_PC;
+                wb_rd [alu_commit_if.issue_tag]         <= cmt_to_issue_if.alu_data.rd;
+            end
+            if (lsu_commit_if.valid) begin
+                wb_data [lsu_commit_if.issue_tag]       <= lsu_commit_if.data;
+                wb_warp_num [lsu_commit_if.issue_tag]   <= cmt_to_issue_if.lsu_data.warp_num;
+                wb_thread_mask [lsu_commit_if.issue_tag] <= cmt_to_issue_if.lsu_data.thread_mask;
+                wb_curr_PC [lsu_commit_if.issue_tag]    <= cmt_to_issue_if.lsu_data.curr_PC;
+                wb_rd [lsu_commit_if.issue_tag]         <= cmt_to_issue_if.lsu_data.rd;
+            end
+            if (csr_commit_if.valid) begin
+                wb_data [csr_commit_if.issue_tag]       <= csr_commit_if.data;
+                wb_warp_num [csr_commit_if.issue_tag]   <= cmt_to_issue_if.csr_data.warp_num;
+                wb_thread_mask [csr_commit_if.issue_tag] <= cmt_to_issue_if.csr_data.thread_mask;
+                wb_curr_PC [csr_commit_if.issue_tag]    <= cmt_to_issue_if.csr_data.curr_PC;
+                wb_rd [csr_commit_if.issue_tag]         <= cmt_to_issue_if.csr_data.rd;
+            end
+            if (mul_commit_if.valid) begin
+                wb_data [mul_commit_if.issue_tag]       <= mul_commit_if.data;
+                wb_warp_num [mul_commit_if.issue_tag]   <= cmt_to_issue_if.mul_data.warp_num;
+                wb_thread_mask [mul_commit_if.issue_tag] <= cmt_to_issue_if.mul_data.thread_mask;
+                wb_curr_PC [mul_commit_if.issue_tag]    <= cmt_to_issue_if.mul_data.curr_PC;
+                wb_rd [mul_commit_if.issue_tag]         <= cmt_to_issue_if.mul_data.rd;
+            end
+            if (fpu_commit_if.valid) begin
+                wb_data [fpu_commit_if.issue_tag]       <= fpu_commit_if.data;
+                wb_warp_num [fpu_commit_if.issue_tag]   <= cmt_to_issue_if.fpu_data.warp_num;
+                wb_thread_mask [fpu_commit_if.issue_tag] <= cmt_to_issue_if.fpu_data.thread_mask;
+                wb_curr_PC [fpu_commit_if.issue_tag]    <= cmt_to_issue_if.fpu_data.curr_PC;
+                wb_rd [fpu_commit_if.issue_tag]         <= cmt_to_issue_if.fpu_data.rd;
+            end 
+
+            wb_pending <= wb_pending_n;
+            wb_index   <= wb_index_n;
+            wb_valid   <= wb_valid_n && writeback_if.ready;
+        end        
+    end 
+
+    // writeback request
+    assign writeback_if.valid       = wb_valid;
+    assign writeback_if.warp_num    = wb_warp_num [wb_index];
+    assign writeback_if.thread_mask = wb_thread_mask [wb_index];
+    assign writeback_if.curr_PC     = wb_curr_PC [wb_index];
+    assign writeback_if.rd          = wb_rd [wb_index];
+    assign writeback_if.data        = wb_data [wb_index];    
+
+    // commit back-pressure
+    assign alu_commit_if.ready = 1'b1;    
+    assign lsu_commit_if.ready = 1'b1;   
+    assign csr_commit_if.ready = 1'b1;
+    assign mul_commit_if.ready = 1'b1;    
+    assign fpu_commit_if.ready = 1'b1;    
+    assign gpu_commit_if.ready = 1'b1;   
+    
+    // special workaround to get RISC-V tests Pass/Fail status
+    reg [31:0] last_wb_value [`NUM_REGS-1:0] /* verilator public */;
+    always @(posedge clk) begin
+        if (writeback_if.valid) begin
+            last_wb_value[writeback_if.rd] <= writeback_if.data[0];
         end
     end
 

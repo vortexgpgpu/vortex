@@ -21,7 +21,7 @@ DBG_FLAGS += -DDBG_CORE_REQ_INFO
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
-DEBUG=1
+#DEBUG=1
 #AFU=1
 
 CFLAGS += -fPIC
@@ -35,11 +35,13 @@ TOP = Vortex
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
 
-RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/cache
+FPU_INCLUDE = -I../../hw/rtl/fp_cores/fpnew/src/common_cells/include -I../../hw/rtl/fp_cores/fpnew/src/common_cells/src -I../../hw/rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I../../hw/rtl/fp_cores/fpnew/src 
+RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/cache -I../../hw/rtl/fp_cores $(FPU_INCLUDE)
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
 VL_FLAGS += --x-initial unique --x-assign unique
+VL_FLAGS += verilator.vlt
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
@@ -70,7 +72,7 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 	
 $(PROJECT): $(SRCS)
-	verilator --exe --cc $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
+	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	make -j -C obj_dir -f V$(TOP).mk
 
 clean:

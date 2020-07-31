@@ -1017,8 +1017,8 @@ localparam SCOPE_SR_DEPTH = 2;
 
 wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
-                  || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
-                  || ((| scope_dcache_rsp_valid) && scope_dcache_rsp_ready)
+                  || (scope_dcache_req_valid && scope_dcache_req_ready)
+                  || (scope_dcache_rsp_valid && scope_dcache_rsp_ready)
                   || (scope_dram_req_valid && scope_dram_req_ready)
                   || (scope_dram_rsp_valid && scope_dram_rsp_ready)
                   || (scope_snp_req_valid && scope_snp_req_ready)
