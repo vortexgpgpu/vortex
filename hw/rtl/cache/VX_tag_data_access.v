@@ -1,6 +1,9 @@
 `include "VX_cache_config.vh"
 
 module VX_tag_data_access #(
+    parameter CACHE_ID          = 0,
+    parameter BANK_ID           = 0,   
+    parameter CORE_TAG_ID_BITS  = 0, 
     // Size of cache in bytes
     parameter CACHE_SIZE        = 0, 
     // Size of line inside a bank in bytes
@@ -21,6 +24,14 @@ module VX_tag_data_access #(
 ) (
     input wire                          clk,
     input wire                          reset,
+
+`ifdef DBG_CORE_REQ_INFO
+    input wire[31:0]                    debug_pc_st1e,
+    input wire                          debug_wb_st1e,
+    input wire[`NR_BITS-1:0]            debug_rd_st1e,
+    input wire[`NW_BITS-1:0]            debug_warp_num_st1e,
+    input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1e,
+`endif
 
     input wire                          stall,
     input wire                          is_snp_st1e,
@@ -85,10 +96,10 @@ module VX_tag_data_access #(
     wire[`LINE_SELECT_BITS-1:0] writeladdr_st1e = writeaddr_st1e[`LINE_SELECT_BITS-1:0];
 
     VX_tag_data_store #(
-        .CACHE_SIZE             (CACHE_SIZE),
-        .BANK_LINE_SIZE         (BANK_LINE_SIZE),
-        .NUM_BANKS              (NUM_BANKS),
-        .WORD_SIZE              (WORD_SIZE)
+        .CACHE_SIZE     (CACHE_SIZE),
+        .BANK_LINE_SIZE (BANK_LINE_SIZE),
+        .NUM_BANKS      (NUM_BANKS),
+        .WORD_SIZE      (WORD_SIZE)
     ) tag_data_store (
         .clk         (clk),
         .reset       (reset),
@@ -125,7 +136,7 @@ module VX_tag_data_access #(
     genvar i;
     for (i = 1; i < STAGE_1_CYCLES-1; i++) begin
         VX_generic_register #(
-            .N( 1 + 1 + BANK_LINE_SIZE + `TAG_SELECT_BITS + `BANK_LINE_WIDTH)
+            .N(1 + 1 + BANK_LINE_SIZE + `TAG_SELECT_BITS + `BANK_LINE_WIDTH)
         ) s0_1_cc (
             .clk   (clk),
             .reset (reset),
@@ -199,5 +210,24 @@ module VX_tag_data_access #(
     assign fill_sent           = miss_st1e;
     assign fill_saw_dirty_st1e = real_writefill && dirty_st1e;
     assign invalidate_line     = snoop_hit_no_pending;
+
+`ifdef DBG_PRINT_CACHE_BANK
+    always @(posedge clk) begin        
+        if (valid_req_st1e) begin             
+            if ((| use_write_enable)) begin
+                if (writefill_st1e) begin
+                    $display("%t: bank%0d:%0d store-fill: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, use_write_data);
+                end else begin
+                    $display("%t: bank%0d:%0d store-write: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, wordsel_st1e, writeword_st1e);
+                end
+            end else
+            if (miss_st1e) begin
+                $display("%t: bank%0d:%0d store-miss: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e);
+            end else begin
+                $display("%t: bank%0d:%0d store-read: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, readaddr_st10, qual_read_tag_st1, wordsel_st1e, qual_read_data_st1);
+            end            
+        end
+    end    
+`endif
 
 endmodule

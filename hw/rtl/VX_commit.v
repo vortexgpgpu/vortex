@@ -39,15 +39,27 @@ module VX_commit #(
     );
 
     assign cmt_to_csr_if.valid = (| commited_mask);    
+    assign cmt_to_csr_if.warp_num    = cmt_to_issue_if.fpu_data.warp_num;
     assign cmt_to_csr_if.num_commits = num_commits;    
+  
+    assign cmt_to_csr_if.upd_fflags  = (fpu_commit_if.valid && fpu_commit_if.ready) && fpu_commit_if.upd_fflags;    
+    
+    integer i;
 
-    assign cmt_to_csr_if.upd_fflags = (fpu_commit_if.valid && fpu_commit_if.ready) && fpu_commit_if.upd_fflags;
-    assign cmt_to_csr_if.fpu_warp_num = cmt_to_issue_if.fpu_data.warp_num;
-    assign cmt_to_csr_if.fflags_NV = fpu_commit_if.fflags_NV;
-	assign cmt_to_csr_if.fflags_DZ = fpu_commit_if.fflags_DZ;
-	assign cmt_to_csr_if.fflags_OF = fpu_commit_if.fflags_OF;
-	assign cmt_to_csr_if.fflags_UF = fpu_commit_if.fflags_UF;
-	assign cmt_to_csr_if.fflags_NX = fpu_commit_if.fflags_NX;    
+    reg [`FFG_BITS-1:0] fflags;
+    always @(*) begin
+        fflags = 0;        
+        for (i = 0; i < `NUM_THREADS; i++) begin
+            if (cmt_to_issue_if.fpu_data.thread_mask[i]) begin
+                fflags[0] |= fpu_commit_if.fflags[i][0];
+                fflags[1] |= fpu_commit_if.fflags[i][1];
+                fflags[2] |= fpu_commit_if.fflags[i][2];
+                fflags[3] |= fpu_commit_if.fflags[i][3];
+                fflags[4] |= fpu_commit_if.fflags[i][4];
+            end
+        end
+    end
+    assign cmt_to_csr_if.fflags = fflags;
 
     // Notify issue stage
 

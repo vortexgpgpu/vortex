@@ -4,3 +4,9 @@ all:
 	$(MAKE) -C driver
 	$(MAKE) -C runtime
 	$(MAKE) -C simX
+
+clean:
+	$(MAKE) -C hw clean
+	$(MAKE) -C driver clean
+	$(MAKE) -C runtime clean
+	$(MAKE) -C simX clean

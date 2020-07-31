@@ -48,7 +48,7 @@ module VX_alu_unit #(
         end       
     end        
 
-    wire [`NT_BITS-1:0] br_result_index, br_result_index_o;
+    wire [`NT_BITS-1:0] br_result_index;
 
     VX_priority_encoder #(
         .N(`NUM_THREADS)
@@ -58,8 +58,14 @@ module VX_alu_unit #(
         `UNUSED_PIN (valid_out)
     );
 
-    wire [`BR_BITS-1:0] br_op = `IS_BR_OP(alu_req_if.alu_op) ? `BR_OP(alu_req_if.alu_op) : 0;
-    wire [`BR_BITS-1:0] br_op_o;
+    wire [32:0] br_result = sub_result[br_result_index];
+    wire br_sign  = br_result[32];
+    wire br_nzero = (| br_result[31:0]);
+    wire br_sign_s1;
+    wire br_nzero_s1;
+
+    wire [`BR_BITS-1:0] br_op = `IS_BR_OP(alu_req_if.alu_op) ? `BR_OP(alu_req_if.alu_op) : `BR_NO;
+    wire [`BR_BITS-1:0] br_op_s1;
 
     wire [31:0] br_addr = (br_op == `BR_JALR) ? alu_req_if.rs1_data[br_result_index] : alu_req_if.curr_PC;
     wire [31:0] br_dest = $signed(br_addr) + $signed(alu_req_if.offset);
@@ -70,34 +76,30 @@ module VX_alu_unit #(
     wire stall = ~alu_commit_if.ready && alu_commit_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `ISTAG_BITS + (`NUM_THREADS * 32) + `BR_BITS + 32 + `NT_BITS)
+        .N(1 + `NW_BITS + `ISTAG_BITS + (`NUM_THREADS * 32) + `BR_BITS + 32 + 1 + 1)
     ) alu_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (0),
-        .in    ({alu_req_if.valid,    alu_req_if.warp_num,    alu_req_if.issue_tag,    alu_jal_result,     br_op,   br_dest,            br_result_index}),
-        .out   ({alu_commit_if.valid, branch_ctl_if.warp_num, alu_commit_if.issue_tag, alu_commit_if.data, br_op_o, branch_ctl_if.dest, br_result_index_o})
-    );    
-
-    wire [31:0] br_result = alu_commit_if.data[br_result_index_o];
-    wire br_sign  = br_result[31];
-    wire br_nzero = (| br_result[31:0]);
+        .in    ({alu_req_if.valid,    alu_req_if.warp_num,    alu_req_if.issue_tag,    alu_jal_result,     br_op,   br_dest,              br_sign,   br_nzero}),
+        .out   ({alu_commit_if.valid, branch_ctl_if.warp_num, alu_commit_if.issue_tag, alu_commit_if.data, br_op_s1, branch_ctl_if.dest, br_sign_s1, br_nzero_s1})
+    );       
     
     reg br_taken;
     always @(*) begin
-        case (br_op_o)            
-            `BR_NE:  br_taken = br_nzero;
-            `BR_EQ:  br_taken = ~br_nzero;
+        case (br_op_s1)            
+            `BR_NE:  br_taken = br_nzero_s1;
+            `BR_EQ:  br_taken = ~br_nzero_s1;
             `BR_LT, 
-            `BR_LTU: br_taken = br_sign;
+            `BR_LTU: br_taken = br_sign_s1;
             `BR_GE, 
-            `BR_GEU: br_taken = ~br_sign;
+            `BR_GEU: br_taken = ~br_sign_s1;
             default: br_taken = 1'b1;
         endcase
     end    
 
-    assign branch_ctl_if.valid = alu_req_if.valid && (br_op_o != 0);
+    assign branch_ctl_if.valid = alu_commit_if.valid && (br_op_s1 != `BR_NO);
     assign branch_ctl_if.taken = br_taken;
 
     assign alu_req_if.ready = ~stall;

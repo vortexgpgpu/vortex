@@ -24,9 +24,10 @@ module VX_writeback #(
     reg [`NUM_THREADS-1:0]       wb_thread_mask [`ISSUEQ_SIZE-1:0];
     reg [31:0]                   wb_curr_PC [`ISSUEQ_SIZE-1:0];
     reg [`NR_BITS-1:0]           wb_rd [`ISSUEQ_SIZE-1:0];
-    reg [`ISSUEQ_SIZE-1:0]       wb_pending, wb_pending_n;
 
-    reg [`ISTAG_BITS-1:0] wb_index;
+    reg [`ISSUEQ_SIZE-1:0] wb_pending;
+    reg [`ISSUEQ_SIZE-1:0] wb_pending_n;
+    reg [`ISTAG_BITS-1:0]  wb_index;
     wire [`ISTAG_BITS-1:0] wb_index_n;
     
     reg wb_valid;
@@ -67,6 +68,8 @@ module VX_writeback #(
     always @(posedge clk) begin
         if (reset) begin
             wb_pending <= 0;
+            wb_index   <= 0;
+            wb_valid   <= 0;  
         end else begin
             if (alu_commit_if.valid) begin
                 wb_data [alu_commit_if.issue_tag]       <= alu_commit_if.data;

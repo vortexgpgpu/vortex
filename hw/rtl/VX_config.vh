@@ -27,10 +27,6 @@
 `define GLOBAL_BLOCK_SIZE 16
 `endif
 
-`ifndef NUM_CSRS
-`define NUM_CSRS 64
-`endif
-
 `ifndef STARTUP_ADDR
 `define STARTUP_ADDR 32'h80000000
 `endif
@@ -59,37 +55,10 @@
 
 `define EXT_F_ENABLE
 
-// Configuration Values =======================================================
-
+// Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
 `define IMPLEMENTATION_ID   0
-
-// CSR Addresses ==============================================================
-
-`define CSR_FFLAGS      12'h001
-`define CSR_FRM         12'h002
-`define CSR_FCSR        12'h003
-
-`define CSR_VEND_ID     12'hF11
-`define CSR_ARCH_ID     12'hF12
-`define CSR_IMPL_ID     12'hF13
-`define CSR_GTID        12'hF14
-
-`define CSR_LTID        12'h020
-`define CSR_LWID        12'h021
-`define CSR_GWID        12'h023
-`define CSR_GCID        12'h024
-`define CSR_NT          12'h025
-`define CSR_NW          12'h026
-`define CSR_NC          12'h027
-
-`define CSR_CYCLE_L     12'hC00
-`define CSR_CYCLE_H     12'hC80
-`define CSR_INSTR_L     12'hC02
-`define CSR_INSTR_H     12'hC82
-
-`define CSR_MISA        12'h301
 
 // Size of MUL Request Queue Size
 `ifndef MULRQ_SIZE
@@ -105,6 +74,45 @@
 `ifndef ISSUEQ_SIZE
 `define ISSUEQ_SIZE (8 + `NUM_WARPS)
 `endif
+
+// CSR Addresses //////////////////////////////////////////////////////////////
+
+`define CSR_FFLAGS      12'h001
+`define CSR_FRM         12'h002
+`define CSR_FCSR        12'h003
+
+`define CSR_LTID        12'h020
+`define CSR_LWID        12'h021
+`define CSR_GTID        12'h022
+`define CSR_GWID        12'h023
+`define CSR_GCID        12'h024
+`define CSR_NT          12'h025
+`define CSR_NW          12'h026
+`define CSR_NC          12'h027
+
+`define CSR_SATP        12'h180
+
+`define CSR_PMPCFG0     12'h3A0
+`define CSR_PMPADDR0    12'h3B0
+
+`define CSR_MSTATUS     12'h300
+`define CSR_MISA        12'h301
+`define CSR_MEDELEG     12'h302
+`define CSR_MIDELEG     12'h303
+`define CSR_MIE         12'h304
+`define CSR_MTVEC       12'h305
+
+`define CSR_MEPC        12'h341
+
+`define CSR_CYCLE       12'hC00
+`define CSR_CYCLE_H     12'hC80
+`define CSR_INSTRET     12'hC02
+`define CSR_INSTRET_H   12'hC82
+
+`define CSR_MVENDORID   12'hF11
+`define CSR_MARCHID     12'hF12
+`define CSR_MIMPID      12'hF13
+`define CSR_MHARTID     12'hF14
 
 // Dcache Configurable Knobs ==================================================
 

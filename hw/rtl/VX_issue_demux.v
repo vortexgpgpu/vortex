@@ -46,7 +46,7 @@ module VX_issue_demux (
     assign csr_req_if.warp_num    = decode_if.warp_num;
     assign csr_req_if.curr_PC     = decode_if.curr_PC;
     assign csr_req_if.csr_op      = `CSR_OP(decode_if.ex_op);
-    assign csr_req_if.csr_addr    = decode_if.imm[`CSR_ADDR_SIZE-1:0];
+    assign csr_req_if.csr_addr    = decode_if.imm[`CSR_ADDR_BITS-1:0];
     assign csr_req_if.csr_mask    = decode_if.rs2_is_imm ? 32'(decode_if.rs1) : gpr_read_if.rs1_data[0];
     assign csr_req_if.is_io       = 1'b0;
 
