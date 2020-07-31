@@ -37,7 +37,7 @@ module VX_csr_data #(
 	reg [`FRM_BITS+`FFG_BITS-1:0] csr_fcsr [`NUM_WARPS-1:0];   // fflags + frm
 
     always @(posedge clk) begin
-        if (cmt_to_csr_if.upd_fflags) begin
+        if (cmt_to_csr_if.has_fflags) begin
             csr_fflags[cmt_to_csr_if.warp_num]               <= cmt_to_csr_if.fflags;
             csr_fcsr[cmt_to_csr_if.warp_num][`FFG_BITS-1:0]  <= cmt_to_csr_if.fflags;
         end

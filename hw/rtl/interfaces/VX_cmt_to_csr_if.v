@@ -11,7 +11,7 @@ interface VX_cmt_to_csr_if ();
 
     wire [`NE_BITS:0] num_commits;
 
-    wire upd_fflags;
+    wire has_fflags;
     wire [`FFG_BITS-1:0] fflags;
 
 endinterface

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-dir_list='../rtl/libs ../rtl/cache ../rtl/interfaces ../rtl ../rtl/fp_cores/fpnew/src/common_cells/include ../rtl/fp_cores/fpnew/src/common_cells/src ../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl ../rtl/fp_cores/fpnew/src'
+dir_list='../rtl/libs ../rtl/cache ../rtl/interfaces ../rtl ../rtl/fp_cores/fpnew/src/common_cells/include ../rtl/fp_cores ../rtl/fp_cores/altera ../rtl/fp_cores/fpnew/src/common_cells/src ../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl ../rtl/fp_cores/fpnew/src'
 
 inc_list=""
 for dir in $dir_list; do

@@ -1,6 +1,8 @@
 PROJECT = vortex_afu
 TOP_LEVEL_ENTITY = vortex_afu
 SRC_FILE = vortex_afu.sv
+FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache;../../../opae;../../../opae/ccip
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
@@ -49,7 +51,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -set "NOPAE" -sdc ../project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache;../../../opae;../../../opae/ccip"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg
