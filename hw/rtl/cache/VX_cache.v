@@ -44,7 +44,7 @@ module VX_cache #(
     parameter SNOOP_FORWARDING              = 0,
 
     // Prefetcher
-    parameter PRFQ_SIZE                     = 0,
+    parameter PRFQ_SIZE                     = 1,
     parameter PRFQ_STRIDE                   = 0,
 
     // core request tag size
