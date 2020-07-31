@@ -37,7 +37,7 @@ Install development tools
 
 Install gnu-riscv-tools
 
-    $ export RISC_GNU_TOOLS_PATH=/opt/riscv-gnu-toolchain
+    $ export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
 
     $ sudo apt-get -y install \
         binutils build-essential libtool texinfo \
@@ -51,7 +51,7 @@ Install gnu-riscv-tools
     $ git submodule update --init --recursive
     $ mkdir build
     $ cd build    
-    $ ../configure --prefix=$RISC_GNU_TOOLS_PATH --with-arch=rv32im --with-abi=ilp32
+    $ ../configure --prefix=$RISCV_TOOLCHAIN_PATH --with-arch=rv32im --with-abi=ilp32
     $ make -j`nproc`  
     $ make -j`nproc` build-qemu
 

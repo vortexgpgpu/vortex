@@ -18,26 +18,30 @@ module VX_execute #(
     VX_cache_core_rsp_if dcache_rsp_if,
 
     // perf
-    VX_perf_cntrs_if    perf_cntrs_if,
-
+    VX_cmt_to_csr_if    cmt_to_csr_if,
+    
     // inputs    
     VX_alu_req_if       alu_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,
     VX_mul_req_if       mul_req_if,    
+    VX_fpu_req_if       fpu_req_if,    
     VX_gpu_req_if       gpu_req_if,
     
     // outputs
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
-    VX_commit_if        alu_commit_if,
-    VX_commit_if        lsu_commit_if,    
-    VX_commit_if        csr_commit_if,
-    VX_commit_if        mul_commit_if,
-    VX_commit_if        gpu_commit_if,
+    VX_exu_to_cmt_if    alu_commit_if,
+    VX_exu_to_cmt_if    lsu_commit_if,    
+    VX_exu_to_cmt_if    csr_commit_if,
+    VX_exu_to_cmt_if    mul_commit_if,
+    VX_fpu_to_cmt_if    fpu_commit_if,
+    VX_exu_to_cmt_if    gpu_commit_if,
     
     output wire         ebreak
 );
+    
+    VX_csr_to_fpu_if  csr_to_fpu_if();
 
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
@@ -66,21 +70,52 @@ module VX_execute #(
     ) csr_unit (
         .clk            (clk),
         .reset          (reset),    
-        .perf_cntrs_if  (perf_cntrs_if),    
+        .cmt_to_csr_if  (cmt_to_csr_if),    
+        .csr_to_fpu_if  (csr_to_fpu_if), 
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if)
     );
 
+`ifdef EXT_M_ENABLE
     VX_mul_unit #(
         .CORE_ID(CORE_ID)
     ) mul_unit (
         .clk            (clk),
         .reset          (reset),
-        .mul_req_if     (mul_req_if),
-        .mul_commit_if  (mul_commit_if)    
+        .alu_req_if     (mul_req_if),
+        .alu_commit_if  (mul_commit_if)    
     );
+`else
+    assign mul_req_if.ready        = 0;
+    assign mul_commit_if.valid     = 0;
+    assign mul_commit_if.issue_tag = 0;
+    assign mul_commit_if.data      = 0;
+`endif
+
+`ifdef EXT_F_ENABLE
+    VX_fpu_unit #(
+        .CORE_ID(CORE_ID)
+    ) fpu_unit (
+        .clk            (clk),
+        .reset          (reset),        
+        .fpu_req_if     (fpu_req_if),
+        .csr_to_fpu_if  (csr_to_fpu_if),
+        .fpu_commit_if  (fpu_commit_if)    
+    );
+`else
+    assign fpu_req_if.ready         = 0;
+    assign fpu_commit_if.valid      = 0;
+    assign fpu_commit_if.issue_tag  = 0;
+    assign fpu_commit_if.data       = 0;
+    assign fpu_commit_if.has_fflags = 0;
+    assign fpu_commit_if.fflags_NV  = 0;
+    assign fpu_commit_if.fflags_DZ  = 0;
+    assign fpu_commit_if.fflags_OF  = 0;
+    assign fpu_commit_if.fflags_UF  = 0;
+    assign fpu_commit_if.fflags_NX  = 0;
+`endif
 
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
@@ -90,7 +125,7 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    assign ebreak = (| alu_req_if.valid) && (alu_req_if.alu_op == `ALU_EBREAK || alu_req_if.alu_op == `ALU_ECALL);
+    assign ebreak = alu_req_if.valid && (alu_req_if.alu_op == `ALU_EBREAK || alu_req_if.alu_op == `ALU_ECALL);
 
     `SCOPE_ASSIGN(scope_decode_valid,       decode_if.valid);
     `SCOPE_ASSIGN(scope_decode_warp_num,    decode_if.warp_num);

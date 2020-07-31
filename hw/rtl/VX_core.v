@@ -166,15 +166,15 @@ module VX_core #(
     VX_cache_core_req_if #(
         .NUM_REQUESTS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
+        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     ) core_icache_req_if();
 
     VX_cache_core_rsp_if #(
         .NUM_REQUESTS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
+        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     ) core_icache_rsp_if();
 
     VX_pipeline #(

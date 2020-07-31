@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_tex_unit #(
     parameter TADDRW = 32,
@@ -11,7 +11,7 @@ module VX_tex_unit #(
     parameter MAXAMW = 2,
     parameter TAGW   = 16,
 
-    parameter NUMCRQS = 32,
+    parameter NUMCRQS = 32
 ) (
     input wire clk,
     input wire reset,

@@ -245,8 +245,8 @@ module VX_mem_unit # (
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (1),
         .WRITE_ENABLE           (0),
-        .CORE_TAG_WIDTH         (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
+        .CORE_TAG_WIDTH         (`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS       (`ICORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
     ) icache (
         `SCOPE_SIGNALS_CACHE_UNBIND

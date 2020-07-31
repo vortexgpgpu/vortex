@@ -173,7 +173,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     {   
         // Load device CAPS
         int ret = 0;
-        ret |= vx_csr_get(device, 0, CSR_IMPL_ID, &device->implementation_id);
+        ret |= vx_csr_get(device, 0, CSR_MIMPID, &device->implementation_id);
         ret |= vx_csr_get(device, 0, CSR_NC, &device->num_cores);
         ret |= vx_csr_get(device, 0, CSR_NW, &device->num_warps);
         ret |= vx_csr_get(device, 0, CSR_NT, &device->num_threads);
@@ -217,14 +217,14 @@ extern int vx_dev_close(vx_device_h hdevice) {
         unsigned value;
 
         int ret = 0;
-        ret |= vx_csr_get(hdevice, 0, CSR_INSTR_H, &value);
+        ret |= vx_csr_get(hdevice, 0, CSR_INSTRET_H, &value);
         instrs = value;
-        ret |= vx_csr_get(hdevice, 0, CSR_INSTR_L, &value);
+        ret |= vx_csr_get(hdevice, 0, CSR_INSTRET, &value);
         instrs = (instrs << 32) | value;
       
         ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_H, &value);
         cycles = value;
-        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_L, &value);
+        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE, &value);
         cycles = (cycles << 32) | value;
 
         float IPC = (float)(double(instrs) / double(cycles));

@@ -24,7 +24,8 @@ Simulator::Simulator() {
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  trace_ = new VerilatedVcdC;
+  trace_ = new VerilatedVcdC();
+  trace_->set_time_unit("1ns");
   vortex_->trace(trace_, 99);
   trace_->open("trace.vcd");
 #endif  
@@ -105,9 +106,8 @@ void Simulator::eval_dram_bus() {
   if (!dram_rsp_active_) {
     if (dequeue_index != -1) {
       vortex_->dram_rsp_valid = 1;
-      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].data, GLOBAL_BLOCK_SIZE);
-      vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;    
-      free(dram_rsp_vec_[dequeue_index].data);
+      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].block.data(), GLOBAL_BLOCK_SIZE);
+      vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;   
       dram_rsp_vec_.erase(dram_rsp_vec_.begin() + dequeue_index);
       dram_rsp_active_ = true;
     } else {
@@ -141,9 +141,8 @@ void Simulator::eval_dram_bus() {
       } else {
         dram_req_t dram_req;
         dram_req.cycles_left = DRAM_LATENCY;     
-        dram_req.data = (uint8_t*)malloc(GLOBAL_BLOCK_SIZE);
         dram_req.tag = vortex_->dram_req_tag;
-        ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.data);
+        ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.block.data());
         dram_rsp_vec_.push_back(dram_req);
       } 
     }    
@@ -211,7 +210,7 @@ void Simulator::wait(uint32_t cycles) {
   }
 }
 
-bool Simulator::is_busy() {
+bool Simulator::is_busy() const {
   return vortex_->busy || snp_req_active_;
 }
 
@@ -238,7 +237,7 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   #endif  
 }
 
-bool Simulator::run() {
+void Simulator::run() {
 #ifndef NDEBUG
   std::cout << timestamp << ": [sim] run()" << std::endl;
 #endif 
@@ -253,20 +252,15 @@ bool Simulator::run() {
   }
 
   // wait 5 cycles to flush the pipeline
-  this->wait(5);
+  this->wait(5);  
+}
 
-  // check riscv-tests PASSED/FAILED status
-#if (NUM_CLUSTERS == 1 && NUM_CORES == 1)
-  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb & 0xf;
-#else
-#if (NUM_CLUSTERS == 1)
-  int status = (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb & 0xf;
-#else
-  int status = (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_data_wb & 0xf;
-#endif
-#endif
-
-  return (status == 1);
+int Simulator::get_last_wb_value(int reg) const {
+  #if (NUM_CLUSTERS != 1)
+    return (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];    
+  #else
+    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
+  #endif
 }
 
 void Simulator::load_bin(const char* program_file) {

@@ -1,9 +1,12 @@
 `ifndef VX_CACHE_CONFIG
 `define VX_CACHE_CONFIG
 
-`include "VX_define.vh"
+`include "VX_platform.vh"
+`include "VX_scope.vh"
 
 `define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_REQ_TAG_WIDTH)
+
+`define REQS_BITS               `LOG2UP(NUM_REQUESTS)
 
 //                               tag              rw   byteen      tid
 `define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)

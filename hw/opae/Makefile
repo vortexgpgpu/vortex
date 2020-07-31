@@ -4,13 +4,18 @@ FPGA_BUILD_DIR=build_fpga
 
 all: ase-1c
 
-ase-1c: setup-ase-1c
+sources.txt:
+	./gen_sources.sh > sources.txt
+
+gen_sources: sources.txt
+
+ase-1c: setup-ase-1c gen_sources
 	make -C $(ASE_BUILD_DIR)_1c
 
-ase-2c: setup-ase-2c
+ase-2c: setup-ase-2c gen_sources
 	make -C $(ASE_BUILD_DIR)_2c
 
-ase-4c: setup-ase-4c
+ase-4c: setup-ase-4c gen_sources
 	make -C $(ASE_BUILD_DIR)_4c
 
 setup-ase-1c: $(ASE_BUILD_DIR)_1c/Makefile
@@ -19,22 +24,22 @@ setup-ase-2c: $(ASE_BUILD_DIR)_2c/Makefile
 
 setup-ase-4c: $(ASE_BUILD_DIR)_4c/Makefile
 
-$(ASE_BUILD_DIR)_1c/Makefile:
+$(ASE_BUILD_DIR)_1c/Makefile: sources.txt
 	afu_sim_setup -s sources_1c.txt $(ASE_BUILD_DIR)_1c
 
-$(ASE_BUILD_DIR)_2c/Makefile:
+$(ASE_BUILD_DIR)_2c/Makefile: sources.txt
 	afu_sim_setup -s sources_2c.txt $(ASE_BUILD_DIR)_2c
 
-$(ASE_BUILD_DIR)_4c/Makefile:
+$(ASE_BUILD_DIR)_4c/Makefile: sources.txt
 	afu_sim_setup -s sources_4c.txt $(ASE_BUILD_DIR)_4c
 
-fpga-1c: setup-fpga-1c
+fpga-1c: setup-fpga-1c gen_sources
 	cd $(FPGA_BUILD_DIR)_1c && qsub-synth
 
-fpga-2c: setup-fpga-2c
+fpga-2c: setup-fpga-2c gen_sources
 	cd $(FPGA_BUILD_DIR)_2c && qsub-synth
 
-fpga-4c: setup-fpga-4c
+fpga-4c: setup-fpga-4c gen_sources
 	cd $(FPGA_BUILD_DIR)_4c && qsub-synth
 	
 setup-fpga-1c: $(FPGA_BUILD_DIR)_1c/build/dcp.qpf
@@ -62,20 +67,20 @@ run-ase-4c:
 	cd $(ASE_BUILD_DIR)_4c && make sim
 
 clean-ase-1c:
-	rm -rf $(ASE_BUILD_DIR)_1c
+	rm -rf $(ASE_BUILD_DIR)_1c sources.txt
 
 clean-ase-2c:
-	rm -rf $(ASE_BUILD_DIR)_2c
+	rm -rf $(ASE_BUILD_DIR)_2c sources.txt
 
 clean-ase-4c:
-	rm -rf $(ASE_BUILD_DIR)_4c
+	rm -rf $(ASE_BUILD_DIR)_4c sources.txt
 
 clean-fpga-1c:
-	rm -rf $(FPGA_BUILD_DIR)_1c
+	rm -rf $(FPGA_BUILD_DIR)_1c sources.txt
 	
 clean-fpga-2c:
-	rm -rf $(FPGA_BUILD_DIR)_2c
+	rm -rf $(FPGA_BUILD_DIR)_2c sources.txt
 
 clean-fpga-4c:
-	rm -rf $(FPGA_BUILD_DIR)_4c
+	rm -rf $(FPGA_BUILD_DIR)_4c sources.txt
 

@@ -15,13 +15,13 @@
 #include <vector>
 
 #define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 100
+#define DRAM_LATENCY 4
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
 
 typedef struct {
   int cycles_left;  
-  uint8_t *data;
+  std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
   unsigned tag;
 } dram_req_t;
 
@@ -34,7 +34,7 @@ public:
   void load_bin(const char* program_file);
   void load_ihex(const char* program_file);
   
-  bool is_busy();  
+  bool is_busy() const;  
 
   void reset();
   void step();
@@ -43,7 +43,8 @@ public:
 
   void attach_ram(RAM* ram);
 
-  bool run();  
+  void run();  
+  int get_last_wb_value(int reg) const;  
   void print_stats(std::ostream& out);
 
 private:  
