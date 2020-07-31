@@ -49,7 +49,7 @@ module VX_scheduler  #(
                 for (i = 0; i < `NUM_REGS; i++) begin
                     inuse_registers[w][i] <= 0;                    
                 end
-                inuse_reg_mask[w] <= 0;
+                inuse_reg_mask[w] <= `NUM_REGS'(0);
             end            
         end else begin
             if (acquire_rd) begin

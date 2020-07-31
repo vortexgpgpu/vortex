@@ -12,7 +12,7 @@ interface VX_csr_req_if ();
 
     wire [`CSR_BITS-1:0]    csr_op;
 
-    wire [`CSR_ADDR_SIZE-1:0] csr_addr;
+    wire [`CSR_ADDR_BITS-1:0] csr_addr;
     wire [31:0]             csr_mask;
 
     wire [`NR_BITS-1:0]     rd;

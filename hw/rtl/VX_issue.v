@@ -97,7 +97,7 @@ module VX_issue #(
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=ALU, istag=%0d, tmask=%b, wb=%d, rd=%0d, rs1_data=%0h, rs2_data=%0h, offset=%0h, next_PC=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, alu_req_if.rs1_data, alu_req_if.rs2_data, alu_req_if.offset, alu_req_if.next_PC);   
         end
         if (lsu_req_if.valid && lsu_req_if.ready) begin
-            $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=LSU, istag=%0d, tmask=%b, wb=%0b, rd=%0d, rw=%b, byteen=%b, baddr=%0h, offset=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, lsu_req_if.rw, lsu_req_if.byteen, lsu_req_if.base_addr, lsu_req_if.offset);   
+            $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=LSU, istag=%0d, tmask=%b, wb=%0b, rd=%0d, rw=%b, byteen=%b, baddr=%0h, offset=%0h, data=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, lsu_req_if.rw, lsu_req_if.byteen, lsu_req_if.base_addr, lsu_req_if.offset, lsu_req_if.store_data);   
         end
         if (csr_req_if.valid && csr_req_if.ready) begin
             $display("%t: Core%0d-issue: warp=%0d, PC=%0h, ex=CSR, istag=%0d, tmask=%b, wb=%d, rd=%0d, addr=%0h, mask=%0h", $time, CORE_ID, decode_tmp_if.warp_num, decode_tmp_if.curr_PC, issue_tmp_tag, decode_tmp_if.thread_mask, decode_tmp_if.wb, decode_tmp_if.rd, csr_req_if.csr_addr, csr_req_if.csr_mask);   

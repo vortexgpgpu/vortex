@@ -105,7 +105,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     /* verilator lint_off UNUSED */
-    wire[31:0]           debug_use_pc_st0;
+    wire[31:0]           debug_pc_st0;
     wire                 debug_wb_st0;
     wire[`NR_BITS-1:0]   debug_rd_st0;
     wire[`NW_BITS-1:0]   debug_warp_num_st0;
@@ -114,7 +114,7 @@ module VX_bank #(
     wire[`REQS_BITS-1:0] debug_tid_st0;
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st0;
 
-    wire[31:0]           debug_use_pc_st1e;
+    wire[31:0]           debug_pc_st1e;
     wire                 debug_wb_st1e;
     wire[`NR_BITS-1:0]   debug_rd_st1e;
     wire[`NW_BITS-1:0]   debug_warp_num_st1e;
@@ -123,7 +123,7 @@ module VX_bank #(
     wire[`REQS_BITS-1:0] debug_tid_st1e;
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1e;
 
-    wire[31:0]           debug_use_pc_st2;
+    wire[31:0]           debug_pc_st2;
     wire                 debug_wb_st2;
     wire[`NR_BITS-1:0]   debug_rd_st2;
     wire[`NW_BITS-1:0]   debug_warp_num_st2;
@@ -360,7 +360,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_use_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = qual_inst_meta_st0;
+        assign {debug_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = qual_inst_meta_st0;
     end
 `endif
 
@@ -432,6 +432,9 @@ module VX_bank #(
                                         && (addr_st2 == addr_st1e);
 
     VX_tag_data_access #(
+        .BANK_ID        (BANK_ID),
+        .CACHE_ID       (CACHE_ID),
+        .CORE_TAG_ID_BITS(CORE_TAG_ID_BITS),
         .CACHE_SIZE     (CACHE_SIZE),
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
@@ -442,6 +445,15 @@ module VX_bank #(
      ) tag_data_access (
         .clk            (clk),
         .reset          (reset),
+
+`ifdef DBG_CORE_REQ_INFO
+        .debug_pc_st1e(debug_pc_st1e),
+        .debug_wb_st1e(debug_wb_st1e),
+        .debug_rd_st1e(debug_rd_st1e),
+        .debug_warp_num_st1e(debug_warp_num_st1e),
+        .debug_tagid_st1e(debug_tagid_st1e),
+`endif
+
         .stall          (stall_bank_pipe),
         .stall_bank_pipe(stall_bank_pipe),
 
@@ -478,7 +490,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_use_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_tagid_st1e, debug_rw_st1e, debug_byteen_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
+        assign {debug_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_tagid_st1e, debug_rw_st1e, debug_byteen_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
     end
 `endif
     
@@ -519,7 +531,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_use_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
+        assign {debug_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
     end
 `endif
 

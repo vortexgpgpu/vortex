@@ -30,7 +30,7 @@
 
 `define NR_BITS    `LOG2UP(`NUM_REGS)
 
-`define CSR_ADDR_SIZE 12
+`define CSR_ADDR_BITS 12
 
 `define CSR_WIDTH   12
 
@@ -38,8 +38,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define LATENCY_IDIV 24
-`define LATENCY_IMUL 2
+`define LATENCY_IDIV    24
+`define LATENCY_IMUL    2
 
 `define LATENCY_FMULADD  2
 `define LATENCY_FDIVSQRT 2
@@ -91,6 +91,7 @@
 `define BR_MRET     4'hA
 `define BR_SRET     4'hB
 `define BR_DRET     4'hC
+`define BR_NO       4'hF
 `define BR_BITS     4
 
 `define OP_BITS     5

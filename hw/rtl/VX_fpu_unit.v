@@ -20,12 +20,12 @@ module VX_fpu_unit #(
     localparam FMTF_BITS = $clog2(fpnew_pkg::NUM_FP_FORMATS);
     localparam FMTI_BITS = $clog2(fpnew_pkg::NUM_INT_FORMATS);
 
-    localparam int FPU_DPATHW = `NUM_THREADS * 32;
+    localparam FPU_DPATHW = 32'd32;
 
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
         Width:         FPU_DPATHW,
-        EnableVectors: 1,
-        EnableNanBox:  1,
+        EnableVectors: 1'b0,
+        EnableNanBox:  1'b1,
         FpFmtMask:     5'b10000,
         IntFmtMask:    4'b0010
     };
@@ -54,7 +54,7 @@ module VX_fpu_unit #(
     wire [FMTI_BITS-1:0] fpu_int_fmt = fpnew_pkg::INT32;
 
     wire [`NUM_THREADS-1:0][31:0] fpu_result;
-    fpnew_pkg::status_t fpu_status;
+    fpnew_pkg::status_t fpu_status [0:`NUM_THREADS-1];
 
     assign csr_to_fpu_if.warp_num = fpu_req_if.warp_num;
     wire [`FRM_BITS-1:0] real_frm = (fpu_req_if.frm == `FRM_DYN) ? csr_to_fpu_if.frm : fpu_req_if.frm;
@@ -65,7 +65,7 @@ module VX_fpu_unit #(
     reg [FOP_BITS-1:0] fpu_op;
     reg [`FRM_BITS-1:0] fpu_rnd;
     reg fpu_op_mod;
-    reg fflags_en, fflags_en_o;    
+    reg fflags_en, fflags_en_o;
 
     always @(*) begin
         fpu_op     = fpnew_pkg::SGNJ;
@@ -87,87 +87,93 @@ module VX_fpu_unit #(
                     fpu_operands[2] = fpu_req_if.rs2_data;
                     fpu_op_mod = 1; 
                 end
-            `FPU_MUL: fpu_op = fpnew_pkg::MUL;
-            `FPU_DIV: fpu_op = fpnew_pkg::DIV;
-            `FPU_SQRT:  fpu_op = fpnew_pkg::SQRT;
-            `FPU_MADD:  fpu_op = fpnew_pkg::FMADD;
-            `FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = 1; end
-            `FPU_NMSUB: fpu_op = fpnew_pkg::FNMSUB;
+            `FPU_MUL:   begin fpu_op = fpnew_pkg::MUL; end
+            `FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
+            `FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
+            `FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; end
+            `FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end
+            `FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
             `FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
             `FPU_SGNJ:  begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RNE; fflags_en = 0; end
             `FPU_SGNJN: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RTZ; fflags_en = 0; end
             `FPU_SGNJX: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RDN; fflags_en = 0; end
             `FPU_MIN:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RNE; end
             `FPU_MAX:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RTZ; end
-            `FPU_CVTWS: fpu_op = fpnew_pkg::F2I;
+            `FPU_CVTWS: begin fpu_op = fpnew_pkg::F2I; end
             `FPU_CVTWUS:begin fpu_op = fpnew_pkg::F2I;  fpu_op_mod = 1; end
-            `FPU_CVTSW: fpu_op = fpnew_pkg::I2F;
+            `FPU_CVTSW: begin fpu_op = fpnew_pkg::I2F; end
             `FPU_CVTSWU:begin fpu_op = fpnew_pkg::I2F;  fpu_op_mod = 1; end
             `FPU_MVXW:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; fflags_en = 0; end
             `FPU_MVWX:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; fflags_en = 0; end
             `FPU_CLASS: begin fpu_op = fpnew_pkg::CLASSIFY; fflags_en = 0; end
-            `FPU_CMP:   fpu_op = fpnew_pkg::CMP;
+            `FPU_CMP:   begin fpu_op = fpnew_pkg::CMP; end
             default:;
         endcase
-    end   
+    end  
+
+    genvar i;
 
 `DISABLE_TRACING
-
-    fpnew_top #( 
-        .Features       (FPU_FEATURES),
-        .Implementation (FPU_IMPLEMENTATION),
-        .TagType        (logic[`LOG2UP(`FPURQ_SIZE)-1+2:0])
-    ) fpnew_core (
-        .clk_i          (clk),
-        .rst_ni         (1'b1),
-        .operands_i     (fpu_operands),
-        .rnd_mode_i     (fpnew_pkg::roundmode_e'(fpu_rnd)),
-        .op_i           (fpnew_pkg::operation_e'(fpu_op)),
-        .op_mod_i       (fpu_op_mod),
-        .src_fmt_i      (fpnew_pkg::fp_format_e'(fpu_src_fmt)),
-        .dst_fmt_i      (fpnew_pkg::fp_format_e'(fpu_dst_fmt)),
-        .int_fmt_i      (fpnew_pkg::int_format_e'(fpu_int_fmt)),
-        .vectorial_op_i (1'b1),
-        .tag_i          ({fpu_in_tag, fflags_en, is_class_op_i}),
-        .in_valid_i     (fpu_in_valid),
-        .in_ready_o     (fpu_in_ready),
-        .flush_i        (reset),
-        .result_o       (fpu_result),
-        .status_o       (fpu_status),
-        .tag_o          ({fpu_out_tag, fflags_en_o, is_class_op_o}),
-        .out_valid_o    (fpu_out_valid),
-        .out_ready_i    (fpu_out_ready),
-        `UNUSED_PIN     (busy_o)
-    );
-
-`ENABLE_TRACING
-
-    reg [`NUM_THREADS-1:0][31:0] fpu_result_qual;
-
-    always @(8) begin
-        // unpack classify mask result
-        if (is_class_op_o) begin            
-            integer i;
-            for (i = 0; i < `NUM_THREADS; i++) begin
-                automatic integer l = i / 4;
-                automatic integer w = i % 4;
-                automatic integer class_mask = fpu_result[l][w * 8 +: 8];
-
-                fpu_result_qual[i][0] = class_mask[7] & class_mask[0];
-                fpu_result_qual[i][1] = class_mask[7] & class_mask[1];
-                fpu_result_qual[i][2] = class_mask[7] & class_mask[2];
-                fpu_result_qual[i][3] = class_mask[7] & class_mask[3];
-                fpu_result_qual[i][4] = class_mask[6] & class_mask[3];
-                fpu_result_qual[i][5] = class_mask[6] & class_mask[2];
-                fpu_result_qual[i][6] = class_mask[6] & class_mask[1];
-                fpu_result_qual[i][7] = class_mask[6] & class_mask[0];
-                fpu_result_qual[i][8] = class_mask[4];
-                fpu_result_qual[i][9] = class_mask[5];
-            end
+    
+    for (i = 0; i < `NUM_THREADS; i++) begin
+        if (0 == i) begin
+            fpnew_top #( 
+                .Features       (FPU_FEATURES),
+                .Implementation (FPU_IMPLEMENTATION),
+                .TagType        (logic[`LOG2UP(`FPURQ_SIZE)+1+1-1:0])
+            ) fpnew_core (
+                .clk_i          (clk),
+                .rst_ni         (1'b1),
+                .operands_i     ({fpu_operands[2][0], fpu_operands[1][0], fpu_operands[0][0]}),
+                .rnd_mode_i     (fpnew_pkg::roundmode_e'(fpu_rnd)),
+                .op_i           (fpnew_pkg::operation_e'(fpu_op)),
+                .op_mod_i       (fpu_op_mod),
+                .src_fmt_i      (fpnew_pkg::fp_format_e'(fpu_src_fmt)),
+                .dst_fmt_i      (fpnew_pkg::fp_format_e'(fpu_dst_fmt)),
+                .int_fmt_i      (fpnew_pkg::int_format_e'(fpu_int_fmt)),
+                .vectorial_op_i (1'b0),
+                .tag_i          ({fpu_in_tag, fflags_en, is_class_op_i}),
+                .in_valid_i     (fpu_in_valid),
+                .in_ready_o     (fpu_in_ready),
+                .flush_i        (reset),
+                .result_o       (fpu_result),
+                .status_o       (fpu_status[0]),
+                .tag_o          ({fpu_out_tag, fflags_en_o, is_class_op_o}),
+                .out_valid_o    (fpu_out_valid),
+                .out_ready_i    (fpu_out_ready),
+                `UNUSED_PIN     (busy_o)
+            );
         end else begin
-            fpu_result_qual = fpu_result;
+            fpnew_top #( 
+                .Features       (FPU_FEATURES),
+                .Implementation (FPU_IMPLEMENTATION),
+                .TagType        (logic)
+            ) fpnew_core (
+                .clk_i          (clk),
+                .rst_ni         (1'b1),
+                .operands_i     ({fpu_operands[2][i], fpu_operands[1][i], fpu_operands[0][i]}),
+                .rnd_mode_i     (fpnew_pkg::roundmode_e'(fpu_rnd)),
+                .op_i           (fpnew_pkg::operation_e'(fpu_op)),
+                .op_mod_i       (fpu_op_mod),
+                .src_fmt_i      (fpnew_pkg::fp_format_e'(fpu_src_fmt)),
+                .dst_fmt_i      (fpnew_pkg::fp_format_e'(fpu_dst_fmt)),
+                .int_fmt_i      (fpnew_pkg::int_format_e'(fpu_int_fmt)),
+                .vectorial_op_i (1'b0),
+                .tag_i          (1'b0),
+                .in_valid_i     (fpu_in_valid),
+                `UNUSED_PIN     (in_ready_o),
+                .flush_i        (reset),
+                .result_o       (fpu_result[i]),
+                .status_o       (fpu_status[i]),
+                `UNUSED_PIN     (tag_o),
+                `UNUSED_PIN     (out_valid_o),
+                .out_ready_i    (fpu_out_ready),
+                `UNUSED_PIN     (busy_o)
+            );
         end
     end
+
+`ENABLE_TRACING
 
     assign fpu_in_valid = fpu_req_if.valid;
     assign fpu_in_tag   = fpu_req_if.issue_tag;
@@ -177,15 +183,18 @@ module VX_fpu_unit #(
 
     assign fpu_commit_if.valid     = fpu_out_valid;
     assign fpu_commit_if.issue_tag = fpu_out_tag;
-    assign fpu_commit_if.data      = fpu_result_qual;
+    assign fpu_commit_if.data      = fpu_result;
     
-    assign fpu_commit_if.upd_fflags = fflags_en_o;
-    assign fpu_commit_if.fflags_NV = fpu_status.NV;
-    assign fpu_commit_if.fflags_DZ = fpu_status.DZ;
-    assign fpu_commit_if.fflags_OF = fpu_status.OF;
-    assign fpu_commit_if.fflags_UF = fpu_status.UF;
-    assign fpu_commit_if.fflags_NX = fpu_status.NX;
+    assign fpu_commit_if.upd_fflags = fflags_en_o;   
     
+    for (i = 0; i < `NUM_THREADS; i++) begin
+        assign fpu_commit_if.fflags[i][0] = fpu_status[i].NX;
+        assign fpu_commit_if.fflags[i][1] = fpu_status[i].UF;
+        assign fpu_commit_if.fflags[i][2] = fpu_status[i].OF;
+        assign fpu_commit_if.fflags[i][3] = fpu_status[i].DZ;
+        assign fpu_commit_if.fflags[i][4] = fpu_status[i].NV;
+    end
+        
     assign fpu_out_ready = fpu_commit_if.ready;
 
 endmodule

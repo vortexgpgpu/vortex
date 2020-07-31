@@ -210,7 +210,7 @@ void Simulator::wait(uint32_t cycles) {
   }
 }
 
-bool Simulator::is_busy() {
+bool Simulator::is_busy() const {
   return vortex_->busy || snp_req_active_;
 }
 
@@ -255,11 +255,11 @@ void Simulator::run() {
   this->wait(5);  
 }
 
-int Simulator::get_last_wb_value(int reg) {
-  #if (NUM_CLUSTERS == 1)
-    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
+int Simulator::get_last_wb_value(int reg) const {
+  #if (NUM_CLUSTERS != 1)
+    return (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];    
   #else
-    return (int)vortex_->Vortex->genblk2__DOT__genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
+    return (int)vortex_->Vortex->genblk1__DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
   #endif
 }
 

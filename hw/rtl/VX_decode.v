@@ -337,10 +337,10 @@ module VX_decode  #(
 
     assign decode_tmp_if.use_rs3 = use_rs3;
     
-    assign decode_tmp_if.reg_use_mask = ((`NUM_REGS)'(use_rd)  << rd) 
-                                      | ((`NUM_REGS)'(use_rs1) << rs1_qual) 
-                                      | ((`NUM_REGS)'(use_rs2) << rs2)
-                                      | ((`NUM_REGS)'(use_rs3) << rs3);
+    assign decode_tmp_if.reg_use_mask = ((`NUM_REGS)'(use_rd)  << decode_tmp_if.rd) 
+                                      | ((`NUM_REGS)'(use_rs1) << decode_tmp_if.rs1) 
+                                      | ((`NUM_REGS)'(use_rs2) << decode_tmp_if.rs2)
+                                      | ((`NUM_REGS)'(use_rs3) << decode_tmp_if.rs3);
 
     assign decode_tmp_if.imm = (is_lui || is_auipc) ? {upper_imm, 12'(0)} : 
                                     (is_jal || is_jalr || is_jals) ? jalx_offset :

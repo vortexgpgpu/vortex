@@ -34,7 +34,7 @@ public:
   void load_bin(const char* program_file);
   void load_ihex(const char* program_file);
   
-  bool is_busy();  
+  bool is_busy() const;  
 
   void reset();
   void step();
@@ -44,7 +44,7 @@ public:
   void attach_ram(RAM* ram);
 
   void run();  
-  int get_last_wb_value(int reg);  
+  int get_last_wb_value(int reg) const;  
   void print_stats(std::ostream& out);
 
 private:  
