@@ -42,7 +42,7 @@ module VX_commit #(
     assign cmt_to_csr_if.warp_num    = cmt_to_issue_if.fpu_data.warp_num;
     assign cmt_to_csr_if.num_commits = num_commits;    
   
-    assign cmt_to_csr_if.upd_fflags  = (fpu_commit_if.valid && fpu_commit_if.ready) && fpu_commit_if.upd_fflags;    
+    assign cmt_to_csr_if.has_fflags  = (fpu_commit_if.valid && fpu_commit_if.ready) && fpu_commit_if.has_fflags;    
     
     integer i;
 

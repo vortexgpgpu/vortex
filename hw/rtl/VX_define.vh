@@ -41,9 +41,9 @@
 `define LATENCY_IDIV    24
 `define LATENCY_IMUL    2
 
-`define LATENCY_FMULADD  2
-`define LATENCY_FDIVSQRT 2
-`define LATENCY_FCONV    2
+`define LATENCY_FMULADD  16
+`define LATENCY_FDIVSQRT 16
+`define LATENCY_FCONV    16
 `define LATENCY_FNONCOMP 1
 
 ///////////////////////////////////////////////////////////////////////////////
