@@ -39,8 +39,8 @@ module VX_fp_fpga (
     VX_fpnew #(
         .FMULADD  (0),
         .FDIVSQRT (0),
-        .FNONCOMP (0),
-        .FCONV    (1)
+        .FNONCOMP (1),
+        .FCONV    (0)
     ) fp_core (
         .clk        (clk),
         .reset      (reset),   
@@ -67,6 +67,7 @@ module VX_fp_fpga (
         .out_valid  (fpnew_out_valid)
     );
 
+    genvar i;
     for (i = 0; i < `NUM_THREADS; i++) begin
         acl_fp_add fp_add (
             .clock  (clk), 
