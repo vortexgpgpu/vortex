@@ -66,7 +66,7 @@ module VX_fpnew #(
     wire fpu_in_ready, fpu_in_valid;    
     wire fpu_out_ready, fpu_out_valid;
 
-    reg [`LOG2UP(`FPURQ_SIZE)-1:0] fpu_in_tag, fpu_out_tag;
+    reg [`ISTAG_BITS-1:0] fpu_in_tag, fpu_out_tag;
     
     reg [2:0][`NUM_THREADS-1:0][31:0] fpu_operands;   
     
@@ -138,7 +138,7 @@ module VX_fpnew #(
             fpnew_top #( 
                 .Features       (FPU_FEATURES),
                 .Implementation (FPU_IMPLEMENTATION),
-                .TagType        (logic[`LOG2UP(`FPURQ_SIZE)+1+1-1:0])
+                .TagType        (logic[`ISTAG_BITS+1+1-1:0])
             ) fpnew_core (
                 .clk_i          (clk),
                 .rst_ni         (1'b1),

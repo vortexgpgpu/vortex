@@ -38,8 +38,8 @@ module VX_fp_fpga (
     
     VX_fpnew #(
         .FMULADD  (0),
-        .FDIVSQRT (1),
-        .FNONCOMP (1),
+        .FDIVSQRT (0),
+        .FNONCOMP (0),
         .FCONV    (1)
     ) fp_core (
         .clk        (clk),
@@ -67,19 +67,23 @@ module VX_fp_fpga (
         .out_valid  (fpnew_out_valid)
     );
 
-    acl_fp_add fp_add (
-        .clock  (clk), 
-        .dataa  (dataa), 
-        .datab  (datab),         
-        .enable (add_out_ready), 
-        .result (add_result)
-    );
+    for (i = 0; i < `NUM_THREADS; i++) begin
+        acl_fp_add fp_add (
+            .clock  (clk), 
+            .dataa  (dataa), 
+            .datab  (datab),         
+            .enable (add_out_ready), 
+            .result (add_result[i])
+        );
+    end
 
     assign in_reqady  = fpnew_in_ready;
     assign has_fflags = fpnew_has_fflags;  
     assign fflags     = fpnew_fflags;  
     assign out_tag    = fpnew_out_tag;
     assign fpnew_out_ready = out_ready;
+
+    assign add_out_ready = out_ready;
 
     assign result = fpnew_out_valid ? fpnew_result : add_result;
     assign out_valid = fpnew_out_valid; 

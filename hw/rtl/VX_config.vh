@@ -65,11 +65,6 @@
 `define MULRQ_SIZE 8
 `endif
 
-// Size of FPU Request Queue Size
-`ifndef FPURQ_SIZE
-`define FPURQ_SIZE 8
-`endif
-
 // Size of issue queue
 `ifndef ISSUEQ_SIZE
 `define ISSUEQ_SIZE (8 + `NUM_WARPS)
