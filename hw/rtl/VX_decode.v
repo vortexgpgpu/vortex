@@ -237,7 +237,6 @@ module VX_decode  #(
     wire is_fl      = 0;
     wire is_fs      = 0;
     wire is_fci     = 0;
-    wire is_fcmp    = 0;
     wire is_fcvti   = 0;
     wire is_fcvtf   = 0;
     wire is_fmvcls  = 0;
@@ -287,10 +286,6 @@ module VX_decode  #(
 
     wire use_rs3 = is_fr4;
 
-    wire rd_is_fp  = is_fpu && ~(is_fcmp || is_fcvti || (fpu_op == `FPU_MVXW || fpu_op == `FPU_CLASS));
-    wire rs1_is_fp = is_fr4 || (is_fci && ~(is_fcvtf || (fpu_op == `FPU_MVWX)));
-    wire rs2_is_fp = is_fs || is_fr4 || is_fci;
-
     wire [4:0] rs1_qual = is_lui ? 5'h0 : rs1;
 
     ///////////////////////////////////////////////////////////////////////////
@@ -324,6 +319,11 @@ module VX_decode  #(
     assign decode_tmp_if.wb = use_rd;
 
     `ifdef EXT_F_ENABLE
+
+        wire rd_is_fp  = is_fpu && ~(is_fcmp || is_fcvti || (fpu_op == `FPU_MVXW || fpu_op == `FPU_CLASS));
+        wire rs1_is_fp = is_fr4 || (is_fci && ~(is_fcvtf || (fpu_op == `FPU_MVWX)));
+        wire rs2_is_fp = is_fs || is_fr4 || is_fci;
+
         assign decode_tmp_if.rd  = {rd_is_fp,  rd};
         assign decode_tmp_if.rs1 = {rs1_is_fp, rs1_qual};
         assign decode_tmp_if.rs2 = {rs2_is_fp, rs2};

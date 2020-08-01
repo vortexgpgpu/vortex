@@ -3,9 +3,10 @@
 #include <fstream>
 #include <iomanip>
 
+#define ALL_TESTS
+
 int main(int argc, char **argv) {
 	if (argc == 1) {
-#define ALL_TESTS
 #ifdef ALL_TESTS
 	bool passed = true;
 
@@ -137,12 +138,7 @@ int main(int argc, char **argv) {
 	simulator.load_ihex(test);
   simulator.run();
 
-	bool status = (1 == simulator.get_last_wb_value(3));
-
-	if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
-	if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
-
-  return !status;
+  return 0;
 
 #endif
 

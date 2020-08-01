@@ -3,26 +3,28 @@
 module VX_gpr_ram (
     input wire clk,   
     input wire [`NUM_THREADS-1:0] we,    
-    input wire [`NR_BITS-1:0] waddr,
+    input wire [`NW_BITS+`NR_BITS-1:0] waddr,
     input wire [`NUM_THREADS-1:0][31:0] wdata,    
-    input wire [`NR_BITS-1:0] rs1,
-    input wire [`NR_BITS-1:0] rs2,
+    input wire [`NW_BITS+`NR_BITS-1:0] rs1,
+    input wire [`NW_BITS+`NR_BITS-1:0] rs2,
     output wire [`NUM_THREADS-1:0][31:0] rs1_data,
     output wire [`NUM_THREADS-1:0][31:0] rs2_data
 ); 
     `ifndef ASIC           
 
-        reg [`NUM_THREADS-1:0][3:0][7:0] ram [`NUM_REGS-1:0];       
+        reg [`NUM_THREADS-1:0][3:0][7:0] ram [(`NUM_WARPS * `NUM_REGS)-1:0];       
 
-        integer i;
+        integer i, j;
 
         initial begin          
             // initialize r0 to 0  
-            for (i = 0; i < `NUM_THREADS; i++) begin
-                ram[0][i][0] = 0; 
-                ram[0][i][1] = 0;
-                ram[0][i][2] = 0;
-                ram[0][i][3] = 0;
+            for (j = 0; j < `NUM_WARPS; j++) begin
+                for (i = 0; i < `NUM_THREADS; i++) begin
+                    ram[j * `NUM_REGS][i][0] = 8'h0; 
+                    ram[j * `NUM_REGS][i][1] = 8'h0;
+                    ram[j * `NUM_REGS][i][2] = 8'h0;
+                    ram[j * `NUM_REGS][i][3] = 8'h0;
+                end
             end
         end
                 

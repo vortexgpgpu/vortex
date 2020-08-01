@@ -110,11 +110,7 @@ module VX_execute #(
     assign fpu_commit_if.issue_tag  = 0;
     assign fpu_commit_if.data       = 0;
     assign fpu_commit_if.has_fflags = 0;
-    assign fpu_commit_if.fflags_NV  = 0;
-    assign fpu_commit_if.fflags_DZ  = 0;
-    assign fpu_commit_if.fflags_OF  = 0;
-    assign fpu_commit_if.fflags_UF  = 0;
-    assign fpu_commit_if.fflags_NX  = 0;
+    assign fpu_commit_if.fflags     = 0;
 `endif
 
     VX_gpu_unit #(

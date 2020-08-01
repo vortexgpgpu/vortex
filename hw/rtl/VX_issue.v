@@ -24,10 +24,11 @@ module VX_issue #(
     assign gpr_read_if.rs2       = decode_if.rs2;
     assign gpr_read_if.rs3       = decode_if.rs3;
     assign gpr_read_if.use_rs3   = decode_if.use_rs3;
+    assign gpr_read_if.out_ready = decode_if.ready;
 
     wire [`ISTAG_BITS-1:0] issue_tag, issue_tmp_tag;
 
-    wire gpr_busy = ~gpr_read_if.ready;
+    wire gpr_busy = ~gpr_read_if.in_ready;
     wire alu_busy = ~alu_req_if.ready; 
     wire lsu_busy = ~lsu_req_if.ready;
     wire csr_busy = ~csr_req_if.ready;
@@ -63,7 +64,7 @@ module VX_issue #(
     );
 
     VX_decode_if    decode_tmp_if();
-    VX_gpr_read_if  gpr_data_tmp_if();
+    VX_gpr_read_if  gpr_read_tmp_if();
 
     wire stall = ~alu_req_if.ready || ~decode_if.ready;
     wire flush = alu_req_if.ready && ~decode_if.ready;  
@@ -75,13 +76,13 @@ module VX_issue #(
         .reset (reset),
         .stall (stall),
         .flush (flush),
-        .in    ({decode_if.valid,     issue_tag,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.frm,    gpr_read_if.rs1_data,      gpr_read_if.rs2_data,     gpr_read_if.rs3_data}),
-        .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.frm, gpr_data_tmp_if.rs1_data, gpr_data_tmp_if.rs2_data, gpr_data_tmp_if.rs3_data})
+        .in    ({decode_if.valid,     issue_tag,     decode_if.warp_num,     decode_if.thread_mask,     decode_if.curr_PC,     decode_if.next_PC,     decode_if.rd,     decode_if.rs1,     decode_if.rs2,     decode_if.imm,     decode_if.rs1_is_PC,     decode_if.rs2_is_imm,     decode_if.ex_type,     decode_if.ex_op,     decode_if.wb,     decode_if.rs3,     decode_if.use_rs3,     decode_if.frm,     gpr_read_if.rs1_data,     gpr_read_if.rs2_data,     gpr_read_if.rs3_data}),
+        .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.frm, gpr_read_tmp_if.rs1_data, gpr_read_tmp_if.rs2_data, gpr_read_tmp_if.rs3_data})
     );
 
     VX_issue_demux issue_demux (
         .decode_if     (decode_tmp_if),
-        .gpr_read_if   (gpr_data_tmp_if),
+        .gpr_read_if   (gpr_read_tmp_if),
         .issue_tag     (issue_tmp_tag),
         .alu_req_if    (alu_req_if),
         .lsu_req_if    (lsu_req_if),        
