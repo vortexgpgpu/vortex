@@ -18,7 +18,7 @@ module VX_multiplier #(
 
 `ifdef QUARTUS
 
-    lpm_mult quartus_mult (
+    lpm_mult mult (
         .clock  (clk),
         .dataa  (dataa),
         .datab  (datab),
@@ -29,13 +29,13 @@ module VX_multiplier #(
         .sum    (1'b0)
     );
 
-    defparam quartus_mult.lpm_type = "LPM_MULT",
-             quartus_mult.lpm_widtha = WIDTHA,
-             quartus_mult.lpm_widthb = WIDTHB,
-             quartus_mult.lpm_widthp = WIDTHP,
-             quartus_mult.lpm_representation = SIGNED ? "SIGNED" : "UNSIGNED",
-             quartus_mult.lpm_pipeline = PIPELINE,
-             quartus_mult.lpm_hint = "DEDICATED_MULTIPLIER_CIRCUITRY=YES,MAXIMIZE_SPEED=9";
+    defparam mult.lpm_type = "LPM_MULT",
+             mult.lpm_widtha = WIDTHA,
+             mult.lpm_widthb = WIDTHB,
+             mult.lpm_widthp = WIDTHP,
+             mult.lpm_representation = SIGNED ? "SIGNED" : "UNSIGNED",
+             mult.lpm_pipeline = PIPELINE,
+             mult.lpm_hint = "MAXIMIZE_SPEED=9,DEDICATED_MULTIPLIER_CIRCUITRY=YES";
 `else
 
     wire [WIDTHP-1:0] result_unqual;

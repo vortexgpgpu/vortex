@@ -25,7 +25,7 @@ module VX_divide #(
     wire [WIDTHN-1:0] quotient_unqual;
     wire [WIDTHD-1:0] remainder_unqual;
 
-    lpm_divide quartus_div (
+    lpm_divide divide (
         .clock    (clk),        
         .numer    (numer),
         .denom    (denom),
@@ -36,13 +36,13 @@ module VX_divide #(
     );
 
     defparam
-		quartus_div.lpm_type = "LPM_DIVIDE",
-        quartus_div.lpm_widthn = WIDTHN,        
-		quartus_div.lpm_widthd = WIDTHD,		
-		quartus_div.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
-        quartus_div.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
-		quartus_div.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
-		quartus_div.lpm_pipeline = PIPELINE;
+		divide.lpm_type = "LPM_DIVIDE",
+        divide.lpm_widthn = WIDTHN,        
+		divide.lpm_widthd = WIDTHD,		
+		divide.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
+        divide.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
+		divide.lpm_hint = "MAXIMIZE_SPEED=9,LPM_REMAINDERPOSITIVE=FALSE",
+		divide.lpm_pipeline = PIPELINE;
 
     assign quotient  = quotient_unqual [WIDTHQ-1:0];
     assign remainder = remainder_unqual [WIDTHR-1:0];
