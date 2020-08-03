@@ -62,7 +62,7 @@ Install Verilator
 
 Install Vortex 
 
-    $ git clone https://github.gatech.edu/casl/Vortex.git
+    $ git clone --recursive https://github.gatech.edu/casl/Vortex.git
     $ cd Vortex
     $ make
 
