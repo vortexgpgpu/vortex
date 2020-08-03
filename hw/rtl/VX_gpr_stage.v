@@ -18,7 +18,7 @@ module VX_gpr_stage #(
     wire [`NUM_THREADS-1:0][31:0] rs2_data; 
     wire [`NW_BITS+`NR_BITS-1:0] raddr1;             
 
-    VX_gpr_ram gpr_int_ram (
+    VX_gpr_ram gpr_ram (
         .clk      (clk),
         .we       ({`NUM_THREADS{writeback_if.valid}} & writeback_if.thread_mask),                
         .waddr    ({writeback_if.warp_num, writeback_if.rd}),
