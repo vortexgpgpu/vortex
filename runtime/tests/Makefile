@@ -6,11 +6,11 @@ all:
 	$(MAKE) -C vecadd
 
 run:
-	cd simple && $(MAKE) run
-	cd dev && $(MAKE) run	
-	cd hello && $(MAKE) run
-	cd nlTest && $(MAKE) run
-	cd vecadd && $(MAKE) run
+	$(MAKE) -C simple run
+	$(MAKE) -C dev run	
+	$(MAKE) -C hello run
+	$(MAKE) -C nlTest run
+	$(MAKE) -C vecadd run
 
 clean:
 	$(MAKE) -C simple clean
