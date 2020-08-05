@@ -31,7 +31,6 @@ module VX_divide #(
         .denom    (denom),
         .quotient (quotient_unqual),
         .remain   (remainder_unqual),
-        .aclr     (1'b0),
         .clken    (clk_en)
     );
 
@@ -41,7 +40,7 @@ module VX_divide #(
 		divide.lpm_widthd = WIDTHD,		
 		divide.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
         divide.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
-		divide.lpm_hint = "MAXIMIZE_SPEED=9,LPM_REMAINDERPOSITIVE=FALSE",
+		divide.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
 		divide.lpm_pipeline = PIPELINE;
 
     assign quotient  = quotient_unqual [WIDTHQ-1:0];
