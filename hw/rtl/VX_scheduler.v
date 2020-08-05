@@ -67,7 +67,7 @@ module VX_scheduler  #(
     wire issue_fire = decode_if.valid && ~stall;
 
     VX_cam_buffer #(
-        .DATAW  ($bits(is_data_t)),
+        .DATAW  ($bits(issue_data_t)),
         .SIZE   (`ISSUEQ_SIZE),
         .RPORTS (`NUM_EXS)
     ) issue_buffer (

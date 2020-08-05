@@ -86,7 +86,7 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (stall_in),
         .flush (0),
-        .in    ({lsu_req_if.valid, lsu_req_if.warp_num, lsu_req_if.thread_mask, lsu_req_if.issue_tag, full_address, mem_req_sext,  lsu_req_if.rw, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.curr_PC}),
+        .in    ({lsu_req_if.valid, lsu_req_if.warp_num, lsu_req_if.thread_mask, lsu_req_if.issue_tag, full_address, mem_req_sext, lsu_req_if.rw, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.curr_PC}),
         .out   ({use_valid,        use_warp_num,        use_thread_mask,        use_issue_tag,        use_address,  use_req_sext, use_req_rw,    use_req_addr, use_req_offset, use_req_byteen, use_req_data, use_rd,        use_wb,        use_pc})
     );
 
@@ -126,7 +126,7 @@ module VX_lsu_unit #(
             mem_rsp_rd_buf [use_issue_tag]       <= use_rd;   
         end    
         if (dcache_rsp_fire) begin
-            mem_rsp_mask_buf [rsp_issue_tag] <= mem_rsp_mask_n;   
+            mem_rsp_mask_buf [rsp_issue_tag]     <= mem_rsp_mask_n;   
             mem_rsp_data_all_buf [rsp_issue_tag] <= mem_rsp_data_all | mem_rsp_data_curr;
         end
     end
