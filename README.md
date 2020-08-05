@@ -68,6 +68,6 @@ Install Vortex
 
 Quick Test running SGEMM kernel
 
-    $ cd /Vortex/benchmarks/opencl/sgemm
+    $ cd /Vortex/benchmarks/opencl/vecadd
     $ make
-    $ make run
+    $ make run-rtlsim
