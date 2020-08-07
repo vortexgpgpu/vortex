@@ -17,7 +17,7 @@ module VX_fp_noncomp (
     output wire [`NUM_THREADS-1:0][31:0] result, 
 
     output wire has_fflags,
-    output wire [`NUM_THREADS-1:0][`FFG_BITS-1:0] fflags,
+    output fflags_t [`NUM_THREADS-1:0] fflags,
 
     output wire [`ISTAG_BITS-1:0] out_tag,
 
@@ -178,7 +178,7 @@ module VX_fp_noncomp (
 
     reg tmp_valid;
     reg tmp_has_fflags;
-    reg [`NUM_THREADS-1:0][`FFG_BITS-1:0] tmp_fflags;
+    fflags_t [`NUM_THREADS-1:0] tmp_fflags;
     reg [`NUM_THREADS-1:0][31:0] tmp_result;
 
     always @(*) begin        
@@ -199,27 +199,27 @@ module VX_fp_noncomp (
             case (op)
                 `FPU_CLASS: begin
                     tmp_result[i] = fclass_mask[i];
-                    {tmp_fflags[i][`FFG_NV], tmp_fflags[i][`FFG_DZ], tmp_fflags[i][`FFG_OF], tmp_fflags[i][`FFG_UF], tmp_fflags[i][`FFG_NX]} = 5'h0;
+                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
                 end                
                 `FPU_MVXW,`FPU_MVWX: begin                    
                     tmp_result[i] = dataa[i];
-                    {tmp_fflags[i][`FFG_NV], tmp_fflags[i][`FFG_DZ], tmp_fflags[i][`FFG_OF], tmp_fflags[i][`FFG_UF], tmp_fflags[i][`FFG_NX]} = 5'h0;
+                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
                 end
                 `FPU_MIN,`FPU_MAX: begin                     
                     tmp_result[i] = fminmax_res[i];
-                    {tmp_fflags[i][`FFG_NV], tmp_fflags[i][`FFG_DZ], tmp_fflags[i][`FFG_OF], tmp_fflags[i][`FFG_UF], tmp_fflags[i][`FFG_NX]} = {a_type[i][0] | b_type[i][0], 4'h0};
+                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = {a_type[i][0] | b_type[i][0], 4'h0};
                 end
                 `FPU_SGNJ,`FPU_SGNJN,`FPU_SGNJX: begin
                     tmp_result[i] = fsgnj_res[i];
-                    {tmp_fflags[i][`FFG_NV], tmp_fflags[i][`FFG_DZ], tmp_fflags[i][`FFG_OF], tmp_fflags[i][`FFG_UF], tmp_fflags[i][`FFG_NX]} = 5'h0;
+                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
                 end
                 `FPU_CMP: begin 
                     tmp_result[i] = fcmp_res[i];
-                    {tmp_fflags[i][`FFG_NV], tmp_fflags[i][`FFG_DZ], tmp_fflags[i][`FFG_OF], tmp_fflags[i][`FFG_UF], tmp_fflags[i][`FFG_NX]} = fcmp_excp[i];
+                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = fcmp_excp[i];
                 end                
                 default: begin                      
                     tmp_result[i] = 32'hdeadbeaf;
-                    {tmp_fflags[i][`FFG_NV], tmp_fflags[i][`FFG_DZ], tmp_fflags[i][`FFG_OF], tmp_fflags[i][`FFG_UF], tmp_fflags[i][`FFG_NX]} = 5'h0;
+                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
                     tmp_valid = 1'b0;
                 end
             endcase
@@ -230,7 +230,7 @@ module VX_fp_noncomp (
     assign in_ready = ~stall;
 
     VX_generic_register #(
-        .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32) + 1 + `FFG_BITS)
+        .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32) + 1 + (`NUM_THREADS * `FFG_BITS))
     ) nc_reg (
         .clk   (clk),
         .reset (reset),

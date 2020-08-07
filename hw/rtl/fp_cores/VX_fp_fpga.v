@@ -5,8 +5,8 @@ module VX_fp_fpga (
 	input wire clk,
 	input wire reset,   
 
-    output wire in_ready,
     input wire  in_valid,
+    output wire in_ready,
 
     input wire [`ISTAG_BITS-1:0] in_tag,
 	
@@ -19,7 +19,7 @@ module VX_fp_fpga (
     output wire [`NUM_THREADS-1:0][31:0] result, 
 
     output wire has_fflags,
-    output wire [`NUM_THREADS-1:0][`FFG_BITS-1:0] fflags,
+    output fflags_t [`NUM_THREADS-1:0] fflags,
 
     output wire [`ISTAG_BITS-1:0] out_tag,
 
@@ -29,31 +29,30 @@ module VX_fp_fpga (
     localparam NUM_FPC  = 12;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
     
-    reg  [FPC_BITS-1:0] core_select;
-
     wire [NUM_FPC-1:0] core_in_ready;
     wire [NUM_FPC-1:0][`NUM_THREADS-1:0][31:0] core_result;
     wire fpnew_has_fflags;  
-    wire [`NUM_THREADS-1:0][`FFG_BITS-1:0] fpnew_fflags;  
+    fflags_t fpnew_fflags;  
     wire [NUM_FPC-1:0][`ISTAG_BITS-1:0] core_out_tag;
     wire [NUM_FPC-1:0] core_out_ready;
     wire [NUM_FPC-1:0] core_out_valid;
 
-    reg  negate_output;
+    reg [FPC_BITS-1:0] core_select;
+    reg fmadd_negate;
 
     genvar i;
 
     always @(*) begin
-        core_select   = 0;
-        negate_output = 0;
+        core_select  = 0;
+        fmadd_negate = 0;
         case (op)
             `FPU_ADD:    core_select = 1;
             `FPU_SUB:    core_select = 2;
             `FPU_MUL:    core_select = 3;
             `FPU_MADD:   core_select = 4;
             `FPU_MSUB:   core_select = 5;
-            `FPU_NMSUB:  begin core_select = 4; negate_output = 1; end
-            `FPU_NMADD:  begin core_select = 5; negate_output = 1; end           
+            `FPU_NMSUB:  begin core_select = 4; fmadd_negate = 1; end
+            `FPU_NMADD:  begin core_select = 5; fmadd_negate = 1; end           
             `FPU_DIV:    core_select = 6;
             `FPU_SQRT:   core_select = 7;
             `FPU_CVTWS:  core_select = 8;
@@ -130,7 +129,7 @@ module VX_fp_fpga (
         .in_valid   (in_valid && (core_select == 4)),
         .in_ready   (core_in_ready[4]),    
         .in_tag     (in_tag),    
-        .negate     (negate_output),
+        .negate     (fmadd_negate),
         .dataa      (dataa), 
         .datab      (datab),         
         .datac      (datac),        
@@ -146,7 +145,7 @@ module VX_fp_fpga (
         .in_valid   (in_valid && (core_select == 5)),
         .in_ready   (core_in_ready[5]),    
         .in_tag     (in_tag),    
-        .negate     (negate_output),
+        .negate     (fmadd_negate),
         .dataa      (dataa), 
         .datab      (datab),   
         .datac      (datac),              
@@ -250,10 +249,21 @@ module VX_fp_fpga (
         assign core_out_ready[i] = out_ready && (i == fp_index);
     end
 
-    assign has_fflags = fpnew_has_fflags && (fp_index == 0);
-    assign fflags     = fpnew_fflags;
-    assign out_tag    = core_out_tag[fp_index];
-    assign result     = core_result[fp_index];
-    assign out_valid  = fp_valid;
+    wire                          tmp_valid  = fp_valid;
+    wire [`ISTAG_BITS-1:0]        tmp_tag    = core_out_tag[fp_index];
+    wire [`NUM_THREADS-1:0][31:0] tmp_result = core_result[fp_index];
+    wire                          tmp_has_fflags = fpnew_has_fflags && (fp_index == 0);
+    fflags_t [`NUM_THREADS-1:0]   tmp_flags  = fpnew_fflags;            
+
+    VX_generic_register #(
+        .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32) + 1 + `FFG_BITS)
+    ) nc_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall),
+        .flush (1'b0),
+        .in    ({tmp_valid, tmp_tag, tmp_result, tmp_has_fflags, tmp_fflags}),
+        .out   ({out_valid, out_tag, result,     has_fflags,     fflags})
+    );
 
 endmodule

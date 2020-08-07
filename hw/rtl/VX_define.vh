@@ -38,7 +38,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define LATENCY_IDIV    22
+`define LATENCY_IDIV    23
 `define LATENCY_IMUL    2
 
 `define LATENCY_FDIV     16
@@ -200,13 +200,6 @@
 `define FRM_RMM    3'b100  // round to nearest max magnitude
 `define FRM_DYN    3'b111  // dynamic mode
 `define FRM_BITS   3
-
-`define FFG_NX     0 // inexact
-`define FFG_UF     1 // underflow 
-`define FFG_OF     2 // overflow
-`define FFG_DZ     3 // division by zero
-`define FFG_NV     4 // invalid
-`define FFG_BITS   5
 
 `define GPU_TMC     3'h0
 `define GPU_WSPAWN  3'h1 
@@ -439,5 +432,15 @@ typedef struct packed {
     logic is_signaling;
     logic is_quiet;
 } fp_type_t;
+
+typedef struct packed {
+    logic NV; // Invalid
+    logic DZ; // Divide by zero
+    logic OF; // Overflow
+    logic UF; // Underflow
+    logic NX; // Inexact
+} fflags_t;
+
+`define FFG_BITS  $bits(fflags_t)
 
 `endif

@@ -38,7 +38,7 @@ module VX_commit #(
         .count (num_commits)
     );
 
-    assign cmt_to_csr_if.valid = (| commited_mask);    
+    assign cmt_to_csr_if.valid       = (| commited_mask);    
     assign cmt_to_csr_if.warp_num    = cmt_to_issue_if.fpu_data.warp_num;
     assign cmt_to_csr_if.num_commits = num_commits;    
   
@@ -46,16 +46,16 @@ module VX_commit #(
     
     integer i;
 
-    reg [`FFG_BITS-1:0] fflags;
+    fflags_t fflags;
     always @(*) begin
         fflags = 0;        
         for (i = 0; i < `NUM_THREADS; i++) begin
             if (cmt_to_issue_if.fpu_data.thread_mask[i]) begin
-                fflags[0] |= fpu_commit_if.fflags[i][0];
-                fflags[1] |= fpu_commit_if.fflags[i][1];
-                fflags[2] |= fpu_commit_if.fflags[i][2];
-                fflags[3] |= fpu_commit_if.fflags[i][3];
-                fflags[4] |= fpu_commit_if.fflags[i][4];
+                fflags.NX |= fpu_commit_if.fflags[i].NX;
+                fflags.UF |= fpu_commit_if.fflags[i].UF;
+                fflags.OF |= fpu_commit_if.fflags[i].OF;
+                fflags.DZ |= fpu_commit_if.fflags[i].DZ;
+                fflags.NV |= fpu_commit_if.fflags[i].NV;
             end
         end
     end
