@@ -28,13 +28,16 @@ module VX_issue #(
 
     wire [`ISTAG_BITS-1:0] issue_tag, issue_tmp_tag;
 
-    wire gpr_busy = ~gpr_read_if.in_ready;
-    wire alu_busy = ~alu_req_if.ready; 
-    wire lsu_busy = ~lsu_req_if.ready;
-    wire csr_busy = ~csr_req_if.ready;
-    wire mul_busy = ~mul_req_if.ready;
-    wire fpu_busy = ~mul_req_if.ready;
-    wire gpu_busy = ~gpu_req_if.ready;
+    wire schedule_delay;
+
+    wire gpr_busy = ~gpr_read_if.in_ready; 
+
+    wire ex_busy = (~alu_req_if.ready && (decode_if.ex_type == `EX_ALU))
+                || (~lsu_req_if.ready && (decode_if.ex_type == `EX_LSU))
+                || (~csr_req_if.ready && (decode_if.ex_type == `EX_CSR))
+                || (~mul_req_if.ready && (decode_if.ex_type == `EX_MUL))
+                || (~fpu_req_if.ready && (decode_if.ex_type == `EX_FPU))
+                || (~gpu_req_if.ready && (decode_if.ex_type == `EX_GPU));
 
     VX_scheduler #(
         .CORE_ID(CORE_ID)
@@ -44,14 +47,10 @@ module VX_issue #(
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
         .cmt_to_issue_if(cmt_to_issue_if), 
-        .gpr_busy       (gpr_busy),
-        .alu_busy       (alu_busy),
-        .lsu_busy       (lsu_busy),
-        .csr_busy       (csr_busy),
-        .mul_busy       (mul_busy),
-        .fpu_busy       (fpu_busy),
-        .gpu_busy       (gpu_busy),  
-        .issue_tag      (issue_tag)
+        .ex_busy        (ex_busy),
+        .gpr_busy       (gpr_busy),  
+        .issue_tag      (issue_tag),
+        .schedule_delay (schedule_delay)
     );
 
     VX_gpr_stage #(
@@ -66,8 +65,8 @@ module VX_issue #(
     VX_decode_if    decode_tmp_if();
     VX_gpr_read_if  gpr_read_tmp_if();
 
-    wire stall = ~alu_req_if.ready || ~decode_if.ready;
-    wire flush = alu_req_if.ready && ~decode_if.ready;  
+    wire stall = schedule_delay;
+    wire flush = schedule_delay && ~ex_busy;
 
     VX_generic_register #(
         .N(1 + `ISTAG_BITS + `NW_BITS + `NUM_THREADS + 32 + 32 + `NR_BITS + `NR_BITS + `NR_BITS + 32 + 1 + 1 + `EX_BITS + `OP_BITS + 1 + `NR_BITS + 1 + `FRM_BITS + (`NUM_THREADS * 32) + (`NUM_THREADS * 32) + (`NUM_THREADS * 32))
@@ -80,17 +79,19 @@ module VX_issue #(
         .out   ({decode_tmp_if.valid, issue_tmp_tag, decode_tmp_if.warp_num, decode_tmp_if.thread_mask, decode_tmp_if.curr_PC, decode_tmp_if.next_PC, decode_tmp_if.rd, decode_tmp_if.rs1, decode_tmp_if.rs2, decode_tmp_if.imm, decode_tmp_if.rs1_is_PC, decode_tmp_if.rs2_is_imm, decode_tmp_if.ex_type, decode_tmp_if.ex_op, decode_tmp_if.wb, decode_tmp_if.rs3, decode_tmp_if.use_rs3, decode_tmp_if.frm, gpr_read_tmp_if.rs1_data, gpr_read_tmp_if.rs2_data, gpr_read_tmp_if.rs3_data})
     );
 
+    assign decode_if.ready = ~stall;
+
     VX_issue_demux issue_demux (
-        .decode_if     (decode_tmp_if),
-        .gpr_read_if   (gpr_read_tmp_if),
-        .issue_tag     (issue_tmp_tag),
-        .alu_req_if    (alu_req_if),
-        .lsu_req_if    (lsu_req_if),        
-        .csr_req_if    (csr_req_if),
-        .mul_req_if    (mul_req_if),
-        .fpu_req_if    (fpu_req_if),
-        .gpu_req_if    (gpu_req_if)
-    );
+        .decode_if  (decode_tmp_if),
+        .gpr_read_if(gpr_read_tmp_if),
+        .issue_tag  (issue_tmp_tag),
+        .alu_req_if (alu_req_if),
+        .lsu_req_if (lsu_req_if),        
+        .csr_req_if (csr_req_if),
+        .mul_req_if (mul_req_if),
+        .fpu_req_if (fpu_req_if),
+        .gpu_req_if (gpu_req_if)
+    );    
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin

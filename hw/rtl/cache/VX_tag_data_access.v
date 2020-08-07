@@ -26,11 +26,13 @@ module VX_tag_data_access #(
     input wire                          reset,
 
 `ifdef DBG_CORE_REQ_INFO
+`IGNORE_WARNINGS_BEGIN
     input wire[31:0]                    debug_pc_st1e,
     input wire                          debug_wb_st1e,
     input wire[`NR_BITS-1:0]            debug_rd_st1e,
     input wire[`NW_BITS-1:0]            debug_warp_num_st1e,
     input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1e,
+`IGNORE_WARNINGS_END
 `endif
 
     input wire                          stall,

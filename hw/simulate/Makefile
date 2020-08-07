@@ -14,7 +14,7 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
 
-#DBG_FLAGS += $(DBG_PRINT_FLAGS)
+DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 FPU_INCLUDE = -I../rtl/fp_cores/fpnew/src/common_cells/include -I../rtl/fp_cores/fpnew/src/common_cells/src -I../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I../rtl/fp_cores/fpnew/src 
