@@ -62,12 +62,12 @@ Install Verilator
 
 Install Vortex 
 
-    $ git clone https://github.gatech.edu/casl/Vortex.git
+    $ git clone --recursive https://github.gatech.edu/casl/Vortex.git
     $ cd Vortex
     $ make
 
 Quick Test running SGEMM kernel
 
-    $ cd /Vortex/benchmarks/opencl/sgemm
+    $ cd /Vortex/benchmarks/opencl/vecadd
     $ make
-    $ make run
+    $ make run-rtlsim
