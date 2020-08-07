@@ -143,16 +143,40 @@ int main(int argc, char **argv) {
 #endif
 
 }	else {
+	bool passed = true;
 
-	char* test = argv[2];
+	std::vector<std::string> tests(argv+2, argv+argc);
+	for (std::string test : tests) {
+		std::cerr << DEFAULT << "\n---------------------------------------\n";
+
+		std::cerr << test << std::endl;
+
+		RAM ram;
+		Simulator simulator;
+		simulator.attach_ram(&ram);
+		simulator.load_ihex(test.c_str());
+		simulator.run();
+
+		bool status = (1 == simulator.get_last_wb_value(3));
+
+		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
+		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
+		std::cerr << DEFAULT;
+		passed = passed && status;
+		if (!passed)
+			break;
+	}
 	
-	std::cerr << test << std::endl;
 
-	RAM ram;
-	Simulator simulator;
-	simulator.attach_ram(&ram);
-	simulator.load_ihex(test);
-	simulator.run();
+//	char* test = argv[2];
+	
+//	std::cerr << test << std::endl;
+
+//	RAM ram;
+//	Simulator simulator;
+//	simulator.attach_ram(&ram);
+//	simulator.load_ihex(test);
+//	simulator.run();
 
 	return 0;
 }
