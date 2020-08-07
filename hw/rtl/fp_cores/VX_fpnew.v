@@ -11,8 +11,8 @@ module VX_fpnew #(
 	input wire clk,
 	input wire reset,   
 
-    output wire in_ready,
     input wire  in_valid,
+    output wire in_ready,
 
     input wire [`ISTAG_BITS-1:0] in_tag,
 	
@@ -25,7 +25,7 @@ module VX_fpnew #(
     output wire [`NUM_THREADS-1:0][31:0] result, 
 
     output wire has_fflags,
-    output wire [`NUM_THREADS-1:0][`FFG_BITS-1:0] fflags,
+    output fflags_t [`NUM_THREADS-1:0] fflags,
 
     output wire [`ISTAG_BITS-1:0] out_tag,
 
@@ -75,7 +75,7 @@ module VX_fpnew #(
     wire [FMTI_BITS-1:0] fpu_int_fmt = fpnew_pkg::INT32;
 
     wire [`NUM_THREADS-1:0][31:0] fpu_result;
-    fpnew_pkg::status_t fpu_status [0:`NUM_THREADS-1];
+    fpnew_pkg::status_t [0:`NUM_THREADS-1] fpu_status;
 
     wire is_class_op_i, is_class_op_o;
     assign is_class_op_i = (op == `FPU_CLASS);
@@ -194,7 +194,8 @@ module VX_fpnew #(
 `ENABLE_TRACING
 
     assign fpu_in_valid = in_valid;
-    assign in_ready = fpu_in_ready;
+    assign in_ready = fpu_in_ready
+                    || ~in_valid; // fix fpnews's in_ready containing in_valid;
 
     assign fpu_in_tag = in_tag;    
     assign out_tag = fpu_out_tag;
@@ -202,14 +203,7 @@ module VX_fpnew #(
     assign result = fpu_result;
     
     assign has_fflags = fpu_has_fflags_o;   
-    
-    for (i = 0; i < `NUM_THREADS; i++) begin
-        assign fflags[i][`FFG_NX] = fpu_status[i].NX;
-        assign fflags[i][`FFG_UF] = fpu_status[i].UF;
-        assign fflags[i][`FFG_OF] = fpu_status[i].OF;
-        assign fflags[i][`FFG_DZ] = fpu_status[i].DZ;
-        assign fflags[i][`FFG_NV] = fpu_status[i].NV;
-    end
+    assign fflags = fpu_status;
 
     assign out_valid = fpu_out_valid;    
     assign fpu_out_ready = out_ready;

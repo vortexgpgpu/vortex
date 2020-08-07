@@ -1,4 +1,4 @@
-project_open Vortex_Socket
+project_open VX_pipeline
 
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 
