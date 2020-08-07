@@ -123,12 +123,12 @@ module VX_warp_sched #(
                 thread_masks[join_if.warp_num] <= join_tm;
                 didnt_split                 <= 0;
             end else if (warp_ctl_if.is_split) begin
-                warp_stalled[warp_ctl_if.warp_num]   <= 0;
+                warp_stalled[warp_ctl_if.warp_num] <= 0;
                 if (warp_ctl_if.do_split) begin
                     thread_masks[warp_ctl_if.warp_num] <= warp_ctl_if.split_new_mask;
-                    didnt_split                <= 0;
+                    didnt_split <= 0;
                 end else begin
-                    didnt_split                <= 1;
+                    didnt_split <= 1;
                 end
             end          
 
@@ -206,11 +206,8 @@ module VX_warp_sched #(
 
     genvar i;
     for (i = 0; i < `NUM_WARPS; i++) begin
-        wire correct_warp_s = (i == warp_ctl_if.warp_num);
-        wire correct_warp_j = (i == join_if.warp_num);
-
-        wire push = (warp_ctl_if.is_split && warp_ctl_if.do_split) && correct_warp_s;
-        wire pop  = join_if.is_join && correct_warp_j;
+        wire push = warp_ctl_if.is_split && warp_ctl_if.do_split && (i == warp_ctl_if.warp_num);
+        wire pop  = join_if.is_join && (i == join_if.warp_num);
 
         VX_ipdom_stack #(
             .WIDTH(1+32+`NUM_THREADS), 
@@ -234,7 +231,7 @@ module VX_warp_sched #(
 
     assign real_schedule = schedule && !warp_stalled[warp_to_schedule] && !total_barrier_stall[warp_to_schedule] && !warp_lock[0];
 
-    assign global_stall = (stall || wstall_this_cycle || hazard || !real_schedule || join_if.is_join);
+    assign global_stall = stall || wstall_this_cycle || hazard || !real_schedule || join_if.is_join;
 
     assign scheduled_warp = !(wstall_this_cycle || hazard || !real_schedule || join_if.is_join) && !reset;
 

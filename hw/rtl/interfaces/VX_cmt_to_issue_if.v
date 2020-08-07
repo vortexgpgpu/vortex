@@ -20,12 +20,12 @@ interface VX_cmt_to_issue_if ();
     wire [`ISTAG_BITS-1:0]  gpu_tag;     
 
 `IGNORE_WARNINGS_BEGIN
-    is_data_t               alu_data;
-    is_data_t               lsu_data;
-    is_data_t               csr_data;
-    is_data_t               mul_data;
-    is_data_t               fpu_data;
-    is_data_t               gpu_data;
+    issue_data_t    alu_data;
+    issue_data_t    lsu_data;
+    issue_data_t    csr_data;
+    issue_data_t    mul_data;
+    issue_data_t    fpu_data;
+    issue_data_t    gpu_data;
 `IGNORE_WARNINGS_END
 
 endinterface
