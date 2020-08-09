@@ -11,8 +11,8 @@ module VX_fpnew #(
 	input wire clk,
 	input wire reset,   
 
-    output wire in_ready,
     input wire  in_valid,
+    output wire in_ready,
 
     input wire [`ISTAG_BITS-1:0] in_tag,
 	
@@ -25,7 +25,7 @@ module VX_fpnew #(
     output wire [`NUM_THREADS-1:0][31:0] result, 
 
     output wire has_fflags,
-    output wire [`NUM_THREADS-1:0][`FFG_BITS-1:0] fflags,
+    output fflags_t [`NUM_THREADS-1:0] fflags,
 
     output wire [`ISTAG_BITS-1:0] out_tag,
 
@@ -75,7 +75,7 @@ module VX_fpnew #(
     wire [FMTI_BITS-1:0] fpu_int_fmt = fpnew_pkg::INT32;
 
     wire [`NUM_THREADS-1:0][31:0] fpu_result;
-    fpnew_pkg::status_t fpu_status [0:`NUM_THREADS-1];
+    fpnew_pkg::status_t [0:`NUM_THREADS-1] fpu_status;
 
     wire is_class_op_i, is_class_op_o;
     assign is_class_op_i = (op == `FPU_CLASS);
@@ -83,13 +83,13 @@ module VX_fpnew #(
     reg [FOP_BITS-1:0] fpu_op;
     reg [`FRM_BITS-1:0] fpu_rnd;
     reg fpu_op_mod;
-    reg fflags_en, fflags_en_o;
+    reg fpu_has_fflags, fpu_has_fflags_o;
 
     always @(*) begin
         fpu_op          = fpnew_pkg::SGNJ;
         fpu_rnd         = frm;  
         fpu_op_mod      = 0;        
-        fflags_en       = 1;
+        fpu_has_fflags  = 1;
         fpu_operands[0] = dataa;
         fpu_operands[1] = datab;
         fpu_operands[2] = datac;
@@ -112,18 +112,18 @@ module VX_fpnew #(
             `FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end
             `FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
             `FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
-            `FPU_SGNJ:  begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RNE; fflags_en = 0; end
-            `FPU_SGNJN: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RTZ; fflags_en = 0; end
-            `FPU_SGNJX: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RDN; fflags_en = 0; end
+            `FPU_SGNJ:  begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RNE; fpu_has_fflags = 0; end
+            `FPU_SGNJN: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RTZ; fpu_has_fflags = 0; end
+            `FPU_SGNJX: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RDN; fpu_has_fflags = 0; end
             `FPU_MIN:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RNE; end
             `FPU_MAX:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RTZ; end
             `FPU_CVTWS: begin fpu_op = fpnew_pkg::F2I; end
             `FPU_CVTWUS:begin fpu_op = fpnew_pkg::F2I;  fpu_op_mod = 1; end
             `FPU_CVTSW: begin fpu_op = fpnew_pkg::I2F; end
             `FPU_CVTSWU:begin fpu_op = fpnew_pkg::I2F;  fpu_op_mod = 1; end
-            `FPU_MVXW:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; fflags_en = 0; end
-            `FPU_MVWX:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; fflags_en = 0; end
-            `FPU_CLASS: begin fpu_op = fpnew_pkg::CLASSIFY; fflags_en = 0; end
+            `FPU_MVXW:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; fpu_has_fflags = 0; end
+            `FPU_MVWX:  begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = `FRM_RUP; fpu_has_fflags = 0; end
+            `FPU_CLASS: begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end
             `FPU_CMP:   begin fpu_op = fpnew_pkg::CMP; end
             default:;
         endcase
@@ -150,13 +150,13 @@ module VX_fpnew #(
                 .dst_fmt_i      (fpnew_pkg::fp_format_e'(fpu_dst_fmt)),
                 .int_fmt_i      (fpnew_pkg::int_format_e'(fpu_int_fmt)),
                 .vectorial_op_i (1'b0),
-                .tag_i          ({fpu_in_tag, fflags_en, is_class_op_i}),
+                .tag_i          ({fpu_in_tag, fpu_has_fflags, is_class_op_i}),
                 .in_valid_i     (fpu_in_valid),
                 .in_ready_o     (fpu_in_ready),
                 .flush_i        (reset),
                 .result_o       (fpu_result[0]),
                 .status_o       (fpu_status[0]),
-                .tag_o          ({fpu_out_tag, fflags_en_o, is_class_op_o}),
+                .tag_o          ({fpu_out_tag, fpu_has_fflags_o, is_class_op_o}),
                 .out_valid_o    (fpu_out_valid),
                 .out_ready_i    (fpu_out_ready),
                 `UNUSED_PIN     (busy_o)
@@ -194,22 +194,16 @@ module VX_fpnew #(
 `ENABLE_TRACING
 
     assign fpu_in_valid = in_valid;
-    assign in_ready = fpu_in_ready;
+    assign in_ready = fpu_in_ready
+                    || ~in_valid; // fix fpnews's in_ready containing in_valid;
 
     assign fpu_in_tag = in_tag;    
     assign out_tag = fpu_out_tag;
 
     assign result = fpu_result;
     
-    assign has_fflags = fflags_en_o;   
-    
-    for (i = 0; i < `NUM_THREADS; i++) begin
-        assign fflags[i][0] = fpu_status[i].NX;
-        assign fflags[i][1] = fpu_status[i].UF;
-        assign fflags[i][2] = fpu_status[i].OF;
-        assign fflags[i][3] = fpu_status[i].DZ;
-        assign fflags[i][4] = fpu_status[i].NV;
-    end
+    assign has_fflags = fpu_has_fflags_o;   
+    assign fflags = fpu_status;
 
     assign out_valid = fpu_out_valid;    
     assign fpu_out_ready = out_ready;

@@ -15,7 +15,7 @@ module VX_index_queue #(
     input  wire [`LOG2UP(SIZE)-1:0] read_addr,
     output wire [DATAW-1:0] read_data
 );
-    `USE_FAST_BRAM reg [DATAW-1:0] data [SIZE-1:0];
+    reg [DATAW-1:0] entries [SIZE-1:0];
     reg [SIZE-1:0] valid;    
     reg [`LOG2UP(SIZE):0] rd_ptr, wr_ptr;
 
@@ -38,7 +38,7 @@ module VX_index_queue #(
             valid  <= 0;     
         end else begin
             if (enqueue)  begin
-                data[wr_a]  <= write_data;
+                entries[wr_a]  <= write_data;
                 valid[wr_a] <= 1;
                 wr_ptr      <= wr_ptr + 1;
             end            
@@ -52,6 +52,6 @@ module VX_index_queue #(
     end
 
     assign write_addr = wr_a;
-    assign read_data = data[read_addr];
+    assign read_data = entries[read_addr];
 
 endmodule

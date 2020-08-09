@@ -23,8 +23,6 @@ module VX_multiplier #(
         .dataa  (dataa),
         .datab  (datab),
         .result (result),
-        .sclr   (reset),
-        .aclr   (1'b0),
         .clken  (clk_en),
         .sum    (1'b0)
     );
