@@ -1,6 +1,7 @@
 +define+NUM_CORES=1
 
 #+define+SCOPE
++define+SYNTHESIS
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE

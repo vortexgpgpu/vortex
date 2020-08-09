@@ -104,7 +104,7 @@ module VX_mul_unit #(
     VX_shift_register #(
         .DATAW(1 + `ISTAG_BITS + 1),
         .DEPTH(`LATENCY_IMUL)
-    ) mul_delay (
+    ) mul_shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(~stall_mul),
@@ -115,7 +115,7 @@ module VX_mul_unit #(
     VX_shift_register #(
         .DATAW(1 + `ISTAG_BITS + `NUM_THREADS),
         .DEPTH(`LATENCY_IDIV)
-    ) div_delay (
+    ) div_shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(~stall_div),
