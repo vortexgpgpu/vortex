@@ -4,22 +4,22 @@ module VX_fp_sqrt (
     input wire clk,
     input wire reset,   
 
-    output wire in_ready,
-    input wire  in_valid,
+    output wire ready_in,
+    input wire  valid_in,
 
-    input wire [`ISTAG_BITS-1:0] in_tag,
+    input wire [`ISTAG_BITS-1:0] tag_in,
 
     input wire [`NUM_THREADS-1:0][31:0]  dataa,
     output wire [`NUM_THREADS-1:0][31:0] result, 
 
-    output wire [`ISTAG_BITS-1:0] out_tag,
+    output wire [`ISTAG_BITS-1:0] tag_out,
 
-    input wire  out_ready,
-    output wire out_valid
+    input wire  ready_out,
+    output wire valid_out
 );    
-    wire stall = ~out_ready && out_valid;
+    wire stall  = ~ready_out && valid_out;
     wire enable = ~stall;
-    assign in_ready = enable;
+    assign ready_in = enable;
 
     genvar i;
 
@@ -40,8 +40,8 @@ module VX_fp_sqrt (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in({in_tag, in_valid}),
-        .out({out_tag, out_valid})
+        .in ({tag_in,  valid_in}),
+        .out({tag_out, valid_out})
     );
 
 endmodule

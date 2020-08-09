@@ -131,7 +131,7 @@ void kernel_fmadd(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = a * 0.5f + b;
+		float c = a * b + 0.5f;
 		dst_ptr[offset+i] = c;
 	}
 }
@@ -147,7 +147,7 @@ void kernel_fmsub(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = a * 0.5f - b;
+		float c = a * b - 0.5f;
 		dst_ptr[offset+i] = c;
 	}
 }
@@ -163,7 +163,7 @@ void kernel_fnmadd(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = -a * 0.5f - b;
+		float c = -a * b - 0.5f;
 		dst_ptr[offset+i] = c;
 	}
 }
@@ -179,7 +179,7 @@ void kernel_fnmsub(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = -a * 0.5f + b;
+		float c = -a * b + 0.5f;
 		dst_ptr[offset+i] = c;
 	}
 }
@@ -195,8 +195,8 @@ void kernel_fnmadd_madd(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = -a * 0.25f - b;
-		float d = a * 0.25f + b;
+		float c =-a * b - 0.5f;
+		float d = a * b + 0.5f;
 		float e = c + d;
 		dst_ptr[offset+i] = e;
 	}
@@ -247,7 +247,7 @@ void kernel_fsqrt(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = sqrt(a) + b;
+		float c = sqrt(a * b);
 		dst_ptr[offset+i] = c;
 	}
 }
@@ -289,38 +289,34 @@ void kernel_ftou(void* arg) {
 void kernel_itof(void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
 	uint32_t count  = _arg->count;
-	float* src0_ptr = (float*)_arg->src0_ptr;
-	float* src1_ptr = (float*)_arg->src1_ptr;
+	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
+	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
 	uint32_t offset = vx_thread_gid() * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
-		float a = src0_ptr[offset+i];
-		float b = src1_ptr[offset+i];
-		int32_t c = (int32_t)a;
-		int32_t d = (int32_t)b;
-		int32_t e = c + d;
-		float f = (float)e;
-		dst_ptr[offset+i] = f;
+		int32_t a = src0_ptr[offset+i];
+		int32_t b = src1_ptr[offset+i];
+		int32_t c = a + b;
+		float d = (float)c;
+		dst_ptr[offset+i] = d;
 	}
 }
 
 void kernel_utof(void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
 	uint32_t count  = _arg->count;
-	float* src0_ptr = (float*)_arg->src0_ptr;
-	float* src1_ptr = (float*)_arg->src1_ptr;
+	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
+	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
 	uint32_t offset = vx_thread_gid() * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
-		float a = src0_ptr[offset+i];
-		float b = src1_ptr[offset+i];
-		uint32_t c = (uint32_t)a;
-		uint32_t d = (uint32_t)b;
-		uint32_t e = c + d;
-		float f = (float)e;
-		dst_ptr[offset+i] = f;
+		int32_t a = src0_ptr[offset+i];
+		int32_t b = src1_ptr[offset+i];
+		uint32_t c = a + b;
+		float d = (float)c;
+		dst_ptr[offset+i] = d;
 	}
 }
 

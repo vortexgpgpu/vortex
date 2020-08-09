@@ -4,10 +4,10 @@ module VX_fp_noncomp (
 	input wire clk,
 	input wire reset,   
 
-    output wire in_ready,
-    input wire  in_valid,
+    output wire ready_in,
+    input wire  valid_in,
 
-    input wire [`ISTAG_BITS-1:0] in_tag,
+    input wire [`ISTAG_BITS-1:0] tag_in,
 	
     input wire [`FPU_BITS-1:0] op,
     input wire [`FRM_BITS-1:0] frm,
@@ -19,10 +19,10 @@ module VX_fp_noncomp (
     output wire has_fflags,
     output fflags_t [`NUM_THREADS-1:0] fflags,
 
-    output wire [`ISTAG_BITS-1:0] out_tag,
+    output wire [`ISTAG_BITS-1:0] tag_out,
 
-    input wire  out_ready,
-    output wire out_valid
+    input wire  ready_out,
+    output wire valid_out
 );  
     localparam  NEG_INF     = 32'h00000001,
                 NEG_NORM    = 32'h00000002,
@@ -226,8 +226,8 @@ module VX_fp_noncomp (
         end
     end
 
-    wire stall = ~out_ready && out_valid;
-    assign in_ready = ~stall;
+    wire stall = ~ready_out && valid_out;
+    assign ready_in = ~stall;
 
     VX_generic_register #(
         .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32) + 1 + (`NUM_THREADS * `FFG_BITS))
@@ -236,8 +236,8 @@ module VX_fp_noncomp (
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({tmp_valid, in_tag,  tmp_result, tmp_has_fflags, tmp_fflags}),
-        .out   ({out_valid, out_tag, result,     has_fflags,     fflags})
+        .in    ({tmp_valid, tag_in,  tmp_result, tmp_has_fflags, tmp_fflags}),
+        .out   ({valid_out, tag_out, result,     has_fflags,     fflags})
     );
 
 endmodule
