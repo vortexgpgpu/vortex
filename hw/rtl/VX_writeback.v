@@ -92,6 +92,15 @@ module VX_writeback #(
             wb_warp_num_table_n [fpu_commit_if.issue_tag]    = cmt_to_issue_if.fpu_data.warp_num;                
             wb_curr_PC_table_n [fpu_commit_if.issue_tag]     = cmt_to_issue_if.fpu_data.curr_PC;
             wb_rd_table_n [fpu_commit_if.issue_tag]          = cmt_to_issue_if.fpu_data.rd;
+        end
+
+        if (gpu_commit_if.valid) begin
+            wb_valid_table_n [gpu_commit_if.issue_tag]       = cmt_to_issue_if.gpu_data.wb;
+            wb_thread_mask_table_n [gpu_commit_if.issue_tag] = cmt_to_issue_if.gpu_data.thread_mask;
+            wb_data_table_n [gpu_commit_if.issue_tag]        = gpu_commit_if.data;
+            wb_warp_num_table_n [gpu_commit_if.issue_tag]    = cmt_to_issue_if.gpu_data.warp_num;                
+            wb_curr_PC_table_n [gpu_commit_if.issue_tag]     = cmt_to_issue_if.gpu_data.curr_PC;
+            wb_rd_table_n [gpu_commit_if.issue_tag]          = cmt_to_issue_if.gpu_data.rd;
         end        
     end
 

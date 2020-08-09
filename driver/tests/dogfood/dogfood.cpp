@@ -77,6 +77,7 @@ const char* kernel_file = "kernel.bin";
 int count    = 0;
 int testid_s = 0;
 int testid_e = (testMngr.size() - 1);
+bool stop_on_error = true;
 
 vx_device_h device   = nullptr;
 vx_buffer_h arg_buf  = nullptr;
@@ -86,12 +87,12 @@ vx_buffer_h dst_buf  = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
-   std::cout << "Usage: [-s:testid] [-e:testid] [-k: kernel] [-n words] [-h: help]" << std::endl;
+   std::cout << "Usage: [-s:testid] [-e:testid] [-k: kernel] [-n words] [-c] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:s:e:k:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:s:e:k:ch?")) != -1) {
     switch (c) {
     case 'n':
       count = atoi(optarg);
@@ -104,6 +105,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'k':
       kernel_file = optarg;
+      break;
+    case 'c':
+      stop_on_error = false;
       break;
     case 'h':
     case '?': {
@@ -136,6 +140,7 @@ void cleanup() {
 }
 
 int main(int argc, char *argv[]) {
+  int exitcode = 0;
   size_t value; 
   kernel_arg_t kernel_arg;
   
@@ -145,6 +150,8 @@ int main(int argc, char *argv[]) {
   if (count == 0) {
     count = 1;
   }
+
+  std::cout << std::dec;
 
   std::cout << "test ids: " << testid_s << " - " << testid_e << std::endl;
   std::cout << "workitem size: " << count << std::endl;
@@ -163,9 +170,7 @@ int main(int argc, char *argv[]) {
   size_t buf_size = num_points * sizeof(uint32_t);
   
   std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
+  std::cout << "buffer size: " << std::hex << buf_size << std::dec <<  " bytes" << std::endl;
 
   // upload program
   std::cout << "upload kernel" << std::endl;  
@@ -183,9 +188,9 @@ int main(int argc, char *argv[]) {
 
   kernel_arg.count = count;
 
-  std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::endl;
-  std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::endl;
-  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::endl;
+  std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::dec << std::endl;
+  std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::dec << std::endl;
+  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::dec << std::endl;
   
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;
@@ -250,15 +255,19 @@ int main(int argc, char *argv[]) {
     if (errors != 0) {
       std::cout << "found " << errors << " errors!" << std::endl;
       std::cout << "FAILED!" << std::endl << std::flush;
-      cleanup();
-      exit(1);  
+      if (stop_on_error) {
+        cleanup();
+        exit(1);  
+      }
+      exitcode = 1;
+    } else {
+      std::cout << "PASSED!" << std::endl << std::flush;
     }
-    std::cout << "PASSED!" << std::endl << std::flush;
   } 
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  return 0;
+  return exitcode;
 }

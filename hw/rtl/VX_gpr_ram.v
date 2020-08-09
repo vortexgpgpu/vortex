@@ -14,22 +14,24 @@ module VX_gpr_ram (
 
         reg [`NUM_THREADS-1:0][3:0][7:0] ram [(`NUM_WARPS * `NUM_REGS)-1:0];       
 
-        integer i, j;
-
         initial begin          
-            // initialize r0 to 0  
-            for (j = 0; j < `NUM_WARPS; j++) begin
-                for (i = 0; i < `NUM_THREADS; i++) begin
-                    ram[j * `NUM_REGS][i][0] = 8'h0; 
-                    ram[j * `NUM_REGS][i][1] = 8'h0;
-                    ram[j * `NUM_REGS][i][2] = 8'h0;
-                    ram[j * `NUM_REGS][i][3] = 8'h0;
+            // initialize ram  
+            for (integer j = 0; j < `NUM_WARPS; j++) begin
+                for (integer i = 0; i < `NUM_REGS; i++) begin
+                    if (i == 0) begin
+                        ram[j * `NUM_REGS + i] = {`NUM_THREADS{32'h00000000}}; // set r0 = 0
+                    end 
+                `ifndef SYNTHESIS
+                    else begin
+                        ram[j * `NUM_REGS + i] = {`NUM_THREADS{32'hdeadbeef}}; 
+                    end
+                `endif
                 end
             end
         end
                 
         always @(posedge clk) begin
-            for (i = 0; i < `NUM_THREADS; i++) begin
+            for (integer i = 0; i < `NUM_THREADS; i++) begin
                 if (we[i]) begin
                     ram[waddr][i][0] <= wdata[i][07:00];
                     ram[waddr][i][1] <= wdata[i][15:08];

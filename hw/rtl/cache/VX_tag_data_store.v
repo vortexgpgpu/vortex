@@ -44,10 +44,9 @@ module VX_tag_data_store #(
 
     wire do_write = (| write_enable);
 
-    integer i, j;
     always @(posedge clk) begin
         if (reset) begin
-            for (i = 0; i < `BANK_LINE_COUNT; i++) begin
+            for (integer i = 0; i < `BANK_LINE_COUNT; i++) begin
                 valid[i] <= 0;
                 dirty[i] <= 0;
             end
@@ -71,10 +70,10 @@ module VX_tag_data_store #(
                 valid[write_addr] <= 0;
             end
 
-            for (i = 0; i < `BANK_LINE_WORDS; i++) begin
-                for (j = 0; j < WORD_SIZE; j++) begin
-                    if (write_enable[i][j]) begin
-                        data[write_addr][i][j] <= write_data[i * `WORD_WIDTH + j * 8 +: 8];
+            for (integer j = 0; j < `BANK_LINE_WORDS; j++) begin
+                for (integer i = 0; i < WORD_SIZE; i++) begin
+                    if (write_enable[j][i]) begin
+                        data[write_addr][j][i] <= write_data[j * `WORD_WIDTH + i * 8 +: 8];
                     end
                 end
             end

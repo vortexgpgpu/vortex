@@ -24,10 +24,10 @@ module VX_fpu_unit #(
         .clk        (clk),
         .reset      (reset),   
 
-        .in_valid   (fpu_req_if.valid),
-        .in_ready   (fpu_req_if.ready),        
+        .valid_in   (fpu_req_if.valid),
+        .ready_in   (fpu_req_if.ready),        
 
-        .in_tag     (fpu_req_if.issue_tag),
+        .tag_in     (fpu_req_if.issue_tag),
         
         .op         (fpu_req_if.fpu_op),
         .frm        (frm),
@@ -40,10 +40,10 @@ module VX_fpu_unit #(
         .has_fflags (fpu_commit_if.has_fflags),
         .fflags     (fpu_commit_if.fflags),
 
-        .out_tag    (fpu_commit_if.issue_tag),
+        .tag_out    (fpu_commit_if.issue_tag),
 
-        .out_ready  (fpu_commit_if.ready),
-        .out_valid  (fpu_commit_if.valid)
+        .ready_out  (fpu_commit_if.ready),
+        .valid_out  (fpu_commit_if.valid)
     );   
 
 `else
@@ -57,10 +57,10 @@ module VX_fpu_unit #(
         .clk        (clk),
         .reset      (reset),   
 
-        .in_valid   (fpu_req_if.valid),
-        .in_ready   (fpu_req_if.ready),        
+        .valid_in   (fpu_req_if.valid),
+        .ready_in   (fpu_req_if.ready),        
 
-        .in_tag     (fpu_req_if.issue_tag),
+        .tag_in     (fpu_req_if.issue_tag),
         
         .op         (fpu_req_if.fpu_op),
         .frm        (frm),
@@ -73,10 +73,10 @@ module VX_fpu_unit #(
         .has_fflags (fpu_commit_if.has_fflags),
         .fflags     (fpu_commit_if.fflags),
 
-        .out_tag    (fpu_commit_if.issue_tag),
+        .tag_out    (fpu_commit_if.issue_tag),
 
-        .out_ready  (fpu_commit_if.ready),
-        .out_valid  (fpu_commit_if.valid)
+        .ready_out  (fpu_commit_if.ready),
+        .valid_out  (fpu_commit_if.valid)
     );
     
 `endif

@@ -2,7 +2,7 @@
 
 module VX_generic_queue #(
     parameter DATAW    = 1,
-    parameter SIZE     = 16,
+    parameter SIZE     = 2,
     parameter BUFFERED = 1
 ) ( 
     input  wire             clk,

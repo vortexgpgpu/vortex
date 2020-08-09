@@ -77,6 +77,8 @@
 
 `define INST_GPU    7'b1101011
 
+///////////////////////////////////////////////////////////////////////////////
+
 `define BYTEEN_SB   3'h0 
 `define BYTEEN_SH   3'h1
 `define BYTEEN_SW   3'h2
@@ -84,6 +86,8 @@
 `define BYTEEN_UH   3'h5
 `define BYTEEN_BITS 3
 `define BYTEEN_TYPE(x) x[1:0]
+
+///////////////////////////////////////////////////////////////////////////////
 
 `define BR_EQ       4'h0
 `define BR_NE       4'h1
@@ -100,6 +104,22 @@
 `define BR_DRET     4'hC
 `define BR_NO       4'hF
 `define BR_BITS     4
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define EX_NOP      3'h0
+`define EX_ALU      3'h1
+`define EX_LSU      3'h2
+`define EX_CSR      3'h3
+`define EX_MUL      3'h4
+`define EX_FPU      3'h5
+`define EX_GPU      3'h6
+`define EX_BITS     3
+
+`define NUM_EXS     6
+`define NE_BITS     `LOG2UP(`NUM_EXS)
+
+///////////////////////////////////////////////////////////////////////////////
 
 `define OP_BITS     5
 
@@ -209,18 +229,6 @@
 `define GPU_OTHER   3'h7
 `define GPU_BITS    3
 `define GPU_OP(x)   x[`GPU_BITS-1:0]
-
-`define EX_NOP      3'h0
-`define EX_ALU      3'h1
-`define EX_LSU      3'h2
-`define EX_CSR      3'h3
-`define EX_MUL      3'h4
-`define EX_FPU      3'h5
-`define EX_GPU      3'h6
-`define EX_BITS     3
-
-`define NUM_EXS     6
-`define NE_BITS     `LOG2UP(`NUM_EXS)
 
 ///////////////////////////////////////////////////////////////////////////////
 

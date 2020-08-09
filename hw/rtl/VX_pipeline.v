@@ -245,10 +245,10 @@ module VX_pipeline #(
     assign core_icache_rsp_if.tag   = icache_rsp_tag;
     assign icache_rsp_ready = core_icache_rsp_if.ready;
 
-    `SCOPE_ASSIGN(scope_busy, busy); 
-    `SCOPE_ASSIGN(scope_schedule_delay, schedule_delay);    
-    `SCOPE_ASSIGN(scope_mem_delay, mem_delay);
-    `SCOPE_ASSIGN(scope_exec_delay, exec_delay);
-    `SCOPE_ASSIGN(scope_gpr_stage_delay, gpr_delay);
+    `SCOPE_ASSIGN (scope_busy, busy); 
+    `SCOPE_ASSIGN (scope_schedule_delay, schedule_delay);    
+    `SCOPE_ASSIGN (scope_mem_delay, mem_delay);
+    `SCOPE_ASSIGN (scope_exec_delay, exec_delay);
+    `SCOPE_ASSIGN (scope_gpr_stage_delay, gpr_delay);
 
 endmodule

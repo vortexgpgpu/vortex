@@ -68,12 +68,12 @@ module VX_lsu_unit #(
         assign mem_req_offset[i] = full_address[i][1:0];
         assign mem_req_byteen[i] = wmask << full_address[i][1:0];
         assign mem_req_data[i]   = lsu_req_if.store_data[i] << {mem_req_offset[i], 3'b0};
-    end     
+    end   
 
-    wire stall_in = ~dcache_req_if.ready;
+     wire stall_in = ~dcache_req_if.ready && use_valid;
 
     // Can accept new request?
-    assign lsu_req_if.ready = ~stall_in; 
+    assign lsu_req_if.ready = ~stall_in;   
 
 `IGNORE_WARNINGS_BEGIN
     wire [`NUM_THREADS-1:0][31:0] use_address;
@@ -167,20 +167,20 @@ module VX_lsu_unit #(
     assign dcache_rsp_if.ready = lsu_commit_if.ready && ~is_store_rsp; // STORE has priority
 
     // scope registration
-    `SCOPE_ASSIGN(scope_dcache_req_valid, dcache_req_if.valid);   
-    `SCOPE_ASSIGN(scope_dcache_req_addr,  use_address);    
-    `SCOPE_ASSIGN(scope_dcache_req_rw,    dcache_req_if.rw );
-    `SCOPE_ASSIGN(scope_dcache_req_byteen,dcache_req_if.byteen);
-    `SCOPE_ASSIGN(scope_dcache_req_data,  dcache_req_if.data);
-    `SCOPE_ASSIGN(scope_dcache_req_tag,   dcache_req_if.tag);
-    `SCOPE_ASSIGN(scope_dcache_req_ready, dcache_req_if.ready); 
-    `SCOPE_ASSIGN(scope_dcache_req_warp_num, use_warp_num);
-    `SCOPE_ASSIGN(scope_dcache_req_curr_PC, use_pc);
+    `SCOPE_ASSIGN (scope_dcache_req_valid, dcache_req_if.valid);   
+    `SCOPE_ASSIGN (scope_dcache_req_addr,  use_address);    
+    `SCOPE_ASSIGN (scope_dcache_req_rw,    dcache_req_if.rw );
+    `SCOPE_ASSIGN (scope_dcache_req_byteen,dcache_req_if.byteen);
+    `SCOPE_ASSIGN (scope_dcache_req_data,  dcache_req_if.data);
+    `SCOPE_ASSIGN (scope_dcache_req_tag,   dcache_req_if.tag);
+    `SCOPE_ASSIGN (scope_dcache_req_ready, dcache_req_if.ready); 
+    `SCOPE_ASSIGN (scope_dcache_req_warp_num, use_warp_num);
+    `SCOPE_ASSIGN (scope_dcache_req_curr_PC, use_pc);
 
-    `SCOPE_ASSIGN(scope_dcache_rsp_valid, dcache_rsp_if.valid);
-    `SCOPE_ASSIGN(scope_dcache_rsp_data,  dcache_rsp_if.data);
-    `SCOPE_ASSIGN(scope_dcache_rsp_tag,   dcache_rsp_if.tag);
-    `SCOPE_ASSIGN(scope_dcache_rsp_ready, dcache_rsp_if.ready);
+    `SCOPE_ASSIGN (scope_dcache_rsp_valid, dcache_rsp_if.valid);
+    `SCOPE_ASSIGN (scope_dcache_rsp_data,  dcache_rsp_if.data);
+    `SCOPE_ASSIGN (scope_dcache_rsp_tag,   dcache_rsp_if.tag);
+    `SCOPE_ASSIGN (scope_dcache_rsp_ready, dcache_rsp_if.ready);
 
     `UNUSED_VAR (mem_rsp_warp_num)
     `UNUSED_VAR (mem_rsp_curr_PC)

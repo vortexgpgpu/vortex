@@ -21,13 +21,13 @@ module VX_mul_unit #(
 
     wire stall_mul, stall_div;
 
-    wire is_mul_op = (alu_op == `MUL_MUL);    
-    wire is_div_op = (alu_op == `MUL_DIV || alu_op == `MUL_DIVU);    
-    
-    reg [`NUM_THREADS-1:0]  is_div_op_in;
-    wire [`NUM_THREADS-1:0] is_div_op_out;
-    wire is_mul_op_out;
+    wire is_mul_mul = (alu_op == `MUL_MUL);    
+    wire is_mul_mul_out;
 
+    wire is_div_divu = (alu_op == `MUL_DIV || alu_op == `MUL_DIVU);        
+    reg [`NUM_THREADS-1:0]  is_div_divu_qual;
+    wire [`NUM_THREADS-1:0] is_div_divu_out;
+    
     genvar i;    
 
     for (i = 0; i < `NUM_THREADS; i++) begin    
@@ -39,16 +39,16 @@ module VX_mul_unit #(
 
         // handle divide by zero
         always @(*) begin
-            is_div_op_in[i] = is_div_op;
+            is_div_divu_qual[i] = is_div_divu;
             div_in1 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in1[i][31], alu_in1[i]};
             div_in2 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in2[i][31], alu_in2[i]};    
 
             if (0 == alu_in2[i]) begin
-                if (is_div_op) begin
+                if (is_div_divu) begin
                     div_in1 = {1'b0, 32'hFFFFFFFF}; // quotient = (0xFFFFFFFF / 1)                 
                     div_in2 = 1; 
                 end else begin                    
-                    is_div_op_in[i] = 1; // remainder = (in1 / 1)
+                    is_div_divu_qual[i] = 1; // remainder = (in1 / 1)
                     div_in2 = 1; 
                 end                
             end
@@ -91,9 +91,12 @@ module VX_mul_unit #(
             .remainder(rem_result_tmp)
         );
 
-        assign mul_result[i] = is_mul_op_out    ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
-        assign div_result[i] = is_div_op_out[i] ? div_result_tmp       : rem_result_tmp;
+        assign mul_result[i] = is_mul_mul_out     ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
+        assign div_result[i] = is_div_divu_out[i] ? div_result_tmp       : rem_result_tmp;
     end 
+
+    wire is_mul_fire = alu_req_if.valid && alu_req_if.ready && ~`IS_DIV_OP(alu_op);
+    wire is_div_fire = alu_req_if.valid && alu_req_if.ready && `IS_DIV_OP(alu_op);
 
     wire mul_valid_out;
     wire div_valid_out;    
@@ -108,8 +111,8 @@ module VX_mul_unit #(
         .clk(clk),
         .reset(reset),
         .enable(~stall_mul),
-        .in({alu_req_if.valid && ~`IS_DIV_OP(alu_op), alu_req_if.issue_tag, is_mul_op}),
-        .out({mul_valid_out, mul_issue_tag, is_mul_op_out})
+        .in({is_mul_fire, alu_req_if.issue_tag, is_mul_mul}),
+        .out({mul_valid_out, mul_issue_tag, is_mul_mul_out})
     );
 
     VX_shift_register #(
@@ -119,8 +122,8 @@ module VX_mul_unit #(
         .clk(clk),
         .reset(reset),
         .enable(~stall_div),
-        .in({alu_req_if.valid && `IS_DIV_OP(alu_op), alu_req_if.issue_tag, is_div_op_in}),
-        .out({div_valid_out, div_issue_tag, is_div_op_out})
+        .in({is_div_fire, alu_req_if.issue_tag, is_div_divu_qual}),
+        .out({div_valid_out, div_issue_tag, is_div_divu_out})
     );
 
     wire stall_out   = (~alu_commit_if.ready && alu_commit_if.valid);
