@@ -43,18 +43,16 @@ module VX_gpr_stage #(
     assign gpr_read_if.rs1_data = rs1_data;
     assign gpr_read_if.rs2_data = rs2_data;
     assign gpr_read_if.rs3_data = 0;
-    assign gpr_read_if.in_ready = 1;
+    assign gpr_read_if.ready    = 1;
     
     wire valid = gpr_read_if.valid;
-    wire out_ready = gpr_read_if.out_ready;
     wire use_rs3 = gpr_read_if.use_rs3; 
     wire [`NR_BITS-1:0] rs3 = gpr_read_if.rs3;
     `UNUSED_VAR (valid);
-    `UNUSED_VAR (out_ready);
     `UNUSED_VAR (use_rs3);
     `UNUSED_VAR (rs3);
 `endif
 
-    assign writeback_if.ready = 1'b1;
+    assign writeback_if.ready = 1'b1; // writes are stall-free
 
 endmodule
