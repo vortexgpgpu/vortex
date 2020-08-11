@@ -1,17 +1,18 @@
 RISCV_TOOLCHAIN_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
-OPTS ?= -n256
+OPTS ?= -n64
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -ffreestanding -nostartfiles -Wl,--gc-sections
+VX_CFLAGS += -march=rv32imf -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -ffreestanding -nostartfiles -Wl,--gc-sections
 VX_CFLAGS += -I$(VORTEX_RT_PATH)/include
 
 VX_LDFLAGS += $(VORTEX_RT_PATH)/libvortexrt.a
+VX_LDFLAGS += -lm
 
 VX_SRCS = kernel.c
 
@@ -19,18 +20,16 @@ CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../../include
 
-LDFLAGS += 
+PROJECT = dogfood
 
-PROJECT = basic
-
-SRCS = basic.cpp
+SRCS = dogfood.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
+ 
+kernel.dump: kernel.elf
+	$(VX_DP) -D kernel.elf > kernel.dump
 
-kernel.dump:  kernel.elf
-	$(VX_DP) -D  kernel.elf > kernel.dump
-
-kernel.bin:  kernel.elf
+kernel.bin: kernel.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
 kernel.elf: $(VX_SRCS)
@@ -47,7 +46,7 @@ run-ase: $(PROJECT)
 
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
+	
 run-simx: $(PROJECT)
 	LD_LIBRARY_PATH=../../simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 

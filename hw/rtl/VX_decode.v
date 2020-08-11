@@ -15,7 +15,7 @@ module VX_decode  #(
     VX_wstall_if        wstall_if,
     VX_join_if          join_if
 );
-    wire        in_valid = ifetch_rsp_if.valid;
+    wire        valid_in = ifetch_rsp_if.valid;
     wire [31:0] instr    = ifetch_rsp_if.instr;
 
     reg [`ALU_BITS-1:0] alu_op;
@@ -352,10 +352,10 @@ module VX_decode  #(
     
     assign decode_tmp_if.frm = func3;
 
-    assign join_if.is_join  = in_valid && is_gpu && (gpu_op == `GPU_JOIN);
+    assign join_if.is_join  = valid_in && is_gpu && (gpu_op == `GPU_JOIN);
     assign join_if.warp_num = ifetch_rsp_if.warp_num;
 
-    assign wstall_if.wstall = in_valid && (is_btype || is_jal || is_jalr || (is_gpu && (gpu_op == `GPU_TMC || gpu_op == `GPU_SPLIT || gpu_op == `GPU_BAR)));
+    assign wstall_if.wstall = valid_in && (is_btype || is_jal || is_jalr || (is_gpu && (gpu_op == `GPU_TMC || gpu_op == `GPU_SPLIT || gpu_op == `GPU_BAR)));
     assign wstall_if.warp_num = ifetch_rsp_if.warp_num;
 
     wire stall = ~decode_if.ready && decode_if.valid; 

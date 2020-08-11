@@ -14,6 +14,8 @@
      exit(-1);                                                  \
    } while (false)
 
+///////////////////////////////////////////////////////////////////////////////
+
 const char* kernel_file = "kernel.bin";
 int test = -1;
 uint32_t count = 0;

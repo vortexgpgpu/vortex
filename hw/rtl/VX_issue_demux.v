@@ -32,11 +32,11 @@ module VX_issue_demux (
     assign lsu_req_if.issue_tag   = issue_tag;
     assign lsu_req_if.warp_num    = decode_if.warp_num;
     assign lsu_req_if.curr_PC     = decode_if.curr_PC;
+    assign lsu_req_if.rw          = `LSU_RW(decode_if.ex_op);
+    assign lsu_req_if.byteen      = `LSU_BE(decode_if.ex_op);
     assign lsu_req_if.base_addr   = gpr_read_if.rs1_data;
     assign lsu_req_if.store_data  = gpr_read_if.rs2_data;
     assign lsu_req_if.offset      = decode_if.imm;
-    assign lsu_req_if.rw          = `LSU_RW(decode_if.ex_op);
-    assign lsu_req_if.byteen      = `LSU_BE(decode_if.ex_op);
     assign lsu_req_if.rd          = decode_if.rd;
     assign lsu_req_if.wb          = decode_if.wb;
 
@@ -54,6 +54,8 @@ module VX_issue_demux (
 `ifdef EXT_M_ENABLE    
     assign mul_req_if.valid       = decode_if.valid && (decode_if.ex_type == `EX_MUL);
     assign mul_req_if.issue_tag   = issue_tag;
+    assign mul_req_if.warp_num    = decode_if.warp_num;
+    assign mul_req_if.curr_PC     = decode_if.curr_PC;
     assign mul_req_if.mul_op      = `MUL_OP(decode_if.ex_op);
     assign mul_req_if.rs1_data    = gpr_read_if.rs1_data;
     assign mul_req_if.rs2_data    = gpr_read_if.rs2_data;   
@@ -64,11 +66,12 @@ module VX_issue_demux (
     assign fpu_req_if.valid       = decode_if.valid && (decode_if.ex_type == `EX_FPU);
     assign fpu_req_if.issue_tag   = issue_tag;
     assign fpu_req_if.warp_num    = decode_if.warp_num;
+    assign fpu_req_if.curr_PC     = decode_if.curr_PC;
     assign fpu_req_if.fpu_op      = `FPU_OP(decode_if.ex_op);
+    assign fpu_req_if.frm         = decode_if.frm;
     assign fpu_req_if.rs1_data    = gpr_read_if.rs1_data;
     assign fpu_req_if.rs2_data    = gpr_read_if.rs2_data;    
-    assign fpu_req_if.rs3_data    = gpr_read_if.rs3_data;    
-    assign fpu_req_if.frm         = decode_if.frm;
+    assign fpu_req_if.rs3_data    = gpr_read_if.rs3_data;        
 `endif
 
     // GPU unit
@@ -76,6 +79,7 @@ module VX_issue_demux (
     assign gpu_req_if.thread_mask = decode_if.thread_mask;
     assign gpu_req_if.issue_tag   = issue_tag;
     assign gpu_req_if.warp_num    = decode_if.warp_num;
+    assign gpu_req_if.curr_PC     = decode_if.curr_PC;
     assign gpu_req_if.gpu_op      = `GPU_OP(decode_if.ex_op);
     assign gpu_req_if.rs1_data    = gpr_read_if.rs1_data;
     assign gpu_req_if.rs2_data    = gpr_read_if.rs2_data[0];
