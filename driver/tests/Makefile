@@ -5,7 +5,7 @@ all:
 
 run:
 	$(MAKE) -C basic run-rtlsim
-	$(MAKE) -C basic run-simx
+	#$(MAKE) -C basic run-simx
 	$(MAKE) -C demo run-rtlsim
 	$(MAKE) -C demo run-simx 
 	$(MAKE) -C dogfood run-rtlsim
