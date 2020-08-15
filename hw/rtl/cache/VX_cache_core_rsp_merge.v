@@ -48,14 +48,12 @@ module VX_cache_core_rsp_merge #(
     
     wire stall = ~core_rsp_ready && (| core_rsp_valid);
 
-    integer i;
-
     if (CORE_TAG_ID_BITS != 0) begin            
         always @(*) begin
             core_rsp_valid_unqual = 0;
             core_rsp_data_unqual  = 0;
             core_rsp_tag_unqual   = per_bank_core_rsp_tag[main_bank_index];        
-            for (i = 0; i < NUM_BANKS; i++) begin 
+            for (integer i = 0; i < NUM_BANKS; i++) begin 
                 if (per_bank_core_rsp_valid[i]                
                  && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == per_bank_core_rsp_tag[main_bank_index][CORE_TAG_ID_BITS-1:0])) begin            
                     core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
@@ -71,7 +69,7 @@ module VX_cache_core_rsp_merge #(
             core_rsp_valid_unqual = 0;
             core_rsp_data_unqual  = 0;
             core_rsp_tag_unqual   = 0;
-            for (i = 0; i < NUM_BANKS; i++) begin 
+            for (integer i = 0; i < NUM_BANKS; i++) begin 
                 if (per_bank_core_rsp_valid[i] 
                  && !core_rsp_valid_unqual[per_bank_core_rsp_tid[i]]                     
                  && ((main_bank_index == `BANK_BITS'(i)) 

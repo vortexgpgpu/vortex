@@ -48,10 +48,8 @@ module VX_fp_noncomp (
     reg [`NUM_THREADS-1:0][31:0] fcmp_res;     // result of comparison
     reg [`NUM_THREADS-1:0][ 4:0] fcmp_excp;    // exception of comparison
 
-    genvar i;
-    
     // Setup
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign a_sign[i]     = dataa[i][31]; 
         assign a_exponent[i] = dataa[i][30:23];
         assign a_mantissa[i] = dataa[i][22:0];
@@ -77,7 +75,7 @@ module VX_fp_noncomp (
     end   
 
     // FCLASS
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin 
             if (a_type[i].is_normal) begin
                 fclass_mask[i] = a_sign[i] ? NEG_NORM : POS_NORM;
@@ -101,7 +99,7 @@ module VX_fp_noncomp (
     end
 
     // Min/Max
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             if (a_type[i].is_nan && b_type[i].is_nan)
                 fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
@@ -120,7 +118,7 @@ module VX_fp_noncomp (
     end
 
     // Sign Injection
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             case (op)
                 `FPU_SGNJ:  fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
@@ -132,7 +130,7 @@ module VX_fp_noncomp (
     end
 
     // Comparison    
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             case (frm)
                 `FRM_RNE: begin
@@ -193,7 +191,7 @@ module VX_fp_noncomp (
         endcase
     end   
 
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             tmp_valid = 1'b1;
             case (op)

@@ -15,12 +15,12 @@
         scope_snp_req_invalidate, \
         scope_snp_req_tag, \
         scope_snp_rsp_tag, \
-        scope_icache_req_warp_num, \
+        scope_icache_req_wid, \
         scope_icache_req_addr, \
         scope_icache_req_tag, \
         scope_icache_rsp_data, \
         scope_icache_rsp_tag, \
-        scope_dcache_req_warp_num, \
+        scope_dcache_req_wid, \
         scope_dcache_req_curr_PC, \
         scope_dcache_req_addr, \
         scope_dcache_req_rw, \
@@ -29,17 +29,17 @@
         scope_dcache_req_tag, \
         scope_dcache_rsp_data, \
         scope_dcache_rsp_tag, \
-        scope_decode_warp_num, \
+        scope_decode_wid, \
         scope_decode_curr_PC, \
         scope_decode_is_jal, \
         scope_decode_rs1, \
         scope_decode_rs2, \
-        scope_execute_warp_num, \
+        scope_execute_wid, \
         scope_execute_curr_PC, \
         scope_execute_rd, \
         scope_execute_a, \
         scope_execute_b, \
-        scope_writeback_warp_num, \
+        scope_writeback_wid, \
         scope_writeback_curr_PC, \
         scope_writeback_wb, \
         scope_writeback_rd, \
@@ -103,7 +103,7 @@
         wire scope_snp_rsp_valid; \
         wire [`VX_SNP_TAG_WIDTH-1:0] scope_snp_rsp_tag; \
         wire scope_icache_req_valid; \
-        wire [`NW_BITS-1:0] scope_icache_req_warp_num; \
+        wire [`NW_BITS-1:0] scope_icache_req_wid; \
         wire [31:0] scope_icache_req_addr; \
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag; \
         wire scope_icache_req_ready; \
@@ -112,7 +112,7 @@
         wire [`ICORE_TAG_WIDTH-1:0] scope_icache_rsp_tag; \
         wire scope_icache_rsp_ready; \
         wire [`NUM_THREADS-1:0] scope_dcache_req_valid; \
-        wire [`NW_BITS-1:0] scope_dcache_req_warp_num; \
+        wire [`NW_BITS-1:0] scope_dcache_req_wid; \
         wire [31:0] scope_dcache_req_curr_PC; \
         wire [63:0] scope_dcache_req_addr; \
         wire scope_dcache_req_rw; \
@@ -131,19 +131,19 @@
         wire scope_exec_delay; \
         wire scope_gpr_stage_delay; \
         wire [`NUM_THREADS-1:0]  scope_decode_valid; \
-        wire [`NW_BITS-1:0]  scope_decode_warp_num; \
+        wire [`NW_BITS-1:0]  scope_decode_wid; \
         wire [31:0] scope_decode_curr_PC; \
         wire        scope_decode_is_jal; \
         wire [`NR_BITS-1:0] scope_decode_rs1; \
         wire [`NR_BITS-1:0] scope_decode_rs2; \
         wire [`NUM_THREADS-1:0]  scope_execute_valid; \
-        wire [`NW_BITS-1:0]  scope_execute_warp_num; \
+        wire [`NW_BITS-1:0]  scope_execute_wid; \
         wire [31:0] scope_execute_curr_PC; \
         wire [`NR_BITS-1:0]  scope_execute_rd; \
         wire [63:0] scope_execute_a; \
         wire [63:0] scope_execute_b; \
         wire [`NUM_THREADS-1:0]  scope_writeback_valid; \
-        wire [`NW_BITS-1:0]  scope_writeback_warp_num; \
+        wire [`NW_BITS-1:0]  scope_writeback_wid; \
         wire [31:0] scope_writeback_curr_PC; \
         wire                scope_writeback_wb; \
         wire [`NR_BITS-1:0] scope_writeback_rd; \
@@ -162,7 +162,7 @@
 
     `define SCOPE_SIGNALS_ISTAGE_IO \
         output wire scope_icache_req_valid, \
-        output wire [`NW_BITS-1:0] scope_icache_req_warp_num, \
+        output wire [`NW_BITS-1:0] scope_icache_req_wid, \
         output wire [31:0] scope_icache_req_addr, \
         output wire [`ICORE_TAG_WIDTH-1:0] scope_icache_req_tag, \
         output wire scope_icache_req_ready, \
@@ -173,7 +173,7 @@
 
     `define SCOPE_SIGNALS_LSU_IO \
         output wire [`NUM_THREADS-1:0] scope_dcache_req_valid, \
-        output wire [`NW_BITS-1:0] scope_dcache_req_warp_num, \
+        output wire [`NW_BITS-1:0] scope_dcache_req_wid, \
         output wire [31:0] scope_dcache_req_curr_PC, \
         output wire [63:0] scope_dcache_req_addr, \
         output wire scope_dcache_req_rw, \
@@ -210,19 +210,19 @@
 
     `define SCOPE_SIGNALS_BE_IO \
         output wire [`NUM_THREADS-1:0] scope_decode_valid, \
-        output wire [`NW_BITS-1:0] scope_decode_warp_num, \
+        output wire [`NW_BITS-1:0] scope_decode_wid, \
         output wire [31:0] scope_decode_curr_PC, \
         output wire        scope_decode_is_jal, \
         output wire [`NR_BITS-1:0]  scope_decode_rs1, \
         output wire [`NR_BITS-1:0]  scope_decode_rs2, \
         output wire [`NUM_THREADS-1:0]  scope_execute_valid, \
-        output wire [`NW_BITS-1:0]  scope_execute_warp_num, \
+        output wire [`NW_BITS-1:0]  scope_execute_wid, \
         output wire [31:0] scope_execute_curr_PC, \
         output wire [`NR_BITS-1:0]  scope_execute_rd, \
         output wire [63:0] scope_execute_a, \
         output wire [63:0] scope_execute_b, \
         output wire [`NUM_THREADS-1:0]  scope_writeback_valid, \
-        output wire [`NW_BITS-1:0]  scope_writeback_warp_num, \
+        output wire [`NW_BITS-1:0]  scope_writeback_wid, \
         output wire [31:0] scope_writeback_curr_PC, \
         output wire                 scope_writeback_wb, \
         output wire [`NR_BITS-1:0]  scope_writeback_rd, \
@@ -230,7 +230,7 @@
 
     `define SCOPE_SIGNALS_ISTAGE_BIND \
         .scope_icache_req_valid (scope_icache_req_valid), \
-        .scope_icache_req_warp_num (scope_icache_req_warp_num), \
+        .scope_icache_req_wid (scope_icache_req_wid), \
         .scope_icache_req_addr  (scope_icache_req_addr), \
         .scope_icache_req_tag   (scope_icache_req_tag), \
         .scope_icache_req_ready (scope_icache_req_ready), \
@@ -241,7 +241,7 @@
 
     `define SCOPE_SIGNALS_LSU_BIND \
         .scope_dcache_req_valid (scope_dcache_req_valid), \
-        .scope_dcache_req_warp_num (scope_dcache_req_warp_num), \
+        .scope_dcache_req_wid (scope_dcache_req_wid), \
         .scope_dcache_req_curr_PC (scope_dcache_req_curr_PC), \
         .scope_dcache_req_addr  (scope_dcache_req_addr), \
         .scope_dcache_req_rw    (scope_dcache_req_rw), \
@@ -332,19 +332,19 @@
 
     `define SCOPE_SIGNALS_BE_BIND \
         .scope_decode_valid     (scope_decode_valid), \
-        .scope_decode_warp_num  (scope_decode_warp_num), \
+        .scope_decode_wid  (scope_decode_wid), \
         .scope_decode_curr_PC   (scope_decode_curr_PC), \
         .scope_decode_is_jal    (scope_decode_is_jal), \
         .scope_decode_rs1       (scope_decode_rs1), \
         .scope_decode_rs2       (scope_decode_rs2), \
         .scope_execute_valid    (scope_execute_valid), \
-        .scope_execute_warp_num (scope_execute_warp_num), \
+        .scope_execute_wid (scope_execute_wid), \
         .scope_execute_curr_PC  (scope_execute_curr_PC), \
         .scope_execute_rd       (scope_execute_rd), \
         .scope_execute_a        (scope_execute_a), \
         .scope_execute_b        (scope_execute_b), \
         .scope_writeback_valid  (scope_writeback_valid), \
-        .scope_writeback_warp_num (scope_writeback_warp_num), \
+        .scope_writeback_wid (scope_writeback_wid), \
         .scope_writeback_curr_PC(scope_writeback_curr_PC), \
         .scope_writeback_wb     (scope_writeback_wb), \
         .scope_writeback_rd     (scope_writeback_rd), \

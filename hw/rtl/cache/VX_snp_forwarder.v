@@ -83,9 +83,7 @@ module VX_snp_forwarder #(
         end
     end
 
-    genvar i;
-
-    for (i = 0; i < NUM_REQUESTS; i++) begin
+    for (genvar i = 0; i < NUM_REQUESTS; i++) begin
         assign snp_fwdout_valid[i]      = snp_req_valid && snp_req_ready;
         assign snp_fwdout_addr[i]       = snp_req_addr;
         assign snp_fwdout_invalidate[i] = snp_req_invalidate;
@@ -110,7 +108,7 @@ module VX_snp_forwarder #(
     assign fwdin_valid = snp_fwdin_valid[fwdin_sel];
     assign fwdin_tag   = snp_fwdin_tag[fwdin_sel];
 
-    for (i = 0; i < NUM_REQUESTS; i++) begin
+    for (genvar i = 0; i < NUM_REQUESTS; i++) begin
         assign snp_fwdin_ready[i] = fwdin_ready && (fwdin_sel == `REQS_BITS'(i));
     end
 

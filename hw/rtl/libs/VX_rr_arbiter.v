@@ -26,12 +26,10 @@ module VX_rr_arbiter #(
         reg [`CLOG2(N)-1:0] state;  
         reg [N-1:0] grant_onehot_r;
 
-        integer i, j;   
-
         always @(*) begin
-            for (i = 0; i < N; i++) begin  
+            for (integer i = 0; i < N; i++) begin  
                 grant_table[i] = `CLOG2(N)'(i);    
-                for (j = 0; j < N; j++) begin    
+                for (integer j = 0; j < N; j++) begin    
                     if (requests[(i+j) % N]) begin                        
                         grant_table[i] = `CLOG2(N)'((i+j) % N);
                     end
@@ -44,8 +42,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end 
-            else begin
+            end else begin
                 state <= grant_index;
             end
         end      

@@ -83,15 +83,13 @@ module VX_mem_arb #(
         assign out_mem_req_data   = in_mem_req_data [bus_req_sel];
         assign out_mem_req_tag    = {in_mem_req_tag [bus_req_sel], REQS_BITS'(bus_req_sel)};
 
-        genvar i;
-
-        for (i = 0; i < NUM_REQUESTS; i++) begin
+        for (genvar i = 0; i < NUM_REQUESTS; i++) begin
             assign in_mem_req_ready[i] = out_mem_req_ready && (bus_req_sel == REQS_BITS'(i));
         end
 
         wire [REQS_BITS-1:0] bus_rsp_sel = out_mem_rsp_tag[REQS_BITS-1:0];
         
-        for (i = 0; i < NUM_REQUESTS; i++) begin                
+        for (genvar i = 0; i < NUM_REQUESTS; i++) begin                
             assign in_mem_rsp_valid[i] = out_mem_rsp_valid && (bus_rsp_sel == REQS_BITS'(i));
             assign in_mem_rsp_data[i]  = out_mem_rsp_data;
             assign in_mem_rsp_tag[i]   = out_mem_rsp_tag[REQS_BITS +: TAG_IN_WIDTH];              

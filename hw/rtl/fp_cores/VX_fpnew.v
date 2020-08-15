@@ -129,11 +129,9 @@ module VX_fpnew #(
         endcase
     end  
 
-    genvar i;
-
 `DISABLE_TRACING
     
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         if (0 == i) begin
             fpnew_top #( 
                 .Features       (FPU_FEATURES),
@@ -194,8 +192,7 @@ module VX_fpnew #(
 `ENABLE_TRACING
 
     assign fpu_valid_in = valid_in;
-    assign ready_in = fpu_ready_in 
-                    || ~valid_in; // fix 
+    assign ready_in = fpu_ready_in;
 
     assign fpu_tag_in = tag_in;    
     assign tag_out = fpu_tag_out;

@@ -3,7 +3,6 @@
 
 `include "VX_platform.vh"
 `include "VX_config.vh"
-`include "VX_scope.vh"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -38,8 +37,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define LATENCY_IDIV    23
-`define LATENCY_IMUL    2
+`define LATENCY_IDIV    33
+`define LATENCY_IMUL    3
 
 `define LATENCY_FDIV     16
 `define LATENCY_FSQRT    10
@@ -87,72 +86,70 @@
 `define BYTEEN_BITS 3
 `define BYTEEN_TYPE(x) x[1:0]
 
-///////////////////////////////////////////////////////////////////////////////
-
-`define BR_EQ       4'h0
-`define BR_NE       4'h1
-`define BR_LT       4'h2
-`define BR_GE       4'h3
-`define BR_LTU      4'h4 
-`define BR_GEU      4'h5 
-`define BR_JAL      4'h6
-`define BR_JALR     4'h7
-`define BR_ECALL    4'h8
-`define BR_EBREAK   4'h9
-`define BR_MRET     4'hA
-`define BR_SRET     4'hB
-`define BR_DRET     4'hC
-`define BR_NO       4'hF
-`define BR_BITS     4
+`define FRM_RNE    3'b000  // round to nearest even
+`define FRM_RTZ    3'b001  // round to zero
+`define FRM_RDN    3'b010  // round to -inf
+`define FRM_RUP    3'b011  // round to +inf
+`define FRM_RMM    3'b100  // round to nearest max magnitude
+`define FRM_DYN    3'b111  // dynamic mode
+`define FRM_BITS   3
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_NOP      3'h0
 `define EX_ALU      3'h1
-`define EX_LSU      3'h2
-`define EX_CSR      3'h3
-`define EX_MUL      3'h4
-`define EX_FPU      3'h5
-`define EX_GPU      3'h6
+`define EX_BRU      3'h2
+`define EX_LSU      3'h3
+`define EX_CSR      3'h4
+`define EX_MUL      3'h5
+`define EX_FPU      3'h6
+`define EX_GPU      3'h7
 `define EX_BITS     3
 
-`define NUM_EXS     6
+`define NUM_EXS     7
 `define NE_BITS     `LOG2UP(`NUM_EXS)
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `define OP_BITS     5
 
-`define ALU_ADD     5'h00
-`define ALU_SUB     5'h01
-`define ALU_SLL     5'h02
-`define ALU_SRL     5'h03
-`define ALU_SRA     5'h04
-`define ALU_SLT     5'h05
-`define ALU_SLTU    5'h06
-`define ALU_XOR     5'h07
-`define ALU_OR      5'h08
-`define ALU_AND     5'h09
-`define ALU_LUI     5'h0A
-`define ALU_AUIPC   5'h0B
-`define ALU_BEQ     {1'b1, `BR_EQ}
-`define ALU_BNE     {1'b1, `BR_NE}
-`define ALU_BLT     {1'b1, `BR_LT}
-`define ALU_BGE     {1'b1, `BR_GE}
-`define ALU_BLTU    {1'b1, `BR_LTU}
-`define ALU_BGEU    {1'b1, `BR_GEU}
-`define ALU_JAL     {1'b1, `BR_JAL}
-`define ALU_JALR    {1'b1, `BR_JALR}
-`define ALU_ECALL   {1'b1, `BR_ECALL}
-`define ALU_EBREAK  {1'b1, `BR_EBREAK}
-`define ALU_MRET    {1'b1, `BR_MRET}
-`define ALU_SRET    {1'b1, `BR_SRET}
-`define ALU_DRET    {1'b1, `BR_DRET}
-`define ALU_OTHER   5'h1F
-`define ALU_BITS    5
+`define ALU_ADD     4'b0000
+`define ALU_SUB     4'b0001
+`define ALU_LUI     4'b0010
+`define ALU_AUIPC   4'b0011
+`define ALU_SLT     4'b0100
+`define ALU_SLTU    4'b0101
+`define ALU_SRL     4'b1000
+`define ALU_SRA     4'b1001
+`define ALU_AND     4'b1100
+`define ALU_OR      4'b1101
+`define ALU_XOR     4'b1110
+`define ALU_SLL     4'b1111
+`define ALU_OTHER   4'b0111
+`define ALU_BITS    4
 `define ALU_OP(x)   x[`ALU_BITS-1:0]
-`define BR_OP(x)    x[`BR_BITS-1:0]
-`define IS_BR_OP(x) x[4]
+`define ALU_OP_CLASS(x) x[3:2]
+
+`define BRU_EQ      4'b0000
+`define BRU_NE      4'b0001
+`define BRU_LTU     4'b0010 
+`define BRU_GEU     4'b0011 
+`define BRU_LT      4'b0110
+`define BRU_GE      4'b0111
+`define BRU_JAL     4'b1000
+`define BRU_JALR    4'b1001
+`define BRU_ECALL   4'b1010
+`define BRU_EBREAK  4'b1011
+`define BRU_MRET    4'b1100
+`define BRU_SRET    4'b1101
+`define BRU_DRET    4'b1110
+`define BRU_OTHER   4'b1111
+`define BRU_BITS    4
+`define BRU_OP(x)   x[`BRU_BITS-1:0]
+`define BRU_NEG(x)    x[0]
+`define BRU_LESS(x)   x[1]
+`define BRU_SIGNED(x) x[2]
+`define BRU_STATIC(x) x[3]
 
 `define LSU_LB      {1'b0, `BYTEEN_SB}
 `define LSU_LH      {1'b0, `BYTEEN_SH}
@@ -213,14 +210,6 @@
 `define FPU_BITS    5
 `define FPU_OP(x)   x[`FPU_BITS-1:0]
 
-`define FRM_RNE    3'b000  // round to nearest even
-`define FRM_RTZ    3'b001  // round to zero
-`define FRM_RDN    3'b010  // round to -inf
-`define FRM_RUP    3'b011  // round to +inf
-`define FRM_RMM    3'b100  // round to nearest max magnitude
-`define FRM_DYN    3'b111  // dynamic mode
-`define FRM_BITS   3
-
 `define GPU_TMC     3'h0
 `define GPU_WSPAWN  3'h1 
 `define GPU_SPLIT   3'h2
@@ -273,7 +262,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CORE_REQ_INFO          // pc,  wb, rd,        warp_num
+`ifdef DBG_CORE_REQ_INFO          // pc,  wb, rd,        wid
 `define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 1 + `NR_BITS + `NW_BITS)
 `else
 `define DEBUG_CORE_REQ_MDATA_WIDTH  0
@@ -421,34 +410,6 @@
 
 `define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
 
-///////////////////////////////////////////////////////////////////////////////
-
-typedef struct packed {
-    logic [`NW_BITS-1:0]    warp_num;
-    logic [`NUM_THREADS-1:0] thread_mask;
-    logic [31:0]            curr_PC;
-    logic [`NR_BITS-1:0]    rd;
-    logic                   wb;
-} issue_data_t;
-
-typedef struct packed {
-    logic is_normal;
-    logic is_zero;
-    logic is_subnormal;
-    logic is_inf;
-    logic is_nan;
-    logic is_signaling;
-    logic is_quiet;
-} fp_type_t;
-
-typedef struct packed {
-    logic NV; // Invalid
-    logic DZ; // Divide by zero
-    logic OF; // Overflow
-    logic UF; // Underflow
-    logic NX; // Inexact
-} fflags_t;
-
-`define FFG_BITS  $bits(fflags_t)
+`include "VX_types.vh"
 
 `endif

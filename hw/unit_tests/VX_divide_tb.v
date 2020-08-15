@@ -17,26 +17,23 @@ module VX_tb_divide();
 
     wire [31:0] o_div[0:7], o_rem[0:7];
 
-    genvar i;
-    generate
-        for (i = 0; i < 8; i++) begin
-            VX_divide#(
-                .WIDTHN(32),
-                .WIDTHD(32),
-                .WIDTHQ(32),
-                .WIDTHR(32),
-                .PIPELINE(i)
-            ) div(
-                .clock(clk),
-                .aclr(rst),
-                .clken(1'b1),
-                .numer(numer),
-                .denom(denom),
-                .quotient(o_div[i]),
-                .remainder(o_rem[i])
-            );
-        end
-    endgenerate
+    for (genvar i = 0; i < 8; i++) begin
+        VX_divide#(
+            .WIDTHN(32),
+            .WIDTHD(32),
+            .WIDTHQ(32),
+            .WIDTHR(32),
+            .PIPELINE(i)
+        ) div(
+            .clock(clk),
+            .aclr(rst),
+            .clken(1'b1),
+            .numer(numer),
+            .denom(denom),
+            .quotient(o_div[i]),
+            .remainder(o_rem[i])
+        );
+    end
 
     initial begin
         clk = 0; rst = 0;

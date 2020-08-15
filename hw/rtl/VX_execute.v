@@ -22,6 +22,7 @@ module VX_execute #(
     
     // inputs    
     VX_alu_req_if       alu_req_if,
+    VX_bru_req_if       bru_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,
     VX_mul_req_if       mul_req_if,    
@@ -32,6 +33,7 @@ module VX_execute #(
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
     VX_exu_to_cmt_if    alu_commit_if,
+    VX_exu_to_cmt_if    bru_commit_if,
     VX_exu_to_cmt_if    lsu_commit_if,    
     VX_exu_to_cmt_if    csr_commit_if,
     VX_exu_to_cmt_if    mul_commit_if,
@@ -49,8 +51,17 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),
         .alu_req_if     (alu_req_if),
-        .branch_ctl_if  (branch_ctl_if),
         .alu_commit_if  (alu_commit_if)
+    );
+
+    VX_bru_unit #(
+        .CORE_ID(CORE_ID)
+    ) bru_unit (
+        .clk            (clk),
+        .reset          (reset),
+        .bru_req_if     (bru_req_if),
+        .branch_ctl_if  (branch_ctl_if),
+        .bru_commit_if  (bru_commit_if)
     );
 
     VX_lsu_unit #(
@@ -116,29 +127,33 @@ module VX_execute #(
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
     ) gpu_unit (
+        .clk            (clk),
+        .reset          (reset),    
         .gpu_req_if     (gpu_req_if),
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    assign ebreak = alu_req_if.valid && (alu_req_if.alu_op == `ALU_EBREAK || alu_req_if.alu_op == `ALU_ECALL);
+    assign ebreak = bru_req_if.valid 
+                 && (bru_req_if.op == `BRU_EBREAK 
+                  || bru_req_if.op == `BRU_ECALL);
 
     `SCOPE_ASSIGN (scope_decode_valid,       decode_if.valid);
-    `SCOPE_ASSIGN (scope_decode_warp_num,    decode_if.warp_num);
+    `SCOPE_ASSIGN (scope_decode_wid,         decode_if.wid);
     `SCOPE_ASSIGN (scope_decode_curr_PC,     decode_if.curr_PC);    
     `SCOPE_ASSIGN (scope_decode_is_jal,      decode_if.is_jal);
     `SCOPE_ASSIGN (scope_decode_rs1,         decode_if.rs1);
     `SCOPE_ASSIGN (scope_decode_rs2,         decode_if.rs2);
 
     `SCOPE_ASSIGN (scope_execute_valid,      alu_req_if.valid);    
-    `SCOPE_ASSIGN (scope_execute_warp_num,   alu_req_if.warp_num);
+    `SCOPE_ASSIGN (scope_execute_wid,        alu_req_if.wid);
     `SCOPE_ASSIGN (scope_execute_curr_PC,    alu_req_if.curr_PC);    
     `SCOPE_ASSIGN (scope_execute_rd,         alu_req_if.rd);
     `SCOPE_ASSIGN (scope_execute_a,          alu_req_if.rs1_data);
     `SCOPE_ASSIGN (scope_execute_b,          alu_req_if.rs2_data);   
         
     `SCOPE_ASSIGN (scope_writeback_valid,    writeback_if.valid);    
-    `SCOPE_ASSIGN (scope_writeback_warp_num, writeback_if.warp_num);
+    `SCOPE_ASSIGN (scope_writeback_wid,      writeback_if.wid);
     `SCOPE_ASSIGN (scope_writeback_curr_PC,  writeback_if.curr_PC);  
     `SCOPE_ASSIGN (scope_writeback_wb,       writeback_if.wb);      
     `SCOPE_ASSIGN (scope_writeback_rd,       writeback_if.rd);

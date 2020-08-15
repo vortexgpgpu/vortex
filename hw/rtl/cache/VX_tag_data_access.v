@@ -30,7 +30,7 @@ module VX_tag_data_access #(
     input wire[31:0]                    debug_pc_st1e,
     input wire                          debug_wb_st1e,
     input wire[`NR_BITS-1:0]            debug_rd_st1e,
-    input wire[`NW_BITS-1:0]            debug_warp_num_st1e,
+    input wire[`NW_BITS-1:0]            debug_wid_st1e,
     input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1e,
 `IGNORE_WARNINGS_END
 `endif
@@ -135,8 +135,7 @@ module VX_tag_data_access #(
         .out   ({read_valid_st1c[0],  read_dirty_st1c[0],  read_dirtyb_st1c[0],  read_tag_st1c[0],  read_data_st1c[0]})
     );
 
-    genvar i;
-    for (i = 1; i < STAGE_1_CYCLES-1; i++) begin
+    for (genvar i = 1; i < STAGE_1_CYCLES-1; i++) begin
         VX_generic_register #(
             .N(1 + 1 + BANK_LINE_SIZE + `TAG_SELECT_BITS + `BANK_LINE_WIDTH)
         ) s0_1_cc (
@@ -157,11 +156,11 @@ module VX_tag_data_access #(
     
     if (`WORD_SELECT_WIDTH != 0) begin
         wire [`WORD_WIDTH-1:0] readword = use_read_data_st1e[wordsel_st1e * `WORD_WIDTH +: `WORD_WIDTH];
-        for (i = 0; i < WORD_SIZE; i++) begin
+        for (genvar i = 0; i < WORD_SIZE; i++) begin
             assign readword_st1e[i * 8 +: 8] = readword[i * 8 +: 8] & {8{mem_byteen_st1e[i]}};
         end
     end else begin
-        for (i = 0; i < WORD_SIZE; i++) begin
+        for (genvar i = 0; i < WORD_SIZE; i++) begin
             assign readword_st1e[i * 8 +: 8] = use_read_data_st1e[i * 8 +: 8] & {8{mem_byteen_st1e[i]}};
         end
     end
@@ -176,7 +175,7 @@ module VX_tag_data_access #(
                      && ~is_snp_st1e
                      && ~real_writefill;
 
-    for (i = 0; i < `BANK_LINE_WORDS; i++) begin
+    for (genvar i = 0; i < `BANK_LINE_WORDS; i++) begin
         wire normal_write = ((`WORD_SELECT_WIDTH == 0) || (wordsel_st1e == `UP(`WORD_SELECT_WIDTH)'(i))) 
                          && should_write;
 
@@ -218,15 +217,15 @@ module VX_tag_data_access #(
         if (valid_req_st1e) begin             
             if ((| use_write_enable)) begin
                 if (writefill_st1e) begin
-                    $display("%t: bank%0d:%0d store-fill: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, use_write_data);
+                    $display("%t: bank%0d:%0d store-fill: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, use_write_data);
                 end else begin
-                    $display("%t: bank%0d:%0d store-write: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, wordsel_st1e, writeword_st1e);
+                    $display("%t: bank%0d:%0d store-write: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, wordsel_st1e, writeword_st1e);
                 end
             end else
             if (miss_st1e) begin
-                $display("%t: bank%0d:%0d store-miss: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e);
+                $display("%t: bank%0d:%0d store-miss: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e);
             end else begin
-                $display("%t: bank%0d:%0d store-read: warp=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_warp_num_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, readaddr_st10, qual_read_tag_st1, wordsel_st1e, qual_read_data_st1);
+                $display("%t: bank%0d:%0d store-read: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, readaddr_st10, qual_read_tag_st1, wordsel_st1e, qual_read_data_st1);
             end            
         end
     end    

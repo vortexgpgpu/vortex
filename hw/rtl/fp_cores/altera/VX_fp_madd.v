@@ -28,9 +28,7 @@ module VX_fp_madd (
     wire [`ISTAG_BITS-1:0] out_tag_st0, out_tag_st1;
     wire in_valid_st0, out_valid_st0, out_valid_st1;
 
-    genvar i;
-
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         twentynm_fp_mac mac_fp_wys0 (
             // inputs
             .accumulate(),

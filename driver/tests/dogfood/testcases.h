@@ -15,8 +15,8 @@ union Float_t {
 };
 
 inline bool almost_equal_eps(float a, float b, float eps = std::numeric_limits<float>::epsilon()) {
-  auto tolerance = std::max(std::fabs(a), std::fabs(b)) * eps;
-  return std::fabs(a - b) <= tolerance;
+  auto tolerance = std::max(fabs(a), fabs(b)) * eps;
+  return fabs(a - b) <= tolerance;
 }
 
 inline bool almost_equal_ulp(float a, float b, int32_t ulp = 4) {

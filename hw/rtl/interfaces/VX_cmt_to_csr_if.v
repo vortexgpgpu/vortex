@@ -7,7 +7,7 @@ interface VX_cmt_to_csr_if ();
 
     wire valid;
 
-    wire [`NW_BITS-1:0] warp_num;
+    wire [`NW_BITS-1:0] wid;
 
     wire [`NE_BITS:0] num_commits;
 

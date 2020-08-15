@@ -18,7 +18,7 @@ VX_SRCS = kernel.c
 
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../../include
+CXXFLAGS += -I../../include -I../../../hw
 
 PROJECT = dogfood
 

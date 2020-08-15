@@ -108,7 +108,7 @@ module VX_bank #(
     wire[31:0]           debug_pc_st0;
     wire                 debug_wb_st0;
     wire[`NR_BITS-1:0]   debug_rd_st0;
-    wire[`NW_BITS-1:0]   debug_warp_num_st0;
+    wire[`NW_BITS-1:0]   debug_wid_st0;
     wire                 debug_rw_st0;    
     wire[WORD_SIZE-1:0]  debug_byteen_st0;
     wire[`REQS_BITS-1:0] debug_tid_st0;
@@ -117,7 +117,7 @@ module VX_bank #(
     wire[31:0]           debug_pc_st1e;
     wire                 debug_wb_st1e;
     wire[`NR_BITS-1:0]   debug_rd_st1e;
-    wire[`NW_BITS-1:0]   debug_warp_num_st1e;
+    wire[`NW_BITS-1:0]   debug_wid_st1e;
     wire                 debug_rw_st1e;    
     wire[WORD_SIZE-1:0]  debug_byteen_st1e;
     wire[`REQS_BITS-1:0] debug_tid_st1e;
@@ -126,7 +126,7 @@ module VX_bank #(
     wire[31:0]           debug_pc_st2;
     wire                 debug_wb_st2;
     wire[`NR_BITS-1:0]   debug_rd_st2;
-    wire[`NW_BITS-1:0]   debug_warp_num_st2;
+    wire[`NW_BITS-1:0]   debug_wid_st2;
     wire                 debug_rw_st2;    
     wire[WORD_SIZE-1:0]  debug_byteen_st2;
     wire[`REQS_BITS-1:0] debug_tid_st2;
@@ -271,10 +271,9 @@ module VX_bank #(
     wire going_to_write_st1 [STAGE_1_CYCLES-1:0];    
 `DEBUG_END
     
-    integer j;
     always @(*) begin
         is_fill_in_pipe = 0;
-        for (j = 0; j < STAGE_1_CYCLES; j++) begin
+        for (integer j = 0; j < STAGE_1_CYCLES; j++) begin
             if (is_fill_st1[j]) begin
                 is_fill_in_pipe = 1;
             end
@@ -360,7 +359,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_pc_st0, debug_wb_st0, debug_rd_st0, debug_warp_num_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = qual_inst_meta_st0;
+        assign {debug_pc_st0, debug_wb_st0, debug_rd_st0, debug_wid_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = qual_inst_meta_st0;
     end
 `endif
 
@@ -375,8 +374,7 @@ module VX_bank #(
         .out   ({is_mrvq_st1[0]  , is_snp_st1[0],   snp_invalidate_st1[0], going_to_write_st1[0],   valid_st1[0],   addr_st1[0],   wsel_st1[0],   writeword_st1[0],   inst_meta_st1[0],   is_fill_st1[0],   writedata_st1[0]})
     );
 
-    genvar i;
-    for (i = 1; i < STAGE_1_CYCLES; i++) begin
+    for (genvar i = 1; i < STAGE_1_CYCLES; i++) begin
         VX_generic_register #(
             .N(1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH)
         ) s0_1_cc (
@@ -446,13 +444,13 @@ module VX_bank #(
         .clk            (clk),
         .reset          (reset),
 
-`ifdef DBG_CORE_REQ_INFO
+    `ifdef DBG_CORE_REQ_INFO
         .debug_pc_st1e(debug_pc_st1e),
         .debug_wb_st1e(debug_wb_st1e),
         .debug_rd_st1e(debug_rd_st1e),
-        .debug_warp_num_st1e(debug_warp_num_st1e),
+        .debug_wid_st1e(debug_wid_st1e),
         .debug_tagid_st1e(debug_tagid_st1e),
-`endif
+    `endif
 
         .stall          (stall_bank_pipe),
         .stall_bank_pipe(stall_bank_pipe),
@@ -490,7 +488,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_warp_num_st1e, debug_tagid_st1e, debug_rw_st1e, debug_byteen_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
+        assign {debug_pc_st1e, debug_wb_st1e, debug_rd_st1e, debug_wid_st1e, debug_tagid_st1e, debug_rw_st1e, debug_byteen_st1e, debug_tid_st1e} = inst_meta_st1[STAGE_1_CYCLES-1];
     end
 `endif
     
@@ -531,7 +529,7 @@ module VX_bank #(
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_pc_st2, debug_wb_st2, debug_rd_st2, debug_warp_num_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
+        assign {debug_pc_st2, debug_wb_st2, debug_rd_st2, debug_wid_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
     end
 `endif
 
@@ -543,10 +541,10 @@ module VX_bank #(
     assign mrvq_push_stall = miss_add_unqual && mrvq_full;
 
     wire miss_add = miss_add_unqual
-                   && !mrvq_full 
-                   && !(cwbq_push_stall 
-                     || dwbq_push_stall 
-                     || dram_fill_req_stall);  
+                 && !mrvq_full 
+                 && !(cwbq_push_stall 
+                   || dwbq_push_stall 
+                   || dram_fill_req_stall);  
 
     assign recover_mrvq_state_st2 = miss_add_unqual && is_mrvq_st2; // Doesn't need to include the stalls 
 
@@ -718,7 +716,9 @@ module VX_bank #(
     always @(posedge clk) begin
         if (reset) begin
             dwbq_dual_valid_sel <= 0;
-        end else if (dwbq_is_dwb_out && dwbq_is_snp_out && (dram_wb_req_fire || snp_rsp_fire)) begin
+        end else if (dwbq_is_dwb_out 
+                  && dwbq_is_snp_out 
+                  && (dram_wb_req_fire || snp_rsp_fire)) begin
             dwbq_dual_valid_sel <= ~dwbq_dual_valid_sel;
         end
     end

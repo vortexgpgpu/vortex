@@ -38,7 +38,6 @@ module VX_generic_queue #(
                 end else if (reading && !writing) begin
                     size_r <= 0;
                 end
-
                 if (writing) begin 
                     head_r <= data_in;
                 end
@@ -146,7 +145,7 @@ module VX_generic_queue #(
                     end
 
                     bypass_r <= writing 
-                                && (empty_r || ((1 == size_r) && reading)); // empty or about to go empty
+                             && (empty_r || ((1 == size_r) && reading)); // empty or about to go empty
                                 
                     curr_r   <= data_in;
                     head_r   <= data[reading ? rd_ptr_next_r : rd_ptr_r];

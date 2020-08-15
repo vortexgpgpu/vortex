@@ -7,7 +7,7 @@ interface VX_gpr_read_if ();
 
     wire                    valid;
 
-    wire [`NW_BITS-1:0]     warp_num;
+    wire [`NW_BITS-1:0]     wid;
     
     wire [`NR_BITS-1:0]     rs1;
     wire [`NR_BITS-1:0]     rs2;  

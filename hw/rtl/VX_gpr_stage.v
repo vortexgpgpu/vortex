@@ -21,10 +21,10 @@ module VX_gpr_stage #(
     VX_gpr_ram gpr_ram (
         .clk      (clk),
         .we       ({`NUM_THREADS{writeback_if.valid}} & writeback_if.thread_mask),                
-        .waddr    ({writeback_if.warp_num, writeback_if.rd}),
+        .waddr    ({writeback_if.wid, writeback_if.rd}),
         .wdata    (writeback_if.data),
         .rs1      (raddr1),
-        .rs2      ({gpr_read_if.warp_num, gpr_read_if.rs2}),
+        .rs2      ({gpr_read_if.wid, gpr_read_if.rs2}),
         .rs1_data (rs1_data),
         .rs2_data (rs2_data)
     );    
@@ -39,9 +39,16 @@ module VX_gpr_stage #(
         .gpr_read_if(gpr_read_if)
     );
 `else
-    assign raddr1 = {gpr_read_if.warp_num, gpr_read_if.rs1};
-    assign gpr_read_if.rs1_data = rs1_data;
-    assign gpr_read_if.rs2_data = rs2_data;
+    reg [`NUM_THREADS-1:0][31:0] rs1_tmp_data, rs2_tmp_data;
+    
+    always @(posedge clk) begin	
+	    rs1_tmp_data <= rs1_data;
+		rs2_tmp_data <= rs2_data;
+	end
+
+    assign raddr1 = {gpr_read_if.wid, gpr_read_if.rs1};
+    assign gpr_read_if.rs1_data = rs1_tmp_data;
+    assign gpr_read_if.rs2_data = rs2_tmp_data;
     assign gpr_read_if.rs3_data = 0;
     assign gpr_read_if.ready    = 1;
     
@@ -52,7 +59,5 @@ module VX_gpr_stage #(
     `UNUSED_VAR (use_rs3);
     `UNUSED_VAR (rs3);
 `endif
-
-    assign writeback_if.ready = 1'b1; // writes are stall-free
 
 endmodule

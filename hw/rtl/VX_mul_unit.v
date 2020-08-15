@@ -11,52 +11,36 @@ module VX_mul_unit #(
 
     // Outputs
     VX_exu_to_cmt_if  alu_commit_if
-);    
-   
-    wire [`MUL_BITS-1:0]          alu_op  = alu_req_if.mul_op;
-    wire [`NUM_THREADS-1:0][31:0] alu_in1 = alu_req_if.rs1_data;
-    wire [`NUM_THREADS-1:0][31:0] alu_in2 = alu_req_if.rs2_data;
+); 
+    wire [`ISTAG_BITS-1:0] issue_tag;
+    wire [`MUL_BITS-1:0] alu_op;
+    wire [`NUM_THREADS-1:0][31:0] alu_in1, alu_in2;
+    wire valid_in, ready_in;
+        
+    // use a skid buffer due to MUL/DIV output arbitration adding realtime backpressure
+    VX_elastic_buffer #(
+        .DATAW (`ISTAG_BITS + `MUL_BITS + (2 * `NUM_THREADS * 32)),
+        .SIZE  (0)
+    ) input_buffer (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (alu_req_if.valid),
+        .ready_in  (alu_req_if.ready),
+        .data_in   ({alu_req_if.issue_tag, alu_req_if.op, alu_req_if.rs1_data, alu_req_if.rs2_data}),
+        .data_out  ({issue_tag,            alu_op,        alu_in1,             alu_in2}),        
+        .ready_out (ready_in),
+        .valid_out (valid_in)
+    );   
 
-    wire [`NUM_THREADS-1:0][31:0] mul_result, div_result;
+    wire [`NUM_THREADS-1:0][31:0] mul_result;
+    wire is_mulw = (alu_op == `MUL_MUL);    
+    wire is_mulw_out;
 
-    wire stall_mul, stall_div;
-
-    wire is_mul_mul = (alu_op == `MUL_MUL);    
-    wire is_mul_mul_out;
-
-    wire is_div_divu = (alu_op == `MUL_DIV || alu_op == `MUL_DIVU);        
-    reg [`NUM_THREADS-1:0]  is_div_divu_qual;
-    wire [`NUM_THREADS-1:0] is_div_divu_out;
-    
-    genvar i;    
-
-    for (i = 0; i < `NUM_THREADS; i++) begin    
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
 
         wire [32:0] mul_in1 = {(alu_op != `MUL_MULHU)                          & alu_in1[i][31], alu_in1[i]};
         wire [32:0] mul_in2 = {(alu_op != `MUL_MULHU && alu_op != `MUL_MULHSU) & alu_in2[i][31], alu_in2[i]};
-
-        reg [32:0] div_in1, div_in2;
-
-        // handle divide by zero
-        always @(*) begin
-            is_div_divu_qual[i] = is_div_divu;
-            div_in1 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in1[i][31], alu_in1[i]};
-            div_in2 = {(alu_op == `MUL_DIV || alu_op == `MUL_REM) & alu_in2[i][31], alu_in2[i]};    
-
-            if (0 == alu_in2[i]) begin
-                if (is_div_divu) begin
-                    div_in1 = {1'b0, 32'hFFFFFFFF}; // quotient = (0xFFFFFFFF / 1)                 
-                    div_in2 = 1; 
-                end else begin                    
-                    is_div_divu_qual[i] = 1; // remainder = (in1 / 1)
-                    div_in2 = 1; 
-                end                
-            end
-        end        
-
         wire [63:0] mul_result_tmp;
-        wire [31:0] div_result_tmp;
-        wire [31:0] rem_result_tmp;
 
         VX_multiplier #(
             .WIDTHA(33),
@@ -67,11 +51,70 @@ module VX_mul_unit #(
         ) multiplier (
             .clk(clk),
             .reset(reset),
-            .clk_en(~stall_mul),
+            .clk_en(1'b1),
             .dataa(mul_in1),
             .datab(mul_in2),
             .result(mul_result_tmp)
         );
+
+        assign mul_result[i] = is_mulw_out ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
+    end
+
+    wire [`ISTAG_BITS-1:0] mul_issue_tag;
+    wire mul_valid_out;
+
+    wire mul_fire = valid_in && ready_in && ~`IS_DIV_OP(alu_op);
+
+    VX_shift_register #(
+        .DATAW(1 + `ISTAG_BITS + 1),
+        .DEPTH(`LATENCY_IMUL)
+    ) mul_shift_reg (
+        .clk(clk),
+        .reset(reset),
+        .enable(1'b1),
+        .in({mul_fire,       issue_tag,     is_mulw}),
+        .out({mul_valid_out, mul_issue_tag, is_mulw_out})
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    wire [`NUM_THREADS-1:0][31:0] div_result;
+    wire is_div = (alu_op == `MUL_DIV || alu_op == `MUL_DIVU);
+    wire is_signed_div = (alu_op == `MUL_DIV || alu_op == `MUL_REM);        
+    reg [`NUM_THREADS-1:0]  is_div_qual;
+    wire [`NUM_THREADS-1:0] is_div_out;  
+    wire stall_div;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
+
+        reg [31:0] div_in1_qual, div_in2_qual;
+        reg [32:0] div_in1, div_in2;
+        wire [31:0] div_result_tmp, rem_result_tmp;
+
+        // handle divide by zero        
+        always @(*) begin      
+            if (~stall_div) begin
+                is_div_qual[i] = is_div;
+                div_in1_qual   = alu_in1[i];
+                div_in2_qual   = alu_in2[i];
+                if (0 == alu_in2[i]) begin
+                    div_in2_qual = 1; 
+                    if (is_div) begin
+                        div_in1_qual = 32'hFFFFFFFF; // quotient = (0xFFFFFFFF / 1)                 
+                    end else begin                    
+                        is_div_qual[i] = 1; // remainder = (in1 / 1)                    
+                    end                                
+                end
+            end
+        end
+
+        // latch divider inputs        
+        always @(posedge clk) begin      
+            if (~stall_div) begin
+                div_in1 <= {is_signed_div & alu_in1[i][31], div_in1_qual};
+                div_in2 <= {is_signed_div & alu_in2[i][31], div_in2_qual};
+            end
+        end               
 
         VX_divide #(
             .WIDTHN(33),
@@ -90,49 +133,32 @@ module VX_mul_unit #(
             .quotient(div_result_tmp),
             .remainder(rem_result_tmp)
         );
-
-        assign mul_result[i] = is_mul_mul_out     ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
-        assign div_result[i] = is_div_divu_out[i] ? div_result_tmp       : rem_result_tmp;
+            
+        assign div_result[i] = is_div_out[i] ? div_result_tmp : rem_result_tmp;
     end 
 
-    wire is_mul_fire = alu_req_if.valid && alu_req_if.ready && ~`IS_DIV_OP(alu_op);
-    wire is_div_fire = alu_req_if.valid && alu_req_if.ready && `IS_DIV_OP(alu_op);
-
-    wire mul_valid_out;
+    wire [`ISTAG_BITS-1:0] div_issue_tag;    
     wire div_valid_out;    
 
-    wire [`ISTAG_BITS-1:0] mul_issue_tag;
-    wire [`ISTAG_BITS-1:0] div_issue_tag;    
-
-    VX_shift_register #(
-        .DATAW(1 + `ISTAG_BITS + 1),
-        .DEPTH(`LATENCY_IMUL)
-    ) mul_shift_reg (
-        .clk(clk),
-        .reset(reset),
-        .enable(~stall_mul),
-        .in({is_mul_fire, alu_req_if.issue_tag, is_mul_mul}),
-        .out({mul_valid_out, mul_issue_tag, is_mul_mul_out})
-    );
+    wire div_fire = valid_in && ready_in && `IS_DIV_OP(alu_op);        
 
     VX_shift_register #(
         .DATAW(1 + `ISTAG_BITS + `NUM_THREADS),
-        .DEPTH(`LATENCY_IDIV)
+        .DEPTH(`LATENCY_IDIV + 1)
     ) div_shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(~stall_div),
-        .in({is_div_fire, alu_req_if.issue_tag, is_div_divu_qual}),
-        .out({div_valid_out, div_issue_tag, is_div_divu_out})
+        .in({div_fire,       issue_tag,     is_div_qual}),
+        .out({div_valid_out, div_issue_tag, is_div_out})
     );
+    
+    ///////////////////////////////////////////////////////////////////////////
 
-    wire stall_out   = (~alu_commit_if.ready && alu_commit_if.valid);
-    assign stall_mul = stall_out;
-    assign stall_div = stall_out 
-                    || (mul_valid_out && div_valid_out); // arbitration prioritizes MUL
+    assign stall_div = mul_valid_out && div_valid_out; // arbitration prioritizes MUL
 
     // can accept new request?
-    assign alu_req_if.ready = ~(stall_mul || stall_div);
+    assign ready_in = ~stall_div;
 
     assign alu_commit_if.valid     = mul_valid_out || div_valid_out;
     assign alu_commit_if.issue_tag = mul_valid_out ? mul_issue_tag : div_issue_tag;

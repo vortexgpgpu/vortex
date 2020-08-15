@@ -52,15 +52,6 @@ module VX_divide #(
     reg [WIDTHD-1:0] remainder_unqual;
 
     always @(*) begin   
-    `ifndef SYNTHESIS    
-        // this edge case kills verilator in some cases by causing a division
-        // overflow exception. INT_MIN / -1 (on x86)
-        if (numer == {1'b1, (WIDTHN-1)'(1'b0)}
-         && denom == {WIDTHD{1'b1}}) begin
-            quotient_unqual  = 0;
-            remainder_unqual = 0;
-        end else
-    `endif
         begin
             if (NSIGNED && DSIGNED) begin
                 quotient_unqual  = $signed(numer) / $signed(denom);
@@ -88,21 +79,21 @@ module VX_divide #(
         reg [WIDTHN-1:0] quotient_pipe [0:PIPELINE-1];
         reg [WIDTHD-1:0] remainder_pipe [0:PIPELINE-1];
 
-        genvar i;
-        for (i = 0; i < PIPELINE; i++) begin
+        for (genvar i = 0; i < PIPELINE; i++) begin
             always @(posedge clk) begin
                 if (reset) begin
                     quotient_pipe[i]  <= 0;
                     remainder_pipe[i] <= 0;
-                end
-                else if (clk_en) begin
-                    if (i == 0) begin
-                        quotient_pipe[i]  <= quotient_unqual;
-                        remainder_pipe[i] <= remainder_unqual;
-                    end else begin
-                        quotient_pipe[i]  <= quotient_pipe[i-1];
-                        remainder_pipe[i] <= remainder_pipe[i-1];
-                    end                    
+                end else begin
+                    if (clk_en) begin
+                        if (i == 0) begin
+                            quotient_pipe[i]  <= quotient_unqual;
+                            remainder_pipe[i] <= remainder_unqual;
+                        end else begin
+                            quotient_pipe[i]  <= quotient_pipe[i-1];
+                            remainder_pipe[i] <= remainder_pipe[i-1];
+                        end                    
+                    end
                 end
             end
         end

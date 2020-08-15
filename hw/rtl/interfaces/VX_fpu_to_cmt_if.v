@@ -10,7 +10,6 @@ interface VX_fpu_to_cmt_if ();
     wire [`NUM_THREADS-1:0][31:0]   data;  
     wire                            has_fflags;
     fflags_t [`NUM_THREADS-1:0]     fflags;
-    wire                            ready;
 
 endinterface
 

@@ -41,8 +41,6 @@ module VX_fp_fpga (
     reg [FPC_BITS-1:0] core_select;
     reg fmadd_negate;
 
-    genvar i;
-
     always @(*) begin
         core_select  = 0;
         fmadd_negate = 0;
@@ -246,7 +244,7 @@ module VX_fp_fpga (
         .valid_out (fp_valid)
     );
 
-    for (i = 0; i < NUM_FPC; i++) begin
+    for (genvar i = 0; i < NUM_FPC; i++) begin
         assign per_core_ready_out[i] = ready_out && (i == fp_index);
     end
 

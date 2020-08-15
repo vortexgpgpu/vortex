@@ -132,12 +132,12 @@ module VX_cache #(
     wire[31:0]           debug_core_req_use_pc;
     wire                 debug_core_req_wb;    
     wire[`NR_BITS-1:0]   debug_core_req_rd;
-    wire[`NW_BITS-1:0]   debug_core_req_warp_num;
+    wire[`NW_BITS-1:0]   debug_core_req_wid;
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_core_req_idx;
     /* verilator lint_on UNUSED */
 
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_warp_num, debug_core_req_idx} = core_req_tag[0];
+        assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_wid, debug_core_req_idx} = core_req_tag[0];
     end
 `endif
 
@@ -246,10 +246,8 @@ module VX_cache #(
 
     assign dram_req_tag   = dram_req_addr;
     assign dram_rsp_ready = (| per_bank_dram_fill_rsp_ready);
-
-    genvar i;
     
-    for (i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
         wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_valid;            
         wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_rw;  
         wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              curr_bank_core_req_byteen;

@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
+#include <VX_config.h>
 #include "testcases.h"
 #include "common.h"
 
@@ -25,6 +26,7 @@ public:
     this->add_test("imul", new Test_IMUL());
     this->add_test("idiv", new Test_IDIV());
     this->add_test("idiv-mul", new Test_IDIV_MUL());
+  #ifdef EXT_F_ENABLE
     this->add_test("fadd", new Test_FADD());
     this->add_test("fsub", new Test_FSUB());
     this->add_test("fmul", new Test_FMUL());
@@ -40,6 +42,7 @@ public:
     this->add_test("ftou", new Test_FTOU());
     this->add_test("tof", new Test_ITOF());
     this->add_test("utof", new Test_UTOF());
+  #endif
   }
 
   ~TestMngr() {
