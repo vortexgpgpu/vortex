@@ -21,9 +21,7 @@ module VX_fp_sqrt (
     wire enable = ~stall;
     assign ready_in = enable;
 
-    genvar i;
-
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         acl_fp_sqrt fsqrt (
             .clk    (clk),
             .areset (1'b0),

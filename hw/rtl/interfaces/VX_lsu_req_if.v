@@ -8,7 +8,7 @@ interface VX_lsu_req_if ();
     wire                            valid;
     wire [`NUM_THREADS-1:0]         thread_mask;
     wire [`ISTAG_BITS-1:0]          issue_tag;
-    wire [`NW_BITS-1:0]             warp_num;
+    wire [`NW_BITS-1:0]             wid;
     wire [31:0]                     curr_PC;
 
     wire                            rw; 

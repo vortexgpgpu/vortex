@@ -77,9 +77,8 @@ module VX_cache_miss_resrv #(
     reg [MRVQ_SIZE-1:0] make_ready;
     reg [MRVQ_SIZE-1:0] make_ready_push;
     reg [MRVQ_SIZE-1:0] valid_address_match;
-
-    genvar i;    
-    for (i = 0; i < MRVQ_SIZE; i++) begin
+ 
+    for (genvar i = 0; i < MRVQ_SIZE; i++) begin
         assign valid_address_match[i] = valid_table[i] ? (addr_table[i] == fill_addr_st1) : 0;
         assign make_ready[i]          = is_fill_st1 && valid_address_match[i];
     end
@@ -121,7 +120,6 @@ module VX_cache_miss_resrv #(
             head_ptr     <= 0;
             tail_ptr     <= 0;
         end else begin
-
             if (mrvq_push) begin
                 valid_table[enqueue_index]    <= 1;
                 ready_table[enqueue_index]    <= mrvq_init_ready_state;
@@ -157,11 +155,10 @@ module VX_cache_miss_resrv #(
     end
 
 `ifdef DBG_PRINT_CACHE_MSRQ        
-    integer j;
     always @(posedge clk) begin        
         if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
             $write("%t: bank%0d:%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);                        
-            for (j = 0; j < MRVQ_SIZE; j++) begin
+            for (integer j = 0; j < MRVQ_SIZE; j++) begin
                 if (valid_table[j]) begin
                     $write(" ");                    
                     if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");                   

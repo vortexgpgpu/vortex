@@ -12,11 +12,11 @@ interface VX_mul_req_if ();
     wire                    valid;
     wire [`ISTAG_BITS-1:0]  issue_tag;
 `DEBUG_BEGIN
+    wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] thread_mask;
-    wire [`NW_BITS-1:0]     warp_num;
     wire [31:0]             curr_PC;
 `DEBUG_END
-    wire [`MUL_BITS-1:0]    mul_op;
+    wire [`MUL_BITS-1:0]    op;
 
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
     wire [`NUM_THREADS-1:0][31:0] rs2_data;

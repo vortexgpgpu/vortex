@@ -191,8 +191,7 @@ module Vortex (
         wire [`CLOG2(`NUM_CLUSTERS)-1:0] csr_io_request_id = `CLOG2(`NUM_CLUSTERS)'(csr_io_req_coreid >> `CLOG2(`NUM_CLUSTERS));
         wire [`NC_BITS-1:0] per_cluster_csr_io_req_coreid = `NC_BITS'(csr_io_req_coreid);
 
-        genvar i;
-        for (i = 0; i < `NUM_CLUSTERS; i++) begin        
+        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin        
             VX_cluster #(
                 .CLUSTER_ID(i)
             ) cluster (
@@ -358,7 +357,7 @@ module Vortex (
         wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]       l3_snp_fwdin_tag;
         wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdin_ready;
 
-        for (i = 0; i < `L3NUM_REQUESTS; i++) begin
+        for (genvar i = 0; i < `L3NUM_REQUESTS; i++) begin
             // Core Request
             assign l3_core_req_valid  [i] = per_cluster_dram_req_valid [i];
             assign l3_core_req_rw     [i] = per_cluster_dram_req_rw    [i];

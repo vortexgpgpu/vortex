@@ -26,16 +26,18 @@ module VX_ipdom_stack #(
     always @(posedge clk) begin
         if (reset) begin   
             wr_ptr <= 0;
-        end else if (push) begin
-            stack_1[wr_ptr] <= q1;
-            stack_2[wr_ptr] <= q2;
-            is_part[wr_ptr] <= 0;            
-            rd_ptr <= wr_ptr;
-            wr_ptr <= wr_ptr + 1;
-        end else if (pop) begin            
-            wr_ptr <= wr_ptr - DEPTH'(is_part[rd_ptr]);
-            rd_ptr <= rd_ptr - DEPTH'(is_part[rd_ptr]);
-            is_part[rd_ptr] <= 1;
+        end else begin
+            if (push) begin
+                stack_1[wr_ptr] <= q1;
+                stack_2[wr_ptr] <= q2;
+                is_part[wr_ptr] <= 0;            
+                rd_ptr <= wr_ptr;
+                wr_ptr <= wr_ptr + 1;
+            end else if (pop) begin            
+                wr_ptr <= wr_ptr - DEPTH'(is_part[rd_ptr]);
+                rd_ptr <= rd_ptr - DEPTH'(is_part[rd_ptr]);
+                is_part[rd_ptr] <= 1;
+            end
         end
     end
 

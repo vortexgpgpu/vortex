@@ -7,13 +7,13 @@ interface VX_csr_req_if ();
 
     wire                    valid;
     wire [`ISTAG_BITS-1:0]  issue_tag;
+    wire [`NW_BITS-1:0]     wid;
 `DEBUG_BEGIN
     wire [`NUM_THREADS-1:0] thread_mask;
 `DEBUG_END
-    wire [`NW_BITS-1:0]     warp_num;
     wire [31:0]             curr_PC;  
 
-    wire [`CSR_BITS-1:0]    csr_op;
+    wire [`CSR_BITS-1:0]    op;
 
     wire [`CSR_ADDR_BITS-1:0] csr_addr;
     wire [31:0]             csr_mask;

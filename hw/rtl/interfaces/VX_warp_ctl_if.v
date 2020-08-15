@@ -5,24 +5,12 @@
 
 interface VX_warp_ctl_if ();
 
-    wire [`NW_BITS-1:0]     warp_num;
+    wire [`NW_BITS-1:0] wid;
 
-    wire                    change_mask;
-    wire [`NUM_THREADS-1:0] thread_mask;
-
-    wire                    wspawn;
-    wire [31:0]             wspawn_pc;
-    wire [`NUM_WARPS-1:0]   wspawn_wmask;
-
-    wire                    is_barrier;
-    wire [`NB_BITS-1:0]     barrier_id;
-    wire [`NW_BITS:0]       barrier_num_warps;
-
-    wire                    is_split;
-    wire                 	do_split;
-    wire [`NUM_THREADS-1:0] split_new_mask;
-    wire [`NUM_THREADS-1:0] split_later_mask;
-    wire [31:0]             split_save_pc;
+    gpu_tmc_t       tmc;
+    gpu_wspawn_t    wspawn;
+    gpu_barrier_t   barrier;
+    gpu_split_t     split;
 
 endinterface
 

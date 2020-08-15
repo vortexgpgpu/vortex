@@ -6,7 +6,7 @@
 interface VX_wstall_if();
 
     wire                wstall;
-    wire [`NW_BITS-1:0]	warp_num;
+    wire [`NW_BITS-1:0]	wid;
 
 endinterface
 

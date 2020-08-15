@@ -6,7 +6,7 @@
 interface VX_branch_ctl_if ();
 
     wire                valid;    
-    wire [`NW_BITS-1:0] warp_num;    
+    wire [`NW_BITS-1:0] wid;    
     wire                taken;
     wire [31:0]         dest;
 

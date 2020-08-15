@@ -18,12 +18,10 @@ module VX_cache_core_req_bank_sel #(
     output reg  [NUM_BANKS-1:0][NUM_REQUESTS-1:0]        per_bank_valid,
     output wire                                          core_req_ready 
 );     
-    integer i;
-
     if (NUM_BANKS == 1) begin
         always @(*) begin            
             per_bank_valid = 0;
-            for (i = 0; i < NUM_REQUESTS; i++) begin                    
+            for (integer i = 0; i < NUM_REQUESTS; i++) begin                    
                 per_bank_valid[0][i] = core_req_valid[i];
             end
         end        
@@ -33,7 +31,7 @@ module VX_cache_core_req_bank_sel #(
         always @(*) begin
             per_bank_valid = 0;
             per_bank_ready_sel = {NUM_BANKS{1'b1}};
-            for (i = 0; i < NUM_REQUESTS; i++) begin
+            for (integer i = 0; i < NUM_REQUESTS; i++) begin
                 per_bank_valid[core_req_addr[i][`BANK_SELECT_ADDR_RNG]][i] = core_req_valid[i];
                 per_bank_ready_sel[core_req_addr[i][`BANK_SELECT_ADDR_RNG]] = 0;
             end

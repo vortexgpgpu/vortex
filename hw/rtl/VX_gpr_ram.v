@@ -20,12 +20,7 @@ module VX_gpr_ram (
                 for (integer i = 0; i < `NUM_REGS; i++) begin
                     if (i == 0) begin
                         ram[j * `NUM_REGS + i] = {`NUM_THREADS{32'h00000000}}; // set r0 = 0
-                    end 
-                `ifndef SYNTHESIS
-                    else begin
-                        ram[j * `NUM_REGS + i] = {`NUM_THREADS{32'hdeadbeef}}; 
                     end
-                `endif
                 end
             end
         end
@@ -48,8 +43,7 @@ module VX_gpr_ram (
 
         wire [`NUM_THREADS-1:0][31:0] write_bit_mask;
 
-        integer i;
-        for (i = 0; i < `NUM_THREADS; i++) begin
+        for (integer i = 0; i < `NUM_THREADS; i++) begin
             assign write_bit_mask[i] = {32{~we[i]}};
         end
 
@@ -61,9 +55,8 @@ module VX_gpr_ram (
         wire [`NUM_THREADS-1:0][31:0] tmp_b;
 
     `ifndef SYNTHESIS
-        integer j;
-        for (i = 0; i < `NUM_THREADS; i++) begin
-            for (j = 0; j < 32; j++) begin
+        for (integer i = 0; i < `NUM_THREADS; i++) begin
+            for (integer j = 0; j < 32; j++) begin
                 assign rs1_data[i][j] = ((tmp_a[i][j] === 1'dx) || cena_1) ? 1'b0 : tmp_a[i][j];
                 assign rs2_data[i][j] = ((tmp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : tmp_b[i][j];
             end
@@ -72,7 +65,7 @@ module VX_gpr_ram (
         assign rs1_data = tmp_a;
         assign rs2_data = tmp_b;
     `endif
-        for (i = 0; i < 'NT; i=i+4) begin
+        for (integer i = 0; i < 'NT; i=i+4) begin
         `IGNORE_WARNINGS_BEGIN
            rf2_32x128_wm1 first_ram (
                 .CENYA(),

@@ -22,9 +22,7 @@ module VX_fp_sub (
     wire enable = ~stall;
     assign ready_in = enable;
 
-    genvar i;
-
-    for (i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         twentynm_fp_mac mac_fp_wys (
             // inputs
             .accumulate(),

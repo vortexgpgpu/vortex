@@ -1035,8 +1035,7 @@ wire [SCOPE_DATAW+1:0] scope_data_in_ste;
 assign scope_data_in_st[0] = {`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST, scope_changed, scope_start};
 assign scope_data_in_ste = scope_data_in_st[SCOPE_SR_DEPTH-1];
 
-genvar i;
-for (i = 1; i < SCOPE_SR_DEPTH; i++) begin
+for (genvar i = 1; i < SCOPE_SR_DEPTH; i++) begin
     VX_generic_register #(
         .N (SCOPE_DATAW+2)
     ) scope_sr (

@@ -9,7 +9,7 @@
 
 interface VX_csr_to_fpu_if ();
 
-	wire [`NW_BITS-1:0]  warp_num;
+	wire [`NW_BITS-1:0]  wid;
 	wire [`FRM_BITS-1:0] frm;
 
 endinterface

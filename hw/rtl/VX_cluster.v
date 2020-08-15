@@ -135,9 +135,7 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                        per_core_busy;
     wire [`NUM_CORES-1:0]                        per_core_ebreak;
 
-    genvar i;
-
-    for (i = 0; i < `NUM_CORES; i++) begin    
+    for (genvar i = 0; i < `NUM_CORES; i++) begin    
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) core (
@@ -316,7 +314,7 @@ module VX_cluster #(
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]           l2_snp_fwdin_tag;
         wire[`NUM_CORES-1:0]                                l2_snp_fwdin_ready;
 
-        for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
+        for (genvar i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
             assign l2_core_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
             assign l2_core_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
 
@@ -472,7 +470,7 @@ module VX_cluster #(
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]        arb_snp_fwdin_tag;
         wire[`NUM_CORES-1:0]                             arb_snp_fwdin_ready;
 
-        for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin            
+        for (genvar i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin            
             assign arb_dram_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
             assign arb_dram_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
 

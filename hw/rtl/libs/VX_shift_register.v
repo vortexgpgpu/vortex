@@ -16,7 +16,7 @@ module VX_shift_register #(
 
         always @(posedge clk) begin
             if (reset) begin
-                entries <= '0;
+                entries <= (DEPTH * DATAW)'(0);
             end else begin
                 if (enable) begin                    
                     entries <= in;
@@ -28,7 +28,7 @@ module VX_shift_register #(
         
         always @(posedge clk) begin
             if (reset) begin
-                entries <= '0;
+                entries <= (DEPTH * DATAW)'(0);
             end else begin
                 if (enable) begin                    
                     entries <= {entries[DEPTH-2:0], in};

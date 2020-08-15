@@ -74,7 +74,6 @@ module VX_scope #(
 			read_delta  	<= 0;
 			data_valid  	<= 0;
 		end else begin
-
 			if (bus_write) begin
 				case (cmd_type)
 					CMD_GET_VALID, 

@@ -50,18 +50,18 @@ module VX_multiplier #(
         
         reg [WIDTHP-1:0] result_pipe [0:PIPELINE-1];
 
-        genvar i;
-        for (i = 0; i < PIPELINE; i++) begin
+        for (genvar i = 0; i < PIPELINE; i++) begin
             always @(posedge clk) begin
                 if (reset) begin
                     result_pipe[i] <= 0;
-                end
-                else if (clk_en) begin
-                    if (i == 0) begin
-                        result_pipe[i] <= result_unqual;
-                    end else begin
-                        result_pipe[i] <= result_pipe[i-1];
-                    end                    
+                end else begin
+                    if (clk_en) begin
+                        if (i == 0) begin
+                            result_pipe[i] <= result_unqual;
+                        end else begin
+                            result_pipe[i] <= result_pipe[i-1];
+                        end                    
+                    end
                 end
             end
         end
