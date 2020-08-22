@@ -212,25 +212,11 @@ extern int vx_dev_close(vx_device_h hdevice) {
 #endif
 
     {   
-        // Dump performance stats
+        // Dump perf stats
         uint64_t instrs, cycles;
-        unsigned value;
-
-        int ret = 0;
-        ret |= vx_csr_get(hdevice, 0, CSR_INSTRET_H, &value);
-        instrs = value;
-        ret |= vx_csr_get(hdevice, 0, CSR_INSTRET, &value);
-        instrs = (instrs << 32) | value;
-      
-        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_H, &value);
-        cycles = value;
-        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE, &value);
-        cycles = (cycles << 32) | value;
-
+        int ret = vx_get_perf(hdevice, &instrs, &cycles);
         float IPC = (float)(double(instrs) / double(cycles));
-
         fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);
-
         assert(ret == 0);
     }
 

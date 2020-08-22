@@ -19,7 +19,8 @@ interface VX_gpr_read_if ();
     wire [`NUM_THREADS-1:0][31:0] rs2_data;
     wire [`NUM_THREADS-1:0][31:0] rs3_data;
 
-    wire                    ready;
+    wire                    ready_in;
+    wire                    ready_out;
 
 endinterface
 

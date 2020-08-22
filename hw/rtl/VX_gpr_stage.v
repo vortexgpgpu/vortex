@@ -7,7 +7,7 @@ module VX_gpr_stage #(
     input wire      reset,
 
     // inputs    
-    VX_wb_if        writeback_if,  
+    VX_writeback_if writeback_if,  
 
     // outputs
     VX_gpr_read_if  gpr_read_if
@@ -50,14 +50,14 @@ module VX_gpr_stage #(
     assign gpr_read_if.rs1_data = rs1_tmp_data;
     assign gpr_read_if.rs2_data = rs2_tmp_data;
     assign gpr_read_if.rs3_data = 0;
-    assign gpr_read_if.ready    = 1;
+    assign gpr_read_if.ready_in = 1;
     
-    wire valid = gpr_read_if.valid;
-    wire use_rs3 = gpr_read_if.use_rs3; 
-    wire [`NR_BITS-1:0] rs3 = gpr_read_if.rs3;
-    `UNUSED_VAR (valid);
-    `UNUSED_VAR (use_rs3);
-    `UNUSED_VAR (rs3);
+    `UNUSED_FIELD (gpr_read_if, valid);
+    `UNUSED_FIELD (gpr_read_if, use_rs3);
+    `UNUSED_FIELD (gpr_read_if, rs3);
+    `UNUSED_FIELD (gpr_read_if, ready_out);
 `endif
+
+    assign writeback_if.ready = 1'b1;
 
 endmodule

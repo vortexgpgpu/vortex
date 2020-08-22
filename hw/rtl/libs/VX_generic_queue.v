@@ -70,7 +70,6 @@ module VX_generic_queue #(
                     if (writing) begin                             
                         data[wr_ptr_a] <= data_in;
                         wr_ptr_r <= wr_ptr_r + 1;
-
                         if (!reading) begin                                                       
                             size_r <= size_r + 1;
                         end

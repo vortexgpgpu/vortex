@@ -7,7 +7,7 @@ module VX_csr_data #(
     input wire reset,
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
-    VX_csr_to_fpu_if                csr_to_fpu_if,  
+    VX_csr_to_issue_if                csr_to_issue_if,  
 
     input wire[`NW_BITS-1:0]        wid,
 
@@ -129,11 +129,11 @@ module VX_csr_data #(
             `CSR_MIMPID  : read_data = `IMPLEMENTATION_ID;
 
             default: begin       
-                    assert(~read_enable) else $error("%t: invalid CSR read address: %0h", $time, read_addr);
-                end
+                assert(~read_enable) else $error("%t: invalid CSR read address: %0h", $time, read_addr);
+            end
         endcase
     end 
 
-    assign csr_to_fpu_if.frm = csr_frm[csr_to_fpu_if.wid]; 
+    assign csr_to_issue_if.frm = csr_frm[csr_to_issue_if.wid]; 
 
 endmodule

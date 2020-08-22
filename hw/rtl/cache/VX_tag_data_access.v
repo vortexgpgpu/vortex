@@ -28,7 +28,6 @@ module VX_tag_data_access #(
 `ifdef DBG_CORE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
     input wire[31:0]                    debug_pc_st1e,
-    input wire                          debug_wb_st1e,
     input wire[`NR_BITS-1:0]            debug_rd_st1e,
     input wire[`NW_BITS-1:0]            debug_wid_st1e,
     input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1e,
@@ -217,15 +216,15 @@ module VX_tag_data_access #(
         if (valid_req_st1e) begin             
             if ((| use_write_enable)) begin
                 if (writefill_st1e) begin
-                    $display("%t: bank%0d:%0d store-fill: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, use_write_data);
+                    $display("%t: cache%0d:%0d store-fill: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, use_write_data);
                 end else begin
-                    $display("%t: bank%0d:%0d store-write: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, wordsel_st1e, writeword_st1e);
+                    $display("%t: cache%0d:%0d store-write: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_rd_st1e, dirty_st1e, writeladdr_st1e, writetag_st1e, wordsel_st1e, writeword_st1e);
                 end
             end else
             if (miss_st1e) begin
-                $display("%t: bank%0d:%0d store-miss: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e);
+                $display("%t: cache%0d:%0d store-miss: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_rd_st1e, dirty_st1e);
             end else begin
-                $display("%t: bank%0d:%0d store-read: wid=%0d, PC=%0h, tag=%0h, wb=%b, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_wb_st1e, debug_rd_st1e, dirty_st1e, readaddr_st10, qual_read_tag_st1, wordsel_st1e, qual_read_data_st1);
+                $display("%t: cache%0d:%0d store-read: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1e, debug_pc_st1e, debug_tagid_st1e, debug_rd_st1e, dirty_st1e, readaddr_st10, qual_read_tag_st1, wordsel_st1e, qual_read_data_st1);
             end            
         end
     end    

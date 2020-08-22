@@ -1,25 +1,28 @@
 `include "VX_define.vh"
 
-module VX_fp_noncomp (
+module VX_fp_noncomp #( 
+    parameter TAGW = 1,
+    parameter LANES = 1
+) (
 	input wire clk,
 	input wire reset,   
 
     output wire ready_in,
     input wire  valid_in,
 
-    input wire [`ISTAG_BITS-1:0] tag_in,
+    input wire [TAGW-1:0] tag_in,
 	
     input wire [`FPU_BITS-1:0] op,
     input wire [`FRM_BITS-1:0] frm,
 
-    input wire [`NUM_THREADS-1:0][31:0]  dataa,
-    input wire [`NUM_THREADS-1:0][31:0]  datab,
-    output wire [`NUM_THREADS-1:0][31:0] result, 
+    input wire [LANES-1:0][31:0]  dataa,
+    input wire [LANES-1:0][31:0]  datab,
+    output wire [LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [`NUM_THREADS-1:0] fflags,
+    output fflags_t [LANES-1:0] fflags,
 
-    output wire [`ISTAG_BITS-1:0] tag_out,
+    output wire [TAGW-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
@@ -35,21 +38,21 @@ module VX_fp_noncomp (
                 SIG_NAN     = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
-    wire [`NUM_THREADS-1:0]       a_sign, b_sign;
-    wire [`NUM_THREADS-1:0][7:0]  a_exponent, b_exponent;
-    wire [`NUM_THREADS-1:0][22:0] a_mantissa, b_mantissa;
-    fp_type_t [`NUM_THREADS-1:0]  a_type, b_type;
+    wire [LANES-1:0]       a_sign, b_sign;
+    wire [LANES-1:0][7:0]  a_exponent, b_exponent;
+    wire [LANES-1:0][22:0] a_mantissa, b_mantissa;
+    fp_type_t [LANES-1:0]  a_type, b_type;
 
-    wire [`NUM_THREADS-1:0] a_smaller, ab_equal;
+    wire [LANES-1:0] a_smaller, ab_equal;
 
-    reg [`NUM_THREADS-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
-    reg [`NUM_THREADS-1:0][31:0] fminmax_res;  // result of fmin/fmax
-    reg [`NUM_THREADS-1:0][31:0] fsgnj_res;    // result of sign injection
-    reg [`NUM_THREADS-1:0][31:0] fcmp_res;     // result of comparison
-    reg [`NUM_THREADS-1:0][ 4:0] fcmp_excp;    // exception of comparison
+    reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
+    reg [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
+    reg [LANES-1:0][31:0] fsgnj_res;    // result of sign injection
+    reg [LANES-1:0][31:0] fcmp_res;     // result of comparison
+    reg [LANES-1:0][ 4:0] fcmp_excp;    // exception of comparison
 
     // Setup
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         assign a_sign[i]     = dataa[i][31]; 
         assign a_exponent[i] = dataa[i][30:23];
         assign a_mantissa[i] = dataa[i][22:0];
@@ -75,7 +78,7 @@ module VX_fp_noncomp (
     end   
 
     // FCLASS
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin 
             if (a_type[i].is_normal) begin
                 fclass_mask[i] = a_sign[i] ? NEG_NORM : POS_NORM;
@@ -99,7 +102,7 @@ module VX_fp_noncomp (
     end
 
     // Min/Max
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             if (a_type[i].is_nan && b_type[i].is_nan)
                 fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
@@ -118,7 +121,7 @@ module VX_fp_noncomp (
     end
 
     // Sign Injection
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (op)
                 `FPU_SGNJ:  fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
@@ -130,7 +133,7 @@ module VX_fp_noncomp (
     end
 
     // Comparison    
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm)
                 `FRM_RNE: begin
@@ -176,8 +179,8 @@ module VX_fp_noncomp (
 
     reg tmp_valid;
     reg tmp_has_fflags;
-    fflags_t [`NUM_THREADS-1:0] tmp_fflags;
-    reg [`NUM_THREADS-1:0][31:0] tmp_result;
+    fflags_t [LANES-1:0] tmp_fflags;
+    reg [LANES-1:0][31:0] tmp_result;
 
     always @(*) begin        
         case (op)
@@ -191,7 +194,7 @@ module VX_fp_noncomp (
         endcase
     end   
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             tmp_valid = 1'b1;
             case (op)
@@ -228,7 +231,7 @@ module VX_fp_noncomp (
     assign ready_in = ~stall;
 
     VX_generic_register #(
-        .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32) + 1 + (`NUM_THREADS * `FFG_BITS))
+        .N(1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS))
     ) nc_reg (
         .clk   (clk),
         .reset (reset),

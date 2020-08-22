@@ -5,6 +5,7 @@
 
 interface VX_warp_ctl_if ();
 
+    wire            valid;
     wire [`NW_BITS-1:0] wid;
 
     gpu_tmc_t       tmc;

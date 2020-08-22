@@ -33,8 +33,6 @@
 
 `define CSR_WIDTH   12
 
-`define ISTAG_BITS  `LOG2UP(`ISSUEQ_SIZE)
-
 ///////////////////////////////////////////////////////////////////////////////
 
 `define LATENCY_IDIV    33
@@ -98,15 +96,14 @@
 
 `define EX_NOP      3'h0
 `define EX_ALU      3'h1
-`define EX_BRU      3'h2
-`define EX_LSU      3'h3
-`define EX_CSR      3'h4
-`define EX_MUL      3'h5
-`define EX_FPU      3'h6
-`define EX_GPU      3'h7
+`define EX_LSU      3'h2
+`define EX_CSR      3'h3
+`define EX_MUL      3'h4
+`define EX_FPU      3'h5
+`define EX_GPU      3'h6
 `define EX_BITS     3
 
-`define NUM_EXS     7
+`define NUM_EXS     6
 `define NE_BITS     `LOG2UP(`NUM_EXS)
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -117,8 +114,8 @@
 `define ALU_SUB     4'b0001
 `define ALU_LUI     4'b0010
 `define ALU_AUIPC   4'b0011
-`define ALU_SLT     4'b0100
-`define ALU_SLTU    4'b0101
+`define ALU_SLTU    4'b0100
+`define ALU_SLT     4'b0101
 `define ALU_SRL     4'b1000
 `define ALU_SRA     4'b1001
 `define ALU_AND     4'b1100
@@ -129,27 +126,31 @@
 `define ALU_BITS    4
 `define ALU_OP(x)   x[`ALU_BITS-1:0]
 `define ALU_OP_CLASS(x) x[3:2]
+`define ALU_SIGNED(x) x[0]
 
-`define BRU_EQ      4'b0000
-`define BRU_NE      4'b0001
-`define BRU_LTU     4'b0010 
-`define BRU_GEU     4'b0011 
-`define BRU_LT      4'b0110
-`define BRU_GE      4'b0111
-`define BRU_JAL     4'b1000
-`define BRU_JALR    4'b1001
-`define BRU_ECALL   4'b1010
-`define BRU_EBREAK  4'b1011
-`define BRU_MRET    4'b1100
-`define BRU_SRET    4'b1101
-`define BRU_DRET    4'b1110
-`define BRU_OTHER   4'b1111
-`define BRU_BITS    4
-`define BRU_OP(x)   x[`BRU_BITS-1:0]
-`define BRU_NEG(x)    x[0]
-`define BRU_LESS(x)   x[1]
-`define BRU_SIGNED(x) x[2]
-`define BRU_STATIC(x) x[3]
+`define BR_EQ       4'b0000
+`define BR_NE       4'b0010
+`define BR_LTU      4'b0100 
+`define BR_GEU      4'b0110 
+`define BR_LT       4'b0101
+`define BR_GE       4'b0111
+`define BR_JAL      4'b1000
+`define BR_JALR     4'b1001
+`define BR_ECALL    4'b1010
+`define BR_EBREAK   4'b1011
+`define BR_MRET     4'b1100
+`define BR_SRET     4'b1101
+`define BR_DRET     4'b1110
+`define BR_OTHER    4'b1111
+`define BR_BITS     4
+`define BR_OP(x)    x[`BR_BITS-1:0]
+`define BR_NEG(x)    x[1]
+`define BR_LESS(x)   x[2]
+`define BR_STATIC(x) x[3]
+
+`define ALU_BR_BITS 5
+`define ALU_BR_OP(x) x[`ALU_BR_BITS-1:0]
+`define IS_BR_OP(x) x[4]
 
 `define LSU_LB      {1'b0, `BYTEEN_SB}
 `define LSU_LH      {1'b0, `BYTEEN_SH}
@@ -262,10 +263,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CORE_REQ_INFO          // pc,  wb, rd,        wid
-`define DEBUG_CORE_REQ_MDATA_WIDTH  (32 + 1 + `NR_BITS + `NW_BITS)
+`ifdef DBG_CORE_REQ_INFO    // pc, rd,        wid       
+`define DBG_CORE_REQ_MDATAW  (32 + `NR_BITS + `NW_BITS)
 `else
-`define DEBUG_CORE_REQ_MDATA_WIDTH  0
+`define DBG_CORE_REQ_MDATAW  0
 `endif
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
@@ -274,10 +275,10 @@
 `define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
 
 // TAG sharing enable       
-`define DCORE_TAG_ID_BITS   `ISTAG_BITS
+`define DCORE_TAG_ID_BITS   `LOG2UP(`LSUQ_SIZE)
 
 // Core request tag bits
-`define DCORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `DCORE_TAG_ID_BITS)
+`define DCORE_TAG_WIDTH     (`DBG_CORE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
  
 // DRAM request data bits
 `define DDRAM_LINE_WIDTH    (`DBANK_LINE_SIZE * 8)
@@ -312,7 +313,7 @@
 `define ICORE_TAG_ID_BITS   `NW_BITS
 
 // Core request tag bits
-`define ICORE_TAG_WIDTH     (`DEBUG_CORE_REQ_MDATA_WIDTH + `ICORE_TAG_ID_BITS)
+`define ICORE_TAG_WIDTH     (`DBG_CORE_REQ_MDATAW + `ICORE_TAG_ID_BITS)
 
 // DRAM request data bits
 `define IDRAM_LINE_WIDTH    (`IBANK_LINE_SIZE * 8)

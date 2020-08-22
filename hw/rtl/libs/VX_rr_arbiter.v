@@ -36,14 +36,14 @@ module VX_rr_arbiter #(
                 end
             end
             grant_onehot_r = N'(0);
-            grant_onehot_r[grant_index] = 1;
+            grant_onehot_r[grant_table[state]] = 1;
         end  
 
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
             end else begin
-                state <= grant_index;
+                state <= grant_table[state];
             end
         end      
 

@@ -130,14 +130,13 @@ module VX_cache #(
 `ifdef DBG_CORE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire[31:0]           debug_core_req_use_pc;
-    wire                 debug_core_req_wb;    
     wire[`NR_BITS-1:0]   debug_core_req_rd;
     wire[`NW_BITS-1:0]   debug_core_req_wid;
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_core_req_idx;
     /* verilator lint_on UNUSED */
 
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_core_req_use_pc, debug_core_req_wb, debug_core_req_rd, debug_core_req_wid, debug_core_req_idx} = core_req_tag[0];
+        assign {debug_core_req_use_pc, debug_core_req_rd, debug_core_req_wid, debug_core_req_idx} = core_req_tag[0];
     end
 `endif
 

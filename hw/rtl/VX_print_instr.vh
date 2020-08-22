@@ -24,39 +24,40 @@ task print_ex_op;
   begin
       case (ex)        
         `EX_ALU: begin
-            case (`ALU_BITS'(op))
-                `ALU_ADD:   $write("ADD");
-                `ALU_SUB:   $write("SUB");
-                `ALU_SLL:   $write("SLL");
-                `ALU_SRL:   $write("SRL");
-                `ALU_SRA:   $write("SRA");
-                `ALU_SLT:   $write("SLT");
-                `ALU_SLTU:  $write("SLTU");
-                `ALU_XOR:   $write("XOR");
-                `ALU_OR:    $write("OR");
-                `ALU_AND:   $write("AND");
-                `ALU_LUI:   $write("LUI");
-                `ALU_AUIPC: $write("AUIPC");
-                default:    $write("?");
-            endcase        
-        end        
-        `EX_BRU: begin
-            case (`BRU_BITS'(op))
-                `BRU_EQ:    $write("BEQ");
-                `BRU_NE:    $write("BNE");
-                `BRU_LT:    $write("BLT");
-                `BRU_GE:    $write("BGE");
-                `BRU_LTU:   $write("BLTU");
-                `BRU_GEU:   $write("BGEU");           
-                `BRU_JAL:   $write("JAL");
-                `BRU_JALR:  $write("JALR");
-                `BRU_ECALL: $write("ECALL");
-                `BRU_EBREAK:$write("EBREAK");    
-                `BRU_MRET:  $write("MRET");    
-                `BRU_SRET:  $write("SRET");    
-                `BRU_DRET:  $write("DRET");    
-                default:    $write("?");
-            endcase        
+            if (`IS_BR_OP(op)) begin
+                case (`BR_BITS'(op))
+                    `BR_EQ:    $write("BEQ");
+                    `BR_NE:    $write("BNE");
+                    `BR_LT:    $write("BLT");
+                    `BR_GE:    $write("BGE");
+                    `BR_LTU:   $write("BLTU");
+                    `BR_GEU:   $write("BGEU");           
+                    `BR_JAL:   $write("JAL");
+                    `BR_JALR:  $write("JALR");
+                    `BR_ECALL: $write("ECALL");
+                    `BR_EBREAK:$write("EBREAK");    
+                    `BR_MRET:  $write("MRET");    
+                    `BR_SRET:  $write("SRET");    
+                    `BR_DRET:  $write("DRET");    
+                    default:    $write("?");
+                endcase                
+            end else begin
+               case (`ALU_BITS'(op))
+                    `ALU_ADD:   $write("ADD");
+                    `ALU_SUB:   $write("SUB");
+                    `ALU_SLL:   $write("SLL");
+                    `ALU_SRL:   $write("SRL");
+                    `ALU_SRA:   $write("SRA");
+                    `ALU_SLT:   $write("SLT");
+                    `ALU_SLTU:  $write("SLTU");
+                    `ALU_XOR:   $write("XOR");
+                    `ALU_OR:    $write("OR");
+                    `ALU_AND:   $write("AND");
+                    `ALU_LUI:   $write("LUI");
+                    `ALU_AUIPC: $write("AUIPC");
+                    default:    $write("?");
+                endcase         
+            end
         end
         `EX_LSU: begin
             case (`LSU_BITS'(op))

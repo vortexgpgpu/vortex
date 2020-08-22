@@ -4,14 +4,6 @@
 `include "VX_define.vh"
 
 typedef struct packed {
-    logic [`NW_BITS-1:0]    wid;
-    logic [`NUM_THREADS-1:0] thread_mask;
-    logic [31:0]            curr_PC;
-    logic [`NR_BITS-1:0]    rd;
-    logic                   wb;
-} issue_data_t;
-
-typedef struct packed {
     logic is_normal;
     logic is_zero;
     logic is_subnormal;
@@ -53,7 +45,7 @@ typedef struct packed {
 typedef struct packed {
     logic                   valid;
     logic [`NB_BITS-1:0]    id;
-    logic [`NW_BITS:0]      num_warps;
+    logic [`NW_BITS-1:0]    size_m1;
 } gpu_barrier_t;
 
 `endif

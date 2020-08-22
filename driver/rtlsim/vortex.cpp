@@ -68,7 +68,8 @@ public:
         simulator_.attach_ram(&ram_);
     } 
 
-    ~vx_device() {     
+    ~vx_device() {
+        simulator_.print_stats(std::cout);     
         if (future_.valid()) {
             future_.wait();
         }
