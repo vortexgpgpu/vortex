@@ -22,7 +22,6 @@ module VX_execute #(
     
     // inputs    
     VX_alu_req_if       alu_req_if,
-    VX_bru_req_if       bru_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,
     VX_mul_req_if       mul_req_if,    
@@ -30,10 +29,10 @@ module VX_execute #(
     VX_gpu_req_if       gpu_req_if,
     
     // outputs
+    VX_csr_to_issue_if  csr_to_issue_if,
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
     VX_exu_to_cmt_if    alu_commit_if,
-    VX_exu_to_cmt_if    bru_commit_if,
     VX_exu_to_cmt_if    lsu_commit_if,    
     VX_exu_to_cmt_if    csr_commit_if,
     VX_exu_to_cmt_if    mul_commit_if,
@@ -43,25 +42,14 @@ module VX_execute #(
     output wire         ebreak
 );
     
-    VX_csr_to_fpu_if  csr_to_fpu_if();
-
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
     ) alu_unit (
         .clk            (clk),
         .reset          (reset),
         .alu_req_if     (alu_req_if),
-        .alu_commit_if  (alu_commit_if)
-    );
-
-    VX_bru_unit #(
-        .CORE_ID(CORE_ID)
-    ) bru_unit (
-        .clk            (clk),
-        .reset          (reset),
-        .bru_req_if     (bru_req_if),
         .branch_ctl_if  (branch_ctl_if),
-        .bru_commit_if  (bru_commit_if)
+        .alu_commit_if  (alu_commit_if)
     );
 
     VX_lsu_unit #(
@@ -82,7 +70,7 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),    
         .cmt_to_csr_if  (cmt_to_csr_if),    
-        .csr_to_fpu_if  (csr_to_fpu_if), 
+        .csr_to_issue_if  (csr_to_issue_if), 
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
@@ -95,8 +83,8 @@ module VX_execute #(
     ) mul_unit (
         .clk            (clk),
         .reset          (reset),
-        .alu_req_if     (mul_req_if),
-        .alu_commit_if  (mul_commit_if)    
+        .mul_req_if     (mul_req_if),
+        .mul_commit_if  (mul_commit_if)    
     );
 `else
     assign mul_req_if.ready        = 0;
@@ -112,7 +100,6 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),        
         .fpu_req_if     (fpu_req_if),
-        .csr_to_fpu_if  (csr_to_fpu_if),
         .fpu_commit_if  (fpu_commit_if)    
     );
 `else
@@ -134,9 +121,10 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    assign ebreak = bru_req_if.valid 
-                 && (bru_req_if.op == `BRU_EBREAK 
-                  || bru_req_if.op == `BRU_ECALL);
+    assign ebreak = alu_req_if.valid 
+                 && `IS_BR_OP(alu_req_if.op)
+                 && (`BR_OP(alu_req_if.op) == `BR_EBREAK 
+                  || `BR_OP(alu_req_if.op) == `BR_ECALL);
 
     `SCOPE_ASSIGN (scope_decode_valid,       decode_if.valid);
     `SCOPE_ASSIGN (scope_decode_wid,         decode_if.wid);

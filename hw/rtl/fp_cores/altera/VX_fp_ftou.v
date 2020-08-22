@@ -1,18 +1,21 @@
 `include "VX_define.vh"
 
-module VX_fp_ftou (
+module VX_fp_ftou #( 
+    parameter TAGW = 1,
+    parameter LANES = 1
+) (
     input wire clk,
     input wire reset,   
 
     output wire ready_in,
     input wire  valid_in,
 
-    input wire [`ISTAG_BITS-1:0] tag_in,
+    input wire [TAGW-1:0] tag_in,
 
-    input wire [`NUM_THREADS-1:0][31:0]  dataa,
-    output wire [`NUM_THREADS-1:0][31:0] result, 
+    input wire [LANES-1:0][31:0]  dataa,
+    output wire [LANES-1:0][31:0] result, 
 
-    output wire [`ISTAG_BITS-1:0] tag_out,
+    output wire [TAGW-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
@@ -21,7 +24,7 @@ module VX_fp_ftou (
     wire enable = ~stall;
     assign ready_in = enable;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         acl_fp_ftou ftou (
             .clk    (clk),
             .areset (1'b0),
@@ -32,7 +35,7 @@ module VX_fp_ftou (
     end
 
     VX_shift_register #(
-        .DATAW(`ISTAG_BITS + 1),
+        .DATAW(TAGW + 1),
         .DEPTH(`LATENCY_FTOU)
     ) shift_reg (
         .clk(clk),

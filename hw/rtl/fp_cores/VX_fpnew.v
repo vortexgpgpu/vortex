@@ -3,6 +3,7 @@
 `include "defs_div_sqrt_mvp.sv"
 
 module VX_fpnew #( 
+    parameter TAGW     = 1,
     parameter FMULADD  = 1,
     parameter FDIVSQRT = 1,
     parameter FNONCOMP = 1,
@@ -14,7 +15,7 @@ module VX_fpnew #(
     input wire  valid_in,
     output wire ready_in,
 
-    input wire [`ISTAG_BITS-1:0] tag_in,
+    input wire [TAGW-1:0] tag_in,
 	
     input wire [`FPU_BITS-1:0] op,
     input wire [`FRM_BITS-1:0] frm,
@@ -27,7 +28,7 @@ module VX_fpnew #(
     output wire has_fflags,
     output fflags_t [`NUM_THREADS-1:0] fflags,
 
-    output wire [`ISTAG_BITS-1:0] tag_out,
+    output wire [TAGW-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
@@ -66,7 +67,7 @@ module VX_fpnew #(
     wire fpu_ready_in, fpu_valid_in;    
     wire fpu_ready_out, fpu_valid_out;
 
-    reg [`ISTAG_BITS-1:0] fpu_tag_in, fpu_tag_out;
+    reg [TAGW-1:0] fpu_tag_in, fpu_tag_out;
     
     reg [2:0][`NUM_THREADS-1:0][31:0] fpu_operands;   
     
@@ -76,9 +77,6 @@ module VX_fpnew #(
 
     wire [`NUM_THREADS-1:0][31:0] fpu_result;
     fpnew_pkg::status_t [0:`NUM_THREADS-1] fpu_status;
-
-    wire is_class_op, is_class_op_out;
-    assign is_class_op = (op == `FPU_CLASS);
 
     reg [FOP_BITS-1:0] fpu_op;
     reg [`FRM_BITS-1:0] fpu_rnd;
@@ -136,7 +134,7 @@ module VX_fpnew #(
             fpnew_top #( 
                 .Features       (FPU_FEATURES),
                 .Implementation (FPU_IMPLEMENTATION),
-                .TagType        (logic[`ISTAG_BITS+1+1-1:0])
+                .TagType        (logic[TAGW+1+1-1:0])
             ) fpnew_core (
                 .clk_i          (clk),
                 .rst_ni         (1'b1),
@@ -148,13 +146,13 @@ module VX_fpnew #(
                 .dst_fmt_i      (fpnew_pkg::fp_format_e'(fpu_dst_fmt)),
                 .int_fmt_i      (fpnew_pkg::int_format_e'(fpu_int_fmt)),
                 .vectorial_op_i (1'b0),
-                .tag_i          ({fpu_tag_in, fpu_has_fflags, is_class_op}),
+                .tag_i          ({fpu_tag_in, fpu_has_fflags}),
                 .in_valid_i     (fpu_valid_in),
                 .in_ready_o     (fpu_ready_in),
                 .flush_i        (reset),
                 .result_o       (fpu_result[0]),
                 .status_o       (fpu_status[0]),
-                .tag_o          ({fpu_tag_out, fpu_has_fflags_out, is_class_op_out}),
+                .tag_o          ({fpu_tag_out, fpu_has_fflags_out}),
                 .out_valid_o    (fpu_valid_out),
                 .out_ready_i    (fpu_ready_out),
                 `UNUSED_PIN     (busy_o)

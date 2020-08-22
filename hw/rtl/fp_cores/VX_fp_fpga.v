@@ -1,14 +1,16 @@
 `include "VX_define.vh"
 `include "dspba_library_ver.sv"
 
-module VX_fp_fpga (
+module VX_fp_fpga #( 
+    parameter TAGW = 1
+) (
 	input wire clk,
 	input wire reset,   
 
     input wire  valid_in,
     output wire ready_in,
 
-    input wire [`ISTAG_BITS-1:0] tag_in,
+    input wire [TAGW-1:0] tag_in,
 	
     input wire [`FPU_BITS-1:0] op,
     input wire [`FRM_BITS-1:0] frm,
@@ -21,7 +23,7 @@ module VX_fp_fpga (
     output wire has_fflags,
     output fflags_t [`NUM_THREADS-1:0] fflags,
 
-    output wire [`ISTAG_BITS-1:0] tag_out,
+    output wire [TAGW-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
@@ -31,7 +33,7 @@ module VX_fp_fpga (
     
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][`NUM_THREADS-1:0][31:0] per_core_result;
-    wire [NUM_FPC-1:0][`ISTAG_BITS-1:0] per_core_tag_out;
+    wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
     wire [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
     
@@ -62,7 +64,10 @@ module VX_fp_fpga (
         endcase
     end
 
-    VX_fp_noncomp fp_noncomp (
+    VX_fp_noncomp #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_noncomp (
         .clk        (clk),
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 0)),
@@ -80,7 +85,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[0])
     );
     
-    VX_fp_add fp_add (
+    VX_fp_add #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_add (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 1)),
@@ -94,7 +102,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[1])
     );
 
-    VX_fp_sub fp_sub (
+    VX_fp_sub #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_sub (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 2)),
@@ -108,7 +119,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[2])
     );
 
-    VX_fp_mul fp_mul (
+    VX_fp_mul #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_mul (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 3)),
@@ -122,7 +136,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[3])
     );
 
-    VX_fp_madd fp_madd (
+    VX_fp_madd #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_madd (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 4)),
@@ -138,7 +155,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[4])
     );
 
-    VX_fp_msub fp_msub (
+    VX_fp_msub #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_msub (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 5)),
@@ -154,7 +174,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[5])
     );
 
-    VX_fp_div fp_div (
+    VX_fp_div #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_div (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 6)),
@@ -168,7 +191,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[6])
     );
 
-    VX_fp_sqrt fp_sqrt (
+    VX_fp_sqrt #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_sqrt (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 7)),
@@ -181,7 +207,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[7])
     );
 
-    VX_fp_ftoi fp_ftoi (
+    VX_fp_ftoi #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_ftoi (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 8)),
@@ -194,7 +223,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[8])
     );
 
-    VX_fp_ftou fp_ftou (
+    VX_fp_ftou #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_ftou (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 9)),
@@ -207,7 +239,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[9])
     );
 
-    VX_fp_itof fp_itof (
+    VX_fp_itof #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_itof (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 10)),
@@ -220,7 +255,10 @@ module VX_fp_fpga (
         .valid_out  (per_core_valid_out[10])
     );
 
-    VX_fp_utof fp_utof (
+    VX_fp_utof #(
+        .TAGW (TAGW),
+        .LANES(`NUM_THREADS)
+    ) fp_utof (
         .clk        (clk), 
         .reset      (reset),   
         .valid_in   (valid_in && (core_select == 11)),
@@ -248,21 +286,10 @@ module VX_fp_fpga (
         assign per_core_ready_out[i] = ready_out && (i == fp_index);
     end
 
-    wire                          tmp_valid  = fp_valid;
-    wire [`ISTAG_BITS-1:0]        tmp_tag    = per_core_tag_out[fp_index];
-    wire [`NUM_THREADS-1:0][31:0] tmp_result = per_core_result[fp_index];
-    wire                          tmp_has_fflags = fpnew_has_fflags && (fp_index == 0);
-    fflags_t [`NUM_THREADS-1:0]   tmp_flags  = fpnew_fflags;            
-
-    VX_generic_register #(
-        .N(1 + `ISTAG_BITS + (`NUM_THREADS * 32) + 1 + `FFG_BITS)
-    ) nc_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (1'b0),
-        .in    ({tmp_valid, tmp_tag, tmp_result, tmp_has_fflags, tmp_fflags}),
-        .out   ({valid_out, tag_out, result,     has_fflags,     fflags})
-    );
+    assign valid_out  = fp_valid;
+    assign tag_out    = per_core_tag_out[fp_index];
+    assign result     = per_core_result[fp_index];
+    assign has_fflags = fpnew_has_fflags && (fp_index == 0);
+    assign fflags     = fpnew_fflags;
 
 endmodule

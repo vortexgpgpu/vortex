@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iomanip>
 
-#define ALL_TESTS
+//#define ALL_TESTS
 
 int main(int argc, char **argv) {
 	if (argc == 1) {

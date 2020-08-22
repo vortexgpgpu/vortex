@@ -65,12 +65,13 @@ module VX_snp_forwarder #(
     ) snp_fwd_buffer (
         .clk            (clk),
         .reset          (reset),
-        .write_data     ({snp_req_addr, snp_req_invalidate, snp_req_tag}),    
-        .write_addr     (sfq_write_addr),        
-        .acquire_slot   (sfq_acquire), 
-        .release_slot   (sfq_release),           
+        .write_addr     (sfq_write_addr),                
+        .acquire_slot   (sfq_acquire),       
         .read_addr      (sfq_read_addr),
+        .write_data     ({snp_req_addr, snp_req_invalidate, snp_req_tag}),            
         .read_data      ({snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag}),
+        .release_addr   (sfq_read_addr),
+        .release_slot   (sfq_release),     
         .full           (sfq_full)
     );
 

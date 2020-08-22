@@ -1,22 +1,25 @@
 `include "VX_define.vh"
 
-module VX_fp_msub (
+module VX_fp_msub #( 
+    parameter TAGW = 1,
+    parameter LANES = 1
+) (
     input wire clk,
     input wire reset,   
 
     output wire ready_in,
     input wire  valid_in,
 
-    input wire [`ISTAG_BITS-1:0] tag_in,
+    input wire [TAGW-1:0] tag_in,
 
-    input wire [`NUM_THREADS-1:0][31:0]  dataa,
-    input wire [`NUM_THREADS-1:0][31:0]  datab,
-    input wire [`NUM_THREADS-1:0][31:0]  datac,
-    output wire [`NUM_THREADS-1:0][31:0] result, 
+    input wire [LANES-1:0][31:0]  dataa,
+    input wire [LANES-1:0][31:0]  datab,
+    input wire [LANES-1:0][31:0]  datac,
+    output wire [LANES-1:0][31:0] result, 
 
     input wire  negate,
 
-    output wire [`ISTAG_BITS-1:0] tag_out,
+    output wire [TAGW-1:0] tag_out,
 
     input wire  ready_out,
     output wire valid_out
@@ -24,11 +27,11 @@ module VX_fp_msub (
     wire enable0, enable1;
     assign ready_in = enable0 && enable1;
 
-    wire [`NUM_THREADS-1:0][31:0] result_st0, result_st1;
-    wire [`ISTAG_BITS-1:0] out_tag_st0, out_tag_st1;
+    wire [LANES-1:0][31:0] result_st0, result_st1;
+    wire [TAGW-1:0] out_tag_st0, out_tag_st1;
     wire in_valid_st0, out_valid_st0, out_valid_st1;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin
         twentynm_fp_mac mac_fp_wys0 (
             // inputs
             .accumulate(),
@@ -111,7 +114,7 @@ module VX_fp_msub (
     end
 
     VX_shift_register #(
-        .DATAW(`ISTAG_BITS + 1 + 1),
+        .DATAW(TAGW + 1 + 1),
         .DEPTH(1)
     ) shift_reg0 (
         .clk(clk),
@@ -122,7 +125,7 @@ module VX_fp_msub (
     );
 
     VX_shift_register #(
-        .DATAW(`ISTAG_BITS + 1),
+        .DATAW(TAGW + 1),
         .DEPTH(1)
     ) shift_reg1 (
         .clk(clk),

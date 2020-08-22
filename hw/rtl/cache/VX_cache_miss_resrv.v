@@ -157,7 +157,7 @@ module VX_cache_miss_resrv #(
 `ifdef DBG_PRINT_CACHE_MSRQ        
     always @(posedge clk) begin        
         if (mrvq_push || mrvq_pop || increment_head || recover_state) begin
-            $write("%t: bank%0d:%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);                        
+            $write("%t: cache%0d:%0d msrq: push=%b pop=%b incr=%d recv=%d", $time, CACHE_ID, BANK_ID, mrvq_push, mrvq_pop, increment_head, recover_state);                        
             for (integer j = 0; j < MRVQ_SIZE; j++) begin
                 if (valid_table[j]) begin
                     $write(" ");                    

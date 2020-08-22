@@ -86,7 +86,7 @@ int run_test(const kernel_arg_t& kernel_arg,
       int ref = i + i; 
       int cur = buf_ptr[i];
       if (cur != ref) {
-        std::cout << "error at value " << i
+        std::cout << "error at result #" << i
                   << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
         ++errors;
       }

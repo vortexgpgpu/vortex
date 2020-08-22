@@ -60,16 +60,6 @@
 `define ARCHITECTURE_ID     0
 `define IMPLEMENTATION_ID   0
 
-// Size of MUL Request Queue Size
-`ifndef MULRQ_SIZE
-`define MULRQ_SIZE 8
-`endif
-
-// Size of issue queue
-`ifndef ISSUEQ_SIZE
-`define ISSUEQ_SIZE (8 + `NUM_WARPS)
-`endif
-
 // CSR Addresses //////////////////////////////////////////////////////////////
 
 `define CSR_FFLAGS      12'h001
@@ -108,6 +98,28 @@
 `define CSR_MARCHID     12'hF12
 `define CSR_MIMPID      12'hF13
 `define CSR_MHARTID     12'hF14
+
+// Pipeline Queues ============================================================
+
+// Size of instruction queue
+`ifndef IBUF_SIZE
+`define IBUF_SIZE 8
+`endif
+
+// Size of LSU Request Queue
+`ifndef LSUQ_SIZE
+`define LSUQ_SIZE 8
+`endif
+
+// Size of MUL Request Queue
+`ifndef MULQ_SIZE
+`define MULQ_SIZE 8
+`endif
+
+// Size of FPU Request Queue
+`ifndef FPUQ_SIZE
+`define FPUQ_SIZE 8
+`endif
 
 // Dcache Configurable Knobs ==================================================
 
