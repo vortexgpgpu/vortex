@@ -13,23 +13,23 @@ module VX_skid_buffer #(
     output reg              valid_out
 ); 
     reg	[DATAW-1:0]	buffer;
-    reg use_buffer;
-
-    wire push = valid_in && ready_in;
+    reg             use_buffer;
     
     always @(posedge clk) begin
         if (reset) begin            
             use_buffer <= 0;
-            valid_out  <= 0;    
+            valid_out  <= 0;  
+            data_out   <= 0;  
+            buffer     <= 0;
         end else begin
-            if (push && (valid_out && !ready_out)) begin
+            if (valid_in && ready_in && valid_out && !ready_out) begin
                 assert(!use_buffer);
                 use_buffer <= 1;
             end 
             if (ready_out) begin
                 use_buffer <= 0;
             end
-            if (push) begin
+            if (valid_in && ready_in) begin
                 buffer <= data_in;
             end
             if (!valid_out || ready_out) begin
@@ -40,26 +40,5 @@ module VX_skid_buffer #(
     end
 
     assign ready_in = !use_buffer;
-    
-    /*wire empty, full;
-
-    VX_generic_queue #(
-        .DATAW    (DATAW),
-        .SIZE     (2),
-        .BUFFERED (0)
-    ) queue (
-        .clk    (clk),
-        .reset  (reset),
-        .push   (valid_in),
-        .pop    (ready_out),
-        .data_in(data_in),
-        .data_out(data_out),        
-        .empty  (empty),
-        .full   (full),
-        `UNUSED_PIN (size)
-    );
-
-    assign ready_in  = ~full;
-    assign valid_out = ~empty;*/
 
 endmodule
