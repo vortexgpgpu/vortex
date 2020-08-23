@@ -111,16 +111,16 @@ module VX_lsu_unit #(
         .DATAW (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
         .SIZE  (`LSUQ_SIZE)
     ) lsu_queue  (
-        .clk            (clk),
-        .reset          (reset),
-        .write_addr     (req_tag),        
-        .acquire_slot   (lsuq_push),       
-        .read_addr      (rsp_tag),
-        .write_data     ({req_wid, req_curr_PC, req_rd, req_wb, req_offset, req_sext}),                    
-        .read_data      ({rsp_wid, rsp_curr_PC, rsp_rd, rsp_wb, rsp_offset, rsp_sext}),
-        .release_addr   (rsp_tag),
-        .release_slot   (lsuq_pop),     
-        .full           (lsuq_full)
+        .clk          (clk),
+        .reset        (reset),
+        .write_addr   (req_tag),        
+        .acquire_slot (lsuq_push),       
+        .read_addr    (rsp_tag),
+        .write_data   ({req_wid, req_curr_PC, req_rd, req_wb, req_offset, req_sext}),                    
+        .read_data    ({rsp_wid, rsp_curr_PC, rsp_rd, rsp_wb, rsp_offset, rsp_sext}),
+        .release_addr (rsp_tag),
+        .release_slot (lsuq_pop),     
+        .full         (lsuq_full)
     );
 
     always @(posedge clk) begin
@@ -170,12 +170,12 @@ module VX_lsu_unit #(
     wire stall_out = ~lsu_commit_if.ready && lsu_commit_if.valid;
     wire mem_rsp_stall = is_load_rsp && is_store_req; // arbitration prioritizes stores
 
-    wire                          arb_valid = is_store_req || is_load_rsp;
-    wire [`NW_BITS-1:0]             arb_wid = is_store_req ? req_wid : rsp_wid;
-    wire [`NUM_THREADS-1:0] arb_thread_mask = is_store_req ? req_thread_mask : dcache_rsp_if.valid;
-    wire [31:0]                 arb_curr_PC = is_store_req ? req_curr_PC : rsp_curr_PC;
-    wire [`NR_BITS-1:0]              arb_rd = is_store_req ? 0 : rsp_rd;
-    wire                             arb_wb = is_store_req ? 0 : rsp_wb;
+    wire                    arb_valid = is_store_req || is_load_rsp;
+    wire [`NW_BITS-1:0]       arb_wid = is_store_req ? req_wid : rsp_wid;
+    wire [`NUM_THREADS-1:0] arb_tmask = is_store_req ? req_thread_mask : dcache_rsp_if.valid;
+    wire [31:0]           arb_curr_PC = is_store_req ? req_curr_PC : rsp_curr_PC;
+    wire [`NR_BITS-1:0]        arb_rd = is_store_req ? 0 : rsp_rd;
+    wire                       arb_wb = is_store_req ? 0 : rsp_wb;
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
@@ -184,7 +184,7 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({arb_valid,           arb_wid,           arb_thread_mask,           arb_curr_PC,           arb_rd,           arb_wb,           rsp_data}),
+        .in    ({arb_valid,           arb_wid,           arb_tmask,                 arb_curr_PC,           arb_rd,           arb_wb,           rsp_data}),
         .out   ({lsu_commit_if.valid, lsu_commit_if.wid, lsu_commit_if.thread_mask, lsu_commit_if.curr_PC, lsu_commit_if.rd, lsu_commit_if.wb, lsu_commit_if.data})
     );
 

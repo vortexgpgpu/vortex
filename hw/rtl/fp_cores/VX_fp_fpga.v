@@ -286,6 +286,7 @@ module VX_fp_fpga #(
         assign per_core_ready_out[i] = ready_out && (i == fp_index);
     end
 
+    assign ready_in   = (& per_core_ready_in);
     assign valid_out  = fp_valid;
     assign tag_out    = per_core_tag_out[fp_index];
     assign result     = per_core_result[fp_index];

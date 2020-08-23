@@ -55,6 +55,8 @@
 
 `define EXT_F_ENABLE
 
+`define IBUF_ENABLE
+
 // Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
