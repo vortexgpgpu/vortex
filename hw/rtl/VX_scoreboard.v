@@ -14,7 +14,7 @@ module VX_scoreboard  #(
     output wire         delay
 );
     reg [`NUM_THREADS-1:0] inuse_registers [(`NUM_WARPS * `NUM_REGS)-1:0];  
-    reg [`NUM_REGS-1:0] inuse_reg_mask  [`NUM_WARPS-1:0];
+    reg [`NUM_REGS-1:0] inuse_reg_mask [`NUM_WARPS-1:0];
     
     wire [`NUM_REGS-1:0] inuse_mask = inuse_reg_mask[ibuf_deq_if.wid] & ibuf_deq_if.used_regs;
 
