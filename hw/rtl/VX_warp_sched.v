@@ -38,13 +38,13 @@ module VX_warp_sched #(
     reg [31:0]              use_wspawn_pc;
     reg [`NUM_WARPS-1:0]    use_wspawn;
     
-    wire [31:0]             warp_pc;
-    wire [`NW_BITS-1:0]     warp_to_schedule;
+    reg [31:0]              warp_pc;
+    reg [`NW_BITS-1:0]      warp_to_schedule;
     wire                    scheduled_warp;
-    
-    wire [`NUM_WARPS-1:0]   total_warp_stalled;
 
-    reg didnt_split;       
+    reg didnt_split;   
+
+    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;    
 
     always @(*) begin
         schedule_table_n = schedule_table;
@@ -56,7 +56,7 @@ module VX_warp_sched #(
         if (wstall_if.wstall) begin
             schedule_table_n[wstall_if.wid] = 0;
         end
-        if (scheduled_warp) begin
+        if (scheduled_warp) begin // remove scheduled warp (round-robin)
             schedule_table_n[warp_to_schedule] = 0;
         end
     end    
@@ -129,7 +129,7 @@ module VX_warp_sched #(
                 stalled_warps[wstall_if.wid] <= 1;                
             end
 
-            // update 'schedule_table' when a warp is scheduled (update round-robin warp schedule)
+            // Advance PC
             if (scheduled_warp) begin
                 warp_pcs[warp_to_schedule] <= warp_pc + 4;
             end
@@ -146,12 +146,12 @@ module VX_warp_sched #(
             if (scheduled_warp) begin
                 fetch_lock[warp_to_schedule] <= 1;
             end
-            if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
+            if (ifetch_rsp_fire) begin
                 fetch_lock[ifetch_rsp_if.wid] <= 0;
             end
 
             // reset 'schedule_table' when it goes to zero
-            schedule_table <= (| schedule_table_n) ? schedule_table_n : (active_warps & ~total_warp_stalled);
+            schedule_table <= (| schedule_table_n) ? schedule_table_n : active_warps;
         end
     end
 
@@ -212,22 +212,25 @@ module VX_warp_sched #(
 
     // calculate next warp schedule
 
-    wire schedule;
+    reg schedule_valid;
+    reg [`NUM_THREADS-1:0] thread_mask;
     
-    assign total_warp_stalled = stalled_warps | total_barrier_stall | fetch_lock;
+    wire [`NUM_WARPS-1:0] schedule_ready = schedule_table & ~(stalled_warps | total_barrier_stall | fetch_lock);
 
-    wire [`NUM_WARPS-1:0] use_ready = schedule_table & ~total_warp_stalled;
-
-    VX_fixed_arbiter #(
-        .N(`NUM_WARPS)
-    ) choose_schedule (
-        .clk         (clk),
-        .reset       (reset),
-        .requests    (use_ready),
-        .grant_index (warp_to_schedule),
-        .grant_valid (schedule),
-        `UNUSED_PIN  (grant_onehot)
-    );
+    always @(*) begin
+        schedule_valid = 0;
+        thread_mask    = 'x;
+        warp_pc        = 'x;
+        for (integer i = 0; i < `NUM_WARPS; ++i) begin
+            if (schedule_ready[i]) begin
+                schedule_valid = 1;
+                thread_mask = use_wspawn[i] ? `NUM_THREADS'(1) : thread_masks[i];
+                warp_pc = use_wspawn[i] ? use_wspawn_pc : warp_pcs[i];
+                warp_to_schedule = `NW_BITS'(i);
+                break;
+            end
+        end    
+    end
 
     wire stall_out = ~ifetch_req_if.ready && ifetch_req_if.valid;
     
@@ -239,11 +242,7 @@ module VX_warp_sched #(
 
     wire stall = stall_out || wstall_this_cycle || branch_hazard || join_if.is_join;        
 
-    assign scheduled_warp = schedule && ~stall;
-
-    wire [`NUM_THREADS-1:0] thread_mask = use_wspawn[warp_to_schedule] ? `NUM_THREADS'(1) : thread_masks[warp_to_schedule];
-
-    assign warp_pc = use_wspawn[warp_to_schedule] ? use_wspawn_pc : warp_pcs[warp_to_schedule];
+    assign scheduled_warp = schedule_valid && ~stall;
 
     VX_generic_register #( 
         .N(1 + `NUM_THREADS + 32 + `NW_BITS)
