@@ -12,7 +12,7 @@ module VX_fp_noncomp #(
 
     input wire [TAGW-1:0] tag_in,
 	
-    input wire [`FPU_BITS-1:0] op,
+    input wire [`FPU_BITS-1:0] op_type,
     input wire [`FRM_BITS-1:0] frm,
 
     input wire [LANES-1:0][31:0]  dataa,
@@ -38,7 +38,7 @@ module VX_fp_noncomp #(
                 SIG_NAN     = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
-    reg [`FPU_BITS-1:0] op_r;
+    reg [`FPU_BITS-1:0] op_type_r;
     reg [`FRM_BITS-1:0] frm_r;
 
     reg [LANES-1:0][31:0]  dataa_r;
@@ -103,10 +103,10 @@ module VX_fp_noncomp #(
 
     always @(posedge clk) begin
         if (~stall) begin
-            op_r    <= op;
-            frm_r   <= frm;
-            dataa_r <= dataa;
-            datab_r <= datab;
+            op_type_r <= op_type;
+            frm_r     <= frm;
+            dataa_r   <= dataa;
+            datab_r   <= datab;
         end
     end 
 
@@ -144,10 +144,10 @@ module VX_fp_noncomp #(
             else if (b_type[i].is_nan) 
                 fminmax_res[i] = dataa_r[i];
             else begin 
-                case (op_r) // use LSB to distinguish MIN and MAX
-                    `FPU_MIN: fminmax_res[i] = a_smaller[i] ? dataa_r[i] : datab_r[i];
-                    `FPU_MAX: fminmax_res[i] = a_smaller[i] ? datab_r[i] : dataa_r[i];
-                    default:  fminmax_res[i] = 32'hdeadbeaf;  // don't care value
+                case (frm_r) // use LSB to distinguish MIN and MAX
+                    3: fminmax_res[i] = a_smaller[i] ? dataa_r[i] : datab_r[i];
+                    4: fminmax_res[i] = a_smaller[i] ? datab_r[i] : dataa_r[i];
+              default: fminmax_res[i] = 32'hdeadbeaf;  // don't care value
                 endcase
             end
         end
@@ -156,11 +156,11 @@ module VX_fp_noncomp #(
     // Sign Injection
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            case (op_r)
-                `FPU_SGNJ:  fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
-                `FPU_SGNJN: fsgnj_res[i] = {~b_sign[i], a_exponent[i], a_mantissa[i]};
-                `FPU_SGNJX: fsgnj_res[i] = { a_sign[i] ^ b_sign[i], a_exponent[i], a_mantissa[i]};
-                default: fsgnj_res[i] = 32'hdeadbeaf;  // don't care value
+            case (frm_r)
+                0:  fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
+                1: fsgnj_res[i] = {~b_sign[i], a_exponent[i], a_mantissa[i]};
+                2: fsgnj_res[i] = { a_sign[i] ^ b_sign[i], a_exponent[i], a_mantissa[i]};
+          default: fsgnj_res[i] = 32'hdeadbeaf;  // don't care value
             endcase
         end
     end
@@ -210,55 +210,44 @@ module VX_fp_noncomp #(
 
     // outputs
 
-    reg tmp_valid;
-    reg tmp_has_fflags;
     fflags_t [LANES-1:0] tmp_fflags;
     reg [LANES-1:0][31:0] tmp_result;
 
-    always @(*) begin        
-        case (op_r)
-            `FPU_SGNJ:  tmp_has_fflags = 0;
-            `FPU_SGNJN: tmp_has_fflags = 0;
-            `FPU_SGNJX: tmp_has_fflags = 0;
-            `FPU_MVXW:  tmp_has_fflags = 0;
-            `FPU_MVWX:  tmp_has_fflags = 0;
-            `FPU_CLASS: tmp_has_fflags = 0;
-            default:    tmp_has_fflags = 1;
-        endcase
-    end   
-
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            tmp_valid = 1'b1;
-            case (op_r)
+            tmp_result[i] = 32'hdeadbeaf;
+            {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
+            case (op_type_r)
                 `FPU_CLASS: begin
                     tmp_result[i] = fclass_mask[i];
                     {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
-                end                
-                `FPU_MVXW,`FPU_MVWX: begin                    
-                    tmp_result[i] = dataa[i];
-                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
-                end
-                `FPU_MIN,`FPU_MAX: begin                     
-                    tmp_result[i] = fminmax_res[i];
-                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = {a_type[i][0] | b_type[i][0], 4'h0};
-                end
-                `FPU_SGNJ,`FPU_SGNJN,`FPU_SGNJX: begin
-                    tmp_result[i] = fsgnj_res[i];
-                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
-                end
+                end   
                 `FPU_CMP: begin 
                     tmp_result[i] = fcmp_res[i];
                     {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = fcmp_excp[i];
-                end                
-                default: begin                      
-                    tmp_result[i] = 32'hdeadbeaf;
-                    {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
-                    tmp_valid = 1'b0;
-                end
+                end      
+                `FPU_MISC: begin
+                    case (frm)
+                        0,1,2:  begin
+                            tmp_result[i] = fsgnj_res[i];
+                            {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
+                        end
+                        3,4: begin
+                            tmp_result[i] = fminmax_res[i];
+                            {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = {a_type[i][0] | b_type[i][0], 4'h0};    
+                        end
+                        5,6: begin
+                            tmp_result[i] = dataa[i];
+                            {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;    
+                        end
+                    endcase
+                end    
             endcase
         end
     end
+
+    wire tmp_has_fflags = ((op_type_r == `FPU_MISC) && (frm == 3 || frm == 4)) // MIN/MAX 
+                       || (op_type_r == `FPU_CMP); // CMP
 
     VX_generic_register #(
         .N(1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS))
@@ -267,7 +256,7 @@ module VX_fp_noncomp #(
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({tmp_valid, tag_in,  tmp_result, tmp_has_fflags, tmp_fflags}),
+        .in    ({valid_in,  tag_in,  tmp_result, tmp_has_fflags, tmp_fflags}),
         .out   ({valid_out, tag_out, result,     has_fflags,     fflags})
     );
 

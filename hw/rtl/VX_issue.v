@@ -67,8 +67,8 @@ module VX_issue #(
     assign execute_if.thread_mask = ibuf_deq_if.thread_mask;
     assign execute_if.curr_PC   = ibuf_deq_if.curr_PC;
     assign execute_if.ex_type   = ibuf_deq_if.ex_type;    
-    assign execute_if.ex_op     = ibuf_deq_if.ex_op; 
-    assign execute_if.frm       = ibuf_deq_if.frm;    
+    assign execute_if.op_type   = ibuf_deq_if.op_type; 
+    assign execute_if.op_mod    = ibuf_deq_if.op_mod;    
     assign execute_if.wb        = ibuf_deq_if.wb;
     assign execute_if.rd        = ibuf_deq_if.rd;
     assign execute_if.rs1       = ibuf_deq_if.rs1;

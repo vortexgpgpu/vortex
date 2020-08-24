@@ -23,7 +23,7 @@ module VX_csr_arb (
     assign csr_req_if.wid       = (~select_io_req) ? csr_core_req_if.wid       : 0; 
     assign csr_req_if.thread_mask = (~select_io_req) ? csr_core_req_if.thread_mask : 0;
     assign csr_req_if.curr_PC   = (~select_io_req) ? csr_core_req_if.curr_PC   : 0;
-	assign csr_req_if.op        = (~select_io_req) ? csr_core_req_if.op        : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
+	assign csr_req_if.op_type   = (~select_io_req) ? csr_core_req_if.op_type   : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
 	assign csr_req_if.csr_addr  = (~select_io_req) ? csr_core_req_if.csr_addr  : csr_io_req_if.addr;	
     assign csr_req_if.csr_mask  = (~select_io_req) ? csr_core_req_if.csr_mask  : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
     assign csr_req_if.rd        = (~select_io_req) ? csr_core_req_if.rd        : 0;

@@ -32,9 +32,9 @@ module VX_alu_unit #(
     wire [1:0] alu_op_class_r;
     wire [31:0] next_PC_r; 
 
-    wire               is_br_op = `IS_BR_OP(alu_req_if.op);
-    wire [`ALU_BITS-1:0] alu_op = `ALU_OP(alu_req_if.op);
-    wire [`BR_BITS-1:0]   br_op = `BR_OP(alu_req_if.op);
+    wire               is_br_op = alu_req_if.is_br_op;
+    wire [`ALU_BITS-1:0] alu_op = `ALU_OP(alu_req_if.op_type);
+    wire [`BR_BITS-1:0]   br_op = `BR_OP(alu_req_if.op_type);
     wire             alu_signed = `ALU_SIGNED(alu_op);   
     wire [1:0]     alu_op_class = `ALU_OP_CLASS(alu_op); 
     wire                 is_sub = (alu_op == `ALU_SUB);

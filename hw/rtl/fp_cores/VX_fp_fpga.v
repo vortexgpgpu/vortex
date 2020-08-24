@@ -12,8 +12,8 @@ module VX_fp_fpga #(
 
     input wire [TAGW-1:0] tag_in,
 	
-    input wire [`FPU_BITS-1:0] op,
-    input wire [`FRM_BITS-1:0] frm,
+    input wire [`FPU_BITS-1:0] op_type,
+    input wire [`MOD_BITS-1:0] frm,
 
     input wire [`NUM_THREADS-1:0][31:0]  dataa,
     input wire [`NUM_THREADS-1:0][31:0]  datab,
@@ -34,7 +34,7 @@ module VX_fp_fpga #(
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][`NUM_THREADS-1:0][31:0] per_core_result;
     wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
-    wire [NUM_FPC-1:0] per_core_ready_out;
+    reg [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
     
     wire fpnew_has_fflags;  
@@ -46,7 +46,7 @@ module VX_fp_fpga #(
     always @(*) begin
         core_select  = 0;
         fmadd_negate = 0;
-        case (op)
+        case (op_type)
             `FPU_ADD:    core_select = 1;
             `FPU_SUB:    core_select = 2;
             `FPU_MUL:    core_select = 3;
@@ -73,8 +73,8 @@ module VX_fp_fpga #(
         .valid_in   (valid_in && (core_select == 0)),
         .ready_in   (per_core_ready_in[0]),        
         .tag_in     (tag_in),        
-        .op         (op),
-        .frm        (frm),
+        .op_type    (op_type),
+        .frm        (op_mod),
         .dataa      (dataa),
         .datab      (datab),
         .result     (per_core_result[0]), 
@@ -271,26 +271,34 @@ module VX_fp_fpga #(
         .valid_out  (per_core_valid_out[11])
     );
 
-    wire [FPC_BITS-1:0] fp_index;
-    wire fp_valid;
-    
-    VX_priority_encoder #(
-        .N(NUM_FPC)
-    ) wb_select (
-        .data_in   (per_core_valid_out),
-        .data_out  (fp_index),
-        .valid_out (fp_valid)
-    );
+    reg valid_out_r;
+    reg has_fflags_r;
+    reg [`NUM_THREADS-1:0][31:0] result_r;
+    reg [TAGW-1:0] tag_out_r;
 
-    for (genvar i = 0; i < NUM_FPC; i++) begin
-        assign per_core_ready_out[i] = ready_out && (i == fp_index);
+    always @(*) begin
+        per_core_ready_out = 0;
+        valid_out_r  = 0;
+        has_fflags_r = 0;
+        result_r     = 'x;
+        tag_out_r    = 'x;
+        for (integer i = 0; i < NUM_FPC; i++) begin
+            if (per_core_valid_out[i]) begin
+                per_core_ready_out[i] = 1;
+                valid_out_r  = i;
+                has_fflags_r = fpnew_has_fflags && (i == 0);
+                result_r     = per_core_result[i];
+                tag_out_r    = per_core_tag_out[i];
+                break;
+            end
+        end
     end
 
     assign ready_in   = (& per_core_ready_in);
-    assign valid_out  = fp_valid;
-    assign tag_out    = per_core_tag_out[fp_index];
-    assign result     = per_core_result[fp_index];
-    assign has_fflags = fpnew_has_fflags && (fp_index == 0);
+    assign valid_out  = valid_out_r;
+    assign has_fflags = has_fflags_r;
+    assign tag_out    = tag_out_r;
+    assign result     = result_r;    
     assign fflags     = fpnew_fflags;
 
 endmodule
