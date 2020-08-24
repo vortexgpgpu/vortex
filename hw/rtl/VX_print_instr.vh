@@ -21,7 +21,7 @@ endtask
 task print_ex_op;
   input [`EX_BITS-1:0] ex_type;
   input [`OP_BITS-1:0] op_type;
-  input [`OP_BITS-1:0] op_mod;
+  input [`MOD_BITS-1:0] op_mod;
   begin
       case (ex_type)        
         `EX_ALU: begin
@@ -139,21 +139,6 @@ task print_ex_op;
         default:;    
     endcase        
   end
-endtask
-
-task print_frm;
-    input [`FRM_BITS-1:0] frm;
-    begin     
-        case (frm)
-            `FRM_RNE: $write("RNE");     
-            `FRM_RTZ: $write("RTZ");
-            `FRM_RDN: $write("RDN");
-            `FRM_RUP: $write("RUP");
-            `FRM_RMM: $write("RMM");
-            `FRM_DYN: $write("DYN");
-            default: $write("?");
-        endcase
-    end      
 endtask
 
 `endif
