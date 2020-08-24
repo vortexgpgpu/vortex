@@ -131,7 +131,7 @@ module VX_fp_msub #(
         .clk(clk),
         .reset(reset),
         .enable(enable1),
-        .in({in_tag_st0, in_valid_st0}),
+        .in({out_tag_st0, in_valid_st0}),
         .out({out_tag_st1, out_valid_st1})
     );
 

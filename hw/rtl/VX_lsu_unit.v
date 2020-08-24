@@ -78,7 +78,7 @@ module VX_lsu_unit #(
         .clk   (clk),
         .reset (reset),
         .stall (stall_in),
-        .flush (0),
+        .flush (1'b0),
         .in    ({lsu_req_if.valid, lsu_req_if.wid, lsu_req_if.thread_mask, lsu_req_if.curr_PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
         .out   ({valid_in,         req_wid,        req_thread_mask,        req_curr_PC,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
     );
@@ -91,21 +91,21 @@ module VX_lsu_unit #(
     wire [1:0] rsp_sext;
     reg [`NUM_THREADS-1:0][31:0] rsp_data;
 
-    reg [`NUM_THREADS-1:0] mem_rsp_mask[`LSUQ_SIZE-1:0];         
+    reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] mem_rsp_mask;         
 
     wire [`DCORE_TAG_ID_BITS-1:0] req_tag, rsp_tag;
     wire lsuq_full;
 
     wire lsuq_push = (| dcache_req_if.valid) && dcache_req_if.ready
-                  && (0 == req_rw); // only loads
+                  && (0 == req_rw); // loads only
 
     wire lsuq_pop_part = (| dcache_rsp_if.valid) && dcache_rsp_if.ready;
     
     assign rsp_tag = dcache_rsp_if.tag[0][`DCORE_TAG_ID_BITS-1:0];    
 
-    wire [`NUM_THREADS-1:0] mem_rsp_mask_upd = mem_rsp_mask[rsp_tag] & ~dcache_rsp_if.valid;
+    wire [`NUM_THREADS-1:0] mem_rsp_mask_n = mem_rsp_mask[rsp_tag] & ~dcache_rsp_if.valid;
 
-    wire lsuq_pop = lsuq_pop_part && (0 == mem_rsp_mask_upd);
+    wire lsuq_pop = lsuq_pop_part && (0 == mem_rsp_mask_n);
 
     VX_cam_buffer #(
         .DATAW (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
@@ -128,10 +128,11 @@ module VX_lsu_unit #(
             mem_rsp_mask[req_tag] <= req_thread_mask;
         end    
         if (lsuq_pop_part) begin
-            mem_rsp_mask[rsp_tag] <= mem_rsp_mask_upd;
+            mem_rsp_mask[rsp_tag] <= mem_rsp_mask_n;
         end
     end
 
+    wire stall_out = ~lsu_commit_if.ready && lsu_commit_if.valid;
     wire store_stall = valid_in && req_rw && stall_out;
 
     // Core Request
@@ -167,7 +168,6 @@ module VX_lsu_unit #(
     wire is_store_req = valid_in && ~lsuq_full && req_rw && dcache_req_if.ready;
     wire is_load_rsp  = (| dcache_rsp_if.valid);
 
-    wire stall_out = ~lsu_commit_if.ready && lsu_commit_if.valid;
     wire mem_rsp_stall = is_load_rsp && is_store_req; // arbitration prioritizes stores
 
     wire                    arb_valid = is_store_req || is_load_rsp;

@@ -14,13 +14,10 @@ module VX_gpr_ram (
 
         reg [`NUM_THREADS-1:0][3:0][7:0] ram [(`NUM_WARPS * `NUM_REGS)-1:0];       
 
-        initial begin          
-            // initialize ram  
+        initial begin // initialize ram: set r0 = 0
             for (integer j = 0; j < `NUM_WARPS; j++) begin
                 for (integer i = 0; i < `NUM_REGS; i++) begin
-                    if (i == 0) begin
-                        ram[j * `NUM_REGS + i] = {`NUM_THREADS{32'h00000000}}; // set r0 = 0
-                    end
+                    ram[j * `NUM_REGS + i] = (i == 0) ? {`NUM_THREADS{32'h0}} : {`NUM_THREADS{32'hx}};
                 end
             end
         end

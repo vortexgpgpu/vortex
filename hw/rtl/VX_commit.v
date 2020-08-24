@@ -28,7 +28,7 @@ module VX_commit #(
                             fpu_commit_if.valid,
                             gpu_commit_if.valid};
 
-    wire [`NE_BITS:0] num_commits;
+    wire [$clog2(`NUM_EXS+1)-1:0] num_commits;
 
     VX_countones #(
         .N(`NUM_EXS)
@@ -54,7 +54,7 @@ module VX_commit #(
     fflags_t fflags_r;
     reg has_fflags_r;
     reg [`NW_BITS-1:0] wid_r;
-    reg [`NE_BITS:0] num_commits_r;
+    reg [$clog2(`NUM_EXS+1)-1:0] num_commits_r;
     reg csr_update_r;
 
     always @(posedge clk) begin

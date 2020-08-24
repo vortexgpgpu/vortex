@@ -82,7 +82,7 @@ module VX_alu_unit #(
         end
     end
     
-    reg [31:0] next_PC = alu_req_if.curr_PC + 4;      
+    wire [31:0] next_PC = alu_req_if.curr_PC + 4;      
 
     VX_shift_register #(
         .DATAW(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `NT_BITS + 1 + 1 + `BR_BITS + 2 + 32),
@@ -131,7 +131,7 @@ module VX_alu_unit #(
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),
-        .flush (0),
+        .flush (1'b0),
         .in    ({valid_r,             wid_r,             thread_mask_r,             curr_PC_r,             rd_r,             wb_r,             alu_jal_result,     is_br_op_r, br_taken,            br_dest}),
         .out   ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.thread_mask, alu_commit_if.curr_PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_s, branch_ctl_if.taken, branch_ctl_if.dest})
     );

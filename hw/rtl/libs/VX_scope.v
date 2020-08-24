@@ -14,7 +14,7 @@ module VX_scope #(
 	input wire changed,
 	input wire [DATAW-1:0] data_in,
 	input wire [BUSW-1:0]  bus_in,
-	output reg [BUSW-1:0]  bus_out,	
+	output wire [BUSW-1:0] bus_out,	
 	input wire bus_write,
 	input wire bus_read
 );
@@ -39,6 +39,7 @@ module VX_scope #(
 	reg [DELTAW-1:0] delta_store [SIZE-1:0];
 	reg [UPDW-1:0] prev_trigger_id;
 	reg [DELTAW-1:0] delta;
+	reg [BUSW-1:0]  bus_out_r;	
 
 	reg [`CLOG2(SIZE)-1:0] raddr, waddr, waddr_end;
 
@@ -168,13 +169,15 @@ module VX_scope #(
 
 	always @(*) begin
 		case (out_cmd)
-			GET_VALID : bus_out = BUSW'(data_valid);
-			GET_WIDTH : bus_out = BUSW'(DATAW);
-			GET_COUNT : bus_out = BUSW'(waddr) + BUSW'(1);
-			GET_DATA  : bus_out = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
-			default   : bus_out = 0;  
+			GET_VALID : bus_out_r = BUSW'(data_valid);
+			GET_WIDTH : bus_out_r = BUSW'(DATAW);
+			GET_COUNT : bus_out_r = BUSW'(waddr) + BUSW'(1);
+			GET_DATA  : bus_out_r = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
+			default   : bus_out_r = 0;  
 		endcase
 	end
+
+	assign bus_out = bus_out_r;
 
 `ifdef DBG_PRINT_SCOPE
 	always @(posedge clk) begin

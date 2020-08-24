@@ -76,7 +76,7 @@ module VX_gpu_unit #(
         .clk   (clk),
         .reset (reset),
         .stall (stall),
-        .flush (0),
+        .flush (1'b0),
         .in    ({gpu_req_if.valid,    gpu_req_if.wid,    gpu_req_if.thread_mask,    gpu_req_if.curr_PC,    gpu_req_if.rd,    gpu_req_if.wb,    tmc,             wspawn,             split,             barrier}),
         .out   ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.thread_mask, gpu_commit_if.curr_PC, gpu_commit_if.rd, gpu_commit_if.wb, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier})
     );

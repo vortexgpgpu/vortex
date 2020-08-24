@@ -7,22 +7,25 @@ module VX_ibuffer #(
     input  wire reset,
 
     // inputs
-    input wire    freeze,     // do not switch to another warp
+    input wire    freeze,       // keep current warp
     VX_decode_if  ibuf_enq_if,  
 
     // outputs
     VX_decode_if  ibuf_deq_if
 );
-    localparam DATAW = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + 1 + `NUM_REGS;
-    localparam SIZE  = `IBUF_SIZE;
+    localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + 1 + `NUM_REGS;
+    localparam SIZE    = `IBUF_SIZE;
+    localparam SIZEW   = $clog2(SIZE+1);
+    localparam ADDRW   = $clog2(SIZE);
+    localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
     `USE_FAST_BRAM reg [DATAW-1:0] entries [`NUM_WARPS-1:0][SIZE-1:0];
-    reg [`LOG2UP(SIZE+1)-1:0] size_r [`NUM_WARPS-1:0];
-    reg [`LOG2UP(SIZE):0] rd_ptr_r [`NUM_WARPS-1:0];
-    reg [`LOG2UP(SIZE):0] wr_ptr_r [`NUM_WARPS-1:0];
+    reg [SIZEW-1:0] size_r [`NUM_WARPS-1:0];
+    reg [ADDRW:0] rd_ptr_r [`NUM_WARPS-1:0];
+    reg [ADDRW:0] wr_ptr_r [`NUM_WARPS-1:0];
 
     wire [`NUM_WARPS-1:0] q_full;
-    wire [`NUM_WARPS-1:0][`LOG2UP(SIZE+1)-1:0] q_size;
+    wire [`NUM_WARPS-1:0][SIZEW-1:0] q_size;
     wire [DATAW-1:0] q_data_in;
     wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
@@ -35,8 +38,8 @@ module VX_ibuffer #(
         wire writing = enq_fire && (i == ibuf_enq_if.wid); 
         wire reading = deq_fire && (i == ibuf_deq_if.wid);
 
-        wire [`LOG2UP(SIZE-1)-1:0] rd_ptr_a = rd_ptr_r[i][`LOG2UP(SIZE-1)-1:0];
-        wire [`LOG2UP(SIZE-1)-1:0] wr_ptr_a = wr_ptr_r[i][`LOG2UP(SIZE-1)-1:0];
+        wire [ADDRW-1:0] rd_ptr_a = rd_ptr_r[i][ADDRW-1:0];
+        wire [ADDRW-1:0] wr_ptr_a = wr_ptr_r[i][ADDRW-1:0];
         
         always @(posedge clk) begin
             if (reset) begin
@@ -49,19 +52,19 @@ module VX_ibuffer #(
                         q_data_out[i] <= q_data_in;
                     end else begin
                         entries[i][wr_ptr_a] <= q_data_in;
-                        wr_ptr_r[i] <= wr_ptr_r[i] + 1;
+                        wr_ptr_r[i] <= wr_ptr_r[i] + ADDRW'(1);
                     end
                     if (!reading) begin                                                       
-                        size_r[i] <= size_r[i] + 1;
+                        size_r[i] <= size_r[i] + SIZEW'(1);
                     end
                 end
                 if (reading) begin
                     if (size_r[i] != 1) begin
                         q_data_out[i] <= q_data_prev[i];
-                        rd_ptr_r[i]   <= rd_ptr_r[i] + 1;
+                        rd_ptr_r[i]   <= rd_ptr_r[i] + ADDRW'(1);
                     end
                     if (!writing) begin                                                        
-                        size_r[i] <= size_r[i] - 1;
+                        size_r[i] <= size_r[i] - SIZEW'(1);
                     end
                 end
             end                   
@@ -75,8 +78,8 @@ module VX_ibuffer #(
     ///////////////////////////////////////////////////////////////////////////
 
     reg [`NUM_WARPS-1:0] valid_table, valid_table_n;
-    reg [`NUM_WARPS-1:0] ready_table, ready_table_n;
-    reg [`LOG2UP(`NUM_WARPS+1)-1:0] active_warps;
+    reg [`NUM_WARPS-1:0] schedule_table, schedule_table_n;
+    reg [NWARPSW-1:0] num_warps;
     reg [`NW_BITS-1:0] deq_wid, deq_wid_n;
     reg deq_valid, deq_valid_n;
     reg [DATAW-1:0] deq_instr, deq_instr_n;
@@ -92,18 +95,19 @@ module VX_ibuffer #(
     end 
 
     always @(*) begin         
-        deq_wid_n   = 0;
-        deq_valid_n = 0;
-        ready_table_n = ready_table;       
+        deq_wid_n        = 0;
+        deq_valid_n      = 0;
+        deq_instr_n      = 'x;
+        schedule_table_n = schedule_table;       
         if (deq_fire) begin
-            ready_table_n[ibuf_deq_if.wid] = (q_size[ibuf_deq_if.wid] != 1);
+            schedule_table_n[ibuf_deq_if.wid] = (q_size[ibuf_deq_if.wid] != 1);
         end
         for (integer i = 0; i < `NUM_WARPS; i++) begin
-            if (ready_table_n[i]) begin
+            if (schedule_table_n[i]) begin                
                 deq_wid_n   = `NW_BITS'(i);
                 deq_valid_n = 1;
                 deq_instr_n = (deq_fire && (ibuf_deq_if.wid == `NW_BITS'(i))) ? q_data_prev[i] : q_data_out[i];
-                ready_table_n[i] = 0;
+                schedule_table_n[i] = 0;
                 break;
             end
         end
@@ -114,15 +118,15 @@ module VX_ibuffer #(
     
     always @(posedge clk) begin
         if (reset)  begin            
-            valid_table  <= 0;
-            ready_table  <= 0;
-            deq_valid    <= 0;  
-            active_warps <= 0;
+            valid_table    <= 0;
+            schedule_table <= 0;
+            deq_valid      <= 0;  
+            num_warps      <= 0;
         end else begin
-            valid_table  <= valid_table_n;
-            ready_table  <= (| ready_table_n) ? ready_table_n : valid_table_n; 
+            valid_table    <= valid_table_n;
+            schedule_table <= (| schedule_table_n) ? schedule_table_n : valid_table_n; 
 
-            if (enq_fire && (0 == active_warps)) begin
+            if (enq_fire && (0 == num_warps)) begin
                 deq_valid  <= 1;
                 deq_wid    <= ibuf_enq_if.wid;
                 deq_instr  <= q_data_in;    
@@ -133,19 +137,21 @@ module VX_ibuffer #(
             end            
 
             if (warp_added && !warp_removed) begin
-                active_warps <= active_warps + 1;
+                num_warps <= num_warps + NWARPSW'(1);
             end else if (warp_removed && !warp_added) begin
-                active_warps <= active_warps - 1;                
+                num_warps <= num_warps - NWARPSW'(1);                
             end            
 
-            begin
-                integer k = 0; 
+        `ifdef VERILATOR
+            begin // verify 'num_warps'
+                integer nw = 0; 
                 for (integer i = 0; i < `NUM_WARPS; i++) begin
-                    k += 32'(q_size[i] != 0);
+                    nw += 32'(q_size[i] != 0);
                 end
-                assert(k == 32'(active_warps));
-                assert(~deq_fire || active_warps != 0);
+                assert(nw == 32'(num_warps));
+                assert(~deq_fire || num_warps != 0);
             end
+        `endif
         end
     end
 
