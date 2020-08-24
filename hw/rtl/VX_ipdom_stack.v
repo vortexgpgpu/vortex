@@ -32,7 +32,7 @@ module VX_ipdom_stack #(
                 stack_2[wr_ptr] <= q2;
                 is_part[wr_ptr] <= 0;            
                 rd_ptr <= wr_ptr;
-                wr_ptr <= wr_ptr + 1;
+                wr_ptr <= wr_ptr + DEPTH'(1);
             end else if (pop) begin            
                 wr_ptr <= wr_ptr - DEPTH'(is_part[rd_ptr]);
                 rd_ptr <= rd_ptr - DEPTH'(is_part[rd_ptr]);

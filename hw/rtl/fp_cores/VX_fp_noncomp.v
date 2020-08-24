@@ -71,15 +71,15 @@ module VX_fp_noncomp #(
         fp_type_t tmp_a_type, tmp_b_type;
 
         VX_fp_type fp_type_a (
-            .exponent(tmp_a_exponent[i]),
-            .mantissa(tmp_a_mantissa[i]),
-            .o_type(tmp_a_type[i])
+            .exponent(tmp_a_exponent),
+            .mantissa(tmp_a_mantissa),
+            .o_type(tmp_a_type)
         );
 
         VX_fp_type fp_type_b (
-            .exponent(tmp_b_exponent[i]),
-            .mantissa(tmp_b_mantissa[i]),
-            .o_type(tmp_b_type[i])
+            .exponent(tmp_b_exponent),
+            .mantissa(tmp_b_mantissa),
+            .o_type(tmp_b_type)
         );
 
         wire tmp_a_smaller = (dataa[i] < datab[i]) ^ (tmp_a_sign || tmp_b_sign);

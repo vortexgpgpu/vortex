@@ -38,7 +38,7 @@ module VX_fp_fpga #(
     wire [NUM_FPC-1:0] per_core_valid_out;
     
     wire fpnew_has_fflags;  
-    fflags_t fpnew_fflags;  
+    fflags_t [`NUM_THREADS-1:0] fpnew_fflags;  
 
     reg [FPC_BITS-1:0] core_select;
     reg fmadd_negate;

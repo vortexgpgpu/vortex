@@ -13,7 +13,7 @@ module VX_cam_buffer #(
     input  wire [DATAW-1:0] write_data,            
     input  wire acquire_slot,
     input  wire [RPORTS-1:0][ADDRW-1:0] read_addr,
-    output reg  [RPORTS-1:0][DATAW-1:0] read_data,
+    output wire [RPORTS-1:0][DATAW-1:0] read_data,
     input  wire [CPORTS-1:0][ADDRW-1:0] release_addr,
     input  wire [CPORTS-1:0] release_slot,        
     output wire full

@@ -111,18 +111,16 @@ module VX_mul_unit #(
 
         // handle divide by zero        
         always @(*) begin      
-            if (~stall_div) begin
-                is_div_qual[i] = is_div;
-                div_in1_qual = alu_in1[i];
-                div_in2_qual = alu_in2[i];
-                if (0 == alu_in2[i]) begin
-                    div_in2_qual = 1; 
-                    if (is_div) begin
-                        div_in1_qual = 32'hFFFFFFFF; // quotient = (0xFFFFFFFF / 1)                 
-                    end else begin                    
-                        is_div_qual[i] = 1; // remainder = (in1 / 1)                    
-                    end                                
-                end
+            is_div_qual[i] = is_div;
+            div_in1_qual = alu_in1[i];
+            div_in2_qual = alu_in2[i];
+            if (0 == alu_in2[i]) begin
+                div_in2_qual = 1; 
+                if (is_div) begin
+                    div_in1_qual = 32'hFFFFFFFF; // quotient = (0xFFFFFFFF / 1)                 
+                end else begin                    
+                    is_div_qual[i] = 1; // remainder = (in1 / 1)                    
+                end                                
             end
         end
 
@@ -192,7 +190,7 @@ module VX_mul_unit #(
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),
-        .flush (0),
+        .flush (1'b0),
         .in    ({valid_out,           rsp_wid,           rsp_thread_mask,           rsp_curr_PC,           rsp_rd,           rsp_wb,           result}),
         .out   ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.thread_mask, mul_commit_if.curr_PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
     );

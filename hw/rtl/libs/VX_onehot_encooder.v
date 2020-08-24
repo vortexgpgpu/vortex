@@ -4,19 +4,25 @@ module VX_onehot_encoder #(
     parameter N = 6
 ) (
     input wire [N-1:0] onehot,    
-    output reg [`LOG2UP(N)-1:0] binary,
-    output reg valid
+    output wire [`LOG2UP(N)-1:0] binary,
+    output wire valid
 );
-    always @(*) begin
-        valid = 1'b0;    
-        binary = `LOG2UP(N)'(0);                
+    reg [`LOG2UP(N)-1:0] binary_r;
+    reg valid_r;
+
+    always @(*) begin        
+        binary_r = `LOG2UP(N)'(0);                
+        valid_r  = 1'b0;    
         for (integer i = 0; i < N; i++) begin
-            if (onehot[i]) begin
-                valid = 1'b1;
-                binary = `LOG2UP(N)'(i);
+            if (onehot[i]) begin                
+                binary_r = `LOG2UP(N)'(i);
+                valid_r  = 1'b1;
             end
         end
     end
+
+    assign binary = binary_r;
+    assign valid  = valid_r;
     
 endmodule
 

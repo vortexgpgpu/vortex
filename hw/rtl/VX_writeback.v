@@ -68,7 +68,7 @@ module VX_writeback #(
         .clk   (clk),
         .reset (reset),
         .stall (stall),
-        .flush (0),
+        .flush (1'b0),
         .in    ({writeback_tmp_if.valid, writeback_tmp_if.wid, writeback_tmp_if.thread_mask, writeback_tmp_if.rd, writeback_tmp_if.data}),
         .out   ({writeback_if.valid,     writeback_if.wid,     writeback_if.thread_mask,     writeback_if.rd,     writeback_if.data})
     );

@@ -37,6 +37,7 @@ set_global_assignment -name ADD_PASS_THROUGH_LOGIC_TO_INFERRED_RAMS OFF
 set_global_assignment -name VERILOG_MACRO QUARTUS
 set_global_assignment -name VERILOG_MACRO SYNTHESIS
 set_global_assignment -name VERILOG_MACRO NDEBUG
+set_global_assignment -name MESSAGE_DISABLE 16818
 
 set idx 0
 foreach arg $q_args_orig {
