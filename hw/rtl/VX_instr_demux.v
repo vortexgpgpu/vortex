@@ -21,6 +21,7 @@ module VX_instr_demux (
 
     wire alu_req_valid = execute_if.valid && (execute_if.ex_type == `EX_ALU);
     wire alu_req_ready;
+    wire is_br_op = `IS_BR_MOD(execute_if.op_mod);
 
     wire [`NT_BITS-1:0] tid;
     VX_priority_encoder #(
@@ -32,14 +33,14 @@ module VX_instr_demux (
     );
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `ALU_BR_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS)
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `ALU_BR_BITS + 1 + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS)
     ) alu_reg (
         .clk       (clk),
         .reset     (reset),
         .ready_in  (alu_req_ready),
         .valid_in  (alu_req_valid),
-        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `ALU_BR_OP(execute_if.ex_op), execute_if.imm, execute_if.rs1_is_PC, execute_if.rs2_is_imm, execute_if.rd, execute_if.wb, tid}),
-        .data_out  ({alu_req_if.wid, alu_req_if.thread_mask, alu_req_if.curr_PC, alu_req_if.op,                alu_req_if.imm, alu_req_if.rs1_is_PC, alu_req_if.rs2_is_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid}),
+        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `ALU_BR_OP(execute_if.op_type), is_br_op,            execute_if.imm, execute_if.rs1_is_PC, execute_if.rs2_is_imm, execute_if.rd, execute_if.wb, tid}),
+        .data_out  ({alu_req_if.wid, alu_req_if.thread_mask, alu_req_if.curr_PC, alu_req_if.op_type,             alu_req_if.is_br_op, alu_req_if.imm, alu_req_if.rs1_is_PC, alu_req_if.rs2_is_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid}),
         .ready_out (alu_req_if.ready),
         .valid_out (alu_req_if.valid)
     );
@@ -67,7 +68,7 @@ module VX_instr_demux (
         .reset     (reset),
         .ready_in  (lsu_req_ready),
         .valid_in  (lsu_req_valid),
-        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `LSU_RW(execute_if.ex_op), `LSU_BE(execute_if.ex_op), execute_if.imm,    execute_if.rd, execute_if.wb}),
+        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `LSU_RW(execute_if.op_type), `LSU_BE(execute_if.op_type), execute_if.imm,    execute_if.rd, execute_if.wb}),
         .data_out  ({lsu_req_if.wid, lsu_req_if.thread_mask, lsu_req_if.curr_PC, lsu_req_if.rw,             lsu_req_if.byteen,         lsu_req_if.offset, lsu_req_if.rd, lsu_req_if.wb}),
         .ready_out (lsu_req_if.ready),
         .valid_out (lsu_req_if.valid)
@@ -96,8 +97,8 @@ module VX_instr_demux (
         .reset     (reset),
         .ready_in  (csr_req_ready),
         .valid_in  (csr_req_valid),
-        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `CSR_OP(execute_if.ex_op), execute_if.imm[`CSR_ADDR_BITS-1:0], execute_if.rd, execute_if.wb, 1'b0}),
-        .data_out  ({csr_req_if.wid, csr_req_if.thread_mask, csr_req_if.curr_PC, csr_req_if.op,             csr_req_if.csr_addr,                csr_req_if.rd, csr_req_if.wb, csr_req_if.is_io}),
+        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `CSR_OP(execute_if.op_type), execute_if.imm[`CSR_ADDR_BITS-1:0], execute_if.rd, execute_if.wb, 1'b0}),
+        .data_out  ({csr_req_if.wid, csr_req_if.thread_mask, csr_req_if.curr_PC, csr_req_if.op_type,          csr_req_if.csr_addr,                csr_req_if.rd, csr_req_if.wb, csr_req_if.is_io}),
         .ready_out (csr_req_if.ready),
         .valid_out (csr_req_if.valid)
     );
@@ -136,8 +137,8 @@ module VX_instr_demux (
         .reset     (reset),
         .ready_in  (mul_req_ready),
         .valid_in  (mul_req_valid),
-        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `MUL_OP(execute_if.ex_op), execute_if.rd, execute_if.wb}),
-        .data_out  ({mul_req_if.wid, mul_req_if.thread_mask, mul_req_if.curr_PC, mul_req_if.op,             mul_req_if.rd, mul_req_if.wb}),
+        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `MUL_OP(execute_if.op_type), execute_if.rd, execute_if.wb}),
+        .data_out  ({mul_req_if.wid, mul_req_if.thread_mask, mul_req_if.curr_PC, mul_req_if.op_type,          mul_req_if.rd, mul_req_if.wb}),
         .ready_out (mul_req_if.ready),
         .valid_out (mul_req_if.valid)
     );   
@@ -162,7 +163,7 @@ module VX_instr_demux (
 
     // resolve dynamic FRM    
     assign csr_to_issue_if.wid = execute_if.wid;
-    wire [`FRM_BITS-1:0] fpu_frm = (execute_if.frm == `FRM_DYN) ? csr_to_issue_if.frm : execute_if.frm;    
+    wire [`FRM_BITS-1:0] fpu_frm = (execute_if.op_mod == `FRM_DYN) ? csr_to_issue_if.frm : execute_if.op_mod;    
 
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + `FPU_BITS + `FRM_BITS + `NR_BITS + 1)
@@ -171,8 +172,8 @@ module VX_instr_demux (
         .reset     (reset),
         .ready_in  (fpu_req_ready),
         .valid_in  (fpu_req_valid),                     
-        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `FPU_OP(execute_if.ex_op), fpu_frm,        execute_if.rd, execute_if.wb}),
-        .data_out  ({fpu_req_if.wid, fpu_req_if.thread_mask, fpu_req_if.curr_PC, fpu_req_if.op,             fpu_req_if.frm, fpu_req_if.rd, fpu_req_if.wb}),
+        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `FPU_OP(execute_if.op_type), fpu_frm,        execute_if.rd, execute_if.wb}),
+        .data_out  ({fpu_req_if.wid, fpu_req_if.thread_mask, fpu_req_if.curr_PC, fpu_req_if.op_type,          fpu_req_if.frm, fpu_req_if.rd, fpu_req_if.wb}),
         .ready_out (fpu_req_if.ready),
         .valid_out (fpu_req_if.valid)
     );
@@ -201,8 +202,8 @@ module VX_instr_demux (
         .reset     (reset),
         .ready_in  (gpu_req_ready),
         .valid_in  (gpu_req_valid),
-        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `GPU_OP(execute_if.ex_op), execute_if.rd, execute_if.wb}),
-        .data_out  ({gpu_req_if.wid, gpu_req_if.thread_mask, gpu_req_if.curr_PC, gpu_req_if.op,             gpu_req_if.rd, gpu_req_if.wb}),
+        .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `GPU_OP(execute_if.op_type), execute_if.rd, execute_if.wb}),
+        .data_out  ({gpu_req_if.wid, gpu_req_if.thread_mask, gpu_req_if.curr_PC, gpu_req_if.op_type,          gpu_req_if.rd, gpu_req_if.wb}),
         .ready_out (gpu_req_if.ready),
         .valid_out (gpu_req_if.valid)
     ); 

@@ -32,18 +32,15 @@ module VX_gpr_fp_ctrl (
 			end else if (read_fire) begin
 				read_rs3 <= 0;
 			end
-			if (read_rs3) begin
-				assert(rs3_wid == gpr_read_if.wid);
+			
+			if (~read_rs3) begin
+				rs1_tmp_data <= rs1_data;
 			end
-		end
-	end
+			rs2_tmp_data <= rs2_data;
+			rs3_tmp_data <= rs1_data;
 
-    always @(posedge clk) begin	
-		if (~read_rs3) begin
-			rs1_tmp_data <= rs1_data;
-		end
-		rs2_tmp_data <= rs2_data;
-		rs3_tmp_data <= rs1_data;
+			assert(!read_rs3 || rs3_wid == gpr_read_if.wid);
+		end	
 	end
 
 	// outputs

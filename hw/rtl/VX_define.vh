@@ -108,7 +108,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define OP_BITS     5
+`define OP_BITS     4
+`define MOD_BITS    3
 
 `define ALU_ADD     4'b0000
 `define ALU_SUB     4'b0001
@@ -147,10 +148,9 @@
 `define BR_NEG(x)    x[1]
 `define BR_LESS(x)   x[2]
 `define BR_STATIC(x) x[3]
-
-`define ALU_BR_BITS 5
+`define ALU_BR_BITS 4
 `define ALU_BR_OP(x) x[`ALU_BR_BITS-1:0]
-`define IS_BR_OP(x) x[4]
+`define IS_BR_MOD(x) x[0]
 
 `define LSU_LB      {1'b0, `BYTEEN_SB}
 `define LSU_LH      {1'b0, `BYTEEN_SH}
@@ -185,30 +185,23 @@
 `define MUL_OP(x)   x[`MUL_BITS-1:0]
 `define IS_DIV_OP(x) x[2]
 
-`define FPU_ADD     5'h00 
-`define FPU_SUB     5'h01 
-`define FPU_MUL     5'h02 
-`define FPU_DIV     5'h03 
-`define FPU_SQRT    5'h04 
-`define FPU_MADD    5'h05 
-`define FPU_MSUB    5'h06   
-`define FPU_NMSUB   5'h07   
-`define FPU_NMADD   5'h08 
-`define FPU_SGNJ    5'h09  // FSGNJ
-`define FPU_SGNJN   5'h0A  // FSGNJN
-`define FPU_SGNJX   5'h0B  // FSGNJX
-`define FPU_MIN     5'h0C  // FMIN.S 
-`define FPU_MAX     5'h0D  // FMAX.S
-`define FPU_CVTWS   5'h0E  // FCVT.W.S
-`define FPU_CVTWUS  5'h0F  // FCVT.WU.S
-`define FPU_CVTSW   5'h10  // FCVT.S.W
-`define FPU_CVTSWU  5'h11  // FCVT.S.WU
-`define FPU_MVXW    5'h12  // MOV FP from fpReg to integer reg
-`define FPU_MVWX    5'h13  // MOV FP from integer reg to fpReg
-`define FPU_CLASS   5'h14  
-`define FPU_CMP     5'h15
-`define FPU_OTHER   5'h1f
-`define FPU_BITS    5
+`define FPU_ADD     4'h0 
+`define FPU_SUB     4'h1 
+`define FPU_MUL     4'h2 
+`define FPU_DIV     4'h3 
+`define FPU_SQRT    4'h4 
+`define FPU_MADD    4'h5 
+`define FPU_MSUB    4'h6   
+`define FPU_NMSUB   4'h7   
+`define FPU_NMADD   4'h8 
+`define FPU_CVTWS   4'h9  // FCVT.W.S
+`define FPU_CVTWUS  4'hA  // FCVT.WU.S
+`define FPU_CVTSW   4'hB  // FCVT.S.W
+`define FPU_CVTSWU  4'hC  // FCVT.S.WU
+`define FPU_CLASS   4'hD  
+`define FPU_CMP     4'hE
+`define FPU_MISC    4'hF  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX
+`define FPU_BITS    4
 `define FPU_OP(x)   x[`FPU_BITS-1:0]
 
 `define GPU_TMC     3'h0

@@ -13,7 +13,7 @@ interface VX_issue_if ();
     wire [31:0]             curr_PC;
 
     wire [`EX_BITS-1:0]     ex_type;    
-    wire [`OP_BITS-1:0]     ex_op; 
+    wire [`OP_BITS-1:0]     op_type; 
 
     wire [`FRM_BITS-1:0]    frm;
 

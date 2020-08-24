@@ -19,13 +19,14 @@ task print_ex_type;
 endtask
 
 task print_ex_op;
-  input [`EX_BITS-1:0] ex;
-  input [`OP_BITS-1:0] op;
+  input [`EX_BITS-1:0] ex_type;
+  input [`OP_BITS-1:0] op_type;
+  input [`OP_BITS-1:0] op_mod;
   begin
-      case (ex)        
+      case (ex_type)        
         `EX_ALU: begin
-            if (`IS_BR_OP(op)) begin
-                case (`BR_BITS'(op))
+            if (`IS_BR_MOD(op_mod)) begin
+                case (`BR_BITS'(op_type))
                     `BR_EQ:    $write("BEQ");
                     `BR_NE:    $write("BNE");
                     `BR_LT:    $write("BLT");
@@ -42,7 +43,7 @@ task print_ex_op;
                     default:    $write("?");
                 endcase                
             end else begin
-               case (`ALU_BITS'(op))
+               case (`ALU_BITS'(op_type))
                     `ALU_ADD:   $write("ADD");
                     `ALU_SUB:   $write("SUB");
                     `ALU_SLL:   $write("SLL");
@@ -60,7 +61,7 @@ task print_ex_op;
             end
         end
         `EX_LSU: begin
-            case (`LSU_BITS'(op))
+            case (`LSU_BITS'(op_type))
                 `LSU_LB:  $write("LB");
                 `LSU_LH:  $write("LH");
                 `LSU_LW:  $write("LW");
@@ -75,7 +76,7 @@ task print_ex_op;
             endcase
         end
         `EX_CSR: begin
-            case (`CSR_BITS'(op))
+            case (`CSR_BITS'(op_type))
                 `CSR_RW: $write("CSRW");
                 `CSR_RS: $write("CSRS");
                 `CSR_RC: $write("CSRC");
@@ -83,7 +84,7 @@ task print_ex_op;
             endcase
         end
         `EX_MUL: begin
-            case (`MUL_BITS'(op))
+            case (`MUL_BITS'(op_type))
                 `MUL_MUL:   $write("MUL");
                 `MUL_MULH:  $write("MULH");
                 `MUL_MULHSU:$write("MULHSU");
@@ -96,7 +97,7 @@ task print_ex_op;
             endcase
         end
         `EX_FPU: begin
-            case (`FPU_BITS'(op))
+            case (`FPU_BITS'(op_type))
                 `FPU_ADD:   $write("ADD");
                 `FPU_SUB:   $write("SUB");
                 `FPU_MUL:   $write("MUL");
@@ -104,25 +105,29 @@ task print_ex_op;
                 `FPU_SQRT:  $write("SQRT");
                 `FPU_MADD:  $write("MADD");
                 `FPU_NMSUB: $write("NMSUB");
-                `FPU_NMADD: $write("NMADD");
-                `FPU_SGNJ:  $write("SGNJ");
-                `FPU_SGNJN: $write("SGNJN");
-                `FPU_SGNJX: $write("SGNJX");
-                `FPU_MIN:   $write("MIN");
-                `FPU_MAX:   $write("MAX");
+                `FPU_NMADD: $write("NMADD");                
                 `FPU_CVTWS: $write("CVTWS");
                 `FPU_CVTWUS:$write("CVTWUS");
                 `FPU_CVTSW: $write("CVTSW");
                 `FPU_CVTSWU:$write("CVTSWU");
-                `FPU_MVXW:  $write("MVXW");
-                `FPU_MVWX:  $write("MVWX");
                 `FPU_CLASS: $write("CLASS");
                 `FPU_CMP:   $write("CMP");
+                `FPU_MISC: begin
+                    case (op_mod)
+                    0: $write("SGNJ");   
+                    1: $write("SGNJN");
+                    2: $write("SGNJX");
+                    3: $write("MIN");
+                    4: $write("MAX");
+                    5: $write("MVXW");
+                    6: $write("MVWX");
+                    endcase
+                end 
                 default:    $write("?");
             endcase
         end
         `EX_GPU: begin
-            case (`GPU_BITS'(op))
+            case (`GPU_BITS'(op_type))
                 `GPU_TMC:   $write("TMC");
                 `GPU_WSPAWN:$write("WSPAWN");
                 `GPU_SPLIT: $write("SPLIT");

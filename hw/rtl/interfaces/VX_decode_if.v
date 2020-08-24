@@ -12,8 +12,8 @@ interface VX_decode_if ();
     wire [31:0]             curr_PC;
 
     wire [`EX_BITS-1:0]     ex_type;    
-    wire [`OP_BITS-1:0]     ex_op; 
-    wire [`FRM_BITS-1:0]    frm;    
+    wire [`OP_BITS-1:0]     op_type; 
+    wire [`MOD_BITS-1:0]    op_mod;    
     wire                    wb;
 
     wire [`NR_BITS-1:0]     rd;

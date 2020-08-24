@@ -14,7 +14,7 @@ module VX_mul_unit #(
 ); 
     localparam MULQ_BITS = `LOG2UP(`MULQ_SIZE);
 
-    wire [`MUL_BITS-1:0]          alu_op  = mul_req_if.op;
+    wire [`MUL_BITS-1:0]          alu_op  = mul_req_if.op_type;
     wire [`NUM_THREADS-1:0][31:0] alu_in1 = mul_req_if.rs1_data;
     wire [`NUM_THREADS-1:0][31:0] alu_in2 = mul_req_if.rs2_data;
 

@@ -69,7 +69,7 @@ module VX_fpu_unit #(
 
         .tag_in     (tag_in),
         
-        .op         (fpu_req_if.op),
+        .op_type    (fpu_req_if.op_type),
         .frm        (fpu_req_if.frm),
 
         .dataa      (fpu_req_if.rs1_data),
@@ -103,7 +103,7 @@ module VX_fpu_unit #(
 
         .tag_in     (tag_in),
         
-        .op         (fpu_req_if.op),
+        .op_type    (fpu_req_if.op_type),
         .frm        (fpu_req_if.frm),
 
         .dataa      (fpu_req_if.rs1_data),

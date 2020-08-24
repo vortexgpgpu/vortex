@@ -67,7 +67,7 @@ module VX_csr_unit #(
     
     always @(*) begin
         csr_we_s0_unqual = 0;
-        case (csr_pipe_req_if.op)
+        case (csr_pipe_req_if.op_type)
             `CSR_RW: begin
                 csr_updated_data = csr_pipe_req_if.csr_mask;
                 csr_we_s0_unqual = 1;

@@ -122,9 +122,9 @@ module VX_execute #(
     );
 
     assign ebreak = alu_req_if.valid 
-                 && `IS_BR_OP(alu_req_if.op)
-                 && (`BR_OP(alu_req_if.op) == `BR_EBREAK 
-                  || `BR_OP(alu_req_if.op) == `BR_ECALL);
+                 && alu_req_if.is_br_op
+                 && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
+                  || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
 
     `SCOPE_ASSIGN (scope_decode_valid,       decode_if.valid);
     `SCOPE_ASSIGN (scope_decode_wid,         decode_if.wid);
