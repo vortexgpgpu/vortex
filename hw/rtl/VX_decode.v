@@ -371,13 +371,15 @@ module VX_decode  #(
 
     wire decode_fire = decode_if.valid && decode_if.ready;
 
-    assign join_if.is_join = decode_fire && is_gpu && (gpu_op == `GPU_JOIN);
+    assign join_if.valid = decode_fire && is_gpu && (gpu_op == `GPU_JOIN);
     assign join_if.wid = ifetch_rsp_if.wid;
 
-    assign wstall_if.wstall = decode_fire && (is_btype || is_jal || is_jalr 
-                                           || (is_gpu && (gpu_op == `GPU_TMC 
-                                                       || gpu_op == `GPU_SPLIT 
-                                                       || gpu_op == `GPU_BAR)));
+    assign wstall_if.valid = decode_fire && (is_btype
+                                          || is_jal 
+                                          || is_jalr 
+                                          || (is_gpu && (gpu_op == `GPU_TMC 
+                                                      || gpu_op == `GPU_SPLIT 
+                                                      || gpu_op == `GPU_BAR)));
     assign wstall_if.wid = ifetch_rsp_if.wid;
 
     ///////////////////////////////////////////////////////////////////////////
@@ -391,9 +393,7 @@ module VX_decode  #(
             print_ex_type(decode_if.ex_type);
             $write(", op=");
             print_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            $write(", tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, frm=", decode_if.thread_mask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm);                        
-            print_frm(decode_if.frm);
-            $write("\n");
+            $write("mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.thread_mask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm);                        
         end
     end
 `endif

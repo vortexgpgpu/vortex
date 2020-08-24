@@ -5,7 +5,7 @@
 
 interface VX_join_if ();
 
-    wire                is_join;
+    wire                valid;
     wire [`NW_BITS-1:0] wid;
 
 endinterface

@@ -52,10 +52,7 @@ module VX_warp_sched #(
          && warp_ctl_if.tmc.valid 
          && (0 == warp_ctl_if.tmc.thread_mask)) begin
             schedule_table_n[warp_ctl_if.wid] = 0;
-        end
-        if (wstall_if.wstall) begin
-            schedule_table_n[wstall_if.wid] = 0;
-        end
+        end        
         if (scheduled_warp) begin // remove scheduled warp (round-robin)
             schedule_table_n[warp_to_schedule] = 0;
         end
@@ -103,7 +100,7 @@ module VX_warp_sched #(
                 if (0 == warp_ctl_if.tmc.thread_mask) begin
                     active_warps[warp_ctl_if.wid] <= 0;                    
                 end
-            end else if (join_if.is_join && !didnt_split) begin
+            end else if (join_if.valid && !didnt_split) begin
                 if (!join_fall) begin
                     warp_pcs[join_if.wid] <= join_pc;
                 end
@@ -125,13 +122,8 @@ module VX_warp_sched #(
             end
 
             // Stalling the scheduling of warps
-            if (wstall_if.wstall) begin
+            if (wstall_if.valid) begin
                 stalled_warps[wstall_if.wid] <= 1;                
-            end
-
-            // Advance PC
-            if (scheduled_warp) begin
-                warp_pcs[warp_to_schedule] <= warp_pc + 4;
             end
 
             // Branch
@@ -148,6 +140,7 @@ module VX_warp_sched #(
             end
             if (ifetch_rsp_fire) begin
                 fetch_lock[ifetch_rsp_if.wid] <= 0;
+                warp_pcs[ifetch_rsp_if.wid] <= ifetch_rsp_if.curr_PC + 4;
             end
 
             // reset 'schedule_table' when it goes to zero
@@ -191,8 +184,7 @@ module VX_warp_sched #(
                  && warp_ctl_if.split.diverged 
                  && (i == warp_ctl_if.wid);
 
-        wire pop = join_if.is_join 
-                && (i == join_if.wid);
+        wire pop = join_if.valid && (i == join_if.wid);
 
         VX_ipdom_stack #(
             .WIDTH(1+32+`NUM_THREADS), 
@@ -232,17 +224,9 @@ module VX_warp_sched #(
         end    
     end
 
-    wire stall_out = ~ifetch_req_if.ready && ifetch_req_if.valid;
-    
-    wire branch_hazard = branch_ctl_if.valid 
-                      && branch_ctl_if.taken 
-                      && (branch_ctl_if.wid == warp_to_schedule);
+    wire stall_out = ~ifetch_req_if.ready && ifetch_req_if.valid;   
 
-    wire wstall_this_cycle = wstall_if.wstall && (wstall_if.wid == warp_to_schedule);
-
-    wire stall = stall_out || wstall_this_cycle || branch_hazard || join_if.is_join;        
-
-    assign scheduled_warp = schedule_valid && ~stall;
+    assign scheduled_warp = schedule_valid && ~stall_out;
 
     VX_generic_register #( 
         .N(1 + `NUM_THREADS + 32 + `NW_BITS)
