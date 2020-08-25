@@ -1,7 +1,7 @@
 language: cpp
-compiler: gcc
-
 dist: focal
+os: linux
+compiler: gcc
 addons:
     apt:
         sources:
@@ -9,26 +9,13 @@ addons:
         packages:
         - build-essential
         - valgrind
-        - autoconf
-        - automake
-        - autotools-dev
-        - lcov
-        - bison
-        - flex
-        - texinfo
         - verilator
         - yosys
         
 install:
   # RISCV_TOOLCHAIN
-  - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
-  - sudo apt-get -y install \
-      binutils build-essential libtool texinfo \
-      gzip zip unzip patchutils curl git \
-      make cmake ninja-build automake bison flex gperf \
-      grep sed gawk python bc \
-      zlib1g-dev libexpat1-dev libmpc-dev \
-      libglib2.0-dev libfdt-dev libpixman-1-dev 
+  - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain/drops
+  - sudo apt-get -y install binutils build-essential libtool texinfo gzip zip unzip patchutils curl git make cmake ninja-build automake bison flex gperf grep sed gawk python bc zlib1g-dev libexpat1-dev libmpc-dev libglib2.0-dev libfdt-dev libpixman-1-dev 
   - git clone https://github.com/riscv/riscv-gnu-toolchain
   - cd riscv-gnu-toolchain
   - git submodule update --init --recursive
@@ -42,8 +29,8 @@ install:
   - git clone --recursive https://github.com/vortexgpgpu/vortex.git
   - cd Vortex
   - make
-  - make -C /Vortex/benchmarks/opencl/sgemm
-  - make -C /Vortex/benchmarks/opencl/sgemm run
+  - make -C benchmarks/opencl/sgemm
+  - make -C benchmarks/opencl/sgemm run
 
 script: 
   - ci/regression.sh ..
