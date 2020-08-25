@@ -14,17 +14,11 @@ addons:
         
 install:
   # RISCV_TOOLCHAIN
-  - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain/drops
-  - sudo apt-get -y install binutils build-essential libtool texinfo gzip zip unzip patchutils curl git make cmake ninja-build automake bison flex gperf grep sed gawk python bc zlib1g-dev libexpat1-dev libmpc-dev libglib2.0-dev libfdt-dev libpixman-1-dev 
-  - git clone https://github.com/riscv/riscv-gnu-toolchain
-  - cd riscv-gnu-toolchain
-  - git submodule update --init --recursive
-  - mkdir build
-  - cd build    
-  - ../configure --prefix=$RISCV_TOOLCHAIN_PATH --with-arch=rv32im --with-abi=ilp32
-  - make -j`nproc`  
-  - make -j`nproc` build-qemu
-  
+  - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain
+  - wget https://github.com/stnolting/riscv_gcc_prebuilt/raw/master/data/$TOOLCHAIN_V.tar.gz
+  - mkdir $RISCV_TOOLCHAIN_PATH
+  - tar -xzf $TOOLCHAIN_V.tar.gz -C $RISCV_TOOLCHAIN_PATH
+    
   # VORTEX
   - git clone --recursive https://github.com/vortexgpgpu/vortex.git
   - cd Vortex
@@ -32,8 +26,11 @@ install:
   - make -C benchmarks/opencl/sgemm
   - make -C benchmarks/opencl/sgemm run
 
-script: 
-  - ci/regression.sh ..
+script:   
+  - ci/test_runtime.sh
+  - ci/test_driver.sh
+  - ci/test_riscv_isa.sh
+  - ci/test_opencl.sh
   
 after_success:
   # Gather code coverage
