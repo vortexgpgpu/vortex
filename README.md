@@ -1,3 +1,6 @@
+[![Linux Build Status](https://travis-ci.org/github/vortexgpgpu/vortex.png?branch=master)](https://travis-ci.org/github/vortexgpgpu/vortex) 
+[![codecov.io](http://codecov.io/github/gtcasl/cash/coverage.svg?branch=master)](http://codecov.io/github/gtcasl/cash?branch=master)
+
 # Vortex RISC-V GPGPU
 
 Vortex is a full-system RISCV-based GPGPU processor.
