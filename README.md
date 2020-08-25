@@ -1,4 +1,4 @@
-[![Linux Build Status](https://travis-ci.org/github/vortexgpgpu/vortex.png?branch=master)](https://travis-ci.org/github/vortexgpgpu/vortex) 
+https://travis-ci.org/vortexgpgpu/vortex.svg?branch=master
 [![codecov](https://codecov.io/gh/vortexgpgpu/vortex/branch/master/graph/badge.svg)](https://codecov.io/gh/vortexgpgpu/vortex)
 
 # Vortex RISC-V GPGPU
