@@ -284,7 +284,7 @@ module VX_fp_fpga #(
         tag_out_r          = 'x;
         for (integer i = 0; i < NUM_FPC; i++) begin
             if (per_core_valid_out[i]) begin
-                per_core_ready_out[i] = 1;
+                per_core_ready_out[i] = ready_out;
                 valid_out_r  = 1;
                 has_fflags_r = fpnew_has_fflags && (i == 0);
                 result_r     = per_core_result[i];
