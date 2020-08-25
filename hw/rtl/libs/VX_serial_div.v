@@ -49,8 +49,8 @@ module VX_serial_div #(
     for (genvar i = 0; i < LANES; ++i) begin
         wire negate_numer = signed_mode && numer[i][WIDTHN-1];
         wire negate_denom = signed_mode && denom[i][WIDTHD-1];
-        assign numer_qual[i] = (numer[i] ^ {WIDTHN{negate_numer}}) + WIDTHN'(negate_numer);
-        assign denom_qual[i] = (denom[i] ^ {WIDTHD{negate_denom}}) + WIDTHD'(negate_denom);
+        assign numer_qual[i] = negate_numer ? -$signed(numer[i]) : numer[i];
+        assign denom_qual[i] = negate_denom ? -$signed(denom[i]) : denom[i];
         assign sub_result[i] = working[i][WIDTHN + MIN_ND : WIDTHN] - denom_r[i];
     end
     
@@ -87,38 +87,14 @@ module VX_serial_div #(
     end
 
     for (genvar i = 0; i < LANES; ++i) begin
-        assign quotient[i]  = (working[i][WIDTHQ-1:0] ^ {WIDTHQ{inv_quot[i]}}) + WIDTHQ'(inv_quot[i]);
-        assign remainder[i] = (working[i][WIDTHN+WIDTHR:WIDTHN+1] ^ {WIDTHR{inv_rem[i]}}) + WIDTHR'(inv_rem[i]);
+        wire [WIDTHQ-1:0] q = working[i][WIDTHQ-1:0];
+        wire [WIDTHR-1:0] r = working[i][WIDTHN+WIDTHR:WIDTHN+1];
+        assign quotient[i]  = inv_quot[i] ? -$signed(q) : q;
+        assign remainder[i] = inv_rem[i] ? -$signed(r) : r;
     end
+    
     assign ready_in  = !is_busy;    
     assign tag_out   = tag_r;
-    assign valid_out = is_busy && done; 
-
-    /*reg [LANES-1:0][WIDTHQ-1:0] quotient_r;
-    reg [LANES-1:0][WIDTHR-1:0] remainder_r; 
-    reg [TAGW-1:0] tag_out_r;
-    reg valid_out_r;
-
-    wire stall_out = !ready_out && valid_out_r;
-    assign pop = is_busy && done && !stall_out;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            valid_out_r <= 0;
-        end else if (~stall_out) begin
-            for (integer i = 0; i < LANES; ++i) begin
-                quotient_r[i]  <= (working[i][WIDTHQ-1:0] ^ {WIDTHQ{inv_quot[i]}}) + WIDTHQ'(inv_quot[i]);
-                remainder_r[i] <= ((working[i][WIDTHN+WIDTHR-1:WIDTHN] >> 1) ^ {WIDTHR{inv_rem[i]}}) + WIDTHR'(inv_rem[i]);
-            end
-            tag_out_r   <= tag_r;
-            valid_out_r <= is_busy && done; 
-        end 
-    end   
-
-    assign ready_in  = !is_busy;    
-    assign quotient  = quotient_r;
-    assign remainder = remainder_r;
-    assign tag_out   = tag_out_r;
-    assign valid_out = valid_out_r;*/
+    assign valid_out = is_busy && done;
 
 endmodule
