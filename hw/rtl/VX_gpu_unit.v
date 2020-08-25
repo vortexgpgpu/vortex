@@ -13,6 +13,9 @@ module VX_gpu_unit #(
     VX_warp_ctl_if      warp_ctl_if,
     VX_exu_to_cmt_if    gpu_commit_if
 );
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
+
     gpu_tmc_t       tmc;
     gpu_wspawn_t    wspawn;
     gpu_barrier_t   barrier;
@@ -58,7 +61,7 @@ module VX_gpu_unit #(
     assign split.diverged  = (| split_then_mask) && (| split_else_mask);
     assign split.then_mask = split_then_mask;
     assign split.else_mask = split_else_mask;
-    assign split.pc        = gpu_req_if.curr_PC + 4;
+    assign split.pc        = gpu_req_if.next_PC;
 
     // barrier
     
@@ -68,23 +71,21 @@ module VX_gpu_unit #(
 
     // output
 
-    wire stall = ~gpu_commit_if.ready && gpu_commit_if.valid;
+    assign warp_ctl_if.valid   = gpu_req_if.valid && gpu_commit_if.ready;
+    assign warp_ctl_if.wid     = gpu_commit_if.wid;
+    assign warp_ctl_if.tmc     = tmc;
+    assign warp_ctl_if.wspawn  = wspawn;
+    assign warp_ctl_if.split   = split;
+    assign warp_ctl_if.barrier = barrier;
 
-    VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + $bits(gpu_tmc_t) + $bits(gpu_wspawn_t) + $bits(gpu_split_t) + $bits(gpu_barrier_t))
-    ) gpu_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (1'b0),
-        .in    ({gpu_req_if.valid,    gpu_req_if.wid,    gpu_req_if.thread_mask,    gpu_req_if.curr_PC,    gpu_req_if.rd,    gpu_req_if.wb,    tmc,             wspawn,             split,             barrier}),
-        .out   ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.thread_mask, gpu_commit_if.curr_PC, gpu_commit_if.rd, gpu_commit_if.wb, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier})
-    );
-
-    assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready;
-    assign warp_ctl_if.wid   = gpu_commit_if.wid;
+    assign gpu_commit_if.valid       = gpu_req_if.valid;
+    assign gpu_commit_if.wid         = gpu_req_if.wid;
+    assign gpu_commit_if.thread_mask = gpu_req_if.thread_mask;
+    assign gpu_commit_if.curr_PC     = gpu_req_if.curr_PC;
+    assign gpu_commit_if.rd          = gpu_req_if.rd;
+    assign gpu_commit_if.wb          = gpu_req_if.wb;
     
     // can accept new request?
-    assign gpu_req_if.ready = ~stall;
+    assign gpu_req_if.ready = gpu_commit_if.ready;
 
 endmodule

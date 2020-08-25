@@ -82,7 +82,7 @@ module VX_fp_noncomp #(
             .o_type(tmp_b_type)
         );
 
-        wire tmp_a_smaller = (dataa[i] < datab[i]) ^ (tmp_a_sign || tmp_b_sign);
+        wire tmp_a_smaller = $signed(dataa[i]) < $signed(datab[i]);
         wire tmp_ab_equal  = (dataa[i] == datab[i]) | (tmp_a_type[4] & tmp_b_type[4]);
 
         always @(posedge clk) begin

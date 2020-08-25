@@ -10,6 +10,7 @@ interface VX_alu_req_if ();
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] thread_mask;
     wire [31:0]             curr_PC;
+    wire [31:0]             next_PC;
     wire [`ALU_BR_BITS-1:0] op_type;
     wire                    is_br_op;
     wire                    rs1_is_PC;
