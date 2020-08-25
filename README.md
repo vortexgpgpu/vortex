@@ -1,5 +1,5 @@
 [![Linux Build Status](https://travis-ci.org/github/vortexgpgpu/vortex.png?branch=master)](https://travis-ci.org/github/vortexgpgpu/vortex) 
-[![codecov.io](http://codecov.io/github/gtcasl/cash/coverage.svg?branch=master)](http://codecov.io/github/gtcasl/cash?branch=master)
+[![codecov.io](http://codecov.io/github/vortexgpgpu/vortex/coverage.svg?branch=master)](http://codecov.io/github/vortexgpgpu/vortex?branch=master)
 
 # Vortex RISC-V GPGPU
 
