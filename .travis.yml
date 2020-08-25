@@ -1,0 +1,40 @@
+language: cpp
+dist: focal
+os: linux
+compiler: gcc
+addons:
+    apt:
+        sources:
+        - ubuntu-toolchain-r-test
+        packages:
+        - build-essential
+        - valgrind
+        - verilator
+        - yosys
+        
+install:
+  # RISCV_TOOLCHAIN
+  - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain
+  - wget https://github.com/stnolting/riscv_gcc_prebuilt/raw/master/data/$TOOLCHAIN_V.tar.gz
+  - mkdir $RISCV_TOOLCHAIN_PATH
+  - tar -xzf $TOOLCHAIN_V.tar.gz -C $RISCV_TOOLCHAIN_PATH
+    
+  # VORTEX
+  - git clone --recursive https://github.com/vortexgpgpu/vortex.git
+  - cd Vortex
+  - make
+  - make -C benchmarks/opencl/sgemm
+  - make -C benchmarks/opencl/sgemm run
+
+script:   
+  - ci/test_runtime.sh
+  - ci/test_driver.sh
+  - ci/test_riscv_isa.sh
+  - ci/test_opencl.sh
+  
+after_success:
+  # Gather code coverage
+  - lcov --directory . --capture --output-file coverage.info # capture trace  
+  - lcov --list coverage.info # trace report
+  # Upload coverage report
+  - bash <(curl -s https://codecov.io/bash)
