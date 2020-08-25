@@ -74,7 +74,7 @@ module VX_fp_fpga #(
         .ready_in   (per_core_ready_in[0]),        
         .tag_in     (tag_in),        
         .op_type    (op_type),
-        .frm        (op_mod),
+        .frm        (frm),
         .dataa      (dataa),
         .datab      (datab),
         .result     (per_core_result[0]), 
@@ -278,14 +278,14 @@ module VX_fp_fpga #(
 
     always @(*) begin
         per_core_ready_out = 0;
-        valid_out_r  = 0;
-        has_fflags_r = 0;
-        result_r     = 'x;
-        tag_out_r    = 'x;
+        valid_out_r        = 0;
+        has_fflags_r       = 'x;
+        result_r           = 'x;
+        tag_out_r          = 'x;
         for (integer i = 0; i < NUM_FPC; i++) begin
             if (per_core_valid_out[i]) begin
                 per_core_ready_out[i] = 1;
-                valid_out_r  = i;
+                valid_out_r  = 1;
                 has_fflags_r = fpnew_has_fflags && (i == 0);
                 result_r     = per_core_result[i];
                 tag_out_r    = per_core_tag_out[i];

@@ -45,14 +45,15 @@ module VX_csr_unit #(
         .clk            (clk),
         .reset          (reset),
         .cmt_to_csr_if  (cmt_to_csr_if),
-        .csr_to_issue_if  (csr_to_issue_if), 
+        .csr_to_issue_if(csr_to_issue_if), 
         .read_enable    (csr_pipe_req_if.valid),
         .read_addr      (csr_pipe_req_if.csr_addr),
+        .read_wid       (csr_pipe_req_if.wid),      
         .read_data      (csr_read_data),
-        .write_enable   (csr_we_s1),
-        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0]),
+        .write_enable   (csr_we_s1),        
         .write_addr     (csr_addr_s1), 
-        .wid            (csr_pipe_req_if.wid)        
+        .write_wid      (csr_pipe_rsp_if.wid),
+        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0])
     );    
 
     wire csr_hazard = (csr_addr_s1 == csr_pipe_req_if.csr_addr)
