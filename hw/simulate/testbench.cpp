@@ -166,18 +166,6 @@ int main(int argc, char **argv) {
 		if (!passed)
 			break;
 	}
-	
-
-//	char* test = argv[2];
-	
-//	std::cerr << test << std::endl;
-
-//	RAM ram;
-//	Simulator simulator;
-//	simulator.attach_ram(&ram);
-//	simulator.load_ihex(test);
-//	simulator.run();
-
 	return 0;
 }
 
