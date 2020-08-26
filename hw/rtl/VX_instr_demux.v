@@ -48,7 +48,8 @@ module VX_instr_demux (
     );
 
     VX_gpr_bypass #(
-        .DATAW ((2 * `NUM_THREADS * 32))
+        .DATAW (2 * `NUM_THREADS * 32),
+        .PASSTHRU (1) // ALU has no back-pressure, bypass not needed
     ) alu_bypass (
         .clk       (clk),
         .reset     (reset),
@@ -231,6 +232,6 @@ module VX_instr_demux (
                        `ifdef EXT_F_ENABLE
                            || (fpu_req_ready && (execute_if.ex_type == `EX_FPU))
                        `endif
-                           || (gpu_req_ready && (execute_if.ex_type == `EX_GPU));
+                           || (gpu_req_ready && (execute_if.ex_type == `EX_GPU));    
     
 endmodule

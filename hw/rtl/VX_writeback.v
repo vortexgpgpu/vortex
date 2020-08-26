@@ -23,42 +23,46 @@ module VX_writeback #(
     wire mul_valid = mul_commit_if.valid && mul_commit_if.wb;
     wire fpu_valid = fpu_commit_if.valid && fpu_commit_if.wb;
 
-    VX_writeback_if writeback_tmp_if();    
-
-    assign writeback_tmp_if.valid = alu_valid ? alu_commit_if.valid :
-                                    lsu_valid ? lsu_commit_if.valid :
-                                    csr_valid ? csr_commit_if.valid :             
-                                    mul_valid ? mul_commit_if.valid :                            
-                                    fpu_valid ? fpu_commit_if.valid :                                                 
-                                                0;     
-
-    assign writeback_tmp_if.wid = alu_valid ? alu_commit_if.wid :
-                                    lsu_valid ? lsu_commit_if.wid :   
-                                    csr_valid ? csr_commit_if.wid :   
-                                    mul_valid ? mul_commit_if.wid :                            
-                                    fpu_valid ? fpu_commit_if.wid :  
-                                                0;
+    wire wb_valid;
+    wire [`NW_BITS-1:0] wb_wid;
+    wire [`NUM_THREADS-1:0] wb_thread_mask;
+    wire [`NR_BITS-1:0] wb_rd;
+    wire [`NUM_THREADS-1:0][31:0] wb_data;
     
-    assign writeback_tmp_if.thread_mask = alu_valid ? alu_commit_if.thread_mask :
-                                    lsu_valid ? lsu_commit_if.thread_mask :   
-                                    csr_valid ? csr_commit_if.thread_mask :   
-                                    mul_valid ? mul_commit_if.thread_mask :                            
-                                    fpu_valid ? fpu_commit_if.thread_mask :  
-                                                0;
+    assign wb_valid =       alu_valid ? alu_commit_if.valid :
+                            lsu_valid ? lsu_commit_if.valid :
+                            csr_valid ? csr_commit_if.valid :             
+                            mul_valid ? mul_commit_if.valid :                            
+                            fpu_valid ? fpu_commit_if.valid :                                                 
+                                        0;     
 
-    assign writeback_tmp_if.rd =    alu_valid ? alu_commit_if.rd :
-                                    lsu_valid ? lsu_commit_if.rd :                           
-                                    csr_valid ? csr_commit_if.rd :                           
-                                    mul_valid ? mul_commit_if.rd :                            
-                                    fpu_valid ? fpu_commit_if.rd :                                                               
-                                                0;
+    assign wb_wid =         alu_valid ? alu_commit_if.wid :
+                            lsu_valid ? lsu_commit_if.wid :   
+                            csr_valid ? csr_commit_if.wid :   
+                            mul_valid ? mul_commit_if.wid :                            
+                            fpu_valid ? fpu_commit_if.wid :  
+                                        0;
+    
+    assign wb_thread_mask = alu_valid ? alu_commit_if.thread_mask :
+                            lsu_valid ? lsu_commit_if.thread_mask :   
+                            csr_valid ? csr_commit_if.thread_mask :   
+                            mul_valid ? mul_commit_if.thread_mask :                            
+                            fpu_valid ? fpu_commit_if.thread_mask :  
+                                        0;
 
-    assign writeback_tmp_if.data =  alu_valid ? alu_commit_if.data :
-                                    lsu_valid ? lsu_commit_if.data :                           
-                                    csr_valid ? csr_commit_if.data :                           
-                                    mul_valid ? mul_commit_if.data :                            
-                                    fpu_valid ? fpu_commit_if.data :                                                               
-                                                0;
+    assign wb_rd =          alu_valid ? alu_commit_if.rd :
+                            lsu_valid ? lsu_commit_if.rd :                           
+                            csr_valid ? csr_commit_if.rd :                           
+                            mul_valid ? mul_commit_if.rd :                            
+                            fpu_valid ? fpu_commit_if.rd :                                                               
+                                        0;
+
+    assign wb_data =        alu_valid ? alu_commit_if.data :
+                            lsu_valid ? lsu_commit_if.data :                           
+                            csr_valid ? csr_commit_if.data :                           
+                            mul_valid ? mul_commit_if.data :                            
+                            fpu_valid ? fpu_commit_if.data :                                                               
+                                        0;
 
     wire stall = ~writeback_if.ready && writeback_if.valid;
 
@@ -69,8 +73,8 @@ module VX_writeback #(
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({writeback_tmp_if.valid, writeback_tmp_if.wid, writeback_tmp_if.thread_mask, writeback_tmp_if.rd, writeback_tmp_if.data}),
-        .out   ({writeback_if.valid,     writeback_if.wid,     writeback_if.thread_mask,     writeback_if.rd,     writeback_if.data})
+        .in    ({wb_valid,           wb_wid,           wb_thread_mask,           wb_rd,           wb_data}),
+        .out   ({writeback_if.valid, writeback_if.wid, writeback_if.thread_mask, writeback_if.rd, writeback_if.data})
     );
 
     assign alu_commit_if.ready = !stall;    
