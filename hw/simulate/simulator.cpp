@@ -12,6 +12,7 @@ double sc_time_stamp() {
 Simulator::Simulator() {  
   // force random values for unitialized signals  
   Verilated::randReset(2);
+  Verilated::randSeed(50);
 
   // Turn off assertion before reset
   Verilated::assertOn(false);
