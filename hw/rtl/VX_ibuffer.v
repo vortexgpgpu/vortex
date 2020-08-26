@@ -83,12 +83,11 @@ module VX_ibuffer #(
     reg [`NW_BITS-1:0] deq_wid, deq_wid_n;
     reg deq_valid, deq_valid_n;
     reg [DATAW-1:0] deq_instr, deq_instr_n;
-    reg deq_is_size1, deq_is_size1_n;
-    
+        
     always @(*) begin
         valid_table_n = valid_table;        
-        if (deq_fire && deq_is_size1) begin
-            valid_table_n[ibuf_deq_if.wid] = 0;
+        if (deq_fire) begin
+            valid_table_n[ibuf_deq_if.wid] = (q_size[deq_wid] != SIZEW'(1));
         end
         if (enq_fire) begin
             valid_table_n[ibuf_enq_if.wid] = 1;
@@ -96,32 +95,35 @@ module VX_ibuffer #(
     end 
 
     always @(*) begin    
-        deq_valid_n    = 0;     
-        deq_wid_n      = 'x;        
-        deq_instr_n    = 'x;
-        deq_is_size1_n = 'x;
+        deq_valid_n = 0;     
+        deq_wid_n   = 'x;        
+        deq_instr_n = 'x;
 
-        schedule_table_n = schedule_table;
-        if (deq_fire && deq_is_size1) begin
-            schedule_table_n[ibuf_deq_if.wid] = 0;            
-        end
-
-        for (integer i = 0; i < `NUM_WARPS; i++) begin
-            if (schedule_table_n[i]) begin 
-                deq_valid_n    = 1;               
-                deq_wid_n      = `NW_BITS'(i);                
-                deq_instr_n    = (deq_fire && (ibuf_deq_if.wid == `NW_BITS'(i))) ? q_data_prev[i] : q_data_out[i];
-                deq_is_size1_n = (~(enq_fire && ibuf_enq_if.wid == `NW_BITS'(i)) 
-                              && (((deq_fire && ibuf_deq_if.wid == `NW_BITS'(i)) && (SIZEW'(2) == q_size[i])) 
-                               || (SIZEW'(1) == q_size[i])));
-                schedule_table_n[i] = 0;                
-                break;
+        schedule_table_n = schedule_table;         
+        
+        if (0 == num_warps) begin
+            deq_valid_n = enq_fire;
+            deq_wid_n   = ibuf_enq_if.wid;
+            deq_instr_n = q_data_in;  
+        end else if ((1 == num_warps) || freeze) begin   
+            deq_valid_n = (!deq_fire || (q_size[deq_wid] != SIZEW'(1))) || enq_fire;               
+            deq_wid_n   = (!deq_fire || (q_size[deq_wid] != SIZEW'(1))) ? deq_wid : ibuf_enq_if.wid;
+            deq_instr_n = deq_fire ? ((q_size[deq_wid] != SIZEW'(1)) ? q_data_prev[deq_wid] : q_data_in) : q_data_out[deq_wid];  
+        end else begin
+            for (integer i = 0; i < `NUM_WARPS; i++) begin
+                if (schedule_table_n[i]) begin 
+                    deq_valid_n    = 1;               
+                    deq_wid_n      = `NW_BITS'(i);                
+                    deq_instr_n    = q_data_out[i];
+                    schedule_table_n[i] = 0;                   
+                    break;
+                end
             end
-        end
+        end   
     end
 
-    wire warp_added   = enq_fire && (0 == q_size[ibuf_enq_if.wid]) && (!deq_fire || ibuf_enq_if.wid != ibuf_deq_if.wid);
-    wire warp_removed = deq_fire && (1 == q_size[ibuf_deq_if.wid]) && (!enq_fire || ibuf_enq_if.wid != ibuf_deq_if.wid);
+    wire warp_added   = enq_fire && (0 == q_size[ibuf_enq_if.wid]);
+    wire warp_removed = deq_fire && ~(enq_fire && ibuf_enq_if.wid == ibuf_deq_if.wid) && (1 == q_size[ibuf_deq_if.wid]);
     
     always @(posedge clk) begin
         if (reset)  begin            
@@ -130,20 +132,18 @@ module VX_ibuffer #(
             deq_valid      <= 0;  
             num_warps      <= 0;
         end else begin
-            valid_table     <= valid_table_n;
-            schedule_table  <= (| schedule_table_n) ? schedule_table_n : valid_table_n;
+            valid_table    <= valid_table_n;
 
-            if (enq_fire && (0 == num_warps)) begin
-                deq_valid    <= 1;
-                deq_wid      <= ibuf_enq_if.wid;
-                deq_instr    <= q_data_in;    
-                deq_is_size1 <= 1;
-            end else if (!freeze) begin
-                deq_valid    <= deq_valid_n;
-                deq_wid      <= deq_wid_n;
-                deq_instr    <= deq_instr_n;                  
-                deq_is_size1 <= deq_is_size1_n;
-            end            
+            if ((| schedule_table_n)) begin
+                schedule_table <= schedule_table_n;
+            end else begin
+                schedule_table <= valid_table_n;
+                schedule_table[deq_wid_n] <= 0;
+            end
+
+            deq_valid      <= deq_valid_n;
+            deq_wid        <= deq_wid_n;
+            deq_instr      <= deq_instr_n;                  
 
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);
@@ -151,14 +151,19 @@ module VX_ibuffer #(
                 num_warps <= num_warps - NWARPSW'(1);                
             end            
 
-        `ifdef VERILATOR
+        `ifdef VERILATOR            
+            /*if (enq_fire || deq_fire || deq_valid) begin   
+                $display("*** %t: cur=%b(%0d), nxt=%b(%0d), enq=%b(%0d), deq=%b(%0d), nw=%0d(%0d,%0d,%0d,%0d), sched=%b, sched_n=%b", 
+                $time, deq_valid, deq_wid, deq_valid_n, deq_wid_n, enq_fire, ibuf_enq_if.wid, deq_fire, ibuf_deq_if.wid, num_warps, size_r[0], size_r[1], size_r[2], size_r[3], schedule_table, schedule_table_n);
+            end*/
             begin // verify 'num_warps'
                 integer nw = 0; 
                 for (integer i = 0; i < `NUM_WARPS; i++) begin
                     nw += 32'(q_size[i] != 0);
                 end
-                assert(nw == 32'(num_warps));
-                assert(~deq_fire || num_warps != 0);
+                assert(nw == 32'(num_warps)) else $display("%t: error: invalid num_warps: nw=%0d, ref=%0d", $time, num_warps, nw);
+                assert(~deq_valid || (q_size[deq_wid] != 0)) else $display("%t: error: invalid schedule: wid=%0d", $time, deq_wid);
+                assert(~deq_fire || (q_size[deq_wid] != 0)) else $display("%t: error: invalid dequeu: wid=%0d", $time, deq_wid);
             end
         `endif
         end

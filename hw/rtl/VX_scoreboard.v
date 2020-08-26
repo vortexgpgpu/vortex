@@ -55,7 +55,7 @@ module VX_scoreboard  #(
         if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin
             $display("%t: core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b, gpr=%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.curr_PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
-                    inuse_reg_mask[ibuf_deq_if.rd], inuse_reg_mask[ibuf_deq_if.rs1], inuse_reg_mask[ibuf_deq_if.rs2], inuse_reg_mask[ibuf_deq_if.rs3], exe_delay, gpr_delay);
+                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay, gpr_delay);
         end
     end
 `endif

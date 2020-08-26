@@ -5,15 +5,15 @@ module VX_ipdom_stack #(
     parameter WIDTH = 1,
     parameter DEPTH = 1
 ) (
-    input  wire              clk,
-    input  wire              reset,
-    input  reg [WIDTH - 1:0] q1,
-    input  reg [WIDTH - 1:0] q2,
-    output wire[WIDTH - 1:0] d,
-    input  wire              push,
-    input  wire              pop,
-    output wire              empty,
-    output wire              full
+    input  wire               clk,
+    input  wire               reset,
+    input  wire [WIDTH - 1:0] q1,
+    input  wire [WIDTH - 1:0] q2,
+    output wire [WIDTH - 1:0] d,
+    input  wire               push,
+    input  wire               pop,
+    output wire               empty,
+    output wire               full
 );
     localparam STACK_SIZE = 2 ** DEPTH;
 
