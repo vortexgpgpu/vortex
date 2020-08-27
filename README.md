@@ -65,7 +65,7 @@ Install Verilator
 
 Install Vortex 
 
-    $ git clone --recursive https://github.gatech.edu/casl/Vortex.git
+    $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
     $ make
 

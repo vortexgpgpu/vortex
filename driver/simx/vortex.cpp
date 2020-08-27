@@ -357,3 +357,11 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
 
     return device->wait(timeout);
 }
+
+extern int vx_csr_set(vx_device_h /*hdevice*/, int /*core*/, int /*address*/, unsigned /*value*/) {
+    return -1;
+}
+
+extern int vx_csr_get(vx_device_h /*hdevice*/, int /*core*/, int /*address*/, unsigned* /*value*/) {
+    return -1;
+}

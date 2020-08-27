@@ -91,7 +91,7 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
   return err;
 }
 
-extern int vx_get_perf(vx_device_h device, uint64_t* cycles, uint64_t* instrs) {
+extern int vx_get_perf(vx_device_h device, size_t* cycles, size_t* instrs) {
   int ret = 0;
 
   unsigned value;
