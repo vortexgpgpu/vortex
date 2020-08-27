@@ -69,7 +69,7 @@ Install Vortex
     $ cd Vortex
     $ make
 
-Quick Test running SGEMM kernel
+Quick Test running OpenCL vecadd program
 
     $ cd /Vortex/benchmarks/opencl/vecadd
     $ make
