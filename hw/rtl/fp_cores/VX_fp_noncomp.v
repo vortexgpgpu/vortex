@@ -85,30 +85,28 @@ module VX_fp_noncomp #(
         wire tmp_a_smaller = $signed(dataa[i]) < $signed(datab[i]);
         wire tmp_ab_equal  = (dataa[i] == datab[i]) | (tmp_a_type[4] & tmp_b_type[4]);
 
-        always @(posedge clk) begin
-            if (~stall) begin
-                a_sign[i]     <= tmp_a_sign;
-                b_sign[i]     <= tmp_b_sign;
-                a_exponent[i] <= tmp_a_exponent;
-                b_exponent[i] <= tmp_b_exponent;
-                a_mantissa[i] <= tmp_a_mantissa;
-                b_mantissa[i] <= tmp_b_mantissa;
-                a_type[i]     <= tmp_a_type;
-                b_type[i]     <= tmp_b_type;
-                a_smaller[i]  <= tmp_a_smaller;
-                ab_equal[i]   <= tmp_ab_equal;
-            end
-        end 
-    end   
+        VX_generic_register #(
+            .N(1 + 1 + 8 + 8 + 23 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
+        ) fnc1_reg (
+            .clk   (clk),
+            .reset (reset),
+            .stall (stall),
+            .flush (1'b0),
+            .in    ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_b_exponent, tmp_a_mantissa, tmp_b_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
+            .out   ({a_sign[i],  b_sign[i],  a_exponent[i],  b_exponent[i],  a_mantissa[i],  b_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
+        );
+    end  
 
-    always @(posedge clk) begin
-        if (~stall) begin
-            op_type_r <= op_type;
-            frm_r     <= frm;
-            dataa_r   <= dataa;
-            datab_r   <= datab;
-        end
-    end 
+    VX_generic_register #(
+        .N(`FPU_BITS + `FRM_BITS + (2 * `NUM_THREADS * 32))
+    ) fnc2_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall),
+        .flush (1'b0),
+        .in    ({op_type,   frm,   dataa,   datab}),
+        .out   ({op_type_r, frm_r, dataa_r, datab_r})
+    ); 
 
     // FCLASS
     for (genvar i = 0; i < LANES; i++) begin

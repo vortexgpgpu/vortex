@@ -23,8 +23,11 @@ module VX_gpr_fp_ctrl (
 
 	always @(posedge clk) begin
 		if (reset) begin
-			read_rs3 <= 0;
-			rs3_wid  <= 0;
+			read_rs3     <= 0;			
+			rs3_wid      <= 0;
+			rs1_tmp_data <= 0;
+			rs2_tmp_data <= 0;
+			rs3_tmp_data <= 0;
 		end else begin
 			if (rs3_delay) begin
 				read_rs3 <= 1;

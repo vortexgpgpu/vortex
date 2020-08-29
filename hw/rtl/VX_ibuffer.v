@@ -83,6 +83,8 @@ module VX_ibuffer #(
     reg [`NW_BITS-1:0] deq_wid, deq_wid_n;
     reg deq_valid, deq_valid_n;
     reg [DATAW-1:0] deq_instr, deq_instr_n;
+
+    reg [DATAW-1:0] q_data_prev_r, q_data_out_r;
         
     always @(*) begin
         valid_table_n = valid_table;        
@@ -94,6 +96,8 @@ module VX_ibuffer #(
         end
     end 
 
+    // schedule the next instruction to issue
+    // does round-robin scheduling when multiple warps are present
     always @(*) begin    
         deq_valid_n = 0;     
         deq_wid_n   = 'x;        
@@ -108,7 +112,7 @@ module VX_ibuffer #(
         end else if ((1 == num_warps) || freeze) begin   
             deq_valid_n = (!deq_fire || (q_size[deq_wid] != SIZEW'(1))) || enq_fire;               
             deq_wid_n   = (!deq_fire || (q_size[deq_wid] != SIZEW'(1))) ? deq_wid : ibuf_enq_if.wid;
-            deq_instr_n = deq_fire ? ((q_size[deq_wid] != SIZEW'(1)) ? q_data_prev[deq_wid] : q_data_in) : q_data_out[deq_wid];  
+            deq_instr_n = deq_fire ? ((q_size[deq_wid] != SIZEW'(1)) ? q_data_prev_r : q_data_in) : q_data_out_r;
         end else begin
             for (integer i = 0; i < `NUM_WARPS; i++) begin
                 if (schedule_table_n[i]) begin 
@@ -130,9 +134,9 @@ module VX_ibuffer #(
             valid_table    <= 0;
             schedule_table <= 0;
             deq_valid      <= 0;  
-            num_warps      <= 0;
+            num_warps      <= 0;         
         end else begin
-            valid_table    <= valid_table_n;
+            valid_table <= valid_table_n;
 
             if ((| schedule_table_n)) begin
                 schedule_table <= schedule_table_n;
@@ -141,9 +145,12 @@ module VX_ibuffer #(
                 schedule_table[deq_wid_n] <= 0;
             end
 
-            deq_valid      <= deq_valid_n;
-            deq_wid        <= deq_wid_n;
-            deq_instr      <= deq_instr_n;                  
+            q_data_out_r  <= (0 == num_warps) ? q_data_in : q_data_out[deq_wid_n];
+            q_data_prev_r <= q_data_prev[deq_wid_n];
+
+            deq_valid <= deq_valid_n;
+            deq_wid   <= deq_wid_n;
+            deq_instr <= deq_instr_n;                  
 
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);

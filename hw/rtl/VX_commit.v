@@ -111,7 +111,7 @@ module VX_commit #(
         end
     end
 `else    
-    `UNUSED_FIELD(fpu_commit_if, curr_PC)
+    `UNUSED_VAR(fpu_commit_if.curr_PC)
 `endif
 
 endmodule

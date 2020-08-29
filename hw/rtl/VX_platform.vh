@@ -31,13 +31,7 @@
                               /* verilator lint_on UNDRIVEN */ \
                               /* verilator lint_on DECLFILENAME */
 
-`define UNUSED_VAR(x) /* verilator lint_off UNUSED */ \
-                      wire [$bits(x)-1:0] __``x``__ = x; \
-                      /* verilator lint_on UNUSED */
-
-`define UNUSED_FIELD(x,y) /* verilator lint_off UNUSED */ \
-                      wire [$bits(x.y)-1:0] __``y``__ = x.y; \
-                      /* verilator lint_on UNUSED */
+`define UNUSED_VAR(x) always @(x) begin end
 
 `define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
                        . x () \
