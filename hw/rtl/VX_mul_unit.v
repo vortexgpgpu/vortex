@@ -35,7 +35,7 @@ module VX_mul_unit #(
     VX_cam_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE  (`MULQ_SIZE)
-    ) mul_queue  (
+    ) mul_cam  (
         .clk            (clk),
         .reset          (reset),
         .acquire_slot   (mulq_push),       

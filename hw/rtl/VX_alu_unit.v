@@ -72,9 +72,9 @@ module VX_alu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             case (alu_op_class)                        
-                0: alu_result[i] = is_sub ? sub_result[i][31:0] : add_result[i];
+                0: alu_result[i] = add_result[i];
                 1: alu_result[i] = {31'b0, sub_result[i][32]};
-                2: alu_result[i] = shift_result[i];
+                2: alu_result[i] = is_sub ? sub_result[i][31:0] : shift_result[i];
                 default: alu_result[i] = misc_result[i];
             endcase
         end       

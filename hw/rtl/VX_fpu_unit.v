@@ -38,7 +38,7 @@ module VX_fpu_unit #(
     VX_cam_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE  (`FPUQ_SIZE)
-    ) mul_queue  (
+    ) fpu_cam  (
         .clk            (clk),
         .reset          (reset),
         .acquire_slot   (fpuq_push),       

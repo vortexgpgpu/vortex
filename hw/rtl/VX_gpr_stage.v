@@ -52,10 +52,10 @@ module VX_gpr_stage #(
     assign gpr_read_if.rs3_data = 0;
     assign gpr_read_if.ready_in = 1;
     
-    `UNUSED_FIELD (gpr_read_if, valid);
-    `UNUSED_FIELD (gpr_read_if, use_rs3);
-    `UNUSED_FIELD (gpr_read_if, rs3);
-    `UNUSED_FIELD (gpr_read_if, ready_out);
+    `UNUSED_VAR (gpr_read_if.valid);
+    `UNUSED_VAR (gpr_read_if.use_rs3);
+    `UNUSED_VAR (gpr_read_if.rs3);
+    `UNUSED_VAR (gpr_read_if.ready_out);
 `endif
 
     assign writeback_if.ready = 1'b1;
