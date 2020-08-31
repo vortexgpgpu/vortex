@@ -650,6 +650,7 @@ module VX_bank #(
     assign core_rsp_valid = !cwbq_empty;
 
     // Enqueue DRAM fill request
+    
     wire dram_fill_req_fast   = miss_add_unqual; // Completely unqualified hint that we might send a dram_fill_req
     wire dram_fill_req_unqual = dram_fill_req_fast
                              && (!mrvq_init_ready_state_st2 

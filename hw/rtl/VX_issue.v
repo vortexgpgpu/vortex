@@ -22,15 +22,17 @@ module VX_issue #(
     VX_gpr_read_if  gpr_read_if();
 
     wire scoreboard_delay;
+    wire [`NW_BITS-1:0] deq_wid_next;
 
     VX_ibuffer #(
         .CORE_ID(CORE_ID)
     ) ibuffer (
         .clk            (clk),
         .reset          (reset), 
+        .freeze         (~gpr_read_if.ready_in),
         .ibuf_enq_if    (decode_if),
-        .ibuf_deq_if    (ibuf_deq_if),
-        .freeze         (~gpr_read_if.ready_in)  
+        .deq_wid_next   (deq_wid_next),
+        .ibuf_deq_if    (ibuf_deq_if)      
     );
 
     VX_scoreboard #(
@@ -40,6 +42,7 @@ module VX_issue #(
         .reset          (reset), 
         .ibuf_deq_if    (ibuf_deq_if),
         .writeback_if   (writeback_if),
+        .deq_wid_next   (deq_wid_next),
         .exe_delay      (~execute_if.ready),
         .gpr_delay      (~gpr_read_if.ready_in),
         .delay          (scoreboard_delay)

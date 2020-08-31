@@ -47,7 +47,7 @@ module VX_fp_noncomp #(
     reg [LANES-1:0]       a_sign, b_sign;
     reg [LANES-1:0][7:0]  a_exponent;
     reg [LANES-1:0][22:0] a_mantissa;
-    fp_type_t [LANES-1:0]  a_type, b_type;
+    fp_type_t [LANES-1:0] a_type, b_type;
     reg [LANES-1:0] a_smaller, ab_equal;
 
     reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
