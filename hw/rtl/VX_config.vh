@@ -89,7 +89,7 @@
 `endif
 
 `ifndef LATENCY_FSQRT
-`define LATENCY_FSQRT 9
+`define LATENCY_FSQRT 10
 `endif
 
 `ifndef LATENCY_ITOF
@@ -98,6 +98,18 @@
 
 `ifndef LATENCY_FTOI
 `define LATENCY_FTOI 3
+`endif
+
+`ifndef LATENCY_FADDMUL
+`define LATENCY_FADDMUL 2
+`endif
+
+`ifndef LATENCY_FDIVSQRT
+`define LATENCY_FDIVSQRT 2
+`endif
+
+`ifndef LATENCY_FCONV
+`define LATENCY_FCONV 2
 `endif
 
 // CSR Addresses //////////////////////////////////////////////////////////////
