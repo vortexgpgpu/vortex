@@ -56,7 +56,7 @@ module VX_fpu_unit #(
     // can accept new request?
     assign fpu_req_if.ready = ready_in && ~fpuq_full;
 
-`ifdef SYNTHESIS
+`ifndef FPNEW_ENABLE
 
     VX_fp_fpga #(
         .TAGW (FPUQ_BITS)

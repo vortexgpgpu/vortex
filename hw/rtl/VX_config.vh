@@ -51,14 +51,54 @@
 `define L3_ENABLE (`NUM_CLUSTERS > 1)
 `endif
 
+`ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
+`endif
 
+`ifndef EXT_F_DISABLE
 `define EXT_F_ENABLE
+`endif
+
+`define FPNEW_ENABLE
 
 // Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
 `define IMPLEMENTATION_ID   0
+
+///////////////////////////////////////////////////////////////////////////////
+
+`ifndef LATENCY_IMUL
+`define LATENCY_IMUL 3
+`endif
+
+`ifndef LATENCY_FNONCOMP
+`define LATENCY_FNONCOMP 1
+`endif
+
+`ifndef LATENCY_FMADD
+`define LATENCY_FMADD 1
+`endif
+
+`ifndef LATENCY_FNMADD
+`define LATENCY_FNMADD 2
+`endif
+
+`ifndef LATENCY_FDIV
+`define LATENCY_FDIV 15
+`endif
+
+`ifndef LATENCY_FSQRT
+`define LATENCY_FSQRT 9
+`endif
+
+`ifndef LATENCY_ITOF
+`define LATENCY_ITOF 7
+`endif
+
+`ifndef LATENCY_FTOI
+`define LATENCY_FTOI 3
+`endif
 
 // CSR Addresses //////////////////////////////////////////////////////////////
 
