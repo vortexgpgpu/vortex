@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 // SystemVerilog created from acl_fp_div
-// SystemVerilog created on Wed Aug  5 12:58:14 2020
+// SystemVerilog created on Mon Aug 31 06:15:17 2020
 
 
 (* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION OFF; -name MESSAGE_DISABLE 10036; -name MESSAGE_DISABLE 10037; -name MESSAGE_DISABLE 14130; -name MESSAGE_DISABLE 14320; -name MESSAGE_DISABLE 15400; -name MESSAGE_DISABLE 14130; -name MESSAGE_DISABLE 10036; -name MESSAGE_DISABLE 12020; -name MESSAGE_DISABLE 12030; -name MESSAGE_DISABLE 12010; -name MESSAGE_DISABLE 12110; -name MESSAGE_DISABLE 14320; -name MESSAGE_DISABLE 13410; -name MESSAGE_DISABLE 113007; -name MESSAGE_DISABLE 10958" *)
@@ -118,18 +118,15 @@ module acl_fp_div (
     wire [0:0] regOverRegWithUf_uid86_fpDivTest_q;
     wire [0:0] xRegOrZero_uid87_fpDivTest_q;
     wire [0:0] regOrZeroOverInf_uid88_fpDivTest_q;
-    wire [0:0] excRZero_uid89_fpDivTest_qi;
-    reg [0:0] excRZero_uid89_fpDivTest_q;
+    wire [0:0] excRZero_uid89_fpDivTest_q;
     wire [0:0] excXRYZ_uid90_fpDivTest_q;
     wire [0:0] excXRYROvf_uid91_fpDivTest_q;
     wire [0:0] excXIYZ_uid92_fpDivTest_q;
     wire [0:0] excXIYR_uid93_fpDivTest_q;
-    wire [0:0] excRInf_uid94_fpDivTest_qi;
-    reg [0:0] excRInf_uid94_fpDivTest_q;
+    wire [0:0] excRInf_uid94_fpDivTest_q;
     wire [0:0] excXZYZ_uid95_fpDivTest_q;
     wire [0:0] excXIYI_uid96_fpDivTest_q;
-    wire [0:0] excRNaN_uid97_fpDivTest_qi;
-    reg [0:0] excRNaN_uid97_fpDivTest_q;
+    wire [0:0] excRNaN_uid97_fpDivTest_q;
     wire [2:0] concExc_uid98_fpDivTest_q;
     reg [1:0] excREnc_uid99_fpDivTest_q;
     wire [22:0] oneFracRPostExc2_uid100_fpDivTest_q;
@@ -138,7 +135,8 @@ module acl_fp_div (
     wire [1:0] expRPostExc_uid107_fpDivTest_s;
     reg [7:0] expRPostExc_uid107_fpDivTest_q;
     wire [0:0] invExcRNaN_uid108_fpDivTest_q;
-    wire [0:0] sRPostExc_uid109_fpDivTest_q;
+    wire [0:0] sRPostExc_uid109_fpDivTest_qi;
+    reg [0:0] sRPostExc_uid109_fpDivTest_q;
     wire [31:0] divR_uid110_fpDivTest_q;
     wire [11:0] yT1_uid124_invPolyEval_b;
     wire [0:0] lowRangeB_uid126_invPolyEval_in;
@@ -235,80 +233,78 @@ module acl_fp_div (
     reg [0:0] redist1_lowRangeB_uid126_invPolyEval_b_1_q;
     reg [7:0] redist2_excRPreExc_uid79_fpDivTest_b_1_q;
     reg [22:0] redist3_fracRPreExc_uid78_fpDivTest_b_1_q;
-    reg [0:0] redist4_norm_uid67_fpDivTest_b_1_q;
-    reg [23:0] redist5_lOAdded_uid58_fpDivTest_q_3_q;
-    reg [0:0] redist6_fracYPostZ_uid56_fpDivTest_q_4_q;
-    reg [13:0] redist7_yPE_uid52_fpDivTest_b_2_q;
-    reg [8:0] redist9_yAddr_uid51_fpDivTest_b_3_q;
-    reg [8:0] redist10_yAddr_uid51_fpDivTest_b_7_q;
-    reg [0:0] redist12_signR_uid46_fpDivTest_q_16_q;
-    reg [0:0] redist13_fracXIsZero_uid39_fpDivTest_q_15_q;
-    reg [0:0] redist14_expXIsMax_uid38_fpDivTest_q_15_q;
-    reg [0:0] redist15_excZ_y_uid37_fpDivTest_q_15_q;
-    reg [0:0] redist16_fracXIsZero_uid25_fpDivTest_q_5_q;
-    reg [0:0] redist17_expXIsMax_uid24_fpDivTest_q_15_q;
-    reg [0:0] redist18_excZ_x_uid23_fpDivTest_q_15_q;
-    reg [0:0] redist19_fracYZero_uid15_fpDivTest_q_9_q;
-    wire redist8_yPE_uid52_fpDivTest_b_6_mem_reset0;
-    wire [13:0] redist8_yPE_uid52_fpDivTest_b_6_mem_ia;
-    wire [1:0] redist8_yPE_uid52_fpDivTest_b_6_mem_aa;
-    wire [1:0] redist8_yPE_uid52_fpDivTest_b_6_mem_ab;
-    wire [13:0] redist8_yPE_uid52_fpDivTest_b_6_mem_iq;
-    wire [13:0] redist8_yPE_uid52_fpDivTest_b_6_mem_q;
-    wire [1:0] redist8_yPE_uid52_fpDivTest_b_6_rdcnt_q;
-    (* preserve *) reg [1:0] redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i;
-    (* preserve *) reg redist8_yPE_uid52_fpDivTest_b_6_rdcnt_eq;
-    wire [0:0] redist8_yPE_uid52_fpDivTest_b_6_rdmux_s;
-    reg [1:0] redist8_yPE_uid52_fpDivTest_b_6_rdmux_q;
-    reg [1:0] redist8_yPE_uid52_fpDivTest_b_6_wraddr_q;
-    wire [1:0] redist8_yPE_uid52_fpDivTest_b_6_mem_last_q;
-    wire [0:0] redist8_yPE_uid52_fpDivTest_b_6_cmp_q;
-    reg [0:0] redist8_yPE_uid52_fpDivTest_b_6_cmpReg_q;
-    wire [0:0] redist8_yPE_uid52_fpDivTest_b_6_notEnable_q;
-    wire [0:0] redist8_yPE_uid52_fpDivTest_b_6_nor_q;
-    (* preserve_syn_only *) reg [0:0] redist8_yPE_uid52_fpDivTest_b_6_sticky_ena_q;
-    wire [0:0] redist8_yPE_uid52_fpDivTest_b_6_enaAnd_q;
-    reg [8:0] redist11_expXmY_uid47_fpDivTest_q_13_outputreg_q;
-    wire redist11_expXmY_uid47_fpDivTest_q_13_mem_reset0;
-    wire [8:0] redist11_expXmY_uid47_fpDivTest_q_13_mem_ia;
-    wire [3:0] redist11_expXmY_uid47_fpDivTest_q_13_mem_aa;
-    wire [3:0] redist11_expXmY_uid47_fpDivTest_q_13_mem_ab;
-    wire [8:0] redist11_expXmY_uid47_fpDivTest_q_13_mem_iq;
-    wire [8:0] redist11_expXmY_uid47_fpDivTest_q_13_mem_q;
-    wire [3:0] redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_q;
-    (* preserve *) reg [3:0] redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i;
-    (* preserve *) reg redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_eq;
-    wire [0:0] redist11_expXmY_uid47_fpDivTest_q_13_rdmux_s;
-    reg [3:0] redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q;
-    reg [3:0] redist11_expXmY_uid47_fpDivTest_q_13_wraddr_q;
-    wire [4:0] redist11_expXmY_uid47_fpDivTest_q_13_mem_last_q;
-    wire [4:0] redist11_expXmY_uid47_fpDivTest_q_13_cmp_b;
-    wire [0:0] redist11_expXmY_uid47_fpDivTest_q_13_cmp_q;
-    reg [0:0] redist11_expXmY_uid47_fpDivTest_q_13_cmpReg_q;
-    wire [0:0] redist11_expXmY_uid47_fpDivTest_q_13_notEnable_q;
-    wire [0:0] redist11_expXmY_uid47_fpDivTest_q_13_nor_q;
-    (* preserve_syn_only *) reg [0:0] redist11_expXmY_uid47_fpDivTest_q_13_sticky_ena_q;
-    wire [0:0] redist11_expXmY_uid47_fpDivTest_q_13_enaAnd_q;
-    reg [22:0] redist20_fracX_uid10_fpDivTest_b_10_outputreg_q;
-    wire redist20_fracX_uid10_fpDivTest_b_10_mem_reset0;
-    wire [22:0] redist20_fracX_uid10_fpDivTest_b_10_mem_ia;
-    wire [2:0] redist20_fracX_uid10_fpDivTest_b_10_mem_aa;
-    wire [2:0] redist20_fracX_uid10_fpDivTest_b_10_mem_ab;
-    wire [22:0] redist20_fracX_uid10_fpDivTest_b_10_mem_iq;
-    wire [22:0] redist20_fracX_uid10_fpDivTest_b_10_mem_q;
-    wire [2:0] redist20_fracX_uid10_fpDivTest_b_10_rdcnt_q;
-    (* preserve *) reg [2:0] redist20_fracX_uid10_fpDivTest_b_10_rdcnt_i;
-    wire [0:0] redist20_fracX_uid10_fpDivTest_b_10_rdmux_s;
-    reg [2:0] redist20_fracX_uid10_fpDivTest_b_10_rdmux_q;
-    reg [2:0] redist20_fracX_uid10_fpDivTest_b_10_wraddr_q;
-    wire [3:0] redist20_fracX_uid10_fpDivTest_b_10_mem_last_q;
-    wire [3:0] redist20_fracX_uid10_fpDivTest_b_10_cmp_b;
-    wire [0:0] redist20_fracX_uid10_fpDivTest_b_10_cmp_q;
-    reg [0:0] redist20_fracX_uid10_fpDivTest_b_10_cmpReg_q;
-    wire [0:0] redist20_fracX_uid10_fpDivTest_b_10_notEnable_q;
-    wire [0:0] redist20_fracX_uid10_fpDivTest_b_10_nor_q;
-    (* preserve_syn_only *) reg [0:0] redist20_fracX_uid10_fpDivTest_b_10_sticky_ena_q;
-    wire [0:0] redist20_fracX_uid10_fpDivTest_b_10_enaAnd_q;
+    reg [23:0] redist4_lOAdded_uid58_fpDivTest_q_3_q;
+    reg [0:0] redist5_fracYPostZ_uid56_fpDivTest_q_4_q;
+    reg [13:0] redist6_yPE_uid52_fpDivTest_b_2_q;
+    reg [8:0] redist8_yAddr_uid51_fpDivTest_b_3_q;
+    reg [8:0] redist9_yAddr_uid51_fpDivTest_b_7_q;
+    reg [0:0] redist11_signR_uid46_fpDivTest_q_14_q;
+    reg [0:0] redist12_fracXIsZero_uid39_fpDivTest_q_14_q;
+    reg [0:0] redist13_expXIsMax_uid38_fpDivTest_q_14_q;
+    reg [0:0] redist14_excZ_y_uid37_fpDivTest_q_14_q;
+    reg [0:0] redist15_fracXIsZero_uid25_fpDivTest_q_4_q;
+    reg [0:0] redist16_expXIsMax_uid24_fpDivTest_q_14_q;
+    reg [0:0] redist17_excZ_x_uid23_fpDivTest_q_14_q;
+    reg [0:0] redist18_fracYZero_uid15_fpDivTest_q_9_q;
+    wire redist7_yPE_uid52_fpDivTest_b_6_mem_reset0;
+    wire [13:0] redist7_yPE_uid52_fpDivTest_b_6_mem_ia;
+    wire [1:0] redist7_yPE_uid52_fpDivTest_b_6_mem_aa;
+    wire [1:0] redist7_yPE_uid52_fpDivTest_b_6_mem_ab;
+    wire [13:0] redist7_yPE_uid52_fpDivTest_b_6_mem_iq;
+    wire [13:0] redist7_yPE_uid52_fpDivTest_b_6_mem_q;
+    wire [1:0] redist7_yPE_uid52_fpDivTest_b_6_rdcnt_q;
+    (* preserve *) reg [1:0] redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i;
+    (* preserve *) reg redist7_yPE_uid52_fpDivTest_b_6_rdcnt_eq;
+    wire [0:0] redist7_yPE_uid52_fpDivTest_b_6_rdmux_s;
+    reg [1:0] redist7_yPE_uid52_fpDivTest_b_6_rdmux_q;
+    reg [1:0] redist7_yPE_uid52_fpDivTest_b_6_wraddr_q;
+    wire [1:0] redist7_yPE_uid52_fpDivTest_b_6_mem_last_q;
+    wire [0:0] redist7_yPE_uid52_fpDivTest_b_6_cmp_q;
+    reg [0:0] redist7_yPE_uid52_fpDivTest_b_6_cmpReg_q;
+    wire [0:0] redist7_yPE_uid52_fpDivTest_b_6_notEnable_q;
+    wire [0:0] redist7_yPE_uid52_fpDivTest_b_6_nor_q;
+    (* preserve_syn_only *) reg [0:0] redist7_yPE_uid52_fpDivTest_b_6_sticky_ena_q;
+    wire [0:0] redist7_yPE_uid52_fpDivTest_b_6_enaAnd_q;
+    reg [8:0] redist10_expXmY_uid47_fpDivTest_q_13_outputreg_q;
+    wire redist10_expXmY_uid47_fpDivTest_q_13_mem_reset0;
+    wire [8:0] redist10_expXmY_uid47_fpDivTest_q_13_mem_ia;
+    wire [3:0] redist10_expXmY_uid47_fpDivTest_q_13_mem_aa;
+    wire [3:0] redist10_expXmY_uid47_fpDivTest_q_13_mem_ab;
+    wire [8:0] redist10_expXmY_uid47_fpDivTest_q_13_mem_iq;
+    wire [8:0] redist10_expXmY_uid47_fpDivTest_q_13_mem_q;
+    wire [3:0] redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_q;
+    (* preserve *) reg [3:0] redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i;
+    (* preserve *) reg redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_eq;
+    wire [0:0] redist10_expXmY_uid47_fpDivTest_q_13_rdmux_s;
+    reg [3:0] redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q;
+    reg [3:0] redist10_expXmY_uid47_fpDivTest_q_13_wraddr_q;
+    wire [4:0] redist10_expXmY_uid47_fpDivTest_q_13_mem_last_q;
+    wire [4:0] redist10_expXmY_uid47_fpDivTest_q_13_cmp_b;
+    wire [0:0] redist10_expXmY_uid47_fpDivTest_q_13_cmp_q;
+    reg [0:0] redist10_expXmY_uid47_fpDivTest_q_13_cmpReg_q;
+    wire [0:0] redist10_expXmY_uid47_fpDivTest_q_13_notEnable_q;
+    wire [0:0] redist10_expXmY_uid47_fpDivTest_q_13_nor_q;
+    (* preserve_syn_only *) reg [0:0] redist10_expXmY_uid47_fpDivTest_q_13_sticky_ena_q;
+    wire [0:0] redist10_expXmY_uid47_fpDivTest_q_13_enaAnd_q;
+    wire redist19_fracX_uid10_fpDivTest_b_10_mem_reset0;
+    wire [22:0] redist19_fracX_uid10_fpDivTest_b_10_mem_ia;
+    wire [3:0] redist19_fracX_uid10_fpDivTest_b_10_mem_aa;
+    wire [3:0] redist19_fracX_uid10_fpDivTest_b_10_mem_ab;
+    wire [22:0] redist19_fracX_uid10_fpDivTest_b_10_mem_iq;
+    wire [22:0] redist19_fracX_uid10_fpDivTest_b_10_mem_q;
+    wire [3:0] redist19_fracX_uid10_fpDivTest_b_10_rdcnt_q;
+    (* preserve *) reg [3:0] redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i;
+    (* preserve *) reg redist19_fracX_uid10_fpDivTest_b_10_rdcnt_eq;
+    wire [0:0] redist19_fracX_uid10_fpDivTest_b_10_rdmux_s;
+    reg [3:0] redist19_fracX_uid10_fpDivTest_b_10_rdmux_q;
+    reg [3:0] redist19_fracX_uid10_fpDivTest_b_10_wraddr_q;
+    wire [3:0] redist19_fracX_uid10_fpDivTest_b_10_mem_last_q;
+    wire [0:0] redist19_fracX_uid10_fpDivTest_b_10_cmp_q;
+    reg [0:0] redist19_fracX_uid10_fpDivTest_b_10_cmpReg_q;
+    wire [0:0] redist19_fracX_uid10_fpDivTest_b_10_notEnable_q;
+    wire [0:0] redist19_fracX_uid10_fpDivTest_b_10_nor_q;
+    (* preserve_syn_only *) reg [0:0] redist19_fracX_uid10_fpDivTest_b_10_sticky_ena_q;
+    wire [0:0] redist19_fracX_uid10_fpDivTest_b_10_enaAnd_q;
 
 
     // fracY_uid13_fpDivTest(BITSELECT,12)@0
@@ -322,9 +318,9 @@ module acl_fp_div (
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     fracXIsZero_uid39_fpDivTest_delay ( .xin(fracXIsZero_uid39_fpDivTest_qi), .xout(fracXIsZero_uid39_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist13_fracXIsZero_uid39_fpDivTest_q_15(DELAY,165)
-    dspba_delay_ver #( .width(1), .depth(14), .reset_kind("ASYNC") )
-    redist13_fracXIsZero_uid39_fpDivTest_q_15 ( .xin(fracXIsZero_uid39_fpDivTest_q), .xout(redist13_fracXIsZero_uid39_fpDivTest_q_15_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist12_fracXIsZero_uid39_fpDivTest_q_14(DELAY,164)
+    dspba_delay_ver #( .width(1), .depth(13), .reset_kind("ASYNC") )
+    redist12_fracXIsZero_uid39_fpDivTest_q_14 ( .xin(fracXIsZero_uid39_fpDivTest_q), .xout(redist12_fracXIsZero_uid39_fpDivTest_q_14_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // cstAllOWE_uid18_fpDivTest(CONSTANT,17)
     assign cstAllOWE_uid18_fpDivTest_q = 8'b11111111;
@@ -337,78 +333,93 @@ module acl_fp_div (
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     expXIsMax_uid38_fpDivTest_delay ( .xin(expXIsMax_uid38_fpDivTest_qi), .xout(expXIsMax_uid38_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist14_expXIsMax_uid38_fpDivTest_q_15(DELAY,166)
-    dspba_delay_ver #( .width(1), .depth(14), .reset_kind("ASYNC") )
-    redist14_expXIsMax_uid38_fpDivTest_q_15 ( .xin(expXIsMax_uid38_fpDivTest_q), .xout(redist14_expXIsMax_uid38_fpDivTest_q_15_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist13_expXIsMax_uid38_fpDivTest_q_14(DELAY,165)
+    dspba_delay_ver #( .width(1), .depth(13), .reset_kind("ASYNC") )
+    redist13_expXIsMax_uid38_fpDivTest_q_14 ( .xin(expXIsMax_uid38_fpDivTest_q), .xout(redist13_expXIsMax_uid38_fpDivTest_q_14_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // excI_y_uid41_fpDivTest(LOGICAL,40)@15
-    assign excI_y_uid41_fpDivTest_q = redist14_expXIsMax_uid38_fpDivTest_q_15_q & redist13_fracXIsZero_uid39_fpDivTest_q_15_q;
+    // excI_y_uid41_fpDivTest(LOGICAL,40)@14
+    assign excI_y_uid41_fpDivTest_q = redist13_expXIsMax_uid38_fpDivTest_q_14_q & redist12_fracXIsZero_uid39_fpDivTest_q_14_q;
 
-    // redist20_fracX_uid10_fpDivTest_b_10_notEnable(LOGICAL,204)
-    assign redist20_fracX_uid10_fpDivTest_b_10_notEnable_q = ~ (en);
+    // redist19_fracX_uid10_fpDivTest_b_10_notEnable(LOGICAL,202)
+    assign redist19_fracX_uid10_fpDivTest_b_10_notEnable_q = ~ (en);
 
-    // redist20_fracX_uid10_fpDivTest_b_10_nor(LOGICAL,205)
-    assign redist20_fracX_uid10_fpDivTest_b_10_nor_q = ~ (redist20_fracX_uid10_fpDivTest_b_10_notEnable_q | redist20_fracX_uid10_fpDivTest_b_10_sticky_ena_q);
+    // redist19_fracX_uid10_fpDivTest_b_10_nor(LOGICAL,203)
+    assign redist19_fracX_uid10_fpDivTest_b_10_nor_q = ~ (redist19_fracX_uid10_fpDivTest_b_10_notEnable_q | redist19_fracX_uid10_fpDivTest_b_10_sticky_ena_q);
 
-    // redist20_fracX_uid10_fpDivTest_b_10_mem_last(CONSTANT,201)
-    assign redist20_fracX_uid10_fpDivTest_b_10_mem_last_q = 4'b0110;
+    // redist19_fracX_uid10_fpDivTest_b_10_mem_last(CONSTANT,199)
+    assign redist19_fracX_uid10_fpDivTest_b_10_mem_last_q = 4'b0111;
 
-    // redist20_fracX_uid10_fpDivTest_b_10_cmp(LOGICAL,202)
-    assign redist20_fracX_uid10_fpDivTest_b_10_cmp_b = {1'b0, redist20_fracX_uid10_fpDivTest_b_10_rdmux_q};
-    assign redist20_fracX_uid10_fpDivTest_b_10_cmp_q = redist20_fracX_uid10_fpDivTest_b_10_mem_last_q == redist20_fracX_uid10_fpDivTest_b_10_cmp_b ? 1'b1 : 1'b0;
+    // redist19_fracX_uid10_fpDivTest_b_10_cmp(LOGICAL,200)
+    assign redist19_fracX_uid10_fpDivTest_b_10_cmp_q = redist19_fracX_uid10_fpDivTest_b_10_mem_last_q == redist19_fracX_uid10_fpDivTest_b_10_rdmux_q ? 1'b1 : 1'b0;
 
-    // redist20_fracX_uid10_fpDivTest_b_10_cmpReg(REG,203)
+    // redist19_fracX_uid10_fpDivTest_b_10_cmpReg(REG,201)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_cmpReg_q <= 1'b0;
+            redist19_fracX_uid10_fpDivTest_b_10_cmpReg_q <= 1'b0;
         end
         else if (en == 1'b1)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_cmpReg_q <= redist20_fracX_uid10_fpDivTest_b_10_cmp_q;
+            redist19_fracX_uid10_fpDivTest_b_10_cmpReg_q <= redist19_fracX_uid10_fpDivTest_b_10_cmp_q;
         end
     end
 
-    // redist20_fracX_uid10_fpDivTest_b_10_sticky_ena(REG,206)
+    // redist19_fracX_uid10_fpDivTest_b_10_sticky_ena(REG,204)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_sticky_ena_q <= 1'b0;
+            redist19_fracX_uid10_fpDivTest_b_10_sticky_ena_q <= 1'b0;
         end
-        else if (redist20_fracX_uid10_fpDivTest_b_10_nor_q == 1'b1)
+        else if (redist19_fracX_uid10_fpDivTest_b_10_nor_q == 1'b1)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_sticky_ena_q <= redist20_fracX_uid10_fpDivTest_b_10_cmpReg_q;
+            redist19_fracX_uid10_fpDivTest_b_10_sticky_ena_q <= redist19_fracX_uid10_fpDivTest_b_10_cmpReg_q;
         end
     end
 
-    // redist20_fracX_uid10_fpDivTest_b_10_enaAnd(LOGICAL,207)
-    assign redist20_fracX_uid10_fpDivTest_b_10_enaAnd_q = redist20_fracX_uid10_fpDivTest_b_10_sticky_ena_q & en;
+    // redist19_fracX_uid10_fpDivTest_b_10_enaAnd(LOGICAL,205)
+    assign redist19_fracX_uid10_fpDivTest_b_10_enaAnd_q = redist19_fracX_uid10_fpDivTest_b_10_sticky_ena_q & en;
 
-    // redist20_fracX_uid10_fpDivTest_b_10_rdcnt(COUNTER,198)
-    // low=0, high=7, step=1, init=0
+    // redist19_fracX_uid10_fpDivTest_b_10_rdcnt(COUNTER,196)
+    // low=0, high=8, step=1, init=0
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_rdcnt_i <= 3'd0;
+            redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i <= 4'd0;
+            redist19_fracX_uid10_fpDivTest_b_10_rdcnt_eq <= 1'b0;
         end
         else if (en == 1'b1)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_rdcnt_i <= $unsigned(redist20_fracX_uid10_fpDivTest_b_10_rdcnt_i) + $unsigned(3'd1);
+            if (redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i == 4'd7)
+            begin
+                redist19_fracX_uid10_fpDivTest_b_10_rdcnt_eq <= 1'b1;
+            end
+            else
+            begin
+                redist19_fracX_uid10_fpDivTest_b_10_rdcnt_eq <= 1'b0;
+            end
+            if (redist19_fracX_uid10_fpDivTest_b_10_rdcnt_eq == 1'b1)
+            begin
+                redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i <= $unsigned(redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i) + $unsigned(4'd8);
+            end
+            else
+            begin
+                redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i <= $unsigned(redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i) + $unsigned(4'd1);
+            end
         end
     end
-    assign redist20_fracX_uid10_fpDivTest_b_10_rdcnt_q = redist20_fracX_uid10_fpDivTest_b_10_rdcnt_i[2:0];
+    assign redist19_fracX_uid10_fpDivTest_b_10_rdcnt_q = redist19_fracX_uid10_fpDivTest_b_10_rdcnt_i[3:0];
 
-    // redist20_fracX_uid10_fpDivTest_b_10_rdmux(MUX,199)
-    assign redist20_fracX_uid10_fpDivTest_b_10_rdmux_s = en;
-    always @(redist20_fracX_uid10_fpDivTest_b_10_rdmux_s or redist20_fracX_uid10_fpDivTest_b_10_wraddr_q or redist20_fracX_uid10_fpDivTest_b_10_rdcnt_q)
+    // redist19_fracX_uid10_fpDivTest_b_10_rdmux(MUX,197)
+    assign redist19_fracX_uid10_fpDivTest_b_10_rdmux_s = en;
+    always @(redist19_fracX_uid10_fpDivTest_b_10_rdmux_s or redist19_fracX_uid10_fpDivTest_b_10_wraddr_q or redist19_fracX_uid10_fpDivTest_b_10_rdcnt_q)
     begin
-        unique case (redist20_fracX_uid10_fpDivTest_b_10_rdmux_s)
-            1'b0 : redist20_fracX_uid10_fpDivTest_b_10_rdmux_q = redist20_fracX_uid10_fpDivTest_b_10_wraddr_q;
-            1'b1 : redist20_fracX_uid10_fpDivTest_b_10_rdmux_q = redist20_fracX_uid10_fpDivTest_b_10_rdcnt_q;
-            default : redist20_fracX_uid10_fpDivTest_b_10_rdmux_q = 3'b0;
+        unique case (redist19_fracX_uid10_fpDivTest_b_10_rdmux_s)
+            1'b0 : redist19_fracX_uid10_fpDivTest_b_10_rdmux_q = redist19_fracX_uid10_fpDivTest_b_10_wraddr_q;
+            1'b1 : redist19_fracX_uid10_fpDivTest_b_10_rdmux_q = redist19_fracX_uid10_fpDivTest_b_10_rdcnt_q;
+            default : redist19_fracX_uid10_fpDivTest_b_10_rdmux_q = 4'b0;
         endcase
     end
 
@@ -418,33 +429,33 @@ module acl_fp_div (
     // fracX_uid10_fpDivTest(BITSELECT,9)@0
     assign fracX_uid10_fpDivTest_b = a[22:0];
 
-    // redist20_fracX_uid10_fpDivTest_b_10_wraddr(REG,200)
+    // redist19_fracX_uid10_fpDivTest_b_10_wraddr(REG,198)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_wraddr_q <= 3'b111;
+            redist19_fracX_uid10_fpDivTest_b_10_wraddr_q <= 4'b1000;
         end
         else
         begin
-            redist20_fracX_uid10_fpDivTest_b_10_wraddr_q <= redist20_fracX_uid10_fpDivTest_b_10_rdmux_q;
+            redist19_fracX_uid10_fpDivTest_b_10_wraddr_q <= redist19_fracX_uid10_fpDivTest_b_10_rdmux_q;
         end
     end
 
-    // redist20_fracX_uid10_fpDivTest_b_10_mem(DUALMEM,197)
-    assign redist20_fracX_uid10_fpDivTest_b_10_mem_ia = fracX_uid10_fpDivTest_b;
-    assign redist20_fracX_uid10_fpDivTest_b_10_mem_aa = redist20_fracX_uid10_fpDivTest_b_10_wraddr_q;
-    assign redist20_fracX_uid10_fpDivTest_b_10_mem_ab = redist20_fracX_uid10_fpDivTest_b_10_rdmux_q;
-    assign redist20_fracX_uid10_fpDivTest_b_10_mem_reset0 = areset;
+    // redist19_fracX_uid10_fpDivTest_b_10_mem(DUALMEM,195)
+    assign redist19_fracX_uid10_fpDivTest_b_10_mem_ia = fracX_uid10_fpDivTest_b;
+    assign redist19_fracX_uid10_fpDivTest_b_10_mem_aa = redist19_fracX_uid10_fpDivTest_b_10_wraddr_q;
+    assign redist19_fracX_uid10_fpDivTest_b_10_mem_ab = redist19_fracX_uid10_fpDivTest_b_10_rdmux_q;
+    assign redist19_fracX_uid10_fpDivTest_b_10_mem_reset0 = areset;
     altera_syncram #(
         .ram_block_type("MLAB"),
         .operation_mode("DUAL_PORT"),
         .width_a(23),
-        .widthad_a(3),
-        .numwords_a(8),
+        .widthad_a(4),
+        .numwords_a(9),
         .width_b(23),
-        .widthad_b(3),
-        .numwords_b(8),
+        .widthad_b(4),
+        .numwords_b(9),
         .lpm_type("altera_syncram"),
         .width_byteena_a(1),
         .address_reg_b("CLOCK0"),
@@ -459,17 +470,17 @@ module acl_fp_div (
         .read_during_write_mode_mixed_ports("DONT_CARE"),
         .power_up_uninitialized("TRUE"),
         .intended_device_family("Arria 10")
-    ) redist20_fracX_uid10_fpDivTest_b_10_mem_dmem (
-        .clocken1(redist20_fracX_uid10_fpDivTest_b_10_enaAnd_q[0]),
+    ) redist19_fracX_uid10_fpDivTest_b_10_mem_dmem (
+        .clocken1(redist19_fracX_uid10_fpDivTest_b_10_enaAnd_q[0]),
         .clocken0(VCC_q[0]),
         .clock0(clk),
-        .aclr1(redist20_fracX_uid10_fpDivTest_b_10_mem_reset0),
+        .aclr1(redist19_fracX_uid10_fpDivTest_b_10_mem_reset0),
         .clock1(clk),
-        .address_a(redist20_fracX_uid10_fpDivTest_b_10_mem_aa),
-        .data_a(redist20_fracX_uid10_fpDivTest_b_10_mem_ia),
+        .address_a(redist19_fracX_uid10_fpDivTest_b_10_mem_aa),
+        .data_a(redist19_fracX_uid10_fpDivTest_b_10_mem_ia),
         .wren_a(en[0]),
-        .address_b(redist20_fracX_uid10_fpDivTest_b_10_mem_ab),
-        .q_b(redist20_fracX_uid10_fpDivTest_b_10_mem_iq),
+        .address_b(redist19_fracX_uid10_fpDivTest_b_10_mem_ab),
+        .q_b(redist19_fracX_uid10_fpDivTest_b_10_mem_iq),
         .wren_b(),
         .rden_a(),
         .rden_b(),
@@ -489,20 +500,16 @@ module acl_fp_div (
         .q_a(),
         .eccstatus()
     );
-    assign redist20_fracX_uid10_fpDivTest_b_10_mem_q = redist20_fracX_uid10_fpDivTest_b_10_mem_iq[22:0];
-
-    // redist20_fracX_uid10_fpDivTest_b_10_outputreg(DELAY,196)
-    dspba_delay_ver #( .width(23), .depth(1), .reset_kind("ASYNC") )
-    redist20_fracX_uid10_fpDivTest_b_10_outputreg ( .xin(redist20_fracX_uid10_fpDivTest_b_10_mem_q), .xout(redist20_fracX_uid10_fpDivTest_b_10_outputreg_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    assign redist19_fracX_uid10_fpDivTest_b_10_mem_q = redist19_fracX_uid10_fpDivTest_b_10_mem_iq[22:0];
 
     // fracXIsZero_uid25_fpDivTest(LOGICAL,24)@10 + 1
-    assign fracXIsZero_uid25_fpDivTest_qi = paddingY_uid15_fpDivTest_q == redist20_fracX_uid10_fpDivTest_b_10_outputreg_q ? 1'b1 : 1'b0;
+    assign fracXIsZero_uid25_fpDivTest_qi = paddingY_uid15_fpDivTest_q == redist19_fracX_uid10_fpDivTest_b_10_mem_q ? 1'b1 : 1'b0;
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     fracXIsZero_uid25_fpDivTest_delay ( .xin(fracXIsZero_uid25_fpDivTest_qi), .xout(fracXIsZero_uid25_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist16_fracXIsZero_uid25_fpDivTest_q_5(DELAY,168)
-    dspba_delay_ver #( .width(1), .depth(4), .reset_kind("ASYNC") )
-    redist16_fracXIsZero_uid25_fpDivTest_q_5 ( .xin(fracXIsZero_uid25_fpDivTest_q), .xout(redist16_fracXIsZero_uid25_fpDivTest_q_5_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist15_fracXIsZero_uid25_fpDivTest_q_4(DELAY,167)
+    dspba_delay_ver #( .width(1), .depth(3), .reset_kind("ASYNC") )
+    redist15_fracXIsZero_uid25_fpDivTest_q_4 ( .xin(fracXIsZero_uid25_fpDivTest_q), .xout(redist15_fracXIsZero_uid25_fpDivTest_q_4_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // expX_uid9_fpDivTest(BITSELECT,8)@0
     assign expX_uid9_fpDivTest_b = a[30:23];
@@ -512,27 +519,27 @@ module acl_fp_div (
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     expXIsMax_uid24_fpDivTest_delay ( .xin(expXIsMax_uid24_fpDivTest_qi), .xout(expXIsMax_uid24_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist17_expXIsMax_uid24_fpDivTest_q_15(DELAY,169)
-    dspba_delay_ver #( .width(1), .depth(14), .reset_kind("ASYNC") )
-    redist17_expXIsMax_uid24_fpDivTest_q_15 ( .xin(expXIsMax_uid24_fpDivTest_q), .xout(redist17_expXIsMax_uid24_fpDivTest_q_15_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist16_expXIsMax_uid24_fpDivTest_q_14(DELAY,168)
+    dspba_delay_ver #( .width(1), .depth(13), .reset_kind("ASYNC") )
+    redist16_expXIsMax_uid24_fpDivTest_q_14 ( .xin(expXIsMax_uid24_fpDivTest_q), .xout(redist16_expXIsMax_uid24_fpDivTest_q_14_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // excI_x_uid27_fpDivTest(LOGICAL,26)@15
-    assign excI_x_uid27_fpDivTest_q = redist17_expXIsMax_uid24_fpDivTest_q_15_q & redist16_fracXIsZero_uid25_fpDivTest_q_5_q;
+    // excI_x_uid27_fpDivTest(LOGICAL,26)@14
+    assign excI_x_uid27_fpDivTest_q = redist16_expXIsMax_uid24_fpDivTest_q_14_q & redist15_fracXIsZero_uid25_fpDivTest_q_4_q;
 
-    // excXIYI_uid96_fpDivTest(LOGICAL,95)@15
+    // excXIYI_uid96_fpDivTest(LOGICAL,95)@14
     assign excXIYI_uid96_fpDivTest_q = excI_x_uid27_fpDivTest_q & excI_y_uid41_fpDivTest_q;
 
-    // fracXIsNotZero_uid40_fpDivTest(LOGICAL,39)@15
-    assign fracXIsNotZero_uid40_fpDivTest_q = ~ (redist13_fracXIsZero_uid39_fpDivTest_q_15_q);
+    // fracXIsNotZero_uid40_fpDivTest(LOGICAL,39)@14
+    assign fracXIsNotZero_uid40_fpDivTest_q = ~ (redist12_fracXIsZero_uid39_fpDivTest_q_14_q);
 
-    // excN_y_uid42_fpDivTest(LOGICAL,41)@15
-    assign excN_y_uid42_fpDivTest_q = redist14_expXIsMax_uid38_fpDivTest_q_15_q & fracXIsNotZero_uid40_fpDivTest_q;
+    // excN_y_uid42_fpDivTest(LOGICAL,41)@14
+    assign excN_y_uid42_fpDivTest_q = redist13_expXIsMax_uid38_fpDivTest_q_14_q & fracXIsNotZero_uid40_fpDivTest_q;
 
-    // fracXIsNotZero_uid26_fpDivTest(LOGICAL,25)@15
-    assign fracXIsNotZero_uid26_fpDivTest_q = ~ (redist16_fracXIsZero_uid25_fpDivTest_q_5_q);
+    // fracXIsNotZero_uid26_fpDivTest(LOGICAL,25)@14
+    assign fracXIsNotZero_uid26_fpDivTest_q = ~ (redist15_fracXIsZero_uid25_fpDivTest_q_4_q);
 
-    // excN_x_uid28_fpDivTest(LOGICAL,27)@15
-    assign excN_x_uid28_fpDivTest_q = redist17_expXIsMax_uid24_fpDivTest_q_15_q & fracXIsNotZero_uid26_fpDivTest_q;
+    // excN_x_uid28_fpDivTest(LOGICAL,27)@14
+    assign excN_x_uid28_fpDivTest_q = redist16_expXIsMax_uid24_fpDivTest_q_14_q & fracXIsNotZero_uid26_fpDivTest_q;
 
     // cstAllZWE_uid20_fpDivTest(CONSTANT,19)
     assign cstAllZWE_uid20_fpDivTest_q = 8'b00000000;
@@ -542,28 +549,26 @@ module acl_fp_div (
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     excZ_y_uid37_fpDivTest_delay ( .xin(excZ_y_uid37_fpDivTest_qi), .xout(excZ_y_uid37_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist15_excZ_y_uid37_fpDivTest_q_15(DELAY,167)
-    dspba_delay_ver #( .width(1), .depth(14), .reset_kind("ASYNC") )
-    redist15_excZ_y_uid37_fpDivTest_q_15 ( .xin(excZ_y_uid37_fpDivTest_q), .xout(redist15_excZ_y_uid37_fpDivTest_q_15_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist14_excZ_y_uid37_fpDivTest_q_14(DELAY,166)
+    dspba_delay_ver #( .width(1), .depth(13), .reset_kind("ASYNC") )
+    redist14_excZ_y_uid37_fpDivTest_q_14 ( .xin(excZ_y_uid37_fpDivTest_q), .xout(redist14_excZ_y_uid37_fpDivTest_q_14_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // excZ_x_uid23_fpDivTest(LOGICAL,22)@0 + 1
     assign excZ_x_uid23_fpDivTest_qi = expX_uid9_fpDivTest_b == cstAllZWE_uid20_fpDivTest_q ? 1'b1 : 1'b0;
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     excZ_x_uid23_fpDivTest_delay ( .xin(excZ_x_uid23_fpDivTest_qi), .xout(excZ_x_uid23_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist18_excZ_x_uid23_fpDivTest_q_15(DELAY,170)
-    dspba_delay_ver #( .width(1), .depth(14), .reset_kind("ASYNC") )
-    redist18_excZ_x_uid23_fpDivTest_q_15 ( .xin(excZ_x_uid23_fpDivTest_q), .xout(redist18_excZ_x_uid23_fpDivTest_q_15_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist17_excZ_x_uid23_fpDivTest_q_14(DELAY,169)
+    dspba_delay_ver #( .width(1), .depth(13), .reset_kind("ASYNC") )
+    redist17_excZ_x_uid23_fpDivTest_q_14 ( .xin(excZ_x_uid23_fpDivTest_q), .xout(redist17_excZ_x_uid23_fpDivTest_q_14_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // excXZYZ_uid95_fpDivTest(LOGICAL,94)@15
-    assign excXZYZ_uid95_fpDivTest_q = redist18_excZ_x_uid23_fpDivTest_q_15_q & redist15_excZ_y_uid37_fpDivTest_q_15_q;
+    // excXZYZ_uid95_fpDivTest(LOGICAL,94)@14
+    assign excXZYZ_uid95_fpDivTest_q = redist17_excZ_x_uid23_fpDivTest_q_14_q & redist14_excZ_y_uid37_fpDivTest_q_14_q;
 
-    // excRNaN_uid97_fpDivTest(LOGICAL,96)@15 + 1
-    assign excRNaN_uid97_fpDivTest_qi = excXZYZ_uid95_fpDivTest_q | excN_x_uid28_fpDivTest_q | excN_y_uid42_fpDivTest_q | excXIYI_uid96_fpDivTest_q;
-    dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
-    excRNaN_uid97_fpDivTest_delay ( .xin(excRNaN_uid97_fpDivTest_qi), .xout(excRNaN_uid97_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // excRNaN_uid97_fpDivTest(LOGICAL,96)@14
+    assign excRNaN_uid97_fpDivTest_q = excXZYZ_uid95_fpDivTest_q | excN_x_uid28_fpDivTest_q | excN_y_uid42_fpDivTest_q | excXIYI_uid96_fpDivTest_q;
 
-    // invExcRNaN_uid108_fpDivTest(LOGICAL,107)@16
+    // invExcRNaN_uid108_fpDivTest(LOGICAL,107)@14
     assign invExcRNaN_uid108_fpDivTest_q = ~ (excRNaN_uid97_fpDivTest_q);
 
     // signY_uid14_fpDivTest(BITSELECT,13)@0
@@ -577,25 +582,27 @@ module acl_fp_div (
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     signR_uid46_fpDivTest_delay ( .xin(signR_uid46_fpDivTest_qi), .xout(signR_uid46_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist12_signR_uid46_fpDivTest_q_16(DELAY,164)
-    dspba_delay_ver #( .width(1), .depth(15), .reset_kind("ASYNC") )
-    redist12_signR_uid46_fpDivTest_q_16 ( .xin(signR_uid46_fpDivTest_q), .xout(redist12_signR_uid46_fpDivTest_q_16_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // redist11_signR_uid46_fpDivTest_q_14(DELAY,163)
+    dspba_delay_ver #( .width(1), .depth(13), .reset_kind("ASYNC") )
+    redist11_signR_uid46_fpDivTest_q_14 ( .xin(signR_uid46_fpDivTest_q), .xout(redist11_signR_uid46_fpDivTest_q_14_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // sRPostExc_uid109_fpDivTest(LOGICAL,108)@16
-    assign sRPostExc_uid109_fpDivTest_q = redist12_signR_uid46_fpDivTest_q_16_q & invExcRNaN_uid108_fpDivTest_q;
+    // sRPostExc_uid109_fpDivTest(LOGICAL,108)@14 + 1
+    assign sRPostExc_uid109_fpDivTest_qi = redist11_signR_uid46_fpDivTest_q_14_q & invExcRNaN_uid108_fpDivTest_q;
+    dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
+    sRPostExc_uid109_fpDivTest_delay ( .xin(sRPostExc_uid109_fpDivTest_qi), .xout(sRPostExc_uid109_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // lOAdded_uid58_fpDivTest(BITJOIN,57)@10
-    assign lOAdded_uid58_fpDivTest_q = {VCC_q, redist20_fracX_uid10_fpDivTest_b_10_outputreg_q};
+    assign lOAdded_uid58_fpDivTest_q = {VCC_q, redist19_fracX_uid10_fpDivTest_b_10_mem_q};
 
-    // redist5_lOAdded_uid58_fpDivTest_q_3(DELAY,157)
+    // redist4_lOAdded_uid58_fpDivTest_q_3(DELAY,156)
     dspba_delay_ver #( .width(24), .depth(3), .reset_kind("ASYNC") )
-    redist5_lOAdded_uid58_fpDivTest_q_3 ( .xin(lOAdded_uid58_fpDivTest_q), .xout(redist5_lOAdded_uid58_fpDivTest_q_3_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist4_lOAdded_uid58_fpDivTest_q_3 ( .xin(lOAdded_uid58_fpDivTest_q), .xout(redist4_lOAdded_uid58_fpDivTest_q_3_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // oFracXSE_bottomExtension_uid61_fpDivTest(CONSTANT,60)
     assign oFracXSE_bottomExtension_uid61_fpDivTest_q = 2'b00;
 
     // oFracXSE_mergedSignalTM_uid63_fpDivTest(BITJOIN,62)@13
-    assign oFracXSE_mergedSignalTM_uid63_fpDivTest_q = {redist5_lOAdded_uid58_fpDivTest_q_3_q, oFracXSE_bottomExtension_uid61_fpDivTest_q};
+    assign oFracXSE_mergedSignalTM_uid63_fpDivTest_q = {redist4_lOAdded_uid58_fpDivTest_q_3_q, oFracXSE_bottomExtension_uid61_fpDivTest_q};
 
     // yAddr_uid51_fpDivTest(BITSELECT,50)@0
     assign yAddr_uid51_fpDivTest_b = fracY_uid13_fpDivTest_b[22:14];
@@ -654,12 +661,12 @@ module acl_fp_div (
     // yPE_uid52_fpDivTest(BITSELECT,51)@0
     assign yPE_uid52_fpDivTest_b = b[13:0];
 
-    // redist7_yPE_uid52_fpDivTest_b_2(DELAY,159)
+    // redist6_yPE_uid52_fpDivTest_b_2(DELAY,158)
     dspba_delay_ver #( .width(14), .depth(2), .reset_kind("ASYNC") )
-    redist7_yPE_uid52_fpDivTest_b_2 ( .xin(yPE_uid52_fpDivTest_b), .xout(redist7_yPE_uid52_fpDivTest_b_2_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist6_yPE_uid52_fpDivTest_b_2 ( .xin(yPE_uid52_fpDivTest_b), .xout(redist6_yPE_uid52_fpDivTest_b_2_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // yT1_uid124_invPolyEval(BITSELECT,123)@2
-    assign yT1_uid124_invPolyEval_b = redist7_yPE_uid52_fpDivTest_b_2_q[13:2];
+    assign yT1_uid124_invPolyEval_b = redist6_yPE_uid52_fpDivTest_b_2_q[13:2];
 
     // prodXY_uid140_pT1_uid125_invPolyEval_cma(CHAINMULTADD,149)@2 + 3
     assign prodXY_uid140_pT1_uid125_invPolyEval_cma_reset = areset;
@@ -728,13 +735,13 @@ module acl_fp_div (
     // highBBits_uid127_invPolyEval(BITSELECT,126)@5
     assign highBBits_uid127_invPolyEval_b = osig_uid141_pT1_uid125_invPolyEval_b[12:1];
 
-    // redist9_yAddr_uid51_fpDivTest_b_3(DELAY,161)
+    // redist8_yAddr_uid51_fpDivTest_b_3(DELAY,160)
     dspba_delay_ver #( .width(9), .depth(3), .reset_kind("ASYNC") )
-    redist9_yAddr_uid51_fpDivTest_b_3 ( .xin(yAddr_uid51_fpDivTest_b), .xout(redist9_yAddr_uid51_fpDivTest_b_3_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist8_yAddr_uid51_fpDivTest_b_3 ( .xin(yAddr_uid51_fpDivTest_b), .xout(redist8_yAddr_uid51_fpDivTest_b_3_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // memoryC1_uid115_invTables_lutmem(DUALMEM,146)@3 + 2
     // in j@20000000
-    assign memoryC1_uid115_invTables_lutmem_aa = redist9_yAddr_uid51_fpDivTest_b_3_q;
+    assign memoryC1_uid115_invTables_lutmem_aa = redist8_yAddr_uid51_fpDivTest_b_3_q;
     assign memoryC1_uid115_invTables_lutmem_reset0 = areset;
     altera_syncram #(
         .ram_block_type("M20K"),
@@ -810,107 +817,107 @@ module acl_fp_div (
     // s1_uid129_invPolyEval(BITJOIN,128)@6
     assign s1_uid129_invPolyEval_q = {s1sumAHighB_uid128_invPolyEval_q, redist1_lowRangeB_uid126_invPolyEval_b_1_q};
 
-    // redist8_yPE_uid52_fpDivTest_b_6_notEnable(LOGICAL,180)
-    assign redist8_yPE_uid52_fpDivTest_b_6_notEnable_q = ~ (en);
+    // redist7_yPE_uid52_fpDivTest_b_6_notEnable(LOGICAL,179)
+    assign redist7_yPE_uid52_fpDivTest_b_6_notEnable_q = ~ (en);
 
-    // redist8_yPE_uid52_fpDivTest_b_6_nor(LOGICAL,181)
-    assign redist8_yPE_uid52_fpDivTest_b_6_nor_q = ~ (redist8_yPE_uid52_fpDivTest_b_6_notEnable_q | redist8_yPE_uid52_fpDivTest_b_6_sticky_ena_q);
+    // redist7_yPE_uid52_fpDivTest_b_6_nor(LOGICAL,180)
+    assign redist7_yPE_uid52_fpDivTest_b_6_nor_q = ~ (redist7_yPE_uid52_fpDivTest_b_6_notEnable_q | redist7_yPE_uid52_fpDivTest_b_6_sticky_ena_q);
 
-    // redist8_yPE_uid52_fpDivTest_b_6_mem_last(CONSTANT,177)
-    assign redist8_yPE_uid52_fpDivTest_b_6_mem_last_q = 2'b01;
+    // redist7_yPE_uid52_fpDivTest_b_6_mem_last(CONSTANT,176)
+    assign redist7_yPE_uid52_fpDivTest_b_6_mem_last_q = 2'b01;
 
-    // redist8_yPE_uid52_fpDivTest_b_6_cmp(LOGICAL,178)
-    assign redist8_yPE_uid52_fpDivTest_b_6_cmp_q = redist8_yPE_uid52_fpDivTest_b_6_mem_last_q == redist8_yPE_uid52_fpDivTest_b_6_rdmux_q ? 1'b1 : 1'b0;
+    // redist7_yPE_uid52_fpDivTest_b_6_cmp(LOGICAL,177)
+    assign redist7_yPE_uid52_fpDivTest_b_6_cmp_q = redist7_yPE_uid52_fpDivTest_b_6_mem_last_q == redist7_yPE_uid52_fpDivTest_b_6_rdmux_q ? 1'b1 : 1'b0;
 
-    // redist8_yPE_uid52_fpDivTest_b_6_cmpReg(REG,179)
+    // redist7_yPE_uid52_fpDivTest_b_6_cmpReg(REG,178)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_cmpReg_q <= 1'b0;
+            redist7_yPE_uid52_fpDivTest_b_6_cmpReg_q <= 1'b0;
         end
         else if (en == 1'b1)
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_cmpReg_q <= redist8_yPE_uid52_fpDivTest_b_6_cmp_q;
+            redist7_yPE_uid52_fpDivTest_b_6_cmpReg_q <= redist7_yPE_uid52_fpDivTest_b_6_cmp_q;
         end
     end
 
-    // redist8_yPE_uid52_fpDivTest_b_6_sticky_ena(REG,182)
+    // redist7_yPE_uid52_fpDivTest_b_6_sticky_ena(REG,181)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_sticky_ena_q <= 1'b0;
+            redist7_yPE_uid52_fpDivTest_b_6_sticky_ena_q <= 1'b0;
         end
-        else if (redist8_yPE_uid52_fpDivTest_b_6_nor_q == 1'b1)
+        else if (redist7_yPE_uid52_fpDivTest_b_6_nor_q == 1'b1)
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_sticky_ena_q <= redist8_yPE_uid52_fpDivTest_b_6_cmpReg_q;
+            redist7_yPE_uid52_fpDivTest_b_6_sticky_ena_q <= redist7_yPE_uid52_fpDivTest_b_6_cmpReg_q;
         end
     end
 
-    // redist8_yPE_uid52_fpDivTest_b_6_enaAnd(LOGICAL,183)
-    assign redist8_yPE_uid52_fpDivTest_b_6_enaAnd_q = redist8_yPE_uid52_fpDivTest_b_6_sticky_ena_q & en;
+    // redist7_yPE_uid52_fpDivTest_b_6_enaAnd(LOGICAL,182)
+    assign redist7_yPE_uid52_fpDivTest_b_6_enaAnd_q = redist7_yPE_uid52_fpDivTest_b_6_sticky_ena_q & en;
 
-    // redist8_yPE_uid52_fpDivTest_b_6_rdcnt(COUNTER,174)
+    // redist7_yPE_uid52_fpDivTest_b_6_rdcnt(COUNTER,173)
     // low=0, high=2, step=1, init=0
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i <= 2'd0;
-            redist8_yPE_uid52_fpDivTest_b_6_rdcnt_eq <= 1'b0;
+            redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i <= 2'd0;
+            redist7_yPE_uid52_fpDivTest_b_6_rdcnt_eq <= 1'b0;
         end
         else if (en == 1'b1)
         begin
-            if (redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i == 2'd1)
+            if (redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i == 2'd1)
             begin
-                redist8_yPE_uid52_fpDivTest_b_6_rdcnt_eq <= 1'b1;
+                redist7_yPE_uid52_fpDivTest_b_6_rdcnt_eq <= 1'b1;
             end
             else
             begin
-                redist8_yPE_uid52_fpDivTest_b_6_rdcnt_eq <= 1'b0;
+                redist7_yPE_uid52_fpDivTest_b_6_rdcnt_eq <= 1'b0;
             end
-            if (redist8_yPE_uid52_fpDivTest_b_6_rdcnt_eq == 1'b1)
+            if (redist7_yPE_uid52_fpDivTest_b_6_rdcnt_eq == 1'b1)
             begin
-                redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i <= $unsigned(redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i) + $unsigned(2'd2);
+                redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i <= $unsigned(redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i) + $unsigned(2'd2);
             end
             else
             begin
-                redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i <= $unsigned(redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i) + $unsigned(2'd1);
+                redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i <= $unsigned(redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i) + $unsigned(2'd1);
             end
         end
     end
-    assign redist8_yPE_uid52_fpDivTest_b_6_rdcnt_q = redist8_yPE_uid52_fpDivTest_b_6_rdcnt_i[1:0];
+    assign redist7_yPE_uid52_fpDivTest_b_6_rdcnt_q = redist7_yPE_uid52_fpDivTest_b_6_rdcnt_i[1:0];
 
-    // redist8_yPE_uid52_fpDivTest_b_6_rdmux(MUX,175)
-    assign redist8_yPE_uid52_fpDivTest_b_6_rdmux_s = en;
-    always @(redist8_yPE_uid52_fpDivTest_b_6_rdmux_s or redist8_yPE_uid52_fpDivTest_b_6_wraddr_q or redist8_yPE_uid52_fpDivTest_b_6_rdcnt_q)
+    // redist7_yPE_uid52_fpDivTest_b_6_rdmux(MUX,174)
+    assign redist7_yPE_uid52_fpDivTest_b_6_rdmux_s = en;
+    always @(redist7_yPE_uid52_fpDivTest_b_6_rdmux_s or redist7_yPE_uid52_fpDivTest_b_6_wraddr_q or redist7_yPE_uid52_fpDivTest_b_6_rdcnt_q)
     begin
-        unique case (redist8_yPE_uid52_fpDivTest_b_6_rdmux_s)
-            1'b0 : redist8_yPE_uid52_fpDivTest_b_6_rdmux_q = redist8_yPE_uid52_fpDivTest_b_6_wraddr_q;
-            1'b1 : redist8_yPE_uid52_fpDivTest_b_6_rdmux_q = redist8_yPE_uid52_fpDivTest_b_6_rdcnt_q;
-            default : redist8_yPE_uid52_fpDivTest_b_6_rdmux_q = 2'b0;
+        unique case (redist7_yPE_uid52_fpDivTest_b_6_rdmux_s)
+            1'b0 : redist7_yPE_uid52_fpDivTest_b_6_rdmux_q = redist7_yPE_uid52_fpDivTest_b_6_wraddr_q;
+            1'b1 : redist7_yPE_uid52_fpDivTest_b_6_rdmux_q = redist7_yPE_uid52_fpDivTest_b_6_rdcnt_q;
+            default : redist7_yPE_uid52_fpDivTest_b_6_rdmux_q = 2'b0;
         endcase
     end
 
-    // redist8_yPE_uid52_fpDivTest_b_6_wraddr(REG,176)
+    // redist7_yPE_uid52_fpDivTest_b_6_wraddr(REG,175)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_wraddr_q <= 2'b10;
+            redist7_yPE_uid52_fpDivTest_b_6_wraddr_q <= 2'b10;
         end
         else
         begin
-            redist8_yPE_uid52_fpDivTest_b_6_wraddr_q <= redist8_yPE_uid52_fpDivTest_b_6_rdmux_q;
+            redist7_yPE_uid52_fpDivTest_b_6_wraddr_q <= redist7_yPE_uid52_fpDivTest_b_6_rdmux_q;
         end
     end
 
-    // redist8_yPE_uid52_fpDivTest_b_6_mem(DUALMEM,173)
-    assign redist8_yPE_uid52_fpDivTest_b_6_mem_ia = redist7_yPE_uid52_fpDivTest_b_2_q;
-    assign redist8_yPE_uid52_fpDivTest_b_6_mem_aa = redist8_yPE_uid52_fpDivTest_b_6_wraddr_q;
-    assign redist8_yPE_uid52_fpDivTest_b_6_mem_ab = redist8_yPE_uid52_fpDivTest_b_6_rdmux_q;
-    assign redist8_yPE_uid52_fpDivTest_b_6_mem_reset0 = areset;
+    // redist7_yPE_uid52_fpDivTest_b_6_mem(DUALMEM,172)
+    assign redist7_yPE_uid52_fpDivTest_b_6_mem_ia = redist6_yPE_uid52_fpDivTest_b_2_q;
+    assign redist7_yPE_uid52_fpDivTest_b_6_mem_aa = redist7_yPE_uid52_fpDivTest_b_6_wraddr_q;
+    assign redist7_yPE_uid52_fpDivTest_b_6_mem_ab = redist7_yPE_uid52_fpDivTest_b_6_rdmux_q;
+    assign redist7_yPE_uid52_fpDivTest_b_6_mem_reset0 = areset;
     altera_syncram #(
         .ram_block_type("MLAB"),
         .operation_mode("DUAL_PORT"),
@@ -934,17 +941,17 @@ module acl_fp_div (
         .read_during_write_mode_mixed_ports("DONT_CARE"),
         .power_up_uninitialized("TRUE"),
         .intended_device_family("Arria 10")
-    ) redist8_yPE_uid52_fpDivTest_b_6_mem_dmem (
-        .clocken1(redist8_yPE_uid52_fpDivTest_b_6_enaAnd_q[0]),
+    ) redist7_yPE_uid52_fpDivTest_b_6_mem_dmem (
+        .clocken1(redist7_yPE_uid52_fpDivTest_b_6_enaAnd_q[0]),
         .clocken0(VCC_q[0]),
         .clock0(clk),
-        .aclr1(redist8_yPE_uid52_fpDivTest_b_6_mem_reset0),
+        .aclr1(redist7_yPE_uid52_fpDivTest_b_6_mem_reset0),
         .clock1(clk),
-        .address_a(redist8_yPE_uid52_fpDivTest_b_6_mem_aa),
-        .data_a(redist8_yPE_uid52_fpDivTest_b_6_mem_ia),
+        .address_a(redist7_yPE_uid52_fpDivTest_b_6_mem_aa),
+        .data_a(redist7_yPE_uid52_fpDivTest_b_6_mem_ia),
         .wren_a(en[0]),
-        .address_b(redist8_yPE_uid52_fpDivTest_b_6_mem_ab),
-        .q_b(redist8_yPE_uid52_fpDivTest_b_6_mem_iq),
+        .address_b(redist7_yPE_uid52_fpDivTest_b_6_mem_ab),
+        .q_b(redist7_yPE_uid52_fpDivTest_b_6_mem_iq),
         .wren_b(),
         .rden_a(),
         .rden_b(),
@@ -964,7 +971,7 @@ module acl_fp_div (
         .q_a(),
         .eccstatus()
     );
-    assign redist8_yPE_uid52_fpDivTest_b_6_mem_q = redist8_yPE_uid52_fpDivTest_b_6_mem_iq[13:0];
+    assign redist7_yPE_uid52_fpDivTest_b_6_mem_q = redist7_yPE_uid52_fpDivTest_b_6_mem_iq[13:0];
 
     // prodXY_uid143_pT2_uid131_invPolyEval_cma(CHAINMULTADD,150)@6 + 3
     assign prodXY_uid143_pT2_uid131_invPolyEval_cma_reset = areset;
@@ -988,7 +995,7 @@ module acl_fp_div (
         begin
             if (prodXY_uid143_pT2_uid131_invPolyEval_cma_ena0 == 1'b1)
             begin
-                prodXY_uid143_pT2_uid131_invPolyEval_cma_a0[0] <= redist8_yPE_uid52_fpDivTest_b_6_mem_q;
+                prodXY_uid143_pT2_uid131_invPolyEval_cma_a0[0] <= redist7_yPE_uid52_fpDivTest_b_6_mem_q;
                 prodXY_uid143_pT2_uid131_invPolyEval_cma_c0[0] <= s1_uid129_invPolyEval_q;
             end
         end
@@ -1033,13 +1040,13 @@ module acl_fp_div (
     // highBBits_uid133_invPolyEval(BITSELECT,132)@9
     assign highBBits_uid133_invPolyEval_b = osig_uid144_pT2_uid131_invPolyEval_b[23:2];
 
-    // redist10_yAddr_uid51_fpDivTest_b_7(DELAY,162)
+    // redist9_yAddr_uid51_fpDivTest_b_7(DELAY,161)
     dspba_delay_ver #( .width(9), .depth(4), .reset_kind("ASYNC") )
-    redist10_yAddr_uid51_fpDivTest_b_7 ( .xin(redist9_yAddr_uid51_fpDivTest_b_3_q), .xout(redist10_yAddr_uid51_fpDivTest_b_7_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist9_yAddr_uid51_fpDivTest_b_7 ( .xin(redist8_yAddr_uid51_fpDivTest_b_3_q), .xout(redist9_yAddr_uid51_fpDivTest_b_7_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // memoryC0_uid112_invTables_lutmem(DUALMEM,145)@7 + 2
     // in j@20000000
-    assign memoryC0_uid112_invTables_lutmem_aa = redist10_yAddr_uid51_fpDivTest_b_7_q;
+    assign memoryC0_uid112_invTables_lutmem_aa = redist9_yAddr_uid51_fpDivTest_b_7_q;
     assign memoryC0_uid112_invTables_lutmem_reset0 = areset;
     altera_syncram #(
         .ram_block_type("M20K"),
@@ -1185,21 +1192,21 @@ module acl_fp_div (
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     fracYZero_uid15_fpDivTest_delay ( .xin(fracYZero_uid15_fpDivTest_qi), .xout(fracYZero_uid15_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist19_fracYZero_uid15_fpDivTest_q_9(DELAY,171)
+    // redist18_fracYZero_uid15_fpDivTest_q_9(DELAY,170)
     dspba_delay_ver #( .width(1), .depth(8), .reset_kind("ASYNC") )
-    redist19_fracYZero_uid15_fpDivTest_q_9 ( .xin(fracYZero_uid15_fpDivTest_q), .xout(redist19_fracYZero_uid15_fpDivTest_q_9_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist18_fracYZero_uid15_fpDivTest_q_9 ( .xin(fracYZero_uid15_fpDivTest_q), .xout(redist18_fracYZero_uid15_fpDivTest_q_9_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // fracYPostZ_uid56_fpDivTest(LOGICAL,55)@9 + 1
-    assign fracYPostZ_uid56_fpDivTest_qi = redist19_fracYZero_uid15_fpDivTest_q_9_q | invY_uid54_fpDivTest_merged_bit_select_c;
+    assign fracYPostZ_uid56_fpDivTest_qi = redist18_fracYZero_uid15_fpDivTest_q_9_q | invY_uid54_fpDivTest_merged_bit_select_c;
     dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
     fracYPostZ_uid56_fpDivTest_delay ( .xin(fracYPostZ_uid56_fpDivTest_qi), .xout(fracYPostZ_uid56_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // redist6_fracYPostZ_uid56_fpDivTest_q_4(DELAY,158)
+    // redist5_fracYPostZ_uid56_fpDivTest_q_4(DELAY,157)
     dspba_delay_ver #( .width(1), .depth(3), .reset_kind("ASYNC") )
-    redist6_fracYPostZ_uid56_fpDivTest_q_4 ( .xin(fracYPostZ_uid56_fpDivTest_q), .xout(redist6_fracYPostZ_uid56_fpDivTest_q_4_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist5_fracYPostZ_uid56_fpDivTest_q_4 ( .xin(fracYPostZ_uid56_fpDivTest_q), .xout(redist5_fracYPostZ_uid56_fpDivTest_q_4_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
     // divValPreNormTrunc_uid66_fpDivTest(MUX,65)@13
-    assign divValPreNormTrunc_uid66_fpDivTest_s = redist6_fracYPostZ_uid56_fpDivTest_q_4_q;
+    assign divValPreNormTrunc_uid66_fpDivTest_s = redist5_fracYPostZ_uid56_fpDivTest_q_4_q;
     always @(divValPreNormTrunc_uid66_fpDivTest_s or en or osig_uid138_prodDivPreNormProd_uid60_fpDivTest_b or oFracXSE_mergedSignalTM_uid63_fpDivTest_q)
     begin
         unique case (divValPreNormTrunc_uid66_fpDivTest_s)
@@ -1212,97 +1219,93 @@ module acl_fp_div (
     // norm_uid67_fpDivTest(BITSELECT,66)@13
     assign norm_uid67_fpDivTest_b = divValPreNormTrunc_uid66_fpDivTest_q[25:25];
 
-    // redist4_norm_uid67_fpDivTest_b_1(DELAY,156)
-    dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
-    redist4_norm_uid67_fpDivTest_b_1 ( .xin(norm_uid67_fpDivTest_b), .xout(redist4_norm_uid67_fpDivTest_b_1_q), .ena(en[0]), .clk(clk), .aclr(areset) );
-
-    // rndOp_uid75_fpDivTest(BITJOIN,74)@14
-    assign rndOp_uid75_fpDivTest_q = {redist4_norm_uid67_fpDivTest_b_1_q, paddingY_uid15_fpDivTest_q, VCC_q};
+    // rndOp_uid75_fpDivTest(BITJOIN,74)@13
+    assign rndOp_uid75_fpDivTest_q = {norm_uid67_fpDivTest_b, paddingY_uid15_fpDivTest_q, VCC_q};
 
     // cstBiasM1_uid6_fpDivTest(CONSTANT,5)
     assign cstBiasM1_uid6_fpDivTest_q = 8'b01111110;
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_notEnable(LOGICAL,192)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_notEnable_q = ~ (en);
+    // redist10_expXmY_uid47_fpDivTest_q_13_notEnable(LOGICAL,191)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_notEnable_q = ~ (en);
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_nor(LOGICAL,193)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_nor_q = ~ (redist11_expXmY_uid47_fpDivTest_q_13_notEnable_q | redist11_expXmY_uid47_fpDivTest_q_13_sticky_ena_q);
+    // redist10_expXmY_uid47_fpDivTest_q_13_nor(LOGICAL,192)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_nor_q = ~ (redist10_expXmY_uid47_fpDivTest_q_13_notEnable_q | redist10_expXmY_uid47_fpDivTest_q_13_sticky_ena_q);
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_mem_last(CONSTANT,189)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_mem_last_q = 5'b01000;
+    // redist10_expXmY_uid47_fpDivTest_q_13_mem_last(CONSTANT,188)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_mem_last_q = 5'b01000;
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_cmp(LOGICAL,190)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_cmp_b = {1'b0, redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q};
-    assign redist11_expXmY_uid47_fpDivTest_q_13_cmp_q = redist11_expXmY_uid47_fpDivTest_q_13_mem_last_q == redist11_expXmY_uid47_fpDivTest_q_13_cmp_b ? 1'b1 : 1'b0;
+    // redist10_expXmY_uid47_fpDivTest_q_13_cmp(LOGICAL,189)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_cmp_b = {1'b0, redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q};
+    assign redist10_expXmY_uid47_fpDivTest_q_13_cmp_q = redist10_expXmY_uid47_fpDivTest_q_13_mem_last_q == redist10_expXmY_uid47_fpDivTest_q_13_cmp_b ? 1'b1 : 1'b0;
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_cmpReg(REG,191)
+    // redist10_expXmY_uid47_fpDivTest_q_13_cmpReg(REG,190)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_cmpReg_q <= 1'b0;
+            redist10_expXmY_uid47_fpDivTest_q_13_cmpReg_q <= 1'b0;
         end
         else if (en == 1'b1)
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_cmpReg_q <= redist11_expXmY_uid47_fpDivTest_q_13_cmp_q;
+            redist10_expXmY_uid47_fpDivTest_q_13_cmpReg_q <= redist10_expXmY_uid47_fpDivTest_q_13_cmp_q;
         end
     end
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_sticky_ena(REG,194)
+    // redist10_expXmY_uid47_fpDivTest_q_13_sticky_ena(REG,193)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_sticky_ena_q <= 1'b0;
+            redist10_expXmY_uid47_fpDivTest_q_13_sticky_ena_q <= 1'b0;
         end
-        else if (redist11_expXmY_uid47_fpDivTest_q_13_nor_q == 1'b1)
+        else if (redist10_expXmY_uid47_fpDivTest_q_13_nor_q == 1'b1)
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_sticky_ena_q <= redist11_expXmY_uid47_fpDivTest_q_13_cmpReg_q;
+            redist10_expXmY_uid47_fpDivTest_q_13_sticky_ena_q <= redist10_expXmY_uid47_fpDivTest_q_13_cmpReg_q;
         end
     end
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_enaAnd(LOGICAL,195)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_enaAnd_q = redist11_expXmY_uid47_fpDivTest_q_13_sticky_ena_q & en;
+    // redist10_expXmY_uid47_fpDivTest_q_13_enaAnd(LOGICAL,194)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_enaAnd_q = redist10_expXmY_uid47_fpDivTest_q_13_sticky_ena_q & en;
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_rdcnt(COUNTER,186)
+    // redist10_expXmY_uid47_fpDivTest_q_13_rdcnt(COUNTER,185)
     // low=0, high=9, step=1, init=0
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i <= 4'd0;
-            redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_eq <= 1'b0;
+            redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i <= 4'd0;
+            redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_eq <= 1'b0;
         end
         else if (en == 1'b1)
         begin
-            if (redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i == 4'd8)
+            if (redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i == 4'd8)
             begin
-                redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_eq <= 1'b1;
+                redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_eq <= 1'b1;
             end
             else
             begin
-                redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_eq <= 1'b0;
+                redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_eq <= 1'b0;
             end
-            if (redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_eq == 1'b1)
+            if (redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_eq == 1'b1)
             begin
-                redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i <= $unsigned(redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i) + $unsigned(4'd7);
+                redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i <= $unsigned(redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i) + $unsigned(4'd7);
             end
             else
             begin
-                redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i <= $unsigned(redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i) + $unsigned(4'd1);
+                redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i <= $unsigned(redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i) + $unsigned(4'd1);
             end
         end
     end
-    assign redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_q = redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_i[3:0];
+    assign redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_q = redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_i[3:0];
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_rdmux(MUX,187)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_rdmux_s = en;
-    always @(redist11_expXmY_uid47_fpDivTest_q_13_rdmux_s or redist11_expXmY_uid47_fpDivTest_q_13_wraddr_q or redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_q)
+    // redist10_expXmY_uid47_fpDivTest_q_13_rdmux(MUX,186)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_rdmux_s = en;
+    always @(redist10_expXmY_uid47_fpDivTest_q_13_rdmux_s or redist10_expXmY_uid47_fpDivTest_q_13_wraddr_q or redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_q)
     begin
-        unique case (redist11_expXmY_uid47_fpDivTest_q_13_rdmux_s)
-            1'b0 : redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q = redist11_expXmY_uid47_fpDivTest_q_13_wraddr_q;
-            1'b1 : redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q = redist11_expXmY_uid47_fpDivTest_q_13_rdcnt_q;
-            default : redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q = 4'b0;
+        unique case (redist10_expXmY_uid47_fpDivTest_q_13_rdmux_s)
+            1'b0 : redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q = redist10_expXmY_uid47_fpDivTest_q_13_wraddr_q;
+            1'b1 : redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q = redist10_expXmY_uid47_fpDivTest_q_13_rdcnt_q;
+            default : redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q = 4'b0;
         endcase
     end
 
@@ -1322,24 +1325,24 @@ module acl_fp_div (
     end
     assign expXmY_uid47_fpDivTest_q = expXmY_uid47_fpDivTest_o[8:0];
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_wraddr(REG,188)
+    // redist10_expXmY_uid47_fpDivTest_q_13_wraddr(REG,187)
     always @ (posedge clk or posedge areset)
     begin
         if (areset)
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_wraddr_q <= 4'b1001;
+            redist10_expXmY_uid47_fpDivTest_q_13_wraddr_q <= 4'b1001;
         end
         else
         begin
-            redist11_expXmY_uid47_fpDivTest_q_13_wraddr_q <= redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q;
+            redist10_expXmY_uid47_fpDivTest_q_13_wraddr_q <= redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q;
         end
     end
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_mem(DUALMEM,185)
-    assign redist11_expXmY_uid47_fpDivTest_q_13_mem_ia = expXmY_uid47_fpDivTest_q;
-    assign redist11_expXmY_uid47_fpDivTest_q_13_mem_aa = redist11_expXmY_uid47_fpDivTest_q_13_wraddr_q;
-    assign redist11_expXmY_uid47_fpDivTest_q_13_mem_ab = redist11_expXmY_uid47_fpDivTest_q_13_rdmux_q;
-    assign redist11_expXmY_uid47_fpDivTest_q_13_mem_reset0 = areset;
+    // redist10_expXmY_uid47_fpDivTest_q_13_mem(DUALMEM,184)
+    assign redist10_expXmY_uid47_fpDivTest_q_13_mem_ia = expXmY_uid47_fpDivTest_q;
+    assign redist10_expXmY_uid47_fpDivTest_q_13_mem_aa = redist10_expXmY_uid47_fpDivTest_q_13_wraddr_q;
+    assign redist10_expXmY_uid47_fpDivTest_q_13_mem_ab = redist10_expXmY_uid47_fpDivTest_q_13_rdmux_q;
+    assign redist10_expXmY_uid47_fpDivTest_q_13_mem_reset0 = areset;
     altera_syncram #(
         .ram_block_type("MLAB"),
         .operation_mode("DUAL_PORT"),
@@ -1363,17 +1366,17 @@ module acl_fp_div (
         .read_during_write_mode_mixed_ports("DONT_CARE"),
         .power_up_uninitialized("TRUE"),
         .intended_device_family("Arria 10")
-    ) redist11_expXmY_uid47_fpDivTest_q_13_mem_dmem (
-        .clocken1(redist11_expXmY_uid47_fpDivTest_q_13_enaAnd_q[0]),
+    ) redist10_expXmY_uid47_fpDivTest_q_13_mem_dmem (
+        .clocken1(redist10_expXmY_uid47_fpDivTest_q_13_enaAnd_q[0]),
         .clocken0(VCC_q[0]),
         .clock0(clk),
-        .aclr1(redist11_expXmY_uid47_fpDivTest_q_13_mem_reset0),
+        .aclr1(redist10_expXmY_uid47_fpDivTest_q_13_mem_reset0),
         .clock1(clk),
-        .address_a(redist11_expXmY_uid47_fpDivTest_q_13_mem_aa),
-        .data_a(redist11_expXmY_uid47_fpDivTest_q_13_mem_ia),
+        .address_a(redist10_expXmY_uid47_fpDivTest_q_13_mem_aa),
+        .data_a(redist10_expXmY_uid47_fpDivTest_q_13_mem_ia),
         .wren_a(en[0]),
-        .address_b(redist11_expXmY_uid47_fpDivTest_q_13_mem_ab),
-        .q_b(redist11_expXmY_uid47_fpDivTest_q_13_mem_iq),
+        .address_b(redist10_expXmY_uid47_fpDivTest_q_13_mem_ab),
+        .q_b(redist10_expXmY_uid47_fpDivTest_q_13_mem_iq),
         .wren_b(),
         .rden_a(),
         .rden_b(),
@@ -1393,26 +1396,16 @@ module acl_fp_div (
         .q_a(),
         .eccstatus()
     );
-    assign redist11_expXmY_uid47_fpDivTest_q_13_mem_q = redist11_expXmY_uid47_fpDivTest_q_13_mem_iq[8:0];
+    assign redist10_expXmY_uid47_fpDivTest_q_13_mem_q = redist10_expXmY_uid47_fpDivTest_q_13_mem_iq[8:0];
 
-    // redist11_expXmY_uid47_fpDivTest_q_13_outputreg(DELAY,184)
+    // redist10_expXmY_uid47_fpDivTest_q_13_outputreg(DELAY,183)
     dspba_delay_ver #( .width(9), .depth(1), .reset_kind("ASYNC") )
-    redist11_expXmY_uid47_fpDivTest_q_13_outputreg ( .xin(redist11_expXmY_uid47_fpDivTest_q_13_mem_q), .xout(redist11_expXmY_uid47_fpDivTest_q_13_outputreg_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    redist10_expXmY_uid47_fpDivTest_q_13_outputreg ( .xin(redist10_expXmY_uid47_fpDivTest_q_13_mem_q), .xout(redist10_expXmY_uid47_fpDivTest_q_13_outputreg_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // expR_uid48_fpDivTest(ADD,47)@13 + 1
-    assign expR_uid48_fpDivTest_a = {{2{redist11_expXmY_uid47_fpDivTest_q_13_outputreg_q[8]}}, redist11_expXmY_uid47_fpDivTest_q_13_outputreg_q};
+    // expR_uid48_fpDivTest(ADD,47)@13
+    assign expR_uid48_fpDivTest_a = {{2{redist10_expXmY_uid47_fpDivTest_q_13_outputreg_q[8]}}, redist10_expXmY_uid47_fpDivTest_q_13_outputreg_q};
     assign expR_uid48_fpDivTest_b = {3'b000, cstBiasM1_uid6_fpDivTest_q};
-    always @ (posedge clk or posedge areset)
-    begin
-        if (areset)
-        begin
-            expR_uid48_fpDivTest_o <= 11'b0;
-        end
-        else if (en == 1'b1)
-        begin
-            expR_uid48_fpDivTest_o <= $signed(expR_uid48_fpDivTest_a) + $signed(expR_uid48_fpDivTest_b);
-        end
-    end
+    assign expR_uid48_fpDivTest_o = $signed(expR_uid48_fpDivTest_a) + $signed(expR_uid48_fpDivTest_b);
     assign expR_uid48_fpDivTest_q = expR_uid48_fpDivTest_o[9:0];
 
     // divValPreNormHigh_uid68_fpDivTest(BITSELECT,67)@13
@@ -1423,28 +1416,21 @@ module acl_fp_div (
     assign divValPreNormLow_uid69_fpDivTest_in = divValPreNormTrunc_uid66_fpDivTest_q[23:0];
     assign divValPreNormLow_uid69_fpDivTest_b = divValPreNormLow_uid69_fpDivTest_in[23:0];
 
-    // normFracRnd_uid70_fpDivTest(MUX,69)@13 + 1
+    // normFracRnd_uid70_fpDivTest(MUX,69)@13
     assign normFracRnd_uid70_fpDivTest_s = norm_uid67_fpDivTest_b;
-    always @ (posedge clk or posedge areset)
+    always @(normFracRnd_uid70_fpDivTest_s or en or divValPreNormLow_uid69_fpDivTest_b or divValPreNormHigh_uid68_fpDivTest_b)
     begin
-        if (areset)
-        begin
-            normFracRnd_uid70_fpDivTest_q <= 24'b0;
-        end
-        else if (en == 1'b1)
-        begin
-            unique case (normFracRnd_uid70_fpDivTest_s)
-                1'b0 : normFracRnd_uid70_fpDivTest_q <= divValPreNormLow_uid69_fpDivTest_b;
-                1'b1 : normFracRnd_uid70_fpDivTest_q <= divValPreNormHigh_uid68_fpDivTest_b;
-                default : normFracRnd_uid70_fpDivTest_q <= 24'b0;
-            endcase
-        end
+        unique case (normFracRnd_uid70_fpDivTest_s)
+            1'b0 : normFracRnd_uid70_fpDivTest_q = divValPreNormLow_uid69_fpDivTest_b;
+            1'b1 : normFracRnd_uid70_fpDivTest_q = divValPreNormHigh_uid68_fpDivTest_b;
+            default : normFracRnd_uid70_fpDivTest_q = 24'b0;
+        endcase
     end
 
-    // expFracRnd_uid71_fpDivTest(BITJOIN,70)@14
+    // expFracRnd_uid71_fpDivTest(BITJOIN,70)@13
     assign expFracRnd_uid71_fpDivTest_q = {expR_uid48_fpDivTest_q, normFracRnd_uid70_fpDivTest_q};
 
-    // expFracPostRnd_uid76_fpDivTest(ADD,75)@14 + 1
+    // expFracPostRnd_uid76_fpDivTest(ADD,75)@13 + 1
     assign expFracPostRnd_uid76_fpDivTest_a = {{2{expFracRnd_uid71_fpDivTest_q[33]}}, expFracRnd_uid71_fpDivTest_q};
     assign expFracPostRnd_uid76_fpDivTest_b = {11'b00000000000, rndOp_uid75_fpDivTest_q};
     always @ (posedge clk or posedge areset)
@@ -1460,7 +1446,7 @@ module acl_fp_div (
     end
     assign expFracPostRnd_uid76_fpDivTest_q = expFracPostRnd_uid76_fpDivTest_o[34:0];
 
-    // excRPreExc_uid79_fpDivTest(BITSELECT,78)@15
+    // excRPreExc_uid79_fpDivTest(BITSELECT,78)@14
     assign excRPreExc_uid79_fpDivTest_in = expFracPostRnd_uid76_fpDivTest_q[31:0];
     assign excRPreExc_uid79_fpDivTest_b = excRPreExc_uid79_fpDivTest_in[31:24];
 
@@ -1468,98 +1454,99 @@ module acl_fp_div (
     dspba_delay_ver #( .width(8), .depth(1), .reset_kind("ASYNC") )
     redist2_excRPreExc_uid79_fpDivTest_b_1 ( .xin(excRPreExc_uid79_fpDivTest_b), .xout(redist2_excRPreExc_uid79_fpDivTest_b_1_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // invExpXIsMax_uid43_fpDivTest(LOGICAL,42)@15
-    assign invExpXIsMax_uid43_fpDivTest_q = ~ (redist14_expXIsMax_uid38_fpDivTest_q_15_q);
+    // invExpXIsMax_uid43_fpDivTest(LOGICAL,42)@14
+    assign invExpXIsMax_uid43_fpDivTest_q = ~ (redist13_expXIsMax_uid38_fpDivTest_q_14_q);
 
-    // InvExpXIsZero_uid44_fpDivTest(LOGICAL,43)@15
-    assign InvExpXIsZero_uid44_fpDivTest_q = ~ (redist15_excZ_y_uid37_fpDivTest_q_15_q);
+    // InvExpXIsZero_uid44_fpDivTest(LOGICAL,43)@14
+    assign InvExpXIsZero_uid44_fpDivTest_q = ~ (redist14_excZ_y_uid37_fpDivTest_q_14_q);
 
-    // excR_y_uid45_fpDivTest(LOGICAL,44)@15
+    // excR_y_uid45_fpDivTest(LOGICAL,44)@14
     assign excR_y_uid45_fpDivTest_q = InvExpXIsZero_uid44_fpDivTest_q & invExpXIsMax_uid43_fpDivTest_q;
 
-    // excXIYR_uid93_fpDivTest(LOGICAL,92)@15
+    // excXIYR_uid93_fpDivTest(LOGICAL,92)@14
     assign excXIYR_uid93_fpDivTest_q = excI_x_uid27_fpDivTest_q & excR_y_uid45_fpDivTest_q;
 
-    // excXIYZ_uid92_fpDivTest(LOGICAL,91)@15
-    assign excXIYZ_uid92_fpDivTest_q = excI_x_uid27_fpDivTest_q & redist15_excZ_y_uid37_fpDivTest_q_15_q;
+    // excXIYZ_uid92_fpDivTest(LOGICAL,91)@14
+    assign excXIYZ_uid92_fpDivTest_q = excI_x_uid27_fpDivTest_q & redist14_excZ_y_uid37_fpDivTest_q_14_q;
 
-    // expRExt_uid80_fpDivTest(BITSELECT,79)@15
+    // expRExt_uid80_fpDivTest(BITSELECT,79)@14
     assign expRExt_uid80_fpDivTest_b = expFracPostRnd_uid76_fpDivTest_q[34:24];
 
-    // expOvf_uid84_fpDivTest(COMPARE,83)@15
+    // expOvf_uid84_fpDivTest(COMPARE,83)@14
     assign expOvf_uid84_fpDivTest_a = {{2{expRExt_uid80_fpDivTest_b[10]}}, expRExt_uid80_fpDivTest_b};
     assign expOvf_uid84_fpDivTest_b = {5'b00000, cstAllOWE_uid18_fpDivTest_q};
     assign expOvf_uid84_fpDivTest_o = $signed(expOvf_uid84_fpDivTest_a) - $signed(expOvf_uid84_fpDivTest_b);
     assign expOvf_uid84_fpDivTest_n[0] = ~ (expOvf_uid84_fpDivTest_o[12]);
 
-    // invExpXIsMax_uid29_fpDivTest(LOGICAL,28)@15
-    assign invExpXIsMax_uid29_fpDivTest_q = ~ (redist17_expXIsMax_uid24_fpDivTest_q_15_q);
+    // invExpXIsMax_uid29_fpDivTest(LOGICAL,28)@14
+    assign invExpXIsMax_uid29_fpDivTest_q = ~ (redist16_expXIsMax_uid24_fpDivTest_q_14_q);
 
-    // InvExpXIsZero_uid30_fpDivTest(LOGICAL,29)@15
-    assign InvExpXIsZero_uid30_fpDivTest_q = ~ (redist18_excZ_x_uid23_fpDivTest_q_15_q);
+    // InvExpXIsZero_uid30_fpDivTest(LOGICAL,29)@14
+    assign InvExpXIsZero_uid30_fpDivTest_q = ~ (redist17_excZ_x_uid23_fpDivTest_q_14_q);
 
-    // excR_x_uid31_fpDivTest(LOGICAL,30)@15
+    // excR_x_uid31_fpDivTest(LOGICAL,30)@14
     assign excR_x_uid31_fpDivTest_q = InvExpXIsZero_uid30_fpDivTest_q & invExpXIsMax_uid29_fpDivTest_q;
 
-    // excXRYROvf_uid91_fpDivTest(LOGICAL,90)@15
+    // excXRYROvf_uid91_fpDivTest(LOGICAL,90)@14
     assign excXRYROvf_uid91_fpDivTest_q = excR_x_uid31_fpDivTest_q & excR_y_uid45_fpDivTest_q & expOvf_uid84_fpDivTest_n;
 
-    // excXRYZ_uid90_fpDivTest(LOGICAL,89)@15
-    assign excXRYZ_uid90_fpDivTest_q = excR_x_uid31_fpDivTest_q & redist15_excZ_y_uid37_fpDivTest_q_15_q;
+    // excXRYZ_uid90_fpDivTest(LOGICAL,89)@14
+    assign excXRYZ_uid90_fpDivTest_q = excR_x_uid31_fpDivTest_q & redist14_excZ_y_uid37_fpDivTest_q_14_q;
 
-    // excRInf_uid94_fpDivTest(LOGICAL,93)@15 + 1
-    assign excRInf_uid94_fpDivTest_qi = excXRYZ_uid90_fpDivTest_q | excXRYROvf_uid91_fpDivTest_q | excXIYZ_uid92_fpDivTest_q | excXIYR_uid93_fpDivTest_q;
-    dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
-    excRInf_uid94_fpDivTest_delay ( .xin(excRInf_uid94_fpDivTest_qi), .xout(excRInf_uid94_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // excRInf_uid94_fpDivTest(LOGICAL,93)@14
+    assign excRInf_uid94_fpDivTest_q = excXRYZ_uid90_fpDivTest_q | excXRYROvf_uid91_fpDivTest_q | excXIYZ_uid92_fpDivTest_q | excXIYR_uid93_fpDivTest_q;
 
-    // xRegOrZero_uid87_fpDivTest(LOGICAL,86)@15
-    assign xRegOrZero_uid87_fpDivTest_q = excR_x_uid31_fpDivTest_q | redist18_excZ_x_uid23_fpDivTest_q_15_q;
+    // xRegOrZero_uid87_fpDivTest(LOGICAL,86)@14
+    assign xRegOrZero_uid87_fpDivTest_q = excR_x_uid31_fpDivTest_q | redist17_excZ_x_uid23_fpDivTest_q_14_q;
 
-    // regOrZeroOverInf_uid88_fpDivTest(LOGICAL,87)@15
+    // regOrZeroOverInf_uid88_fpDivTest(LOGICAL,87)@14
     assign regOrZeroOverInf_uid88_fpDivTest_q = xRegOrZero_uid87_fpDivTest_q & excI_y_uid41_fpDivTest_q;
 
-    // expUdf_uid81_fpDivTest(COMPARE,80)@15
+    // expUdf_uid81_fpDivTest(COMPARE,80)@14
     assign expUdf_uid81_fpDivTest_a = {12'b000000000000, GND_q};
     assign expUdf_uid81_fpDivTest_b = {{2{expRExt_uid80_fpDivTest_b[10]}}, expRExt_uid80_fpDivTest_b};
     assign expUdf_uid81_fpDivTest_o = $signed(expUdf_uid81_fpDivTest_a) - $signed(expUdf_uid81_fpDivTest_b);
     assign expUdf_uid81_fpDivTest_n[0] = ~ (expUdf_uid81_fpDivTest_o[12]);
 
-    // regOverRegWithUf_uid86_fpDivTest(LOGICAL,85)@15
+    // regOverRegWithUf_uid86_fpDivTest(LOGICAL,85)@14
     assign regOverRegWithUf_uid86_fpDivTest_q = expUdf_uid81_fpDivTest_n & excR_x_uid31_fpDivTest_q & excR_y_uid45_fpDivTest_q;
 
-    // zeroOverReg_uid85_fpDivTest(LOGICAL,84)@15
-    assign zeroOverReg_uid85_fpDivTest_q = redist18_excZ_x_uid23_fpDivTest_q_15_q & excR_y_uid45_fpDivTest_q;
+    // zeroOverReg_uid85_fpDivTest(LOGICAL,84)@14
+    assign zeroOverReg_uid85_fpDivTest_q = redist17_excZ_x_uid23_fpDivTest_q_14_q & excR_y_uid45_fpDivTest_q;
 
-    // excRZero_uid89_fpDivTest(LOGICAL,88)@15 + 1
-    assign excRZero_uid89_fpDivTest_qi = zeroOverReg_uid85_fpDivTest_q | regOverRegWithUf_uid86_fpDivTest_q | regOrZeroOverInf_uid88_fpDivTest_q;
-    dspba_delay_ver #( .width(1), .depth(1), .reset_kind("ASYNC") )
-    excRZero_uid89_fpDivTest_delay ( .xin(excRZero_uid89_fpDivTest_qi), .xout(excRZero_uid89_fpDivTest_q), .ena(en[0]), .clk(clk), .aclr(areset) );
+    // excRZero_uid89_fpDivTest(LOGICAL,88)@14
+    assign excRZero_uid89_fpDivTest_q = zeroOverReg_uid85_fpDivTest_q | regOverRegWithUf_uid86_fpDivTest_q | regOrZeroOverInf_uid88_fpDivTest_q;
 
-    // concExc_uid98_fpDivTest(BITJOIN,97)@16
+    // concExc_uid98_fpDivTest(BITJOIN,97)@14
     assign concExc_uid98_fpDivTest_q = {excRNaN_uid97_fpDivTest_q, excRInf_uid94_fpDivTest_q, excRZero_uid89_fpDivTest_q};
 
-    // excREnc_uid99_fpDivTest(LOOKUP,98)@16
-    always @(concExc_uid98_fpDivTest_q)
+    // excREnc_uid99_fpDivTest(LOOKUP,98)@14 + 1
+    always @ (posedge clk or posedge areset)
     begin
-        // Begin reserved scope level
-        unique case (concExc_uid98_fpDivTest_q)
-            3'b000 : excREnc_uid99_fpDivTest_q = 2'b01;
-            3'b001 : excREnc_uid99_fpDivTest_q = 2'b00;
-            3'b010 : excREnc_uid99_fpDivTest_q = 2'b10;
-            3'b011 : excREnc_uid99_fpDivTest_q = 2'b00;
-            3'b100 : excREnc_uid99_fpDivTest_q = 2'b11;
-            3'b101 : excREnc_uid99_fpDivTest_q = 2'b00;
-            3'b110 : excREnc_uid99_fpDivTest_q = 2'b00;
-            3'b111 : excREnc_uid99_fpDivTest_q = 2'b00;
-            default : begin
-                          // unreachable
-                          excREnc_uid99_fpDivTest_q = 2'bxx;
-                      end
-        endcase
-        // End reserved scope level
+        if (areset)
+        begin
+            excREnc_uid99_fpDivTest_q <= 2'b01;
+        end
+        else if (en == 1'b1)
+        begin
+            unique case (concExc_uid98_fpDivTest_q)
+                3'b000 : excREnc_uid99_fpDivTest_q <= 2'b01;
+                3'b001 : excREnc_uid99_fpDivTest_q <= 2'b00;
+                3'b010 : excREnc_uid99_fpDivTest_q <= 2'b10;
+                3'b011 : excREnc_uid99_fpDivTest_q <= 2'b00;
+                3'b100 : excREnc_uid99_fpDivTest_q <= 2'b11;
+                3'b101 : excREnc_uid99_fpDivTest_q <= 2'b00;
+                3'b110 : excREnc_uid99_fpDivTest_q <= 2'b00;
+                3'b111 : excREnc_uid99_fpDivTest_q <= 2'b00;
+                default : begin
+                              // unreachable
+                              excREnc_uid99_fpDivTest_q <= 2'bxx;
+                          end
+            endcase
+        end
     end
 
-    // expRPostExc_uid107_fpDivTest(MUX,106)@16
+    // expRPostExc_uid107_fpDivTest(MUX,106)@15
     assign expRPostExc_uid107_fpDivTest_s = excREnc_uid99_fpDivTest_q;
     always @(expRPostExc_uid107_fpDivTest_s or en or cstAllZWE_uid20_fpDivTest_q or redist2_excRPreExc_uid79_fpDivTest_b_1_q or cstAllOWE_uid18_fpDivTest_q)
     begin
@@ -1575,7 +1562,7 @@ module acl_fp_div (
     // oneFracRPostExc2_uid100_fpDivTest(CONSTANT,99)
     assign oneFracRPostExc2_uid100_fpDivTest_q = 23'b00000000000000000000001;
 
-    // fracRPreExc_uid78_fpDivTest(BITSELECT,77)@15
+    // fracRPreExc_uid78_fpDivTest(BITSELECT,77)@14
     assign fracRPreExc_uid78_fpDivTest_in = expFracPostRnd_uid76_fpDivTest_q[23:0];
     assign fracRPreExc_uid78_fpDivTest_b = fracRPreExc_uid78_fpDivTest_in[23:1];
 
@@ -1583,7 +1570,7 @@ module acl_fp_div (
     dspba_delay_ver #( .width(23), .depth(1), .reset_kind("ASYNC") )
     redist3_fracRPreExc_uid78_fpDivTest_b_1 ( .xin(fracRPreExc_uid78_fpDivTest_b), .xout(redist3_fracRPreExc_uid78_fpDivTest_b_1_q), .ena(en[0]), .clk(clk), .aclr(areset) );
 
-    // fracRPostExc_uid103_fpDivTest(MUX,102)@16
+    // fracRPostExc_uid103_fpDivTest(MUX,102)@15
     assign fracRPostExc_uid103_fpDivTest_s = excREnc_uid99_fpDivTest_q;
     always @(fracRPostExc_uid103_fpDivTest_s or en or paddingY_uid15_fpDivTest_q or redist3_fracRPreExc_uid78_fpDivTest_b_1_q or oneFracRPostExc2_uid100_fpDivTest_q)
     begin
@@ -1596,10 +1583,10 @@ module acl_fp_div (
         endcase
     end
 
-    // divR_uid110_fpDivTest(BITJOIN,109)@16
+    // divR_uid110_fpDivTest(BITJOIN,109)@15
     assign divR_uid110_fpDivTest_q = {sRPostExc_uid109_fpDivTest_q, expRPostExc_uid107_fpDivTest_q, fracRPostExc_uid103_fpDivTest_q};
 
-    // xOut(GPOUT,4)@16
+    // xOut(GPOUT,4)@15
     assign q = divR_uid110_fpDivTest_q;
 
 endmodule
