@@ -45,9 +45,9 @@ module VX_fp_noncomp #(
     reg [LANES-1:0][31:0]  datab_r;
 
     reg [LANES-1:0]       a_sign, b_sign;
-    reg [LANES-1:0][7:0]  a_exponent, b_exponent;
-    reg [LANES-1:0][22:0] a_mantissa, b_mantissa;
-    fp_type_t [LANES-1:0]  a_type, b_type;
+    reg [LANES-1:0][7:0]  a_exponent;
+    reg [LANES-1:0][22:0] a_mantissa;
+    fp_type_t [LANES-1:0] a_type, b_type;
     reg [LANES-1:0] a_smaller, ab_equal;
 
     reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
@@ -86,14 +86,14 @@ module VX_fp_noncomp #(
         wire tmp_ab_equal  = (dataa[i] == datab[i]) | (tmp_a_type[4] & tmp_b_type[4]);
 
         VX_generic_register #(
-            .N(1 + 1 + 8 + 8 + 23 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
+            .N(1 + 1 + 8 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
         ) fnc1_reg (
             .clk   (clk),
             .reset (reset),
             .stall (stall),
             .flush (1'b0),
-            .in    ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_b_exponent, tmp_a_mantissa, tmp_b_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
-            .out   ({a_sign[i],  b_sign[i],  a_exponent[i],  b_exponent[i],  a_mantissa[i],  b_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
+            .in    ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
+            .out   ({a_sign[i],  b_sign[i],  a_exponent[i],  a_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
         );
     end  
 

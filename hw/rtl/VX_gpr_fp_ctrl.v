@@ -15,39 +15,37 @@ module VX_gpr_fp_ctrl (
 );
 
     reg [`NUM_THREADS-1:0][31:0] rs1_tmp_data, rs2_tmp_data, rs3_tmp_data;
-	reg read_rs3;
+	reg read_rs1;
 	reg [`NW_BITS-1:0] rs3_wid;
 
-	wire rs3_delay = gpr_read_if.valid && gpr_read_if.use_rs3 && ~read_rs3;
+	wire rs3_delay = gpr_read_if.valid && gpr_read_if.use_rs3 && read_rs1;
 	wire read_fire = gpr_read_if.valid && gpr_read_if.ready_out;
 
 	always @(posedge clk) begin
 		if (reset) begin
-			read_rs3     <= 0;			
-			rs3_wid      <= 0;
-			rs1_tmp_data <= 0;
-			rs2_tmp_data <= 0;
-			rs3_tmp_data <= 0;
+			read_rs1 <= 1;
 		end else begin
 			if (rs3_delay) begin
-				read_rs3 <= 1;
+				read_rs1 <= 0;
 				rs3_wid  <= gpr_read_if.wid;
 			end else if (read_fire) begin
-				read_rs3 <= 0;
+				read_rs1 <= 1;
 			end
-			
-			if (~read_rs3) begin
-				rs1_tmp_data <= rs1_data;
-			end
-			rs2_tmp_data <= rs2_data;
-			rs3_tmp_data <= rs1_data;
 
-			assert(!read_rs3 || rs3_wid == gpr_read_if.wid);
+			assert(read_rs1 || rs3_wid == gpr_read_if.wid);
 		end	
 	end
 
+	always @(posedge clk) begin
+		if (read_rs1) begin
+			rs1_tmp_data <= rs1_data;
+		end
+		rs2_tmp_data <= rs2_data;
+		rs3_tmp_data <= rs1_data;
+	end
+
 	// outputs
-	wire [`NR_BITS-1:0] rs1 = read_rs3 ? gpr_read_if.rs3 : gpr_read_if.rs1;
+	wire [`NR_BITS-1:0] rs1 = read_rs1 ? gpr_read_if.rs1 : gpr_read_if.rs3;
 	assign raddr1 = {gpr_read_if.wid, rs1};
     assign gpr_read_if.ready_in = ~rs3_delay;
 	assign gpr_read_if.rs1_data = rs1_tmp_data;

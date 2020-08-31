@@ -64,8 +64,9 @@ module VX_writeback #(
                         fpu_valid ? fpu_commit_if.data :                                                               
                                     0;
 
-    wire stall = ~writeback_if.ready && writeback_if.valid;
-
+    always @(*) assert(writeback_if.ready);
+    wire stall = 0/*~writeback_if.ready && writeback_if.valid*/;
+    
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32))
     ) wb_reg (
