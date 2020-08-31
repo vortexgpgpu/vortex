@@ -271,34 +271,34 @@ module VX_fp_fpga #(
         .valid_out  (per_core_valid_out[11])
     );
 
-    reg valid_out_r;
-    reg has_fflags_r;
-    reg [`NUM_THREADS-1:0][31:0] result_r;
-    reg [TAGW-1:0] tag_out_r;
+    reg valid_out_n;
+    reg has_fflags_n;
+    reg [`NUM_THREADS-1:0][31:0] result_n;
+    reg [TAGW-1:0] tag_out_n;
 
     always @(*) begin
         per_core_ready_out = 0;
-        valid_out_r        = 0;
-        has_fflags_r       = 'x;
-        result_r           = 'x;
-        tag_out_r          = 'x;
+        valid_out_n        = 0;
+        has_fflags_n       = 'x;
+        result_n           = 'x;
+        tag_out_n          = 'x;        
         for (integer i = 0; i < NUM_FPC; i++) begin
             if (per_core_valid_out[i]) begin
                 per_core_ready_out[i] = ready_out;
-                valid_out_r  = 1;
-                has_fflags_r = fpnew_has_fflags && (i == 0);
-                result_r     = per_core_result[i];
-                tag_out_r    = per_core_tag_out[i];
+                valid_out_n  = 1;
+                has_fflags_n = fpnew_has_fflags && (i == 0);
+                result_n     = per_core_result[i];
+                tag_out_n    = per_core_tag_out[i];
                 break;
             end
         end
     end
 
     assign ready_in   = (& per_core_ready_in);
-    assign valid_out  = valid_out_r;
-    assign has_fflags = has_fflags_r;
-    assign tag_out    = tag_out_r;
-    assign result     = result_r;    
+    assign valid_out  = valid_out_n;
+    assign has_fflags = has_fflags_n;
+    assign tag_out    = tag_out_n;
+    assign result     = result_n;    
     assign fflags     = fpnew_fflags;
 
 endmodule

@@ -13,11 +13,11 @@ module VX_alu_unit #(
     VX_branch_ctl_if    branch_ctl_if,
     VX_exu_to_cmt_if    alu_commit_if    
 );    
-    reg [`NUM_THREADS-1:0][31:0] alu_result;
+    reg [`NUM_THREADS-1:0][31:0] alu_result;    
     reg [`NUM_THREADS-1:0][31:0] add_result;   
     reg [`NUM_THREADS-1:0][32:0] sub_result;
-    reg [`NUM_THREADS-1:0][31:0] shift_result;
-    reg [`NUM_THREADS-1:0][31:0] misc_result;    
+    reg [`NUM_THREADS-1:0][31:0] shr_result;
+    reg [`NUM_THREADS-1:0][31:0] msc_result;    
 
     wire               is_br_op = alu_req_if.is_br_op;
     wire [`ALU_BITS-1:0] alu_op = `ALU_OP(alu_req_if.op_type);
@@ -48,23 +48,23 @@ module VX_alu_unit #(
     end
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin    
-        wire [32:0] shift_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
+        wire [32:0] shr_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
     `IGNORE_WARNINGS_BEGIN
-        wire [32:0] shift_value = $signed(shift_in1) >>> alu_in2_imm[i][4:0]; 
+        wire [32:0] shr_value = $signed(shr_in1) >>> alu_in2_imm[i][4:0]; 
     `IGNORE_WARNINGS_END
         always @(*) begin
-            shift_result[i] = shift_value[31:0];
+            shr_result[i] = shr_value[31:0];
         end
     end        
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin 
         always @(*) begin
             case (alu_op)
-                `ALU_AND:   misc_result[i] = alu_in1[i] & alu_in2_imm[i];
-                `ALU_OR:    misc_result[i] = alu_in1[i] | alu_in2_imm[i];
-                `ALU_XOR:   misc_result[i] = alu_in1[i] ^ alu_in2_imm[i];                
+                `ALU_AND:   msc_result[i] = alu_in1[i] & alu_in2_imm[i];
+                `ALU_OR:    msc_result[i] = alu_in1[i] | alu_in2_imm[i];
+                `ALU_XOR:   msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];                
                 //`ALU_SLL,
-                default:    misc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
+                default:    msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
             endcase
         end
     end
@@ -74,21 +74,20 @@ module VX_alu_unit #(
             case (alu_op_class)                        
                 0: alu_result[i] = add_result[i];
                 1: alu_result[i] = {31'b0, sub_result[i][32]};
-                2: alu_result[i] = is_sub ? sub_result[i][31:0] : shift_result[i];
-                default: alu_result[i] = misc_result[i];
+                2: alu_result[i] = is_sub ? sub_result[i][31:0] : shr_result[i];
+                default: alu_result[i] = msc_result[i];
             endcase
         end       
     end
     
     wire is_jal = is_br_op && (br_op == `BR_JAL || br_op == `BR_JALR);
-    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result;
+    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result; 
 
     wire [31:0] br_dest    = add_result[alu_req_if.tid]; 
-    wire [32:0] cmp_result = sub_result[alu_req_if.tid];
-    wire is_less  = cmp_result[32];
-    wire is_equal = ~(| cmp_result[31:0]);        
+    wire [32:0] cmp_result = sub_result[alu_req_if.tid];   
     
-    wire is_br_op_r, is_less_r, is_equal_r;
+    wire [32:0] cmp_result_r;
+    wire is_br_op_r;
 `IGNORE_WARNINGS_BEGIN
     wire [`BR_BITS-1:0] br_op_r;
 `IGNORE_WARNINGS_END
@@ -98,20 +97,23 @@ module VX_alu_unit #(
     wire stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 1 + 1 + 32)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 32 + 33)
     ) alu_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.thread_mask,    alu_req_if.curr_PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_op,   is_less,   is_equal,   br_dest}),
-        .out   ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.thread_mask, alu_commit_if.curr_PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, br_op_r, is_less_r, is_equal_r, branch_ctl_if.dest})
+        .in    ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.thread_mask,    alu_req_if.curr_PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_op,   br_dest,            cmp_result}),
+        .out   ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.thread_mask, alu_commit_if.curr_PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, br_op_r, branch_ctl_if.dest, cmp_result_r})
     );
+    
+    wire is_less  = cmp_result_r[32];
+    wire is_equal = ~(| cmp_result_r[31:0]);        
 
     wire br_neg    = `BR_NEG(br_op_r);    
     wire br_less   = `BR_LESS(br_op_r);
     wire br_static = `BR_STATIC(br_op_r);
-    wire br_taken  = ((br_less ? is_less_r : is_equal_r) ^ br_neg) | br_static;   
+    wire br_taken  = ((br_less ? is_less : is_equal) ^ br_neg) | br_static;   
 
     assign branch_ctl_if.valid = alu_commit_if.valid && alu_commit_if.ready && is_br_op_r;
     assign branch_ctl_if.wid   = alu_commit_if.wid; 

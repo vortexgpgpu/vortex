@@ -72,7 +72,7 @@ module VX_instr_demux (
         .ready_in  (lsu_req_ready),
         .valid_in  (lsu_req_valid),
         .data_in   ({execute_if.wid, execute_if.thread_mask, execute_if.curr_PC, `LSU_RW(execute_if.op_type), `LSU_BE(execute_if.op_type), execute_if.imm,    execute_if.rd, execute_if.wb}),
-        .data_out  ({lsu_req_if.wid, lsu_req_if.thread_mask, lsu_req_if.curr_PC, lsu_req_if.rw,             lsu_req_if.byteen,         lsu_req_if.offset, lsu_req_if.rd, lsu_req_if.wb}),
+        .data_out  ({lsu_req_if.wid, lsu_req_if.thread_mask, lsu_req_if.curr_PC, lsu_req_if.rw,               lsu_req_if.byteen,           lsu_req_if.offset, lsu_req_if.rd, lsu_req_if.wb}),
         .ready_out (lsu_req_if.ready),
         .valid_out (lsu_req_if.valid)
     );

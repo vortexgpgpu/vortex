@@ -31,7 +31,7 @@ module VX_icache_stage #(
     always @(posedge clk) begin
         if (icache_req_fire)  begin
             rsp_curr_PC_buf[req_tag]     <= ifetch_req_if.curr_PC;  
-            rsp_thread_mask_buf[req_tag] <=  ifetch_req_if.thread_mask;
+            rsp_thread_mask_buf[req_tag] <= ifetch_req_if.thread_mask;
         end    
     end    
 
