@@ -1,6 +1,10 @@
 `include "VX_define.vh"
 
-module VX_fp_itof #( 
+`ifndef SYNTHESIS
+`include "float_dpi.vh"
+`endif
+
+module VX_fp_sqrt #( 
     parameter TAGW = 1,
     parameter LANES = 1
 ) (
@@ -20,29 +24,35 @@ module VX_fp_itof #(
     input wire  ready_out,
     output wire valid_out
 );    
-    wire stall  = ~ready_out && valid_out;
-    wire enable = ~stall;
-    assign ready_in = enable;
-
+    wire stall = ~ready_out && valid_out;
+    
     for (genvar i = 0; i < LANES; i++) begin
-        acl_fp_itof itof (
+    `ifdef QUARTUS
+        acl_fp_sqrt fsqrt (
             .clk    (clk),
             .areset (1'b0),
-            .en     (enable),
+            .en     (~stall),
             .a      (dataa[i]),
             .q      (result[i])
         );
+    `else
+        always @(posedge clk) begin
+           dpi_fsqrt(clk, ~stall, dataa[i], result[i]);
+        end
+    `endif
     end
 
     VX_shift_register #(
         .DATAW(TAGW + 1),
-        .DEPTH(`LATENCY_ITOF)
+        .DEPTH(`LATENCY_FSQRT)
     ) shift_reg (
         .clk(clk),
         .reset(reset),
-        .enable(enable),
+        .enable(~stall),
         .in ({tag_in,  valid_in}),
         .out({tag_out, valid_out})
     );
+
+    assign ready_in = ~stall;
 
 endmodule

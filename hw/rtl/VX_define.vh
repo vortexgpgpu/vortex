@@ -35,22 +35,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define LATENCY_IMUL    3
-
-`define LATENCY_FDIV     16
-`define LATENCY_FSQRT    10
-`define LATENCY_FTOI     5
-`define LATENCY_FTOU     4
-`define LATENCY_ITOF     8
-`define LATENCY_UTOF     7
-
-`define LATENCY_FMULADD  2
-`define LATENCY_FDIVSQRT 2
-`define LATENCY_FCONV    2
-`define LATENCY_FNONCOMP 1
-
-///////////////////////////////////////////////////////////////////////////////
-
 `define INST_LUI    7'b0110111
 `define INST_AUIPC  7'b0010111
 `define INST_JAL    7'b1101111

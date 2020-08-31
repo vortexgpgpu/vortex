@@ -34,9 +34,10 @@ LDFLAGS += -shared -pthread
 TOP = Vortex
 
 SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
+SRCS += ../../hw/rtl/fp_cores/svdpi/float_dpi.cpp
 
-FPU_INCLUDE = -I../../hw/rtl/fp_cores/fpnew/src/common_cells/include -I../../hw/rtl/fp_cores/fpnew/src/common_cells/src -I../../hw/rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I../../hw/rtl/fp_cores/fpnew/src 
-RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/cache -I../../hw/rtl/fp_cores $(FPU_INCLUDE)
+FPU_INCLUDE = -I../../hw/rtl/fp_cores -I../../hw/rtl/fp_cores/svdpi -I../../hw/rtl/fp_cores/fpnew/src/common_cells/include -I../../hw/rtl/fp_cores/fpnew/src/common_cells/src -I../../hw/rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I../../hw/rtl/fp_cores/fpnew/src 
+RTL_INCLUDE = -I../../hw/rtl -I../../hw/rtl/libs -I../../hw/rtl/interfaces -I../../hw/rtl/cache $(FPU_INCLUDE)
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME

@@ -45,8 +45,8 @@ module VX_fp_noncomp #(
     reg [LANES-1:0][31:0]  datab_r;
 
     reg [LANES-1:0]       a_sign, b_sign;
-    reg [LANES-1:0][7:0]  a_exponent, b_exponent;
-    reg [LANES-1:0][22:0] a_mantissa, b_mantissa;
+    reg [LANES-1:0][7:0]  a_exponent;
+    reg [LANES-1:0][22:0] a_mantissa;
     fp_type_t [LANES-1:0]  a_type, b_type;
     reg [LANES-1:0] a_smaller, ab_equal;
 
@@ -60,12 +60,12 @@ module VX_fp_noncomp #(
 
     // Setup
     for (genvar i = 0; i < LANES; i++) begin
-        wire tmp_a_sign            = dataa[i][31]; 
-        wire [7:0] tmp_a_exponent  = dataa[i][30:23];
+        wire            tmp_a_sign = dataa[i][31]; 
+        wire [7:0]  tmp_a_exponent = dataa[i][30:23];
         wire [22:0] tmp_a_mantissa = dataa[i][22:0];
 
-        wire tmp_b_sign            = datab[i][31]; 
-        wire [7:0] tmp_b_exponent  = datab[i][30:23];
+        wire            tmp_b_sign = datab[i][31]; 
+        wire [7:0]  tmp_b_exponent = datab[i][30:23];
         wire [22:0] tmp_b_mantissa = datab[i][22:0];
 
         fp_type_t tmp_a_type, tmp_b_type;
@@ -86,14 +86,14 @@ module VX_fp_noncomp #(
         wire tmp_ab_equal  = (dataa[i] == datab[i]) | (tmp_a_type[4] & tmp_b_type[4]);
 
         VX_generic_register #(
-            .N(1 + 1 + 8 + 8 + 23 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
+            .N(1 + 1 + 8 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
         ) fnc1_reg (
             .clk   (clk),
             .reset (reset),
             .stall (stall),
             .flush (1'b0),
-            .in    ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_b_exponent, tmp_a_mantissa, tmp_b_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
-            .out   ({a_sign[i],  b_sign[i],  a_exponent[i],  b_exponent[i],  a_mantissa[i],  b_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
+            .in    ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
+            .out   ({a_sign[i],  b_sign[i],  a_exponent[i],  a_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
         );
     end  
 
@@ -213,8 +213,6 @@ module VX_fp_noncomp #(
 
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            tmp_result[i] = 32'hdeadbeaf;
-            {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;
             case (op_type_r)
                 `FPU_CLASS: begin
                     tmp_result[i] = fclass_mask[i];
@@ -224,7 +222,8 @@ module VX_fp_noncomp #(
                     tmp_result[i] = fcmp_res[i];
                     {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = fcmp_excp[i];
                 end      
-                `FPU_MISC: begin
+                //`FPU_MISC:
+                default: begin
                     case (frm)
                         0,1,2:  begin
                             tmp_result[i] = fsgnj_res[i];
@@ -234,7 +233,8 @@ module VX_fp_noncomp #(
                             tmp_result[i] = fminmax_res[i];
                             {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = {a_type[i][0] | b_type[i][0], 4'h0};    
                         end
-                        5,6: begin
+                        //5,6,7: 
+                        default: begin
                             tmp_result[i] = dataa[i];
                             {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;    
                         end

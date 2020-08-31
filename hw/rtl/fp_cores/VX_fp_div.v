@@ -1,5 +1,9 @@
 `include "VX_define.vh"
 
+`ifndef SYNTHESIS
+`include "float_dpi.vh"
+`endif
+
 module VX_fp_div #( 
     parameter TAGW = 1,
     parameter LANES = 1
@@ -21,19 +25,23 @@ module VX_fp_div #(
     input wire  ready_out,
     output wire valid_out
 );    
-    wire stall  = ~ready_out && valid_out;
-    wire enable = ~stall;
-    assign ready_in = enable;
-
+    wire stall = ~ready_out && valid_out;
+    
     for (genvar i = 0; i < LANES; i++) begin
+    `ifdef QUARTUS
         acl_fp_div fdiv (
             .clk    (clk),
             .areset (1'b0),
-            .en     (enable),
+            .en     (~stall),
             .a      (dataa[i]),
             .b      (datab[i]),
             .q      (result[i])
         );
+    `else 
+        always @(posedge clk) begin
+           dpi_fdiv(clk, ~stall, dataa[i], datab[i], result[i]);
+        end
+    `endif
     end
 
     VX_shift_register #(
@@ -42,9 +50,11 @@ module VX_fp_div #(
     ) shift_reg (
         .clk(clk),
         .reset(reset),
-        .enable(enable),
+        .enable(~stall),
         .in ({tag_in,  valid_in}),
         .out({tag_out, valid_out})
     );
+
+    assign ready_in = ~stall;
 
 endmodule

@@ -94,6 +94,7 @@ if args.outc != 'none':
 // Translated from VX_config.vh:
 '''[1:].format(date=datetime.now()), file=f)
         with open(path.join(script_dir, '../rtl/VX_config.vh'), 'r') as r:
+            lineno = 0
             for line in r:
                 if in_expansion:
                     f.write(post_process_line(line))
@@ -107,7 +108,8 @@ if args.outc != 'none':
                             f.write(post_process_line(pat.sub(repl, line)))
                             break
                     else:
-                        raise ValueError('failed to find rule for: ' + line)
+                        raise ValueError('failed to find rule for: "' + line + '" (' + str(lineno) + ')')
+                lineno = lineno + 1
 
         print('''
 // Misc
