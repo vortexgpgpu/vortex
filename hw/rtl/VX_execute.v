@@ -4,7 +4,7 @@ module VX_execute #(
     parameter CORE_ID = 0
 ) (
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_BE_IO
+    `SCOPE_SIGNALS_EX_IO
 
     input wire clk, 
     input wire reset, 
@@ -126,24 +126,16 @@ module VX_execute #(
                  && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
                   || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
 
-    `SCOPE_ASSIGN (scope_decode_valid,       decode_if.valid);
-    `SCOPE_ASSIGN (scope_decode_wid,         decode_if.wid);
-    `SCOPE_ASSIGN (scope_decode_curr_PC,     decode_if.curr_PC);    
-    `SCOPE_ASSIGN (scope_decode_is_jal,      decode_if.is_jal);
-    `SCOPE_ASSIGN (scope_decode_rs1,         decode_if.rs1);
-    `SCOPE_ASSIGN (scope_decode_rs2,         decode_if.rs2);
-
-    `SCOPE_ASSIGN (scope_execute_valid,      alu_req_if.valid);    
-    `SCOPE_ASSIGN (scope_execute_wid,        alu_req_if.wid);
-    `SCOPE_ASSIGN (scope_execute_curr_PC,    alu_req_if.curr_PC);    
-    `SCOPE_ASSIGN (scope_execute_rd,         alu_req_if.rd);
-    `SCOPE_ASSIGN (scope_execute_a,          alu_req_if.rs1_data);
-    `SCOPE_ASSIGN (scope_execute_b,          alu_req_if.rs2_data);   
+    `SCOPE_ASSIGN (scope_alu_req_valid,      alu_req_if.valid);    
+    `SCOPE_ASSIGN (scope_alu_req_wid,        alu_req_if.wid);
+    `SCOPE_ASSIGN (scope_alu_req_PC,         alu_req_if.curr_PC);    
+    `SCOPE_ASSIGN (scope_alu_req_rd,         alu_req_if.rd);
+    `SCOPE_ASSIGN (scope_alu_req_a,          alu_req_if.rs1_data);
+    `SCOPE_ASSIGN (scope_alu_req_b,          alu_req_if.rs2_data);   
         
     `SCOPE_ASSIGN (scope_writeback_valid,    writeback_if.valid);    
     `SCOPE_ASSIGN (scope_writeback_wid,      writeback_if.wid);
-    `SCOPE_ASSIGN (scope_writeback_curr_PC,  writeback_if.curr_PC);  
-    `SCOPE_ASSIGN (scope_writeback_wb,       writeback_if.wb);      
+    `SCOPE_ASSIGN (scope_writeback_PC,       writeback_if.curr_PC);  
     `SCOPE_ASSIGN (scope_writeback_rd,       writeback_if.rd);
     `SCOPE_ASSIGN (scope_writeback_data,     writeback_if.data);
 

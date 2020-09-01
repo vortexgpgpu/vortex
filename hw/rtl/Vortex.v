@@ -6,7 +6,7 @@ module Vortex (
     `SCOPE_SIGNALS_CORE_IO
     `SCOPE_SIGNALS_CACHE_IO
     `SCOPE_SIGNALS_PIPELINE_IO
-    `SCOPE_SIGNALS_BE_IO
+    `SCOPE_SIGNALS_EX_IO
 
     // Clock
     input  wire                             clk,
@@ -81,7 +81,7 @@ module Vortex (
             `SCOPE_SIGNALS_CORE_BIND
             `SCOPE_SIGNALS_CACHE_BIND
             `SCOPE_SIGNALS_PIPELINE_BIND
-            `SCOPE_SIGNALS_BE_BIND
+            `SCOPE_SIGNALS_EX_BIND
 
             .clk                (clk),
             .reset              (reset),
@@ -200,7 +200,7 @@ module Vortex (
                 `SCOPE_SIGNALS_CORE_BIND
                 `SCOPE_SIGNALS_CACHE_BIND
                 `SCOPE_SIGNALS_PIPELINE_BIND
-                `SCOPE_SIGNALS_BE_BIND
+                `SCOPE_SIGNALS_EX_BIND
 
                 .clk                (clk),
                 .reset              (reset),

@@ -194,13 +194,13 @@ module VX_lsu_unit #(
     // scope registration
     `SCOPE_ASSIGN (scope_dcache_req_valid, dcache_req_if.valid);   
     `SCOPE_ASSIGN (scope_dcache_req_addr,  req_address);    
-    `SCOPE_ASSIGN (scope_dcache_req_rw,    dcache_req_if.rw );
+    `SCOPE_ASSIGN (scope_dcache_req_rw,    req_rw);
     `SCOPE_ASSIGN (scope_dcache_req_byteen,dcache_req_if.byteen);
     `SCOPE_ASSIGN (scope_dcache_req_data,  dcache_req_if.data);
     `SCOPE_ASSIGN (scope_dcache_req_tag,   dcache_req_if.tag);
     `SCOPE_ASSIGN (scope_dcache_req_ready, dcache_req_if.ready); 
     `SCOPE_ASSIGN (scope_dcache_req_wid,   req_wid);
-    `SCOPE_ASSIGN (scope_dcache_req_curr_PC, req_pc);
+    `SCOPE_ASSIGN (scope_dcache_req_PC,    req_curr_PC);
 
     `SCOPE_ASSIGN (scope_dcache_rsp_valid, dcache_rsp_if.valid);
     `SCOPE_ASSIGN (scope_dcache_rsp_data,  dcache_rsp_if.data);

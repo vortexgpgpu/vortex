@@ -32,6 +32,12 @@ constexpr int ilog2(int n) {
 
 static constexpr int NW_BITS = ilog2(NUM_WARPS);
 
+#ifdef EXT_F_ENABLE
+static constexpr int NR_BITS = ilog2(64);
+#else
+static constexpr int NR_BITS = ilog2(32);
+#endif
+
 static const scope_signal_t scope_signals[] = {
 
     { 32, "dram_req_addr" },
@@ -47,39 +53,32 @@ static const scope_signal_t scope_signals[] = {
     { 16, "snp_req_tag" },
     { 16, "snp_rsp_tag" },    
     
-    { NW_BITS, "icache_req_warp_num" },
+    { NW_BITS, "icache_req_wid" },
     { 32, "icache_req_addr" },    
     { NW_BITS, "icache_req_tag" },  
     { 32, "icache_rsp_data" },    
     { NW_BITS, "icache_rsp_tag" },
 
-    { NW_BITS, "dcache_req_warp_num" },         
-    { 32, "dcache_req_curr_PC" },
-    { 64, "dcache_req_addr" },
+    { NW_BITS, "dcache_req_wid" },         
+    { 32, "dcache_req_PC" },
+    { NUM_THREADS * 32, "dcache_req_addr" },
     { 1,  "dcache_req_rw" },
-    { 8,  "dcache_req_byteen" },
-    { 64, "dcache_req_data" },
+    { NUM_THREADS * 4,  "dcache_req_byteen" },
+    { NUM_THREADS * 32, "dcache_req_data" },
     { NW_BITS, "dcache_req_tag" },
-    { 64, "dcache_rsp_data" },    
+    { NUM_THREADS * 32, "dcache_rsp_data" },    
     { NW_BITS, "dcache_rsp_tag" }, 
     
-    { NW_BITS, "decode_warp_num" },
-    { 32, "decode_curr_PC" },
-    { 1, "decode_is_jal" },
-    { 5, "decode_rs1" },
-    { 5, "decode_rs2" },    
+    { NW_BITS, "alu_req_wid" },
+    { 32, "alu_req_PC" },
+    { NR_BITS,  "alu_req_rd" },
+    { NUM_THREADS * 32, "alu_req_a" },
+    { NUM_THREADS * 32, "alu_req_b" },    
     
-    { NW_BITS, "execute_warp_num" },
-    { 32, "execute_curr_PC" },
-    { 5,  "execute_rd" },
-    { 64, "execute_a" },
-    { 64, "execute_b" },    
-    
-    { NW_BITS, "writeback_warp_num" },    
-    { 32, "writeback_curr_PC" },
-    { 2,  "writeback_wb" },
-    { 5,  "writeback_rd" },
-    { 64, "writeback_data" },    
+    { NW_BITS, "writeback_wid" },    
+    { 32, "writeback_PC" },
+    { NR_BITS,  "writeback_rd" },
+    { NUM_THREADS * 32, "writeback_data" },    
 
     { 32, "bank_addr_st0" },    
     { 32, "bank_addr_st1" },    
@@ -112,13 +111,9 @@ static const scope_signal_t scope_signals[] = {
     { 1, "dcache_rsp_ready" },
     
     { NUM_THREADS, "decode_valid" },
-    { NUM_THREADS, "execute_valid" },
-    { NUM_THREADS, "writeback_valid" },   
+    { NUM_THREADS, "alu_req_valid" },
+    { NUM_THREADS, "writeback_valid" }, 
 
-    { 1, "schedule_delay" },
-    { 1, "mem_delay" },
-    { 1, "exec_delay" },
-    { 1, "gpr_delay" },
     { 1, "busy" },
 
     { 1, "bank_valid_st0" },
