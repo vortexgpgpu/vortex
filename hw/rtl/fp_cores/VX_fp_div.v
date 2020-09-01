@@ -39,7 +39,7 @@ module VX_fp_div #(
         );
     `else 
         always @(posedge clk) begin
-           dpi_fdiv(clk, ~stall, dataa[i], datab[i], result[i]);
+           dpi_fdiv(8*LANES+i, ~stall, valid_in, dataa[i], datab[i], result[i]);
         end
     `endif
     end

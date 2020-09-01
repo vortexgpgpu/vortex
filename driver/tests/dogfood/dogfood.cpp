@@ -40,7 +40,7 @@ public:
     this->add_test("fsqrt", new Test_FSQRT());
     this->add_test("ftoi", new Test_FTOI());
     this->add_test("ftou", new Test_FTOU());
-    this->add_test("tof", new Test_ITOF());
+    this->add_test("itof", new Test_ITOF());
     this->add_test("utof", new Test_UTOF());
   #endif
   }
@@ -257,14 +257,14 @@ int main(int argc, char *argv[]) {
                               (void*)vx_host_ptr(src2_buf));
     if (errors != 0) {
       std::cout << "found " << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl << std::flush;
+      std::cout << "Test" << t << "-" << name << " FAILED!" << std::endl << std::flush;
       if (stop_on_error) {
         cleanup();
         exit(1);  
       }
       exitcode = 1;
     } else {
-      std::cout << "PASSED!" << std::endl << std::flush;
+      std::cout << "Test" << t << "-" << name << " PASSED!" << std::endl << std::flush;
     }
   } 
 

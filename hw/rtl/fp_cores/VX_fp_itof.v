@@ -53,8 +53,8 @@ module VX_fp_itof #(
         );
     `else
         always @(posedge clk) begin
-           dpi_itof(clk, ~stall, dataa[i], result_s);
-           dpi_utof(clk, ~stall, dataa[i], result_u);
+           dpi_itof(12*LANES+i, ~stall, valid_in, dataa[i], result_s);
+           dpi_utof(13*LANES+i, ~stall, valid_in, dataa[i], result_u);
         end
     `endif
 
@@ -63,7 +63,7 @@ module VX_fp_itof #(
 
     VX_shift_register #(
         .DATAW(TAGW + 1 + 1),
-        .DEPTH(`LATENCY_FTOI)
+        .DEPTH(`LATENCY_ITOF)
     ) shift_reg (
         .clk(clk),
         .reset(reset),

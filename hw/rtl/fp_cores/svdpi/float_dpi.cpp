@@ -4,21 +4,24 @@
 #include <vector>
 #include <mutex>
 #include "svdpi.h"
+#include "verilated_vpi.h"
 #include "VX_config.h"
 
 extern "C" {
-  void dpi_fadd(bool clk, bool enable, int a, int b, int* result);
-  void dpi_fsub(bool clk, bool enable, int a, int b, int* result);
-  void dpi_fmul(bool clk, bool enable, int a, int b, int* result);
-  void dpi_fmadd(bool clk, bool enable, int a, int b, int c, int* result);
-  void dpi_fmsub(bool clk, bool enable, int a, int b, int c, int* result);
-  void dpi_fdiv(bool clk, bool enable, int a, int b, int* result);
-  void dpi_fsqrt(bool clk, bool enable, int a, int* result);
-  void dpi_ftoi(bool clk, bool enable, int a, int* result);
-  void dpi_ftou(bool clk, bool enable, int a, int* result);
-  void dpi_itof(bool clk, bool enable, int a, int* result);
-  void dpi_utof(bool clk, bool enable, int a, int* result);
+  void dpi_fadd(int inst, bool enable, bool valid, int a, int b, int* result);
+  void dpi_fsub(int inst, bool enable, bool valid, int a, int b, int* result);
+  void dpi_fmul(int inst, bool enable, bool valid, int a, int b, int* result);
+  void dpi_fmadd(int inst, bool enable, bool valid, int a, int b, int c, int* result);
+  void dpi_fmsub(int inst, bool enable, bool valid, int a, int b, int c, int* result);
+  void dpi_fdiv(int inst, bool enable, bool valid, int a, int b, int* result);
+  void dpi_fsqrt(int inst, bool enable, bool valid, int a, int* result);
+  void dpi_ftoi(int inst, bool enable, bool valid, int a, int* result);
+  void dpi_ftou(int inst, bool enable, bool valid, int a, int* result);
+  void dpi_itof(int inst, bool enable, bool valid, int a, int* result);
+  void dpi_utof(int inst, bool enable, bool valid, int a, int* result);
 }
+
+extern double sc_time_stamp();
 
 class ShiftRegister {
 public:
@@ -32,179 +35,177 @@ public:
     }
   }
 
-  void push(int value, bool clk, bool enable) {
-    if (clk || !enable)
-      return;
+  void push(int value, bool enable, bool valid) {
+    if (!enable)
+      return;      
     for (unsigned i = 0; i < depth_-1; ++i) {
       buffer_[i] = buffer_[i+1];
     }
-    buffer_[depth_-1] = value;
+    buffer_[depth_-1].value = value;
+    buffer_[depth_-1].valid = valid;
   }
 
   int top() const {
-    return buffer_[0];
+    return buffer_[0].value;
+  }
+
+  bool valid() const { 
+    return buffer_[0].valid;
   }
 
 private:
 
-  std::vector<int> buffer_;
+  struct entry_t {
+    int value;
+    bool valid;
+  };
+
+  std::vector<entry_t> buffer_;
+  int top_;
   unsigned depth_;
   bool init_;
 };
 
 class Instances {
 public:
-  ShiftRegister& get(svScope scope) {
+  ShiftRegister& get(int inst) {
     mutex_.lock();
-    ShiftRegister& reg = instances_[scope];
+    ShiftRegister& sr = instances_[inst];
     mutex_.unlock();
-    return reg;
+    return sr;
   }
 
 private:
-  std::unordered_map<svScope, ShiftRegister> instances_;
+  std::unordered_map<int, ShiftRegister> instances_;
   std::mutex mutex_;
 };
 
 Instances instances;
 
-void dpi_fadd(bool clk, bool enable, int a, int b, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fadd(int inst, bool enable, bool valid, int a, int b, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   float fb = *(float*)&b;
   float fr = fa + fb;   
 
-  inst.ensure_init(LATENCY_FMADD);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FMADD);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_fsub(bool clk, bool enable, int a, int b, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fsub(int inst, bool enable, bool valid, int a, int b, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   float fb = *(float*)&b;
   float fr = fa - fb;   
 
-  inst.ensure_init(LATENCY_FMADD);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FMADD);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_fmul(bool clk, bool enable, int a, int b, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fmul(int inst, bool enable, bool valid, int a, int b, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   float fb = *(float*)&b;
   float fr = fa * fb;   
 
-  inst.ensure_init(LATENCY_FMADD);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FMADD);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_fmadd(bool clk, bool enable, int a, int b, int c, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fmadd(int inst, bool enable, bool valid, int a, int b, int c, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   float fb = *(float*)&b;
   float fc = *(float*)&c;
   float fr = fa * fb + fc;   
 
-  inst.ensure_init(LATENCY_FMADD);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FMADD);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_fmsub(bool clk, bool enable, int a, int b, int c, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fmsub(int inst, bool enable, bool valid, int a, int b, int c, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   float fb = *(float*)&b;
   float fc = *(float*)&c;
   float fr = fa * fb - fc;   
 
-  inst.ensure_init(LATENCY_FMADD);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FMADD);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_fdiv(bool clk, bool enable, int a, int b, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fdiv(int inst, bool enable, bool valid, int a, int b, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   float fb = *(float*)&b;
   float fr = fa / fb;   
 
-  inst.ensure_init(LATENCY_FDIV);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.
-  
-  top();
+  sr.ensure_init(LATENCY_FDIV);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_fsqrt(bool clk, bool enable, int a, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_fsqrt(int inst, bool enable, bool valid, int a, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
-  float fr = sqrt(fa);   
+  float fr = sqrtf(fa);
 
-  inst.ensure_init(LATENCY_FSQRT);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FSQRT);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_ftoi(bool clk, bool enable, int a, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_ftoi(int inst, bool enable, bool valid, int a, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   int ir = int(fa);   
 
-  inst.ensure_init(LATENCY_FTOI);
-  inst.push(ir, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FTOI);
+  sr.push(ir, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_ftou(bool clk, bool enable, int a, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_ftou(int inst, bool enable, bool valid, int a, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   float fa = *(float*)&a;
   unsigned ir = unsigned(fa);   
 
-  inst.ensure_init(LATENCY_FTOI);
-  inst.push(ir, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_FTOI);
+  sr.push(ir, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_itof(bool clk, bool enable, int a, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_itof(int inst, bool enable, bool valid, int a, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
-  float fr = float(a);   
+  float fr = (float)a;   
 
-  inst.ensure_init(LATENCY_ITOF);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_ITOF);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
 
-void dpi_utof(bool clk, bool enable, int a, int* result) {
-  auto scope = svGetScope();
-  ShiftRegister& inst = instances.get(scope);
+void dpi_utof(int inst, bool enable, bool valid, int a, int* result) {
+  ShiftRegister& sr = instances.get(inst);
 
   unsigned ua = *(unsigned*)&a;
-  float fr = float(ua);   
+  float fr = (float)ua;   
 
-  inst.ensure_init(LATENCY_ITOF);
-  inst.push(*(int*)&fr, clk, enable);
-  *result = inst.top();
+  sr.ensure_init(LATENCY_ITOF);
+  sr.push(*(int*)&fr, enable, valid);
+  *result = sr.top();
 }
