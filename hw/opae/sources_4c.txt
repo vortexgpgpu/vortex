@@ -1,5 +1,8 @@
 +define+NUM_CORES=4
 +define+L2_ENABLE=0
++define+SYNTHESIS
++define+QUARTUS
++define+FPU_FAST
 
 vortex_afu.json
 QI:vortex_afu.qsf

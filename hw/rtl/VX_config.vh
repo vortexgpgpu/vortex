@@ -59,10 +59,6 @@
 `define EXT_F_ENABLE
 `endif
 
-`ifndef FPNEW_DISABLE
-`define FPNEW_ENABLE
-`endif
-
 // Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
