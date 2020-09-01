@@ -15,6 +15,6 @@ rm -f riscv-gnu-toolchain.tar.bz2*
 
 # VERILATOR
 
-wget $REPOSITORY/verilator/ubuntu/bionic/verilator.bz2
-tar -xvf verilator.bz2
-rm -f verilator.bz2
+wget $REPOSITORY/verilator/ubuntu/bionic/verilator.tar.bz2
+tar -xvf verilator.tar.bz2
+rm -f verilator.tar.bz2
