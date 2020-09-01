@@ -3,6 +3,8 @@
 module VX_fetch #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_SIGNALS_ISTAGE_IO
+
     input wire clk,
     input wire reset,
 

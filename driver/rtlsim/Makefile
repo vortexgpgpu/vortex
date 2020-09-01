@@ -62,8 +62,8 @@ ifdef AFU
     TOP = vortex_afu_sim
 	VL_FLAGS += -DNOPAE
 	CFLAGS += -DNOPAE
-	#VL_FLAGS += -DSCOPE
-	#CFLAGS += -DSCOPE
+	VL_FLAGS += -DSCOPE
+	CFLAGS += -DSCOPE
 	RTL_INCLUDE += -I../../hw/opae  -I../../hw/opae/ccip
 endif
 
