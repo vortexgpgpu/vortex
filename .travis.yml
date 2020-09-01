@@ -1,5 +1,5 @@
 language: cpp
-dist: focal
+dist: bionic
 os: linux
 compiler: gcc
 addons:
@@ -11,13 +11,13 @@ addons:
         - valgrind
         - verilator
         - yosys
-        
+
 install:
-  # RISCV_TOOLCHAIN
+  # TOOLCHAIN
+  - ci/toolchain_install.sh
   - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain
-  - wget https://github.com/stnolting/riscv_gcc_prebuilt/raw/master/data/$TOOLCHAIN_V.tar.gz
-  - mkdir $RISCV_TOOLCHAIN_PATH
-  - tar -xzf $TOOLCHAIN_V.tar.gz -C $RISCV_TOOLCHAIN_PATH
+  - export VERILATOR_ROOT=$PWD/verilator
+  - export PATH=$VERILATOR_ROOT/bin:$PATH
     
   # VORTEX
   - git clone --recursive https://github.com/vortexgpgpu/vortex.git
