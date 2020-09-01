@@ -193,11 +193,6 @@
 `define DWORD_SIZE 4
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef DSTAGE_1_CYCLES
-`define DSTAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef DCREQ_SIZE
 `define DCREQ_SIZE `NUM_WARPS
@@ -264,11 +259,6 @@
 `define IWORD_SIZE 4
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef ISTAGE_1_CYCLES
-`define ISTAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef ICREQ_SIZE
 `define ICREQ_SIZE `NUM_WARPS
@@ -330,11 +320,6 @@
 `define SWORD_SIZE 4
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef SSTAGE_1_CYCLES
-`define SSTAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef SCREQ_SIZE
 `define SCREQ_SIZE `NUM_WARPS
@@ -365,11 +350,6 @@
 // Size of a word in bytes
 `ifndef L2WORD_SIZE
 `define L2WORD_SIZE `L2BANK_LINE_SIZE
-`endif
-
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef L2STAGE_1_CYCLES
-`define L2STAGE_1_CYCLES 1
 `endif
 
 // Core Request Queue Size
@@ -436,11 +416,6 @@
 // Size of a word in bytes
 `ifndef L3WORD_SIZE
 `define L3WORD_SIZE `L3BANK_LINE_SIZE
-`endif
-
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef L3STAGE_1_CYCLES
-`define L3STAGE_1_CYCLES 1
 `endif
 
 // Core Request Queue Size

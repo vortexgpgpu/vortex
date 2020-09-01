@@ -12,8 +12,6 @@ module VX_cache #(
     parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle {1, 2, 4, 8, ...}
     parameter NUM_REQUESTS                  = 4, 
-    // Number of cycles to complete stage 1 (read from memory)
-    parameter STAGE_1_CYCLES                = 1,
 
     // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
 
@@ -359,7 +357,6 @@ module VX_cache #(
             .NUM_BANKS          (NUM_BANKS),
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQUESTS       (NUM_REQUESTS),
-            .STAGE_1_CYCLES     (STAGE_1_CYCLES),
             .CREQ_SIZE          (CREQ_SIZE),
             .MRVQ_SIZE          (MRVQ_SIZE),
             .DFPQ_SIZE          (DFPQ_SIZE),
