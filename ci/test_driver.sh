@@ -1,3 +1,3 @@
 #!/bin/bash
 
-cd ../driver/tests && make run -f Makefile
+make -C driver/tests run

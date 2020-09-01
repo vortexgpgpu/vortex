@@ -1,3 +1,3 @@
 #!/bin/bash
 
-cd ../runtime/tests && make run -f Makefile
+make -C runtime/tests run

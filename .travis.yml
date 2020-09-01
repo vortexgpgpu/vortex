@@ -21,10 +21,8 @@ install:
     
   # VORTEX
   - git clone --recursive https://github.com/vortexgpgpu/vortex.git
-  - cd Vortex
-  - make
-  - make -C benchmarks/opencl/sgemm
-  - make -C benchmarks/opencl/sgemm run
+  - cd vortex
+  - make -j`nproc`
 
 script:   
   - ci/test_runtime.sh

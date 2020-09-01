@@ -1,3 +1,3 @@
 #!/bin/bash
 
-cd ../benchmarks/riscv_tests/isa && make run -f Makefile
+make -C benchmarks/riscv_tests/isa run

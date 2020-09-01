@@ -1,3 +1,3 @@
 #!/bin/sh
 
-cd ../benchmarks/opencl && make run -f Makefile
+make -C benchmarks/opencl run
