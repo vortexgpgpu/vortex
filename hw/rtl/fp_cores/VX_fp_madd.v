@@ -51,9 +51,9 @@ module VX_fp_madd #(
             .chainin_invalid(),
             .chainin_underflow(),
             .chainin_inexact(),
-            .ax(),
+            .ax(dataa[i]),
             .ay(datab[i]),
-            .az(dataa[i]),
+            .az(),
             .clk({2'b00,clk}),
             .ena({2'b11,~stall}),
             .aclr(2'b00),
@@ -75,12 +75,12 @@ module VX_fp_madd #(
         defparam mac_fp_add.adder_subtract = "false"; 
         defparam mac_fp_add.ax_clock = "0"; 
         defparam mac_fp_add.ay_clock = "0"; 
-        defparam mac_fp_add.az_clock = "0"; 
+        defparam mac_fp_add.az_clock = "none"; 
         defparam mac_fp_add.output_clock = "0"; 
         defparam mac_fp_add.accumulate_clock = "none"; 
-        defparam mac_fp_add.ax_chainin_pl_clock = "0"; 
+        defparam mac_fp_add.ax_chainin_pl_clock = "none"; 
         defparam mac_fp_add.accum_pipeline_clock = "none"; 
-        defparam mac_fp_add.mult_pipeline_clock = "0"; 
+        defparam mac_fp_add.mult_pipeline_clock = "none"; 
         defparam mac_fp_add.adder_input_clock = "0"; 
         defparam mac_fp_add.accum_adder_clock = "none"; 
 
@@ -91,9 +91,9 @@ module VX_fp_madd #(
             .chainin_invalid(),
             .chainin_underflow(),
             .chainin_inexact(),
-            .ax(),
+            .ax(dataa[i]),
             .ay(datab[i]),
-            .az(dataa[i]),
+            .az(),
             .clk({2'b00,clk}),
             .ena({2'b11,~stall}),
             .aclr(2'b00),

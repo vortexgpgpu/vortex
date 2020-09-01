@@ -23,7 +23,11 @@ module VX_gpr_fp_ctrl (
 
 	always @(posedge clk) begin
 		if (reset) begin
-			read_rs1 <= 1;
+			rs1_tmp_data <= 0;
+			rs2_tmp_data <= 0;
+			rs3_tmp_data <= 0;
+			read_rs1     <= 1;
+			rs3_wid      <= 0;
 		end else begin
 			if (rs3_delay) begin
 				read_rs1 <= 0;
@@ -32,16 +36,18 @@ module VX_gpr_fp_ctrl (
 				read_rs1 <= 1;
 			end
 
+			if (read_rs1) begin
+				rs1_tmp_data <= rs1_data;
+			end
+			rs2_tmp_data <= rs2_data;
+			rs3_tmp_data <= rs1_data;
+
 			assert(read_rs1 || rs3_wid == gpr_read_if.wid);
 		end	
 	end
 
 	always @(posedge clk) begin
-		if (read_rs1) begin
-			rs1_tmp_data <= rs1_data;
-		end
-		rs2_tmp_data <= rs2_data;
-		rs3_tmp_data <= rs1_data;
+		
 	end
 
 	// outputs

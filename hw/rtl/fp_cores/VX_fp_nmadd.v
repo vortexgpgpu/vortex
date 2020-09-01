@@ -52,7 +52,7 @@ module VX_fp_nmadd #(
             .ay(datab[i]),
             .az(dataa[i]),
             .clk({2'b00,clk}),
-            .ena({2'b11,~stall),
+            .ena({2'b11,~stall}),
             .aclr(2'b00),
             .chainin(),
             // outputs

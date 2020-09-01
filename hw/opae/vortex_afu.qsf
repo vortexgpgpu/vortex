@@ -6,3 +6,4 @@ set_global_assignment -name VERILOG_MACRO QUARTUS
 set_global_assignment -name VERILOG_MACRO SYNTHESIS
 set_global_assignment -name VERILOG_MACRO NDEBUG
 set_global_assignment -name MESSAGE_DISABLE 16818
+set_global_assignment -name VERILOG_MACRO FPU_FAST
