@@ -161,10 +161,12 @@ module VX_fp_nmadd #(
         defparam mac_fp_neg.adder_input_clock = "0"; 
         defparam mac_fp_neg.accum_adder_clock = "none";
     `else
+        reg valid_in_st0;
         always @(posedge clk) begin
-           dpi_fmadd(clk, ~stall, dataa[i], datab[i], datac[i], result_madd);
-           dpi_fmsub(clk, ~stall, dataa[i], datab[i], datac[i], result_msub);
-           dpi_fsub(clk, ~stall, 32'b0, result_st0, result[i]);
+           valid_in_st0 <= reset ? 0 : valid_in; 
+           dpi_fmadd(5*LANES+i, ~stall, valid_in, dataa[i], datab[i], datac[i], result_madd);
+           dpi_fmsub(6*LANES+i, ~stall, valid_in, dataa[i], datab[i], datac[i], result_msub);
+           dpi_fsub(7*LANES+i, ~stall, valid_in_st0, 32'b0, result_st0, result[i]);
         end
     `endif
     end    

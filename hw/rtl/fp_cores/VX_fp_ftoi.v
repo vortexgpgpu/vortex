@@ -53,8 +53,8 @@ module VX_fp_ftoi #(
         );        
     `else
         always @(posedge clk) begin
-           dpi_ftoi(clk, ~stall, dataa[i], result_s);
-           dpi_ftou(clk, ~stall, dataa[i], result_u);
+           dpi_ftoi(10*LANES+i, ~stall, valid_in, dataa[i], result_s);
+           dpi_ftou(11*LANES+i, ~stall, valid_in, dataa[i], result_u);
         end
     `endif
 

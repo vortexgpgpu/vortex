@@ -37,7 +37,7 @@ module VX_fp_sqrt #(
         );
     `else
         always @(posedge clk) begin
-           dpi_fsqrt(clk, ~stall, dataa[i], result[i]);
+           dpi_fsqrt(9*LANES+i, ~stall, valid_in, dataa[i], result[i]);
         end
     `endif
     end

@@ -247,7 +247,7 @@ void kernel_fsqrt(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = sqrt(a * b);
+		float c = sqrtf(a * b);
 		dst_ptr[offset+i] = c;
 	}
 }
