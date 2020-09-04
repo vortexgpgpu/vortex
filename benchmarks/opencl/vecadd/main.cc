@@ -31,6 +31,7 @@
    })
 
 int exitcode = 0;
+cl_device_id device_id = NULL;
 cl_context context = NULL;
 cl_command_queue commandQueue = NULL;
 cl_program program = NULL;
@@ -72,6 +73,8 @@ static void cleanup() {
   if (b_memobj) clReleaseMemObject(b_memobj);
   if (c_memobj) clReleaseMemObject(c_memobj);  
   if (context) clReleaseContext(context);
+  if (device_id) clReleaseDevice(device_id);
+  
   if (kernel_bin) free(kernel_bin);
   if (A) free(A);
   if (B) free(B);
@@ -104,7 +107,6 @@ int main (int argc, char **argv) {
   printf("enter demo main\n");
 
   cl_platform_id platform_id;
-  cl_device_id device_id;
   size_t kernel_size;
   cl_int binary_status = 0;
   int i;
@@ -139,6 +141,11 @@ int main (int argc, char **argv) {
   // Create program from kernel source
   program = CL_CHECK2(clCreateProgramWithBinary(
     context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
+  if (program == NULL) {
+    printf("clCreateProgramWithBinary() failed\n");
+    cleanup();
+    return -1;
+  }
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
