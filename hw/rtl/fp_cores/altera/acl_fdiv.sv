@@ -15,12 +15,12 @@
 // applicable agreement for further details.
 // ---------------------------------------------------------------------------
 
-// SystemVerilog created from acl_fp_div
-// SystemVerilog created on Mon Aug 31 06:15:17 2020
+// SystemVerilog created from acl_fdiv
+// SystemVerilog created on Wed Sep  2 07:11:09 2020
 
 
 (* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION OFF; -name MESSAGE_DISABLE 10036; -name MESSAGE_DISABLE 10037; -name MESSAGE_DISABLE 14130; -name MESSAGE_DISABLE 14320; -name MESSAGE_DISABLE 15400; -name MESSAGE_DISABLE 14130; -name MESSAGE_DISABLE 10036; -name MESSAGE_DISABLE 12020; -name MESSAGE_DISABLE 12030; -name MESSAGE_DISABLE 12010; -name MESSAGE_DISABLE 12110; -name MESSAGE_DISABLE 14320; -name MESSAGE_DISABLE 13410; -name MESSAGE_DISABLE 113007; -name MESSAGE_DISABLE 10958" *)
-module acl_fp_div (
+module acl_fdiv (
     input wire [31:0] a,
     input wire [31:0] b,
     input wire [0:0] en,
@@ -623,7 +623,7 @@ module acl_fp_div (
         .outdata_aclr_a("CLEAR0"),
         .clock_enable_input_a("NORMAL"),
         .power_up_uninitialized("FALSE"),
-        .init_file("acl_fp_div_memoryC2_uid118_invTables_lutmem.hex"),
+        .init_file("acl_fdiv_memoryC2_uid118_invTables_lutmem.hex"),
         .init_file_layout("PORT_A"),
         .intended_device_family("Arria 10")
     ) memoryC2_uid118_invTables_lutmem_dmem (
@@ -755,7 +755,7 @@ module acl_fp_div (
         .outdata_aclr_a("CLEAR0"),
         .clock_enable_input_a("NORMAL"),
         .power_up_uninitialized("FALSE"),
-        .init_file("acl_fp_div_memoryC1_uid115_invTables_lutmem.hex"),
+        .init_file("acl_fdiv_memoryC1_uid115_invTables_lutmem.hex"),
         .init_file_layout("PORT_A"),
         .intended_device_family("Arria 10")
     ) memoryC1_uid115_invTables_lutmem_dmem (
@@ -1060,7 +1060,7 @@ module acl_fp_div (
         .outdata_aclr_a("CLEAR0"),
         .clock_enable_input_a("NORMAL"),
         .power_up_uninitialized("FALSE"),
-        .init_file("acl_fp_div_memoryC0_uid112_invTables_lutmem.hex"),
+        .init_file("acl_fdiv_memoryC0_uid112_invTables_lutmem.hex"),
         .init_file_layout("PORT_A"),
         .intended_device_family("Arria 10")
     ) memoryC0_uid112_invTables_lutmem_dmem (

@@ -1,16 +1,14 @@
 `include "VX_platform.vh"
 
 module VX_multiplier #(
-    parameter WIDTHA = 1,
-    parameter WIDTHB = 1,
-    parameter WIDTHP = 1,
-    parameter SIGNED = 0,
-    parameter PIPELINE = 0
+    parameter WIDTHA  = 1,
+    parameter WIDTHB  = 1,
+    parameter WIDTHP  = 1,
+    parameter SIGNED  = 0,
+    parameter LATENCY = 0
 ) (
-    input wire clk,
-    input wire reset,
-
-    input wire clk_en,
+    input wire clk,    
+    input wire enable,
     input wire [WIDTHA-1:0]  dataa,
     input wire [WIDTHB-1:0]  datab,
     output wire [WIDTHP-1:0] result
@@ -20,20 +18,22 @@ module VX_multiplier #(
 
     lpm_mult mult (
         .clock  (clk),
+        .clken  (enable),
         .dataa  (dataa),
         .datab  (datab),
-        .result (result),
-        .clken  (clk_en),
+        .result (result),        
+        .aclr   (1'b0),
+        .sclr   (1'b0),
         .sum    (1'b0)
     );
 
-    defparam mult.lpm_type = "LPM_MULT",
+    defparam mult.lpm_type   = "LPM_MULT",
              mult.lpm_widtha = WIDTHA,
              mult.lpm_widthb = WIDTHB,
              mult.lpm_widthp = WIDTHP,
              mult.lpm_representation = SIGNED ? "SIGNED" : "UNSIGNED",
-             mult.lpm_pipeline = PIPELINE,
-             mult.lpm_hint = "MAXIMIZE_SPEED=9,DEDICATED_MULTIPLIER_CIRCUITRY=YES";
+             mult.lpm_pipeline = LATENCY,
+             mult.lpm_hint   = "DEDICATED_MULTIPLIER_CIRCUITRY=YES,MAXIMIZE_SPEED=9";
 `else
 
     wire [WIDTHP-1:0] result_unqual;
@@ -44,29 +44,20 @@ module VX_multiplier #(
         assign result_unqual = dataa * datab;
     end
     
-    if (PIPELINE == 0) begin
+    if (LATENCY == 0) begin
         assign result = result_unqual;
-    end else begin
-        
-        reg [WIDTHP-1:0] result_pipe [0:PIPELINE-1];
+    end else begin        
+        reg [WIDTHP-1:0] result_pipe [0:LATENCY-1];
 
-        for (genvar i = 0; i < PIPELINE; i++) begin
+        for (genvar i = 0; i < LATENCY; i++) begin
             always @(posedge clk) begin
-                if (reset) begin
-                    result_pipe[i] <= 0;
-                end else begin
-                    if (clk_en) begin
-                        if (i == 0) begin
-                            result_pipe[i] <= result_unqual;
-                        end else begin
-                            result_pipe[i] <= result_pipe[i-1];
-                        end                    
-                    end
+                if (enable) begin
+                    result_pipe[i] <= (0 == i) ? result_unqual : result_pipe[i-1];
                 end
             end
-        end
-        
-        assign result = result_pipe[PIPELINE-1]; 
+        end        
+
+        assign result = result_pipe[LATENCY-1]; 
     end
 
 `endif

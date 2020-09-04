@@ -62,7 +62,7 @@ module VX_commit #(
         fflags_r      <= fflags;
         has_fflags_r  <= fpu_commit_if.valid && fpu_commit_if.has_fflags;
         wid_r         <= fpu_commit_if.wid;
-        num_commits_r <= num_commits;
+        num_commits_r <= (num_commits << $clog2(`NUM_THREADS));
     end
 
     assign cmt_to_csr_if.valid       = csr_update_r;            

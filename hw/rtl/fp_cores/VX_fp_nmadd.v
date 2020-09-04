@@ -30,13 +30,14 @@ module VX_fp_nmadd #(
 ); 
 
     wire stall = ~ready_out && valid_out;
+    wire enable = ~stall;
 
     reg do_sub_r;
 
     for (genvar i = 0; i < LANES; i++) begin
 
         wire [31:0] result_madd;
-        wire [31:0] result_msub; 
+        wire [31:0] result_msub;     
 
         wire [31:0] result_st0 = do_sub_r ? result_msub : result_madd;
 
@@ -52,7 +53,7 @@ module VX_fp_nmadd #(
             .ay(datab[i]),
             .az(dataa[i]),
             .clk({2'b00,clk}),
-            .ena({2'b11,~stall}),
+            .ena({2'b11,enable}),
             .aclr(2'b00),
             .chainin(),
             // outputs
@@ -161,33 +162,36 @@ module VX_fp_nmadd #(
         defparam mac_fp_neg.adder_input_clock = "0"; 
         defparam mac_fp_neg.accum_adder_clock = "none";
     `else
-        reg valid_in_st0;
         always @(posedge clk) begin
-           valid_in_st0 <= reset ? 0 : valid_in; 
-           dpi_fmadd(5*LANES+i, ~stall, valid_in, dataa[i], datab[i], datac[i], result_madd);
-           dpi_fmsub(6*LANES+i, ~stall, valid_in, dataa[i], datab[i], datac[i], result_msub);
-           dpi_fsub(7*LANES+i, ~stall, valid_in_st0, 32'b0, result_st0, result[i]);
+           dpi_fmadd(5*LANES+i, enable, dataa[i], datab[i], datac[i], result_madd);
+           dpi_fmsub(6*LANES+i, enable, dataa[i], datab[i], datac[i], result_msub);
+           dpi_fsub(7*LANES+i, enable, 32'b0, result_st0, result[i]);
         end
     `endif
-    end    
-
-    always @(posedge clk) begin
-        if (~stall) begin
-            do_sub_r <= do_sub;
-        end
     end
 
     VX_shift_register #(
+        .DATAW(1),
+        .DEPTH(`LATENCY_FMADD)
+    ) shift_reg0 (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .in({do_sub}),
+        .out({do_sub_r})
+    );
+
+    VX_shift_register #(
         .DATAW(TAGW + 1),
-        .DEPTH(`LATENCY_FNMADD)
+        .DEPTH(`LATENCY_FMADD + `LATENCY_FADDMUL)
     ) shift_reg1 (
         .clk(clk),
         .reset(reset),
-        .enable(~stall),
+        .enable(enable),
         .in({tag_in,   valid_in}),
         .out({tag_out, valid_out})
     );
 
-    assign ready_in  = ~stall;
+    assign ready_in = enable;
 
 endmodule

@@ -25,19 +25,20 @@ module VX_fp_sqrt #(
     output wire valid_out
 );    
     wire stall = ~ready_out && valid_out;
+    wire enable = ~stall;
     
     for (genvar i = 0; i < LANES; i++) begin
     `ifdef QUARTUS
-        acl_fp_sqrt fsqrt (
+        acl_fsqrt fsqrt (
             .clk    (clk),
             .areset (1'b0),
-            .en     (~stall),
+            .en     (enable),
             .a      (dataa[i]),
             .q      (result[i])
         );
     `else
         always @(posedge clk) begin
-           dpi_fsqrt(9*LANES+i, ~stall, valid_in, dataa[i], result[i]);
+           dpi_fsqrt(9*LANES+i, enable, dataa[i], result[i]);
         end
     `endif
     end
@@ -48,11 +49,11 @@ module VX_fp_sqrt #(
     ) shift_reg (
         .clk(clk),
         .reset(reset),
-        .enable(~stall),
+        .enable(enable),
         .in ({tag_in,  valid_in}),
         .out({tag_out, valid_out})
     );
 
-    assign ready_in = ~stall;
+    assign ready_in = enable;
 
 endmodule
