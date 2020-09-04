@@ -22,6 +22,7 @@ Simulator::Simulator() {
 
   dram_rsp_active_ = false;
   snp_req_active_ = false;
+  csr_req_active_ = false;
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
@@ -163,15 +164,6 @@ void Simulator::eval_io_bus() {
   vortex_->io_rsp_valid = 0;
 }
 
-void Simulator::eval_csr_bus() {
-  vortex_->csr_io_req_valid = 0;
-  vortex_->csr_io_req_coreid = 0;
-  vortex_->csr_io_req_addr = 0;
-  vortex_->csr_io_req_rw = 0;
-  vortex_->csr_io_req_data = 0;  
-  vortex_->csr_io_rsp_ready = 1;
-}
-
 void Simulator::eval_snp_bus() {
   if (snp_req_active_) {       
     if (vortex_->snp_rsp_valid) {      
@@ -204,6 +196,27 @@ void Simulator::eval_snp_bus() {
   }
 }
 
+void Simulator::eval_csr_bus() {
+  if (csr_req_active_) { 
+    if (vortex_->csr_io_req_rw) {
+      if (vortex_->csr_io_req_ready) {
+        vortex_->snp_req_valid = 0;
+        csr_req_active_ = false;
+      }
+    } else { 
+      if (vortex_->csr_io_rsp_valid) {
+        *csr_rsp_value_ = vortex_->csr_io_rsp_data;
+        vortex_->snp_req_valid = 0;
+        vortex_->csr_io_rsp_ready = 0;
+        csr_req_active_ = false;
+      }
+    }
+  } else {
+    vortex_->csr_io_req_valid = 0;
+    vortex_->csr_io_rsp_ready = 0;
+  }
+}
+
 void Simulator::wait(uint32_t cycles) {
   for (int i = 0; i < cycles; ++i) {
     this->step();
@@ -211,7 +224,9 @@ void Simulator::wait(uint32_t cycles) {
 }
 
 bool Simulator::is_busy() const {
-  return vortex_->busy || snp_req_active_;
+  return vortex_->busy 
+      || snp_req_active_ 
+      || csr_req_active_;
 }
 
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
@@ -221,20 +236,50 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   if (0 == size)
     return;
 
-  snp_req_active_ = true;
-  snp_req_size_   = (size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE; 
-  
   vortex_->snp_req_addr  = mem_addr / GLOBAL_BLOCK_SIZE;
   vortex_->snp_req_tag   = 0;
   vortex_->snp_req_valid = 1;
   vortex_->snp_rsp_ready = 1;  
 
+  snp_req_size_   = (size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE; 
   --snp_req_size_;
   pending_snp_reqs_ = 1;
+
+  snp_req_active_ = true;
     
   #ifdef DBG_PRINT_CACHE_SNP
     std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << std::dec << " tag=" << vortex_->snp_req_tag << " remain=" << snp_req_size_ << std::endl;
   #endif  
+}
+
+void Simulator::set_csr(int core_id, int addr, unsigned value) {
+#ifndef NDEBUG
+  std::cout << timestamp << ": [sim] set_csr()" << std::endl;
+#endif
+
+  vortex_->csr_io_req_valid  = 1;
+  vortex_->csr_io_req_coreid = core_id;
+  vortex_->csr_io_req_addr   = addr;
+  vortex_->csr_io_req_rw     = 1;
+  vortex_->csr_io_req_data   = value;  
+  vortex_->csr_io_rsp_ready  = 0;
+
+  csr_req_active_ = true;
+}
+
+void Simulator::get_csr(int core_id, int addr, unsigned *value) {
+#ifndef NDEBUG
+  std::cout << timestamp << ": [sim] get_csr()" << std::endl;
+#endif
+
+  vortex_->csr_io_req_valid  = 1;
+  vortex_->csr_io_req_coreid = core_id;
+  vortex_->csr_io_req_addr   = addr;
+  vortex_->csr_io_req_rw     = 0;
+  vortex_->csr_io_rsp_ready  = 1;
+
+  csr_rsp_value_ = value;
+  csr_req_active_ = true;  
 }
 
 void Simulator::run() {

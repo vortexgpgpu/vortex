@@ -31,6 +31,8 @@ public:
   Simulator();
   virtual ~Simulator();
 
+  void attach_ram(RAM* ram);
+
   void load_bin(const char* program_file);
   void load_ihex(const char* program_file);
   
@@ -39,12 +41,14 @@ public:
   void reset();
   void step();
   void wait(uint32_t cycles);
+  
   void flush_caches(uint32_t mem_addr, uint32_t size);  
-
-  void attach_ram(RAM* ram);
+  void set_csr(int core_id, int addr, unsigned value);
+  void get_csr(int core_id, int addr, unsigned *value);
 
   void run();  
   int get_last_wb_value(int reg) const;  
+
   void print_stats(std::ostream& out);
 
 private:  
@@ -60,8 +64,11 @@ private:
   int dram_rsp_active_;
   
   bool snp_req_active_;
+  bool csr_req_active_;
+
   uint32_t snp_req_size_;
   uint32_t pending_snp_reqs_;
+  uint32_t* csr_rsp_value_;
 
   RAM *ram_;
   VVortex *vortex_;

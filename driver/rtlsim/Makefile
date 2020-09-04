@@ -28,6 +28,8 @@ CFLAGS += -fPIC
 
 CFLAGS += -DUSE_RTLSIM $(CONFIGS)
 
+CFLAGS += -DDUMP_PERF_STATS
+
 LDFLAGS += -shared -pthread
 # LDFLAGS += -dynamiclib -pthread
 
