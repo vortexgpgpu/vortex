@@ -59,6 +59,8 @@
 `define EXT_F_ENABLE
 `endif
 
+`define FPU_FAST
+
 // Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
@@ -74,12 +76,12 @@
 `define LATENCY_FNONCOMP 1
 `endif
 
-`ifndef LATENCY_FMADD
-`define LATENCY_FMADD 1
+`ifndef LATENCY_FADDMUL
+`define LATENCY_FADDMUL 3
 `endif
 
-`ifndef LATENCY_FNMADD
-`define LATENCY_FNMADD 2
+`ifndef LATENCY_FMADD
+`define LATENCY_FMADD 4
 `endif
 
 `ifndef LATENCY_FDIV
@@ -98,16 +100,12 @@
 `define LATENCY_FTOI 3
 `endif
 
-`ifndef LATENCY_FADDMUL
-`define LATENCY_FADDMUL 2
-`endif
-
 `ifndef LATENCY_FDIVSQRT
-`define LATENCY_FDIVSQRT 2
+`define LATENCY_FDIVSQRT 10
 `endif
 
 `ifndef LATENCY_FCONV
-`define LATENCY_FCONV 2
+`define LATENCY_FCONV 3
 `endif
 
 // CSR Addresses //////////////////////////////////////////////////////////////

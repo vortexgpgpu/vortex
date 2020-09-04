@@ -4,6 +4,10 @@
 `include "VX_platform.vh"
 `include "VX_scope.vh"
 
+`ifdef DBG_CORE_REQ_INFO
+`include "VX_define.vh"
+`endif
+
 `define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_REQ_TAG_WIDTH)
 
 `define REQS_BITS               `LOG2UP(NUM_REQUESTS)
@@ -76,5 +80,7 @@
 `define LINE_TO_DRAM_ADDR(x, i) {x, `BANK_SELECT_BITS'(i)}
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
+
+`define DRAM_TO_BYTE_ADDR(x)    {x, (32-$bits(x))'(0)}
 
 `endif

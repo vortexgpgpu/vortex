@@ -27,6 +27,7 @@ module VX_fp_itof #(
     output wire valid_out
 );    
     wire stall = ~ready_out && valid_out;
+    wire enable = ~stall;
 
     reg is_signed_r;
 
@@ -36,25 +37,25 @@ module VX_fp_itof #(
         wire [31:0] result_u;
 
     `ifdef QUARTUS
-        acl_fp_itof itof (
+        acl_itof itof (
             .clk    (clk),
             .areset (1'b0),
-            .en     (~stall),
+            .en     (enable),
             .a      (dataa[i]),
             .q      (result_s)
         );
 
-        acl_fp_utof utof (
+        acl_utof utof (
             .clk    (clk),
             .areset (1'b0),
-            .en     (~stall),
+            .en     (enable),
             .a      (dataa[i]),
             .q      (result_u)
         );
     `else
         always @(posedge clk) begin
-           dpi_itof(12*LANES+i, ~stall, valid_in, dataa[i], result_s);
-           dpi_utof(13*LANES+i, ~stall, valid_in, dataa[i], result_u);
+           dpi_itof(12*LANES+i, enable, dataa[i], result_s);
+           dpi_utof(13*LANES+i, enable, dataa[i], result_u);
         end
     `endif
 
@@ -67,11 +68,11 @@ module VX_fp_itof #(
     ) shift_reg (
         .clk(clk),
         .reset(reset),
-        .enable(~stall),
+        .enable(enable),
         .in ({tag_in,  valid_in,  is_signed}),
         .out({tag_out, valid_out, is_signed_r})
     );
 
-    assign ready_in = ~stall;
+    assign ready_in = enable;
 
 endmodule

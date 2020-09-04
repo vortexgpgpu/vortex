@@ -385,7 +385,7 @@
 `define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
 `define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
 
-`define DRAM_TO_BYTE_ADDR(x)     {x, (32-$bits(x))'(0)}
+`define DRAM_TO_BYTE_ADDR(x)    {x, (32-$bits(x))'(0)}
 
 `include "VX_types.vh"
 

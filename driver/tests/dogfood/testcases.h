@@ -5,12 +5,12 @@
 #include <limits>
 
 union Float_t {    
-    float   f;
-    int32_t i;
+    float f;
+    int   i;
     struct {
-        uint32_t mantissa : 23;
-        uint32_t exponent : 8;
-        uint32_t sign     : 1;
+        uint32_t man  : 23;
+        uint32_t exp  : 8;
+        uint32_t sign : 1;
     } parts;
 };
 

@@ -13,6 +13,7 @@
 #+define+DBG_PRINT_DRAM
 #+define+DBG_PRINT_PIPELINE
 #+define+DBG_PRINT_OPAE
+#+define+DBG_CORE_REQ_INFO
 #+define+DBG_PRINT_SCOPE
 
 vortex_afu.json

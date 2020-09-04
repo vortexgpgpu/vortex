@@ -51,32 +51,33 @@ module VX_mul_unit #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
-    wire is_mulw = (alu_op == `MUL_MUL);    
-    wire is_mulw_out;
+    wire is_mul_in = (alu_op == `MUL_MUL);    
+    wire is_mul_out;
     wire stall_mul;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin    
 
         wire [32:0] mul_in1 = {(alu_op != `MUL_MULHU)                          & alu_in1[i][31], alu_in1[i]};
         wire [32:0] mul_in2 = {(alu_op != `MUL_MULHU && alu_op != `MUL_MULHSU) & alu_in2[i][31], alu_in2[i]};
-        wire [63:0] mul_result_tmp;
+    `IGNORE_WARNINGS_BEGIN
+        wire [65:0] mul_result_tmp;
+    `IGNORE_WARNINGS_END
 
         VX_multiplier #(
             .WIDTHA(33),
             .WIDTHB(33),
-            .WIDTHP(64),
+            .WIDTHP(66),
             .SIGNED(1),
-            .PIPELINE(`LATENCY_IMUL)
+            .LATENCY(`LATENCY_IMUL)
         ) multiplier (
             .clk(clk),
-            .reset(reset),
-            .clk_en(~stall_mul),
+            .enable(~stall_mul),
             .dataa(mul_in1),
             .datab(mul_in2),
             .result(mul_result_tmp)
         );
 
-        assign mul_result[i] = is_mulw_out ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
+        assign mul_result[i] = is_mul_out ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
     end
 
     wire [MULQ_BITS-1:0] mul_tag;
@@ -91,17 +92,17 @@ module VX_mul_unit #(
         .clk(clk),
         .reset(reset),
         .enable(~stall_mul),
-        .in({mul_fire,       tag_in,  is_mulw}),
-        .out({mul_valid_out, mul_tag, is_mulw_out})
+        .in({mul_fire,       tag_in,  is_mul_in}),
+        .out({mul_valid_out, mul_tag, is_mul_out})
     );
 
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;
 
-    wire is_div_only = (alu_op == `MUL_DIV) || (alu_op == `MUL_DIVU);
+    wire is_div_only   = (alu_op == `MUL_DIV) || (alu_op == `MUL_DIVU);
     wire is_signed_div = (alu_op == `MUL_DIV) || (alu_op == `MUL_REM);     
-    wire div_valid_in = mul_req_if.valid && is_div_op;   
+    wire div_valid_in  = mul_req_if.valid && is_div_op;   
     wire div_ready_in;
     wire div_ready_out;
     wire div_valid_out;

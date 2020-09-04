@@ -15,12 +15,12 @@
 // applicable agreement for further details.
 // ---------------------------------------------------------------------------
 
-// SystemVerilog created from acl_fp_ftou
-// SystemVerilog created on Mon Aug 31 06:15:18 2020
+// SystemVerilog created from acl_ftou
+// SystemVerilog created on Wed Sep  2 07:11:09 2020
 
 
 (* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION OFF; -name MESSAGE_DISABLE 10036; -name MESSAGE_DISABLE 10037; -name MESSAGE_DISABLE 14130; -name MESSAGE_DISABLE 14320; -name MESSAGE_DISABLE 15400; -name MESSAGE_DISABLE 14130; -name MESSAGE_DISABLE 10036; -name MESSAGE_DISABLE 12020; -name MESSAGE_DISABLE 12030; -name MESSAGE_DISABLE 12010; -name MESSAGE_DISABLE 12110; -name MESSAGE_DISABLE 14320; -name MESSAGE_DISABLE 13410; -name MESSAGE_DISABLE 113007; -name MESSAGE_DISABLE 10958" *)
-module acl_fp_ftou (
+module acl_ftou (
     input wire [31:0] a,
     input wire [0:0] en,
     output wire [31:0] q,
