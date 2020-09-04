@@ -68,8 +68,7 @@ public:
         simulator_.attach_ram(&ram_);
     } 
 
-    ~vx_device() {
-        simulator_.print_stats(std::cout);     
+    ~vx_device() {    
         if (future_.valid()) {
             future_.wait();
         }
@@ -152,6 +151,28 @@ public:
         return 0;
     }
 
+    int set_csr(int core_id, int addr, unsigned value) {
+        if (future_.valid()) {
+            future_.wait(); // ensure prior run completed
+        }        
+        simulator_.set_csr(core_id, addr, value);        
+        while (simulator_.is_busy()) {
+            simulator_.step();
+        };
+        return 0;
+    }
+
+    int get_csr(int core_id, int addr, unsigned *value) {
+        if (future_.valid()) {
+            future_.wait(); // ensure prior run completed
+        }        
+        simulator_.get_csr(core_id, addr, value);        
+        while (simulator_.is_busy()) {
+            simulator_.step();
+        };
+        return 0;
+    }
+
 private:
 
     size_t mem_allocation_;     
@@ -214,6 +235,29 @@ extern int vx_dev_close(vx_device_h hdevice) {
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
+    
+#ifdef DUMP_PERF_STATS
+    unsigned num_cores;
+    vx_csr_get(hdevice, 0, CSR_NC, &num_cores);
+    if (num_cores > 1) {
+        uint64_t total_instrs = 0, total_cycles = 0;
+        for (unsigned core_id = 0; core_id < num_cores; ++core_id) {           
+            uint64_t instrs, cycles;
+            vx_get_perf(hdevice, core_id, &instrs, &cycles);
+            float IPC = (float)(double(instrs) / double(cycles));
+            fprintf(stdout, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
+            total_instrs += instrs;
+            total_cycles = std::max<uint64_t>(total_cycles, cycles);
+        }
+        float IPC = (float)(double(total_instrs) / double(total_cycles));
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
+    } else {
+        uint64_t instrs, cycles;
+        vx_get_perf(hdevice, 0, &instrs, &cycles);
+        float IPC = (float)(double(instrs) / double(cycles));
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
+    }
+#endif
 
     delete device;
 
@@ -324,10 +368,20 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     return device->wait(timeout);
 }
 
-extern int vx_csr_set(vx_device_h /*hdevice*/, int /*core*/, int /*address*/, unsigned /*value*/) {
-    return -1;
+extern int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+
+    return device->set_csr(core_id, addr, value);
 }
 
-extern int vx_csr_get(vx_device_h /*hdevice*/, int /*core*/, int /*address*/, unsigned* /*value*/) {
-    return -1;
+extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+
+    return device->get_csr(core_id, addr, value);
 }

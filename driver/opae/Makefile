@@ -17,6 +17,9 @@ CXXFLAGS +=-fstack-protector
 # Position independent code
 CXXFLAGS += -fPIC
 
+# Dump perf stats
+CXXFLAGS += -DDUMP_PERF_STATS
+
 # Enable scope analyzer
 #CXXFLAGS += -DSCOPE
 
