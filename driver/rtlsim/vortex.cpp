@@ -68,29 +68,7 @@ public:
         simulator_.attach_ram(&ram_);
     } 
 
-    ~vx_device() {
-    #ifdef DUMP_PERF_STATS
-        unsigned num_cores;
-        this->get_csr(0, CSR_NC, &num_cores);
-        if (num_cores > 1) {
-            uint64_t total_instrs = 0, total_cycles = 0;
-            for (unsigned core_id = 0; core_id < num_cores; ++core_id) {           
-                uint64_t instrs, cycles;
-                vx_get_perf(this, core_id, &instrs, &cycles);
-                float IPC = (float)(double(instrs) / double(cycles));
-                fprintf(stdout, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
-                total_instrs += instrs;
-                total_cycles = std::max<uint64_t>(total_cycles, cycles);
-            }
-            float IPC = (float)(double(total_instrs) / double(total_cycles));
-            fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
-        } else {
-            uint64_t instrs, cycles;
-            vx_get_perf(this, 0, &instrs, &cycles);
-            float IPC = (float)(double(instrs) / double(cycles));
-            fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
-        }
-    #endif    
+    ~vx_device() {    
         if (future_.valid()) {
             future_.wait();
         }
@@ -257,6 +235,29 @@ extern int vx_dev_close(vx_device_h hdevice) {
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
+    
+#ifdef DUMP_PERF_STATS
+    unsigned num_cores;
+    vx_csr_get(hdevice, 0, CSR_NC, &num_cores);
+    if (num_cores > 1) {
+        uint64_t total_instrs = 0, total_cycles = 0;
+        for (unsigned core_id = 0; core_id < num_cores; ++core_id) {           
+            uint64_t instrs, cycles;
+            vx_get_perf(hdevice, core_id, &instrs, &cycles);
+            float IPC = (float)(double(instrs) / double(cycles));
+            fprintf(stdout, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
+            total_instrs += instrs;
+            total_cycles = std::max<uint64_t>(total_cycles, cycles);
+        }
+        float IPC = (float)(double(total_instrs) / double(total_cycles));
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
+    } else {
+        uint64_t instrs, cycles;
+        vx_get_perf(hdevice, 0, &instrs, &cycles);
+        float IPC = (float)(double(instrs) / double(cycles));
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
+    }
+#endif
 
     delete device;
 
