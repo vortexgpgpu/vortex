@@ -43,11 +43,11 @@ module VX_writeback #(
                         fpu_valid ? fpu_commit_if.wid :  
                                     0;
     
-    assign wb_tmask =   alu_valid ? alu_commit_if.thread_mask :
-                        lsu_valid ? lsu_commit_if.thread_mask :   
-                        csr_valid ? csr_commit_if.thread_mask :   
-                        mul_valid ? mul_commit_if.thread_mask :                            
-                        fpu_valid ? fpu_commit_if.thread_mask :  
+    assign wb_tmask =   alu_valid ? alu_commit_if.tmask :
+                        lsu_valid ? lsu_commit_if.tmask :   
+                        csr_valid ? csr_commit_if.tmask :   
+                        mul_valid ? mul_commit_if.tmask :                            
+                        fpu_valid ? fpu_commit_if.tmask :  
                                     0;
 
     assign wb_rd =      alu_valid ? alu_commit_if.rd :
@@ -74,8 +74,8 @@ module VX_writeback #(
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({wb_valid,           wb_wid,           wb_tmask,                 wb_rd,           wb_data}),
-        .out   ({writeback_if.valid, writeback_if.wid, writeback_if.thread_mask, writeback_if.rd, writeback_if.data})
+        .in    ({wb_valid,           wb_wid,           wb_tmask,           wb_rd,           wb_data}),
+        .out   ({writeback_if.valid, writeback_if.wid, writeback_if.tmask, writeback_if.rd, writeback_if.data})
     );
 
     assign alu_commit_if.ready = !stall;    

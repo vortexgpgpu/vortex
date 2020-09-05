@@ -18,6 +18,12 @@
      return -1;                                     \
    } while (false)
 
+
+template<int N> 
+constexpr bool static_print() {
+    return (0 < N < 100); 
+}
+
 #define MMIO_SCOPE_READ     (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE    (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
@@ -27,7 +33,8 @@ struct scope_signal_t {
 };
 
 constexpr int ilog2(int n) {
-    return (n > 1) ? 1 + ilog2(n >> 1) : 0;
+    return (n > 1) ? 1 +
+     ilog2(n >> 1) : 0;
 }
 
 static constexpr int NW_BITS = ilog2(NUM_WARPS);
@@ -38,7 +45,14 @@ static constexpr int NR_BITS = ilog2(64);
 static constexpr int NR_BITS = ilog2(32);
 #endif
 
-static const scope_signal_t scope_signals[] = {
+static constexpr int EX_BITS  = 3;
+static constexpr int OP_BITS  = 4;
+static constexpr int MOD_BITS = 3;
+
+static constexpr int ICORE_TAG_WIDTH = NW_BITS;
+static constexpr int DCORE_TAG_WIDTH = ilog2(LSUQ_SIZE);
+
+static constexpr scope_signal_t scope_signals[] = {
 
     { 32, "dram_req_addr" },
     { 1,  "dram_req_rw" },
@@ -55,28 +69,43 @@ static const scope_signal_t scope_signals[] = {
     
     { NW_BITS, "icache_req_wid" },
     { 32, "icache_req_addr" },    
-    { NW_BITS, "icache_req_tag" },  
+    { ICORE_TAG_WIDTH, "icache_req_tag" },  
     { 32, "icache_rsp_data" },    
-    { NW_BITS, "icache_rsp_tag" },
+    { ICORE_TAG_WIDTH, "icache_rsp_tag" },
 
     { NW_BITS, "dcache_req_wid" },         
-    { 32, "dcache_req_PC" },
+    { 32, "dcache_req_pc" },
     { NUM_THREADS * 32, "dcache_req_addr" },
     { 1,  "dcache_req_rw" },
     { NUM_THREADS * 4,  "dcache_req_byteen" },
     { NUM_THREADS * 32, "dcache_req_data" },
-    { NW_BITS, "dcache_req_tag" },
+    { DCORE_TAG_WIDTH, "dcache_req_tag" },
     { NUM_THREADS * 32, "dcache_rsp_data" },    
-    { NW_BITS, "dcache_rsp_tag" }, 
+    { DCORE_TAG_WIDTH, "dcache_rsp_tag" }, 
+
+    { NW_BITS, "issue_wid" },
+    { NUM_THREADS, "issue_tmask" },
+    { 32, "issue_pc" },
+    { EX_BITS, "issue_ex_type" },
+    { OP_BITS, "issue_op_type" },
+    { MOD_BITS, "issue_op_mod" },
+    { 1, "issue_wb" },
+    { NR_BITS, "issue_rd" },
+    { NR_BITS, "issue_rs1" },
+    { NR_BITS, "issue_rs2" },
+    { NR_BITS, "issue_rs3" },
+    { 32, "issue_imm" },
+    { 1, "issue_rs1_is_pc" },
+    { 1, "issue_rs2_is_imm" },
     
-    { NW_BITS, "alu_req_wid" },
-    { 32, "alu_req_PC" },
-    { NR_BITS,  "alu_req_rd" },
-    { NUM_THREADS * 32, "alu_req_a" },
-    { NUM_THREADS * 32, "alu_req_b" },    
+    { NW_BITS, "gpr_rsp_wid" },
+    { 32, "gpr_rsp_pc" },
+    { NUM_THREADS * 32, "gpr_rsp_a" },
+    { NUM_THREADS * 32, "gpr_rsp_b" },    
+    { NUM_THREADS * 32, "gpr_rsp_c" },    
     
     { NW_BITS, "writeback_wid" },    
-    { 32, "writeback_PC" },
+    { 32, "writeback_pc" },
     { NR_BITS,  "writeback_rd" },
     { NUM_THREADS * 32, "writeback_data" },    
 
@@ -110,19 +139,29 @@ static const scope_signal_t scope_signals[] = {
     { NUM_THREADS, "dcache_rsp_valid" }, 
     { 1, "dcache_rsp_ready" },
     
-    { NUM_THREADS, "decode_valid" },
-    { NUM_THREADS, "alu_req_valid" },
-    { NUM_THREADS, "writeback_valid" }, 
-
-    { 1, "busy" },
-
     { 1, "bank_valid_st0" },
     { 1, "bank_valid_st1" },
     { 1, "bank_valid_st2" },
     { 1, "bank_stall_pipe" },
+
+    { 1, "issue_valid" },   
+    { 1, "issue_ready" },   
+    { 1, "gpr_rsp_valid" },
+    { 1, "writeback_valid" }, 
+    { 1, "scoreboard_delay" },
+    { 1, "gpr_delay" },
+    { 1, "execute_delay" },
+    { 1, "busy" },
 };
 
-static const int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
+static constexpr int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
+
+constexpr int calcFrameWidth(int index = 0) {
+    return (index < num_signals) ? (scope_signals[index].width + calcFrameWidth(index + 1)) : 0;
+}
+
+static constexpr int fwidth = calcFrameWidth();
+static_assert(fwidth == 1766, "invalid size");
 
 int vx_scope_start(fpga_handle hfpga, uint64_t delay) {    
     if (nullptr == hfpga)
@@ -153,12 +192,6 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
 
     ofs << "$timescale 1 ns $end" << std::endl;
     ofs << "$var reg 1 0 clk $end" << std::endl;
-
-    int fwidth = 0;
-    for (int i = 0; i < num_signals; ++i) {
-        ofs << "$var reg " << scope_signals[i].width << " " << (i+1) << " " << scope_signals[i].name << " $end" << std::endl;
-        fwidth += scope_signals[i].width;
-    }
 
     ofs << "enddefinitions $end" << std::endl;
 

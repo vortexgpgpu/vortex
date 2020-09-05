@@ -261,7 +261,7 @@ module VX_decode  #(
     wire [2:0] frm    = 0;  
 
     always @(*) begin
-        fpu_op = `FPU_OTHER;
+        fpu_op = `FPU_MISC;
     end
 `endif
 
@@ -307,12 +307,12 @@ module VX_decode  #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    assign decode_if.valid       = ifetch_rsp_if.valid 
-                                && (decode_if.ex_type != `EX_NOP); // skip noop
+    assign decode_if.valid = ifetch_rsp_if.valid 
+                          && (decode_if.ex_type != `EX_NOP); // skip noop
 
-    assign decode_if.wid         = ifetch_rsp_if.wid;
-    assign decode_if.thread_mask = ifetch_rsp_if.thread_mask;
-    assign decode_if.curr_PC     = ifetch_rsp_if.curr_PC;
+    assign decode_if.wid   = ifetch_rsp_if.wid;
+    assign decode_if.tmask = ifetch_rsp_if.tmask;
+    assign decode_if.PC    = ifetch_rsp_if.PC;
 
     assign decode_if.ex_type = is_lsu ? `EX_LSU :
                                     is_csr ? `EX_CSR :
@@ -389,11 +389,11 @@ module VX_decode  #(
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            $write("%t: core%0d-decode: wid=%0d, PC=%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.curr_PC);
+            $write("%t: core%0d-decode: wid=%0d, PC=%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);
             print_ex_type(decode_if.ex_type);
             $write(", op=");
             print_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            $write(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.thread_mask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm);                        
+            $write(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm);                        
         end
     end
 `endif

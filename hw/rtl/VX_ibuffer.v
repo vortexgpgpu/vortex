@@ -175,8 +175,8 @@ module VX_ibuffer #(
     assign deq_wid_next = deq_wid_n;
 
     assign ibuf_enq_if.ready = ~q_full[ibuf_enq_if.wid];
-    assign q_data_in = {ibuf_enq_if.thread_mask, 
-                        ibuf_enq_if.curr_PC, 
+    assign q_data_in = {ibuf_enq_if.tmask, 
+                        ibuf_enq_if.PC, 
                         ibuf_enq_if.ex_type, 
                         ibuf_enq_if.op_type, 
                         ibuf_enq_if.op_mod, 
@@ -193,8 +193,8 @@ module VX_ibuffer #(
 
     assign ibuf_deq_if.valid = deq_valid;
     assign ibuf_deq_if.wid   = deq_wid;
-    assign {ibuf_deq_if.thread_mask, 
-            ibuf_deq_if.curr_PC, 
+    assign {ibuf_deq_if.tmask, 
+            ibuf_deq_if.PC, 
             ibuf_deq_if.ex_type, 
             ibuf_deq_if.op_type, 
             ibuf_deq_if.op_mod, 

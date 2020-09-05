@@ -25,7 +25,7 @@ typedef struct packed {
 
 typedef struct packed {
     logic                    valid;
-    logic [`NUM_THREADS-1:0] thread_mask;
+    logic [`NUM_THREADS-1:0] tmask;
 } gpu_tmc_t;
 
 typedef struct packed {

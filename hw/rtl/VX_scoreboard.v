@@ -26,7 +26,7 @@ module VX_scoreboard  #(
 
     wire release_reg = writeback_if.valid && writeback_if.ready;
 
-    wire [`NUM_THREADS-1:0] inuse_registers_n = inuse_registers[{writeback_if.wid, writeback_if.rd}] & ~writeback_if.thread_mask;
+    wire [`NUM_THREADS-1:0] inuse_registers_n = inuse_registers[{writeback_if.wid, writeback_if.rd}] & ~writeback_if.tmask;
 
     always @(*) begin
         inuse_reg_mask_n = inuse_reg_mask;
@@ -48,7 +48,7 @@ module VX_scoreboard  #(
             end            
         end else begin
             if (reserve_reg) begin
-                inuse_registers[{ibuf_deq_if.wid, ibuf_deq_if.rd}] <= ibuf_deq_if.thread_mask;
+                inuse_registers[{ibuf_deq_if.wid, ibuf_deq_if.rd}] <= ibuf_deq_if.tmask;
             end       
             if (release_reg) begin
                 assert(inuse_reg_mask[writeback_if.wid][writeback_if.rd] != 0);
@@ -67,7 +67,7 @@ module VX_scoreboard  #(
     always @(posedge clk) begin
         if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin
             $display("%t: core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b, gpr=%b",
-                    $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.curr_PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
+                    $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
                     inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay, gpr_delay);
         end
     end

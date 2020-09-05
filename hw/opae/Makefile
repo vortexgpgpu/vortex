@@ -9,15 +9,15 @@ sources.txt:
 
 gen_sources: sources.txt
 
-ase-1c: setup-ase-1c gen_sources
+ase-1c: gen_sources setup-ase-1c 
 	make -C $(ASE_BUILD_DIR)_1c
 	cp ../rtl/fp_cores/altera/*.hex $(ASE_BUILD_DIR)_1c/work
 
-ase-2c: setup-ase-2c gen_sources
+ase-2c: gen_sources setup-ase-2c
 	make -C $(ASE_BUILD_DIR)_2c
 	cp ../rtl/fp_cores/altera/*.hex $(ASE_BUILD_DIR)_2c/work
 
-ase-4c: setup-ase-4c gen_sources
+ase-4c: gen_sources setup-ase-4c
 	make -C $(ASE_BUILD_DIR)_4c
 	cp ../rtl/fp_cores/altera/*.hex $(ASE_BUILD_DIR)_3c/work
 
@@ -36,15 +36,15 @@ $(ASE_BUILD_DIR)_2c/Makefile: sources.txt
 $(ASE_BUILD_DIR)_4c/Makefile: sources.txt
 	afu_sim_setup -s sources_4c.txt $(ASE_BUILD_DIR)_4c
 
-fpga-1c: setup-fpga-1c gen_sources
+fpga-1c: gen_sources setup-fpga-1c
 	cd $(FPGA_BUILD_DIR)_1c && qsub-synth
 	cp ../rtl/fp_cores/altera/*.hex $(FPGA_BUILD_DIR)_1c
 
-fpga-2c: setup-fpga-2c gen_sources
+fpga-2c: gen_sources setup-fpga-2c
 	cd $(FPGA_BUILD_DIR)_2c && qsub-synth
 	cp ../rtl/fp_cores/altera/*.hex $(FPGA_BUILD_DIR)_2c
 
-fpga-4c: setup-fpga-4c gen_sources
+fpga-4c: gen_sources setup-fpga-4c
 	cd $(FPGA_BUILD_DIR)_4c && qsub-synth
 	cp ../rtl/fp_cores/altera/*.hex $(FPGA_BUILD_DIR)_4c
 	

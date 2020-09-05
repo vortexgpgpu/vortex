@@ -18,7 +18,7 @@ module VX_lsu_unit #(
     // outputs
     VX_exu_to_cmt_if    lsu_commit_if
 );
-    wire [`NUM_THREADS-1:0]       req_thread_mask;
+    wire [`NUM_THREADS-1:0]       req_tmask;
     wire                          req_rw;
     wire [`NUM_THREADS-1:0][29:0] req_addr;    
     wire [`NUM_THREADS-1:0][1:0]  req_offset;    
@@ -28,7 +28,7 @@ module VX_lsu_unit #(
     wire [`NR_BITS-1:0]           req_rd;
     wire                          req_wb;
     wire [`NW_BITS-1:0]           req_wid;
-    wire [31:0]                   req_curr_PC;
+    wire [31:0]                   req_pc;
 
     wire [`NUM_THREADS-1:0][31:0] full_address;    
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
@@ -79,12 +79,12 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (stall_in),
         .flush (1'b0),
-        .in    ({lsu_req_if.valid, lsu_req_if.wid, lsu_req_if.thread_mask, lsu_req_if.curr_PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
-        .out   ({valid_in,         req_wid,        req_thread_mask,        req_curr_PC,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
+        .in    ({lsu_req_if.valid, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
+        .out   ({valid_in,         req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
     );
 
     wire [`NW_BITS-1:0] rsp_wid;
-    wire [31:0] rsp_curr_PC;
+    wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
     wire rsp_wb;
     wire [`NUM_THREADS-1:0][1:0] rsp_offset;
@@ -116,8 +116,8 @@ module VX_lsu_unit #(
         .write_addr   (req_tag),        
         .acquire_slot (lsuq_push),       
         .read_addr    (rsp_tag),
-        .write_data   ({req_wid, req_curr_PC, req_rd, req_wb, req_offset, req_sext}),                    
-        .read_data    ({rsp_wid, rsp_curr_PC, rsp_rd, rsp_wb, rsp_offset, rsp_sext}),
+        .write_data   ({req_wid, req_pc, req_rd, req_wb, req_offset, req_sext}),                    
+        .read_data    ({rsp_wid, rsp_pc, rsp_rd, rsp_wb, rsp_offset, rsp_sext}),
         .release_addr (rsp_tag),
         .release_slot (lsuq_pop),     
         .full         (lsuq_full)
@@ -125,7 +125,7 @@ module VX_lsu_unit #(
 
     always @(posedge clk) begin
         if (lsuq_push)  begin
-            mem_rsp_mask[req_tag] <= req_thread_mask;
+            mem_rsp_mask[req_tag] <= req_tmask;
         end    
         if (lsuq_pop_part) begin
             mem_rsp_mask[rsp_tag] <= mem_rsp_mask_n;
@@ -136,14 +136,14 @@ module VX_lsu_unit #(
     wire store_stall = valid_in && req_rw && stall_out;
 
     // Core Request
-    assign dcache_req_if.valid  = {`NUM_THREADS{valid_in && ~lsuq_full && ~store_stall}} & req_thread_mask;
+    assign dcache_req_if.valid  = {`NUM_THREADS{valid_in && ~lsuq_full && ~store_stall}} & req_tmask;
     assign dcache_req_if.rw     = {`NUM_THREADS{req_rw}};
     assign dcache_req_if.byteen = req_byteen;
     assign dcache_req_if.addr   = req_addr;
     assign dcache_req_if.data   = req_data;  
 
 `ifdef DBG_CORE_REQ_INFO
-    assign dcache_req_if.tag = {req_curr_PC, req_rd, req_wid, req_tag};
+    assign dcache_req_if.tag = {req_pc, req_rd, req_wid, req_tag};
 `else
     assign dcache_req_if.tag = req_tag;
 `endif
@@ -172,8 +172,8 @@ module VX_lsu_unit #(
 
     wire                    arb_valid = is_store_req || is_load_rsp;
     wire [`NW_BITS-1:0]       arb_wid = is_store_req ? req_wid : rsp_wid;
-    wire [`NUM_THREADS-1:0] arb_tmask = is_store_req ? req_thread_mask : dcache_rsp_if.valid;
-    wire [31:0]           arb_curr_PC = is_store_req ? req_curr_PC : rsp_curr_PC;
+    wire [`NUM_THREADS-1:0] arb_tmask = is_store_req ? req_tmask : dcache_rsp_if.valid;
+    wire [31:0]                arb_PC = is_store_req ? req_pc : rsp_pc;
     wire [`NR_BITS-1:0]        arb_rd = is_store_req ? 0 : rsp_rd;
     wire                       arb_wb = is_store_req ? 0 : rsp_wb;
 
@@ -184,8 +184,8 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({arb_valid,           arb_wid,           arb_tmask,                 arb_curr_PC,           arb_rd,           arb_wb,           rsp_data}),
-        .out   ({lsu_commit_if.valid, lsu_commit_if.wid, lsu_commit_if.thread_mask, lsu_commit_if.curr_PC, lsu_commit_if.rd, lsu_commit_if.wb, lsu_commit_if.data})
+        .in    ({arb_valid,           arb_wid,           arb_tmask,                 arb_PC,           arb_rd,           arb_wb,           rsp_data}),
+        .out   ({lsu_commit_if.valid, lsu_commit_if.wid, lsu_commit_if.tmask, lsu_commit_if.PC, lsu_commit_if.rd, lsu_commit_if.wb, lsu_commit_if.data})
     );
 
     // Can accept new cache response?
@@ -197,25 +197,25 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN (scope_dcache_req_rw,    req_rw);
     `SCOPE_ASSIGN (scope_dcache_req_byteen,dcache_req_if.byteen);
     `SCOPE_ASSIGN (scope_dcache_req_data,  dcache_req_if.data);
-    `SCOPE_ASSIGN (scope_dcache_req_tag,   dcache_req_if.tag);
+    `SCOPE_ASSIGN (scope_dcache_req_tag,   req_tag);
     `SCOPE_ASSIGN (scope_dcache_req_ready, dcache_req_if.ready); 
     `SCOPE_ASSIGN (scope_dcache_req_wid,   req_wid);
-    `SCOPE_ASSIGN (scope_dcache_req_PC,    req_curr_PC);
+    `SCOPE_ASSIGN (scope_dcache_req_pc,    req_pc);
 
     `SCOPE_ASSIGN (scope_dcache_rsp_valid, dcache_rsp_if.valid);
     `SCOPE_ASSIGN (scope_dcache_rsp_data,  dcache_rsp_if.data);
-    `SCOPE_ASSIGN (scope_dcache_rsp_tag,   dcache_rsp_if.tag);
+    `SCOPE_ASSIGN (scope_dcache_rsp_tag,   rsp_tag);
     `SCOPE_ASSIGN (scope_dcache_rsp_ready, dcache_rsp_if.ready);
     
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
         if ((| dcache_req_if.valid) && dcache_req_if.ready) begin
             $display("%t: D$%0d req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, rw=%0b, byteen=%0h, data=%0h", 
-                     $time, CORE_ID, req_wid, req_curr_PC, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.rw, dcache_req_if.byteen, dcache_req_if.data);
+                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.rw, dcache_req_if.byteen, dcache_req_if.data);
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 
-                     $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_curr_PC, dcache_rsp_if.tag, rsp_rd, dcache_rsp_if.data);
+                     $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd, dcache_rsp_if.data);
         end
     end
 `endif
