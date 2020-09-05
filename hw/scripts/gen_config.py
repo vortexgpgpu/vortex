@@ -58,13 +58,12 @@ if args.outc != 'none':
 
 translation_rules = [
     (re.compile(r'^$'), r''),
-    (re.compile(r'^( *)`ifndef ([^ ]+)$'), r'\1#ifndef \2'),
-    (re.compile(r'^( *)`define ([^ ]+)$'), r'\1#define \2'),
-    # (re.compile(r'^( *)`include "\./VX_define_synth\.v"$'), r'\1#include "VX_define_synth.h"'),
-    (re.compile(r'^( *)`include "VX_user_config\.vh"$'), r''),
-    (re.compile(r'^( *)`define ([^ ]+) (.+)$'), r'\1#define \2 \3'),
-    (re.compile(r'^( *)`endif$'), r'\1#endif'),
-    (re.compile(r'^( *)// (.*)$'), r'\1// \2'),
+    (re.compile(r'^(\s*)`ifndef\s+([^ ]+)'), r'\1#ifndef \2'),
+    (re.compile(r'^(\s*)`define\s+([^ ]+)'), r'\1#define \2'),
+    (re.compile(r'^(\s*)`include "VX_user_config\.vh"'), r''),
+    (re.compile(r'^(\s*)`define\s+([^ ]+) (.+)'), r'\1#define \2 \3'),
+    (re.compile(r'^(\s*)`endif\s+'), r'\1#endif'),
+    (re.compile(r'^(\s*)//(.*)'), r'\1// \2'),
 ]
 
 post_rules = [
@@ -77,7 +76,6 @@ post_rules = [
     # fix macro references (does not support escaped identifiers §5.6.1)
     (re.compile(r"`([A-Za-z_][$_0-9A-Za-z]*)"), r'\1'),
 ]
-
 
 def post_process_line(line):
     for pat, repl in post_rules:
@@ -96,6 +94,7 @@ if args.outc != 'none':
 // Translated from VX_config.vh:
 '''[1:].format(date=datetime.now()), file=f)
         with open(path.join(script_dir, '../rtl/VX_config.vh'), 'r') as r:
+            lineno = 0
             for line in r:
                 if in_expansion:
                     f.write(post_process_line(line))
@@ -109,7 +108,8 @@ if args.outc != 'none':
                             f.write(post_process_line(pat.sub(repl, line)))
                             break
                     else:
-                        raise ValueError('failed to find rule for: ' + line)
+                        raise ValueError('failed to find rule for: "' + line + '" (' + str(lineno) + ')')
+                lineno = lineno + 1
 
         print('''
 // Misc

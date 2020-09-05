@@ -60,8 +60,9 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_1c ../../driver/tests/basic/basic
-./run_ase.sh build_ase_1c ../../driver/tests/demo/demo
+./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -n 256
+./run_ase.sh build_ase_1c ../../driver/tests/demo/demo -n 16
+./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n1 -s4 -e4
 ./run_ase.sh build_ase_1c ../../benchmarks/opencl/vecadd/vecadd
 
 # modify "vsim_run.tcl" to dump VCD trace
@@ -74,6 +75,10 @@ tar -zcvf output_files_1c.tar.gz `find ./build_fpga_1c -type f \( -iname \*.rpt 
 
 # compress VCD trace
 tar -zcvf vortex.vcd.tar.gz ./build_ase_1c/work/vortex.vcd
+tar -zcvf trace.vcd.tar.gz obj_dir/trace.vcd
+tar -zcvf trace.vcd.tar.gz trace.vcd
+tar -zcvf run.log.tar.gz run.log
+tar -cvjf vortex.vcd.tar.bz2 build_ase_1c/work/vortex.vcd
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
@@ -89,8 +94,16 @@ kill -9 <pid>
 lsof +D build_ase_1c
 
 # quick off cache synthesis
-make -C pipeline > pipeline/build.log 2>&1 &
-make -C cache > cache/build.log 2>&1 &
-make -C core > core/build.log 2>&1 &
-make -C vortex > vortex/build.log 2>&1 &
-make -C top > top/build.log 2>&1 &
+make -C pipeline clean && make -C pipeline > pipeline/build.log 2>&1 &
+make -C cache clean && make -C cache > cache/build.log 2>&1 &
+make -C core clean && make -C core > core/build.log 2>&1 &
+make -C vortex clean && make -C vortex > vortex/build.log 2>&1 &
+make -C top clean && make -C top > top/build.log 2>&1 &
+
+# How to calculate the maximum operating frequency?
+200  Mhz -> period = 1/200x10^6 = 5ns 
+if slack = +1.664 -> minimal period = 5-1.664 = 3.336 -> fmax = 1/3.336 = 300 Mhz
+
+
+# build rtlsim from driver tests
+make -C ../../rtlsim clean && reset && make -C ../../rtlsim

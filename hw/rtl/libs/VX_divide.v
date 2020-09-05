@@ -1,42 +1,47 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_divide #(
-    parameter WIDTHN = 1,
-    parameter WIDTHD = 1,
+    parameter WIDTHN  = 1,
+    parameter WIDTHD  = 1,
+    parameter WIDTHQ  = 1,
+    parameter WIDTHR  = 1,
     parameter NSIGNED = 0,
     parameter DSIGNED = 0,
-    parameter PIPELINE = 0
+    parameter LATENCY = 0
 ) (
     input wire clk,
-    input wire reset,
-
+    input wire enable,
     input wire [WIDTHN-1:0] numer,
     input wire [WIDTHD-1:0] denom,
-
-    output wire [WIDTHN-1:0] quotient,
-    output wire [WIDTHD-1:0] remainder
+    output wire [WIDTHQ-1:0] quotient,
+    output wire [WIDTHR-1:0] remainder
 );
 
 `ifdef QUARTUS
 
-    lpm_divide quartus_div (
+    wire [WIDTHN-1:0] quotient_unqual;
+    wire [WIDTHD-1:0] remainder_unqual;
+
+    lpm_divide divide (
         .clock    (clk),        
+        .clken    (enable),
         .numer    (numer),
         .denom    (denom),
-        .quotient (quotient),
-        .remain   (remainder),
-        .aclr     (1'b0),
-        .clken    (1'b1)
+        .quotient (quotient_unqual),
+        .remain   (remainder_unqual)
     );
 
     defparam
-		quartus_div.lpm_type = "LPM_DIVIDE",
-        quartus_div.lpm_widthn = WIDTHN,        
-		quartus_div.lpm_widthd = WIDTHD,		
-		quartus_div.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
-        quartus_div.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
-		quartus_div.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
-		quartus_div.lpm_pipeline = PIPELINE;
+		divide.lpm_type = "LPM_DIVIDE",
+        divide.lpm_widthn = WIDTHN,        
+		divide.lpm_widthd = WIDTHD,		
+		divide.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
+        divide.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
+		divide.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
+		divide.lpm_pipeline = LATENCY;
+
+    assign quotient  = quotient_unqual [WIDTHQ-1:0];
+    assign remainder = remainder_unqual [WIDTHR-1:0];
 
 `else
 
@@ -44,15 +49,6 @@ module VX_divide #(
     reg [WIDTHD-1:0] remainder_unqual;
 
     always @(*) begin   
-    `ifndef SYNTHESIS    
-        // this edge case kills verilator in some cases by causing a division
-        // overflow exception. INT_MIN / -1 (on x86)
-        if (numer == {1'b1, (WIDTHN-1)'(0)}
-         && denom == {WIDTHD{1'b1}}) begin
-            quotient_unqual  = 0;
-            remainder_unqual = 0;
-        end else
-    `endif
         begin
             if (NSIGNED && DSIGNED) begin
                 quotient_unqual  = $signed(numer) / $signed(denom);
@@ -73,34 +69,24 @@ module VX_divide #(
         end
     end
 
-    if (PIPELINE == 0) begin
-        assign quotient  = quotient_unqual;
-        assign remainder = remainder_unqual;
+    if (LATENCY == 0) begin
+        assign quotient  = quotient_unqual [WIDTHQ-1:0];
+        assign remainder = remainder_unqual [WIDTHR-1:0];
     end else begin
-        reg [WIDTHN-1:0] quotient_pipe [0:PIPELINE-1];
-        reg [WIDTHD-1:0] remainder_pipe [0:PIPELINE-1];
+        reg [WIDTHN-1:0] quotient_pipe [0:LATENCY-1];
+        reg [WIDTHD-1:0] remainder_pipe [0:LATENCY-1];
 
-        genvar i;
-        for (i = 0; i < PIPELINE; i++) begin
-            always @(posedge clk) begin
-                if (reset) begin
-                    quotient_pipe[i]  <= 0;
-                    remainder_pipe[i] <= 0;
-                end
-                else begin
-                    if (i == 0) begin
-                        quotient_pipe[0]  <= quotient_unqual;
-                        remainder_pipe[0] <= remainder_unqual;
-                    end else begin
-                        quotient_pipe[i]  <= quotient_pipe[i-1];
-                        remainder_pipe[i] <= remainder_pipe[i-1];    
-                    end                     
+        for (genvar i = 0; i < LATENCY; i++) begin
+            always @(posedge clk) begin                
+                if (enable) begin
+                    quotient_pipe[i]  <= (0 == i) ? quotient_unqual  : quotient_pipe[i-1];
+                    remainder_pipe[i] <= (0 == i) ? remainder_unqual : remainder_pipe[i-1];
                 end
             end
         end
 
-        assign quotient  = quotient_pipe[PIPELINE-1];
-        assign remainder = remainder_pipe[PIPELINE-1];
+        assign quotient  = quotient_pipe[LATENCY-1][WIDTHQ-1:0];
+        assign remainder = remainder_pipe[LATENCY-1][WIDTHR-1:0];
     end    
 
 `endif

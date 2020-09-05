@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_generic_register #( 
     parameter N = 1, 
@@ -11,18 +11,23 @@ module VX_generic_register #(
     input wire[N-1:0]   in,
     output wire[N-1:0]  out
 );
-    reg [(N-1):0] value;
+    if (PASSTHRU) begin
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        `UNUSED_VAR (stall)
+        assign out = flush ? N'(0) : in;    
+    end else begin        
+        reg [(N-1):0] value;
 
-    always @(posedge clk) begin
-        if (reset) begin
-            value <= 0;
-        end else if (flush) begin
-            value <= 0;
-        end else if (~stall) begin
-            value <= in;
+        always @(posedge clk) begin
+            if (reset || flush) begin
+                value <= N'(0);
+            end else if (~stall) begin
+                value <= in;
+            end
         end
-    end
 
-    assign out = PASSTHRU ? in : value;
+        assign out = value;
+    end    
 
 endmodule

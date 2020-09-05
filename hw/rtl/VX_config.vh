@@ -27,20 +27,12 @@
 `define GLOBAL_BLOCK_SIZE 16
 `endif
 
-`ifndef NUM_CSRS
-`define NUM_CSRS 1024
-`endif
-
 `ifndef STARTUP_ADDR
 `define STARTUP_ADDR 32'h80000000
 `endif
 
 `ifndef SHARED_MEM_BASE_ADDR
 `define SHARED_MEM_BASE_ADDR 32'h6FFFF000
-`endif
-
-`ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR 20'h6FFFF
 `endif
 
 `ifndef IO_BUS_BASE_ADDR
@@ -59,31 +51,121 @@
 `define L3_ENABLE (`NUM_CLUSTERS > 1)
 `endif
 
-// Configuration Values =======================================================
+`ifndef EXT_M_DISABLE
+`define EXT_M_ENABLE
+`endif
 
+`ifndef EXT_F_DISABLE
+`define EXT_F_ENABLE
+`endif
+
+// Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
 `define IMPLEMENTATION_ID   0
 
-// CSR Addresses ==============================================================
+///////////////////////////////////////////////////////////////////////////////
 
-`define CSR_VEND_ID     12'hF11
-`define CSR_ARCH_ID     12'hF12
-`define CSR_IMPL_ID     12'hF13
-`define CSR_GTID        12'hF14
+`ifndef LATENCY_IMUL
+`define LATENCY_IMUL 3
+`endif
+
+`ifndef LATENCY_FNONCOMP
+`define LATENCY_FNONCOMP 1
+`endif
+
+`ifndef LATENCY_FADDMUL
+`define LATENCY_FADDMUL 3
+`endif
+
+`ifndef LATENCY_FMADD
+`define LATENCY_FMADD 4
+`endif
+
+`ifndef LATENCY_FDIV
+`define LATENCY_FDIV 15
+`endif
+
+`ifndef LATENCY_FSQRT
+`define LATENCY_FSQRT 10
+`endif
+
+`ifndef LATENCY_ITOF
+`define LATENCY_ITOF 7
+`endif
+
+`ifndef LATENCY_FTOI
+`define LATENCY_FTOI 3
+`endif
+
+`ifndef LATENCY_FDIVSQRT
+`define LATENCY_FDIVSQRT 10
+`endif
+
+`ifndef LATENCY_FCONV
+`define LATENCY_FCONV 3
+`endif
+
+// CSR Addresses //////////////////////////////////////////////////////////////
+
+`define CSR_FFLAGS      12'h001
+`define CSR_FRM         12'h002
+`define CSR_FCSR        12'h003
 
 `define CSR_LTID        12'h020
 `define CSR_LWID        12'h021
+`define CSR_GTID        12'h022
 `define CSR_GWID        12'h023
 `define CSR_GCID        12'h024
 `define CSR_NT          12'h025
 `define CSR_NW          12'h026
 `define CSR_NC          12'h027
 
-`define CSR_CYCLE_L     12'hC00
+`define CSR_SATP        12'h180
+
+`define CSR_PMPCFG0     12'h3A0
+`define CSR_PMPADDR0    12'h3B0
+
+`define CSR_MSTATUS     12'h300
+`define CSR_MISA        12'h301
+`define CSR_MEDELEG     12'h302
+`define CSR_MIDELEG     12'h303
+`define CSR_MIE         12'h304
+`define CSR_MTVEC       12'h305
+
+`define CSR_MEPC        12'h341
+
+`define CSR_CYCLE       12'hC00
 `define CSR_CYCLE_H     12'hC80
-`define CSR_INSTR_L     12'hC02
-`define CSR_INSTR_H     12'hC82
+`define CSR_INSTRET     12'hC02
+`define CSR_INSTRET_H   12'hC82
+
+`define CSR_MVENDORID   12'hF11
+`define CSR_MARCHID     12'hF12
+`define CSR_MIMPID      12'hF13
+`define CSR_MHARTID     12'hF14
+
+// Pipeline Queues ============================================================
+
+// Size of instruction queue
+`ifndef IBUF_SIZE
+`define IBUF_SIZE 8
+`endif
+
+// Size of LSU Request Queue
+`ifndef LSUQ_SIZE
+`define LSUQ_SIZE 8
+`endif
+
+// Size of MUL Request Queue
+`ifndef MULQ_SIZE
+`define MULQ_SIZE 8
+`endif
+
+// Size of FPU Request Queue
+`ifndef FPUQ_SIZE
+`define FPUQ_SIZE 8
+`endif
 
 // Dcache Configurable Knobs ==================================================
 
@@ -107,11 +189,6 @@
 `define DWORD_SIZE 4
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef DSTAGE_1_CYCLES
-`define DSTAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef DCREQ_SIZE
 `define DCREQ_SIZE `NUM_WARPS
@@ -124,12 +201,12 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef DDFPQ_SIZE
-`define DDFPQ_SIZE 16
+`define DDFPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
 `ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 16
+`define DSNRQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -149,7 +226,7 @@
 
 // Prefetcher
 `ifndef DPRFQ_SIZE
-`define DPRFQ_SIZE 16
+`define DPRFQ_SIZE 8
 `endif
 
 `ifndef DPRFQ_STRIDE
@@ -178,11 +255,6 @@
 `define IWORD_SIZE 4
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef ISTAGE_1_CYCLES
-`define ISTAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef ICREQ_SIZE
 `define ICREQ_SIZE `NUM_WARPS
@@ -195,7 +267,7 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef IDFPQ_SIZE
-`define IDFPQ_SIZE 16
+`define IDFPQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -205,7 +277,7 @@
 
 // Dram Writeback Queue Size
 `ifndef IDWBQ_SIZE
-`define IDWBQ_SIZE 16
+`define IDWBQ_SIZE 8
 `endif
 
 // Dram Fill Req Queue Size
@@ -215,7 +287,7 @@
 
 // Prefetcher
 `ifndef IPRFQ_SIZE
-`define IPRFQ_SIZE 16
+`define IPRFQ_SIZE 8
 `endif
 
 `ifndef IPRFQ_STRIDE
@@ -242,11 +314,6 @@
 // Size of a word in bytes
 `ifndef SWORD_SIZE
 `define SWORD_SIZE 4
-`endif
-
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef SSTAGE_1_CYCLES
-`define SSTAGE_1_CYCLES 1
 `endif
 
 // Core Request Queue Size
@@ -281,14 +348,9 @@
 `define L2WORD_SIZE `L2BANK_LINE_SIZE
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef L2STAGE_1_CYCLES
-`define L2STAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef L2CREQ_SIZE
-`define L2CREQ_SIZE 16
+`define L2CREQ_SIZE 8
 `endif
 
 // Miss Reserv Queue Knob
@@ -298,12 +360,12 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef L2DFPQ_SIZE
-`define L2DFPQ_SIZE 16
+`define L2DFPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
 `ifndef L2SNRQ_SIZE
-`define L2SNRQ_SIZE 16
+`define L2SNRQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -313,7 +375,7 @@
 
 // Dram Writeback Queue Size
 `ifndef L2DWBQ_SIZE
-`define L2DWBQ_SIZE 16
+`define L2DWBQ_SIZE 8
 `endif
 
 // Dram Fill Req Queue Size
@@ -323,7 +385,7 @@
 
 // Prefetcher
 `ifndef L2PRFQ_SIZE
-`define L2PRFQ_SIZE 16
+`define L2PRFQ_SIZE 8
 `endif
 
 `ifndef L2PRFQ_STRIDE
@@ -352,14 +414,9 @@
 `define L3WORD_SIZE `L3BANK_LINE_SIZE
 `endif
 
-// Number of cycles to complete stage 1 (read from memory)
-`ifndef L3STAGE_1_CYCLES
-`define L3STAGE_1_CYCLES 1
-`endif
-
 // Core Request Queue Size
 `ifndef L3CREQ_SIZE
-`define L3CREQ_SIZE 16
+`define L3CREQ_SIZE 8
 `endif
 
 // Miss Reserv Queue Knob
@@ -369,12 +426,12 @@
 
 // Dram Fill Rsp Queue Size
 `ifndef L3DFPQ_SIZE
-`define L3DFPQ_SIZE 16
+`define L3DFPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
 `ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 16
+`define L3SNRQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
@@ -384,7 +441,7 @@
 
 // Dram Writeback Queue Size
 `ifndef L3DWBQ_SIZE
-`define L3DWBQ_SIZE 16
+`define L3DWBQ_SIZE 8
 `endif
 
 // Dram Fill Req Queue Size
@@ -394,12 +451,11 @@
 
 // Prefetcher
 `ifndef L3PRFQ_SIZE
-`define L3PRFQ_SIZE 16
+`define L3PRFQ_SIZE 8
 `endif
 
 `ifndef L3PRFQ_STRIDE
 `define L3PRFQ_STRIDE 0
 `endif
 
- // VX_CONFIG
 `endif

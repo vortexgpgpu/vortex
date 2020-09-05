@@ -1,8 +1,8 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_tex_mgr (
     input wire clk,
-    input wire reset,
+    input wire reset
 );
 
     //--

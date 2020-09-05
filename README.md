@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/vortexgpgpu/vortex.svg?branch=master)](https://travis-ci.org/vortexgpgpu/vortex)
+[![codecov](https://codecov.io/gh/vortexgpgpu/vortex/branch/master/graph/badge.svg)](https://codecov.io/gh/vortexgpgpu/vortex)
+
 # Vortex RISC-V GPGPU
 
 Vortex is a full-system RISCV-based GPGPU processor.
@@ -37,7 +40,7 @@ Install development tools
 
 Install gnu-riscv-tools
 
-    $ export RISC_GNU_TOOLS_PATH=/opt/riscv-gnu-toolchain
+    $ export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
 
     $ sudo apt-get -y install \
         binutils build-essential libtool texinfo \
@@ -51,7 +54,7 @@ Install gnu-riscv-tools
     $ git submodule update --init --recursive
     $ mkdir build
     $ cd build    
-    $ ../configure --prefix=$RISC_GNU_TOOLS_PATH --with-arch=rv32im --with-abi=ilp32
+    $ ../configure --prefix=$RISCV_TOOLCHAIN_PATH --with-arch=rv32im --with-abi=ilp32
     $ make -j`nproc`  
     $ make -j`nproc` build-qemu
 
@@ -62,12 +65,12 @@ Install Verilator
 
 Install Vortex 
 
-    $ git clone https://github.gatech.edu/casl/Vortex.git
+    $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
     $ make
 
-Quick Test running SGEMM kernel
+Quick Test running OpenCL vecadd program
 
-    $ cd /Vortex/benchmarks/opencl/sgemm
+    $ cd /Vortex/benchmarks/opencl/vecadd
     $ make
-    $ make run
+    $ make run-rtlsim

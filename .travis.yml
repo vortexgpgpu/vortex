@@ -1,0 +1,38 @@
+language: cpp
+dist: bionic
+os: linux
+compiler: gcc
+addons:
+    apt:
+        sources:
+        - ubuntu-toolchain-r-test
+        packages:
+        - build-essential
+        - valgrind
+        - verilator
+        - yosys
+
+install:
+  # TOOLCHAIN
+  - ci/toolchain_install.sh
+  - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain
+  - export VERILATOR_ROOT=$PWD/verilator
+  - export PATH=$VERILATOR_ROOT/bin:$PATH
+    
+  # VORTEX
+  - git clone --recursive https://github.com/vortexgpgpu/vortex.git
+  - cd vortex
+  - make -j`nproc`
+
+script:   
+  - ci/test_runtime.sh
+  - ci/test_driver.sh
+  - ci/test_riscv_isa.sh
+  - ci/test_opencl.sh
+  
+after_success:
+  # Gather code coverage
+  - lcov --directory . --capture --output-file coverage.info # capture trace  
+  - lcov --list coverage.info # trace report
+  # Upload coverage report
+  - bash <(curl -s https://codecov.io/bash)

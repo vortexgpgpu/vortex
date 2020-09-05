@@ -14,6 +14,8 @@
      exit(-1);                                                  \
    } while (false)
 
+///////////////////////////////////////////////////////////////////////////////
+
 const char* kernel_file = "kernel.bin";
 int test = -1;
 uint32_t count = 0;
@@ -153,7 +155,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
     int32_t curr = ((int32_t*)vx_host_ptr(buffer))[i];
     int32_t ref = i;
     if (curr != ref) {
-      std::cout << "error at value " << i
+      std::cout << "error at result #" << i
                 << ": actual 0x" << curr << ", expected 0x" << ref << std::endl;
       ++errors;
     }
@@ -236,7 +238,7 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  std::cout << "Test PASSED" << std::endl;
-
+  std::cout << "Test PASSED" << std::endl;  
+  
   return 0;
 }

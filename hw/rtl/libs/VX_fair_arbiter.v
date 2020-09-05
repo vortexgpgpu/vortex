@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_fair_arbiter #(
     parameter N = 1
@@ -11,7 +11,7 @@ module VX_fair_arbiter #(
     output wire                  grant_valid
   );
 
-    if (N == 1)  begin        
+    if (N == 1)  begin                
         
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -33,11 +33,13 @@ module VX_fair_arbiter #(
             if (reset) begin
                 requests_use    <= 0;
                 refill_original <= 0;
-            end else if (refill) begin
-                requests_use    <= refill_value;
-                refill_original <= refill_value;
             end else begin
-                requests_use <= update_value;
+                if (refill) begin
+                    requests_use    <= refill_value;
+                    refill_original <= refill_value;
+                end else begin
+                    requests_use <= update_value;
+                end
             end
        end
 

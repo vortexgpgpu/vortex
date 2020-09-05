@@ -1,6 +1,8 @@
 PROJECT = Core
 TOP_LEVEL_ENTITY = VX_core
 SRC_FILE = VX_core.v
+FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
@@ -9,9 +11,9 @@ DEVICE = 10AX115N3F40E2SG
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on
-FIT_ARGS = --part=$(DEVICE) --read_settings_files=on
+FIT_ARGS = --parallel --part=$(DEVICE) --read_settings_files=on
 ASM_ARGS =
-STA_ARGS = --do_report_timing
+STA_ARGS = --parallel --do_report_timing
 
 # Build targets
 all: $(PROJECT).sta.rpt
@@ -49,7 +51,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc ../project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg

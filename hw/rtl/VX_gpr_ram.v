@@ -1,35 +1,30 @@
 `include "VX_define.vh"
 
 module VX_gpr_ram (
-    input wire      clk,
-    input wire      reset,
-    input wire      write_ce,
-    VX_gpr_read_if  gpr_read_if,
-    VX_wb_if        writeback_if,
+    input wire clk,   
+    input wire [`NUM_THREADS-1:0] we,    
+    input wire [`NW_BITS+`NR_BITS-1:0] waddr,
+    input wire [`NUM_THREADS-1:0][31:0] wdata,    
+    input wire [`NW_BITS+`NR_BITS-1:0] rs1,
+    input wire [`NW_BITS+`NR_BITS-1:0] rs2,
+    output wire [`NUM_THREADS-1:0][31:0] rs1_data,
+    output wire [`NUM_THREADS-1:0][31:0] rs2_data
+); 
+    `ifndef ASIC           
 
-    output wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] a_reg_data,
-    output wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] b_reg_data
-);
-    wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] a_reg_data_unqual;
-    wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] b_reg_data_unqual;
+        reg [`NUM_THREADS-1:0][3:0][7:0] ram [(`NUM_WARPS * `NUM_REGS)-1:0];       
 
-    assign a_reg_data = (gpr_read_if.rs1 != 0) ? a_reg_data_unqual : 0;
-    assign b_reg_data = (gpr_read_if.rs2 != 0) ? b_reg_data_unqual : 0;
-
-    wire [`NUM_THREADS-1:0] write_enable = writeback_if.valid & {`NUM_THREADS{write_ce && (writeback_if.wb != 0)}};
-    
-    `ifndef ASIC            
-        `UNUSED_VAR(reset)
-
-        reg [`NUM_THREADS-1:0][3:0][7:0] ram[31:0];
-
-        wire [4:0] waddr = writeback_if.rd;
-        wire [`NUM_THREADS-1:0][31:0] wdata = writeback_if.data;
+        initial begin // initialize ram: set r0 = 0
+            for (integer j = 0; j < `NUM_WARPS; j++) begin
+                for (integer i = 0; i < `NUM_REGS; i++) begin
+                    ram[j * `NUM_REGS + i] = (i == 0) ? {`NUM_THREADS{32'h0}} : {`NUM_THREADS{32'hx}};
+                end
+            end
+        end
                 
-        genvar i;        
-        for (i = 0; i < `NUM_THREADS; i++) begin
-            always @(posedge clk) begin
-                if (write_enable[i]) begin
+        always @(posedge clk) begin
+            for (integer i = 0; i < `NUM_THREADS; i++) begin
+                if (we[i]) begin
                     ram[waddr][i][0] <= wdata[i][07:00];
                     ram[waddr][i][1] <= wdata[i][15:08];
                     ram[waddr][i][2] <= wdata[i][23:16];
@@ -38,44 +33,36 @@ module VX_gpr_ram (
             end
         end
         
-        assign a_reg_data_unqual = ram[gpr_read_if.rs1];
-        assign b_reg_data_unqual = ram[gpr_read_if.rs2];
+        assign rs1_data = ram[rs1];
+        assign rs2_data = ram[rs2];
 
     `else 
 
-        wire going_to_write = write_enable & (| writeback_if.wb_valid);
-        wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] write_bit_mask;
+        wire [`NUM_THREADS-1:0][31:0] write_bit_mask;
 
-        genvar i;
-        for (i = 0; i < `NUM_THREADS; i++) begin
-            wire local_write = write_enable & writeback_if.wb_valid[i];
-            assign write_bit_mask[i] = {`NUM_GPRS{~local_write}};
+        for (integer i = 0; i < `NUM_THREADS; i++) begin
+            assign write_bit_mask[i] = {32{~we[i]}};
         end
 
         wire cenb   = 0;
         wire cena_1 = 0;
         wire cena_2 = 0;
 
-        wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] tmp_a;
-        wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] tmp_b;
+        wire [`NUM_THREADS-1:0][31:0] tmp_a;
+        wire [`NUM_THREADS-1:0][31:0] tmp_b;
 
     `ifndef SYNTHESIS
-        genvar j;
-        for (i = 0; i < `NUM_THREADS; i++) begin
-            for (j = 0; j < `NUM_GPRS; j++) begin
-                assign a_reg_data_unqual[i][j] = ((tmp_a[i][j] === 1'dx) || cena_1) ? 1'b0 : tmp_a[i][j];
-                assign b_reg_data_unqual[i][j] = ((tmp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : tmp_b[i][j];
+        for (integer i = 0; i < `NUM_THREADS; i++) begin
+            for (integer j = 0; j < 32; j++) begin
+                assign rs1_data[i][j] = ((tmp_a[i][j] === 1'dx) || cena_1) ? 1'b0 : tmp_a[i][j];
+                assign rs2_data[i][j] = ((tmp_b[i][j] === 1'dx) || cena_2) ? 1'b0 : tmp_b[i][j];
             end
         end
     `else
-        assign a_reg_data_unqual = tmp_a;
-        assign b_reg_data_unqual = tmp_b;
+        assign rs1_data = tmp_a;
+        assign rs2_data = tmp_b;
     `endif
-
-        wire [`NUM_THREADS-1:0][`NUM_GPRS-1:0] to_write = writeback_if.write_data;
-
-        for (i = 0; i < 'NT; i=i+4)
-        begin
+        for (integer i = 0; i < 'NT; i=i+4) begin
         `IGNORE_WARNINGS_BEGIN
            rf2_32x128_wm1 first_ram (
                 .CENYA(),
@@ -88,12 +75,12 @@ module VX_gpr_ram (
                 .SOB(),
                 .CLKA(clk),
                 .CENA(cena_1),
-                .AA(gpr_read_if.rs1[(i+3):(i)]),
+                .AA(rs1[(i+3):(i)]),
                 .CLKB(clk),
                 .CENB(cenb),
                 .WENB(write_bit_mask[(i+3):(i)]),
-                .AB(writeback_if.rd[(i+3):(i)]),
-                .DB(to_write[(i+3):(i)]),
+                .AB(waddr[(i+3):(i)]),
+                .DB(wdata[(i+3):(i)]),
                 .EMAA(3'b011),
                 .EMASA(1'b0),
                 .EMAB(3'b011),
@@ -125,12 +112,12 @@ module VX_gpr_ram (
                 .SOB(),
                 .CLKA(clk),
                 .CENA(cena_2),
-                .AA(gpr_read_if.rs2[(i+3):(i)]),
+                .AA(rs2[(i+3):(i)]),
                 .CLKB(clk),
                 .CENB(cenb),
                 .WENB(write_bit_mask[(i+3):(i)]),
-                .AB(writeback_if.rd[(i+3):(i)]),
-                .DB(to_write[(i+3):(i)]),
+                .AB(waddr[(i+3):(i)]),
+                .DB(wdata[(i+3):(i)]),
                 .EMAA(3'b011),
                 .EMASA(1'b0),
                 .EMAB(3'b011),

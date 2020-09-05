@@ -1,3 +1,25 @@
 +define+NUM_CORES=1
 
++define+SYNTHESIS
++define+QUARTUS
++define+FPU_FAST
+#+define+SCOPE
+
+#+define+DBG_PRINT_CORE_ICACHE
+#+define+DBG_PRINT_CORE_DCACHE
+#+define+DBG_PRINT_CACHE_BANK
+#+define+DBG_PRINT_CACHE_SNP
+#+define+DBG_PRINT_CACHE_MSRQ
+#+define+DBG_PRINT_DRAM
+#+define+DBG_PRINT_PIPELINE
+#+define+DBG_PRINT_OPAE
+#+define+DBG_CORE_REQ_INFO
+#+define+DBG_PRINT_SCOPE
+
+vortex_afu.json
+QI:vortex_afu.qsf
+ccip_interface_reg.sv
+ccip_std_afu.sv
+vortex_afu.sv
+
 C:sources.txt

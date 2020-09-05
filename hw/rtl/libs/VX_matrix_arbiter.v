@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_matrix_arbiter #(
     parameter N = 1
@@ -24,11 +24,9 @@ module VX_matrix_arbiter #(
 
         reg [N-1:1] state [0:N-1];  
         wire [N-1:0] pri [0:N-1];
-
-        genvar i, j;           
-
-        for (i = 0; i < N; i++) begin      
-            for (j = 0; j < N; j++) begin
+        
+        for (genvar i = 0; i < N; i++) begin      
+            for (genvar j = 0; j < N; j++) begin
                 if (j > i) begin
                     assign pri[j][i] = requests[i] && state[i][j];
                 end 
@@ -43,20 +41,19 @@ module VX_matrix_arbiter #(
             assign grant_onehot[i] = requests[i] && !(| pri[i]);
         end
         
-        for (i = 0; i < N; i++) begin      
-            for (j = i + 1; j < N; j++) begin
+        for (genvar i = 0; i < N; i++) begin      
+            for (genvar j = i + 1; j < N; j++) begin
                 always @(posedge clk) begin                       
                     if (reset) begin         
                         state[i][j] <= 0;
-                    end 
-                    else begin
+                    end else begin
                         state[i][j] <= (state[i][j] || grant_onehot[j]) && !grant_onehot[i];
                     end
                 end
             end
         end
 
-        VX_encoder_onehot #(
+        VX_onehot_encoder #(
             .N(N)
         ) encoder (
             .onehot (grant_onehot),
