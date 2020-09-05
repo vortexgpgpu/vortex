@@ -20,8 +20,8 @@ module VX_mul_unit #(
     wire [`NUM_THREADS-1:0][31:0] alu_in2 = mul_req_if.rs2_data;
 
     wire [`NW_BITS-1:0] rsp_wid;
-    wire [`NUM_THREADS-1:0] rsp_thread_mask;
-    wire [31:0] rsp_curr_PC;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [31:0] rsp_PC;
     wire [`NR_BITS-1:0] rsp_rd;
     wire rsp_wb;
     wire [MULQ_BITS-1:0] tag_in, tag_out;
@@ -42,8 +42,8 @@ module VX_mul_unit #(
         .write_addr     (tag_in),                
         .read_addr      (tag_out),
         .release_addr   (tag_out),        
-        .write_data     ({mul_req_if.wid, mul_req_if.thread_mask, mul_req_if.curr_PC, mul_req_if.rd, mul_req_if.wb}),                    
-        .read_data      ({rsp_wid,        rsp_thread_mask,        rsp_curr_PC,        rsp_rd,        rsp_wb}),        
+        .write_data     ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb}),                    
+        .read_data      ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}),        
         .release_slot   (mulq_pop),     
         .full           (mulq_full)
     );
@@ -155,8 +155,8 @@ module VX_mul_unit #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({valid_out,           rsp_wid,           rsp_thread_mask,           rsp_curr_PC,           rsp_rd,           rsp_wb,           result}),
-        .out   ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.thread_mask, mul_commit_if.curr_PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
+        .in    ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result}),
+        .out   ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.tmask, mul_commit_if.PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
     );
 
     // can accept new request?

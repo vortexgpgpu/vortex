@@ -50,7 +50,7 @@ module VX_warp_sched #(
         schedule_table_n = schedule_table;
         if (warp_ctl_if.valid 
          && warp_ctl_if.tmc.valid 
-         && (0 == warp_ctl_if.tmc.thread_mask)) begin
+         && (0 == warp_ctl_if.tmc.tmask)) begin
             schedule_table_n[warp_ctl_if.wid] = 0;
         end        
         if (scheduled_warp) begin // remove scheduled warp (round-robin)
@@ -95,9 +95,9 @@ module VX_warp_sched #(
                     barrier_stall_mask[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
                 end
             end else if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
-                thread_masks[warp_ctl_if.wid] <= warp_ctl_if.tmc.thread_mask;
+                thread_masks[warp_ctl_if.wid] <= warp_ctl_if.tmc.tmask;
                 stalled_warps[warp_ctl_if.wid] <= 0;
-                if (0 == warp_ctl_if.tmc.thread_mask) begin
+                if (0 == warp_ctl_if.tmc.tmask) begin
                     active_warps[warp_ctl_if.wid] <= 0;                    
                 end
             end else if (join_if.valid && !didnt_split) begin
@@ -140,7 +140,7 @@ module VX_warp_sched #(
             end
             if (ifetch_rsp_fire) begin
                 fetch_lock[ifetch_rsp_if.wid] <= 0;
-                warp_pcs[ifetch_rsp_if.wid] <= ifetch_rsp_if.curr_PC + 4;
+                warp_pcs[ifetch_rsp_if.wid] <= ifetch_rsp_if.PC + 4;
             end
 
             // reset 'schedule_table' when it goes to zero
@@ -173,7 +173,7 @@ module VX_warp_sched #(
     // split/join stack management
 
     wire [(1+32+`NUM_THREADS-1):0] ipdom[`NUM_WARPS-1:0];
-    wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0, thread_masks[warp_ctl_if.wid]};
+    wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0,                thread_masks[warp_ctl_if.wid]};
     wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, warp_ctl_if.split.pc, warp_ctl_if.split.else_mask};
 
     assign {join_fall, join_pc, join_tm} = ipdom[join_if.wid];
@@ -236,8 +236,8 @@ module VX_warp_sched #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({scheduled_warp,      thread_mask,               warp_pc,               warp_to_schedule}),
-        .out   ({ifetch_req_if.valid, ifetch_req_if.thread_mask, ifetch_req_if.curr_PC, ifetch_req_if.wid})
+        .in    ({scheduled_warp,      thread_mask,         warp_pc,          warp_to_schedule}),
+        .out   ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );
 
     assign busy = (active_warps != 0); 

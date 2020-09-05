@@ -5,10 +5,9 @@ module VX_cluster #(
 ) ( 
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CORE_IO
     `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_PIPELINE_IO
-    `SCOPE_SIGNALS_EX_IO
+    `SCOPE_SIGNALS_ISSUE_IO
+    `SCOPE_SIGNALS_EXECUTE_IO
 
     // Clock
     input  wire                             clk,
@@ -141,10 +140,9 @@ module VX_cluster #(
         ) core (
             `SCOPE_SIGNALS_ISTAGE_BIND
             `SCOPE_SIGNALS_LSU_BIND
-            `SCOPE_SIGNALS_CORE_BIND
             `SCOPE_SIGNALS_CACHE_BIND
-            `SCOPE_SIGNALS_PIPELINE_BIND
-            `SCOPE_SIGNALS_EX_BIND
+            `SCOPE_SIGNALS_ISSUE_BIND
+            `SCOPE_SIGNALS_EXECUTE_BIND
 
             .clk                (clk),
             .reset              (reset),

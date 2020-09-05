@@ -6,11 +6,11 @@
 interface VX_writeback_if ();
 
     wire                            valid;
-    wire [`NUM_THREADS-1:0]         thread_mask;
+    wire [`NUM_THREADS-1:0]         tmask;
     wire [`NW_BITS-1:0]             wid; 
 
 `IGNORE_WARNINGS_BEGIN
-    wire [31:0]                     curr_PC;
+    wire [31:0]                     PC;
 `IGNORE_WARNINGS_END
 
     wire [`NR_BITS-1:0]             rd;

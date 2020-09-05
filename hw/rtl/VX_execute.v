@@ -4,7 +4,7 @@ module VX_execute #(
     parameter CORE_ID = 0
 ) (
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_EX_IO
+    `SCOPE_SIGNALS_EXECUTE_IO
 
     input wire clk, 
     input wire reset, 
@@ -87,10 +87,14 @@ module VX_execute #(
         .mul_commit_if  (mul_commit_if)    
     );
 `else
-    assign mul_req_if.ready        = 0;
-    assign mul_commit_if.valid     = 0;
-    assign mul_commit_if.issue_tag = 0;
-    assign mul_commit_if.data      = 0;
+    assign mul_req_if.ready     = 0;
+    assign mul_commit_if.valid  = 0;
+    assign mul_commit_if.wid    = 0;
+    assign mul_commit_if.PC     = 0;
+    assign mul_commit_if.tmask  = 0;
+    assign mul_commit_if.wb     = 0;
+    assign mul_commit_if.rd     = 0;
+    assign mul_commit_if.data   = 0;
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -103,12 +107,16 @@ module VX_execute #(
         .fpu_commit_if  (fpu_commit_if)    
     );
 `else
-    assign fpu_req_if.ready         = 0;
-    assign fpu_commit_if.valid      = 0;
-    assign fpu_commit_if.issue_tag  = 0;
-    assign fpu_commit_if.data       = 0;
+    assign fpu_req_if.ready     = 0;
+    assign fpu_commit_if.valid  = 0;
+    assign fpu_commit_if.wid    = 0;
+    assign fpu_commit_if.PC     = 0;
+    assign fpu_commit_if.tmask  = 0;
+    assign fpu_commit_if.wb     = 0;
+    assign fpu_commit_if.rd     = 0;
+    assign fpu_commit_if.data   = 0;
     assign fpu_commit_if.has_fflags = 0;
-    assign fpu_commit_if.fflags     = 0;
+    assign fpu_commit_if.fflags = 0;
 `endif
 
     VX_gpu_unit #(
@@ -125,18 +133,5 @@ module VX_execute #(
                  && alu_req_if.is_br_op
                  && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
                   || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
-
-    `SCOPE_ASSIGN (scope_alu_req_valid,      alu_req_if.valid);    
-    `SCOPE_ASSIGN (scope_alu_req_wid,        alu_req_if.wid);
-    `SCOPE_ASSIGN (scope_alu_req_PC,         alu_req_if.curr_PC);    
-    `SCOPE_ASSIGN (scope_alu_req_rd,         alu_req_if.rd);
-    `SCOPE_ASSIGN (scope_alu_req_a,          alu_req_if.rs1_data);
-    `SCOPE_ASSIGN (scope_alu_req_b,          alu_req_if.rs2_data);   
-        
-    `SCOPE_ASSIGN (scope_writeback_valid,    writeback_if.valid);    
-    `SCOPE_ASSIGN (scope_writeback_wid,      writeback_if.wid);
-    `SCOPE_ASSIGN (scope_writeback_PC,       writeback_if.curr_PC);  
-    `SCOPE_ASSIGN (scope_writeback_rd,       writeback_if.rd);
-    `SCOPE_ASSIGN (scope_writeback_data,     writeback_if.data);
 
 endmodule

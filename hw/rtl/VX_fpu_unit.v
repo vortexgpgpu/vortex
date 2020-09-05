@@ -20,8 +20,8 @@ module VX_fpu_unit #(
     wire ready_out;
 
     wire [`NW_BITS-1:0] rsp_wid;
-    wire [`NUM_THREADS-1:0] rsp_thread_mask;
-    wire [31:0] rsp_curr_PC;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [31:0] rsp_PC;
     wire [`NR_BITS-1:0] rsp_rd;
     wire rsp_wb;
 
@@ -45,8 +45,8 @@ module VX_fpu_unit #(
         .write_addr     (tag_in),                
         .read_addr      (tag_out),
         .release_addr   (tag_out),        
-        .write_data     ({fpu_req_if.wid, fpu_req_if.thread_mask, fpu_req_if.curr_PC, fpu_req_if.rd, fpu_req_if.wb}),                    
-        .read_data      ({rsp_wid,        rsp_thread_mask,        rsp_curr_PC,        rsp_rd,        rsp_wb}),        
+        .write_data     ({fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.rd, fpu_req_if.wb}),                    
+        .read_data      ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}),        
         .release_slot   (fpuq_pop),     
         .full           (fpuq_full)
     );
@@ -131,8 +131,8 @@ module VX_fpu_unit #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({valid_out,           rsp_wid,           rsp_thread_mask,           rsp_curr_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,               fflags}),
-        .out   ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.thread_mask, fpu_commit_if.curr_PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, fpu_commit_if.has_fflags, fpu_commit_if.fflags})
+        .in    ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,               fflags}),
+        .out   ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, fpu_commit_if.has_fflags, fpu_commit_if.fflags})
     );
 
     assign ready_out = ~stall_out;    

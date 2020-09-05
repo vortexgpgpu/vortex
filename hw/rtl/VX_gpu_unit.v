@@ -32,8 +32,8 @@ module VX_gpu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign tmc_new_mask[i] = (i < gpu_req_if.rs1_data[0]);
     end    
-    assign tmc.valid       = is_tmc;
-    assign tmc.thread_mask = tmc_new_mask;
+    assign tmc.valid = is_tmc;
+    assign tmc.tmask = tmc_new_mask;
 
     // wspawn
 
@@ -53,8 +53,8 @@ module VX_gpu_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire taken = gpu_req_if.rs1_data[i][0];
-        assign split_then_mask[i] = gpu_req_if.thread_mask[i] & taken;
-        assign split_else_mask[i] = gpu_req_if.thread_mask[i] & ~taken;
+        assign split_then_mask[i] = gpu_req_if.tmask[i] & taken;
+        assign split_else_mask[i] = gpu_req_if.tmask[i] & ~taken;
     end
 
     assign split.valid     = is_split;
@@ -78,12 +78,12 @@ module VX_gpu_unit #(
     assign warp_ctl_if.split   = split;
     assign warp_ctl_if.barrier = barrier;
 
-    assign gpu_commit_if.valid       = gpu_req_if.valid;
-    assign gpu_commit_if.wid         = gpu_req_if.wid;
-    assign gpu_commit_if.thread_mask = gpu_req_if.thread_mask;
-    assign gpu_commit_if.curr_PC     = gpu_req_if.curr_PC;
-    assign gpu_commit_if.rd          = gpu_req_if.rd;
-    assign gpu_commit_if.wb          = gpu_req_if.wb;
+    assign gpu_commit_if.valid = gpu_req_if.valid;
+    assign gpu_commit_if.wid   = gpu_req_if.wid;
+    assign gpu_commit_if.tmask = gpu_req_if.tmask;
+    assign gpu_commit_if.PC    = gpu_req_if.PC;
+    assign gpu_commit_if.rd    = gpu_req_if.rd;
+    assign gpu_commit_if.wb    = gpu_req_if.wb;
     
     // can accept new request?
     assign gpu_req_if.ready = gpu_commit_if.ready;

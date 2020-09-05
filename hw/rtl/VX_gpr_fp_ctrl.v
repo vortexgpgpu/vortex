@@ -8,41 +8,50 @@ module VX_gpr_fp_ctrl (
 
 	input wire [`NUM_THREADS-1:0][31:0] rs1_data,
 	input wire [`NUM_THREADS-1:0][31:0] rs2_data,
+	VX_gpr_req_if   gpr_req_if,
 
 	// outputs 
 	output wire [`NW_BITS+`NR_BITS-1:0]	raddr1,
-	VX_gpr_read_if	gpr_read_if
+	VX_gpr_rsp_if	gpr_rsp_if
 );
 
-    reg [`NUM_THREADS-1:0][31:0] rs1_tmp_data, rs2_tmp_data, rs3_tmp_data;
+    reg [`NUM_THREADS-1:0][31:0] rsp_rs1_data, rsp_rs2_data, rsp_rs3_data;
+	reg rsp_valid;
+	reg [31:0] rsp_pc;	
+	reg [`NW_BITS-1:0] rsp_wid;
 	reg read_rs1;
-	reg [`NW_BITS-1:0] rs3_wid;
 
-	wire rs3_delay = gpr_read_if.valid && gpr_read_if.use_rs3 && read_rs1;
-	wire read_fire = gpr_read_if.valid && gpr_read_if.ready_out;
+	wire rs3_delay = gpr_req_if.valid && gpr_req_if.use_rs3 && read_rs1;
+	wire read_fire = gpr_req_if.valid && gpr_rsp_if.ready;
 
 	always @(posedge clk) begin
 		if (reset) begin
-			rs1_tmp_data <= 0;
-			rs2_tmp_data <= 0;
-			rs3_tmp_data <= 0;
-			read_rs1     <= 1;
-			rs3_wid      <= 0;
+			rsp_valid    <= 0;
+			rsp_pc       <= 0;		
+			rsp_rs1_data <= 0;
+			rsp_rs2_data <= 0;
+			rsp_rs3_data <= 0;	
+			rsp_wid      <= 0;			
+			read_rs1     <= 1;			
 		end else begin
 			if (rs3_delay) begin
 				read_rs1 <= 0;
-				rs3_wid  <= gpr_read_if.wid;
+				rsp_wid  <= gpr_req_if.wid;
 			end else if (read_fire) begin
 				read_rs1 <= 1;
 			end
 
-			if (read_rs1) begin
-				rs1_tmp_data <= rs1_data;
-			end
-			rs2_tmp_data <= rs2_data;
-			rs3_tmp_data <= rs1_data;
+			rsp_valid    <= gpr_req_if.valid;
+			rsp_wid      <= gpr_req_if.wid;
+			rsp_pc       <= gpr_req_if.PC;		
 
-			assert(read_rs1 || rs3_wid == gpr_read_if.wid);
+			if (read_rs1) begin
+				rsp_rs1_data <= rs1_data;
+			end			
+			rsp_rs2_data <= rs2_data;
+			rsp_rs3_data <= rs1_data;
+
+			assert(read_rs1 || rsp_wid == gpr_req_if.wid);
 		end	
 	end
 
@@ -51,11 +60,15 @@ module VX_gpr_fp_ctrl (
 	end
 
 	// outputs
-	wire [`NR_BITS-1:0] rs1 = read_rs1 ? gpr_read_if.rs1 : gpr_read_if.rs3;
-	assign raddr1 = {gpr_read_if.wid, rs1};
-    assign gpr_read_if.ready_in = ~rs3_delay;
-	assign gpr_read_if.rs1_data = rs1_tmp_data;
-    assign gpr_read_if.rs2_data = rs2_tmp_data;
-    assign gpr_read_if.rs3_data = rs3_tmp_data;
+	wire [`NR_BITS-1:0] rs1 = read_rs1 ? gpr_req_if.rs1 : gpr_req_if.rs3;
+	assign raddr1 = {gpr_req_if.wid, rs1};
+    assign gpr_req_if.ready = ~rs3_delay;
+
+	assign gpr_rsp_if.valid    = rsp_valid;
+	assign gpr_rsp_if.wid      = rsp_wid;
+	assign gpr_rsp_if.PC       = rsp_pc;
+	assign gpr_rsp_if.rs1_data = rsp_rs1_data;
+    assign gpr_rsp_if.rs2_data = rsp_rs2_data;
+    assign gpr_rsp_if.rs3_data = rsp_rs3_data;
 
 endmodule

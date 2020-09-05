@@ -5,8 +5,8 @@ module VX_pipeline #(
 ) (        
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_PIPELINE_IO
-    `SCOPE_SIGNALS_EX_IO
+    `SCOPE_SIGNALS_ISSUE_IO
+    `SCOPE_SIGNALS_EXECUTE_IO
     
     // Clock
     input wire                              clk,
@@ -153,6 +153,8 @@ module VX_pipeline #(
     VX_issue #(
         .CORE_ID(CORE_ID)
     ) issue (
+        `SCOPE_SIGNALS_ISSUE_BIND
+
         .clk            (clk),
         .reset          (reset),        
 
@@ -172,7 +174,7 @@ module VX_pipeline #(
         .CORE_ID(CORE_ID)
     ) execute (
         `SCOPE_SIGNALS_LSU_BIND
-        `SCOPE_SIGNALS_EX_BIND
+        `SCOPE_SIGNALS_EXECUTE_BIND
         .clk            (clk),
         .reset          (reset),    
         
@@ -246,7 +248,5 @@ module VX_pipeline #(
     assign core_icache_rsp_if.data  = icache_rsp_data;
     assign core_icache_rsp_if.tag   = icache_rsp_tag;
     assign icache_rsp_ready = core_icache_rsp_if.ready;
-
-    `SCOPE_ASSIGN (scope_busy, busy);
 
 endmodule

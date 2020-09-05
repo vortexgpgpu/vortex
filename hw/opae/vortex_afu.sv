@@ -913,10 +913,9 @@ assign cmd_run_done = !vx_busy;
 Vortex #() vortex (
   `SCOPE_SIGNALS_ISTAGE_BIND
   `SCOPE_SIGNALS_LSU_BIND
-  `SCOPE_SIGNALS_CORE_BIND
   `SCOPE_SIGNALS_CACHE_BIND
-  `SCOPE_SIGNALS_PIPELINE_BIND
-  `SCOPE_SIGNALS_EX_BIND
+  `SCOPE_SIGNALS_ISSUE_BIND
+  `SCOPE_SIGNALS_EXECUTE_BIND
 
   .clk              (clk),
   .reset            (SoftReset | vx_reset),
@@ -988,6 +987,8 @@ Vortex #() vortex (
 localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST});
 localparam SCOPE_SR_DEPTH = 2;
 
+`STATIC_ASSERT(SCOPE_DATAW == 1766, "invalid size")
+
 `SCOPE_ASSIGN (scope_dram_req_valid, vx_dram_req_valid);
 `SCOPE_ASSIGN (scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
 `SCOPE_ASSIGN (scope_dram_req_rw,    vx_dram_req_rw);
@@ -1015,6 +1016,8 @@ localparam SCOPE_SR_DEPTH = 2;
 `SCOPE_ASSIGN (scope_snp_rsp_tag,   vx_snp_rsp_tag);
 `SCOPE_ASSIGN (scope_snp_rsp_ready, vx_snp_rsp_ready);
 
+`SCOPE_ASSIGN (scope_busy, vx_busy);
+
 wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
                   || ((| scope_dcache_req_valid) && scope_dcache_req_ready)
@@ -1023,10 +1026,16 @@ wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_dram_rsp_valid && scope_dram_rsp_ready)
                   || (scope_snp_req_valid && scope_snp_req_ready)
                   || (scope_snp_rsp_valid && scope_snp_rsp_ready)
+                  || (scope_issue_valid && scope_issue_ready)
+                  || scope_gpr_rsp_valid
                   || scope_bank_valid_st0
                   || scope_bank_valid_st1
                   || scope_bank_valid_st2
-                  || scope_bank_stall_pipe;
+                  || scope_bank_stall_pipe
+                  || scope_scoreboard_delay
+                  || scope_gpr_delay
+                  || scope_execute_delay
+                  || scope_busy;
 
 wire scope_start = vx_reset;
 

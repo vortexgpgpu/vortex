@@ -6,9 +6,9 @@
 interface VX_ifetch_req_if ();
 
     wire                    valid;
-    wire [`NUM_THREADS-1:0] thread_mask;    
+    wire [`NUM_THREADS-1:0] tmask;    
     wire [`NW_BITS-1:0]     wid;
-    wire [31:0]             curr_PC;
+    wire [31:0]             PC;
     wire                    ready;
 
 endinterface
