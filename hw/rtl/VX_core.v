@@ -5,10 +5,9 @@ module VX_core #(
 ) (        
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CORE_IO
     `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_PIPELINE_IO
-    `SCOPE_SIGNALS_BE_IO
+    `SCOPE_SIGNALS_ISSUE_IO
+    `SCOPE_SIGNALS_EXECUTE_IO
     
     // Clock
     input  wire                             clk,
@@ -166,15 +165,15 @@ module VX_core #(
     VX_cache_core_req_if #(
         .NUM_REQUESTS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
+        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     ) core_icache_req_if();
 
     VX_cache_core_rsp_if #(
         .NUM_REQUESTS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
+        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     ) core_icache_rsp_if();
 
     VX_pipeline #(
@@ -182,8 +181,8 @@ module VX_core #(
     ) pipeline (
         `SCOPE_SIGNALS_ISTAGE_BIND
         `SCOPE_SIGNALS_LSU_BIND
-        `SCOPE_SIGNALS_PIPELINE_BIND
-        `SCOPE_SIGNALS_BE_BIND
+        `SCOPE_SIGNALS_ISSUE_BIND
+        `SCOPE_SIGNALS_EXECUTE_BIND
 
         .clk(clk),
         .reset(reset),
@@ -250,7 +249,7 @@ module VX_core #(
     assign dcache_snp_req_if.addr       = snp_req_addr;
     assign dcache_snp_req_if.invalidate = snp_req_invalidate;
     assign dcache_snp_req_if.tag        = snp_req_tag;
-    assign snp_req_ready                        = dcache_snp_req_if.ready;
+    assign snp_req_ready                = dcache_snp_req_if.ready;
 
     assign snp_rsp_valid = dcache_snp_rsp_if.valid;
     assign snp_rsp_tag   = dcache_snp_rsp_if.tag;
@@ -283,18 +282,20 @@ module VX_core #(
         .icache_dram_rsp_if (icache_dram_rsp_if)
     );
 
-    // select io address
+    // select io bus
     wire is_io_addr = ({core_dcache_req_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
-    wire io_select = (| core_dcache_req_if.valid) ? is_io_addr : 0;
+    wire io_req_select = (| core_dcache_req_if.valid) ? is_io_addr : 0;
+    wire io_rsp_select = (| arb_io_rsp_if.valid);
 
-    VX_dcache_arb dcache_io_arb (
-        .req_select       (io_select),
-        .in_core_req_if   (core_dcache_req_if),
-        .out0_core_req_if (arb_dcache_req_if),
-        .out1_core_req_if (arb_io_req_if),  
-        .in0_core_rsp_if  (arb_dcache_rsp_if),
-        .in1_core_rsp_if  (arb_io_rsp_if),    
-        .out_core_rsp_if  (core_dcache_rsp_if)
+    VX_dcache_arb dcache_io_arb (        
+        .core_req_in_if   (core_dcache_req_if),
+        .core_req_out0_if (arb_dcache_req_if),
+        .core_req_out1_if (arb_io_req_if),  
+        .core_rsp_in0_if  (arb_dcache_rsp_if),
+        .core_rsp_in1_if  (arb_io_rsp_if),    
+        .core_rsp_out_if  (core_dcache_rsp_if),
+        .select_req       (io_req_select),
+        .select_rsp       (io_rsp_select)
     );
     
 endmodule

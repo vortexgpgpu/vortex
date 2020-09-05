@@ -5,10 +5,9 @@ module VX_cluster #(
 ) ( 
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CORE_IO
     `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_PIPELINE_IO
-    `SCOPE_SIGNALS_BE_IO
+    `SCOPE_SIGNALS_ISSUE_IO
+    `SCOPE_SIGNALS_EXECUTE_IO
 
     // Clock
     input  wire                             clk,
@@ -135,18 +134,15 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                        per_core_busy;
     wire [`NUM_CORES-1:0]                        per_core_ebreak;
 
-    genvar i;
-
-    for (i = 0; i < `NUM_CORES; i++) begin    
+    for (genvar i = 0; i < `NUM_CORES; i++) begin    
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) core (
             `SCOPE_SIGNALS_ISTAGE_BIND
             `SCOPE_SIGNALS_LSU_BIND
-            `SCOPE_SIGNALS_CORE_BIND
             `SCOPE_SIGNALS_CACHE_BIND
-            `SCOPE_SIGNALS_PIPELINE_BIND
-            `SCOPE_SIGNALS_BE_BIND
+            `SCOPE_SIGNALS_ISSUE_BIND
+            `SCOPE_SIGNALS_EXECUTE_BIND
 
             .clk                (clk),
             .reset              (reset),
@@ -316,7 +312,7 @@ module VX_cluster #(
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]           l2_snp_fwdin_tag;
         wire[`NUM_CORES-1:0]                                l2_snp_fwdin_ready;
 
-        for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
+        for (genvar i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
             assign l2_core_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
             assign l2_core_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
 
@@ -367,7 +363,6 @@ module VX_cluster #(
             .NUM_BANKS              (`L2NUM_BANKS),
             .WORD_SIZE              (`L2WORD_SIZE),
             .NUM_REQUESTS           (`L2NUM_REQUESTS),
-            .STAGE_1_CYCLES         (`L2STAGE_1_CYCLES),
             .CREQ_SIZE              (`L2CREQ_SIZE),
             .MRVQ_SIZE              (`L2MRVQ_SIZE),
             .DFPQ_SIZE              (`L2DFPQ_SIZE),
@@ -472,7 +467,7 @@ module VX_cluster #(
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]        arb_snp_fwdin_tag;
         wire[`NUM_CORES-1:0]                             arb_snp_fwdin_ready;
 
-        for (i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin            
+        for (genvar i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin            
             assign arb_dram_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
             assign arb_dram_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
 

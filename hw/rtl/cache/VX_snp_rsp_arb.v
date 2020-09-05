@@ -34,8 +34,7 @@ module VX_snp_rsp_arb #(
     assign snp_rsp_valid = fsq_valid;
     assign snp_rsp_tag   = per_bank_snp_rsp_tag[fsq_bank];
 
-    genvar i;
-    for (i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
         assign per_bank_snp_rsp_ready[i] = snp_rsp_ready && (fsq_bank == `BANK_BITS'(i));
     end
 

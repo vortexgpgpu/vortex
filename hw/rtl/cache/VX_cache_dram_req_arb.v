@@ -106,8 +106,7 @@ module VX_cache_dram_req_arb #(
         `UNUSED_PIN  (grant_onehot)
     );    
 
-    genvar i;
-    for (i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
         assign per_bank_dram_wb_req_ready[i] = dram_req_ready && (dwb_bank == `BANK_BITS'(i));
     end
 

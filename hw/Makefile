@@ -2,3 +2,6 @@
 
 build_config:
 	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./VX_config.h
+
+clean:
+	rm ./rtl/VX_user_config.vh ./VX_config.h

@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_rr_arbiter #(
     parameter N = 1
@@ -26,27 +26,24 @@ module VX_rr_arbiter #(
         reg [`CLOG2(N)-1:0] state;  
         reg [N-1:0] grant_onehot_r;
 
-        integer i, j;   
-
         always @(*) begin
-            for (i = 0; i < N; i++) begin  
+            for (integer i = 0; i < N; i++) begin  
                 grant_table[i] = `CLOG2(N)'(i);    
-                for (j = 0; j < N; j++) begin    
+                for (integer j = 0; j < N; j++) begin    
                     if (requests[(i+j) % N]) begin                        
                         grant_table[i] = `CLOG2(N)'((i+j) % N);
                     end
                 end
             end
             grant_onehot_r = N'(0);
-            grant_onehot_r[grant_index] = 1;
+            grant_onehot_r[grant_table[state]] = 1;
         end  
 
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end 
-            else begin
-                state <= grant_index;
+            end else begin
+                state <= grant_table[state];
             end
         end      
 

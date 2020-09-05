@@ -9,9 +9,9 @@ DEVICE = 10AX115N3F40E2SG
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on
-FIT_ARGS = --part=$(DEVICE) --read_settings_files=on
+FIT_ARGS = --parallel --part=$(DEVICE) --read_settings_files=on
 ASM_ARGS =
-STA_ARGS = --do_report_timing
+STA_ARGS = --parallel --do_report_timing
 
 # Build targets
 all: $(PROJECT).sta.rpt

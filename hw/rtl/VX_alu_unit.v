@@ -1,132 +1,125 @@
 `include "VX_define.vh"
 
-module VX_alu_unit (
-    input wire         clk,
-    input wire         reset,
-    input wire [31:0]  src_a,
-    input wire [31:0]  src_b,
-    input wire         src_rs2,
-    input wire [31:0]  itype_immed,
-    input wire [19:0]  upper_immed,
-    input wire [4:0]   alu_op,
-    input wire [31:0]  curr_PC,
-    output reg [31:0]  alu_result,
-    output reg         alu_stall
-);
-    wire[31:0] div_result_unsigned;
-    wire[31:0] div_result_signed;
-
-    wire[31:0] rem_result_unsigned;    
-    wire[31:0] rem_result_signed;
-  
-    wire[63:0] mul_result;    
-
-    wire[31:0] alu_in1 = src_a;
-    wire[31:0] alu_in2 = (src_rs2 == `RS2_IMMED) ? itype_immed : src_b;
-
-    wire[31:0] upper_immed_s = {upper_immed, {12{1'b0}}};
+module VX_alu_unit #(
+    parameter CORE_ID = 0
+) (
+    input wire          clk,
+    input wire          reset,
     
-    reg [7:0] inst_delay;
-    reg [7:0] curr_inst_delay;
-        
-    always @(*) begin
-        case (alu_op)
-            `ALU_DIV,
-            `ALU_DIVU,
-            `ALU_REM,
-            `ALU_REMU:  inst_delay = `DIV_LATENCY;
-            `ALU_MUL,
-            `ALU_MULH,
-            `ALU_MULHSU,
-            `ALU_MULHU: inst_delay = `MUL_LATENCY;
-            default:    inst_delay = 0;
-        endcase
+    // Inputs
+    VX_alu_req_if       alu_req_if,
+
+    // Outputs
+    VX_branch_ctl_if    branch_ctl_if,
+    VX_exu_to_cmt_if    alu_commit_if    
+);    
+    reg [`NUM_THREADS-1:0][31:0] alu_result;    
+    reg [`NUM_THREADS-1:0][31:0] add_result;   
+    reg [`NUM_THREADS-1:0][32:0] sub_result;
+    reg [`NUM_THREADS-1:0][31:0] shr_result;
+    reg [`NUM_THREADS-1:0][31:0] msc_result;    
+
+    wire               is_br_op = alu_req_if.is_br_op;
+    wire [`ALU_BITS-1:0] alu_op = `ALU_OP(alu_req_if.op_type);
+    wire [`BR_BITS-1:0]   br_op = `BR_OP(alu_req_if.op_type);
+    wire             alu_signed = `ALU_SIGNED(alu_op);   
+    wire [1:0]     alu_op_class = `ALU_OP_CLASS(alu_op); 
+    wire                 is_sub = (alu_op == `ALU_SUB);
+
+    wire [`NUM_THREADS-1:0][31:0] alu_in1 = alu_req_if.rs1_data;
+    wire [`NUM_THREADS-1:0][31:0] alu_in2 = alu_req_if.rs2_data;
+
+    wire [`NUM_THREADS-1:0][31:0] alu_in1_PC   = alu_req_if.rs1_is_PC  ? {`NUM_THREADS{alu_req_if.PC}} : alu_in1;
+    wire [`NUM_THREADS-1:0][31:0] alu_in2_imm  = alu_req_if.rs2_is_imm ? {`NUM_THREADS{alu_req_if.imm}}     : alu_in2;
+    wire [`NUM_THREADS-1:0][31:0] alu_in2_less = (alu_req_if.rs2_is_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        always @(*) begin
+            add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];  
+        end
     end
 
-    wire inst_stalled = (curr_inst_delay != inst_delay);
-
-    always @(posedge clk) begin
-        if (reset) begin            
-            curr_inst_delay <= 0;
-        end else begin
-            curr_inst_delay <= inst_stalled ? (curr_inst_delay + 1) : 0; 
-        end        
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        wire [32:0] sub_in1 = {alu_signed & alu_in1[i][31],      alu_in1[i]};
+        wire [32:0] sub_in2 = {alu_signed & alu_in2_less[i][31], alu_in2_less[i]};
+        always @(*) begin
+            sub_result[i] = $signed(sub_in1) - $signed(sub_in2);
+        end
     end
 
-    assign alu_stall = inst_stalled;
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
+        wire [32:0] shr_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
+    `IGNORE_WARNINGS_BEGIN
+        wire [32:0] shr_value = $signed(shr_in1) >>> alu_in2_imm[i][4:0]; 
+    `IGNORE_WARNINGS_END
+        always @(*) begin
+            shr_result[i] = shr_value[31:0];
+        end
+    end        
 
-    always @(*) begin
-        case (alu_op)
-            `ALU_ADD:       alu_result = $signed(alu_in1) + $signed(alu_in2);
-            `ALU_SUB:       alu_result = $signed(alu_in1) - $signed(alu_in2);
-            `ALU_SLLA:      alu_result = alu_in1 << alu_in2[4:0];
-            `ALU_SLT:       alu_result = ($signed(alu_in1) < $signed(alu_in2)) ? 32'h1 : 32'h0;
-            `ALU_SLTU:      alu_result = alu_in1 < alu_in2 ? 32'h1 : 32'h0;
-            `ALU_XOR:       alu_result = alu_in1 ^ alu_in2;
-            `ALU_SRL:       alu_result = alu_in1 >> alu_in2[4:0];
-            `ALU_SRA:       alu_result = $signed(alu_in1)  >>> alu_in2[4:0];
-            `ALU_OR:        alu_result = alu_in1 | alu_in2;
-            `ALU_AND:       alu_result = alu_in2 & alu_in1;
-            `ALU_SUBU:      alu_result = (alu_in1 >= alu_in2) ? 32'h0 : 32'hffffffff;
-            `ALU_LUI:       alu_result = upper_immed_s;
-            `ALU_AUIPC:     alu_result = $signed(curr_PC) + $signed(upper_immed_s);
-            `ALU_MUL:       alu_result = mul_result[31:0];
-            `ALU_MULH:      alu_result = mul_result[63:32];
-            `ALU_MULHSU:    alu_result = mul_result[63:32];
-            `ALU_MULHU:     alu_result = mul_result[63:32];
-            `ALU_DIV:       alu_result = (alu_in2 == 0) ? 32'hffffffff : div_result_signed;
-            `ALU_DIVU:      alu_result = (alu_in2 == 0) ? 32'hffffffff : div_result_unsigned;
-            `ALU_REM:       alu_result = (alu_in2 == 0) ? alu_in1 : rem_result_signed;
-            `ALU_REMU:      alu_result = (alu_in2 == 0) ? alu_in1 : rem_result_unsigned;
-            default:        alu_result = 32'h0;
-        endcase
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin 
+        always @(*) begin
+            case (alu_op)
+                `ALU_AND:   msc_result[i] = alu_in1[i] & alu_in2_imm[i];
+                `ALU_OR:    msc_result[i] = alu_in1[i] | alu_in2_imm[i];
+                `ALU_XOR:   msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];                
+                //`ALU_SLL,
+                default:    msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
+            endcase
+        end
     end
+            
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        always @(*) begin
+            case (alu_op_class)                        
+                0: alu_result[i] = add_result[i];
+                1: alu_result[i] = {31'b0, sub_result[i][32]};
+                2: alu_result[i] = is_sub ? sub_result[i][31:0] : shr_result[i];
+                default: alu_result[i] = msc_result[i];
+            endcase
+        end       
+    end
+    
+    wire is_jal = is_br_op && (br_op == `BR_JAL || br_op == `BR_JALR);
+    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result; 
 
-    VX_divide #(
-        .WIDTHN(32),
-        .WIDTHD(32),
-        .NSIGNED(0),
-        .DSIGNED(0),
-        .PIPELINE(`DIV_LATENCY)
-    ) udiv (
-        .clk(clk),
-        .reset(reset),
-        .numer(alu_in1),
-        .denom(alu_in2),
-        .quotient(div_result_unsigned),
-        .remainder(rem_result_unsigned)
+    wire [31:0] br_dest    = add_result[alu_req_if.tid]; 
+    wire [32:0] cmp_result = sub_result[alu_req_if.tid];   
+    
+    wire [32:0] cmp_result_r;
+    wire is_br_op_r;
+`IGNORE_WARNINGS_BEGIN
+    wire [`BR_BITS-1:0] br_op_r;
+`IGNORE_WARNINGS_END
+
+    // output
+
+    wire stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
+
+    VX_generic_register #(
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 32 + 33)
+    ) alu_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall_out),
+        .flush (1'b0),
+        .in    ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.tmask,    alu_req_if.PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_op,   br_dest,            cmp_result}),
+        .out   ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, br_op_r, branch_ctl_if.dest, cmp_result_r})
     );
+    
+    wire is_less  = cmp_result_r[32];
+    wire is_equal = ~(| cmp_result_r[31:0]);        
 
-    VX_divide #(
-        .WIDTHN(32),
-        .WIDTHD(32),
-        .NSIGNED(1),
-        .DSIGNED(1),
-        .PIPELINE(`DIV_LATENCY)
-    ) sdiv (
-        .clk(clk),
-        .reset(reset),
-        .numer(alu_in1),
-        .denom(alu_in2),
-        .quotient(div_result_signed),
-        .remainder(rem_result_signed)
-    );
+    wire br_neg    = `BR_NEG(br_op_r);    
+    wire br_less   = `BR_LESS(br_op_r);
+    wire br_static = `BR_STATIC(br_op_r);
+    wire br_taken  = ((br_less ? is_less : is_equal) ^ br_neg) | br_static;   
 
-    wire [32:0] mul_dataa = {(alu_op == `ALU_MULHU)                          ? 1'b0 : alu_in1[31], alu_in1};
-    wire [32:0] mul_datab = {(alu_op == `ALU_MULHU || alu_op == `ALU_MULHSU) ? 1'b0 : alu_in2[31], alu_in2};
+    assign branch_ctl_if.valid = alu_commit_if.valid && alu_commit_if.ready && is_br_op_r;
+    assign branch_ctl_if.wid   = alu_commit_if.wid; 
+    assign branch_ctl_if.taken = br_taken;
 
-    VX_mult #(
-        .WIDTHA(33),
-        .WIDTHB(33),
-        .WIDTHP(64),
-        .SIGNED(1),
-        .PIPELINE(`MUL_LATENCY)
-    ) multiplier (
-        .clk(clk),
-        .reset(reset),
-        .dataa(mul_dataa),
-        .datab(mul_datab),
-        .result(mul_result)
-    );
+    // can accept new request?
+    assign alu_req_if.ready = ~stall_out;
 
 endmodule

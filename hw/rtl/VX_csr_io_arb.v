@@ -2,7 +2,7 @@
 
 module VX_csr_io_arb #(
     parameter NUM_REQUESTS = 1,
-    parameter REQS_BITS = `CLOG2(NUM_REQUESTS)
+    parameter REQS_BITS = `LOG2UP(NUM_REQUESTS)
 ) (
     input wire                              clk,
     input wire                              reset,
@@ -37,6 +37,7 @@ module VX_csr_io_arb #(
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_VAR (request_id)
 
         assign out_csr_io_req_valid  = in_csr_io_req_valid;
         assign out_csr_io_req_rw     = in_csr_io_req_rw;        
@@ -50,9 +51,7 @@ module VX_csr_io_arb #(
 
     end else begin
 
-        genvar i;
-
-        for (i = 0; i < NUM_REQUESTS; i++) begin                
+        for (genvar i = 0; i < NUM_REQUESTS; i++) begin                
             assign out_csr_io_req_valid[i]  = in_csr_io_req_valid && (request_id == `REQS_BITS'(i));
             assign out_csr_io_req_rw[i]     = in_csr_io_req_rw;
             assign out_csr_io_req_addr[i]   = in_csr_io_req_addr;
@@ -77,7 +76,7 @@ module VX_csr_io_arb #(
         assign out_csr_io_rsp_valid = in_csr_io_rsp_valid [bus_rsp_sel];
         assign out_csr_io_rsp_data  = in_csr_io_rsp_data [bus_rsp_sel];       
 
-        for (i = 0; i < NUM_REQUESTS; i++) begin
+        for (genvar i = 0; i < NUM_REQUESTS; i++) begin
             assign in_csr_io_rsp_ready[i] = out_csr_io_rsp_ready && (bus_rsp_sel == `REQS_BITS'(i));
         end
         

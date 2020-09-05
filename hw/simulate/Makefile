@@ -1,6 +1,8 @@
+SINGLECORE += -DNUM_CLUSTERS=1 -DNUM_CORES=1 
+
 #MULTICORE += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
 #MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
-MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2
+MULTICORE += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
 # control RTL debug print states
 DBG_PRINT_FLAGS += -DDBG_PRINT_CORE_ICACHE
@@ -12,12 +14,14 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
 
-#DBG_FLAGS += $(DBG_PRINT_FLAGS)
+DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
-INCLUDE = -I../rtl/ -I../rtl/libs -I../rtl/interfaces -I../rtl/cache -I../rtl/simulate
+FPU_INCLUDE = -I../rtl/fp_cores -I../rtl/fp_cores/svdpi -I../rtl/fp_cores/fpnew/src/common_cells/include -I../rtl/fp_cores/fpnew/src/common_cells/src -I../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I../rtl/fp_cores/fpnew/src 
+INCLUDE = -I../rtl/ -I../rtl/libs -I../rtl/interfaces -I../rtl/cache -I../rtl/simulate $(FPU_INCLUDE)
 
 SRCS = simulator.cpp testbench.cpp
+SRCS += ../rtl/fp_cores/svdpi/float_dpi.cpp
 
 all: build-s
 
@@ -26,30 +30,31 @@ CF += -std=c++11 -fms-extensions -I../..
 VF += --language 1800-2009 --assert -Wall -Wpedantic
 VF += -Wno-DECLFILENAME
 VF += --x-initial unique --x-assign unique
-VF += -exe $(SRCS) $(INCLUDE)
+VF += --exe $(SRCS) $(INCLUDE)
+VF += --cc Vortex.v --top-module Vortex
+VF += verilator.vlt
 
 DBG += -DVCD_OUTPUT $(DBG_FLAGS)
-DBG += -DDBG_CORE_REQ_INFO
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
 gen-s:
-	verilator $(VF) -DNDEBUG -cc Vortex.v -CFLAGS '$(CF) -DNDEBUG'
+	verilator $(VF) -DNDEBUG  $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG $(SINGLECORE)'
 
 gen-sd:
-	verilator $(VF) -cc Vortex.v -CFLAGS '$(CF) -g -O0  $(DBG)' --trace $(DBG)
+	verilator $(VF) $(SINGLECORE) -CFLAGS '$(CF) -g -O0 $(DBG) $(SINGLECORE)' --trace $(DBG)
 
 gen-st:
-	verilator $(VF) -DNDEBUG -cc Vortex.v -CFLAGS '$(CF) -DNDEBUG -O2' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(SINGLECORE)' --threads $(THREADS)
 
 gen-m:
-	verilator $(VF) -DNDEBUG -cc Vortex.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
+	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md:
-	verilator $(VF) -cc Vortex.v $(MULTICORE) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
+	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) -g -O0 $(DBG) $(MULTICORE)' --trace $(DBG)
 
 gen-mt:
-	verilator $(VF) -DNDEBUG -cc Vortex.v $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
 
 build-s: gen-s
 	(cd obj_dir && make -j -f VVortex.mk)

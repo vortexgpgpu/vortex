@@ -15,13 +15,13 @@
 #include <vector>
 
 #define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 100
+#define DRAM_LATENCY 4
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
 
 typedef struct {
   int cycles_left;  
-  uint8_t *data;
+  std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
   unsigned tag;
 } dram_req_t;
 
@@ -31,19 +31,24 @@ public:
   Simulator();
   virtual ~Simulator();
 
+  void attach_ram(RAM* ram);
+
   void load_bin(const char* program_file);
   void load_ihex(const char* program_file);
   
-  bool is_busy();  
+  bool is_busy() const;  
 
   void reset();
   void step();
   void wait(uint32_t cycles);
+  
   void flush_caches(uint32_t mem_addr, uint32_t size);  
+  void set_csr(int core_id, int addr, unsigned value);
+  void get_csr(int core_id, int addr, unsigned *value);
 
-  void attach_ram(RAM* ram);
+  void run();  
+  int get_last_wb_value(int reg) const;  
 
-  bool run();  
   void print_stats(std::ostream& out);
 
 private:  
@@ -52,14 +57,18 @@ private:
 
   void eval_dram_bus();
   void eval_io_bus();
+  void eval_csr_bus();
   void eval_snp_bus();
   
   std::vector<dram_req_t> dram_rsp_vec_;
   int dram_rsp_active_;
   
   bool snp_req_active_;
+  bool csr_req_active_;
+
   uint32_t snp_req_size_;
   uint32_t pending_snp_reqs_;
+  uint32_t* csr_rsp_value_;
 
   RAM *ram_;
   VVortex *vortex_;

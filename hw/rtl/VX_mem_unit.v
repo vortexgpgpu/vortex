@@ -40,18 +40,20 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
     ) core_dcache_rsp_qual_if(), core_smem_rsp_if();
 
-    // select shared memory address
-    wire is_smem_addr = (({core_dcache_req_if.addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
-    wire smem_select = (| core_dcache_req_if.valid) ? is_smem_addr : 0;
+    // select shared memory bus
+    wire is_smem_addr    = (({core_dcache_req_if.addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
+    wire smem_req_select = (| core_dcache_req_if.valid) ? is_smem_addr : 0;
+    wire smem_rsp_select = (| core_smem_rsp_if.valid);
 
-    VX_dcache_arb dcache_smem_arb (
-        .req_select       (smem_select),
-        .in_core_req_if   (core_dcache_req_if),
-        .out0_core_req_if (core_dcache_req_qual_if),
-        .out1_core_req_if (core_smem_req_if),    
-        .in0_core_rsp_if  (core_dcache_rsp_qual_if),
-        .in1_core_rsp_if  (core_smem_rsp_if),    
-        .out_core_rsp_if  (core_dcache_rsp_if)
+    VX_dcache_arb dcache_smem_arb (        
+        .core_req_in_if   (core_dcache_req_if),
+        .core_req_out0_if (core_dcache_req_qual_if),
+        .core_req_out1_if (core_smem_req_if),    
+        .core_rsp_in0_if  (core_dcache_rsp_qual_if),
+        .core_rsp_in1_if  (core_smem_rsp_if),    
+        .core_rsp_out_if  (core_dcache_rsp_if),
+        .select_req       (smem_req_select),
+        .select_rsp       (smem_rsp_select)
     );
 
     VX_cache #(
@@ -61,7 +63,6 @@ module VX_mem_unit # (
         .NUM_BANKS              (`SNUM_BANKS),
         .WORD_SIZE              (`SWORD_SIZE),
         .NUM_REQUESTS           (`SNUM_REQUESTS),
-        .STAGE_1_CYCLES         (`SSTAGE_1_CYCLES),
         .CREQ_SIZE              (`SCREQ_SIZE),
         .MRVQ_SIZE              (8),
         .DFPQ_SIZE              (1),
@@ -145,7 +146,6 @@ module VX_mem_unit # (
         .NUM_BANKS              (`DNUM_BANKS),
         .WORD_SIZE              (`DWORD_SIZE),
         .NUM_REQUESTS           (`DNUM_REQUESTS),
-        .STAGE_1_CYCLES         (`DSTAGE_1_CYCLES),
         .CREQ_SIZE              (`DCREQ_SIZE),
         .MRVQ_SIZE              (`DMRVQ_SIZE),
         .DFPQ_SIZE              (`DDFPQ_SIZE),
@@ -230,7 +230,6 @@ module VX_mem_unit # (
         .NUM_BANKS              (`INUM_BANKS),
         .WORD_SIZE              (`IWORD_SIZE),
         .NUM_REQUESTS           (`INUM_REQUESTS),
-        .STAGE_1_CYCLES         (`ISTAGE_1_CYCLES),
         .CREQ_SIZE              (`ICREQ_SIZE),
         .MRVQ_SIZE              (`IMRVQ_SIZE),
         .DFPQ_SIZE              (`IDFPQ_SIZE),
@@ -243,8 +242,8 @@ module VX_mem_unit # (
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (1),
         .WRITE_ENABLE           (0),
-        .CORE_TAG_WIDTH         (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
+        .CORE_TAG_WIDTH         (`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS       (`ICORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
     ) icache (
         `SCOPE_SIGNALS_CACHE_UNBIND

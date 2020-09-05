@@ -3,10 +3,9 @@
 module Vortex (
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CORE_IO
     `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_PIPELINE_IO
-    `SCOPE_SIGNALS_BE_IO
+    `SCOPE_SIGNALS_ISSUE_IO
+    `SCOPE_SIGNALS_EXECUTE_IO
 
     // Clock
     input  wire                             clk,
@@ -78,10 +77,9 @@ module Vortex (
         ) cluster (
             `SCOPE_SIGNALS_ISTAGE_BIND
             `SCOPE_SIGNALS_LSU_BIND
-            `SCOPE_SIGNALS_CORE_BIND
             `SCOPE_SIGNALS_CACHE_BIND
-            `SCOPE_SIGNALS_PIPELINE_BIND
-            `SCOPE_SIGNALS_BE_BIND
+            `SCOPE_SIGNALS_ISSUE_BIND
+            `SCOPE_SIGNALS_EXECUTE_BIND
 
             .clk                (clk),
             .reset              (reset),
@@ -139,69 +137,67 @@ module Vortex (
 
     end else begin
 
-        wire                            per_cluster_dram_req_valid [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_dram_req_rw [`NUM_CLUSTERS-1:0];        
-        wire [`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen [`NUM_CLUSTERS-1:0];   
-        wire [`L2DRAM_ADDR_WIDTH-1:0]   per_cluster_dram_req_addr [`NUM_CLUSTERS-1:0];
-        wire [`L2DRAM_LINE_WIDTH-1:0]   per_cluster_dram_req_data [`NUM_CLUSTERS-1:0];
-        wire [`L2DRAM_TAG_WIDTH-1:0]    per_cluster_dram_req_tag [`NUM_CLUSTERS-1:0];
-        wire                            l3_core_req_ready;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_valid;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_rw;        
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen;   
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_dram_req_addr;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_req_data;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_req_tag;
+        wire                                            l3_core_req_ready;
   
-        wire                            per_cluster_dram_rsp_valid [`NUM_CLUSTERS-1:0];        
-        wire [`L2DRAM_LINE_WIDTH-1:0]   per_cluster_dram_rsp_data [`NUM_CLUSTERS-1:0];
-        wire [`L2DRAM_TAG_WIDTH-1:0]    per_cluster_dram_rsp_tag [`NUM_CLUSTERS-1:0]; 
-        wire                            per_cluster_dram_rsp_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_valid;        
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_rsp_data;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_rsp_tag; 
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_rsp_ready;
 
-        wire                            per_cluster_snp_req_valid [`NUM_CLUSTERS-1:0];
-        wire [`L2DRAM_ADDR_WIDTH-1:0]   per_cluster_snp_req_addr [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_snp_req_invalidate [`NUM_CLUSTERS-1:0];
-        wire [`L2SNP_TAG_WIDTH-1:0]     per_cluster_snp_req_tag [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_snp_req_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_snp_req_addr;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_invalidate;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]   per_cluster_snp_req_tag;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_ready;
 
-        wire                            per_cluster_snp_rsp_valid [`NUM_CLUSTERS-1:0];
-        wire [`L2SNP_TAG_WIDTH-1:0]     per_cluster_snp_rsp_tag [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_snp_rsp_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_rsp_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]   per_cluster_snp_rsp_tag;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_rsp_ready;
 
-        wire                            per_cluster_io_req_valid [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_io_req_rw [`NUM_CLUSTERS-1:0];
-        wire [3:0]                      per_cluster_io_req_byteen [`NUM_CLUSTERS-1:0];
-        wire [29:0]                     per_cluster_io_req_addr [`NUM_CLUSTERS-1:0];
-        wire [31:0]                     per_cluster_io_req_data [`NUM_CLUSTERS-1:0];        
-        wire [`L2CORE_TAG_WIDTH-1:0]    per_cluster_io_req_tag [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_io_req_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_req_valid;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_req_rw;
+        wire [`NUM_CLUSTERS-1:0][3:0]                    per_cluster_io_req_byteen;
+        wire [`NUM_CLUSTERS-1:0][29:0]                   per_cluster_io_req_addr;
+        wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_req_data;        
+        wire [`NUM_CLUSTERS-1:0][`L2CORE_TAG_WIDTH-1:0]  per_cluster_io_req_tag;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_req_ready;
 
-        wire                            per_cluster_io_rsp_valid [`NUM_CLUSTERS-1:0];
-        wire [`L2CORE_TAG_WIDTH-1:0]    per_cluster_io_rsp_tag [`NUM_CLUSTERS-1:0];
-        wire [31:0]                     per_cluster_io_rsp_data [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_io_rsp_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2CORE_TAG_WIDTH-1:0]  per_cluster_io_rsp_tag;
+        wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_io_rsp_data;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_io_rsp_ready;
 
-        wire                            per_cluster_csr_io_req_valid [`NUM_CLUSTERS-1:0];
-        wire [11:0]                     per_cluster_csr_io_req_addr [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_csr_io_req_rw [`NUM_CLUSTERS-1:0];
-        wire [31:0]                     per_cluster_csr_io_req_data [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_csr_io_req_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_req_valid;
+        wire [`NUM_CLUSTERS-1:0][11:0]                   per_cluster_csr_io_req_addr;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_req_rw;
+        wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_csr_io_req_data;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_req_ready;
 
-        wire                            per_cluster_csr_io_rsp_valid [`NUM_CLUSTERS-1:0];
-        wire [31:0]                     per_cluster_csr_io_rsp_data [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_csr_io_rsp_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_rsp_valid;
+        wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_csr_io_rsp_data;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_io_rsp_ready;
 
-        wire                            per_cluster_busy [`NUM_CLUSTERS-1:0];
-        wire                            per_cluster_ebreak [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_ebreak;
 
         wire [`CLOG2(`NUM_CLUSTERS)-1:0] csr_io_request_id = `CLOG2(`NUM_CLUSTERS)'(csr_io_req_coreid >> `CLOG2(`NUM_CLUSTERS));
         wire [`NC_BITS-1:0] per_cluster_csr_io_req_coreid = `NC_BITS'(csr_io_req_coreid);
 
-        genvar i;
-        for (i = 0; i < `NUM_CLUSTERS; i++) begin        
+        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin        
             VX_cluster #(
                 .CLUSTER_ID(i)
             ) cluster (
                 `SCOPE_SIGNALS_ISTAGE_BIND
                 `SCOPE_SIGNALS_LSU_BIND
-                `SCOPE_SIGNALS_CORE_BIND
                 `SCOPE_SIGNALS_CACHE_BIND
-                `SCOPE_SIGNALS_PIPELINE_BIND
-                `SCOPE_SIGNALS_BE_BIND
+                `SCOPE_SIGNALS_ISSUE_BIND
+                `SCOPE_SIGNALS_EXECUTE_BIND
 
                 .clk                (clk),
                 .reset              (reset),
@@ -336,29 +332,29 @@ module Vortex (
 
         // L3 Cache ///////////////////////////////////////////////////////////
 
-        wire                            l3_core_req_valid [`L3NUM_REQUESTS-1:0];
-        wire                            l3_core_req_rw [`L3NUM_REQUESTS-1:0];
-        wire [`L2DRAM_BYTEEN_WIDTH-1:0] l3_core_req_byteen [`L3NUM_REQUESTS-1:0];
-        wire [`L2DRAM_ADDR_WIDTH-1:0]   l3_core_req_addr [`L3NUM_REQUESTS-1:0];
-        wire [`L2DRAM_LINE_WIDTH-1:0]   l3_core_req_data [`L3NUM_REQUESTS-1:0];
-        wire [`L2DRAM_TAG_WIDTH-1:0]    l3_core_req_tag [`L3NUM_REQUESTS-1:0];
+        wire [`L3NUM_REQUESTS-1:0]                           l3_core_req_valid;
+        wire [`L3NUM_REQUESTS-1:0]                           l3_core_req_rw;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] l3_core_req_byteen;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_ADDR_WIDTH-1:0]   l3_core_req_addr;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   l3_core_req_data;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    l3_core_req_tag;
 
-        wire                            l3_core_rsp_valid [`L3NUM_REQUESTS-1:0];        
-        wire [`L2DRAM_LINE_WIDTH-1:0]   l3_core_rsp_data [`L3NUM_REQUESTS-1:0];
-        wire [`L2DRAM_TAG_WIDTH-1:0]    l3_core_rsp_tag [`L3NUM_REQUESTS-1:0];
-        wire                            l3_core_rsp_ready;    
+        wire [`L3NUM_REQUESTS-1:0]                           l3_core_rsp_valid;        
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   l3_core_rsp_data;
+        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    l3_core_rsp_tag;
+        wire                                                 l3_core_rsp_ready;    
 
-        wire                            l3_snp_fwdout_valid [`NUM_CLUSTERS-1:0];
-        wire [`L2DRAM_ADDR_WIDTH-1:0]   l3_snp_fwdout_addr [`NUM_CLUSTERS-1:0];
-        wire                            l3_snp_fwdout_invalidate [`NUM_CLUSTERS-1:0];
-        wire [`L2SNP_TAG_WIDTH-1:0]     l3_snp_fwdout_tag [`NUM_CLUSTERS-1:0];
-        wire                            l3_snp_fwdout_ready [`NUM_CLUSTERS-1:0];    
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0]     l3_snp_fwdout_addr;
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_invalidate;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]       l3_snp_fwdout_tag;
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdout_ready;    
 
-        wire                            l3_snp_fwdin_valid [`NUM_CLUSTERS-1:0];
-        wire [`L2SNP_TAG_WIDTH-1:0]     l3_snp_fwdin_tag [`NUM_CLUSTERS-1:0];
-        wire                            l3_snp_fwdin_ready [`NUM_CLUSTERS-1:0];
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdin_valid;
+        wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]       l3_snp_fwdin_tag;
+        wire [`NUM_CLUSTERS-1:0]                             l3_snp_fwdin_ready;
 
-        for (i = 0; i < `L3NUM_REQUESTS; i++) begin
+        for (genvar i = 0; i < `L3NUM_REQUESTS; i++) begin
             // Core Request
             assign l3_core_req_valid  [i] = per_cluster_dram_req_valid [i];
             assign l3_core_req_rw     [i] = per_cluster_dram_req_rw    [i];
@@ -394,7 +390,6 @@ module Vortex (
             .NUM_BANKS          (`L3NUM_BANKS),
             .WORD_SIZE          (`L3WORD_SIZE),
             .NUM_REQUESTS       (`L3NUM_REQUESTS),
-            .STAGE_1_CYCLES     (`L3STAGE_1_CYCLES),
             .CREQ_SIZE          (`L3CREQ_SIZE),
             .MRVQ_SIZE          (`L3MRVQ_SIZE),
             .DFPQ_SIZE          (`L3DFPQ_SIZE),

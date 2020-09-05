@@ -173,7 +173,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     {   
         // Load device CAPS
         int ret = 0;
-        ret |= vx_csr_get(device, 0, CSR_IMPL_ID, &device->implementation_id);
+        ret |= vx_csr_get(device, 0, CSR_MIMPID, &device->implementation_id);
         ret |= vx_csr_get(device, 0, CSR_NC, &device->num_cores);
         ret |= vx_csr_get(device, 0, CSR_NW, &device->num_warps);
         ret |= vx_csr_get(device, 0, CSR_NT, &device->num_threads);
@@ -211,28 +211,29 @@ extern int vx_dev_close(vx_device_h hdevice) {
     vx_scope_stop(device->fpga, 0);
 #endif
 
-    {   
-        // Dump performance stats
+#ifdef DUMP_PERF_STATS
+    // Dump perf stats
+    if (device->num_cores > 1) {
+        uint64_t total_instrs = 0, total_cycles = 0;
+        for (unsigned core_id = 0; core_id < device->num_cores; ++core_id) {           
+            uint64_t instrs, cycles;
+            int ret = vx_get_perf(hdevice, core_id, &instrs, &cycles);
+            assert(ret == 0);
+            float IPC = (float)(double(instrs) / double(cycles));
+            fprintf(stdout, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
+            total_instrs += instrs;
+            total_cycles = std::max<uint64_t>(total_cycles, cycles);
+        }
+        float IPC = (float)(double(total_instrs) / double(total_cycles));
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
+    } else {
         uint64_t instrs, cycles;
-        unsigned value;
-
-        int ret = 0;
-        ret |= vx_csr_get(hdevice, 0, CSR_INSTR_H, &value);
-        instrs = value;
-        ret |= vx_csr_get(hdevice, 0, CSR_INSTR_L, &value);
-        instrs = (instrs << 32) | value;
-      
-        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_H, &value);
-        cycles = value;
-        ret |= vx_csr_get(hdevice, 0, CSR_CYCLE_L, &value);
-        cycles = (cycles << 32) | value;
-
+        int ret = vx_get_perf(hdevice, 0, &instrs, &cycles);
         float IPC = (float)(double(instrs) / double(cycles));
-
-        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);
-
         assert(ret == 0);
+        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
     }
+#endif
 
     fpgaClose(device->fpga);
 
@@ -494,7 +495,7 @@ extern int vx_start(vx_device_h hdevice) {
 }
 
 // set device constant registers
-extern int vx_csr_set(vx_device_h hdevice, int core, int address, unsigned value) {
+extern int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -505,8 +506,8 @@ extern int vx_csr_set(vx_device_h hdevice, int core, int address, unsigned value
         return -1;    
   
     // write CSR value
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_ADDR, address));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core_id));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_ADDR, addr));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_DATA, value));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_CSR_WRITE));
 
@@ -514,7 +515,7 @@ extern int vx_csr_set(vx_device_h hdevice, int core, int address, unsigned value
 }
 
 // get device constant registers
-extern int vx_csr_get(vx_device_h hdevice, int core, int address, unsigned* value) {
+extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* value) {
     if (nullptr == hdevice || nullptr == value)
         return -1;
 
@@ -526,8 +527,8 @@ extern int vx_csr_get(vx_device_h hdevice, int core, int address, unsigned* valu
 
     
     // write CSR value    
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_ADDR, address));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core_id));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_ADDR, addr));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_CSR_READ));    
 
     // Ensure ready for new command

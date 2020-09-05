@@ -49,7 +49,7 @@ vx_set_sp:
   slli a1, a1, 10      # multiply by 1024
   csrr a2, CSR_LTID    # get local thread id  
   slli a2, a2, 2       # multiply by 4
-  lui  sp, STACK_BASE_ADDR # load base sp
+  lui  sp, (SHARED_MEM_BASE_ADDR>>12) # load base sp
   sub  sp, sp, a1      # sub thread block
   add  sp, sp, a2      # reduce addr collision for perf
 

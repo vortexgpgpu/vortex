@@ -58,10 +58,10 @@ int vx_start(vx_device_h hdevice);
 int vx_ready_wait(vx_device_h hdevice, long long timeout);
 
 // set device constant registers
-int vx_csr_set(vx_device_h hdevice, int core, int address, unsigned value);
+int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value);
 
 // get device constant registers
-int vx_csr_get(vx_device_h hdevice, int core, int address, unsigned* value);
+int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* value);
 
 ////////////////////////////// UTILITY FUNCIONS ///////////////////////////////
 
@@ -70,6 +70,9 @@ int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_t size)
 
 // upload kernel file to device
 int vx_upload_kernel_file(vx_device_h device, const char* filename);
+
+// get performance counters
+int vx_get_perf(vx_device_h device, int core_id, size_t* cycles, size_t* instrs);
 
 #ifdef __cplusplus
 }

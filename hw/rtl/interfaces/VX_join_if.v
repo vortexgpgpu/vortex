@@ -1,4 +1,3 @@
-
 `ifndef VX_JOIN_IF
 `define VX_JOIN_IF
 
@@ -6,8 +5,8 @@
 
 interface VX_join_if ();
 
-    wire                is_join;
-    wire [`NW_BITS-1:0] warp_num;
+    wire                valid;
+    wire [`NW_BITS-1:0] wid;
 
 endinterface
 

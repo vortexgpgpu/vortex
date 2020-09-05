@@ -5,18 +5,20 @@
 
 interface VX_csr_req_if ();
 
-    wire [`NUM_THREADS-1:0] valid;
-    wire [`NW_BITS-1:0] warp_num;
-    wire [4:0]          rd;
-    wire [1:0]          wb;
-    wire [4:0]          alu_op;
-    wire                is_csr;
-    wire [11:0]         csr_addr;
-    wire                csr_immed;
-    wire [31:0]         csr_mask;
+    wire                    valid;
 
-    wire                is_io;    
-
+    wire [`NW_BITS-1:0]     wid;
+    wire [`NUM_THREADS-1:0] tmask;
+    wire [31:0]             PC;
+    wire [`CSR_BITS-1:0]    op_type;
+    wire [`CSR_ADDR_BITS-1:0] csr_addr;
+    wire [31:0]             csr_mask;
+    wire [`NR_BITS-1:0]     rd;
+    wire                    wb;
+    wire                    is_io;  
+    
+    wire                    ready;
+    
 endinterface
 
 `endif

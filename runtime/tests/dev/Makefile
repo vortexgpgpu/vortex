@@ -27,6 +27,9 @@ $(PROJECT).hex: $(PROJECT).elf
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
+run: $(PROJECT).hex
+	(cd ../../../hw/simulate/obj_dir && ./VVortex -f ../../../runtime/tests/dev/$(PROJECT).hex) 
+
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 

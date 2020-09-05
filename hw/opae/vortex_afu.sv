@@ -913,10 +913,9 @@ assign cmd_run_done = !vx_busy;
 Vortex #() vortex (
   `SCOPE_SIGNALS_ISTAGE_BIND
   `SCOPE_SIGNALS_LSU_BIND
-  `SCOPE_SIGNALS_CORE_BIND
   `SCOPE_SIGNALS_CACHE_BIND
-  `SCOPE_SIGNALS_PIPELINE_BIND
-  `SCOPE_SIGNALS_BE_BIND
+  `SCOPE_SIGNALS_ISSUE_BIND
+  `SCOPE_SIGNALS_EXECUTE_BIND
 
   .clk              (clk),
   .reset            (SoftReset | vx_reset),
@@ -988,32 +987,36 @@ Vortex #() vortex (
 localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST});
 localparam SCOPE_SR_DEPTH = 2;
 
-`SCOPE_ASSIGN(scope_dram_req_valid, vx_dram_req_valid);
-`SCOPE_ASSIGN(scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
-`SCOPE_ASSIGN(scope_dram_req_rw,    vx_dram_req_rw);
-`SCOPE_ASSIGN(scope_dram_req_byteen,vx_dram_req_byteen);
-`SCOPE_ASSIGN(scope_dram_req_data,  vx_dram_req_data);
-`SCOPE_ASSIGN(scope_dram_req_tag,   vx_dram_req_tag);
-`SCOPE_ASSIGN(scope_dram_req_ready, vx_dram_req_ready);
+`STATIC_ASSERT(SCOPE_DATAW == 1766, "invalid size")
 
-`SCOPE_ASSIGN(scope_dram_rsp_valid, vx_dram_rsp_valid);
-`SCOPE_ASSIGN(scope_dram_rsp_data,  vx_dram_rsp_data);
-`SCOPE_ASSIGN(scope_dram_rsp_tag,   vx_dram_rsp_tag);
-`SCOPE_ASSIGN(scope_dram_rsp_ready, vx_dram_rsp_ready);
+`SCOPE_ASSIGN (scope_dram_req_valid, vx_dram_req_valid);
+`SCOPE_ASSIGN (scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
+`SCOPE_ASSIGN (scope_dram_req_rw,    vx_dram_req_rw);
+`SCOPE_ASSIGN (scope_dram_req_byteen,vx_dram_req_byteen);
+`SCOPE_ASSIGN (scope_dram_req_data,  vx_dram_req_data);
+`SCOPE_ASSIGN (scope_dram_req_tag,   vx_dram_req_tag);
+`SCOPE_ASSIGN (scope_dram_req_ready, vx_dram_req_ready);
 
-`SCOPE_ASSIGN(scope_snp_req_valid, vx_snp_req_valid);
-`SCOPE_ASSIGN(scope_snp_req_addr,  {vx_snp_req_addr, 4'b0});
-`SCOPE_ASSIGN(scope_snp_req_invalidate, vx_snp_req_invalidate);
-`SCOPE_ASSIGN(scope_snp_req_tag,   vx_snp_req_tag);
-`SCOPE_ASSIGN(scope_snp_req_ready, vx_snp_req_ready);
+`SCOPE_ASSIGN (scope_dram_rsp_valid, vx_dram_rsp_valid);
+`SCOPE_ASSIGN (scope_dram_rsp_data,  vx_dram_rsp_data);
+`SCOPE_ASSIGN (scope_dram_rsp_tag,   vx_dram_rsp_tag);
+`SCOPE_ASSIGN (scope_dram_rsp_ready, vx_dram_rsp_ready);
 
-`SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
-`SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
-`SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
+`SCOPE_ASSIGN (scope_snp_req_valid, vx_snp_req_valid);
+`SCOPE_ASSIGN (scope_snp_req_addr,  {vx_snp_req_addr, 4'b0});
+`SCOPE_ASSIGN (scope_snp_req_invalidate, vx_snp_req_invalidate);
+`SCOPE_ASSIGN (scope_snp_req_tag,   vx_snp_req_tag);
+`SCOPE_ASSIGN (scope_snp_req_ready, vx_snp_req_ready);
 
-`SCOPE_ASSIGN(scope_snp_rsp_valid, vx_snp_rsp_valid);
-`SCOPE_ASSIGN(scope_snp_rsp_tag,   vx_snp_rsp_tag);
-`SCOPE_ASSIGN(scope_snp_rsp_ready, vx_snp_rsp_ready);
+`SCOPE_ASSIGN (scope_snp_rsp_valid, vx_snp_rsp_valid);
+`SCOPE_ASSIGN (scope_snp_rsp_tag,   vx_snp_rsp_tag);
+`SCOPE_ASSIGN (scope_snp_rsp_ready, vx_snp_rsp_ready);
+
+`SCOPE_ASSIGN (scope_snp_rsp_valid, vx_snp_rsp_valid);
+`SCOPE_ASSIGN (scope_snp_rsp_tag,   vx_snp_rsp_tag);
+`SCOPE_ASSIGN (scope_snp_rsp_ready, vx_snp_rsp_ready);
+
+`SCOPE_ASSIGN (scope_busy, vx_busy);
 
 wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_icache_rsp_valid && scope_icache_rsp_ready)
@@ -1023,10 +1026,16 @@ wire scope_changed = (scope_icache_req_valid && scope_icache_req_ready)
                   || (scope_dram_rsp_valid && scope_dram_rsp_ready)
                   || (scope_snp_req_valid && scope_snp_req_ready)
                   || (scope_snp_rsp_valid && scope_snp_rsp_ready)
+                  || (scope_issue_valid && scope_issue_ready)
+                  || scope_gpr_rsp_valid
                   || scope_bank_valid_st0
                   || scope_bank_valid_st1
                   || scope_bank_valid_st2
-                  || scope_bank_stall_pipe;
+                  || scope_bank_stall_pipe
+                  || scope_scoreboard_delay
+                  || scope_gpr_delay
+                  || scope_execute_delay
+                  || scope_busy;
 
 wire scope_start = vx_reset;
 
@@ -1035,8 +1044,7 @@ wire [SCOPE_DATAW+1:0] scope_data_in_ste;
 assign scope_data_in_st[0] = {`SCOPE_SIGNALS_DATA_LIST `SCOPE_SIGNALS_UPD_LIST, scope_changed, scope_start};
 assign scope_data_in_ste = scope_data_in_st[SCOPE_SR_DEPTH-1];
 
-genvar i;
-for (i = 1; i < SCOPE_SR_DEPTH; i++) begin
+for (genvar i = 1; i < SCOPE_SR_DEPTH; i++) begin
     VX_generic_register #(
         .N (SCOPE_DATAW+2)
     ) scope_sr (
