@@ -254,12 +254,14 @@ void CacheSim::get_core_rsp(unsigned int (&rsp)[4]){
   rsp[1] = cache_->core_rsp_data[1];
   rsp[2] = cache_->core_rsp_data[2];
   rsp[3] = cache_->core_rsp_data[3];
+
   //std::cout << std::hex << "core_rsp_valid: " << cache_->core_rsp_valid << std::endl;
   //std::cout << std::hex << "core_rsp_data: " << cache_->core_rsp_data << std::endl;
   //std::cout << std::hex << "core_rsp_tag: " << cache_->core_rsp_tag << std::endl; 
 }
 
 void CacheSim::get_core_req(){
+  std::cout << cache_->genblk5_BRA_0_KET_->bank->is_fill_in_pipe<< std::endl; 
   char check = cache_->core_req_valid;
   std::cout << std::hex << "core_req_valid: " << check << std::endl;
   std::cout << std::hex << "core_req_data[0]: " << cache_->core_req_data[0] << std::endl;
