@@ -52,6 +52,7 @@ public:
   void clear_req(); 
   void send_req(core_req_t *req);
   bool assert_equal(unsigned int* data, unsigned int tag);
+  //void time_analyisis 
 
   //display funcs
 
