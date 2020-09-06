@@ -19,7 +19,7 @@ inline bool almost_equal_eps(float a, float b, float eps = std::numeric_limits<f
   return fabs(a - b) <= tolerance;
 }
 
-inline bool almost_equal_ulp(float a, float b, int32_t ulp = 4) {
+inline bool almost_equal_ulp(float a, float b, int32_t ulp = 5) {
   Float_t fa{a}, fb{b};
   return std::abs(fa.i - fb.i) <= ulp;
 }
@@ -253,7 +253,8 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto ref = a[i] * b[i] + 0.5f;
+      auto x = a[i] - b[i];
+      auto ref = a[i] * b[i] + x;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -281,7 +282,8 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto ref = a[i] * b[i] - 0.5f;
+      auto x = a[i] - b[i];
+      auto ref = a[i] * b[i] - x;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -309,7 +311,8 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto ref = -a[i] * b[i] - 0.5f;
+      auto x = a[i] - b[i];
+      auto ref = -a[i] * b[i] - x;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -337,7 +340,8 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto ref = -a[i] * b[i] + 0.5f;
+      auto x = a[i] - b[i];
+      auto ref = -a[i] * b[i] + x;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -365,9 +369,10 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto x = -a[i] * b[i] - 0.5f;
-      auto y =  a[i] * b[i] + 0.5f;
-      auto ref = x + y;
+      auto x = a[i] - b[i];
+      auto y = -a[i] * b[i] - x;
+      auto z =  a[i] * b[i] + x;
+      auto ref = y + z;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;

@@ -58,6 +58,7 @@ void CacheSim::reset() {
 }
 
 void CacheSim::step() {
+  std::cout << timestamp << ": [sim] step()" << std::endl;
   //toggle clock
   cache_->clk = 0;
   this->eval();
@@ -69,6 +70,7 @@ void CacheSim::step() {
   this->eval_reqs();
   this->eval_rsps();
   this->eval_dram_bus();
+  timestamp++;
 }
 
 void CacheSim::eval() {
@@ -80,14 +82,15 @@ void CacheSim::eval() {
 }
 
 void CacheSim::run(){
-#ifndef NDEBUG
-  std::cout << timestamp << ": [sim] run()" << std::endl;
-#endif
+//#ifndef NDEBUG
+  
+//#endif
   this->step();
 
   int valid = 300; 
   
   while (valid > -1) {
+
       this->step();
       if(!cache_->core_req_valid && !cache_->core_rsp_valid){
         valid--; 
@@ -251,12 +254,14 @@ void CacheSim::get_core_rsp(unsigned int (&rsp)[4]){
   rsp[1] = cache_->core_rsp_data[1];
   rsp[2] = cache_->core_rsp_data[2];
   rsp[3] = cache_->core_rsp_data[3];
+
   //std::cout << std::hex << "core_rsp_valid: " << cache_->core_rsp_valid << std::endl;
   //std::cout << std::hex << "core_rsp_data: " << cache_->core_rsp_data << std::endl;
   //std::cout << std::hex << "core_rsp_tag: " << cache_->core_rsp_tag << std::endl; 
 }
 
 void CacheSim::get_core_req(){
+  std::cout << cache_->genblk5_BRA_0_KET_->bank->is_fill_in_pipe<< std::endl; 
   char check = cache_->core_req_valid;
   std::cout << std::hex << "core_req_valid: " << check << std::endl;
   std::cout << std::hex << "core_req_data[0]: " << cache_->core_req_data[0] << std::endl;
