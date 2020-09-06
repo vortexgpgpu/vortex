@@ -131,8 +131,9 @@ void kernel_fmadd(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = a * b + 0.5f;
-		dst_ptr[offset+i] = c;
+		float c = a - b;
+		float d = a * b + c;
+		dst_ptr[offset+i] = d;
 	}
 }
 
@@ -147,8 +148,9 @@ void kernel_fmsub(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = a * b - 0.5f;
-		dst_ptr[offset+i] = c;
+		float c = a - b;
+		float d = a * b - c;
+		dst_ptr[offset+i] = d;
 	}
 }
 
@@ -163,8 +165,9 @@ void kernel_fnmadd(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = -a * b - 0.5f;
-		dst_ptr[offset+i] = c;
+		float c = a - b;
+		float d =-a * b - c;
+		dst_ptr[offset+i] = d;
 	}
 }
 
@@ -179,8 +182,9 @@ void kernel_fnmsub(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = -a * b + 0.5f;
-		dst_ptr[offset+i] = c;
+		float c = a - b;
+		float d =-a * b + c;
+		dst_ptr[offset+i] = d;
 	}
 }
 
@@ -195,10 +199,11 @@ void kernel_fnmadd_madd(void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c =-a * b - 0.5f;
-		float d = a * b + 0.5f;
-		float e = c + d;
-		dst_ptr[offset+i] = e;
+		float c = a - b;
+		float d =-a * b - c;
+		float e = a * b + c;
+		float f = d + e;
+		dst_ptr[offset+i] = f;
 	}
 }
 
