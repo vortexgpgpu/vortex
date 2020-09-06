@@ -93,7 +93,7 @@ module VX_fp_nmadd #(
             .ay(datab[i]),
             .az(dataa[i]),
             .clk({2'b00,clk}),
-            .ena({2'b11,enable0}),
+            .ena({2'b11,enable}),
             .aclr(2'b00),
             .chainin(),
             // outputs
@@ -133,7 +133,7 @@ module VX_fp_nmadd #(
             .ay(result_st0),
             .az(),
             .clk({2'b00,clk}),
-            .ena({2'b11,enable1}),
+            .ena({2'b11,enable}),
             .aclr(2'b00),
             .chainin(),
             // outputs
