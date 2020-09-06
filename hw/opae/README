@@ -79,6 +79,7 @@ tar -zcvf trace.vcd.tar.gz obj_dir/trace.vcd
 tar -zcvf trace.vcd.tar.gz trace.vcd
 tar -zcvf run.log.tar.gz run.log
 tar -cvjf vortex.vcd.tar.bz2 build_ase_1c/work/vortex.vcd
+tar -zcvf vortex.vcd.tar.gz build_ase_1c/work/vortex.vcd
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
@@ -103,7 +104,6 @@ make -C top clean && make -C top > top/build.log 2>&1 &
 # How to calculate the maximum operating frequency?
 200  Mhz -> period = 1/200x10^6 = 5ns 
 if slack = +1.664 -> minimal period = 5-1.664 = 3.336 -> fmax = 1/3.336 = 300 Mhz
-
 
 # build rtlsim from driver tests
 make -C ../../rtlsim clean && reset && make -C ../../rtlsim
