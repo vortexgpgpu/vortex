@@ -52,6 +52,7 @@ public:
   void clear_req(); 
   void send_req(core_req_t *req);
   bool assert_equal(unsigned int* data, unsigned int tag);
+  //void time_analyisis 
 
   //display funcs
 
@@ -61,6 +62,7 @@ public:
   bool get_core_req_ready();
   bool get_core_rsp_ready();
   void get_dram_rsp();
+  void display_hit_miss(); 
 
 
 private:  
