@@ -18,7 +18,7 @@ module vortex_afu #(
 ) (
   // global signals
   input clk,
-  input SoftReset,
+  input reset,
 
   // IF signals between CCI and AFU
   input   t_if_ccip_Rx  cp2af_sRxPort,
@@ -191,7 +191,7 @@ assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mm
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) begin
+  if (reset) begin
     mmio_tx.hdr         <= 0;
     mmio_tx.data        <= 0;
     mmio_tx.mmioRdValid <= 0;
@@ -319,7 +319,7 @@ logic cmd_run_done;
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) begin
+  if (reset) begin
     state     <= STATE_IDLE;    
     vx_reset  <= 0;    
   end
@@ -484,18 +484,18 @@ begin
   case (state)
     CMD_MEM_READ:  avs_address = cci_dram_rd_req_addr;
     CMD_MEM_WRITE: avs_address = cci_dram_wr_req_addr + ((DRAM_ADDR_WIDTH)'(t_cci_rdq_tag'(cci_rdq_dout)));
-    default:        avs_address = vx_dram_req_addr[`VX_DRAM_ADDR_WIDTH-1:`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH];
+    default:       avs_address = vx_dram_req_addr[`VX_DRAM_ADDR_WIDTH-1:`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH];
   endcase
 
   case (state)
     CMD_MEM_READ:  avs_byteenable = 64'hffffffffffffffff;
     CMD_MEM_WRITE: avs_byteenable = 64'hffffffffffffffff;
-    default:        avs_byteenable = vx_dram_req_byteen_;
+    default:       avs_byteenable = vx_dram_req_byteen_;
   endcase
 
   case (state)
     CMD_MEM_WRITE: avs_writedata = cci_rdq_dout[$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:$bits(t_cci_rdq_tag)];
-    default:        avs_writedata = (DRAM_LINE_WIDTH)'(vx_dram_req_data) << vx_dram_req_offset;
+    default:       avs_writedata = (DRAM_LINE_WIDTH)'(vx_dram_req_data) << vx_dram_req_offset;
   endcase
 end
 
@@ -506,7 +506,7 @@ assign cmd_write_done = (cci_dram_wr_req_ctr >= cmd_data_size);
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) 
+  if (reset) 
   begin    
     mem_bank_select      <= 0;
     avs_burstcount       <= 1;
@@ -586,7 +586,7 @@ VX_generic_queue #(
   .SIZE(AVS_RD_QUEUE_SIZE)
 ) avs_rd_req_queue (
   .clk      (clk),
-  .reset    (SoftReset),
+  .reset    (reset),
   .push     (avs_rtq_push),
   .data_in  ({vx_dram_req_tag, vx_dram_req_offset}),
   .pop      (avs_rtq_pop),
@@ -608,7 +608,7 @@ VX_generic_queue #(
   .SIZE(AVS_RD_QUEUE_SIZE)
 ) avs_rd_rsp_queue (
   .clk      (clk),
-  .reset    (SoftReset),
+  .reset    (reset),
   .push     (avs_rdq_push),
   .data_in  (avs_readdata),
   .pop      (avs_rdq_pop),
@@ -655,7 +655,7 @@ assign af2cp_sTxPort.c0.valid = cci_rd_req_enable && !cci_rd_req_wait;
 // Send read requests to CCI
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) begin
+  if (reset) begin
     cci_rd_req_addr   <= 0;
     cci_rd_req_ctr    <= 0;
     cci_rd_rsp_ctr    <= 0;
@@ -716,7 +716,7 @@ VX_generic_queue #(
   .SIZE(CCI_RD_QUEUE_SIZE)
 ) cci_rd_req_queue (
   .clk      (clk),
-  .reset    (SoftReset),
+  .reset    (reset),
   .push     (cci_rdq_push),
   .data_in  (cci_rdq_din),
   .pop      (cci_rdq_pop),
@@ -754,7 +754,7 @@ assign af2cp_sTxPort.c1.valid = cci_wr_req_enable && !avs_rdq_empty;
 // Send write requests to CCI
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) begin
+  if (reset) begin
     cci_wr_req_addr    <= 0;
     cci_wr_req_ctr     <= 0;
     cci_wr_req_enable  <= 0;
@@ -818,7 +818,7 @@ assign cmd_clflush_done = (0 == snp_rsp_ctr);
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) begin
+  if (reset) begin
     vx_snp_req_valid <= 0;
     vx_snp_req_addr  <= 0;
     vx_snp_req_tag   <= 0;
@@ -866,7 +866,7 @@ begin
     `ifdef DBG_PRINT_OPAE
       $display("%t: AFU Snp Rsp: tag=%0d, rem=%0d", $time, vx_snp_rsp_tag, snp_rsp_ctr_next);
     `endif
-    end   
+    end
   end
 end
 
@@ -887,7 +887,7 @@ assign cmd_csr_done = (STATE_CSR_WRITE == state) ? vx_csr_io_req_ready : vx_csr_
 
 always_ff @(posedge clk) 
 begin
-  if (SoftReset) begin
+  if (reset) begin
     csr_io_req_sent <= 0;
     cmd_csr_rdata   <= 0;
   end
@@ -918,7 +918,7 @@ Vortex #() vortex (
   `SCOPE_SIGNALS_EXECUTE_BIND
 
   .clk              (clk),
-  .reset            (SoftReset | vx_reset),
+  .reset            (reset | vx_reset),
 
   // DRAM request 
   .dram_req_valid   (vx_dram_req_valid),
@@ -979,6 +979,13 @@ Vortex #() vortex (
   .busy 				    (vx_busy),
   `UNUSED_PIN       (ebreak)
 );
+
+always @(posedge clk) begin
+  if (!reset) begin
+    // DRAM reads should only happen during vortex execution    
+    assert(vx_busy || !vx_dram_rd_req_enable);
+  end
+end
 
 // SCOPE //////////////////////////////////////////////////////////////////////
 
@@ -1049,7 +1056,7 @@ for (genvar i = 1; i < SCOPE_SR_DEPTH; i++) begin
         .N (SCOPE_DATAW+2)
     ) scope_sr (
         .clk   (clk),
-        .reset (SoftReset),
+        .reset (reset),
         .stall (0),
         .flush (0),
         .in    (scope_data_in_st[i-1]),
@@ -1064,7 +1071,7 @@ VX_scope #(
   .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))
 ) scope (
   .clk      (clk),
-  .reset    (SoftReset),
+  .reset    (reset),
   .start    (scope_data_in_ste[0]),
   .stop     (0),
   .changed  (scope_data_in_ste[1]),
