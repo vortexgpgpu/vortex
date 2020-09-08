@@ -1,11 +1,11 @@
 `include "vortex_afu.vh"
-
+`include "VX_define.vh"
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
 /* verilator lint_on IMPORTSTAR */ 
 
-module vortex_afu_sim #(
+module vortex_afu_shim #(
   parameter NUM_LOCAL_MEM_BANKS = 2
 ) (
   // global signals

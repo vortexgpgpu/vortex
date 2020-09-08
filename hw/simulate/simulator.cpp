@@ -3,6 +3,11 @@
 #include <fstream>
 #include <iomanip>
 
+#define ENABLE_DRAM_STALLS
+#define DRAM_LATENCY 4
+#define DRAM_RQ_SIZE 16
+#define DRAM_STALLS_MODULO 16
+
 uint64_t timestamp = 0;
 
 double sc_time_stamp() { 

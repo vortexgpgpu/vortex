@@ -6,13 +6,20 @@
 #include <unistd.h>
 #include <assert.h>
 #include <cmath>
-#include <uuid/uuid.h>
+
+#ifdef USE_VLSIM
+#include "vlsim/fpga.h"
+#else
 #include <opae/fpga.h>
+#include <uuid/uuid.h>
+#endif
+
 #include <vortex.h>
 #include <VX_config.h>
 #include "vortex_afu.h"
+
 #ifdef SCOPE
-#include "scope.h"
+#include "vx_scope.h"
 #endif
 
 #define CACHE_LINESIZE  64
@@ -122,14 +129,16 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
 extern int vx_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
-        
-    fpga_properties filter = nullptr;
-    fpga_result res;
-    fpga_guid guid;
-    fpga_token accel_token;
-    uint32_t num_matches;
-    fpga_handle accel_handle;
+
+    fpga_result res;    
+    fpga_handle accel_handle;    
     vx_device_t* device;   
+
+#ifndef USE_VLSIM
+    fpga_token accel_token;
+    fpga_properties filter = nullptr;    
+    fpga_guid guid; 
+    uint32_t num_matches;
     
     // Set up a filter that will search for an accelerator
     fpgaGetProperties(nullptr, &filter);
@@ -159,6 +168,13 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     // Done with token
     fpgaDestroyToken(&accel_token);
+#else
+    // Open accelerator
+    res = fpgaOpen(NULL, &accel_handle, 0);
+    if (FPGA_OK != res) {
+        return -1;
+    }
+#endif
 
     // allocate device object
     device = (vx_device_t*)malloc(sizeof(vx_device_t));

@@ -1,4 +1,4 @@
-all: stub rtlsim simx
+all: stub rtlsim simx opae
 
 stub:
 	$(MAKE) -C stub
