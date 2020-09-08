@@ -59,6 +59,8 @@
 `define EXT_F_ENABLE
 `endif
 
+//`define FPU_FAST
+
 // Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0

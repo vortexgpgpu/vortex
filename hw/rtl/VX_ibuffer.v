@@ -118,7 +118,7 @@ module VX_ibuffer #(
                     deq_valid_n  = 1;               
                     deq_wid_n    = `NW_BITS'(i);                
                     deq_instr_n  = q_data_out[i];
-                    schedule_table_n[i] = 0;                   
+                    schedule_table_n[i] = 0;
                     break;
                 end
             end

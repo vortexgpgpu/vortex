@@ -31,7 +31,7 @@ module VX_fp_sqrt #(
     `ifdef QUARTUS
         acl_fsqrt fsqrt (
             .clk    (clk),
-            .areset (1'b0),
+            .areset (reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result[i])
