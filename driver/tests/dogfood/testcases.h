@@ -253,8 +253,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto x = a[i] - b[i];
-      auto ref = a[i] * b[i] + x;
+      auto ref = a[i] * b[i] + b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -282,8 +281,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto x = a[i] - b[i];
-      auto ref = a[i] * b[i] - x;
+      auto ref = a[i] * b[i] - b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -311,8 +309,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto x = a[i] - b[i];
-      auto ref = -a[i] * b[i] - x;
+      auto ref = -a[i] * b[i] - b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -340,8 +337,7 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto x = a[i] - b[i];
-      auto ref = -a[i] * b[i] + x;
+      auto ref = -a[i] * b[i] + b[i];
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
@@ -369,10 +365,9 @@ public:
     auto b = (float*)src2;
     auto c = (float*)dst;
     for (int i = 0; i < n; ++i) {
-      auto x = a[i] - b[i];
-      auto y = -a[i] * b[i] - x;
-      auto z =  a[i] * b[i] + x;
-      auto ref = y + z;
+      auto x = -a[i] * b[i] - b[i];
+      auto y =  a[i] * b[i] + b[i];
+      auto ref = x + y;
       if (!almost_equal(c[i], ref)) {
         std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;

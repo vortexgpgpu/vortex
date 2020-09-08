@@ -39,7 +39,7 @@ module VX_fp_ftoi #(
     `ifdef QUARTUS       
         acl_ftoi ftoi (
             .clk    (clk),
-            .areset (1'b0),
+            .areset (reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result_s)
@@ -47,7 +47,7 @@ module VX_fp_ftoi #(
 
         acl_ftou ftou (
             .clk    (clk),
-            .areset (1'b0),
+            .areset (reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result_u)

@@ -91,6 +91,7 @@ module VX_fpnew #(
         fpu_operands[0] = dataa;
         fpu_operands[1] = datab;
         fpu_operands[2] = datac;
+
         case (op_type)
             `FPU_ADD: begin
                     fpu_op = fpnew_pkg::ADD;
@@ -107,23 +108,23 @@ module VX_fpnew #(
             `FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             `FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
             `FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; end
-            `FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end
-            `FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
+            `FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end            
             `FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
+            `FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
             `FPU_CVTWS: begin fpu_op = fpnew_pkg::F2I; end
-            `FPU_CVTWUS:begin fpu_op = fpnew_pkg::F2I;  fpu_op_mod = 1; end
+            `FPU_CVTWUS:begin fpu_op = fpnew_pkg::F2I; fpu_op_mod = 1; end
             `FPU_CVTSW: begin fpu_op = fpnew_pkg::I2F; end
-            `FPU_CVTSWU:begin fpu_op = fpnew_pkg::I2F;  fpu_op_mod = 1; end
+            `FPU_CVTSWU:begin fpu_op = fpnew_pkg::I2F; fpu_op_mod = 1; end
             `FPU_CLASS: begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end
             `FPU_CMP:   begin fpu_op = fpnew_pkg::CMP; end
             `FPU_MISC:  begin
                 case (frm)
-                  0: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RNE; fpu_has_fflags = 0; end
-                  1: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RTZ; fpu_has_fflags = 0; end
-                  2: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RDN; fpu_has_fflags = 0; end
-                  3: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RNE; end
-                  4: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RTZ; end    
-            default: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RUP; fpu_has_fflags = 0; end
+                      0: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RNE; fpu_has_fflags = 0; end
+                      1: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RTZ; fpu_has_fflags = 0; end
+                      2: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RDN; fpu_has_fflags = 0; end
+                      3: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RNE; end
+                      4: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `FRM_RTZ; end    
+                default: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `FRM_RUP; fpu_has_fflags = 0; end
                 endcase    
             end
             default:;

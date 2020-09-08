@@ -39,7 +39,7 @@ module VX_fp_itof #(
     `ifdef QUARTUS
         acl_itof itof (
             .clk    (clk),
-            .areset (1'b0),
+            .areset (reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result_s)
@@ -47,7 +47,7 @@ module VX_fp_itof #(
 
         acl_utof utof (
             .clk    (clk),
-            .areset (1'b0),
+            .areset (reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result_u)

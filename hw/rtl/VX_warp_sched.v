@@ -20,9 +20,9 @@ module VX_warp_sched #(
     wire [31:0]             join_pc;
     wire [`NUM_THREADS-1:0] join_tm;
 
-    reg [`NUM_WARPS-1:0] active_warps;   // real active warps (updated when a warp is activated or disabled)
-    reg [`NUM_WARPS-1:0] stalled_warps;  // asserted when a branch/gpgpu instructions are issued
+    reg [`NUM_WARPS-1:0] active_warps, active_warps_n;   // real active warps (updated when a warp is activated or disabled)
     reg [`NUM_WARPS-1:0] schedule_table, schedule_table_n; // enforces round-robin, barrier, and non-speculating branches
+    reg [`NUM_WARPS-1:0] stalled_warps;  // asserted when a branch/gpgpu instructions are issued
     
     // Lock warp until instruction decode to resolve branches
     reg [`NUM_WARPS-1:0] fetch_lock;
@@ -47,11 +47,19 @@ module VX_warp_sched #(
     wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;    
 
     always @(*) begin
+        active_warps_n = active_warps;
+        if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
+            active_warps_n = warp_ctl_if.wspawn.wmask;
+        end
+        if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
+            active_warps_n[warp_ctl_if.wid] = (warp_ctl_if.tmc.tmask != 0);
+        end        
+    end
+
+    always @(*) begin
         schedule_table_n = schedule_table;
-        if (warp_ctl_if.valid 
-         && warp_ctl_if.tmc.valid 
-         && (0 == warp_ctl_if.tmc.tmask)) begin
-            schedule_table_n[warp_ctl_if.wid] = 0;
+        if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
+            schedule_table_n[warp_ctl_if.wid] = (warp_ctl_if.tmc.tmask != 0);
         end        
         if (scheduled_warp) begin // remove scheduled warp (round-robin)
             schedule_table_n[warp_to_schedule] = 0;
@@ -82,7 +90,6 @@ module VX_warp_sched #(
             end
         end else begin            
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
-                active_warps  <= warp_ctl_if.wspawn.wmask;                
                 use_wspawn    <= warp_ctl_if.wspawn.wmask & (~`NUM_WARPS'(1));
                 use_wspawn_pc <= warp_ctl_if.wspawn.pc;
             end
@@ -97,9 +104,6 @@ module VX_warp_sched #(
             end else if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
                 thread_masks[warp_ctl_if.wid] <= warp_ctl_if.tmc.tmask;
                 stalled_warps[warp_ctl_if.wid] <= 0;
-                if (0 == warp_ctl_if.tmc.tmask) begin
-                    active_warps[warp_ctl_if.wid] <= 0;                    
-                end
             end else if (join_if.valid && !didnt_split) begin
                 if (!join_fall) begin
                     warp_pcs[join_if.wid] <= join_pc;
@@ -143,8 +147,10 @@ module VX_warp_sched #(
                 warp_pcs[ifetch_rsp_if.wid] <= ifetch_rsp_if.PC + 4;
             end
 
+            active_warps <= active_warps_n;
+
             // reset 'schedule_table' when it goes to zero
-            schedule_table <= (| schedule_table_n) ? schedule_table_n : active_warps;
+            schedule_table <= (| schedule_table_n) ? schedule_table_n : active_warps_n;
         end
     end
 

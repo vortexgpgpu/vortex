@@ -32,7 +32,7 @@ module VX_fp_div #(
     `ifdef QUARTUS
         acl_fdiv fdiv (
             .clk    (clk),
-            .areset (1'b0),
+            .areset (reset),
             .en     (enable),
             .a      (dataa[i]),
             .b      (datab[i]),

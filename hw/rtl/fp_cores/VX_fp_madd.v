@@ -17,7 +17,8 @@ module VX_fp_madd #(
     input wire [TAGW-1:0] tag_in,
 
     input wire  do_sub,  
-
+    input wire  do_neg, 
+    
     input wire [LANES-1:0][31:0]  dataa,
     input wire [LANES-1:0][31:0]  datab,
     input wire [LANES-1:0][31:0]  datac,
@@ -32,7 +33,7 @@ module VX_fp_madd #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    reg do_sub_r;
+    reg do_sub_r, do_neg_r;
 
     for (genvar i = 0; i < LANES; i++) begin
         
@@ -50,9 +51,9 @@ module VX_fp_madd #(
             .ax(datac[i]),
             .ay(datab[i]),
             .az(dataa[i]),
-            .clk({2'b00,clk}),
-            .ena({2'b11,enable}),
-            .aclr(2'b00),
+            .clk({2'b00, clk}),
+            .ena({2'b00, enable}),
+            .aclr({reset, reset}),
             .chainin(),
             // outputs
             .overflow(),
@@ -90,9 +91,9 @@ module VX_fp_madd #(
             .ax(datac[i]),
             .ay(datab[i]),
             .az(dataa[i]),
-            .clk({2'b00,clk}),
-            .ena({2'b11,enable}),
-            .aclr(2'b00),
+            .clk({2'b00, clk}),
+            .ena({2'b00, enable}),
+            .aclr({reset, reset}),
             .chainin(),
             // outputs
             .overflow(),
@@ -126,18 +127,20 @@ module VX_fp_madd #(
         end
     `endif
 
-        assign result[i] = do_sub_r ? result_msub : result_madd;
+        wire [31:0] result_unqual = do_sub_r ? result_msub : result_madd;
+        assign result[i][31]   = result_unqual[31] ^ do_neg_r;
+        assign result[i][30:0] = result_unqual[30:0];
     end
     
     VX_shift_register #(
-        .DATAW(TAGW + 1 + 1),
+        .DATAW(TAGW + 1 + 1 + 1),
         .DEPTH(`LATENCY_FMADD)
     ) shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in({tag_in,   valid_in,  do_sub}),
-        .out({tag_out, valid_out, do_sub_r})
+        .in({tag_in,   valid_in,  do_sub,   do_neg}),
+        .out({tag_out, valid_out, do_sub_r, do_neg_r})
     );
 
     assign ready_in = enable;

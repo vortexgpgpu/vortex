@@ -106,7 +106,7 @@ module ccip_std_afu #(
         .NUM_LOCAL_MEM_BANKS(NUM_LOCAL_MEM_BANKS)
     ) vortex_afu_inst (
         .clk                 (clk),
-        .SoftReset           (reset_T1),
+        .reset               (reset_T1),
 
         .avs_writedata       (avs_writedata),
         .avs_readdata        (avs_readdata),
