@@ -18,23 +18,35 @@ module VX_commit #(
     VX_writeback_if     writeback_if,
     VX_cmt_to_csr_if    cmt_to_csr_if
 );
+    localparam NCMTW = $clog2(`NUM_EXS*`NUM_THREADS+1);
+
     // CSRs update
 
-    wire [`NUM_EXS-1:0] commited_mask;
-    assign commited_mask = {alu_commit_if.valid,                        
-                            lsu_commit_if.valid,                                                        
+    wire [`NUM_EXS-1-1:0] exu_committed;
+    wire [`NUM_THREADS-1:0] lsu_committed;
+    wire [$clog2(`NUM_EXS-1+1)-1:0] exu_commits;
+    wire [$clog2(`NUM_THREADS+1)-1:0] lsu_commits;
+
+    assign exu_committed = {alu_commit_if.valid,                                                      
                             csr_commit_if.valid,
                             mul_commit_if.valid,
                             fpu_commit_if.valid,
                             gpu_commit_if.valid};
 
-    wire [$clog2(`NUM_EXS+1)-1:0] num_commits;
+    assign lsu_committed = {`NUM_THREADS{lsu_commit_if.valid}} & lsu_commit_if.tmask;
 
     VX_countones #(
-        .N(`NUM_EXS)
-    ) valids_counter (
-        .valids(commited_mask),
-        .count (num_commits)
+        .N(`NUM_EXS-1)
+    ) exu_counter (
+        .valids(exu_committed),
+        .count (exu_commits)
+    );
+
+    VX_countones #(
+        .N(`NUM_THREADS)
+    ) lsu_counter (
+        .valids(lsu_committed),
+        .count (lsu_commits)
     );
 
     fflags_t fflags;
@@ -54,20 +66,22 @@ module VX_commit #(
     fflags_t fflags_r;
     reg has_fflags_r;
     reg [`NW_BITS-1:0] wid_r;
-    reg [$clog2(`NUM_EXS+1)-1:0] num_commits_r;
+    reg [$clog2(`NUM_EXS-1+1)-1:0] exu_cmt_r;
+    reg [$clog2(`NUM_THREADS+1)-1:0] lsu_cmt_r;
     reg csr_update_r;
 
     always @(posedge clk) begin
-        csr_update_r  <= (| commited_mask);
-        fflags_r      <= fflags;
-        has_fflags_r  <= fpu_commit_if.valid && fpu_commit_if.has_fflags;
-        wid_r         <= fpu_commit_if.wid;
-        num_commits_r <= (num_commits << $clog2(`NUM_THREADS));
+        csr_update_r <= (| exu_committed) | lsu_commit_if.valid;
+        fflags_r     <= fflags;
+        has_fflags_r <= fpu_commit_if.valid && fpu_commit_if.has_fflags;
+        wid_r        <= fpu_commit_if.wid;        
+        exu_cmt_r    <= exu_commits;
+        lsu_cmt_r    <= lsu_commits;
     end
 
     assign cmt_to_csr_if.valid       = csr_update_r;            
     assign cmt_to_csr_if.wid         = wid_r;  
-    assign cmt_to_csr_if.num_commits = num_commits_r;
+    assign cmt_to_csr_if.num_commits = {exu_cmt_r, `NT_BITS'(0)} + NCMTW'(lsu_cmt_r);
     assign cmt_to_csr_if.has_fflags  = has_fflags_r;    
     assign cmt_to_csr_if.fflags      = fflags_r;
 
