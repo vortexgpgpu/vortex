@@ -507,6 +507,12 @@ extern int vx_start(vx_device_h hdevice) {
     // start execution    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN));
 
+#ifdef SCOPE
+    sleep(15);
+    vx_scope_stop(device->fpga, 0);
+    exit(0);
+#endif
+
     return 0;
 }
 

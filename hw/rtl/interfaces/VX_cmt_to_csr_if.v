@@ -9,7 +9,7 @@ interface VX_cmt_to_csr_if ();
 
     wire [`NW_BITS-1:0] wid;
 
-    wire [$clog2(`NUM_EXS+1)-1:0] num_commits;
+    wire [$clog2(`NUM_EXS*`NUM_THREADS+1)-1:0] num_commits;
 
     wire has_fflags;
     fflags_t fflags;

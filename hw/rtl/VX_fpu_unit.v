@@ -51,10 +51,10 @@ module VX_fpu_unit #(
         .full           (fpuq_full)
     );
     
-    wire valid_in = fpu_req_if.valid && ~fpuq_full;
-
     // can accept new request?
     assign fpu_req_if.ready = ready_in && ~fpuq_full;
+
+    wire valid_in = fpu_req_if.valid && ~fpuq_full;
 
 `ifdef FPU_FAST
 
@@ -135,6 +135,6 @@ module VX_fpu_unit #(
         .out   ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, fpu_commit_if.has_fflags, fpu_commit_if.fflags})
     );
 
-    assign ready_out = ~stall_out;    
+    assign ready_out = ~stall_out;
 
 endmodule
