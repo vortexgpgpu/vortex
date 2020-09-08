@@ -1,7 +1,7 @@
 #CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
 CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -I../../include -I../../../hw/simulate -I../../../hw
+CFLAGS += -I../../../../hw
 
 # control RTL debug print states
 DBG_PRINT_FLAGS += -DDBG_PRINT_CORE_ICACHE
@@ -32,11 +32,11 @@ CFLAGS += -DDUMP_PERF_STATS
 LDFLAGS += -shared -pthread
 # LDFLAGS += -dynamiclib -pthread
 
-TOP = Vortex
+TOP = vortex_afu_shim
 
-RTL_DIR = ../../hw/rtl
+RTL_DIR = ../../../hw/rtl
 
-SRCS = vortex.cpp ../common/vx_utils.cpp ../../hw/simulate/simulator.cpp
+SRCS = fpga.cpp opae_sim.cpp
 SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
 
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/svdpi -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src 
@@ -60,8 +60,13 @@ else
 	CFLAGS   += -DNDEBUG
 endif
 
-PROJECT = libvortex.so
-# PROJECT = libvortex.dylib
+VL_FLAGS += -DNOPAE
+CFLAGS += -DNOPAE
+VL_FLAGS += -DSCOPE
+CFLAGS += -DSCOPE
+RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
+
+PROJECT = libopae-c-vlsim.so
 
 all: $(PROJECT)
 	

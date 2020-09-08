@@ -4,8 +4,15 @@
 #include <chrono>
 #include <vector>
 #include <assert.h>
+
+#ifdef USE_VLSIM
+#include "vlsim/fpga.h"
+#else
+#include <opae/fpga.h>
+#endif
+
 #include <VX_config.h>
-#include "scope.h"
+#include "vx_scope.h"
 #include "vortex_afu.h"
 
 #define CHECK_RES(_expr)                            \
@@ -18,12 +25,6 @@
      return -1;                                     \
    } while (false)
 
-
-template<int N> 
-constexpr bool static_print() {
-    return (0 < N < 100); 
-}
-
 #define MMIO_SCOPE_READ     (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE    (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
@@ -33,8 +34,7 @@ struct scope_signal_t {
 };
 
 constexpr int ilog2(int n) {
-    return (n > 1) ? 1 +
-     ilog2(n >> 1) : 0;
+    return (n > 1) ? 1 + ilog2(n >> 1) : 0;
 }
 
 static constexpr int NW_BITS = ilog2(NUM_WARPS);

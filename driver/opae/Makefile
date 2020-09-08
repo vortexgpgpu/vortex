@@ -1,9 +1,10 @@
+OPAE_HOME ?= /tools/opae/1.4.0
 
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I/tools/opae/1.4.0/include  -I../../hw
+CXXFLAGS += -I../include -I$(OPAE_HOME)/include  -I../../hw
 
-LDFLAGS += -L/tools/opae/1.4.0/lib
+LDFLAGS += -L$(OPAE_HOME)/lib
 
 # stack execution protection
 LDFLAGS +=-z noexecstack
@@ -23,49 +24,60 @@ CXXFLAGS += -DDUMP_PERF_STATS
 # Enable scope analyzer
 #CXXFLAGS += -DSCOPE
 
-LDFLAGS += -luuid
-
 LDFLAGS += -shared
 
-FPGA_LIBS += -lopae-c
+FPGA_LIBS += -luuid -lopae-c
 
-ASE_LIBS += -lopae-c-ase
+ASE_LIBS += -luuid -lopae-c-ase
+
+VLSIM_LIBS += -lopae-c-vlsim
 
 LIB_DIR=../lib
 
 ASE_DIR = ase
 
+VLSIM_DIR = vlsim
+
 PROJECT = libvortex.so
 
 PROJECT_ASE = $(ASE_DIR)/libvortex.so
 
+PROJECT_VLSIM = $(VLSIM_DIR)/libvortex.so
+
 AFU_JSON_INFO = vortex_afu.h
 
-SRCS = vortex.cpp scope.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp vx_scope.cpp ../common/vx_utils.cpp
 
-all: $(PROJECT) $(PROJECT_ASE)
+all: vlsim
 
 # AFU info from JSON file, including AFU UUID
-$(AFU_JSON_INFO): ../../hw/opae/vortex_afu.json
+json: ../../hw/opae/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
-$(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(FPGA_LIBS) -o $@
+fpga: $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(FPGA_LIBS) -o $(PROJECT)
 
-$(PROJECT_ASE): $(SRCS) $(ASE_DIR)
-	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $@
+ase: $(SRCS) $(ASE_DIR)
+	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $(PROJECT_ASE)
 
-vortex.o: vortex.cpp $(AFU_JSON_INFO)
+vlsim: $(SRCS) opae-vlsim
+	$(CXX) $(CXXFLAGS) -L./vlsim -DUSE_VLSIM $(SRCS) $(LDFLAGS) $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
+
+opae-vlsim:
+	$(MAKE) -C vlsim
+
+vortex.o: vortex.cpp
 	$(CXX) $(CXXFLAGS) -c vortex.cpp -o $@
 
 $(ASE_DIR):
 	mkdir -p ase
 
-.depend: $(SRCS) $(AFU_JSON_INFO)
+.depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $(SRCS) > .depend;
 
 clean:
-	rm -rf $(PROJECT) $(PROJECT_ASE) $(AFU_JSON_INFO) *.o .depend 
+	rm -rf $(PROJECT) $(PROJECT_ASE) $(PROJECT_VLSIM) *.o .depend
+	$(MAKE) -C vlsim clean	
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
