@@ -156,7 +156,6 @@ logic avs_rdq_full;
 
 // CMD variables //////////////////////////////////////////////////////////////
 
-logic [2:0]                cmd_type;
 t_ccip_clAddr              cmd_io_addr;
 logic[DRAM_ADDR_WIDTH-1:0] cmd_mem_addr;
 logic[DRAM_ADDR_WIDTH-1:0] cmd_data_size;
@@ -176,9 +175,10 @@ logic [31:0]               cmd_csr_wdata;
 // MMIO controller ////////////////////////////////////////////////////////////
 
 `IGNORE_WARNINGS_BEGIN
-t_ccip_c0_ReqMmioHdr mmio_hdr; 
+t_ccip_c0_ReqMmioHdr mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
 `IGNORE_WARNINGS_END
-assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
+
+`STATIC_ASSERT(($bits(t_ccip_c0_ReqMmioHdr)-$bits(mmio_hdr.address)) == 12, "Oops!")
 
 t_if_ccip_c2_Tx mmio_tx;
 assign af2cp_sTxPort.c2 = mmio_tx;
@@ -189,20 +189,29 @@ assign cmd_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_SCOPE_READ == mmi
 assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mmio_hdr.address);
 `endif
 
+`DEBUG_BEGIN
+wire cp2af_sRxPort_c0_mmioWrValid = cp2af_sRxPort.c0.mmioWrValid;
+wire cp2af_sRxPort_c0_mmioRdValid = cp2af_sRxPort.c0.mmioRdValid;
+wire[$bits(mmio_hdr.address)-1:0] mmio_hdr_address = mmio_hdr.address;
+wire[$bits(mmio_hdr.length)-1:0] mmio_hdr_length = mmio_hdr.length;
+wire[$bits(mmio_hdr.tid)-1:0] mmio_hdr_tid = mmio_hdr.tid;
+wire[$bits(cp2af_sRxPort.c0.hdr.mdata)-1:0] cp2af_sRxPort_c0_hdr_mdata = cp2af_sRxPort.c0.hdr.mdata;
+`DEBUG_END
+
+wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
+
 always_ff @(posedge clk) 
 begin
   if (reset) begin
     mmio_tx.hdr         <= 0;
     mmio_tx.data        <= 0;
     mmio_tx.mmioRdValid <= 0;
-    cmd_type            <= 0;
     cmd_io_addr         <= 0;
     cmd_mem_addr        <= 0;
     cmd_data_size       <= 0;
   end
   else begin
 
-    cmd_type            <= 0;
     mmio_tx.mmioRdValid <= 0;
 
     // serve MMIO write request
@@ -228,7 +237,6 @@ begin
         `endif
         end
         MMIO_CMD_TYPE: begin          
-          cmd_type <= $bits(cmd_type)'(cp2af_sRxPort.c0.data);
         `ifdef DBG_PRINT_OPAE
           $display("%t: MMIO_CMD_TYPE: %0d", $time, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
         `endif
@@ -258,6 +266,11 @@ begin
           $display("%t: MMIO_CSR_DATA: %0h", $time, $bits(cmd_csr_wdata)'(cp2af_sRxPort.c0.data));
         `endif
         end
+        default: begin
+          `ifdef DBG_PRINT_OPAE
+            $display("%t: MMIO_WR: addr=%0h, data=%0h", $time, mmio_hdr.address, $bits(cmd_csr_wdata)'(cp2af_sRxPort.c0.data));
+          `endif
+        end
       endcase
     end
 
@@ -279,15 +292,21 @@ begin
         AFU_ID_L: mmio_tx.data <= afu_id[63:0];   // afu id low
         AFU_ID_H: mmio_tx.data <= afu_id[127:64]; // afu id hi
         16'h0006: mmio_tx.data <= 64'h0; // next AFU
-        16'h0008: mmio_tx.data <= 64'h0; // reserved
+        16'h0008: mmio_tx.data <= 64'h0; // reserved        
         MMIO_STATUS: begin
+          mmio_tx.data <= 64'(state);
         `ifdef DBG_PRINT_OPAE
           if (state != state_t'(mmio_tx.data)) begin
             $display("%t: MMIO_STATUS: state=%0d", $time, state);
           end
-        `endif
-          mmio_tx.data <= 64'(state);
+        `endif          
         end  
+        MMIO_CSR_READ: begin          
+          mmio_tx.data <= 64'(cmd_csr_rdata);
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: MMIO_CSR_READ: data=%0h", $time, cmd_csr_rdata);
+        `endif
+        end
       `ifdef SCOPE
         MMIO_SCOPE_READ: begin          
           mmio_tx.data <= cmd_scope_rdata;
@@ -296,13 +315,11 @@ begin
         `endif
         end
       `endif
-        MMIO_CSR_READ: begin          
-          mmio_tx.data <= 64'(cmd_csr_rdata);
+        default: begin
         `ifdef DBG_PRINT_OPAE
-          $display("%t: MMIO_CSR_READ: data=%0h", $time, cmd_csr_rdata);
+          $display("%t: MMIO_RD: addr=%0h", $time, mmio_hdr.address);
         `endif
         end
-        default: mmio_tx.data <= 64'h0;
       endcase
       mmio_tx.mmioRdValid <= 1; // post response
     end
@@ -376,40 +393,58 @@ begin
       STATE_READ: begin
         if (cmd_read_done) begin
           state <= STATE_IDLE;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: STATE IDLE", $time);
+        `endif
         end
       end
 
       STATE_WRITE: begin
         if (cmd_write_done) begin
           state <= STATE_IDLE;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: STATE IDLE", $time);
+        `endif
         end
       end
 
       STATE_START: begin // vortex reset cycle
-        state <= STATE_RUN; 
+        state <= STATE_RUN;
       end
 
       STATE_RUN: begin
         if (cmd_run_done) begin
           state <= STATE_IDLE;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: STATE IDLE", $time);
+        `endif
         end
       end
 
       STATE_CLFLUSH: begin
         if (cmd_clflush_done) begin
           state <= STATE_IDLE;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: STATE IDLE", $time);
+        `endif
         end
       end
 
       STATE_CSR_READ: begin
         if (cmd_csr_done) begin
           state <= STATE_IDLE;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: STATE IDLE", $time);
+        `endif
         end
       end
 
       STATE_CSR_WRITE: begin
         if (cmd_csr_done) begin
           state <= STATE_IDLE;
+        `ifdef DBG_PRINT_OPAE
+          $display("%t: STATE IDLE", $time);
+        `endif
         end
       end
 

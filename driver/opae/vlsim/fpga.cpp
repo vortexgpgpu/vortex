@@ -32,7 +32,9 @@ extern fpga_result fpgaPrepareBuffer(fpga_handle handle, uint64_t len, void **bu
     return FPGA_INVALID_PARAM;
 
   auto sim = reinterpret_cast<opae_sim*>(handle);
-  sim->prepare_buffer(len, buf_addr, wsid, flags);
+  int ret = sim->prepare_buffer(len, buf_addr, wsid, flags);
+  if (ret != 0)
+    return FPGA_NO_MEMORY;
   
   return FPGA_OK;
 }
@@ -73,6 +75,16 @@ extern fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_
 
   auto sim = reinterpret_cast<opae_sim*>(handle);
   sim->read_mmio64(mmio_num, offset, value);
+
+  return FPGA_OK;
+}
+
+extern fpga_result fpgaFlush(fpga_handle handle) {
+  if (NULL == handle) 
+    return FPGA_INVALID_PARAM;
+
+  auto sim = reinterpret_cast<opae_sim*>(handle);
+  sim->flush();
 
   return FPGA_OK;
 }

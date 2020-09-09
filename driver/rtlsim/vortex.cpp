@@ -304,7 +304,7 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
     return 0;
 }
 
-extern volatile void* vx_host_ptr(vx_buffer_h hbuffer) {
+extern void* vx_host_ptr(vx_buffer_h hbuffer) {
     if (nullptr == hbuffer)
         return nullptr;
 
