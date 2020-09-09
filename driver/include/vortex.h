@@ -34,7 +34,7 @@ int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value);
 int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hbuffer);
 
 // Get host pointer address  
-volatile void* vx_host_ptr(vx_buffer_h hbuffer);
+void* vx_host_ptr(vx_buffer_h hbuffer);
 
 // release buffer
 int vx_buf_release(vx_buffer_h hbuffer);

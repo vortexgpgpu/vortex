@@ -44,6 +44,9 @@ run-fpga: $(PROJECT)
 run-ase: $(PROJECT)
 	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
+run-vlsim: $(PROJECT)
+	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+
 run-rtlsim: $(PROJECT)
 	LD_LIBRARY_PATH=../../rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
