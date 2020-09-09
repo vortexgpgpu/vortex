@@ -14,6 +14,7 @@
 #include <ostream>
 #include <future>
 #include <vector>
+#include <unordered_map>
 
 #define CACHE_BLOCK_SIZE 64
 
@@ -70,12 +71,10 @@ private:
   void sTxPort_bus();
   void avs_bus();
 
-  uint64_t* to_host_ptr(uint64_t addr);
-
   std::future<void> future_;
   bool stop_;
 
-  std::vector<host_buffer_t> host_buffers_;
+  std::unordered_map<int64_t, host_buffer_t> host_buffers_;
 
   std::vector<dram_rd_req_t> dram_reads_;
 

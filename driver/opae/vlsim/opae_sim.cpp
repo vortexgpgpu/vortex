@@ -65,21 +65,24 @@ int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int 
   host_buffer_t buffer;
   buffer.data   = (uint64_t*)alloc;
   buffer.size   = len;
-  buffer.ioaddr = intptr_t(alloc) / CACHE_BLOCK_SIZE; 
+  buffer.ioaddr = uintptr_t(alloc); 
   auto index = host_buffers_.size();
-  host_buffers_.push_back(buffer);
+  host_buffers_.emplace(index, buffer);
   *buf_addr = alloc;
   *wsid = index;
   return 0;
 }
 
 void opae_sim::release_buffer(uint64_t wsid) {
-  free(host_buffers_[wsid].data);
-  host_buffers_.erase(host_buffers_.begin() + wsid);
+  auto it = host_buffers_.find(wsid);
+  if (it != host_buffers_.end()) {
+    free(it->second.data);
+    host_buffers_.erase(it);
+  }
 }
 
 void opae_sim::get_io_address(uint64_t wsid, uint64_t *ioaddr) {
-  *ioaddr = host_buffers_[wsid].ioaddr * CACHE_BLOCK_SIZE;
+  *ioaddr = host_buffers_[wsid].ioaddr;
 }
 
 void opae_sim::write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) {
@@ -201,7 +204,7 @@ void opae_sim::sTxPort_bus() {
     cci_rd_req_t cci_req;
     cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);     
     cci_req.mdata = vortex_afu_->af2cp_sTxPort_c0_hdr_mdata;
-    auto host_ptr = this->to_host_ptr(vortex_afu_->af2cp_sTxPort_c0_hdr_address);
+    auto host_ptr = (uint64_t*)(vortex_afu_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
     memcpy(cci_req.block.data(), host_ptr, CACHE_BLOCK_SIZE);
     cci_reads_.push_back(cci_req);
   }
@@ -211,7 +214,7 @@ void opae_sim::sTxPort_bus() {
     cci_wr_req_t cci_req;
     cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);
     cci_req.mdata = vortex_afu_->af2cp_sTxPort_c1_hdr_mdata;
-    auto host_ptr = this->to_host_ptr(vortex_afu_->af2cp_sTxPort_c1_hdr_address);
+    auto host_ptr = (uint64_t*)(vortex_afu_->af2cp_sTxPort_c1_hdr_address * CACHE_BLOCK_SIZE);
     memcpy(host_ptr, vortex_afu_->af2cp_sTxPort_c1_data, CACHE_BLOCK_SIZE);
     cci_writes_.push_back(cci_req);
   } 
@@ -273,16 +276,4 @@ void opae_sim::avs_bus() {
   }
 
   vortex_afu_->avs_waitrequest = dram_stalled;
-}
-
-uint64_t* opae_sim::to_host_ptr(uint64_t ioaddr) {
-  for (auto& buffer : host_buffers_) {
-    if (ioaddr >= buffer.ioaddr 
-     && ioaddr < (buffer.ioaddr + buffer.size)) {
-      return buffer.data + (ioaddr - buffer.ioaddr) * (CACHE_BLOCK_SIZE / 8);
-    }
-  }
-  printf("error: to_host_ptr(0x%lx) failed\n", ioaddr);
-  std::abort();
-  return nullptr;
 }
