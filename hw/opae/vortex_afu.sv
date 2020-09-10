@@ -573,7 +573,7 @@ begin
     end
 
     if (cci_dram_wr_req_fire) begin                
-      cci_dram_wr_req_addr <= cci_dram_wr_req_addr + ((t_cci_rdq_tag'(cci_dram_wr_req_ctr) == t_cci_rdq_tag'(CCI_RD_WINDOW_SIZE-1)) ? (DRAM_ADDR_WIDTH)'(CCI_RD_WINDOW_SIZE)  : 0);
+      cci_dram_wr_req_addr <= cci_dram_wr_req_addr + ((t_cci_rdq_tag'(cci_dram_wr_req_ctr) == $bits(t_cci_rdq_tag)'(CCI_RD_WINDOW_SIZE-1)) ? DRAM_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE)  : DRAM_ADDR_WIDTH'(0));
       cci_dram_wr_req_ctr  <= cci_dram_wr_req_ctr + 1;
     `ifdef DBG_PRINT_OPAE
       $display("%t: AVS Wr Req: addr=%0h, data=%0h, rem=%0d", $time, `DRAM_TO_BYTE_ADDR(avs_address), avs_writedata, (cci_dram_wr_req_ctr + 1));
@@ -717,7 +717,7 @@ begin
     if (cci_rd_req_fire) begin  
       cci_rd_req_addr <= cci_rd_req_addr + 1;
       cci_rd_req_ctr  <= cci_rd_req_ctr_next;
-      if (t_cci_rdq_tag'(cci_rd_req_ctr) == t_cci_rdq_tag'(CCI_RD_WINDOW_SIZE-1)) begin
+      if (t_cci_rdq_tag'(cci_rd_req_ctr) == $bits(t_cci_rdq_tag)'(CCI_RD_WINDOW_SIZE-1)) begin
         cci_rd_req_wait <= 1;   // end current request batch
       end 
     `ifdef DBG_PRINT_OPAE
@@ -727,7 +727,7 @@ begin
 
     if (cci_rd_rsp_fire) begin
       cci_rd_rsp_ctr <= cci_rd_rsp_ctr + 1;
-      if (cci_rd_rsp_ctr == t_cci_rdq_tag'(CCI_RD_WINDOW_SIZE-1)) begin
+      if (cci_rd_rsp_ctr == $bits(t_cci_rdq_tag)'(CCI_RD_WINDOW_SIZE-1)) begin
         cci_rd_req_wait <= 0;   // restart new request batch
       end 
     `ifdef DBG_PRINT_OPAE
