@@ -18,7 +18,10 @@ int main()
 	vx_tmc(1);
 
 
-	printf("printf: Newlib Main %d\n", 456);
+	vx_print_str("Newlib Main ");
+	vx_print_hex(456);
+	vx_print_str(" \n");
+	vx_print_str("Passed!\n");
 
 	return 0;
 }
