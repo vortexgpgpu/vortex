@@ -143,6 +143,6 @@ int main()
 		}
 		vx_print_str("\n");
 	}
-
+	vx_print_str("Passed!\n");
 	return 0;
 }
