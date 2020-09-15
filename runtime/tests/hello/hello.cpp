@@ -1,5 +1,4 @@
-
-
+#include <stdio.h>
 
 struct hello {
 	int a;
@@ -15,4 +14,7 @@ int main()
 {
 	nameing.a = 20;
 	int b;
+	printf("Passed!\n");
+
+	return 0;
 }
