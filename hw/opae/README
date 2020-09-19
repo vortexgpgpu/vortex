@@ -84,6 +84,7 @@ tar -zcvf run.log.tar.gz build_ase_1c/work/run.log
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
+tar -xvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.bz2
 
 # launch Gtkwave
 gtkwave ./build_ase_1c/work/vortex.vcd &
