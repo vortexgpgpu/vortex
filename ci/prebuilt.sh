@@ -1,18 +1,13 @@
 #!/bin/bash
 
-RISCVTOOL_SRCDIR=/opt/riscv-gnu-toolchain
-POCL_SRCDIR=/opt/pocl
-LLVM_SRCDIR=/opt/llvm-riscv
-VERILATOR_SRCDIR=/opt/verilator
-
 OS_DIR=ubuntu/bionic
-
+SRCDIR=/opt
 DESTDIR=.
 
 riscv() 
 {
     echo "prebuilt riscv-gnu-toolchain..."
-    tar -cvjf riscv-gnu-toolchain.tar.bz2 $RISCVTOOL_SRCDIR
+    tar -cvjf -C $SRCDIR riscv-gnu-toolchain.tar.bz2 riscv-gnu-toolchain
     split -b 50M riscv-gnu-toolchain.tar.bz2 "riscv-gnu-toolchain.tar.bz2.part"    
     mv riscv-gnu-toolchain.tar.bz2.part* $DESTDIR/riscv-gnu-toolchain/$OS_DIR
     rm riscv-gnu-toolchain.tar.bz2
@@ -21,7 +16,7 @@ riscv()
 llvm() 
 {
     echo "prebuilt llvm-riscv..."
-    tar -cvjf llvm-riscv.tar.bz2 $LLVM_SRCDIR
+    tar -cvjf -C $SRCDIR llvm-riscv.tar.bz2 llvm-riscv
     split -b 50M llvm-riscv.tar.bz2 "llvm-riscv.tar.bz2.part"    
     mv llvm-riscv.tar.bz2.part* $DESTDIR/llvm-riscv/$OS_DIR
     rm llvm-riscv.tar.bz2
@@ -30,14 +25,14 @@ llvm()
 pocl() 
 {
     echo "prebuilt pocl..."
-    tar -cvjf pocl.tar.bz2 $POCL_SRCDIR
+    tar -cvjf -C $SRCDIR pocl.tar.bz2 pocl
     mv pocl.tar.bz2 $DESTDIR/pocl/$OS_DIR
 }
 
 verilator() 
 {
     echo "prebuilt verilator..."
-    tar -cvjf verilator.tar.bz2 $VERILATOR_SRCDIR
+    tar -cvjf -C $SRCDIR verilator.tar.bz2 verilator
     mv verilator.tar.bz2 $DESTDIR/verilator/$OS_DIR
 }
 
