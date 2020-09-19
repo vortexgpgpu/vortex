@@ -121,9 +121,14 @@ module VX_fp_madd #(
         defparam mac_fp_msub.adder_input_clock = "0"; 
         defparam mac_fp_msub.accum_adder_clock = "none";
     `else
+        integer fmadd_h, fmsub_h;
+        initial begin
+            fmadd_h = dpi_register();
+            fmsub_h = dpi_register();
+        end
         always @(posedge clk) begin
-           dpi_fmadd(3*LANES+i, enable, dataa[i], datab[i], datac[i], result_madd);
-           dpi_fmsub(4*LANES+i, enable, dataa[i], datab[i], datac[i], result_msub);
+           dpi_fmadd(fmadd_h, enable, dataa[i], datab[i], datac[i], result_madd);
+           dpi_fmsub(fmsub_h, enable, dataa[i], datab[i], datac[i], result_msub);
         end
     `endif
 

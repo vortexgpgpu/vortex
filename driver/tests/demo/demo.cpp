@@ -184,7 +184,7 @@ int main(int argc, char *argv[]) {
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = 0xffffffff;
+      buf_ptr[i] = 0xdeadbeef;
     }
   }
   std::cout << "clear destination buffer" << std::endl;      

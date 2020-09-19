@@ -1,6 +1,8 @@
 `ifndef FLOAT_DPI
 `define FLOAT_DPI
 
+import "DPI-C" context function int dpi_register();
+
 import "DPI-C" context function void dpi_fadd(int inst, input logic enable, input int a, input int b, output int result);
 import "DPI-C" context function void dpi_fsub(int inst, input logic enable, input int a, input int b, output int result);
 import "DPI-C" context function void dpi_fmul(int inst, input logic enable, input int a, input int b, output int result);

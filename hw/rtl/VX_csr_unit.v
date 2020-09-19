@@ -102,8 +102,8 @@ module VX_csr_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign csr_pipe_rsp_if.data[i] = (csr_addr_s1 == `CSR_LTID) ? i : 
-                                            (csr_addr_s1 == `CSR_GTID) ? (csr_read_data_s1 * `NUM_THREADS + i) : 
-                                                                          csr_read_data_s1;
+                                         (csr_addr_s1 == `CSR_GTID) ? (csr_read_data_s1 * `NUM_THREADS + i) : 
+                                                                      csr_read_data_s1;
     end         
 
     // can accept new request?

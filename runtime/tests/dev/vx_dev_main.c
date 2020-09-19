@@ -53,16 +53,13 @@ void mat_add_kernel(void * void_arguments)
 
 void vx_print_mat(unsigned * matPtr, int numRows, int numCols)
 {
-	vx_print_str("---------------------\n");
-	for (int i = 0; i < numRows; i++)
-	{
-		for (int j = 0; j < numCols; j++)
-		{
+	vx_printf("---------------------\n");
+	for (int i = 0; i < numRows; i++)	{
+		for (int j = 0; j < numCols; j++) {
 			unsigned index = (i * numCols) + j;
-			vx_print_hex(matPtr[index]);
-			vx_print_str(" ");
+			vx_printf("0x%x ", matPtr[index]);
 		}
-		vx_print_str("\n");
+		vx_printf("\n");
 	}
 }
 
@@ -72,9 +69,9 @@ int main()
 	vx_tmc(1);
 
 	// void * hellp = malloc(4);
-	vx_print_str("Confirm Dev Main\n");
+	vx_printf("Confirm Dev Main\n");
 
-	vx_print_str("vx_spawn_warps\n");
+	vx_printf("vx_spawn_warps\n");
 
 	mat_add_args_t arguments;
 	arguments.x         = x;

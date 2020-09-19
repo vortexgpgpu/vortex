@@ -41,11 +41,11 @@ module VX_cluster #(
     input wire                              snp_rsp_ready,     
 
     // I/O request
-    output wire                             io_req_valid,
+    output wire [`NUM_THREADS-1:0]          io_req_valid,
     output wire                             io_req_rw,  
-    output wire [3:0]                       io_req_byteen,  
-    output wire [29:0]                      io_req_addr,
-    output wire [31:0]                      io_req_data,    
+    output wire [`NUM_THREADS-1:0][3:0]     io_req_byteen,  
+    output wire [`NUM_THREADS-1:0][29:0]    io_req_addr,
+    output wire [`NUM_THREADS-1:0][31:0]    io_req_data,    
     output wire [`L2CORE_TAG_WIDTH-1:0]     io_req_tag,    
     input wire                              io_req_ready,
 
@@ -108,11 +108,11 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]   per_core_snp_rsp_tag;
     wire [`NUM_CORES-1:0]                        per_core_snp_rsp_ready;
 
-    wire [`NUM_CORES-1:0]                        per_core_io_req_valid;
+    wire [`NUM_CORES-1:0][`NUM_THREADS-1:0]      per_core_io_req_valid;
     wire [`NUM_CORES-1:0]                        per_core_io_req_rw;
-    wire [`NUM_CORES-1:0][3:0]                   per_core_io_req_byteen;
-    wire [`NUM_CORES-1:0][29:0]                  per_core_io_req_addr;
-    wire [`NUM_CORES-1:0][31:0]                  per_core_io_req_data;    
+    wire [`NUM_CORES-1:0][`NUM_THREADS-1:0][3:0] per_core_io_req_byteen;
+    wire [`NUM_CORES-1:0][`NUM_THREADS-1:0][29:0] per_core_io_req_addr;
+    wire [`NUM_CORES-1:0][`NUM_THREADS-1:0][31:0] per_core_io_req_data;    
     wire [`NUM_CORES-1:0][`DCORE_TAG_WIDTH-1:0]  per_core_io_req_tag;
     wire [`NUM_CORES-1:0]                        per_core_io_req_ready;
     
@@ -209,7 +209,7 @@ module VX_cluster #(
         );
     end     
 
-    VX_mem_arb #(
+    VX_io_arb #(
         .NUM_REQUESTS  (`NUM_CORES),
         .WORD_SIZE     (4),
         .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
@@ -219,34 +219,34 @@ module VX_cluster #(
         .reset                 (reset),
 
         // input requests
-        .in_mem_req_valid      (per_core_io_req_valid),
-        .in_mem_req_rw         (per_core_io_req_rw),
-        .in_mem_req_byteen     (per_core_io_req_byteen),
-        .in_mem_req_addr       (per_core_io_req_addr),
-        .in_mem_req_data       (per_core_io_req_data),  
-        .in_mem_req_tag        (per_core_io_req_tag),  
-        .in_mem_req_ready      (per_core_io_req_ready),
+        .in_io_req_valid       (per_core_io_req_valid),
+        .in_io_req_rw          (per_core_io_req_rw),
+        .in_io_req_byteen      (per_core_io_req_byteen),
+        .in_io_req_addr        (per_core_io_req_addr),
+        .in_io_req_data        (per_core_io_req_data),  
+        .in_io_req_tag         (per_core_io_req_tag),  
+        .in_io_req_ready       (per_core_io_req_ready),
 
         // input responses
-        .in_mem_rsp_valid      (per_core_io_rsp_valid),
-        .in_mem_rsp_data       (per_core_io_rsp_data),
-        .in_mem_rsp_tag        (per_core_io_rsp_tag),
-        .in_mem_rsp_ready      (per_core_io_rsp_ready),
+        .in_io_rsp_valid       (per_core_io_rsp_valid),
+        .in_io_rsp_data        (per_core_io_rsp_data),
+        .in_io_rsp_tag         (per_core_io_rsp_tag),
+        .in_io_rsp_ready       (per_core_io_rsp_ready),
 
         // output request
-        .out_mem_req_valid     (io_req_valid),
-        .out_mem_req_rw        (io_req_rw),        
-        .out_mem_req_byteen    (io_req_byteen),        
-        .out_mem_req_addr      (io_req_addr),
-        .out_mem_req_data      (io_req_data),
-        .out_mem_req_tag       (io_req_tag),
-        .out_mem_req_ready     (io_req_ready),
-        
+        .out_io_req_valid      (io_req_valid),
+        .out_io_req_rw         (io_req_rw),        
+        .out_io_req_byteen     (io_req_byteen),        
+        .out_io_req_addr       (io_req_addr),
+        .out_io_req_data       (io_req_data),
+        .out_io_req_tag        (io_req_tag),
+        .out_io_req_ready      (io_req_ready),
+         
         // output response
-        .out_mem_rsp_valid     (io_rsp_valid),
-        .out_mem_rsp_tag       (io_rsp_tag),
-        .out_mem_rsp_data      (io_rsp_data),
-        .out_mem_rsp_ready     (io_rsp_ready)
+        .out_io_rsp_valid      (io_rsp_valid),
+        .out_io_rsp_tag        (io_rsp_tag),
+        .out_io_rsp_data       (io_rsp_data),
+        .out_io_rsp_ready      (io_rsp_ready)
     );   
 
     VX_csr_io_arb #(
@@ -369,9 +369,7 @@ module VX_cluster #(
             .SNRQ_SIZE              (`L2SNRQ_SIZE),
             .CWBQ_SIZE              (`L2CWBQ_SIZE),
             .DWBQ_SIZE              (`L2DWBQ_SIZE),
-            .DFQQ_SIZE              (`L2DFQQ_SIZE),
-            .PRFQ_SIZE              (`L2PRFQ_SIZE),
-            .PRFQ_STRIDE            (`L2PRFQ_STRIDE),        
+            .DFQQ_SIZE              (`L2DFQQ_SIZE),  
             .DRAM_ENABLE            (1),
             .WRITE_ENABLE           (1),
             .SNOOP_FORWARDING       (1),

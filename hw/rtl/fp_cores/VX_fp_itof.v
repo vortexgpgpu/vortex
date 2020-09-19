@@ -53,9 +53,14 @@ module VX_fp_itof #(
             .q      (result_u)
         );
     `else
+        integer itof_h, utof_h;
+        initial begin
+            itof_h = dpi_register();
+            utof_h = dpi_register();
+        end
         always @(posedge clk) begin
-           dpi_itof(12*LANES+i, enable, dataa[i], result_s);
-           dpi_utof(13*LANES+i, enable, dataa[i], result_u);
+           dpi_itof(itof_h, enable, dataa[i], result_s);
+           dpi_utof(utof_h, enable, dataa[i], result_u);
         end
     `endif
 

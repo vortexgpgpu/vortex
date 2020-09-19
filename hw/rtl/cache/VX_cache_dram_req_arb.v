@@ -8,10 +8,7 @@ module VX_cache_dram_req_arb #(
     // Size of a word in bytes
     parameter WORD_SIZE                     = 0, 
     // Dram Fill Req Queue Size
-    parameter DFQQ_SIZE                     = 0,  
-    // Prefetcher
-    parameter PRFQ_SIZE                     = 1,
-    parameter PRFQ_STRIDE                   = 0
+    parameter DFQQ_SIZE                     = 0
 ) (
     input  wire                                 clk,
     input  wire                                 reset,
@@ -38,32 +35,9 @@ module VX_cache_dram_req_arb #(
     input wire                                  dram_req_ready
 );
 
-    wire       pref_pop;
-    wire       pref_valid;
-    wire[`DRAM_ADDR_WIDTH-1:0] pref_addr;
+    wire dwb_valid;
+    wire dfqq_req;
     
-    wire       dwb_valid;
-    wire       dfqq_req;
-
-    assign pref_pop = !dwb_valid && !dfqq_req && dram_req_ready && pref_valid;
-    
-    VX_prefetcher #(
-        .PRFQ_SIZE     (PRFQ_SIZE),
-        .PRFQ_STRIDE   (PRFQ_STRIDE),
-        .BANK_LINE_SIZE(BANK_LINE_SIZE),
-        .WORD_SIZE     (WORD_SIZE)
-    ) prfqq (
-        .clk          (clk),
-        .reset        (reset),
-
-        .dram_req     (dram_req_valid && !dram_req_rw),
-        .dram_req_addr(dram_req_addr),
-
-        .pref_pop     (pref_pop),
-        .pref_valid   (pref_valid),
-        .pref_addr    (pref_addr)
-    );
-
     wire[`DRAM_ADDR_WIDTH-1:0] dfqq_req_addr;
     
 `DEBUG_BEGIN
@@ -110,10 +84,10 @@ module VX_cache_dram_req_arb #(
         assign per_bank_dram_wb_req_ready[i] = dram_req_ready && (dwb_bank == `BANK_BITS'(i));
     end
 
-    assign dram_req_valid  = dwb_valid || dfqq_req || pref_pop;    
+    assign dram_req_valid  = dwb_valid || dfqq_req;    
     assign dram_req_rw     = dwb_valid;    
     assign dram_req_byteen = dwb_valid ? per_bank_dram_wb_req_byteen[dwb_bank] : {BANK_LINE_SIZE{1'b1}};    
-    assign dram_req_addr   = dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : (dfqq_req ? dfqq_req_addr : pref_addr);
+    assign dram_req_addr   = dwb_valid ? per_bank_dram_wb_req_addr[dwb_bank] : dfqq_req_addr;
     assign {dram_req_data} = dwb_valid ? per_bank_dram_wb_req_data[dwb_bank] : 0;
 
 endmodule

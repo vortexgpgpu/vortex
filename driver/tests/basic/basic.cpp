@@ -136,7 +136,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = 0xffffffff;
+      buf_ptr[i] = 0xdeadbeef;
     }
   }  
   std::cout << "clear destination buffer" << std::endl;

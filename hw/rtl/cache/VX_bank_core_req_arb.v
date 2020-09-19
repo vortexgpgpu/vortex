@@ -18,7 +18,7 @@ module VX_bank_core_req_arb #(
     // Enqueue Data
     input wire                                                  reqq_push,
     input wire [NUM_REQUESTS-1:0]                               bank_valids,
-    input wire [NUM_REQUESTS-1:0]                               bank_rw,  
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                        bank_rw,  
     input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]                bank_byteen,    
     input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]              bank_writedata,
     input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]         bank_addr,
@@ -40,21 +40,21 @@ module VX_bank_core_req_arb #(
 );
 
     wire [NUM_REQUESTS-1:0]                             out_per_valids;    
-    wire [NUM_REQUESTS-1:0]                             out_per_rw;  
+    wire [`CORE_REQ_TAG_COUNT-1:0]                      out_per_rw;  
     wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              out_per_byteen;
     wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       out_per_addr;    
     wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]            out_per_writedata;    
     wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]  out_per_tag;
 
     reg [NUM_REQUESTS-1:0]                              use_per_valids;
-    reg [NUM_REQUESTS-1:0]                              use_per_rw;  
+    reg [`CORE_REQ_TAG_COUNT-1:0]                       use_per_rw;  
     reg [NUM_REQUESTS-1:0][WORD_SIZE-1:0]               use_per_byteen;
     reg [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]        use_per_addr;
     reg [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]             use_per_writedata;        
     reg [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]   use_per_tag;
 
     wire [NUM_REQUESTS-1:0]                             qual_valids;  
-    wire [NUM_REQUESTS-1:0]                             qual_rw;  
+    wire [`CORE_REQ_TAG_COUNT-1:0]                      qual_rw;  
     wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              qual_byteen;
     wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       qual_addr;
     wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]            qual_writedata;  
@@ -108,16 +108,17 @@ module VX_bank_core_req_arb #(
 
     assign reqq_empty              = !qual_has_request;
     assign reqq_req_st0            = qual_has_request;
-    assign reqq_req_tid_st0        = qual_request_index;
-    assign reqq_req_rw_st0         = qual_rw[qual_request_index];
+    assign reqq_req_tid_st0        = qual_request_index;    
     assign reqq_req_byteen_st0     = qual_byteen[qual_request_index];
     assign reqq_req_addr_st0       = qual_addr[qual_request_index];
     assign reqq_req_writedata_st0  = qual_writedata[qual_request_index];
     
     if (CORE_TAG_ID_BITS != 0) begin
         assign reqq_req_tag_st0 = qual_tag;
+        assign reqq_req_rw_st0  = qual_rw;
     end else begin
-        assign reqq_req_tag_st0  = qual_tag[qual_request_index];
+        assign reqq_req_tag_st0 = qual_tag[qual_request_index];
+        assign reqq_req_rw_st0  = qual_rw[qual_request_index];
     end    
 
 `DEBUG_BLOCK(

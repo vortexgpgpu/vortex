@@ -64,8 +64,7 @@ private:
 class vx_device {    
 public:
     vx_device() {        
-        mem_allocation_ = ALLOC_BASE_ADDR;
-        simulator_.attach_ram(&ram_);
+        mem_allocation_ = ALLOC_BASE_ADDR;        
     } 
 
     ~vx_device() {    
@@ -117,6 +116,7 @@ public:
         if (future_.valid()) {
             future_.wait(); // ensure prior run completed
         }
+        simulator_.attach_ram(&ram_);
         future_ = std::async(std::launch::async, [&]{             
             simulator_.reset();        
             while (simulator_.is_busy()) {
@@ -144,10 +144,12 @@ public:
         if (future_.valid()) {
             future_.wait(); // ensure prior run completed
         }        
+        simulator_.attach_ram(&ram_);
         simulator_.flush_caches(dev_maddr, size);        
-        while (simulator_.is_busy()) {
+        while (simulator_.snp_req_active()) {
             simulator_.step();
         };
+        simulator_.attach_ram(NULL);
         return 0;
     }
 
@@ -156,7 +158,7 @@ public:
             future_.wait(); // ensure prior run completed
         }        
         simulator_.set_csr(core_id, addr, value);        
-        while (simulator_.is_busy()) {
+        while (simulator_.csr_req_active()) {
             simulator_.step();
         };
         return 0;
@@ -167,7 +169,7 @@ public:
             future_.wait(); // ensure prior run completed
         }        
         simulator_.get_csr(core_id, addr, value);        
-        while (simulator_.is_busy()) {
+        while (simulator_.csr_req_active()) {
             simulator_.step();
         };
         return 0;

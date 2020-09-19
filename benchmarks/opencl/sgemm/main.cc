@@ -1,38 +1,13 @@
-/*
- *  Simple OpenCL demo program
- *
- *  Copyright (C) 2009  Clifford Wolf <clifford@clifford.at>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- *  gcc -o cldemo -std=gnu99 -Wall -I/usr/include/nvidia-current cldemo.c
- * -lOpenCL
- *
- */
-
-#include <CL/cl.h>
-#include <errno.h>
-#include <fstream>
-#include <iostream>
-#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <CL/opencl.h>
 #include <string.h>
-#include <unistd.h>
+#include <time.h> 
+#include <chrono>
 
-#define NUM_DATA 64
+#define SIZE 32
+#define KERNEL_NAME "sgemm"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -56,11 +31,6 @@
      _ret;                                                             \
    })
 
-void pfn_notify(const char *errinfo, const void *private_info, size_t cb,
-                void *user_data) {
-  fprintf(stderr, "OpenCL Error (via pfn_notify): %s\n", errinfo);
-}
-
 static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
   if (nullptr == filename || nullptr == data || 0 == size)
     return -1;
@@ -82,148 +52,152 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-cl_device_id device_id = NULL;
-uint8_t *kernel_bin = NULL;
-cl_context context = 0;
-cl_kernel kernel = 0;
-cl_command_queue queue = 0;
-cl_program program = 0;
-cl_mem memObjects[3] = {0, 0, 0};
-
-///
-//  Cleanup any created OpenCL resources
-//
-void cleanup() {
-  for (int i = 0; i < 3; i++) {
-    if (memObjects[i]) clReleaseMemObject(memObjects[i]);
+static void matmul(float *C, const float* A, const float *B, int M, int N, int K) {
+  for (int m = 0; m < M; ++m) {
+    for (int n = 0; n < N; ++n) {
+      float acc = 0.0f;
+      for (int k = 0; k < K; ++k) {
+          acc += A[k * M + m] * B[n * K + k];
+      }
+      C[n * M + m] = acc;
+    }
   }
-  if (queue) clReleaseCommandQueue(queue);
-  if (kernel) clReleaseKernel(kernel);
-  if (program) clReleaseProgram(program);
-  if (context) clReleaseContext(context);
-  if (device_id) clReleaseDevice(device_id); 
-  
-  if (kernel_bin) free(kernel_bin);
 }
 
-int main(int argc, char **argv) {
-  printf("enter demo main\n");
+static bool almost_equal(float a, float b, int ulp = 21) {
+  union fi_t { int i; float f; };
+  fi_t fa, fb;
+  fa.f = a;
+  fb.f = b;
+  return std::abs(fa.i - fb.i) <= ulp;
+}
+
+cl_device_id device_id = NULL;
+cl_context context = NULL;
+cl_command_queue commandQueue = NULL;
+cl_program program = NULL;
+cl_kernel kernel = NULL;
+cl_mem a_memobj = NULL;
+cl_mem b_memobj = NULL;
+cl_mem c_memobj = NULL;  
+float *h_a = NULL;
+float *h_b = NULL;
+float *h_c = NULL;
+uint8_t *kernel_bin = NULL;
+
+static void cleanup() {
+  if (commandQueue) clReleaseCommandQueue(commandQueue);
+  if (kernel) clReleaseKernel(kernel);
+  if (program) clReleaseProgram(program);
+  if (a_memobj) clReleaseMemObject(a_memobj);
+  if (b_memobj) clReleaseMemObject(b_memobj);
+  if (c_memobj) clReleaseMemObject(c_memobj);  
+  if (context) clReleaseContext(context);
+  if (device_id) clReleaseDevice(device_id);
   
-  cl_platform_id platform_id;  
+  if (kernel_bin) free(kernel_bin);
+  if (h_a) free(h_a);
+  if (h_b) free(h_b);
+  if (h_c) free(h_c);
+}
+
+int main (int argc, char **argv) {
+  cl_platform_id platform_id;
   size_t kernel_size;
-  cl_int binary_status = 0;
-  int i;
+  cl_int binary_status;
+
+  srand(time(NULL));
 
   // read kernel binary from file  
   if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
     return -1;
-
+  
   // Getting platform and device information
   CL_CHECK(clGetPlatformIDs(1, &platform_id, NULL));
   CL_CHECK(clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL));
-  
-  context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));
-  
-  queue = CL_CHECK2(clCreateCommandQueue(context, device_id,
-                                            CL_QUEUE_PROFILING_ENABLE, &_err));  
 
-  // Create OpenCL program - first attempt to load cached binary.
-  //  If that is not available, then create the program from source
-  //  and store the binary for future use.
-  std::cout << "Attempting to create program from binary..." << std::endl;
-  // cl_program program = CreateProgramFromBinary(context, device_id,
-  // "kernel.cl.bin");
+  printf("Create context\n");
+  context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
+
+  // Allocate device buffers
+  size_t nbytes = SIZE * SIZE * sizeof(float);
+  a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
+  b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
+  c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
+
+  printf("Create program from kernel source\n");
   program = CL_CHECK2(clCreateProgramWithBinary(
     context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
   if (program == NULL) {
-    printf("clCreateProgramWithBinary() failed\n");
     cleanup();
     return -1;
-  } 
+  }
 
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
-
-  printf("attempting to create input buffer\n");
-  fflush(stdout);
-  cl_mem input_bufferA;
-  input_bufferA = CL_CHECK2(
-      clCreateBuffer(context, CL_MEM_READ_ONLY,
-                     sizeof(float) * NUM_DATA * NUM_DATA, NULL, &_err));
-
-  cl_mem input_bufferB;
-  input_bufferB = CL_CHECK2(
-      clCreateBuffer(context, CL_MEM_READ_ONLY,
-                     sizeof(float) * NUM_DATA * NUM_DATA, NULL, &_err));
-
-  printf("attempting to create output buffer\n");
-  fflush(stdout);
-  cl_mem output_buffer;
-  output_buffer = CL_CHECK2(
-      clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-                     sizeof(float) * NUM_DATA * NUM_DATA, NULL, &_err));
-
-  memObjects[0] = input_bufferA;
-  memObjects[1] = input_bufferB;
-  memObjects[2] = output_buffer;
-
-  int width = NUM_DATA;
-
-  printf("attempting to create kernel\n");
-  fflush(stdout);
-  kernel = CL_CHECK2(clCreateKernel(program, "sgemm", &_err));
-  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(input_bufferA), &input_bufferA));
-  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(input_bufferB), &input_bufferB));
-  CL_CHECK(clSetKernelArg(kernel, 2, sizeof(output_buffer), &output_buffer));
-  CL_CHECK(clSetKernelArg(kernel, 3, sizeof(width), &width));
   
-  printf("attempting to enqueue write buffer\n");
-  fflush(stdout);
-  for (int i = 0; i < NUM_DATA * NUM_DATA; i++) {
+  // Create kernel
+  kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
-    float in = ((float)rand() / (float)(RAND_MAX)) * 100.0;
-    CL_CHECK(clEnqueueWriteBuffer(queue, input_bufferA, CL_TRUE,
-                                  i * sizeof(float), 4, &in, 0, NULL, NULL));
-    in = ((float)rand() / (float)(RAND_MAX)) * 100.0;
-    CL_CHECK(clEnqueueWriteBuffer(queue, input_bufferB, CL_TRUE,
-                                  i * sizeof(float), 4, &in, 0, NULL, NULL));
+  // Set kernel arguments
+  int width = SIZE;
+  CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
+  CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));	
+  CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
+  CL_CHECK(clSetKernelArg(kernel, 3, sizeof(width), (void*)&width));
+
+  // Allocate memories for input arrays and output arrays.    
+  h_a = (float*)malloc(nbytes);
+  h_b = (float*)malloc(nbytes);
+  h_c = (float*)malloc(nbytes);	
+	
+  // Initialize values for array members.  
+  for (int i = 0; i < (SIZE * SIZE); ++i) {
+    h_a[i] = (float)rand() / (float)RAND_MAX;
+    h_b[i] = (float)rand() / (float)RAND_MAX;
+    h_c[i] = 0xdeadbeef;
+    //printf("*** [%d]: h_a=%f, h_b=%f\n", i, h_a[i], h_b[i]);
   }
 
-  printf("Done enqueueing\n");
+  // Creating command queue
+  commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  
 
-  cl_event kernel_completion;
-  const size_t local_work_size[3] = {1, 1, 1};
-  //                             a_offset
-  size_t global_work_size[3] = {NUM_DATA, NUM_DATA, NUM_DATA};
-  printf("attempting to enqueue kernel\n");
-  fflush(stdout);
-  CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size,
-                                  local_work_size, 0, NULL,
-                                  &kernel_completion));
-  printf("Enqueue'd kernel\n");
-  fflush(stdout);
-  cl_ulong time_start, time_end;
-  CL_CHECK(clWaitForEvents(1, &kernel_completion));
-  CL_CHECK(clGetEventProfilingInfo(kernel_completion,
-                                   CL_PROFILING_COMMAND_START,
-                                   sizeof(time_start), &time_start, NULL));
-  CL_CHECK(clGetEventProfilingInfo(kernel_completion, CL_PROFILING_COMMAND_END,
-                                   sizeof(time_end), &time_end, NULL));
-  double elapsed = time_end - time_start;
-  printf("time(ns):%lg\n", elapsed);
-  CL_CHECK(clReleaseEvent(kernel_completion));
+	printf("Upload source buffers\n");
+  CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a, 0, NULL, NULL));
+  CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b, 0, NULL, NULL));
 
-  printf("Result:");
-  for (int i = 0; i < NUM_DATA * NUM_DATA; i++) {
-    float data;
-    CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE,
-                                 i * sizeof(float), 4, &data, 0, NULL, NULL));
-    // printf(" %f", data);
+  printf("Execute the kernel\n");
+  size_t global_work_size[2] = {SIZE, SIZE};
+  size_t local_work_size[2] = {1, 1};
+  auto time_start = std::chrono::high_resolution_clock::now();
+  CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL));
+  CL_CHECK(clFinish(commandQueue));
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
+
+  printf("Download destination buffer\n");
+  CL_CHECK(clEnqueueReadBuffer(commandQueue, c_memobj, CL_TRUE, 0, nbytes, h_c, 0, NULL, NULL));
+
+  printf("Verify result\n");
+  int errors = 0;
+  float* h_ref = (float*)malloc(nbytes);
+  matmul(h_ref, h_a, h_b, SIZE, SIZE, SIZE);
+  for (int i = 0; i < (SIZE * SIZE); i++) {
+    if (!almost_equal(h_c[i], h_ref[i])) {
+      printf("*** error: [%d] expected=%f, actual=%f\n", i, h_ref[i], h_c[i]);
+      ++errors;
+    }
+  }  
+  free(h_ref);
+  if (errors != 0) {
+    printf("FAILED! - %d errors\n", errors);    
+  } else {
+    printf("PASSED!\n");
   }
-  printf("\n");
 
   // Clean up		
   cleanup();  
 
-  return 0;
+  return errors;
 }

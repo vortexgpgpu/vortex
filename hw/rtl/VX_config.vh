@@ -226,15 +226,6 @@
 `define DDFQQ_SIZE `DCREQ_SIZE
 `endif
 
-// Prefetcher
-`ifndef DPRFQ_SIZE
-`define DPRFQ_SIZE 8
-`endif
-
-`ifndef DPRFQ_STRIDE
-`define DPRFQ_STRIDE 0
-`endif
-
 // Icache Configurable Knobs ==================================================
 
 // Size of cache in bytes
@@ -285,15 +276,6 @@
 // Dram Fill Req Queue Size
 `ifndef IDFQQ_SIZE
 `define IDFQQ_SIZE `ICREQ_SIZE
-`endif
-
-// Prefetcher
-`ifndef IPRFQ_SIZE
-`define IPRFQ_SIZE 8
-`endif
-
-`ifndef IPRFQ_STRIDE
-`define IPRFQ_STRIDE 0
 `endif
 
 // SM Configurable Knobs ======================================================
@@ -385,15 +367,6 @@
 `define L2DFQQ_SIZE `L2CREQ_SIZE
 `endif
 
-// Prefetcher
-`ifndef L2PRFQ_SIZE
-`define L2PRFQ_SIZE 8
-`endif
-
-`ifndef L2PRFQ_STRIDE
-`define L2PRFQ_STRIDE 0
-`endif
-
 // L3cache Configurable Knobs =================================================
 
 // Size of cache in bytes
@@ -449,15 +422,6 @@
 // Dram Fill Req Queue Size
 `ifndef L3DFQQ_SIZE
 `define L3DFQQ_SIZE `L3CREQ_SIZE
-`endif
-
-// Prefetcher
-`ifndef L3PRFQ_SIZE
-`define L3PRFQ_SIZE 8
-`endif
-
-`ifndef L3PRFQ_STRIDE
-`define L3PRFQ_STRIDE 0
 `endif
 
 `endif

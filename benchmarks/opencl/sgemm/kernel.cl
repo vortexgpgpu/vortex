@@ -1,9 +1,18 @@
-__kernel void sgemm(__global float *A, __global float *B, __global float *C, int ldc)
+__kernel void sgemm (__global const float *A,
+	                   __global const float *B,
+	                   __global float *C, 
+                     int N)
 {
-  long i = get_global_id(0);
-  long m = get_global_id(1);
-  long n = get_global_id(2);
-  float a = A[m+n*ldc];
-  float b = B[m*ldc+i];
-  C[i+n*ldc] = C[i+n*ldc] + a * b;
+  // Thread identifiers
+  const int r = get_global_id(0); // Row ID
+  const int c = get_global_id(1); // Col ID
+
+  // Compute a single element (loop a K)
+  float acc = 0.0f;
+  for (int k = 0; k < N; k++) {
+    acc += A[k * N + r] * B[c * N + k];
+  }
+
+  // Store the result
+  C[c * N + r] = acc;
 }

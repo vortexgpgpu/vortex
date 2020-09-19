@@ -161,10 +161,16 @@ module VX_fp_addmul #(
         defparam mac_fp_mul.adder_input_clock = "none"; 
         defparam mac_fp_mul.accum_adder_clock = "none";
     `else
+        integer fadd_h, fsub_h, fmul_h;
+        initial begin
+            fadd_h = dpi_register();
+            fsub_h = dpi_register();
+            fmul_h = dpi_register();
+        end
         always @(posedge clk) begin
-           dpi_fadd(0*LANES+i, enable, dataa[i], datab[i], result_add);
-           dpi_fsub(1*LANES+i, enable, dataa[i], datab[i], result_sub);
-           dpi_fmul(2*LANES+i, enable, dataa[i], datab[i], result_mul);
+           dpi_fadd(fadd_h, enable, dataa[i], datab[i], result_add);
+           dpi_fsub(fsub_h, enable, dataa[i], datab[i], result_sub);
+           dpi_fmul(fmul_h, enable, dataa[i], datab[i], result_mul);
         end
     `endif
 
