@@ -8,6 +8,9 @@
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
 
+#define VL_WDATA_GETW(lwp, i, n, w) \
+  VL_SEL_IWII(0, n * w, 0, 0, lwp, i * w, w)
+
 uint64_t timestamp = 0;
 
 double sc_time_stamp() { 
@@ -35,9 +38,18 @@ Simulator::Simulator() {
   vortex_->trace(trace_, 99);
   trace_->open("trace.vcd");
 #endif  
+
+  // reset the device
+  this->reset();
 }
 
 Simulator::~Simulator() {
+  for (auto& buf : print_bufs_) {
+    auto str = buf.second.str();
+    if (str.size()) {
+      std::cout << "#" << buf.first << ": " << buf.second.str() << std::endl;
+    }
+  }
 #ifdef VCD_OUTPUT
   trace_->close();
 #endif
@@ -158,12 +170,20 @@ void Simulator::eval_dram_bus() {
 }
 
 void Simulator::eval_io_bus() {
-  if (vortex_->io_req_valid
-   && vortex_->io_req_rw 
-   && ((vortex_->io_req_addr << 2) == IO_BUS_ADDR_COUT)) {
-    uint32_t data_write = (uint32_t)vortex_->io_req_data;
-    char c = (char)data_write;
-    std::cout << c;      
+  for (int i = 0; i < NUM_THREADS; ++i) {
+    if (((vortex_->io_req_valid >> i) & 0x1) 
+     && ((VL_WDATA_GETW(vortex_->io_req_addr, i, NUM_THREADS, 30) << 2) == IO_BUS_ADDR_COUT)) {
+      assert(vortex_->io_req_rw);
+      int data = vortex_->io_req_data[i];
+      int tid = data >> 16;
+      char c = data & 0xff;
+      auto& ss_buf = print_bufs_[tid];
+      ss_buf << c;
+      if (c == '\n') {
+        std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
+        ss_buf.str("");
+      }         
+    }
   }
   vortex_->io_req_ready = 1;
   vortex_->io_rsp_valid = 0;
@@ -229,9 +249,15 @@ void Simulator::wait(uint32_t cycles) {
 }
 
 bool Simulator::is_busy() const {
-  return vortex_->busy 
-      || snp_req_active_ 
-      || csr_req_active_;
+  return vortex_->busy;
+}
+
+bool Simulator::snp_req_active() const {
+  return snp_req_active_;
+}
+
+bool Simulator::csr_req_active() const {
+  return csr_req_active_;
 }
 
 void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {  
@@ -290,10 +316,7 @@ void Simulator::get_csr(int core_id, int addr, unsigned *value) {
 void Simulator::run() {
 #ifndef NDEBUG
   std::cout << timestamp << ": [sim] run()" << std::endl;
-#endif 
-
-  // reset the device
-  this->reset();
+#endif
 
   // execute program
   while (vortex_->busy 

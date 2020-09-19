@@ -15,8 +15,8 @@ addons:
 install:
   # TOOLCHAIN
   - ci/toolchain_install.sh
-  - export RISCV_TOOLCHAIN_PATH=$PWD/riscv-gnu-toolchain
-  - export VERILATOR_ROOT=$PWD/verilator
+  - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
+  - export VERILATOR_ROOT=/opt/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH
     
   # VORTEX

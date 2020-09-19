@@ -18,8 +18,8 @@ DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 #CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
-#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
-CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
+CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
+#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 #DEBUG=1
 
@@ -62,8 +62,11 @@ endif
 
 VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
-VL_FLAGS += -DSCOPE
-CFLAGS += -DSCOPE
+
+# Enable scope analyzer
+#VL_FLAGS += -DSCOPE
+#CFLAGS += -DSCOPE
+
 RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 
 PROJECT = libopae-c-vlsim.so
@@ -72,7 +75,7 @@ all: $(PROJECT)
 	
 $(PROJECT): $(SRCS)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
-	make -j -C obj_dir -f V$(TOP).mk
+	OPT_FAST="-O0 -g" make -j -C obj_dir -f V$(TOP).mk
 
 clean:
 	rm -rf $(PROJECT) obj_dir

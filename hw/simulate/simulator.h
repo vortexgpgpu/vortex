@@ -13,6 +13,8 @@
 
 #include <ostream>
 #include <vector>
+#include <sstream> 
+#include <unordered_map>
 
 class Simulator {
 public:
@@ -25,7 +27,10 @@ public:
   void load_bin(const char* program_file);
   void load_ihex(const char* program_file);
   
-  bool is_busy() const;  
+  bool is_busy() const;
+
+  bool snp_req_active() const;  
+  bool csr_req_active() const;
 
   void reset();
   void step();
@@ -47,6 +52,8 @@ private:
     std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
     unsigned tag;
   } dram_req_t;
+
+  std::unordered_map<int, std::stringstream> print_bufs_;
 
   void eval();  
 

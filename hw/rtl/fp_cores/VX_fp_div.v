@@ -39,8 +39,12 @@ module VX_fp_div #(
             .q      (result[i])
         );
     `else 
+        integer fdiv_h;
+        initial begin
+            fdiv_h = dpi_register();
+        end
         always @(posedge clk) begin
-           dpi_fdiv(8*LANES+i, enable, dataa[i], datab[i], result[i]);
+           dpi_fdiv(fdiv_h, enable, dataa[i], datab[i], result[i]);
         end
     `endif
     end

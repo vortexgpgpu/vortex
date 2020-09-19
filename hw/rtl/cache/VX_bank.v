@@ -57,7 +57,7 @@ module VX_bank #(
 
     // Core Request    
     input wire [NUM_REQUESTS-1:0]                               core_req_valid,        
-    input wire [NUM_REQUESTS-1:0]                               core_req_rw,  
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                        core_req_rw,  
     input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]                core_req_byteen,
     input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]         core_req_addr,
     input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]              core_req_data,

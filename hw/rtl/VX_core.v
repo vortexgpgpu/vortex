@@ -55,11 +55,11 @@ module VX_core #(
     input  wire                             snp_rsp_ready,
 
     // I/O request
-    output wire                             io_req_valid,
+    output wire [`NUM_THREADS-1:0]          io_req_valid,
     output wire                             io_req_rw,    
-    output wire [3:0]                       io_req_byteen,  
-    output wire [29:0]                      io_req_addr,
-    output wire [31:0]                      io_req_data,    
+    output wire [`NUM_THREADS-1:0][3:0]     io_req_byteen,  
+    output wire [`NUM_THREADS-1:0][29:0]    io_req_addr,
+    output wire [`NUM_THREADS-1:0][31:0]    io_req_data,    
     output wire [`DCORE_TAG_WIDTH-1:0]      io_req_tag,  
     input wire                              io_req_ready,
 
@@ -123,12 +123,12 @@ module VX_core #(
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
     ) core_dcache_rsp_if(), arb_dcache_rsp_if(), arb_io_rsp_if();
 
-    assign io_req_valid  = arb_io_req_if.valid[0];
-    assign io_req_rw     = arb_io_req_if.rw[0];
-    assign io_req_byteen = arb_io_req_if.byteen[0];
-    assign io_req_addr   = arb_io_req_if.addr[0];
-    assign io_req_data   = arb_io_req_if.data[0];
-    assign io_req_tag    = arb_io_req_if.tag[0];
+    assign io_req_valid  = arb_io_req_if.valid;
+    assign io_req_rw     = arb_io_req_if.rw;
+    assign io_req_byteen = arb_io_req_if.byteen;
+    assign io_req_addr   = arb_io_req_if.addr;
+    assign io_req_data   = arb_io_req_if.data;
+    assign io_req_tag    = arb_io_req_if.tag;
     assign arb_io_req_if.ready = io_req_ready;
 
     assign arb_io_rsp_if.valid   = {{(`NUM_THREADS-1){1'b0}}, io_rsp_valid};

@@ -1,4 +1,4 @@
-RISCV_TOOLCHAIN_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
 OPTS ?= -n64
@@ -8,7 +8,7 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -march=rv32imf -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -nostartfiles -Wl,--gc-sections
+VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -nostartfiles -Wl,--gc-sections
 VX_CFLAGS += -I$(VORTEX_RT_PATH)/include
 
 VX_LDFLAGS += $(VORTEX_RT_PATH)/libvortexrt.a

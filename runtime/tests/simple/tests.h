@@ -7,6 +7,4 @@ void test_divergence();
 
 void test_wsapwn();
 
-void intrinsics_tests();
-
 #endif
