@@ -292,6 +292,6 @@ int main(int argc, char *argv[]) {
     free(h_updating_graph_mask);
     free(h_graph_visited);
   }
-
+  printf("Passed!\n");
   return 0;
 }

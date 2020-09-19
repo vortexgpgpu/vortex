@@ -221,7 +221,7 @@ int main(int argc, char **argv) {
     // printf(" %f", data);
   }
   printf("\n");
-
+  printf("Passed!\n");
   // Clean up		
   cleanup();  
 
