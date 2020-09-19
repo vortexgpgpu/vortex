@@ -7,7 +7,7 @@ DESTDIR=.
 riscv() 
 {
     echo "prebuilt riscv-gnu-toolchain..."
-    tar -cvjf -C $SRCDIR riscv-gnu-toolchain.tar.bz2 riscv-gnu-toolchain
+    tar -C $SRCDIR -cvjf riscv-gnu-toolchain.tar.bz2 riscv-gnu-toolchain
     split -b 50M riscv-gnu-toolchain.tar.bz2 "riscv-gnu-toolchain.tar.bz2.part"    
     mv riscv-gnu-toolchain.tar.bz2.part* $DESTDIR/riscv-gnu-toolchain/$OS_DIR
     rm riscv-gnu-toolchain.tar.bz2
@@ -16,7 +16,7 @@ riscv()
 llvm() 
 {
     echo "prebuilt llvm-riscv..."
-    tar -cvjf -C $SRCDIR llvm-riscv.tar.bz2 llvm-riscv
+    tar -C $SRCDIR -cvjf llvm-riscv.tar.bz2 llvm-riscv
     split -b 50M llvm-riscv.tar.bz2 "llvm-riscv.tar.bz2.part"    
     mv llvm-riscv.tar.bz2.part* $DESTDIR/llvm-riscv/$OS_DIR
     rm llvm-riscv.tar.bz2
@@ -25,14 +25,14 @@ llvm()
 pocl() 
 {
     echo "prebuilt pocl..."
-    tar -cvjf -C $SRCDIR pocl.tar.bz2 pocl
+    tar -C $SRCDIR -cvjf pocl.tar.bz2 pocl
     mv pocl.tar.bz2 $DESTDIR/pocl/$OS_DIR
 }
 
 verilator() 
 {
     echo "prebuilt verilator..."
-    tar -cvjf -C $SRCDIR verilator.tar.bz2 verilator
+    tar -C $SRCDIR -cvjf verilator.tar.bz2 verilator
     mv verilator.tar.bz2 $DESTDIR/verilator/$OS_DIR
 }
 
