@@ -17,11 +17,10 @@ int main()
 	// Main is called with all threads active of warp 0
 	vx_tmc(1);
 
-
-	vx_print_str("Newlib Main ");
-	vx_print_hex(456);
-	vx_print_str(" \n");
-	vx_print_str("Passed!\n");
+	vx_prints("Newlib Main ");
+	vx_printx(456);
+	vx_prints(" \n");
+	vx_prints("Passed!\n");
 
 	return 0;
 }

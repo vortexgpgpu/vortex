@@ -6,10 +6,9 @@
 #define ALL_TESTS
 
 int main(int argc, char **argv) {
+	bool passed = true;
 	if (argc == 1) {
 #ifdef ALL_TESTS
-	bool passed = true;
-
   std::string tests[] = {
 	  "../../../benchmarks/riscv_tests/isa/rv32ui-p-add.hex",
 	 	"../../../benchmarks/riscv_tests/isa/rv32ui-p-addi.hex",
@@ -78,9 +77,9 @@ int main(int argc, char **argv) {
 	 };
 
 	for (std::string test : tests) {
-		std::cerr << DEFAULT << "\n---------------------------------------\n";
+		std::cout << DEFAULT << "\n---------------------------------------\n";
 
-		std::cerr << test << std::endl;
+		std::cout << test << std::endl;
 
 		RAM ram;
 		Simulator simulator;
@@ -90,18 +89,18 @@ int main(int argc, char **argv) {
 
 		bool status = (1 == simulator.get_last_wb_value(3));
 
-		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
-		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
-		std::cerr << DEFAULT;
+		if (status) std::cout << GREEN << "Test Passed: " << test << std::endl;
+		if (!status) std::cout << RED   << "Test Failed: " << test << std::endl;
+		std::cout << DEFAULT;
 		passed = passed && status;
 		if (!passed)
 			break;
 	}
 
 	for (std::string test : tests_fp) {
-		std::cerr << DEFAULT << "\n---------------------------------------\n";
+		std::cout << DEFAULT << "\n---------------------------------------\n";
 
-		std::cerr << test << std::endl;
+		std::cout << test << std::endl;
 
 		RAM ram;
 		Simulator simulator;
@@ -111,18 +110,18 @@ int main(int argc, char **argv) {
 
 		bool status = (1 == simulator.get_last_wb_value(3));
 
-		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
-		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
-		std::cerr << DEFAULT;
+		if (status) std::cout << GREEN << "Test Passed: " << test << std::endl;
+		if (!status) std::cout << RED   << "Test Failed: " << test << std::endl;
+		std::cout << DEFAULT;
 		passed = passed && status;
 		if (!passed)
 			break;
 	}
 
-	std::cerr << DEFAULT << "\n***************************************\n";
+	std::cout << DEFAULT << "\n***************************************\n";
 
-	if (passed) std::cerr << DEFAULT << "PASSED ALL TESTS\n";
-	if (!passed) std::cerr << DEFAULT << "Failed one or more tests\n";
+	if (passed) std::cout << DEFAULT << "PASSED ALL TESTS\n";
+	if (!passed) std::cout << DEFAULT << "Failed one or more tests\n";
 
 	return !passed;
 
@@ -130,7 +129,7 @@ int main(int argc, char **argv) {
 
 	char test[] = "../../../runtime/tests/simple/vx_simple.hex";
 
-  std::cerr << test << std::endl;
+  std::cout << test << std::endl;
 
   RAM ram;
 	Simulator simulator;
@@ -145,27 +144,16 @@ int main(int argc, char **argv) {
 }	else {
 	bool passed = true;
 
-	std::vector<std::string> tests(argv+2, argv+argc);
-	for (std::string test : tests) {
-		std::cerr << DEFAULT << "\n---------------------------------------\n";
+	std::string test(argv[2]);
+	
+	std::cout << test << std::endl;
 
-		std::cerr << test << std::endl;
-
-		RAM ram;
-		Simulator simulator;
-		simulator.attach_ram(&ram);
-		simulator.load_ihex(test.c_str());
-		simulator.run();
-
-		//bool status = (1 == simulator.get_last_wb_value(3));
-		bool status = true;
-		if (status) std::cerr << GREEN << "Test Passed: " << test << std::endl;
-		if (!status) std::cerr << RED   << "Test Failed: " << test << std::endl;
-		std::cerr << DEFAULT;
-		passed = passed && status;
-		if (!passed)
-			break;
-	}
+	RAM ram;
+	Simulator simulator;
+	simulator.attach_ram(&ram);
+	simulator.load_ihex(test.c_str());
+	simulator.run();
+	
 	return 0;
 }
 

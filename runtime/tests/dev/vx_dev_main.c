@@ -98,7 +98,7 @@ int main()
 	// Second Kernel Call
 	vx_spawn_warps(numWarps, numThreads, mat_add_kernel, &arguments);
 	vx_print_mat(z, arguments.numRows, arguments.numColums);
-	vx_print_str("Passed!\n");
+	vx_prints("Passed!\n");
 
 	return 0;
 }
