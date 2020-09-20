@@ -120,8 +120,8 @@ int main() {
 			unsigned index = (i * arguments.numColums) + j;
 			vx_printf("0x%x ", z[index]);
 		}
-		vx_printf("\n");
+		vx_prints("\n");
 	}
-	vx_print_str("Passed!\n");
+	vx_prints("Passed!\n");
 	return 0;
 }
