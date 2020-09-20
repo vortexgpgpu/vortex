@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
     // printf(" %f", data);
   }
   printf("\n");
-
+  printf("Passed!\n");
   CL_CHECK(clReleaseMemObject(memObjects[0]));
   CL_CHECK(clReleaseMemObject(memObjects[1]));
 

@@ -49,6 +49,7 @@ int main(int argc, char *argv[]) {
       printf("%s --> Distance=%f\n", records[i].recString, records[i].distance);
     }
   free(recordDistances);
+  printf("Passed!\n");
   return 0;
 }
 

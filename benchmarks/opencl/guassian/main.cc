@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
   free(b);
   free(finalVec);
   // OpenClGaussianElimination(context,timing);
-
+  printf("Passed!\n");
   return 0;
 }
 
