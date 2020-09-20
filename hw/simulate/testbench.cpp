@@ -142,17 +142,16 @@ int main(int argc, char **argv) {
 #endif
 
 }	else {
-	bool passed = true;
+	std::vector<std::string> tests(argv+2, argv+argc);
+	for (std::string test : tests) {		
+		std::cout << test << std::endl;
 
-	std::string test(argv[2]);
-	
-	std::cout << test << std::endl;
-
-	RAM ram;
-	Simulator simulator;
-	simulator.attach_ram(&ram);
-	simulator.load_ihex(test.c_str());
-	simulator.run();
+		RAM ram;
+		Simulator simulator;
+		simulator.attach_ram(&ram);
+		simulator.load_ihex(test.c_str());
+		simulator.run();
+	}
 	
 	return 0;
 }
