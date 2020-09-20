@@ -11,7 +11,7 @@ riscv()
     cat riscv-gnu-toolchain.tar.bz2.parta* > riscv-gnu-toolchain.tar.bz2
     tar -xvf riscv-gnu-toolchain.tar.bz2
     rm -f riscv-gnu-toolchain.tar.bz2*
-    sudo cp riscv-gnu-toolchain /opt/
+    sudo cp -r riscv-gnu-toolchain /opt/
     rm -rf riscv-gnu-toolchain
 }
 
@@ -21,18 +21,19 @@ llvm()
     do
         wget $REPOSITORY/llvm-riscv/ubuntu/bionic/llvm-riscv.tar.bz2.parta$x
     done
+    cat llvm-riscv.tar.bz2.parta* > llvm-riscv.tar.bz2
     tar -xvf llvm-riscv.tar.bz2
-    rm -f llvm-riscv.tar.bz2
-    sudo cp llvm-riscv /opt/
+    rm -f llvm-riscv.tar.bz2*
+    sudo cp -r llvm-riscv /opt/
     rm -rf llvm-riscv
 }
 
 pocl()
 {
     wget $REPOSITORY/pocl/ubuntu/bionic/pocl.tar.bz2
-    tar -xvf pocl.bz2
-    rm -f pocl.bz2
-    sudo cp pocl /opt/
+    tar -xvf pocl.tar.bz2
+    rm -f pocl.tar.bz2
+    sudo cp -r pocl /opt/
     rm -rf pocl
 }
 
@@ -41,7 +42,7 @@ verilator()
     wget $REPOSITORY/verilator/ubuntu/bionic/verilator.tar.bz2
     tar -xvf verilator.tar.bz2
     rm -f verilator.tar.bz2
-    sudo cp verilator /opt/
+    sudo cp -r verilator /opt/
     rm -rf verilator
 }
 
