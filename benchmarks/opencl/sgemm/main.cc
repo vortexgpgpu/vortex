@@ -195,7 +195,6 @@ int main (int argc, char **argv) {
   } else {
     printf("PASSED!\n");
   }
-
   // Clean up		
   cleanup();  
 

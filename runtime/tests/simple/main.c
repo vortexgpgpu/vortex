@@ -122,6 +122,6 @@ int main() {
 		}
 		vx_printf("\n");
 	}
-
+	vx_print_str("Passed!\n");
 	return 0;
 }

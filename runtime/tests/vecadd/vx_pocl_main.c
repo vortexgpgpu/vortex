@@ -216,13 +216,13 @@ int main (int argc, char **argv) {
   int exitcode = 0;
   for (i=0; i<SIZE; ++i) {
     if (C[i] != (A[i] + B[i])) {
-      printf("Failed!\n");
+      vx_print_str("Failed!\n");
       exitcode = 1;
       break;
     }
   }
   if (i == SIZE) {
-    printf("Ok!\n");
+    vx_print_str("Ok!\n");
   }
 
   // Clean up   
