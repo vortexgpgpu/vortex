@@ -31,7 +31,7 @@
 #include <string.h>
 
 //#define NUM_DATA 65536
-#define NUM_DATA 4096
+#define NUM_DATA 1024
 
 #define CL_CHECK(_expr)                                                        \
   do {                                                                         \
