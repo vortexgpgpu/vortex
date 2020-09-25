@@ -1,4 +1,4 @@
-RISCV_TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain/drops
 VORTEX_RT_PATH ?= $(wildcard ../..)
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc

@@ -1,4 +1,4 @@
-RISCV_TOOLCHAIN_PATH ?= $(wildcard ~/dev/riscv-gnu-toolchain/drops)
+RISCV_TOOLCHAIN_PATH ?= $(wildcard /opt/riscv-gnu-toolchain/drops)
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
 OPTS ?= -n256

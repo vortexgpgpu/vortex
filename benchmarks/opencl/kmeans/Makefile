@@ -1,5 +1,5 @@
-LLVM_HOME ?= ~/dev/llvm-project/drops
-RISCV_TOOLCHAIN_PATH ?= ~/dev/riscv-gnu-toolchain/drops
+LLVM_HOME ?= /opt/llvm-project/drops
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain/drops
 SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
 
 POCL_CC_PATH ?= $(realpath ../compiler)
