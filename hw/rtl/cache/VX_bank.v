@@ -50,7 +50,7 @@ module VX_bank #(
     // Snooping request tag width
     parameter SNP_REQ_TAG_WIDTH             = 0
 ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_SIGNALS_BANK_IO
 
     input wire clk,
     input wire reset,

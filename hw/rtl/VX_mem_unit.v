@@ -3,7 +3,9 @@
 module VX_mem_unit # (
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_SIGNALS_BANK_L1D_CORE_IO
+    `SCOPE_SIGNALS_BANK_L1I_CORE_IO
+    `SCOPE_SIGNALS_BANK_L1S_CORE_IO
 
     input wire              clk,
     input wire              reset,
@@ -77,7 +79,7 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`SDRAM_TAG_WIDTH)
     ) smem (
-        `SCOPE_SIGNALS_CACHE_UNBIND
+        `SCOPE_SIGNALS_BANK_L1S_CACHE_BIND
         
         .clk                (clk),
         .reset              (reset),
@@ -159,7 +161,7 @@ module VX_mem_unit # (
         .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
         .SNP_REQ_TAG_WIDTH      (`DSNP_TAG_WIDTH)
     ) dcache (
-        `SCOPE_SIGNALS_CACHE_BIND
+        `SCOPE_SIGNALS_BANK_L1D_CACHE_BIND
         
         .clk                (clk),
         .reset              (reset),
@@ -240,7 +242,7 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS       (`ICORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
     ) icache (
-        `SCOPE_SIGNALS_CACHE_UNBIND
+        `SCOPE_SIGNALS_BANK_L1I_CACHE_BIND
 
         .clk                   (clk),
         .reset                 (reset),

@@ -1,11 +1,15 @@
 `include "VX_define.vh"
 
 module Vortex (
-    `SCOPE_SIGNALS_ISTAGE_IO
-    `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_ISSUE_IO
-    `SCOPE_SIGNALS_EXECUTE_IO
+    `SCOPE_SIGNALS_ISTAGE_TOP_IO
+    `SCOPE_SIGNALS_LSU_TOP_IO
+    `SCOPE_SIGNALS_BANK_L3_TOP_IO
+    `SCOPE_SIGNALS_BANK_L2_TOP_IO
+    `SCOPE_SIGNALS_BANK_L1D_TOP_IO
+    `SCOPE_SIGNALS_BANK_L1I_TOP_IO
+    `SCOPE_SIGNALS_BANK_L1S_TOP_IO
+    `SCOPE_SIGNALS_ISSUE_TOP_IO
+    `SCOPE_SIGNALS_EXECUTE_TOP_IO
 
     // Clock
     input  wire                             clk,
@@ -75,11 +79,14 @@ module Vortex (
         VX_cluster #(
             .CLUSTER_ID(0)
         ) cluster (
-            `SCOPE_SIGNALS_ISTAGE_BIND
-            `SCOPE_SIGNALS_LSU_BIND
-            `SCOPE_SIGNALS_CACHE_BIND
-            `SCOPE_SIGNALS_ISSUE_BIND
-            `SCOPE_SIGNALS_EXECUTE_BIND
+            `SCOPE_SIGNALS_ISTAGE_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_LSU_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_BANK_L2_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_BANK_L1D_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_BANK_L1I_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_BANK_L1S_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_ISSUE_CLUSTER_SELECT(0)
+            `SCOPE_SIGNALS_EXECUTE_CLUSTER_SELECT(0)
 
             .clk                (clk),
             .reset              (reset),
@@ -193,11 +200,14 @@ module Vortex (
             VX_cluster #(
                 .CLUSTER_ID(i)
             ) cluster (
-                `SCOPE_SIGNALS_ISTAGE_BIND
-                `SCOPE_SIGNALS_LSU_BIND
-                `SCOPE_SIGNALS_CACHE_BIND
-                `SCOPE_SIGNALS_ISSUE_BIND
-                `SCOPE_SIGNALS_EXECUTE_BIND
+                `SCOPE_SIGNALS_ISTAGE_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_LSU_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_BANK_L2_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_BANK_L1D_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_BANK_L1I_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_BANK_L1S_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_ISSUE_CLUSTER_SELECT(i)
+                `SCOPE_SIGNALS_EXECUTE_CLUSTER_SELECT(i)
 
                 .clk                (clk),
                 .reset              (reset),
@@ -384,7 +394,7 @@ module Vortex (
         assign l3_core_rsp_ready = (& per_cluster_dram_rsp_ready);
 
         VX_cache #(
-            .CACHE_ID           (0),
+            .CACHE_ID           (`L3CACHE_ID),
             .CACHE_SIZE         (`L3CACHE_SIZE),
             .BANK_LINE_SIZE     (`L3BANK_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
@@ -407,7 +417,7 @@ module Vortex (
             .SNP_REQ_TAG_WIDTH  (`L3SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
         ) l3cache (
-            `SCOPE_SIGNALS_CACHE_UNBIND
+            `SCOPE_SIGNALS_BANK_L3_CACHE_BIND
 
             .clk                (clk),
             .reset              (reset),

@@ -74,7 +74,7 @@ Disassembly of section .text:
 800000e0:	0005006b          	0x5006b
 800000e4:	00002197          	auipc	gp,0x2
 800000e8:	c8418193          	addi	gp,gp,-892 # 80001d68 <__global_pointer$>
-800000ec:	f14025f3          	csrr	a1,mhartid
+800000ec:	022025f3          	csrr	a1,0x22
 800000f0:	00a59593          	slli	a1,a1,0xa
 800000f4:	02002673          	csrr	a2,0x20
 800000f8:	00261613          	slli	a2,a2,0x2
@@ -122,7 +122,7 @@ Disassembly of section .text:
 80000158:	00008067          	ret
 
 8000015c <vx_thread_gid>:
-8000015c:	f1402573          	csrr	a0,mhartid
+8000015c:	02202573          	csrr	a0,0x22
 80000160:	00008067          	ret
 
 80000164 <vx_core_id>:
@@ -458,13 +458,12 @@ Disassembly of section .comment:
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	2041                	jal	80 <_start-0x7fffff80>
+   0:	2541                	jal	680 <_start-0x7ffff980>
    2:	0000                	unimp
    4:	7200                	flw	fs0,32(a2)
    6:	7369                	lui	t1,0xffffa
    8:	01007663          	bgeu	zero,a6,14 <_start-0x7fffffec>
-   c:	0016                	c.slli	zero,0x5
-   e:	0000                	unimp
+   c:	0000001b          	0x1b
   10:	1004                	addi	s1,sp,32
   12:	7205                	lui	tp,0xfffe1
   14:	3376                	fld	ft6,376(sp)
@@ -473,4 +472,4 @@ Disassembly of section .riscv.attributes:
   1a:	5f30                	lw	a2,120(a4)
   1c:	326d                	jal	fffff9c6 <__global_pointer$+0x7fffdc5e>
   1e:	3070                	fld	fa2,224(s0)
-	...
+  20:	665f 7032 0030      	0x307032665f
