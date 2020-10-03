@@ -12,6 +12,8 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_MSRQ
 DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM      
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
+DBG_PRINT_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CORE_REQ_INFO
@@ -21,7 +23,8 @@ DBG_FLAGS += -DDBG_CORE_REQ_INFO
 CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
-#DEBUG=1
+DEBUG=1
+#SCOPE=1
 
 CFLAGS += -fPIC
 
@@ -34,7 +37,7 @@ LDFLAGS += -shared -pthread
 
 TOP = vortex_afu_shim
 
-RTL_DIR = ../../../hw/rtl
+RTL_DIR=../../../hw/rtl
 
 SRCS = fpga.cpp opae_sim.cpp
 SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
@@ -60,20 +63,27 @@ else
 	CFLAGS   += -DNDEBUG
 endif
 
+# Enable scope analyzer
+ifdef SCOPE
+	VL_FLAGS += -DSCOPE
+	CFLAGS += -DSCOPE
+	SCOPE_CFG = scope 
+endif
+
 VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
-
-# Enable scope analyzer
-#VL_FLAGS += -DSCOPE
-#CFLAGS += -DSCOPE
 
 RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 
 PROJECT = libopae-c-vlsim.so
 
 all: $(PROJECT)
+
+# generate scope data
+scope: ../../../hw/scripts/scope.json
+	../../../hw/scripts/scope.py $(RTL_INCLUDE) $(CONFIGS) -cc ../scope-defs.h -vl ../../../hw/rtl/scope-defs.vh ../../../hw/scripts/scope.json
 	
-$(PROJECT): $(SRCS)
+$(PROJECT): $(SRCS) $(SCOPE_CFG)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	OPT_FAST="-O0 -g" make -j -C obj_dir -f V$(TOP).mk
 

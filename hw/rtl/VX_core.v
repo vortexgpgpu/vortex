@@ -5,7 +5,9 @@ module VX_core #(
 ) (        
     `SCOPE_SIGNALS_ISTAGE_IO
     `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_SIGNALS_BANK_L1D_CORE_IO
+    `SCOPE_SIGNALS_BANK_L1I_CORE_IO
+    `SCOPE_SIGNALS_BANK_L1S_CORE_IO
     `SCOPE_SIGNALS_ISSUE_IO
     `SCOPE_SIGNALS_EXECUTE_IO
     
@@ -258,7 +260,9 @@ module VX_core #(
     VX_mem_unit #(
         .CORE_ID(CORE_ID)
     ) mem_unit (
-        `SCOPE_SIGNALS_CACHE_BIND
+        `SCOPE_SIGNALS_BANK_L1D_CORE_BIND
+        `SCOPE_SIGNALS_BANK_L1I_CORE_BIND
+        `SCOPE_SIGNALS_BANK_L1S_CORE_BIND
 
         .clk                (clk),
         .reset              (reset),

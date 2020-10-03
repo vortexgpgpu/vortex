@@ -41,7 +41,7 @@
 
 `define STATIC_ASSERT(cond, msg)    \
     generate                        \
-        if (!(cond)) $error(msg);   \
+        if (!(cond)) $error msg;   \
     endgenerate
 
 `define ENABLE_TRACING  /* verilator tracing_on */

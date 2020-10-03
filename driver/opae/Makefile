@@ -1,10 +1,13 @@
 OPAE_HOME ?= /tools/opae/1.4.0
 
+#CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../include -I$(OPAE_HOME)/include  -I../../hw
 
 LDFLAGS += -L$(OPAE_HOME)/lib
+
+SCOPE=1
 
 # stack execution protection
 LDFLAGS +=-z noexecstack
@@ -22,7 +25,11 @@ CXXFLAGS += -fPIC
 CXXFLAGS += -DDUMP_PERF_STATS
 
 # Enable scope analyzer
-#CXXFLAGS += -DSCOPE
+# Enable scope analyzer
+ifdef SCOPE
+	CXXFLAGS += -DSCOPE
+	SET_SCOPE = SCOPE=1
+endif
 
 LDFLAGS += -shared
 
@@ -64,7 +71,7 @@ vlsim: $(SRCS) opae-vlsim
 	$(CXX) $(CXXFLAGS) -L./vlsim -DUSE_VLSIM $(SRCS) $(LDFLAGS) $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
 
 opae-vlsim:
-	$(MAKE) -C vlsim
+	$(SET_SCOPE) $(MAKE) -C vlsim
 
 vortex.o: vortex.cpp
 	$(CXX) $(CXXFLAGS) -c vortex.cpp -o $@

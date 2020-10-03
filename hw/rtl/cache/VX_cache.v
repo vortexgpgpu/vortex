@@ -59,7 +59,7 @@ module VX_cache #(
     // Snooping forward tag width
     parameter SNP_FWD_TAG_WIDTH             = 1
  ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_SIGNALS_BANK_CACHE_IO
     
     input wire clk,
     input wire reset,
@@ -161,8 +161,6 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_valid;
     wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag;
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
-
-    `SCOPE_SIGNALS_CACHE_BANK_SELECT
 
     wire                         snp_req_valid_qual;    
     wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
@@ -367,7 +365,7 @@ module VX_cache #(
             .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
             .SNP_REQ_TAG_WIDTH  (SNP_REQ_TAG_WIDTH)
         ) bank (
-            `SCOPE_SIGNALS_CACHE_BANK_BIND
+            `SCOPE_SIGNALS_BANK_SELECT(i)
             
             .clk                     (clk),
             .reset                   (reset),                

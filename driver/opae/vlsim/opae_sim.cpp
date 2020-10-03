@@ -135,6 +135,10 @@ void opae_sim::step() {
   this->sRxPort_bus();
   this->sTxPort_bus();
   this->avs_bus();
+
+#ifndef NDEBUG
+  fflush(stdout);
+#endif
 }
 
 void opae_sim::eval() {  

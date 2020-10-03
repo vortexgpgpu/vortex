@@ -5,5 +5,5 @@ build_config:
 	$(MAKE) -C simulate	
 
 clean:
-	rm ./rtl/VX_user_config.vh ./VX_config.h
+	rm -f ./rtl/VX_user_config.vh ./VX_config.h
 	$(MAKE) -C simulate clean
