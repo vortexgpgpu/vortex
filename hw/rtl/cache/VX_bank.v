@@ -263,7 +263,8 @@ module VX_bank #(
 `DEBUG_BEGIN
     wire going_to_write_st1;    
 `DEBUG_END
-
+    
+    //determines if the if it is time to pop a req from the queues
     wire mrvq_pop_unqual = mrvq_valid_st0;
     wire dfpq_pop_unqual = !mrvq_pop_unqual && !dfpq_empty;
     wire reqq_pop_unqual = !mrvq_stop && !mrvq_pop_unqual && !dfpq_pop_unqual && !reqq_empty && reqq_req_st0 && !is_fill_st1 && !is_fill_st1;
@@ -297,15 +298,19 @@ module VX_bank #(
     wire                                  snp_invalidate_st1;
     wire                                  is_mrvq_st1;
 
-    assign qual_is_fill_st0 = dfpq_pop_unqual;
+    //why is the signal prefixed with qual?
+    assign qual_is_fill_st0 = dfpq_pop_unqual; //dram is filling a request
 
-    assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop;
+    assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop; //valid if something is being popped
 
+    //decides which request to deal with. Priority: 1) DRAM fill, 2) Miss reserve 3) Core req 4) Snp req
     assign qual_addr_st0 = dfpq_pop_unqual ? dfpq_addr_st0 :
                            mrvq_pop_unqual ? mrvq_addr_st0 :
                            reqq_pop_unqual ? reqq_req_addr_st0[`LINE_SELECT_ADDR_RNG] :
                            snrq_pop_unqual ? snrq_addr_st0 :
                                              0;
+    
+    //Word select does ? Does this just pick a specific word from the line instead of the whole line?
     if (`WORD_SELECT_WIDTH != 0) begin
         assign qual_wsel_st0 = reqq_pop_unqual ? reqq_req_addr_st0[`WORD_SELECT_WIDTH-1:0] :
                                mrvq_pop_unqual ? mrvq_wsel_st0 :
@@ -315,8 +320,10 @@ module VX_bank #(
         assign qual_wsel_st0 = 0;
     end
 
+    //if you are filling from dram then that is the write data? What about core? What is 57?
     assign qual_writedata_st0 = dfpq_pop_unqual ? dfpq_filldata_st0 : 57;
 
+    //
     assign qual_inst_meta_st0 = mrvq_pop_unqual ? {`REQ_TAG_WIDTH'(mrvq_tag_st0)    , mrvq_rw_st0,     mrvq_byteen_st0,     mrvq_tid_st0} :
                                 reqq_pop_unqual ? {`REQ_TAG_WIDTH'(reqq_req_tag_st0), reqq_req_rw_st0, reqq_req_byteen_st0, reqq_req_tid_st0} :
                                 snrq_pop_unqual ? {`REQ_TAG_WIDTH'(snrq_tag_st0),     1'b0,            WORD_SIZE'(0),       `REQS_BITS'(0)} :
@@ -327,6 +334,7 @@ module VX_bank #(
                                             (reqq_pop_unqual && reqq_req_rw_st0) ? 1 :
                                                 0;
 
+    //snp signals check to see if the miss reserve as a snp in it first. 
     assign qual_is_snp_st0 = mrvq_pop_unqual ? mrvq_is_snp_st0 :
                              snrq_pop_unqual ? 1 :
                                                0;
