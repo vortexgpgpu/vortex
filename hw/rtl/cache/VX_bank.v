@@ -265,6 +265,7 @@ module VX_bank #(
 `DEBUG_END
     
     //determines if the if it is time to pop a req from the queues
+    //unqual - the req does NOT qualify for execution in the bank. 
     wire mrvq_pop_unqual = mrvq_valid_st0;
     wire dfpq_pop_unqual = !mrvq_pop_unqual && !dfpq_empty;
     wire reqq_pop_unqual = !mrvq_stop && !mrvq_pop_unqual && !dfpq_pop_unqual && !reqq_empty && reqq_req_st0 && !is_fill_st1 && !is_fill_st1;
@@ -274,7 +275,8 @@ module VX_bank #(
     assign dfpq_pop = dfpq_pop_unqual && !stall_bank_pipe;
     assign reqq_pop = reqq_pop_unqual && !stall_bank_pipe;
     assign snrq_pop = snrq_pop_unqual && !stall_bank_pipe;
-
+    
+    //signals to progress to the next stage
     wire                                  qual_is_fill_st0;
     wire                                  qual_valid_st0;
     wire [`LINE_ADDR_WIDTH-1:0]           qual_addr_st0;
@@ -287,7 +289,8 @@ module VX_bank #(
     wire                                  qual_going_to_write_st0;
     wire                                  qual_is_snp_st0;
     wire                                  qual_snp_invalidate_st0;
-
+    
+    //signals to be *used* in the next stage
     wire                                  valid_st1;
     wire [`LINE_ADDR_WIDTH-1:0]           addr_st1;
     wire [`UP(`WORD_SELECT_WIDTH)-1:0]    wsel_st1;
@@ -298,7 +301,7 @@ module VX_bank #(
     wire                                  snp_invalidate_st1;
     wire                                  is_mrvq_st1;
 
-    //why is the signal prefixed with qual?
+    //Determine which req will progress to the next stage
     assign qual_is_fill_st0 = dfpq_pop_unqual; //dram is filling a request
 
     assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop; //valid if something is being popped
@@ -323,12 +326,13 @@ module VX_bank #(
     //if you are filling from dram then that is the write data? What about core? What is 57?
     assign qual_writedata_st0 = dfpq_pop_unqual ? dfpq_filldata_st0 : 57;
 
-    //
+    //note that this is stored even if a DRAM fill is processed
     assign qual_inst_meta_st0 = mrvq_pop_unqual ? {`REQ_TAG_WIDTH'(mrvq_tag_st0)    , mrvq_rw_st0,     mrvq_byteen_st0,     mrvq_tid_st0} :
                                 reqq_pop_unqual ? {`REQ_TAG_WIDTH'(reqq_req_tag_st0), reqq_req_rw_st0, reqq_req_byteen_st0, reqq_req_tid_st0} :
                                 snrq_pop_unqual ? {`REQ_TAG_WIDTH'(snrq_tag_st0),     1'b0,            WORD_SIZE'(0),       `REQS_BITS'(0)} :
                                                   0;
-
+    
+   
     assign qual_going_to_write_st0 = dfpq_pop_unqual ? 1 :
                                         (mrvq_pop_unqual && mrvq_rw_st0) ? 1 :
                                             (reqq_pop_unqual && reqq_req_rw_st0) ? 1 :
@@ -338,15 +342,16 @@ module VX_bank #(
     assign qual_is_snp_st0 = mrvq_pop_unqual ? mrvq_is_snp_st0 :
                              snrq_pop_unqual ? 1 :
                                                0;
-
+    //if we are popping from the miss reserve then assign to the mrvq invalidate. If not and popping from the snoop queue use the snoop invalidate. Else this is 0
     assign qual_snp_invalidate_st0 = mrvq_pop_unqual ? mrvq_snp_invalidate_st0 :
                                      snrq_pop_unqual ? snrq_invalidate_st0 :
                                                        0;
-
+    //choose which word of the lien is being written to
     assign qual_writeword_st0 = mrvq_pop_unqual ? mrvq_writeword_st0     :
                                 reqq_pop_unqual ? reqq_req_writeword_st0 :
                                                   0;
 
+    
     assign qual_is_mrvq_st0 = mrvq_pop_unqual;
 
 `ifdef DBG_CORE_REQ_INFO
