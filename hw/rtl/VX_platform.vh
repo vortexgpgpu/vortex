@@ -22,14 +22,16 @@
                               /* verilator lint_off WIDTH */ \
                               /* verilator lint_off UNOPTFLAT */ \
                               /* verilator lint_off UNDRIVEN */ \
-                              /* verilator lint_off DECLFILENAME */
+                              /* verilator lint_off DECLFILENAME */ \
+                              /* verilator lint_off IMPLICIT */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
                               /* verilator lint_on PINCONNECTEMPTY */ \
                               /* verilator lint_on WIDTH */ \
                               /* verilator lint_on UNOPTFLAT */ \
                               /* verilator lint_on UNDRIVEN */ \
-                              /* verilator lint_on DECLFILENAME */
+                              /* verilator lint_on DECLFILENAME */ \
+                              /* verilator lint_on IMPLICIT */
 
 `define UNUSED_VAR(x) always @(x) begin end
 

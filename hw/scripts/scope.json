@@ -27,7 +27,7 @@
             "scope_dram_req_tag": "`VX_DRAM_TAG_WIDTH",
             "!scope_dram_req_ready": 1,
             "!scope_dram_rsp_valid": 1,
-            "scope_dram_rsp_data": 128,
+            "scope_dram_rsp_data": "`VX_DRAM_LINE_WIDTH",
             "scope_dram_rsp_tag": "`VX_DRAM_TAG_WIDTH",
             "!scope_dram_rsp_ready": 1,                                    
             "!scope_snp_req_valid": 1,
@@ -83,7 +83,6 @@
             "scope_issue_rs1_is_pc": 1,
             "scope_issue_rs2_is_imm": 1,
             "!scope_issue_ready": 1,
-            "!scope_gpr_rsp_valid": 1,
             "scope_gpr_rsp_wid": "`NW_BITS",
             "scope_gpr_rsp_pc": 32,
             "scope_gpr_rsp_a": "`NUM_THREADS * 32",
@@ -121,41 +120,11 @@
         
         ["scope_icache_req_valid_top", "scope_icache_req_ready_top"],
         ["scope_icache_rsp_valid_top", "scope_icache_rsp_ready_top"],
+        
         ["scope_dcache_req_valid_top", "scope_dcache_req_ready_top"],
         ["scope_dcache_rsp_valid_top", "scope_dcache_rsp_ready_top"],
 
-        ["scope_bank_valid_st0_l3_top"],
-        ["scope_bank_valid_st1_l3_top"],
-        ["scope_bank_valid_st2_l3_top"],
-        ["scope_bank_stall_pipe_l3_top"],
-
-        ["scope_bank_valid_st0_l2_top"],
-        ["scope_bank_valid_st1_l2_top"],
-        ["scope_bank_valid_st2_l2_top"],
-        ["scope_bank_stall_pipe_l2_top"],
-
-        ["scope_bank_valid_st0_l1d_top"],
-        ["scope_bank_valid_st1_l1d_top"],
-        ["scope_bank_valid_st2_l1d_top"],
-        ["scope_bank_stall_pipe_l1d_top"],
-
-        ["scope_bank_valid_st0_l1i_top"],
-        ["scope_bank_valid_st1_l1i_top"],
-        ["scope_bank_valid_st2_l1i_top"],
-        ["scope_bank_stall_pipe_l1i_top"],
-
-        ["scope_bank_valid_st0_l1s_top"],
-        ["scope_bank_valid_st1_l1s_top"],
-        ["scope_bank_valid_st2_l1s_top"],
-        ["scope_bank_stall_pipe_l1s_top"],
-
-        ["scope_issue_valid_top", "scope_issue_ready_top"],
-        ["scope_gpr_rsp_valid_top"],    
-        ["scope_scoreboard_delay_top"],
-        ["scope_gpr_delay_top"],
-        ["scope_execute_delay_top"],
-
-        ["scope_busy"]        
+        ["scope_issue_valid_top", "scope_issue_ready_top"]
     ]
  }
  
