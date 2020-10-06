@@ -20,11 +20,11 @@ DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 #CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
-CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
-#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
+#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
+CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 DEBUG=1
-#SCOPE=1
+SCOPE=1
 
 CFLAGS += -fPIC
 
@@ -45,7 +45,7 @@ SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/svdpi -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src 
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
-VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
+VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
@@ -88,4 +88,4 @@ $(PROJECT): $(SRCS) $(SCOPE_CFG)
 	OPT_FAST="-O0 -g" make -j -C obj_dir -f V$(TOP).mk
 
 clean:
-	rm -rf $(PROJECT) obj_dir
+	rm -rf $(PROJECT) obj_dir ../scope-defs.h ../../../hw/rtl/scope-defs.vh

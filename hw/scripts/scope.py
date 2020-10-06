@@ -291,56 +291,6 @@ def load_config(filename):
     print("condfig=", config)
     return config
 
-def gen_cc_header(file, ports):
-
-    header = '''
-#pragma once\n
-struct scope_signal_t {
-    int width;
-    const char* name;
-};\n
-inline constexpr int __clog2(int n) { return (n > 1) ? 1 + __clog2((n + 1) >> 1) : 0; }\n
-static constexpr scope_signal_t scope_signals[] = {'''
-
-    footer = "};"
-
-    def eval_macro(text):
-        expanded = expand_text(text)
-        if expanded:
-            text = expanded
-        text = text.replace('$clog2', '__clog2')
-        return text
-
-    def asize_name(asize):
-        def Q(arr, ss, asize, idx, N):
-            for i in range(asize[idx]):  
-                tmp = ss + "_" + str(i)                  
-                if (idx + 1) < N:
-                    Q(arr, tmp, asize, idx + 1, N)
-                else:
-                    arr.append(tmp)            
-
-        l = len(asize)   
-        if l == 0:     
-            return [""]
-        arr = []
-        Q(arr, "", asize, 0, l)
-        return arr                  
-
-    with open(file, 'w') as f:
-        print(header, file=f)
-        i = 0
-        for port in ports:                   
-            name = port[0]             
-            size = eval_macro(str(port[1]))
-            for ss in asize_name(port[2]):                
-                if i > 0:
-                    print(",", file=f)      
-                print("\t{" + size + ", \"" + name + ss + "\"}", file=f, end='')    
-                i += 1
-        print("", file=f)
-        print(footer, file=f)
-
 def gen_vl_header(file, taps, triggers):
 
     header = '''
@@ -589,6 +539,68 @@ def gen_vl_header(file, taps, triggers):
         print(footer, file=f)
 
         return all_ports
+
+def gen_cc_header(file, ports):
+
+    header = '''
+#pragma once\n
+struct scope_signal_t {
+    int width;
+    const char* name;
+};\n
+inline constexpr int __clog2(int n) { return (n > 1) ? 1 + __clog2((n + 1) >> 1) : 0; }\n
+static constexpr scope_signal_t scope_signals[] = {'''
+
+    footer = "};"
+
+    def eval_macro(text):
+        expanded = expand_text(text)
+        if expanded:
+            text = expanded
+        text = text.replace('$clog2', '__clog2')
+        return text
+
+    def asize_name(asize):
+        def Q(arr, ss, asize, idx, N):
+            for i in range(asize[idx]):  
+                tmp = ss + "_" + str(i)                  
+                if (idx + 1) < N:
+                    Q(arr, tmp, asize, idx + 1, N)
+                else:
+                    arr.append(tmp)            
+
+        l = len(asize)   
+        if l == 0:     
+            return [""]
+        arr = []
+        Q(arr, "", asize, 0, l)
+        return arr                  
+
+    with open(file, 'w') as f:
+        print(header, file=f)
+        i = 0
+        for port in ports:                  
+            if port[3]:
+                continue 
+            name = port[0]             
+            size = eval_macro(str(port[1]))
+            for ss in asize_name(port[2]):                
+                if i > 0:
+                    print(",", file=f)      
+                print("\t{" + size + ", \"" + name + ss + "\"}", file=f, end='')    
+                i += 1
+        for port in ports:                   
+            if not port[3]:
+                continue
+            name = port[0]             
+            size = eval_macro(str(port[1]))
+            for ss in asize_name(port[2]):                
+                if i > 0:
+                    print(",", file=f)      
+                print("\t{" + size + ", \"" + name + ss + "\"}", file=f, end='')    
+                i += 1
+        print("", file=f)
+        print(footer, file=f)
 
 def main():    
     parser = argparse.ArgumentParser(description='Scope headers generator.')

@@ -200,6 +200,10 @@ wire[$bits(cp2af_sRxPort.c0.hdr.mdata)-1:0] cp2af_sRxPort_c0_hdr_mdata = cp2af_s
 
 wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
 
+`ifdef SCOPE
+reg scope_start;
+`endif
+
 always_ff @(posedge clk) 
 begin
   if (reset) begin
@@ -209,14 +213,18 @@ begin
     cmd_io_addr         <= 0;
     cmd_mem_addr        <= 0;
     cmd_data_size       <= 0;
+  `ifdef SCOPE
+    scope_start         <= 0;
+  `endif
   end
   else begin
-
     mmio_tx.mmioRdValid <= 0;
-
     // serve MMIO write request
     if (cp2af_sRxPort.c0.mmioWrValid)
     begin
+    `ifdef SCOPE
+      scope_start <= 1;
+    `endif
       case (mmio_hdr.address)
         MMIO_IO_ADDR: begin                     
           cmd_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);          
@@ -1030,7 +1038,7 @@ end
 
 `ifdef SCOPE
 
-localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST,`SCOPE_SIGNALS_UPD_LIST});
+`SCOPE_ASSIGN (scope_reset, vx_reset);
 
 `SCOPE_ASSIGN (scope_dram_req_valid, vx_dram_req_valid);
 `SCOPE_ASSIGN (scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
@@ -1063,10 +1071,8 @@ localparam SCOPE_DATAW = $bits({`SCOPE_SIGNALS_DATA_LIST,`SCOPE_SIGNALS_UPD_LIST
 
 wire scope_changed = `SCOPE_TRIGGERS;
 
-wire scope_start = vx_reset;
-
 VX_scope #(
-  .DATAW    (SCOPE_DATAW),
+  .DATAW    ($bits({`SCOPE_SIGNALS_DATA_LIST,`SCOPE_SIGNALS_UPD_LIST})),
   .BUSW     (64),
   .SIZE     (4096),
   .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))

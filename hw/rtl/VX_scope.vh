@@ -6,7 +6,10 @@
 
 `include "scope-defs.vh"
 
-`define SCOPE_ASSIGN(d,s) assign d = s
+`define SCOPE_ASSIGN(d,s) \
+    `IGNORE_WARNINGS_BEGIN \
+    assign d = s \
+    `IGNORE_WARNINGS_END
 
 `else
 
