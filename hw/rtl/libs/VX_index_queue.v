@@ -28,8 +28,12 @@ module VX_index_queue #(
     assign empty = (wr_ptr == rd_ptr);
     assign full  = (wr_a == rd_a) && (wr_ptr[`LOG2UP(SIZE)] != rd_ptr[`LOG2UP(SIZE)]);
 
-    assign enqueue = push && !full;       
+    assign enqueue = push;       
     assign dequeue = !empty && !valid[rd_a]; // auto-remove when head is invalid
+
+    always @(*) begin
+        assert(!push || !full);
+    end
 
     always @(posedge clk) begin
         if (reset) begin

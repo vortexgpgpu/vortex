@@ -3,7 +3,7 @@
 module VX_issue #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_ISSUE_IO
+    `SCOPE_IO_VX_issue
 
     input wire          clk,
     input wire          reset,

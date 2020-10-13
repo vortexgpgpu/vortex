@@ -3,10 +3,7 @@
 module VX_pipeline #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_SIGNALS_ISTAGE_IO
-    `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_ISSUE_IO
-    `SCOPE_SIGNALS_EXECUTE_IO
+    `SCOPE_IO_VX_pipeline
     
     // Clock
     input wire                              clk,
@@ -126,7 +123,7 @@ module VX_pipeline #(
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
-        `SCOPE_SIGNALS_ISTAGE_BIND
+        `SCOPE_BIND_VX_pipeline_fetch()
         .clk            (clk),
         .reset          (reset),
         .icache_req_if  (core_icache_req_if),
@@ -153,7 +150,7 @@ module VX_pipeline #(
     VX_issue #(
         .CORE_ID(CORE_ID)
     ) issue (
-        `SCOPE_SIGNALS_ISSUE_BIND
+        `SCOPE_BIND_VX_pipeline_issue()
 
         .clk            (clk),
         .reset          (reset),        
@@ -173,8 +170,8 @@ module VX_pipeline #(
     VX_execute #(
         .CORE_ID(CORE_ID)
     ) execute (
-        `SCOPE_SIGNALS_LSU_BIND
-        `SCOPE_SIGNALS_EXECUTE_BIND
+        `SCOPE_BIND_VX_pipeline_execute()
+        
         .clk            (clk),
         .reset          (reset),    
         

@@ -19,15 +19,14 @@ module VX_generic_queue #(
 ); 
     `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
 
-    reg [SIZEW-1:0] size_r;        
-    wire            reading;
-    wire            writing;
-
-    assign reading = pop && !empty;
-    assign writing = push && !full; 
+    always @(*) begin
+        assert(!pop || !empty);
+        assert(!push || !full);
+    end
 
     if (SIZE == 1) begin // (SIZE == 1)
 
+        reg [SIZEW-1:0] size_r;
         reg [DATAW-1:0] head_r;
 
         always @(posedge clk) begin
@@ -35,12 +34,12 @@ module VX_generic_queue #(
                 head_r <= 0;
                 size_r <= 0;                    
             end else begin
-                if (writing && !reading) begin
+                if (push && !pop) begin
                     size_r <= 1;
-                end else if (reading && !writing) begin
+                end else if (pop && !push) begin
                     size_r <= 0;
                 end
-                if (writing) begin 
+                if (push) begin 
                     head_r <= data_in;
                 end
             end
@@ -52,11 +51,59 @@ module VX_generic_queue #(
         assign size     = size_r;
 
     end else begin // (SIZE > 1)
+    
+    `ifdef QUARTUS
+
+        scfifo  scfifo_component (
+            .clock (clk),
+            .data (data_in),
+            .rdreq (pop),
+            .wrreq (push),
+            .empty (empty),
+            .full (full),
+            .q (data_out),
+            .sclr (reset),
+            .usedw (),
+            .aclr (),
+            .almost_empty (),
+            .almost_full (),
+            .eccstatus ()            
+        );
+
+        defparam
+            scfifo_component.lpm_type  = "scfifo",
+            scfifo_component.intended_device_family  = "Arria 10",
+            scfifo_component.lpm_numwords  = SIZE,            
+            scfifo_component.lpm_width  = DATAW,
+            scfifo_component.lpm_widthu  = $clog2(SIZE),
+            scfifo_component.lpm_showahead  = "ON",            
+            scfifo_component.add_ram_output_register = (BUFFERED ? "ON" : "ON"),
+            scfifo_component.use_eab  = "ON";
+
+        reg [SIZEW-1:0] size_r;
+            
+        always @(posedge clk) begin
+            if (reset) begin
+                size_r   <= 0;
+            end else begin
+                if (push && !pop) begin                                                       
+                    size_r <= size_r + SIZEW'(1);
+                end
+                if (pop && !push) begin                                                        
+                    size_r <= size_r - SIZEW'(1);
+                end
+            end                   
+        end
+
+        assign size = size_r;
+
+    `else
 
         `USE_FAST_BRAM reg [DATAW-1:0] data [SIZE-1:0];
 
-        if (0 == BUFFERED) begin                
+        if (0 == BUFFERED) begin          
 
+            reg [SIZEW-1:0] size_r;
             reg [ADDRW:0] rd_ptr_r;
             reg [ADDRW:0] wr_ptr_r;
             
@@ -69,30 +116,35 @@ module VX_generic_queue #(
                     wr_ptr_r <= 0;
                     size_r   <= 0;
                 end else begin
-                    if (writing) begin                             
-                        data[wr_ptr_a] <= data_in;
-                        wr_ptr_r <= wr_ptr_r + 1;
-                        if (!reading) begin                                                       
-                            size_r <= size_r + 1;
+                    if (push) begin            
+                        wr_ptr_r <= wr_ptr_r + (ADDRW+1)'(1);
+                        if (!pop) begin                                                       
+                            size_r <= size_r + SIZEW'(1);
                         end
                     end
-
-                    if (reading) begin
-                        rd_ptr_r <= rd_ptr_r + 1;
-                        if (!writing) begin                                                        
-                            size_r <= size_r - 1;
+                    if (pop) begin
+                        rd_ptr_r <= rd_ptr_r + (ADDRW+1)'(1);
+                        if (!push) begin                                                        
+                            size_r <= size_r - SIZEW'(1);
                         end
                     end
                 end                   
+            end
+
+            always @(posedge clk) begin
+                if (push) begin                             
+                    data[wr_ptr_a] <= data_in;
+                end                  
             end  
 
-            assign data_out = data[rd_ptr_a];
+            assign data_out = data[rd_ptr_a];            
             assign empty    = (wr_ptr_r == rd_ptr_r);
             assign full     = (wr_ptr_a == rd_ptr_a) && (wr_ptr_r[ADDRW] != rd_ptr_r[ADDRW]);
-            assign size     = size_r;            
+            assign size     = size_r;  
 
         end else begin
 
+            reg [SIZEW-1:0] size_r;
             reg [DATAW-1:0] head_r;
             reg [DATAW-1:0] curr_r;
             reg [ADDRW-1:0] wr_ptr_r;
@@ -105,7 +157,6 @@ module VX_generic_queue #(
             always @(posedge clk) begin
                 if (reset) begin
                     size_r          <= 0;
-                    head_r          <= 0;
                     curr_r          <= 0;
                     wr_ptr_r        <= 0;
                     rd_ptr_r        <= 0;
@@ -113,43 +164,50 @@ module VX_generic_queue #(
                     empty_r         <= 1;                   
                     full_r          <= 0;                    
                 end else begin
-                    if (writing) begin                            
-                        data[wr_ptr_r] <= data_in;
-                        wr_ptr_r <= wr_ptr_r + 1; 
+                    if (push) begin                 
+                        wr_ptr_r <= wr_ptr_r + ADDRW'(1); 
 
-                        if (!reading) begin                                
+                        if (!pop) begin                                
                             empty_r <= 0;
-                            if (size_r == ($bits(size_r)'(SIZE-1))) begin
+                            if (size_r == SIZEW'(SIZE-1)) begin
                                 full_r <= 1;
                             end
-                            size_r <= size_r + 1;
+                            size_r <= size_r + SIZEW'(1);
                         end
                     end
 
-                    if (reading) begin
+                    if (pop) begin
                         rd_ptr_r <= rd_ptr_next_r;   
                         
                         if (SIZE > 2) begin        
-                            rd_ptr_next_r <= rd_ptr_r + $bits(rd_ptr_r)'(2);
+                            rd_ptr_next_r <= rd_ptr_r + ADDRW'(2);
                         end else begin // (SIZE == 2);
                             rd_ptr_next_r <= ~rd_ptr_next_r;                                
                         end
 
-                        if (!writing) begin                                
-                            if (size_r == 1) begin
+                        if (!push) begin                                
+                            if (size_r == SIZEW'(1)) begin
                                 assert(rd_ptr_next_r == wr_ptr_r);
                                 empty_r <= 1;  
                             end;                
                             full_r <= 0;
-                            size_r <= size_r - 1;
+                            size_r <= size_r - SIZEW'(1);
                         end
                     end
 
-                    bypass_r <= writing 
-                             && (empty_r || ((1 == size_r) && reading)); // empty or about to go empty
-                                
+                    bypass_r <= push && (empty_r || ((size_r == SIZEW'(1)) && pop));                                
                     curr_r   <= data_in;
-                    head_r   <= data[reading ? rd_ptr_next_r : rd_ptr_r];
+                end
+            end
+
+            always @(posedge clk) begin
+                if (reset) begin
+                    head_r <= 0;                
+                end else begin
+                    if (push) begin
+                        data[wr_ptr_r] <= data_in;
+                    end
+                    head_r <= data[pop ? rd_ptr_next_r : rd_ptr_r];
                 end
             end 
 
@@ -158,6 +216,9 @@ module VX_generic_queue #(
             assign full     = full_r;
             assign size     = size_r;
         end
+
+    `endif
+
     end
 
 endmodule

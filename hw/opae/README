@@ -60,7 +60,7 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -n 256
+./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -t1 -n1
 ./run_ase.sh build_ase_1c ../../driver/tests/demo/demo -n 16
 ./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n1 -s4 -e4
 ./run_ase.sh build_ase_1c ../../benchmarks/opencl/vecadd/vecadd
@@ -81,6 +81,7 @@ tar -zcvf run.log.tar.gz run.log
 tar -cvjf vortex.vcd.tar.bz2 build_ase_1c/work/vortex.vcd
 tar -zcvf vortex.vcd.tar.gz build_ase_1c/work/vortex.vcd
 tar -zcvf run.log.tar.gz build_ase_1c/work/run.log
+tar -zcvf vx_scope.vcd.tar.gz vx_scope.vcd
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz

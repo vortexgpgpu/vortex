@@ -41,22 +41,18 @@ module VX_gpr_fp_ctrl (
 				read_rs1 <= 1;
 			end
 
-			rsp_valid    <= gpr_req_if.valid;
-			rsp_wid      <= gpr_req_if.wid;
-			rsp_pc       <= gpr_req_if.PC;		
+			rsp_valid <= gpr_req_if.valid;
+			rsp_wid   <= gpr_req_if.wid;
+			rsp_pc    <= gpr_req_if.PC;		
 
 			if (read_rs1) begin
-				rsp_rs1_data <= rs1_data;
+				rsp_rs1_data <= (gpr_req_if.rs1 == 0) ? (`NUM_THREADS*32)'(0) : rs1_data;
 			end			
-			rsp_rs2_data <= rs2_data;
-			rsp_rs3_data <= rs1_data;
+			rsp_rs2_data <= (gpr_req_if.rs2 == 0) ? (`NUM_THREADS*32)'(0) : rs2_data;
+			rsp_rs3_data <= (gpr_req_if.rs1 == 0) ? (`NUM_THREADS*32)'(0) : rs1_data;
 
 			assert(read_rs1 || rsp_wid == gpr_req_if.wid);
 		end	
-	end
-
-	always @(posedge clk) begin
-		
 	end
 
 	// outputs
