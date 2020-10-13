@@ -4,6 +4,9 @@
 #include <chrono>
 #include <vector>
 #include <assert.h>
+#include <chrono>
+#include <thread>
+#include <mutex>
 
 #ifdef USE_VLSIM
 #include "vlsim/fpga.h"
@@ -39,13 +42,29 @@
 #define CMD_SET_STOP    5
 #define CMD_GET_OFFSET  6
 
-static constexpr int num_signals = sizeof(scope_signals) / sizeof(scope_signal_t);
+static constexpr int num_modules = sizeof(scope_modules) / sizeof(scope_module_t);
+
+static constexpr int num_signals = sizeof(scope_taps) / sizeof(scope_tap_t);
 
 constexpr int calcFrameWidth(int index = 0) {
-    return (index < num_signals) ? (scope_signals[index].width + calcFrameWidth(index + 1)) : 0;
+    return (index < num_signals) ? (scope_taps[index].width + calcFrameWidth(index + 1)) : 0;
 }
 
 static constexpr int fwidth = calcFrameWidth();
+
+#ifdef HANG_TIMEOUT
+static std::thread g_timeout_thread;
+static std::mutex g_timeout_mutex;
+
+static void timeout_callback(fpga_handle fpga) {
+    std::this_thread::sleep_for(std::chrono::seconds{60});
+    if (!g_timeout_mutex.try_lock())
+        return;
+    vx_scope_stop(fpga, HANG_TIMEOUT);
+    fpgaClose(fpga);
+    exit(0);
+}
+#endif
 
 uint64_t print_clock(std::ofstream& ofs, uint64_t delta, uint64_t timestamp) {
     while (delta != 0) {
@@ -56,6 +75,27 @@ uint64_t print_clock(std::ofstream& ofs, uint64_t delta, uint64_t timestamp) {
         --delta;
     }
     return timestamp;
+}
+
+void dump_taps(std::ofstream& ofs, int module) {
+    int i = 1;
+     for (auto& tap : scope_taps) {
+        if (tap.module != module)
+            continue;
+        ofs << "$var reg " << tap.width << " " << i << " " << tap.name << " $end" << std::endl;        
+        i += 1;
+    }
+}
+
+void dump_module(std::ofstream& ofs, int parent) {
+    for (auto& module : scope_modules) {
+        if (module.parent != parent)
+            continue;
+        ofs << "$scope module " << module.name << " $end" << std::endl;
+        dump_module(ofs, module.index);
+        dump_taps(ofs, module.index);
+        ofs << "$upscope $end" << std::endl;
+    }
 }
 
 int vx_scope_start(fpga_handle hfpga, uint64_t delay) {    
@@ -69,10 +109,20 @@ int vx_scope_start(fpga_handle hfpga, uint64_t delay) {
         std::cout << "scope start delay: " << delay << std::endl;
     }
 
+#ifdef HANG_TIMEOUT
+    g_timeout_thread = std::thread(timeout_callback, hfpga);
+    g_timeout_thread.detach();
+#endif
+
     return 0;
 }
 
 int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {    
+#ifdef HANG_TIMEOUT
+    if (!g_timeout_mutex.try_lock())
+        return 0;
+#endif
+
     if (nullptr == hfpga)
         return -1;
     
@@ -89,11 +139,8 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     ofs << "$timescale 1 ns $end" << std::endl;
     ofs << "$scope module TOP $end" << std::endl;
     ofs << "$var reg 1 0 clk $end" << std::endl;
-
-    for (int i = 0; i < num_signals; ++i) {
-        ofs << "$var reg " << scope_signals[i].width << " " << (i+1) << " " << scope_signals[i].name << " $end" << std::endl;
-    }
-
+    dump_module(ofs, -1);
+    dump_taps(ofs, -1);
     ofs << "$upscope $end" << std::endl;
     ofs << "enddefinitions $end" << std::endl;
     
@@ -158,7 +205,7 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
         CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &word));
         
         do {          
-            int signal_width = scope_signals[signal_id-1].width;
+            int signal_width = scope_taps[signal_id-1].width;
             int word_offset = frame_offset % 64;
 
             signal_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
@@ -183,7 +230,9 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
                     CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &delta));
                     timestamp = print_clock(ofs, delta + 1, timestamp);            
                     signal_id = num_signals;
-                    //std::cout << "*** " << frame_no << " frames, timestamp=" << timestamp << std::endl;
+                    if (0 == (frame_no % 100)) {
+                        std::cout << "*** " << frame_no << " frames, timestamp=" << timestamp << std::endl;
+                    }
                 }                     
             }
             

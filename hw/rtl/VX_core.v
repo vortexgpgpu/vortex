@@ -3,13 +3,7 @@
 module VX_core #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_SIGNALS_ISTAGE_IO
-    `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_BANK_L1D_CORE_IO
-    `SCOPE_SIGNALS_BANK_L1I_CORE_IO
-    `SCOPE_SIGNALS_BANK_L1S_CORE_IO
-    `SCOPE_SIGNALS_ISSUE_IO
-    `SCOPE_SIGNALS_EXECUTE_IO
+    `SCOPE_IO_VX_core
     
     // Clock
     input  wire                             clk,
@@ -181,10 +175,7 @@ module VX_core #(
     VX_pipeline #(
         .CORE_ID(CORE_ID)
     ) pipeline (
-        `SCOPE_SIGNALS_ISTAGE_BIND
-        `SCOPE_SIGNALS_LSU_BIND
-        `SCOPE_SIGNALS_ISSUE_BIND
-        `SCOPE_SIGNALS_EXECUTE_BIND
+        `SCOPE_BIND_VX_core_pipeline()
 
         .clk(clk),
         .reset(reset),
@@ -260,9 +251,7 @@ module VX_core #(
     VX_mem_unit #(
         .CORE_ID(CORE_ID)
     ) mem_unit (
-        `SCOPE_SIGNALS_BANK_L1D_CORE_BIND
-        `SCOPE_SIGNALS_BANK_L1I_CORE_BIND
-        `SCOPE_SIGNALS_BANK_L1S_CORE_BIND
+        `SCOPE_BIND_VX_core_mem_unit()
 
         .clk                (clk),
         .reset              (reset),

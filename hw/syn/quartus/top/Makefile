@@ -51,7 +51,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE"
 	
 syn.chg:
 	$(STAMP) syn.chg

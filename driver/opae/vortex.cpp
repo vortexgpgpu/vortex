@@ -509,12 +509,6 @@ extern int vx_start(vx_device_h hdevice) {
     // start execution    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN));
 
-/*#ifdef SCOPE
-    sleep(15);
-    vx_scope_stop(device->fpga, 0);
-    exit(0);
-#endif*/
-
     return 0;
 }
 
@@ -547,7 +541,7 @@ extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* valu
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
-        return -1; 
+        return -1;
 
     // write CSR value    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core_id));

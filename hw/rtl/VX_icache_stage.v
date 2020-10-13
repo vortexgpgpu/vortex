@@ -3,7 +3,7 @@
 module VX_icache_stage #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_ISTAGE_IO
+    `SCOPE_IO_VX_icache_stage
 
     input  wire             clk,
     input  wire             reset,
@@ -30,7 +30,7 @@ module VX_icache_stage #(
 
     always @(posedge clk) begin
         if (icache_req_fire)  begin
-            rsp_PC_buf[req_tag]          <= ifetch_req_if.PC;  
+            rsp_PC_buf[req_tag]    <= ifetch_req_if.PC;  
             rsp_tmask_buf[req_tag] <= ifetch_req_if.tmask;
         end    
     end    

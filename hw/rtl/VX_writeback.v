@@ -25,6 +25,7 @@ module VX_writeback #(
 
     wire wb_valid;
     wire [`NW_BITS-1:0] wb_wid;
+     wire [31:0] wb_PC;
     wire [`NUM_THREADS-1:0] wb_tmask;
     wire [`NR_BITS-1:0] wb_rd;
     wire [`NUM_THREADS-1:0][31:0] wb_data;
@@ -41,6 +42,13 @@ module VX_writeback #(
                         csr_valid ? csr_commit_if.wid :   
                         mul_valid ? mul_commit_if.wid :                            
                         fpu_valid ? fpu_commit_if.wid :  
+                                    0;
+
+    assign wb_PC =      alu_valid ? alu_commit_if.PC :
+                        lsu_valid ? lsu_commit_if.PC :   
+                        csr_valid ? csr_commit_if.PC :   
+                        mul_valid ? mul_commit_if.PC :                            
+                        fpu_valid ? fpu_commit_if.PC :  
                                     0;
     
     assign wb_tmask =   alu_valid ? alu_commit_if.tmask :
@@ -68,16 +76,16 @@ module VX_writeback #(
     wire stall = 0/*~writeback_if.ready && writeback_if.valid*/;
     
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32))
+        .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32))
     ) wb_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({wb_valid,           wb_wid,           wb_tmask,           wb_rd,           wb_data}),
-        .out   ({writeback_if.valid, writeback_if.wid, writeback_if.tmask, writeback_if.rd, writeback_if.data})
+        .in    ({wb_valid,           wb_wid,           wb_PC,           wb_tmask,           wb_rd,           wb_data}),
+        .out   ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data})
     );
-
+    
     assign alu_commit_if.ready = !stall;    
     assign lsu_commit_if.ready = !stall && !alu_valid;   
     assign csr_commit_if.ready = !stall && !alu_valid && !lsu_valid;

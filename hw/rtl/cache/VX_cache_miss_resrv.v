@@ -125,12 +125,12 @@ module VX_cache_miss_resrv #(
                 ready_table[enqueue_index]    <= mrvq_init_ready_state;
                 addr_table[enqueue_index]     <= miss_add_addr;
                 metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_tag, miss_add_rw, miss_add_byteen, miss_add_wsel, miss_add_is_snp, miss_add_snp_invalidate};
-                tail_ptr                      <= tail_ptr + 1;
+                tail_ptr                      <= tail_ptr + $bits(tail_ptr)'(1);
             end else if (increment_head) begin
                 valid_table[head_ptr]         <= 0;
-                head_ptr                      <= head_ptr + 1;
+                head_ptr                      <= head_ptr + $bits(head_ptr)'(1);
             end else if (recover_state) begin
-                schedule_ptr                  <= schedule_ptr - 1;
+                schedule_ptr                  <= schedule_ptr - $bits(schedule_ptr)'(1);
             end
 
             // update entry as 'ready' during DRAM fill response
@@ -140,15 +140,15 @@ module VX_cache_miss_resrv #(
 
             if (mrvq_pop) begin
                 ready_table[dequeue_index] <= 0;
-                schedule_ptr               <= schedule_ptr + 1;
+                schedule_ptr               <= schedule_ptr + $bits(schedule_ptr)'(1);
             end
 
             if (!(mrvq_push && increment_head)) begin
                 if (mrvq_push) begin
-                    size <= size + 1;
+                    size <= size + $bits(size)'(1);
                 end
                 if (increment_head) begin
-                    size <= size - 1;
+                    size <= size - $bits(size)'(1);
                 end
             end
         end
