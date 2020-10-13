@@ -87,7 +87,7 @@ t_if_ccip_Tx af2cp_sTxPort;
 
 vortex_afu #(
   .NUM_LOCAL_MEM_BANKS(NUM_LOCAL_MEM_BANKS)
-) vortex_afu (
+) afu (
     .clk(clk),
     .reset(reset),
     .cp2af_sRxPort(cp2af_sRxPort),

@@ -24,13 +24,6 @@ CXXFLAGS += -fPIC
 # Dump perf stats
 CXXFLAGS += -DDUMP_PERF_STATS
 
-# Enable scope analyzer
-# Enable scope analyzer
-ifdef SCOPE
-	CXXFLAGS += -DSCOPE
-	SET_SCOPE = SCOPE=1
-endif
-
 LDFLAGS += -shared
 
 FPGA_LIBS += -luuid -lopae-c
@@ -53,7 +46,14 @@ PROJECT_VLSIM = $(VLSIM_DIR)/libvortex.so
 
 AFU_JSON_INFO = vortex_afu.h
 
-SRCS = vortex.cpp vx_scope.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp ../common/vx_utils.cpp
+
+# Enable scope analyzer
+ifdef SCOPE
+	CXXFLAGS += -DSCOPE	
+	SRCS += vx_scope.cpp
+	SET_SCOPE = SCOPE=1
+endif
 
 all: vlsim
 
@@ -64,7 +64,7 @@ json: ../../hw/opae/vortex_afu.json
 fpga: $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(FPGA_LIBS) -o $(PROJECT)
 
-ase: $(SRCS) $(ASE_DIR)
+asesim: $(SRCS) $(ASE_DIR)
 	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $(PROJECT_ASE)
 
 vlsim: $(SRCS) opae-vlsim

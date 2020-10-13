@@ -1,15 +1,7 @@
 `include "VX_define.vh"
 
 module Vortex (
-    `SCOPE_SIGNALS_ISTAGE_TOP_IO
-    `SCOPE_SIGNALS_LSU_TOP_IO
-    `SCOPE_SIGNALS_BANK_L3_TOP_IO
-    `SCOPE_SIGNALS_BANK_L2_TOP_IO
-    `SCOPE_SIGNALS_BANK_L1D_TOP_IO
-    `SCOPE_SIGNALS_BANK_L1I_TOP_IO
-    `SCOPE_SIGNALS_BANK_L1S_TOP_IO
-    `SCOPE_SIGNALS_ISSUE_TOP_IO
-    `SCOPE_SIGNALS_EXECUTE_TOP_IO
+    `SCOPE_IO_Vortex
 
     // Clock
     input  wire                             clk,
@@ -79,14 +71,7 @@ module Vortex (
         VX_cluster #(
             .CLUSTER_ID(0)
         ) cluster (
-            `SCOPE_SIGNALS_ISTAGE_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_LSU_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_BANK_L2_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_BANK_L1D_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_BANK_L1I_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_BANK_L1S_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_ISSUE_CLUSTER_SELECT(0)
-            `SCOPE_SIGNALS_EXECUTE_CLUSTER_SELECT(0)
+            `SCOPE_BIND_Vortex_cluster(0)
 
             .clk                (clk),
             .reset              (reset),
@@ -200,14 +185,7 @@ module Vortex (
             VX_cluster #(
                 .CLUSTER_ID(i)
             ) cluster (
-                `SCOPE_SIGNALS_ISTAGE_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_LSU_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_BANK_L2_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_BANK_L1D_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_BANK_L1I_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_BANK_L1S_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_ISSUE_CLUSTER_SELECT(i)
-                `SCOPE_SIGNALS_EXECUTE_CLUSTER_SELECT(i)
+                `SCOPE_BIND_Vortex_cluster(i)
 
                 .clk                (clk),
                 .reset              (reset),
@@ -417,7 +395,7 @@ module Vortex (
             .SNP_REQ_TAG_WIDTH  (`L3SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
         ) l3cache (
-            `SCOPE_SIGNALS_BANK_L3_CACHE_BIND
+            `SCOPE_BIND_Vortex_l3cache()
 
             .clk                (clk),
             .reset              (reset),
