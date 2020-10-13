@@ -954,7 +954,7 @@ end
 assign cmd_run_done = !vx_busy;
 
 Vortex #() vortex (
-  `SCOPE_BIND_vortex_afu_vortex()
+  `SCOPE_BIND_vortex_afu_vortex
 
   .clk              (clk),
   .reset            (reset | vx_reset),

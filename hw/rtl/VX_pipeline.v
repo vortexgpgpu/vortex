@@ -123,7 +123,7 @@ module VX_pipeline #(
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
-        `SCOPE_BIND_VX_pipeline_fetch()
+        `SCOPE_BIND_VX_pipeline_fetch
         .clk            (clk),
         .reset          (reset),
         .icache_req_if  (core_icache_req_if),
@@ -150,7 +150,7 @@ module VX_pipeline #(
     VX_issue #(
         .CORE_ID(CORE_ID)
     ) issue (
-        `SCOPE_BIND_VX_pipeline_issue()
+        `SCOPE_BIND_VX_pipeline_issue
 
         .clk            (clk),
         .reset          (reset),        
@@ -170,7 +170,7 @@ module VX_pipeline #(
     VX_execute #(
         .CORE_ID(CORE_ID)
     ) execute (
-        `SCOPE_BIND_VX_pipeline_execute()
+        `SCOPE_BIND_VX_pipeline_execute
         
         .clk            (clk),
         .reset          (reset),    

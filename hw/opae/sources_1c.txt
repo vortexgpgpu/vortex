@@ -3,7 +3,7 @@
 +define+SYNTHESIS
 +define+QUARTUS
 +define+FPU_FAST
-#+define+SCOPE
++define+SCOPE
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE

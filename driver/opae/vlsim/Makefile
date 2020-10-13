@@ -20,8 +20,8 @@ DBG_FLAGS += -DDBG_CORE_REQ_INFO
 
 #CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
-CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
-#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
+#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
+CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 #DEBUG=1
 SCOPE=1
@@ -38,6 +38,8 @@ LDFLAGS += -shared -pthread
 TOP = vortex_afu_shim
 
 RTL_DIR=../../../hw/rtl
+
+SCRIPT_DIR=../../../hw/scripts
 
 SRCS = fpga.cpp opae_sim.cpp
 SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
@@ -67,7 +69,7 @@ endif
 ifdef SCOPE
 	VL_FLAGS += -DSCOPE
 	CFLAGS += -DSCOPE
-	SCOPE_CFG = scope 
+	SCOPE_VH = $(RTL_DIR)/scope-defs.vh 
 endif
 
 VL_FLAGS += -DNOPAE
@@ -80,12 +82,14 @@ PROJECT = libopae-c-vlsim.so
 all: $(PROJECT)
 
 # generate scope data
-scope: ../../../hw/scripts/scope.json
-	../../../hw/scripts/scope.py $(RTL_INCLUDE) $(CONFIGS) -cc ../scope-defs.h -vl ../../../hw/rtl/scope-defs.vh ../../../hw/scripts/scope.json
+scope: $(RTL_DIR)/scope-defs.vh
+
+$(RTL_DIR)/scope-defs.vh: $(SCRIPT_DIR)/scope.json
+	$(SCRIPT_DIR)/scope.py $(RTL_INCLUDE) $(CONFIGS) -cc ../scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
 	
-$(PROJECT): $(SRCS) $(SCOPE_CFG)
+$(PROJECT): $(SRCS) $(SCOPE_VH)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	OPT_FAST="-O0 -g" make -j -C obj_dir -f V$(TOP).mk
 
 clean:
-	rm -rf $(PROJECT) obj_dir ../scope-defs.h ../../../hw/rtl/scope-defs.vh
+	rm -rf $(PROJECT) obj_dir ../scope-defs.h $(RTL_DIR)/scope-defs.vh

@@ -527,7 +527,7 @@ def gen_vl_header(file, modules, taps):
             ports[nn] = pp
 
             if (0 == scount):
-                nn = "SCOPE_BIND_" + ntype + '_' + spath + "()"                
+                nn = "SCOPE_BIND_" + ntype + '_' + spath             
                 pp = create_signal(nn, ports)
                 for st in new_staps:
                     if e:
@@ -746,13 +746,15 @@ struct scope_tap_t {
             continue
         paths.pop(-1)
         parent = -1
+        mk = ""
         for path in paths:
-            if not path in mdic:
+            mk += '/' + path
+            if not mk in mdic:                
                 index = len(mdic)
-                mdic[path] = (index, parent)
+                mdic[mk] = (path, index, parent)
                 parent = index
             else:    
-                parent = mdic[path][0]
+                parent = mdic[mk][1]
         fdic[key][1] = parent
 
     with open(file, 'w') as f:
@@ -764,7 +766,7 @@ struct scope_tap_t {
             m = mdic[key]
             if i > 0:
                 print(',', file=f)
-            print("\t{\"" + key + "\", " + str(m[0]) + ", " + str(m[1]) + "}", file=f, end='')                
+            print("\t{\"" + m[0] + "\", " + str(m[1]) + ", " + str(m[2]) + "}", file=f, end='')                
             i += 1
         print("", file=f)
         print("};", file=f)

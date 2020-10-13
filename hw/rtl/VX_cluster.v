@@ -372,7 +372,7 @@ module VX_cluster #(
             .SNP_REQ_TAG_WIDTH      (`L2SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH      (`DSNP_TAG_WIDTH)
         ) l2cache (
-            `SCOPE_BIND_VX_cluster_l2cache()
+            `SCOPE_BIND_VX_cluster_l2cache
             
             .clk                (clk),
             .reset              (reset),
