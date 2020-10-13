@@ -1,17 +1,19 @@
-#ifndef VX_IO_H
-#define VX_IO_H
+#ifndef VX_PRINT_H
+#define VX_PRINT_H
 
-#include <stdbool.h>
+#include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void vx_print_hex(unsigned);
-void vx_printf(const char *, unsigned);
+void vx_prints(const char * str);
+void vx_printx(unsigned value);
+void vx_printv(const char * str, unsigned value);
 
-void vx_print_str(const char *);
-void vx_printc(unsigned, char c);
+int vx_vprintf(const char* format, va_list va);
+int vx_printf(const char * format, ...);
+int vx_putchar(int c);
 
 #ifdef __cplusplus
 }

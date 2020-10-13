@@ -5,21 +5,15 @@ all:
 	$(MAKE) -C sfilter
 	$(MAKE) -C nearn
 	$(MAKE) -C guassian
-	$(MAKE) -C bfs
+	#$(MAKE) -C bfs
 run:
 	$(MAKE) -C vecadd run-rtlsim 
-	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C sgemm run-rtlsim
-	$(MAKE) -C sgemm run-simx
 	$(MAKE) -C saxpy run-rtlsim
-	$(MAKE) -C saxpy run-simx
 	$(MAKE) -C sfilter run-rtlsim
 	$(MAKE) -C nearn run-rtlsim
-	$(MAKE) -C nearn run-simx
 	$(MAKE) -C guassian run-rtlsim
-	$(MAKE) -C guassian run-simx
-	$(MAKE) -C bfs run-rtlsim
-	$(MAKE) -C bfs run-simx
+	#$(MAKE) -C bfs run-rtlsim
 clean:
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C sgemm clean
@@ -27,4 +21,4 @@ clean:
 	$(MAKE) -C sfilter clean
 	$(MAKE) -C nearn clean
 	$(MAKE) -C guassian clean
-	$(MAKE) -C bfs clean
+	#$(MAKE) -C bfs clean

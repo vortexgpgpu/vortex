@@ -41,10 +41,6 @@ module VX_cache #(
     // Enable snoop forwarding
     parameter SNOOP_FORWARDING              = 0,
 
-    // Prefetcher
-    parameter PRFQ_SIZE                     = 1,
-    parameter PRFQ_STRIDE                   = 0,
-
     // core request tag size
     parameter CORE_TAG_WIDTH                = 42,
 
@@ -63,14 +59,14 @@ module VX_cache #(
     // Snooping forward tag width
     parameter SNP_FWD_TAG_WIDTH             = 1
  ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_SIGNALS_BANK_CACHE_IO
     
     input wire clk,
     input wire reset,
 
     // Core request    
     input wire [NUM_REQUESTS-1:0]                           core_req_valid,
-    input wire [NUM_REQUESTS-1:0]                           core_req_rw,
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                    core_req_rw,
     input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]            core_req_byteen,
     input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]     core_req_addr,
     input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]          core_req_data,
@@ -166,8 +162,6 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag;
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
 
-    `SCOPE_SIGNALS_CACHE_BANK_SELECT
-
     wire                         snp_req_valid_qual;    
     wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
     wire                         snp_req_invalidate_qual;    
@@ -246,7 +240,7 @@ module VX_cache #(
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_valid;            
-        wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_rw;  
+        wire [`CORE_REQ_TAG_COUNT-1:0]                      curr_bank_core_req_rw;  
         wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              curr_bank_core_req_byteen;
         wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       curr_bank_core_req_addr;
         wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]  curr_bank_core_req_tag;
@@ -371,7 +365,7 @@ module VX_cache #(
             .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
             .SNP_REQ_TAG_WIDTH  (SNP_REQ_TAG_WIDTH)
         ) bank (
-            `SCOPE_SIGNALS_CACHE_BANK_BIND
+            `SCOPE_SIGNALS_BANK_SELECT(i)
             
             .clk                     (clk),
             .reset                   (reset),                
@@ -427,9 +421,7 @@ module VX_cache #(
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
-        .DFQQ_SIZE      (DFQQ_SIZE),
-        .PRFQ_SIZE      (PRFQ_SIZE),
-        .PRFQ_STRIDE    (PRFQ_STRIDE)
+        .DFQQ_SIZE      (DFQQ_SIZE)
     ) cache_dram_req_arb (
         .clk                          (clk),
         .reset                        (reset),        

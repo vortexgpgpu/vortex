@@ -66,7 +66,7 @@ module VX_cache_miss_resrv #(
 
     reg [`LOG2UP(MRVQ_SIZE+1)-1:0] size;
 
-    `STATIC_ASSERT(MRVQ_SIZE > 5, "invalid size")
+    `STATIC_ASSERT(MRVQ_SIZE > 5, ("invalid size"))
 
     assign miss_resrv_full = (size == $bits(size)'(MRVQ_SIZE));
     assign miss_resrv_stop = (size  > $bits(size)'(MRVQ_SIZE-5)); // need to add 5 cycles to prevent pipeline lock

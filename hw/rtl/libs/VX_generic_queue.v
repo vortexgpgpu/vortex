@@ -17,7 +17,7 @@ module VX_generic_queue #(
     output wire             full,      
     output wire [SIZEW-1:0] size
 ); 
-    `STATIC_ASSERT(`ISPOW2(SIZE), "must be 0 or power of 2!")
+    `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
 
     reg [SIZEW-1:0] size_r;        
     wire            reading;

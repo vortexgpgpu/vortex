@@ -58,7 +58,7 @@ void CacheSim::reset() {
 }
 
 void CacheSim::step() {
-  std::cout << timestamp << ": [sim] step()" << std::endl;
+  //std::cout << timestamp << ": [sim] step()" << std::endl;
   //toggle clock
   cache_->clk = 0;
   this->eval();
@@ -95,6 +95,7 @@ void CacheSim::run(){
       if(!cache_->core_req_valid && !cache_->core_rsp_valid){
         valid--; 
       }
+      this->display_hit_miss();
   }
 }
 
@@ -261,7 +262,7 @@ void CacheSim::get_core_rsp(unsigned int (&rsp)[4]){
 }
 
 void CacheSim::get_core_req(){
-  std::cout << cache_->genblk5_BRA_0_KET_->bank->is_fill_in_pipe<< std::endl; 
+  //std::cout << cache_->genblk5_BRA_0_KET_->bank->is_fill_in_pipe<< std::endl; 
   char check = cache_->core_req_valid;
   std::cout << std::hex << "core_req_valid: " << check << std::endl;
   std::cout << std::hex << "core_req_data[0]: " << cache_->core_req_data[0] << std::endl;
@@ -285,5 +286,9 @@ void CacheSim::get_dram_rsp(){
   std::cout << std::hex << "dram_rsp_data: " << cache_->dram_rsp_data << std::endl; 
   std::cout << std::hex << "dram_rsp_tag: " << cache_->dram_rsp_tag << std::endl;
   std::cout << std::hex << "dram_rsp_ready: " << cache_->dram_rsp_ready << std::endl;
+}
+
+void CacheSim::display_hit_miss(){
+  std::cout << std::hex << "Misses: " << cache_->misses << std::endl; 
 }
 
