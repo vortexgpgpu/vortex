@@ -3,9 +3,7 @@
 module VX_mem_unit # (
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_BANK_L1D_CORE_IO
-    `SCOPE_SIGNALS_BANK_L1I_CORE_IO
-    `SCOPE_SIGNALS_BANK_L1S_CORE_IO
+    `SCOPE_IO_VX_mem_unit
 
     input wire              clk,
     input wire              reset,
@@ -79,7 +77,7 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`SDRAM_TAG_WIDTH)
     ) smem (
-        `SCOPE_SIGNALS_BANK_L1S_CACHE_BIND
+        `SCOPE_BIND_VX_mem_unit_smem()
         
         .clk                (clk),
         .reset              (reset),
@@ -106,7 +104,7 @@ module VX_mem_unit # (
         `UNUSED_PIN (dram_req_addr),
         `UNUSED_PIN (dram_req_data),
         `UNUSED_PIN (dram_req_tag),
-        .dram_req_ready     (0),       
+        .dram_req_ready     (1'b0),       
 
         // DRAM response
         .dram_rsp_valid     (0),
@@ -115,7 +113,7 @@ module VX_mem_unit # (
         `UNUSED_PIN (dram_rsp_ready),
 
         // Snoop request
-        .snp_req_valid      (0),
+        .snp_req_valid      (1'b0),
         .snp_req_addr       (0),
         .snp_req_invalidate (0),
         .snp_req_tag        (0),
@@ -124,17 +122,17 @@ module VX_mem_unit # (
         // Snoop response
         `UNUSED_PIN (snp_rsp_valid),
         `UNUSED_PIN (snp_rsp_tag),
-        .snp_rsp_ready      (0),
+        .snp_rsp_ready      (1'b0),
 
         // Snoop forward out
         `UNUSED_PIN (snp_fwdout_valid),
         `UNUSED_PIN (snp_fwdout_addr),    
         `UNUSED_PIN (snp_fwdout_invalidate),
         `UNUSED_PIN (snp_fwdout_tag),    
-        .snp_fwdout_ready   (0),
+        .snp_fwdout_ready   (1'b0),
 
          // Snoop forward in
-        .snp_fwdin_valid    (0),
+        .snp_fwdin_valid    (1'b0),
         .snp_fwdin_tag      (0),    
         `UNUSED_PIN (snp_fwdin_ready)
     );
@@ -161,7 +159,7 @@ module VX_mem_unit # (
         .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
         .SNP_REQ_TAG_WIDTH      (`DSNP_TAG_WIDTH)
     ) dcache (
-        `SCOPE_SIGNALS_BANK_L1D_CACHE_BIND
+        `SCOPE_BIND_VX_mem_unit_dcache()
         
         .clk                (clk),
         .reset              (reset),
@@ -213,10 +211,10 @@ module VX_mem_unit # (
         `UNUSED_PIN (snp_fwdout_addr),    
         `UNUSED_PIN (snp_fwdout_invalidate),
         `UNUSED_PIN (snp_fwdout_tag),    
-        .snp_fwdout_ready   (0),
+        .snp_fwdout_ready   (1'b0),
 
          // Snoop forward in
-        .snp_fwdin_valid    (0),
+        .snp_fwdin_valid    (1'b0),
         .snp_fwdin_tag      (0),    
         `UNUSED_PIN (snp_fwdin_ready)
     );
@@ -242,7 +240,7 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS       (`ICORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
     ) icache (
-        `SCOPE_SIGNALS_BANK_L1I_CACHE_BIND
+        `SCOPE_BIND_VX_mem_unit_icache()
 
         .clk                   (clk),
         .reset                 (reset),
@@ -278,26 +276,26 @@ module VX_mem_unit # (
         .dram_rsp_ready        (icache_dram_rsp_if.ready),
 
         // Snoop request
-        .snp_req_valid         (0),
+        .snp_req_valid         (1'b0),
         .snp_req_addr          (0),
-        .snp_req_invalidate    (0),
+        .snp_req_invalidate    (1'b0),
         .snp_req_tag           (0),
         `UNUSED_PIN (snp_req_ready),
 
         // Snoop response
         `UNUSED_PIN (snp_rsp_valid),
         `UNUSED_PIN (snp_rsp_tag),
-        .snp_rsp_ready         (0),
+        .snp_rsp_ready         (1'b0),
 
         // Snoop forward out
         `UNUSED_PIN (snp_fwdout_valid),
         `UNUSED_PIN (snp_fwdout_addr),   
         `UNUSED_PIN (snp_fwdout_invalidate), 
         `UNUSED_PIN (snp_fwdout_tag),    
-        .snp_fwdout_ready      (0),
+        .snp_fwdout_ready      (1'b0),
 
          // Snoop forward in
-        .snp_fwdin_valid       (0),
+        .snp_fwdin_valid       (1'b0),
         .snp_fwdin_tag         (0),    
         `UNUSED_PIN (snp_fwdin_ready)
     );

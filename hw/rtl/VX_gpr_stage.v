@@ -15,9 +15,8 @@ module VX_gpr_stage #(
 );
     `UNUSED_VAR (reset)
 
-    wire [`NUM_THREADS-1:0][31:0] rs1_data;
-    wire [`NUM_THREADS-1:0][31:0] rs2_data; 
-    wire [`NW_BITS+`NR_BITS-1:0]  raddr1;             
+    wire [`NUM_THREADS-1:0][31:0] rs1_data, rs2_data;
+    wire [`NW_BITS+`NR_BITS-1:0] raddr1;            
 
     VX_gpr_ram gpr_ram (
         .clk      (clk),
@@ -57,8 +56,8 @@ module VX_gpr_stage #(
             rsp_valid    <= gpr_req_if.valid;
             rsp_wid      <= gpr_req_if.wid;   
             rsp_pc       <= gpr_req_if.PC;
-            rsp_rs1_data <= rs1_data;
-            rsp_rs2_data <= rs2_data;
+            rsp_rs1_data <= (gpr_req_if.rs1 == 0) ? (`NUM_THREADS*32)'(0) : rs1_data;
+            rsp_rs2_data <= (gpr_req_if.rs2 == 0) ? (`NUM_THREADS*32)'(0) : rs2_data;
         end
 	end
 

@@ -126,11 +126,11 @@ module VX_scope #(
 					 || (trigger_id != prev_trigger_id)) begin
 						delta_store[waddr] <= delta;
 						data_store[waddr]  <= data_in;
-						waddr       <= waddr + 1;
+						waddr       <= waddr + $bits(waddr)'(1);
 						delta       <= 0;
 						delta_flush <= 0;
 					end else begin
-						delta       <= delta + 1;
+						delta       <= delta + DELTAW'(1);
 						delta_flush <= (delta == (MAX_DELTA-1));
 					end
 					prev_trigger_id <= trigger_id;
@@ -159,7 +159,7 @@ module VX_scope #(
 						if (read_offset < $bits(read_offset)'(DATAW-BUSW)) begin
 							read_offset <= read_offset + $bits(read_offset)'(BUSW);
 						end else begin
-							raddr       <= raddr + 1;
+							raddr       <= raddr + $bits(raddr)'(1);
 							read_offset <= 0;							
 							read_delta  <= 1; 
 							if (raddr == waddr) begin

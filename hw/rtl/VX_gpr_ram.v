@@ -12,15 +12,7 @@ module VX_gpr_ram (
 ); 
     `ifndef ASIC           
 
-        reg [`NUM_THREADS-1:0][3:0][7:0] ram [(`NUM_WARPS * `NUM_REGS)-1:0];       
-
-        initial begin // initialize ram: set r0 = 0
-            for (integer j = 0; j < `NUM_WARPS; j++) begin
-                for (integer i = 0; i < `NUM_REGS; i++) begin
-                    ram[j * `NUM_REGS + i] = (i == 0) ? {`NUM_THREADS{32'h0}} : {`NUM_THREADS{32'hx}};
-                end
-            end
-        end
+        reg [`NUM_THREADS-1:0][3:0][7:0] ram [(`NUM_WARPS * `NUM_REGS)-1:0];
                 
         always @(posedge clk) begin
             for (integer i = 0; i < `NUM_THREADS; i++) begin

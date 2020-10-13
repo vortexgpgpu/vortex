@@ -3,7 +3,7 @@
 module VX_lsu_unit #(
     parameter CORE_ID = 0
 ) (    
-    `SCOPE_SIGNALS_LSU_IO
+    `SCOPE_IO_VX_lsu_unit
 
     input wire clk,
     input wire reset,

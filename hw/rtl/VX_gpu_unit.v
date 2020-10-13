@@ -3,6 +3,8 @@
 module VX_gpu_unit #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_IO_VX_gpu_unit
+    
     input wire          clk,
     input wire          reset,
 
@@ -87,5 +89,19 @@ module VX_gpu_unit #(
     
     // can accept new request?
     assign gpu_req_if.ready = gpu_commit_if.ready;
+
+    `SCOPE_ASSIGN (scope_gpu_req_valid, gpu_req_if.valid);
+    `SCOPE_ASSIGN (scope_gpu_req_wid, gpu_req_if.wid);
+    `SCOPE_ASSIGN (scope_gpu_req_tmask, gpu_req_if.tmask);
+    `SCOPE_ASSIGN (scope_gpu_req_op_type, gpu_req_if.op_type);
+    `SCOPE_ASSIGN (scope_gpu_req_rs1, gpu_req_if.rs1_data[0]); 
+    `SCOPE_ASSIGN (scope_gpu_req_rs2, gpu_req_if.rs2_data);
+    `SCOPE_ASSIGN (scope_gpu_req_ready, gpu_req_if.ready);
+    `SCOPE_ASSIGN (scope_gpu_rsp_valid, warp_ctl_if.valid);
+    `SCOPE_ASSIGN (scope_gpu_rsp_wid, warp_ctl_if.wid);
+    `SCOPE_ASSIGN (scope_gpu_rsp_tmc, warp_ctl_if.tmc);
+    `SCOPE_ASSIGN (scope_gpu_rsp_wspawn, warp_ctl_if.wspawn);          
+    `SCOPE_ASSIGN (scope_gpu_rsp_split, warp_ctl_if.split);
+    `SCOPE_ASSIGN (scope_gpu_rsp_barrier, warp_ctl_if.barrier);
 
 endmodule

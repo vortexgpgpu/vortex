@@ -11,11 +11,88 @@ vl_ifdef_re = re.compile(r"^\s*`(ifdef|ifndef|elsif)\s+(\w+)\s*$")
 vl_endif_re = re.compile(r"^\s*`(endif|else)\s*$")
 vl_expand_re = re.compile(r"`([0-9a-zA-Z_]+)")
 
-parameters = []
 exclude_files = []
 include_dirs = []
 macros = []
 br_stack = []
+
+def translate_ternary(text):
+    
+    def skip_space(text, i, ln, step):
+        while (i >= 0) and (i < ln):
+            c = text[i]
+            if not c.isspace():
+                break
+            i += step        
+        return i
+
+    def skip_expr(text, i, ln, step):                        
+        paren = 0
+        checkparen = True
+        while (i >= 0) and (i < ln):
+            c = text[i]                                    
+            if checkparen and (((step < 0) and (c == ')')) or ((step > 0) and (c == '('))):
+                paren += 1
+            elif checkparen and (((step < 0) and (c == '(')) or ((step > 0) and (c == ')'))):
+                if (0 == paren):
+                    break
+                paren -= 1
+                if (0 == paren):
+                    i = skip_space(text, i + step, ln, step)
+                    checkparen = False
+                    continue
+            elif (0 == paren) and not (c.isalnum() or (c == '_')):
+                break
+            i += step
+        return (i - step) 
+
+    def parse_ternary(text):
+        ternary = None
+        ln = len(text)    
+        for i in range(1, ln):
+            c = text[i]
+            if not (c == '?'):
+                continue
+            # parse condition expression              
+            i0 = skip_space(text, i - 1, ln, -1)
+            if (i < 0):
+                raise Exception("invalid condition expression")
+            i1 = skip_expr(text, i0, ln, -1)
+            if (i1 > i0):
+                raise Exception("invalid condition expression")
+            # parse true expression                
+            i2 = skip_space(text, i + 1, ln, 1)
+            if (i2 >= ln):
+                raise Exception("invalid true expression")
+            i3 = skip_expr(text, i2, ln, 1)
+            if (i3 < i2):
+                raise Exception("invalid true expression")                        
+            # parse colon                
+            i4 = skip_space(text, i3 + 1, ln, 1)
+            if (i4 >= ln):
+                raise Exception("invalid colon")
+            if not (text[i4] == ':'):
+                raise Exception("missing colon")
+            # parse false expression           
+            i5 = skip_space(text, i4 + 1, ln, 1)
+            if (i5 >= ln):
+                raise Exception("invalid false expression")
+            i6 = skip_expr(text, i5, ln, 1)
+            if (i6 < i5):
+                raise Exception("invalid false expression")
+            ternary = (i0, i1, i2, i3, i5, i6) 
+            break
+        return ternary
+
+    while True:
+        pos = parse_ternary(text)    
+        if pos is None:
+            break
+        # convert to python ternary
+        newText = text[:pos[1]] + text[pos[2]:pos[3]+1] + " if " + text[pos[1]:pos[0]+1] + " else " + text[pos[4]:pos[5]+1] + text[pos[5]+1:]
+        text = newText
+
+    return text
 
 def parse_func_args(text):
     args = []
@@ -26,7 +103,6 @@ def parse_func_args(text):
     paren = 1
     for i in range(1, l):
         c = text[i]
-
         if c == '(':
             paren += 1
         elif c == ')':
@@ -36,17 +112,14 @@ def parse_func_args(text):
             if paren == 0:
                 l = i
                 break
-
         if c == ',' and paren == 1:
             if arg.strip():
                 args.append(arg)
             arg = ''
         else:
             arg += c
-
     if paren != 0:
         raise Exception("missing closing parenthesis: " + text)
-
     if arg.strip():
         args.append(arg)
 
@@ -90,9 +163,29 @@ def find_macro(name):
             return macro
     return None
 
-def expand_text(text):
+def expand_text(text, params):
 
-    class DoRepl(object):
+    def re_pattern_args(args):
+        p = "(?<![0-9a-zA-Z_])("
+        i = 0
+        for arg in args:
+            if i > 0:
+                p += "|"    
+            p += arg
+            i += 1
+        p += ")(?![0-9a-zA-Z_])"
+        return p
+
+    class DoReplParam(object):
+        def __init__(self, params):            
+            self.params = params
+            self.expanded = False
+        def __call__(self, match):
+            name = match.group(1)
+            self.expanded = True
+            return self.params[name]
+
+    class DoReplMacro(object):
         def __init__(self):            
             self.expanded = False
             self.has_func = False
@@ -106,17 +199,6 @@ def expand_text(text):
                     self.expanded = True
                     return macro[2]
             return "`" + name
-
-    class DoRepl2(object):
-        def __init__(self, args, f_args):            
-            map = {}
-            for i in range(len(args)):
-                map[args[i]] = f_args[i]
-            self.map = map
-        def __call__(self, match):
-            for key in match.groups():
-                return self.map[key]
-            return group
 
     def repl_func_macro(text):
         expanded = False
@@ -137,14 +219,11 @@ def expand_text(text):
                         if len(args) != len(f_args[0]):
                             raise Exception("mismatch number of argments for macro '" + name + "': actual=" + len(f_args[0]) + ", expected=" + len(args))
                         
-                        pattern = "(?<![0-9a-zA-Z_])("
+                        pattern = re_pattern_args(args)
+                        params = {}
                         for i in range(len(args)):
-                            if i > 0:
-                                pattern += "|"    
-                            pattern += args[i]
-                        pattern += ")(?![0-9a-zA-Z_])"
-                        
-                        dorepl = DoRepl2(args, f_args[0])
+                            params[args[i]] = f_args[0][i]
+                        dorepl = DoReplParam(params)
                         value = re.sub(pattern, dorepl, value)
 
                     str_head = text[0:match.start()]
@@ -163,10 +242,18 @@ def expand_text(text):
             raise Exception("Macro recursion!")    
         has_func = False
         while True:
-            do_repl = DoRepl()
+            params_updated = False
+            if not params is None:
+                do_repl = DoReplParam(params)
+                pattern = re_pattern_args(params)
+                new_text = re.sub(pattern, do_repl, text)    
+                if do_repl.expanded:
+                    text = new_text
+                    params_updated = True
+            do_repl = DoReplMacro()
             new_text = re.sub(vl_expand_re, do_repl, text)
-            has_func = do_repl.has_func
-            if not do_repl.expanded:
+            has_func = do_repl.has_func            
+            if not (params_updated or do_repl.expanded):
                 break
             text = new_text            
             changed = True
@@ -291,7 +378,28 @@ def load_config(filename):
     print("condfig=", config)
     return config
 
-def gen_vl_header(file, taps, triggers):
+def eval_node(text, params):
+    def clog2(x):
+        l2 = math.log2(x)
+        cl = math.ceil(l2)
+        return int(cl)
+
+    if not type(text) == str:
+        return text
+
+    expanded = expand_text(text, params)
+    if expanded:
+        text = expanded    
+
+    try:        
+        __text = text.replace('$clog2', '__clog2')
+        __text = translate_ternary(__text)
+        e = eval(__text, {'__clog2': clog2})
+        return e
+    except (NameError, SyntaxError):
+        return text
+
+def gen_vl_header(file, modules, taps):
 
     header = '''
 `ifndef VX_SCOPE_DEFS
@@ -299,238 +407,274 @@ def gen_vl_header(file, taps, triggers):
 '''
     footer = '`endif'
 
-    def signal_size(size, asize):
-        str_asize = ""
-        for s in asize:
-            if type(s) == int:
-                str_asize += "[" + str(s-1) + ":0]"
-            else:                
-                str_asize += "[" + str(s) + "-1:0]"
-
+    def signal_size(size, mn):
         if type(size) == int:
-            size1 = (size-1)
-            if size1 != 0:
-                return str_asize + "[" + str(size1) + ":0]"
+            if (size != mn):
+                return "[" + str(size-1) + ":0]"
             else:
-                return str_asize
+                return ""
         else:
-            return str_asize + "[(" + size + ")-1:0]"
+            return "[" + size + "-1:0]"
 
-    def generate_ports(tclass, tap, ports, new_taps):
+    def create_signal(key, ports):
+        if not key in ports:
+            ports[key] = []
+        return ports[key]
 
-        def emit_io(tap, ports, prefix, asize, return_list, new_taps, is_enabled):
-            stap = tap + "_IO"
-            new_taps.append(stap)        
-            print("`define " + stap + " \\", file=f)                
-            if is_enabled:
-                for key in ports:
-                    size = ports[key]
-                    name = key
-                    is_trigger = False
-                    if name[0] == '!':
-                        name = name[1:]
-                        is_trigger = True
-                    if not return_list is None:
-                        return_list.append((name + prefix, size, asize, is_trigger))
-                    print("\toutput wire" + signal_size(size, asize) + " " + name + prefix + ", \\", file=f)
-            print("", file=f)            
-            emit_bind(tap, ports, prefix, prefix, new_taps, is_enabled)
-
-        def emit_bind(tap, ports, from_prefix, to_prefix, new_taps, is_enabled):
-            stap = tap + "_BIND"
-            new_taps.append(stap)       
-            print("`define " + stap + " \\", file=f)            
-            for key in ports:
-                name = key
-                if name[0] == '!':
-                    name = name[1:]
-                if is_enabled:
-                    print("\t." + name + to_prefix + " (" + name + from_prefix + "), \\", file=f)
-                else:
-                    if (from_prefix != to_prefix):
-                        print("\t`UNUSED_PIN (" + name + to_prefix + "), \\", file=f)
-            print("", file=f)
-
-        def emit_select(tap, ports, from_prefix, to_prefix, new_taps, is_enabled):
-            stap = tap + "_SELECT(__i__)"
-            new_taps.append(stap)      
-            print("`define " + stap + " \\", file=f)
-            if is_enabled:
-                for key in ports:
-                    name = key
-                    if name[0] == '!':
-                        name = name[1:]
-                    print("\t." + name + to_prefix + " (" + name + from_prefix + "[__i__]), \\", file=f)    
-            print("", file=f)
-
-        def do_top(tap, ports, new_taps):
-            out_ports = []
-            for p in ports:
-                name = p
-                is_trigger = False
-                if name[0] == '!':
-                    name = name[1:]
-                    is_trigger = True
-                out_ports.append((name, ports[p], [], is_trigger))
-            return out_ports
-
-        def do_core(tap, ports, new_taps):
-            out_ports = []
-            nclusters = parameters["NUM_CLUSTERS"]
-            ncores = parameters["NUM_CORES"]
-            emit_io(tap + "_TOP", ports, "_top", [nclusters, ncores], out_ports, new_taps, True)
-            emit_io(tap + "_CLUSTER", ports, "_cluster", [ncores], None, new_taps, True)
-            emit_io(tap + "", ports, "", [], None, new_taps, True)
-            emit_select(tap + "_CLUSTER", ports, "_top", "_cluster", new_taps, True)
-            emit_select(tap + "", ports, "_cluster", "", new_taps, True)
-            return out_ports         
-
-        def do_bank(tap, ports, new_taps):
-            out_ports = []
-
-            nclusters = parameters["NUM_CLUSTERS"]
-            ncores = parameters["NUM_CORES"]
-            has_l3 = (parameters["L3_ENABLE"] != 0)
-            has_l2 = (parameters["L2_ENABLE"] != 0)
-
-            emit_io(tap + "_L3_TOP", ports, "_l3_cache", [parameters["L3NUM_BANKS"]], out_ports, new_taps, has_l3)
-            emit_io(tap + "_L2_TOP", ports, "_l2_top", [nclusters, parameters["L2NUM_BANKS"]], out_ports, new_taps, has_l2)
-            emit_io(tap + "_L1D_TOP", ports, "_l1d_top", [nclusters, ncores, parameters["DNUM_BANKS"]], out_ports, new_taps, True)
-            emit_io(tap + "_L1I_TOP", ports, "_l1i_top", [nclusters, ncores, parameters["INUM_BANKS"]], out_ports, new_taps, True)
-            emit_io(tap + "_L1S_TOP", ports, "_l1s_top", [nclusters, ncores, parameters["SNUM_BANKS"]], out_ports, new_taps, True)
-
-            emit_io(tap + "_L2_CLUSTER", ports, "_l2_cache", [parameters["L2NUM_BANKS"]], None, new_taps, has_l2)            
-            emit_io(tap + "_L1D_CLUSTER", ports, "_l1d_cluster", [ncores, parameters["DNUM_BANKS"]], None, new_taps, True)
-            emit_io(tap + "_L1I_CLUSTER", ports, "_l1i_cluster", [ncores, parameters["INUM_BANKS"]], None, new_taps, True)
-            emit_io(tap + "_L1S_CLUSTER", ports, "_l1s_cluster", [ncores, parameters["SNUM_BANKS"]], None, new_taps, True)
-
-            emit_io(tap + "_L1D_CORE", ports, "_l1d_cache", [parameters["DNUM_BANKS"]], None, new_taps, True)
-            emit_io(tap + "_L1I_CORE", ports, "_l1i_cache", [parameters["INUM_BANKS"]], None, new_taps, True)
-            emit_io(tap + "_L1S_CORE", ports, "_l1s_cache", [parameters["SNUM_BANKS"]], None, new_taps, True)
-
-            emit_io(tap + "_CACHE", ports, "_cache", ["NUM_BANKS"], None, new_taps, True)
-            emit_io(tap + "", ports, "", [], None, new_taps, True)
-
-            emit_select(tap + "_L2_CLUSTER", ports, "_l2_top", "_l2_cache", new_taps, has_l2)
-            emit_select(tap + "_L1D_CLUSTER", ports, "_l1d_top", "_l1d_cluster", new_taps, True)
-            emit_select(tap + "_L1I_CLUSTER", ports, "_l1i_top", "_l1i_cluster", new_taps, True)
-            emit_select(tap + "_L1S_CLUSTER", ports, "_l1s_top", "_l1s_cluster", new_taps, True)  
-
-            emit_select(tap + "_L1D_CORE", ports, "_l1d_cluster", "_l1d_cache", new_taps, True)
-            emit_select(tap + "_L1I_CORE", ports, "_l1i_cluster", "_l1i_cache", new_taps, True)
-            emit_select(tap + "_L1S_CORE", ports, "_l1s_cluster", "_l1s_cache", new_taps, True)         
-
-            emit_bind(tap + "_L3_CACHE", ports, "_l3_cache", "_cache", new_taps, has_l3)
-            emit_bind(tap + "_L2_CACHE", ports, "_l2_cache", "_cache", new_taps, has_l2)
-            emit_bind(tap + "_L1D_CACHE", ports, "_l1d_cache", "_cache", new_taps, True)
-            emit_bind(tap + "_L1I_CACHE", ports, "_l1i_cache", "_cache", new_taps, True)
-            emit_bind(tap + "_L1S_CACHE", ports, "_l1s_cache", "_cache", new_taps, True)         
-            
-            emit_select(tap + "", ports, "_cache", "", new_taps, True)
-
-            return out_ports   
-
-        callbacks = {
-            "top":  do_top, 
-            "core": do_core,
-            "bank": do_bank
-        }
-
-        return callbacks[tclass](tap, ports, new_taps)
-
-    def trigger_size(name, ports):
-        for port in ports:
-            if port[0] == name:
-                return (port[1], port[2])
-        return None
-
-    def trigger_prefices(asize):
-        def Q(arr, ss, asize, idx, N):
-            for i in range(asize[idx]):  
-                tmp = ss + '[' + str(i) + ']'                  
-                if (idx + 1) < N:
-                    Q(arr, tmp, asize, idx + 1, N)
-                else:
-                    arr.append(tmp)            
-
-        l = len(asize)   
-        if l == 0:     
-            return [""]
-        arr = []
-        Q(arr, "", asize, 0, l)
-        return arr         
+    def dic_insert(gdic, ldic, key, value, enabled):
+        if enabled:
+            ldic[key] = value
+        if key in gdic:
+            return False
+        if enabled:
+            gdic[key] = None        
+        return True
 
     def trigger_name(name, size):
         if type(size) == int:
-            size1 = (size-1)
-            if size1 != 0:
+            if size != 1:
                 return "(| " + name + ")"
             else:
                 return name
         else:
             return "(| " + name + ")"
 
-    with open(file, 'w') as f:
+    def trigger_subscripts(asize):
+        def Q(arr, ss, asize, idx, N):
+            a = asize[idx]
+            if (a != 0):
+                for i in range(a):  
+                    tmp = ss + '[' + str(i) + ']'                  
+                    if (idx + 1) < N:
+                        Q(arr, tmp, asize, idx + 1, N)
+                    else:
+                        arr.append(tmp)           
+            else:                
+                if (idx + 1) < N:
+                    Q(arr, ss, asize, idx + 1, N)
+                else:
+                    arr.append(ss)
+
+        if asize is None:
+            return [""]        
+        ln = len(asize)   
+        if (0 == ln):     
+            return [""]
+        arr = []
+        Q(arr, "", asize, 0, ln)
+        return arr
+
+
+    def visit_path(alltaps, ports, path, node, paths, modules, taps):
+        ntype = node["type"]
+
+        enabled = True
+        if "enabled" in node:
+            enabled = eval_node(node["enabled"], None)
+
+        curtaps = {}
+
+        if (len(paths) != 0):
+            spath = paths.pop(0)
+            snodes = modules[ntype]["submodules"]                        
+            if not spath in snodes:
+                raise Exception("invalid path: " + spath + " in " + path)            
+            snode = snodes[spath]
+
+            subtaps = visit_path(alltaps, ports, spath, snode, paths, modules, taps)
+            
+            scount = 0   
+            if "count" in snode:
+                scount = eval_node(snode["count"], None)
+
+            params = None
+            if "params" in snode:
+                params = snode["params"]
+
+            new_staps = []
+
+            nn = "SCOPE_IO_" + ntype
+            pp = create_signal(nn, ports)
+            for key in subtaps:
+                subtap = subtaps[key]
+                s = subtap[0]
+                a = subtap[1]
+                t = subtap[2]
+                e = subtap[3]
+
+                s = eval_node(s, params)
+
+                e = eval_node(e, params)
+                if type(e) == str or type(enabled) == str:
+                    me = str(e) + " and " + str(enabled)                    
+                else:
+                    me = e and enabled                                        
+
+                aa = [scount]
+                sa = signal_size(scount, 0)
+                if a:
+                    for i in a:
+                        x = eval_node(i, params)
+                        aa.append(x)
+                        sa += signal_size(x, 0)
+                
+                if dic_insert(alltaps, curtaps, spath + '/' + key, (s, aa, t, me), e):
+                    skey = key.replace('/', '_')
+                    if e:
+                        pp.append("\toutput wire" + sa + signal_size(s, 1) + " scope_" + spath + '_' + skey + ',')
+                    new_staps.append(skey)
+
+            ports[nn] = pp
+
+            if (0 == scount):
+                nn = "SCOPE_BIND_" + ntype + '_' + spath + "()"                
+                pp = create_signal(nn, ports)
+                for st in new_staps:
+                    if e:
+                        pp.append("\t.scope_" + st + "(scope_" + spath + '_' + st + "),")
+                    else:
+                        pp.append("\t`UNUSED_PIN (scope_" + st + "),")
+                ports[nn] = pp
+            else:
+                nn = "SCOPE_BIND_" + ntype + '_' + spath + "(__i__)"
+                pp = create_signal(nn, ports)
+                for st in new_staps:
+                    if e:
+                        pp.append("\t.scope_" + st + "(scope_" + spath + '_' + st + "[__i__]),")
+                    else:
+                        pp.append("\t`UNUSED_PIN (scope_" + st + "),")
+                ports[nn] = pp
+        else:
+            nn = "SCOPE_IO_" + ntype
+            pp = create_signal(nn, ports) 
+            for tk in taps:
+                trigger = 0
+                name = tk
+                size = eval_node(taps[tk], None)
+                if name[0] == '!':
+                    name = name[1:]
+                    trigger = 1
+                elif name[0] == '?':
+                    name = name[1:]
+                    trigger = 2
+                if dic_insert(alltaps, curtaps, name, (size, None, trigger, enabled), True):
+                    pp.append("\toutput wire" + signal_size(size, 1) + " scope_" + name + ',')
+
+            ports[nn] = pp
+
+        return curtaps
+
+    toptaps = {}
+
+    with open(file, 'w') as f:        
+
+        top = modules['*']
+        snodes = top["submodules"]
+
+        ports = {}
+        alltaps = {}
+        
+        for key in taps:
+            skey_list = key.split(',')
+            _taps = taps[key]
+            for skey in skey_list:
+                print('processing node: ' + skey + ' ...')
+                paths = skey.strip().split('/')
+                spath = paths.pop(0)
+                if not spath in snodes:
+                    raise Exception("invalid path: " + spath)            
+                snode = snodes[spath]
+                curtaps = visit_path(alltaps, ports, spath, snode, paths, modules, _taps)
+                for tk in curtaps:
+                    toptaps[tk] = curtaps[tk]
+
         print(header, file=f)
 
-        all_ports = []
-        new_taps = []
+        for key in ports:
+            print("`define " + key + ' \\', file=f)
+            for port in ports[key]:
+                print(port + ' \\', file=f)
+            print("", file=f)
 
-        for key in taps:            
-            [tclass, tap] = key.split('::')
-            ports = generate_ports(tclass, tap, taps[key], new_taps)
-            for port in ports:
-                all_ports.append(port)
-
-        print("`define SCOPE_SIGNALS_DECL \\", file=f)
-        i = 0  
-        for port in all_ports:     
+        print("`define SCOPE_DECL_SIGNALS \\", file=f)
+        i = 0
+        for key in toptaps:
+            tap = toptaps[key]
+            name = key.replace('/', '_')
+            size = tap[0]
+            asize = tap[1]
+            enabled = tap[3]
+            sa = ""
+            if asize:
+                for a in asize:
+                    sa += signal_size(a, 0)
             if i > 0:
                 print(" \\", file=f)
-            print("\twire" + signal_size(port[1], port[2]) + " " + port[0] + ";", file=f, end='')
+            if not enabled:
+                print("`IGNORE_WARNINGS_BEGIN \\", file=f)
+                print('\t wire' + sa + signal_size(size, 1) + " scope_" + name + '; \\', file=f)
+                print("`IGNORE_WARNINGS_END", file=f, end='')
+            else:
+                print('\t wire' + sa + signal_size(size, 1) + " scope_" + name + ';', file=f, end='')
             i += 1
         print("", file=f)
         print("", file=f)
 
-        print("`define SCOPE_SIGNALS_DATA_LIST \\", file=f)
+        print("`define SCOPE_DATA_LIST \\", file=f)
         i = 0
-        for port in all_ports:
-            if port[3]:
+        for key in toptaps:
+            tap = toptaps[key]
+            if tap[2] != 0:
                 continue
+            name = key.replace('/', '_')
             if i > 0:
                 print(", \\", file=f)
-            print("\t" + port[0], file=f, end='')            
+            print("\t scope_" + name, file=f, end='')
             i += 1
         print("", file=f)
         print("", file=f)
 
-        print("`define SCOPE_SIGNALS_UPD_LIST \\", file=f)
+        print("`define SCOPE_UPDATE_LIST \\", file=f)
         i = 0
-        for port in all_ports:
-            if not port[3]:
+        for key in toptaps:
+            tap = toptaps[key]
+            if tap[2] == 0:
                 continue
+            name = key.replace('/', '_')
             if i > 0:
                 print(", \\", file=f)
-            print("\t" + port[0], file=f, end='')            
+            print("\t scope_" + name, file=f, end='')
             i += 1
         print("", file=f)
         print("", file=f)
 
-        print("`define SCOPE_TRIGGERS \\", file=f)
+        print("`define SCOPE_TRIGGER \\", file=f)
         i = 0
-        for trigger in triggers:
-            arr = trigger_size(trigger[0], all_ports)
-            if arr is None:
+        excluded_list = []
+        for key in toptaps:
+            if key in excluded_list:
                 continue
-            [size, asize] = arr
-            for prefix in trigger_prefices(asize):
+            tap = toptaps[key]
+            if tap[2] != 2:
+                continue
+            size = tap[0]
+            asize = tap[1]            
+            sus = trigger_subscripts(asize)
+            for su in sus:
                 if i > 0:
-                    print(" | \\", file=f)                
-                print("\t(", file=f, end='')
-                for j in range(len(trigger)):
-                    if j > 0:
-                        print(" && ", file=f, end='')                
-                    print(trigger_name(trigger[j] + prefix, size), file=f, end='')
+                    print(" | \\", file=f)         
+                print("\t(", file=f, end='')            
+                name = trigger_name("scope_" + key.replace('/', '_') + su, size)
+                if key.endswith("_valid"):
+                    ready_signal = key[:-6] + "_ready"
+                    if ready_signal in toptaps:
+                        rname = trigger_name("scope_" + ready_signal.replace('/', '_') + su, size)
+                        print(name + " && " + rname, file=f, end='')
+                        excluded_list.append(ready_signal)
+                    else:
+                        print(name, file=f, end='')
+                else:
+                    print(name, file=f, end='')
                 print(")", file=f, end='')         
                 i += 1
         print("", file=f)
@@ -538,69 +682,110 @@ def gen_vl_header(file, taps, triggers):
 
         print(footer, file=f)
 
-        return all_ports
+    return toptaps
 
-def gen_cc_header(file, ports):
+def gen_cc_header(file, taps):
 
     header = '''
-#pragma once\n
-struct scope_signal_t {
+#pragma once
+
+struct scope_module_t {
+    const char* name;
+    int index;
+    int parent;
+};
+
+struct scope_tap_t {
     int width;
     const char* name;
-};\n
-inline constexpr int __clog2(int n) { return (n > 1) ? 1 + __clog2((n + 1) >> 1) : 0; }\n
-static constexpr scope_signal_t scope_signals[] = {'''
-
-    footer = "};"
-
-    def eval_macro(text):
-        expanded = expand_text(text)
-        if expanded:
-            text = expanded
-        text = text.replace('$clog2', '__clog2')
-        return text
-
-    def asize_name(asize):
-        def Q(arr, ss, asize, idx, N):
-            for i in range(asize[idx]):  
-                tmp = ss + "_" + str(i)                  
+    int module;
+};
+'''
+    def flatten_path(paths, sizes):
+        def Q(arr, ss, idx, N, paths, sizes):
+            size = sizes[idx]
+            if size != 0:
+                for i in range(sizes[idx]):  
+                    tmp = ss + ('/' if (ss != '') else '')
+                    tmp += paths[idx] + '_' + str(i)
+                    if (idx + 1) < N:
+                        Q(arr, tmp, idx + 1, N, paths, sizes)
+                    else:
+                        arr.append(tmp)            
+            else:
+                tmp = ss + ('/' if (ss != '') else '')
+                tmp += paths[idx]
                 if (idx + 1) < N:
-                    Q(arr, tmp, asize, idx + 1, N)
+                    Q(arr, tmp, idx + 1, N, paths, sizes)
                 else:
-                    arr.append(tmp)            
+                    arr.append(tmp)
 
-        l = len(asize)   
-        if l == 0:     
-            return [""]
         arr = []
-        Q(arr, "", asize, 0, l)
-        return arr                  
+        Q(arr, "", 0, len(asize), paths, asize)
+        return arr
+
+    # flatten the taps
+    fdic = {}
+    for key in taps:
+        tap = taps[key]
+        size = str(tap[0])            
+        paths = key.split('/')
+        if (len(paths) > 1):                
+            name = paths.pop(-1)
+            asize = tap[1]    
+            for ss in flatten_path(paths, asize):
+                fdic[ss + '/' + name ] = [size, -1]
+        else:
+            fdic[key] = [size, -1]
+
+    # generate module dic
+    mdic = {}
+    for key in fdic:         
+        paths = key.split('/')
+        if len(paths) == 1:
+            continue
+        paths.pop(-1)
+        parent = -1
+        for path in paths:
+            if not path in mdic:
+                index = len(mdic)
+                mdic[path] = (index, parent)
+                parent = index
+            else:    
+                parent = mdic[path][0]
+        fdic[key][1] = parent
 
     with open(file, 'w') as f:
         print(header, file=f)
+
+        print("static constexpr scope_module_t scope_modules[] = {", file=f)
         i = 0
-        for port in ports:                  
-            if port[3]:
-                continue 
-            name = port[0]             
-            size = eval_macro(str(port[1]))
-            for ss in asize_name(port[2]):                
-                if i > 0:
-                    print(",", file=f)      
-                print("\t{" + size + ", \"" + name + ss + "\"}", file=f, end='')    
-                i += 1
-        for port in ports:                   
-            if not port[3]:
-                continue
-            name = port[0]             
-            size = eval_macro(str(port[1]))
-            for ss in asize_name(port[2]):                
-                if i > 0:
-                    print(",", file=f)      
-                print("\t{" + size + ", \"" + name + ss + "\"}", file=f, end='')    
-                i += 1
+        for key in mdic:
+            m = mdic[key]
+            if i > 0:
+                print(',', file=f)
+            print("\t{\"" + key + "\", " + str(m[0]) + ", " + str(m[1]) + "}", file=f, end='')                
+            i += 1
         print("", file=f)
-        print(footer, file=f)
+        print("};", file=f)
+
+        print("", file=f)
+        print("static constexpr scope_tap_t scope_taps[] = {", file=f)
+        i = 0
+        for key in fdic:
+            size = fdic[key][0]
+            parent = fdic[key][1]
+            paths = key.split('/')
+            if len(paths) > 1:
+                name = paths.pop(-1)
+            else:
+                name = key
+            if i > 0:
+                print(',', file=f)
+            print("\t{" + size + ", \"" + name + "\", " + str(parent) + "}", file=f, end='')                
+            i += 1
+        print("", file=f)
+        print("};", file=f)
 
 def main():    
     parser = argparse.ArgumentParser(description='Scope headers generator.')
@@ -612,7 +797,6 @@ def main():
     args = parser.parse_args()
     print("args=", args)
 
-    global parameters
     global exclude_files
     global include_dirs
     global macros
@@ -630,13 +814,9 @@ def main():
 
     if "includes" in config:
         parse_includes(config["includes"])
-
-    parameters = config["parameters"]
-    for key in parameters:
-        parameters[key] = int(eval(expand_text(str(parameters[key]))))
         
-    ports = gen_vl_header(args.vl, config["taps"], config["triggers"])
-    gen_cc_header(args.cc, ports)
+    taps = gen_vl_header(args.vl, config["modules"], config["taps"])
+    gen_cc_header(args.cc, taps)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

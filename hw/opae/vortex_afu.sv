@@ -93,7 +93,7 @@ typedef logic [$bits(t_ccip_clData) + $bits(t_cci_rdq_tag)-1:0] t_cci_rdq_data;
 state_t state;
 
 `ifdef SCOPE
-`SCOPE_SIGNALS_DECL
+`SCOPE_DECL_SIGNALS
 `endif
 
 // Vortex ports ///////////////////////////////////////////////////////////////
@@ -511,8 +511,8 @@ assign vx_dram_wr_req_fire  = vx_dram_wr_req_enable && !avs_waitrequest;
 assign vx_dram_rd_rsp_fire  = vx_dram_rsp_valid && vx_dram_rsp_ready;
 
 assign avs_pending_reads_next = avs_pending_reads 
-                              + (((cci_dram_rd_req_fire || vx_dram_rd_req_fire) && !avs_rdq_pop) ? 1 :
-                                 (~(cci_dram_rd_req_fire || vx_dram_rd_req_fire) && avs_rdq_pop) ? -1 : 0);
+                              + $bits(avs_pending_reads)'(((cci_dram_rd_req_fire || vx_dram_rd_req_fire) && !avs_rdq_pop) ? 1 :
+                                                          (~(cci_dram_rd_req_fire || vx_dram_rd_req_fire) && avs_rdq_pop) ? -1 : 0);
 
 if (`VX_DRAM_LINE_WIDTH != DRAM_LINE_WIDTH) begin
   assign vx_dram_req_offset  = ((DRAM_LINE_LW)'(vx_dram_req_addr[(DRAM_LINE_LW-VX_DRAM_LINE_LW)-1:0])) << VX_DRAM_LINE_LW;    
@@ -573,8 +573,8 @@ begin
     end
 
     if (cci_dram_rd_req_fire) begin
-      cci_dram_rd_req_addr <= cci_dram_rd_req_addr + 1;       
-      cci_dram_rd_req_ctr  <= cci_dram_rd_req_ctr - 1;  
+      cci_dram_rd_req_addr <= cci_dram_rd_req_addr + DRAM_ADDR_WIDTH'(1);       
+      cci_dram_rd_req_ctr  <= cci_dram_rd_req_ctr - DRAM_ADDR_WIDTH'(1);  
     `ifdef DBG_PRINT_OPAE
       $display("%t: AVS Rd Req: addr=%0h, rem=%0d, pending=%0d", $time, `DRAM_TO_BYTE_ADDR(avs_address), (cci_dram_rd_req_ctr - 1), avs_pending_reads_next);
     `endif
@@ -582,7 +582,7 @@ begin
 
     if (cci_dram_wr_req_fire) begin                
       cci_dram_wr_req_addr <= cci_dram_wr_req_addr + ((t_cci_rdq_tag'(cci_dram_wr_req_ctr) == $bits(t_cci_rdq_tag)'(CCI_RD_WINDOW_SIZE-1)) ? DRAM_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE)  : DRAM_ADDR_WIDTH'(0));
-      cci_dram_wr_req_ctr  <= cci_dram_wr_req_ctr + 1;
+      cci_dram_wr_req_ctr  <= cci_dram_wr_req_ctr + DRAM_ADDR_WIDTH'(1);
     `ifdef DBG_PRINT_OPAE
       $display("%t: AVS Wr Req: addr=%0h, data=%0h, rem=%0d", $time, `DRAM_TO_BYTE_ADDR(avs_address), avs_writedata, (cci_dram_wr_req_ctr + 1));
     `endif
@@ -683,15 +683,15 @@ end
 assign cci_rd_req_fire = af2cp_sTxPort.c0.valid && !cp2af_sRxPort.c0TxAlmFull;
 assign cci_rd_rsp_fire = (STATE_WRITE == state) && cp2af_sRxPort.c0.rspValid;
 
-assign cci_rd_req_ctr_next = cci_rd_req_ctr + (cci_rd_req_fire ? 1 : 0);
+assign cci_rd_req_ctr_next = cci_rd_req_ctr + DRAM_ADDR_WIDTH'(cci_rd_req_fire ? 1 : 0);
 
 assign cci_rdq_pop  = cci_dram_wr_req_fire;
 assign cci_rdq_push = cci_rd_rsp_fire;
 assign cci_rdq_din  = {cp2af_sRxPort.c0.data, t_cci_rdq_tag'(cp2af_sRxPort.c0.hdr.mdata)};  
 
 assign cci_pending_reads_next = cci_pending_reads 
-                              + ((cci_rd_req_fire && !cci_rdq_pop) ? 1 : 
-                                 (!cci_rd_req_fire && cci_rdq_pop) ? -1 : 0);
+                              + $bits(cci_pending_reads)'((cci_rd_req_fire && !cci_rdq_pop) ? 1 : 
+                                                          (!cci_rd_req_fire && cci_rdq_pop) ? -1 : 0);
 
 assign af2cp_sTxPort.c0.valid = cci_rd_req_enable && !cci_rd_req_wait;
 
@@ -734,7 +734,7 @@ begin
     end
 
     if (cci_rd_rsp_fire) begin
-      cci_rd_rsp_ctr <= cci_rd_rsp_ctr + 1;
+      cci_rd_rsp_ctr <= cci_rd_rsp_ctr + t_cci_rdq_tag'(1);
       if (cci_rd_rsp_ctr == $bits(t_cci_rdq_tag)'(CCI_RD_WINDOW_SIZE-1)) begin
         cci_rd_req_wait <= 0;   // restart new request batch
       end 
@@ -787,8 +787,8 @@ assign cci_wr_req_fire = af2cp_sTxPort.c1.valid && !cp2af_sRxPort.c1TxAlmFull;
 assign cci_wr_rsp_fire = (STATE_READ == state) && cp2af_sRxPort.c1.rspValid;
 
 assign cci_pending_writes_next = cci_pending_writes 
-                               + ((cci_wr_req_fire && !cci_wr_rsp_fire) ? 1 :
-                                  (!cci_wr_req_fire && cci_wr_rsp_fire) ? -1 : 0);
+                               + $bits(cci_pending_writes)'((cci_wr_req_fire && !cci_wr_rsp_fire) ? 1 :
+                                                            (!cci_wr_req_fire && cci_wr_rsp_fire) ? -1 : 0);
 
 assign cmd_read_done = (0 == cci_wr_req_ctr) && (0 == cci_pending_writes);
 
@@ -817,8 +817,8 @@ begin
 
     if (cci_wr_req_fire) begin
       assert(cci_wr_req_ctr != 0);  
-      cci_wr_req_addr <= cci_wr_req_addr + 1;        
-      cci_wr_req_ctr  <= cci_wr_req_ctr - 1;
+      cci_wr_req_addr <= cci_wr_req_addr + t_ccip_clAddr'(1);        
+      cci_wr_req_ctr  <= cci_wr_req_ctr - DRAM_ADDR_WIDTH'(1);
     `ifdef DBG_PRINT_OPAE
       $display("%t: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes_next);
     `endif
@@ -854,8 +854,8 @@ end
 assign vx_snp_req_fire  = vx_snp_req_valid && vx_snp_req_ready;
 assign vx_snp_rsp_fire  = vx_snp_rsp_valid && vx_snp_rsp_ready;
 
-assign snp_req_ctr_next = vx_snp_req_fire ? (snp_req_ctr + 1) : snp_req_ctr;
-assign snp_rsp_ctr_next = vx_snp_rsp_fire ? (snp_rsp_ctr - 1) : snp_rsp_ctr;
+assign snp_req_ctr_next = vx_snp_req_fire ? (snp_req_ctr + `VX_DRAM_ADDR_WIDTH'(1)) : snp_req_ctr;
+assign snp_rsp_ctr_next = vx_snp_rsp_fire ? (snp_rsp_ctr - `VX_DRAM_ADDR_WIDTH'(1)) : snp_rsp_ctr;
 
 assign cmd_clflush_done = (0 == snp_rsp_ctr);  
 
@@ -894,7 +894,7 @@ begin
     if (vx_snp_req_fire)
     begin
       assert(snp_req_ctr < snp_req_size);
-      vx_snp_req_addr <= vx_snp_req_addr + 1;
+      vx_snp_req_addr <= vx_snp_req_addr + `VX_DRAM_ADDR_WIDTH'(1);
       vx_snp_req_tag  <= (`VX_SNP_TAG_WIDTH)'(snp_req_ctr_next);
       snp_req_ctr     <= snp_req_ctr_next;
     `ifdef DBG_PRINT_OPAE
@@ -954,15 +954,7 @@ end
 assign cmd_run_done = !vx_busy;
 
 Vortex #() vortex (
-  `SCOPE_SIGNALS_ISTAGE_TOP_BIND
-  `SCOPE_SIGNALS_LSU_TOP_BIND
-  `SCOPE_SIGNALS_BANK_L3_TOP_BIND
-  `SCOPE_SIGNALS_BANK_L2_TOP_BIND
-  `SCOPE_SIGNALS_BANK_L1D_TOP_BIND
-  `SCOPE_SIGNALS_BANK_L1I_TOP_BIND
-  `SCOPE_SIGNALS_BANK_L1S_TOP_BIND
-  `SCOPE_SIGNALS_ISSUE_TOP_BIND
-  `SCOPE_SIGNALS_EXECUTE_TOP_BIND
+  `SCOPE_BIND_vortex_afu_vortex()
 
   .clk              (clk),
   .reset            (reset | vx_reset),
@@ -1001,10 +993,10 @@ Vortex #() vortex (
   `UNUSED_PIN       (io_req_addr),
   `UNUSED_PIN       (io_req_data),
   `UNUSED_PIN       (io_req_tag),    
-  .io_req_ready     (1),
+  .io_req_ready     (1'b1),
 
   // I/O response
-  .io_rsp_valid     (0),
+  .io_rsp_valid     (1'b0),
   .io_rsp_data      (0),
   .io_rsp_tag       (0),
   `UNUSED_PIN       (io_rsp_ready),
@@ -1069,20 +1061,20 @@ end
 
 `SCOPE_ASSIGN (scope_busy, vx_busy);
 
-wire scope_changed = `SCOPE_TRIGGERS;
+wire scope_changed = `SCOPE_TRIGGER;
 
 VX_scope #(
-  .DATAW    ($bits({`SCOPE_SIGNALS_DATA_LIST,`SCOPE_SIGNALS_UPD_LIST})),
+  .DATAW    ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),
   .BUSW     (64),
   .SIZE     (4096),
-  .UPDW     ($bits({`SCOPE_SIGNALS_UPD_LIST}))
+  .UPDW     ($bits({`SCOPE_UPDATE_LIST}))
 ) scope (
   .clk      (clk),
   .reset    (reset),
   .start    (scope_start),
-  .stop     (0),
+  .stop     (1'b0),
   .changed  (scope_changed),
-  .data_in  ({`SCOPE_SIGNALS_DATA_LIST,`SCOPE_SIGNALS_UPD_LIST}),
+  .data_in  ({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST}),
   .bus_in   (cmd_scope_wdata),
   .bus_out  (cmd_scope_rdata),
   .bus_read (cmd_scope_read),
