@@ -9,8 +9,6 @@
 
 `else
 
-`define SCOPE_IO_vortex_afu
-
 `define SCOPE_IO_VX_icache_stage
 
 `define SCOPE_IO_VX_fetch
@@ -37,7 +35,7 @@
 
 `define SCOPE_BIND_Vortex_cluster(__i__)
 
-`define SCOPE_BIND_vortex_afu_vortex
+`define SCOPE_BIND_top_vortex
 
 `define SCOPE_IO_VX_lsu_unit
 

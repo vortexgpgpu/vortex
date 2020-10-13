@@ -465,23 +465,24 @@ def gen_vl_header(file, modules, taps):
         return arr
 
 
-    def visit_path(alltaps, ports, path, node, paths, modules, taps):
-        ntype = node["type"]
-
-        enabled = True
-        if "enabled" in node:
-            enabled = eval_node(node["enabled"], None)
-
+    def visit_path(alltaps, ports, ntype, paths, modules, taps):
         curtaps = {}
 
         if (len(paths) != 0):
             spath = paths.pop(0)
             snodes = modules[ntype]["submodules"]                        
             if not spath in snodes:
-                raise Exception("invalid path: " + spath + " in " + path)            
+                raise Exception("invalid path: " + spath + " in " + ntype)  
+
             snode = snodes[spath]
 
-            subtaps = visit_path(alltaps, ports, spath, snode, paths, modules, taps)
+            stype = snode["type"]
+
+            enabled = True
+            if "enabled" in snode:
+                enabled = eval_node(snode["enabled"], None)
+
+            subtaps = visit_path(alltaps, ports, stype, paths, modules, taps)
             
             scount = 0   
             if "count" in snode:
@@ -495,20 +496,12 @@ def gen_vl_header(file, modules, taps):
 
             nn = "SCOPE_IO_" + ntype
             pp = create_signal(nn, ports)
+        
             for key in subtaps:
                 subtap = subtaps[key]
                 s = subtap[0]
                 a = subtap[1]
-                t = subtap[2]
-                e = subtap[3]
-
-                s = eval_node(s, params)
-
-                e = eval_node(e, params)
-                if type(e) == str or type(enabled) == str:
-                    me = str(e) + " and " + str(enabled)                    
-                else:
-                    me = e and enabled                                        
+                t = subtap[2]                                                        
 
                 aa = [scount]
                 sa = signal_size(scount, 0)
@@ -518,9 +511,9 @@ def gen_vl_header(file, modules, taps):
                         aa.append(x)
                         sa += signal_size(x, 0)
                 
-                if dic_insert(alltaps, curtaps, spath + '/' + key, (s, aa, t, me), e):
+                if dic_insert(alltaps, curtaps, spath + '/' + key, (s, aa, t), enabled):
                     skey = key.replace('/', '_')
-                    if e:
+                    if enabled:
                         pp.append("\toutput wire" + sa + signal_size(s, 1) + " scope_" + spath + '_' + skey + ',')
                     new_staps.append(skey)
 
@@ -529,24 +522,29 @@ def gen_vl_header(file, modules, taps):
             if (0 == scount):
                 nn = "SCOPE_BIND_" + ntype + '_' + spath             
                 pp = create_signal(nn, ports)
+
                 for st in new_staps:
-                    if e:
+                    if enabled:
                         pp.append("\t.scope_" + st + "(scope_" + spath + '_' + st + "),")
                     else:
                         pp.append("\t`UNUSED_PIN (scope_" + st + "),")
+
                 ports[nn] = pp
             else:
                 nn = "SCOPE_BIND_" + ntype + '_' + spath + "(__i__)"
                 pp = create_signal(nn, ports)
+
                 for st in new_staps:
-                    if e:
+                    if enabled:
                         pp.append("\t.scope_" + st + "(scope_" + spath + '_' + st + "[__i__]),")
                     else:
                         pp.append("\t`UNUSED_PIN (scope_" + st + "),")
+
                 ports[nn] = pp
         else:
             nn = "SCOPE_IO_" + ntype
             pp = create_signal(nn, ports) 
+            
             for tk in taps:
                 trigger = 0
                 name = tk
@@ -557,7 +555,7 @@ def gen_vl_header(file, modules, taps):
                 elif name[0] == '?':
                     name = name[1:]
                     trigger = 2
-                if dic_insert(alltaps, curtaps, name, (size, None, trigger, enabled), True):
+                if dic_insert(alltaps, curtaps, name, (size, None, trigger), True):
                     pp.append("\toutput wire" + signal_size(size, 1) + " scope_" + name + ',')
 
             ports[nn] = pp
@@ -568,9 +566,6 @@ def gen_vl_header(file, modules, taps):
 
     with open(file, 'w') as f:        
 
-        top = modules['*']
-        snodes = top["submodules"]
-
         ports = {}
         alltaps = {}
         
@@ -580,11 +575,8 @@ def gen_vl_header(file, modules, taps):
             for skey in skey_list:
                 print('processing node: ' + skey + ' ...')
                 paths = skey.strip().split('/')
-                spath = paths.pop(0)
-                if not spath in snodes:
-                    raise Exception("invalid path: " + spath)            
-                snode = snodes[spath]
-                curtaps = visit_path(alltaps, ports, spath, snode, paths, modules, _taps)
+                ntype = paths.pop(0)
+                curtaps = visit_path(alltaps, ports, ntype, paths, modules, _taps)
                 for tk in curtaps:
                     toptaps[tk] = curtaps[tk]
 
@@ -603,19 +595,13 @@ def gen_vl_header(file, modules, taps):
             name = key.replace('/', '_')
             size = tap[0]
             asize = tap[1]
-            enabled = tap[3]
             sa = ""
             if asize:
                 for a in asize:
                     sa += signal_size(a, 0)
             if i > 0:
                 print(" \\", file=f)
-            if not enabled:
-                print("`IGNORE_WARNINGS_BEGIN \\", file=f)
-                print('\t wire' + sa + signal_size(size, 1) + " scope_" + name + '; \\', file=f)
-                print("`IGNORE_WARNINGS_END", file=f, end='')
-            else:
-                print('\t wire' + sa + signal_size(size, 1) + " scope_" + name + ';', file=f, end='')
+            print('\t wire' + sa + signal_size(size, 1) + " scope_" + name + ';', file=f, end='')
             i += 1
         print("", file=f)
         print("", file=f)
@@ -624,7 +610,8 @@ def gen_vl_header(file, modules, taps):
         i = 0
         for key in toptaps:
             tap = toptaps[key]
-            if tap[2] != 0:
+            trigger = tap[2]
+            if trigger != 0:
                 continue
             name = key.replace('/', '_')
             if i > 0:
@@ -638,7 +625,8 @@ def gen_vl_header(file, modules, taps):
         i = 0
         for key in toptaps:
             tap = toptaps[key]
-            if tap[2] == 0:
+            trigger = tap[2]
+            if trigger == 0:
                 continue
             name = key.replace('/', '_')
             if i > 0:
@@ -729,23 +717,41 @@ struct scope_tap_t {
     for key in taps:
         tap = taps[key]
         size = str(tap[0])            
+        trigger = tap[2]
+        if (trigger != 0):
+            continue
         paths = key.split('/')
         if (len(paths) > 1):                
             name = paths.pop(-1)
             asize = tap[1]    
             for ss in flatten_path(paths, asize):
-                fdic[ss + '/' + name ] = [size, -1]
+                fdic[ss + '/' + name ] = [size, 0]
         else:
-            fdic[key] = [size, -1]
+            fdic[key] = [size, 0]
+    for key in taps:
+        tap = taps[key]
+        size = str(tap[0])            
+        trigger = tap[2]
+        if (trigger == 0):
+            continue
+        paths = key.split('/')
+        if (len(paths) > 1):                
+            name = paths.pop(-1)
+            asize = tap[1]    
+            for ss in flatten_path(paths, asize):
+                fdic[ss + '/' + name ] = [size, 0]
+        else:
+            fdic[key] = [size, 0]
 
     # generate module dic
     mdic = {}
+    mdic["*"] = ("*", 0, -1)
     for key in fdic:         
         paths = key.split('/')
         if len(paths) == 1:
             continue
         paths.pop(-1)
-        parent = -1
+        parent = 0
         mk = ""
         for path in paths:
             mk += '/' + path
