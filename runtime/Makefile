@@ -1,11 +1,11 @@
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain/drops
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-CFLAGS += -O3 -march=rv32im -mabi=ilp32
+CFLAGS += -O3 -march=rv32imf -mabi=ilp32f
 CFLAFS += -nostartfiles -ffreestanding -fno-exceptions -Wl,--gc-sections
 CFLAGS += -I./include -I../hw
 

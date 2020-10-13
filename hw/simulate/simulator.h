@@ -13,17 +13,8 @@
 
 #include <ostream>
 #include <vector>
-
-#define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 4
-#define DRAM_RQ_SIZE 16
-#define DRAM_STALLS_MODULO 16
-
-typedef struct {
-  int cycles_left;  
-  std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
-  unsigned tag;
-} dram_req_t;
+#include <sstream> 
+#include <unordered_map>
 
 class Simulator {
 public:
@@ -36,7 +27,10 @@ public:
   void load_bin(const char* program_file);
   void load_ihex(const char* program_file);
   
-  bool is_busy() const;  
+  bool is_busy() const;
+
+  bool snp_req_active() const;  
+  bool csr_req_active() const;
 
   void reset();
   void step();
@@ -53,6 +47,14 @@ public:
 
 private:  
 
+  typedef struct {
+    int cycles_left;  
+    std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
+    unsigned tag;
+  } dram_req_t;
+
+  std::unordered_map<int, std::stringstream> print_bufs_;
+
   void eval();  
 
   void eval_dram_bus();
@@ -61,7 +63,7 @@ private:
   void eval_snp_bus();
   
   std::vector<dram_req_t> dram_rsp_vec_;
-  int dram_rsp_active_;
+  bool dram_rsp_active_;
   
   bool snp_req_active_;
   bool csr_req_active_;

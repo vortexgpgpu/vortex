@@ -14,7 +14,7 @@ module VX_pipeline #(
 
     // Dcache core request
     output wire [`NUM_THREADS-1:0]          dcache_req_valid,
-    output wire [`NUM_THREADS-1:0]          dcache_req_rw,
+    output wire                             dcache_req_rw,
     output wire [`NUM_THREADS-1:0][3:0]     dcache_req_byteen,
     output wire [`NUM_THREADS-1:0][29:0]    dcache_req_addr,
     output wire [`NUM_THREADS-1:0][31:0]    dcache_req_data,

@@ -68,18 +68,27 @@ uint64_t shuffle(int i, uint64_t value) {
 
 int run_memcopy_test(uint32_t dev_addr, uint64_t value, int num_blocks) {
   int errors = 0;
+  int num_blocks_8 = (64 * num_blocks) / 8;
 
   // update source buffer
-  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
+  for (int i = 0; i < num_blocks_8; ++i) {
     ((uint64_t*)vx_host_ptr(buffer))[i] = shuffle(i, value);
   }
 
+  /*for (int i = 0; i < num_blocks; ++i) {
+    std::cout << "data[" << i << "]=0x";
+    for (int j = 7; j >= 0; --j) {
+      std::cout << std::hex << ((uint64_t*)vx_host_ptr(buffer))[i * 8 +j];
+    }
+    std::cout << std::endl;
+  }*/
+  
   // write buffer to local memory
   std::cout << "write buffer to local memory" << std::endl;
   RT_CHECK(vx_copy_to_dev(buffer, dev_addr, 64 * num_blocks, 0));
 
   // clear destination buffer
-  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
+  for (int i = 0; i < num_blocks_8; ++i) {
     ((uint64_t*)vx_host_ptr(buffer))[i] = 0;
   }
 
@@ -89,7 +98,7 @@ int run_memcopy_test(uint32_t dev_addr, uint64_t value, int num_blocks) {
 
   // verify result
   std::cout << "verify result" << std::endl;
-  for (int i = 0; i < (64 * num_blocks) / 8; ++i) {
+  for (int i = 0; i < num_blocks_8; ++i) {
     auto curr = ((uint64_t*)vx_host_ptr(buffer))[i];
     auto ref = shuffle(i, value);
     if (curr != ref) {
@@ -127,7 +136,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = 0xffffffff;
+      buf_ptr[i] = 0xdeadbeef;
     }
   }  
   std::cout << "clear destination buffer" << std::endl;
@@ -214,7 +223,8 @@ int main(int argc, char *argv[]) {
   if (0 == test || -1 == test) {
     std::cout << "run memcopy test" << std::endl;
     RT_CHECK(run_memcopy_test(kernel_arg.src_ptr, 0x0badf00d00ff00ff, 1));
-    RT_CHECK(run_memcopy_test(kernel_arg.src_ptr, 0x0badf00d40ff40ff, num_blocks));
+    if (num_blocks >= 4) RT_CHECK(run_memcopy_test(kernel_arg.src_ptr, 0x0badf00d00ff00ff, num_blocks/2));
+    if (num_blocks >= 2) RT_CHECK(run_memcopy_test(kernel_arg.src_ptr, 0x0badf00d40ff40ff, num_blocks));
   }
 
   if (1 == test || -1 == test) {

@@ -235,4 +235,10 @@ typedef struct packed {
     t_if_ccip_c1_Rx      c1; 
 } t_if_ccip_Rx;
 
+
+typedef union packed { 
+    t_ccip_c0_RspMemHdr  rspMemHdr;
+    t_ccip_c0_ReqMmioHdr reqMmioHdr;
+} t_if_ccip_c0_RxHdr;
+
 endpackage

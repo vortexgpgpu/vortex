@@ -137,7 +137,7 @@ module VX_lsu_unit #(
 
     // Core Request
     assign dcache_req_if.valid  = {`NUM_THREADS{valid_in && ~lsuq_full && ~store_stall}} & req_tmask;
-    assign dcache_req_if.rw     = {`NUM_THREADS{req_rw}};
+    assign dcache_req_if.rw     = req_rw;
     assign dcache_req_if.byteen = req_byteen;
     assign dcache_req_if.addr   = req_addr;
     assign dcache_req_if.data   = req_data;  

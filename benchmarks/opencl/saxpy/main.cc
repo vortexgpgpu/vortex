@@ -31,7 +31,7 @@
 #include <string.h>
 
 //#define NUM_DATA 65536
-#define NUM_DATA 4096
+#define NUM_DATA 1024
 
 #define CL_CHECK(_expr)                                                        \
   do {                                                                         \
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
     // printf(" %f", data);
   }
   printf("\n");
-
+  printf("Passed!\n");
   CL_CHECK(clReleaseMemObject(memObjects[0]));
   CL_CHECK(clReleaseMemObject(memObjects[1]));
 

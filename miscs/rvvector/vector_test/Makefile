@@ -1,4 +1,4 @@
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain/drops
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../..)
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
@@ -6,7 +6,7 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-CFLAGS += -march=rv32im -mabi=ilp32 -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld
+CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld
 CFLAGS += -nostartfiles -ffreestanding -fno-exceptions -Wl,--gc-sections 
 CFLAGS += -I$(VORTEX_RT_PATH)/include
 

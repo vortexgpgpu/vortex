@@ -1,128 +1,83 @@
 #include "tests.h"
+#include <stdbool.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 
-int tmc_array[4] = {5,5,5,5};
+int tmc_array[4] = {5, 5, 5, 5};
 
-void test_tmc_impl()
-{
+void test_tmc_impl() {
 	unsigned tid = vx_thread_id(); // Get TID
 	tmc_array[tid] = tid;
 }
 
-void test_tmc()
-{
-	vx_print_str("testing_tmc\n");
+void test_tmc() {
+	vx_printf("testing_tmc\n");
 
 	vx_tmc(4);
-
 	test_tmc_impl();
-
 	vx_tmc(1);
 
-	vx_print_hex(tmc_array[0]);
-	vx_print_str("\n");
-	vx_print_hex(tmc_array[1]);
-	vx_print_str("\n");
-	vx_print_hex(tmc_array[2]);
-	vx_print_str("\n");
-	vx_print_hex(tmc_array[3]);
-	vx_print_str("\n");
+	vx_printx(tmc_array[0]);
+	vx_printx(tmc_array[1]);
+	vx_printx(tmc_array[2]);
+	vx_printx(tmc_array[3]);
 
 	return;
 }
 
 int div_arr[4];
 
-void test_divergence()
-{
+void test_divergence() {
+	vx_tmc(4);
+
 	unsigned tid = vx_thread_id(); // Get TID
 
 	bool b = tid < 2;
-	__if (b)
-	{
+	__if (b) {
 		bool c = tid < 1;
-		__if (c)
-		{
+		__if (c) {
 			div_arr[tid] = 10;
 		}
-		__else
-		{
+		__else {
 			div_arr[tid] = 11;
 		}
 		__endif
 	}
-	__else
-	{
+	__else {
 		bool c = tid < 3;
-		__if (c)
-		{
+		__if (c) {
 			div_arr[tid] = 12;
 		}
-		__else
-		{
+		__else {
 			div_arr[tid] = 13;
 		}
 		__endif
 	}
 	__endif
 
-	vx_print_hex(div_arr[0]);
-	vx_print_str("\n");
-	vx_print_hex(div_arr[1]);
-	vx_print_str("\n");
-	vx_print_hex(div_arr[2]);
-	vx_print_str("\n");
-	vx_print_hex(div_arr[3]);
-	vx_print_str("\n");
+	vx_tmc(1);
+
+	vx_printx(div_arr[0]);
+	vx_printx(div_arr[1]);
+	vx_printx(div_arr[2]);
+	vx_printx(div_arr[3]);
 }
 
 unsigned wsapwn_arr[4];
 
-void simple_kernel()
-{
+void simple_kernel() {
 	unsigned wid = vx_warp_id();
 
 	wsapwn_arr[wid] = wid;
 
-	if (wid != 0)
-	{
-		vx_tmc(0);
-	}
-
+	vx_tmc(0 == wid);
 }
 
-void test_wsapwn()
-{
-	unsigned func_ptr = (unsigned) simple_kernel;
-	vx_wspawn(4, func_ptr);
+void test_wsapwn() {
+	vx_wspawn(4, (unsigned)simple_kernel);
 	simple_kernel();
-
-	for (int i = 0; i < 100; i++) {}
-
-	vx_print_hex(wsapwn_arr[0]);
-	vx_print_str("\n");
-	vx_print_hex(wsapwn_arr[1]);
-	vx_print_str("\n");
-	vx_print_hex(wsapwn_arr[2]);
-	vx_print_str("\n");
-	vx_print_hex(wsapwn_arr[3]);
-	vx_print_str("\n");
-}
-
-void intrinsics_tests()
-{
-	// TMC test
-	test_tmc();
-
-	// Control Divergence Test
-	vx_print_str("test_divergence\n");
-	vx_tmc(4);
-	test_divergence();
-	vx_tmc(1);
-
-
-	// Test wspawn
-	vx_print_str("test_spawn\n");
-	test_wsapwn();
+	vx_printx(wsapwn_arr[0]);
+	vx_printx(wsapwn_arr[1]);
+	vx_printx(wsapwn_arr[2]);
+	vx_printx(wsapwn_arr[3]);
 }

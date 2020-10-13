@@ -11,7 +11,7 @@ interface VX_cache_core_req_if #(
 ) ();
 
     wire [NUM_REQUESTS-1:0]                             valid;
-    wire [NUM_REQUESTS-1:0]                             rw;
+    wire [`CORE_REQ_TAG_COUNT-1:0]                      rw;
     wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              byteen;
     wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       addr;
     wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]            data;

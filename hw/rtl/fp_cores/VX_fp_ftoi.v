@@ -53,9 +53,14 @@ module VX_fp_ftoi #(
             .q      (result_u)
         );        
     `else
+        integer ftoi_h, ftou_h;
+        initial begin
+            ftoi_h = dpi_register();
+            ftou_h = dpi_register();
+        end
         always @(posedge clk) begin
-           dpi_ftoi(10*LANES+i, enable, dataa[i], result_s);
-           dpi_ftou(11*LANES+i, enable, dataa[i], result_u);
+           dpi_ftoi(ftoi_h, enable, dataa[i], result_s);
+           dpi_ftou(ftou_h, enable, dataa[i], result_u);
         end
     `endif
 

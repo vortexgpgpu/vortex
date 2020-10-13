@@ -3,7 +3,9 @@
 module VX_mem_unit # (
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_SIGNALS_BANK_L1D_CORE_IO
+    `SCOPE_SIGNALS_BANK_L1I_CORE_IO
+    `SCOPE_SIGNALS_BANK_L1S_CORE_IO
 
     input wire              clk,
     input wire              reset,
@@ -70,8 +72,6 @@ module VX_mem_unit # (
         .CWBQ_SIZE              (`SCWBQ_SIZE),
         .DWBQ_SIZE              (1),
         .DFQQ_SIZE              (1),
-        .PRFQ_SIZE              (1),
-        .PRFQ_STRIDE            (0),
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (0),
         .WRITE_ENABLE           (1),
@@ -79,7 +79,7 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`SDRAM_TAG_WIDTH)
     ) smem (
-        `SCOPE_SIGNALS_CACHE_UNBIND
+        `SCOPE_SIGNALS_BANK_L1S_CACHE_BIND
         
         .clk                (clk),
         .reset              (reset),
@@ -153,8 +153,6 @@ module VX_mem_unit # (
         .CWBQ_SIZE              (`DCWBQ_SIZE),
         .DWBQ_SIZE              (`DDWBQ_SIZE),
         .DFQQ_SIZE              (`DDFQQ_SIZE),
-        .PRFQ_SIZE              (`DPRFQ_SIZE),
-        .PRFQ_STRIDE            (`DPRFQ_STRIDE),
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (1),
         .WRITE_ENABLE           (1),
@@ -163,7 +161,7 @@ module VX_mem_unit # (
         .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
         .SNP_REQ_TAG_WIDTH      (`DSNP_TAG_WIDTH)
     ) dcache (
-        `SCOPE_SIGNALS_CACHE_BIND
+        `SCOPE_SIGNALS_BANK_L1D_CACHE_BIND
         
         .clk                (clk),
         .reset              (reset),
@@ -237,8 +235,6 @@ module VX_mem_unit # (
         .CWBQ_SIZE              (`ICWBQ_SIZE),
         .DWBQ_SIZE              (`IDWBQ_SIZE),
         .DFQQ_SIZE              (`IDFQQ_SIZE),
-        .PRFQ_SIZE              (`IPRFQ_SIZE),
-        .PRFQ_STRIDE            (`IPRFQ_STRIDE),
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (1),
         .WRITE_ENABLE           (0),
@@ -246,7 +242,7 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS       (`ICORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
     ) icache (
-        `SCOPE_SIGNALS_CACHE_UNBIND
+        `SCOPE_SIGNALS_BANK_L1I_CACHE_BIND
 
         .clk                   (clk),
         .reset                 (reset),
