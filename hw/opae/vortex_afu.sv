@@ -954,7 +954,7 @@ end
 assign cmd_run_done = !vx_busy;
 
 Vortex #() vortex (
-  `SCOPE_BIND_vortex_afu_vortex
+  `SCOPE_BIND_top_vortex
 
   .clk              (clk),
   .reset            (reset | vx_reset),
@@ -1066,7 +1066,7 @@ wire scope_changed = `SCOPE_TRIGGER;
 VX_scope #(
   .DATAW    ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),
   .BUSW     (64),
-  .SIZE     (4096),
+  .SIZE     (100),
   .UPDW     ($bits({`SCOPE_UPDATE_LIST}))
 ) scope (
   .clk      (clk),
