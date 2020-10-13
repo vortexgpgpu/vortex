@@ -395,7 +395,7 @@ module Vortex (
             .SNP_REQ_TAG_WIDTH  (`L3SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
         ) l3cache (
-            `SCOPE_BIND_Vortex_l3cache()
+            `SCOPE_BIND_Vortex_l3cache
 
             .clk                (clk),
             .reset              (reset),

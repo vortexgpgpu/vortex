@@ -32,7 +32,7 @@
         },
         "VX_core": {
             "submodules": {
-                "pipeline": {"type":"VX_pipeline", "enabled":false},
+                "pipeline": {"type":"VX_pipeline", "enabled":true},
                 "mem_unit": {"type":"VX_mem_unit", "enabled":true}
             }
         },

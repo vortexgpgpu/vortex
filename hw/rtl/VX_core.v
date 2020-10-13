@@ -175,7 +175,7 @@ module VX_core #(
     VX_pipeline #(
         .CORE_ID(CORE_ID)
     ) pipeline (
-        `SCOPE_BIND_VX_core_pipeline()
+        `SCOPE_BIND_VX_core_pipeline
 
         .clk(clk),
         .reset(reset),
@@ -251,7 +251,7 @@ module VX_core #(
     VX_mem_unit #(
         .CORE_ID(CORE_ID)
     ) mem_unit (
-        `SCOPE_BIND_VX_core_mem_unit()
+        `SCOPE_BIND_VX_core_mem_unit
 
         .clk                (clk),
         .reset              (reset),

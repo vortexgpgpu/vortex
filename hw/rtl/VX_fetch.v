@@ -29,7 +29,7 @@ module VX_fetch #(
     VX_warp_sched #(
         .CORE_ID(CORE_ID)
     ) warp_sched (
-        `SCOPE_BIND_VX_fetch_warp_sched()
+        `SCOPE_BIND_VX_fetch_warp_sched
 
         .clk              (clk),
         .reset            (reset),        
@@ -45,7 +45,7 @@ module VX_fetch #(
     VX_icache_stage #(
         .CORE_ID(CORE_ID)
     ) icache_stage (
-        `SCOPE_BIND_VX_fetch_icache_stage()
+        `SCOPE_BIND_VX_fetch_icache_stage
 
         .clk            (clk),
         .reset          (reset),        
