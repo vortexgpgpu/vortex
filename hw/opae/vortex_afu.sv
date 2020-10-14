@@ -1066,7 +1066,7 @@ wire scope_changed = `SCOPE_TRIGGER;
 VX_scope #(
   .DATAW    ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),
   .BUSW     (64),
-  .SIZE     (100),
+  .SIZE     (4096),
   .UPDW     ($bits({`SCOPE_UPDATE_LIST}))
 ) scope (
   .clk      (clk),

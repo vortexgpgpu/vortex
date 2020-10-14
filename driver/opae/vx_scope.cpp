@@ -58,8 +58,6 @@ static std::mutex g_timeout_mutex;
 
 static void timeout_callback(fpga_handle fpga) {
     std::this_thread::sleep_for(std::chrono::seconds{60});
-    if (!g_timeout_mutex.try_lock())
-        return;
     vx_scope_stop(fpga, HANG_TIMEOUT);
     fpgaClose(fpga);
     exit(0);
