@@ -175,8 +175,9 @@ logic [31:0]               cmd_csr_wdata;
 // MMIO controller ////////////////////////////////////////////////////////////
 
 `IGNORE_WARNINGS_BEGIN
-t_ccip_c0_ReqMmioHdr mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
+t_ccip_c0_ReqMmioHdr mmio_hdr;
 `IGNORE_WARNINGS_END
+assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
 
 `STATIC_ASSERT(($bits(t_ccip_c0_ReqMmioHdr)-$bits(mmio_hdr.address)) == 12, ("Oops!"))
 
@@ -204,9 +205,20 @@ wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hd
 reg scope_start;
 `endif
 
+// disable assertions until reset
+`ifndef VERILATOR
+initial begin
+  $assertoff;  
+end
+`endif
+
 always_ff @(posedge clk) 
 begin
   if (reset) begin
+  `ifndef VERILATOR
+    $asserton; // enable assertions
+  `endif
+
     mmio_tx.hdr         <= 0;
     mmio_tx.data        <= 0;
     mmio_tx.mmioRdValid <= 0;
@@ -324,7 +336,8 @@ begin
         end
       `endif
         default: begin
-        `ifdef DBG_PRINT_OPAE
+          mmio_tx.data <= 64'h0;
+        `ifdef DBG_PRINT_OPAE          
           $display("%t: Unknown MMIO Rd: addr=%0h", $time, mmio_hdr.address);
         `endif
         end

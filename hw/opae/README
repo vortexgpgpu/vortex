@@ -60,9 +60,9 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -t1 -n1
+./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -n16
 ./run_ase.sh build_ase_1c ../../driver/tests/demo/demo -n 16
-./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n1 -s4 -e4
+./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n16
 ./run_ase.sh build_ase_1c ../../benchmarks/opencl/vecadd/vecadd
 
 # modify "vsim_run.tcl" to dump VCD trace
@@ -97,7 +97,7 @@ kill -9 <pid>
 # fixing device resource busy issue when deleting /build_ase_1c/
 lsof +D build_ase_1c
 
-# quick off cache synthesis
+# quick off synthesis
 make -C pipeline clean && make -C pipeline > pipeline/build.log 2>&1 &
 make -C cache clean && make -C cache > cache/build.log 2>&1 &
 make -C core clean && make -C core > core/build.log 2>&1 &

@@ -29,7 +29,7 @@ module VX_icache_stage #(
     wire [`NW_BITS-1:0] rsp_tag = icache_rsp_if.tag[0][`NW_BITS-1:0];    
 
     always @(posedge clk) begin
-        if (icache_req_fire)  begin
+        if (icache_req_fire) begin
             rsp_PC_buf[req_tag]    <= ifetch_req_if.PC;  
             rsp_tmask_buf[req_tag] <= ifetch_req_if.tmask;
         end    

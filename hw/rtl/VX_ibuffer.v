@@ -20,13 +20,13 @@ module VX_ibuffer #(
     localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
+    reg [SIZEW-1:0] size_r [`NUM_WARPS-1:0];
+    
     wire [`NUM_WARPS-1:0] q_full;
     wire [`NUM_WARPS-1:0][SIZEW-1:0] q_size;
     wire [DATAW-1:0] q_data_in;
-    wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;
-    
+    wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;    
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
-    reg [SIZEW-1:0] size_r [`NUM_WARPS-1:0];
 
     wire enq_fire = ibuf_enq_if.valid && ibuf_enq_if.ready;
     wire deq_fire = ibuf_deq_if.valid && ibuf_deq_if.ready;
@@ -36,7 +36,7 @@ module VX_ibuffer #(
         wire writing = enq_fire && (i == ibuf_enq_if.wid); 
         wire reading = deq_fire && (i == ibuf_deq_if.wid);
 
-        wire is_slot0 = ((0 == size_r[i]) || ((1 == size_r[i]) && reading));
+        wire is_slot0 = (0 == size_r[i]) || ((1 == size_r[i]) && reading);
 
         wire push = writing && !is_slot0;
         wire pop = reading && (size_r[i] != 1);
@@ -48,8 +48,8 @@ module VX_ibuffer #(
             .clk      (clk),
             .reset    (reset),
             .push     (push),
-            .data_in  (q_data_in),
             .pop      (pop),
+            .data_in  (q_data_in),
             .data_out (q_data_prev[i]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (full),
@@ -57,27 +57,28 @@ module VX_ibuffer #(
         );
 
         always @(posedge clk) begin
-            if (writing && is_slot0) begin                                                       
-                q_data_out[i] <= q_data_in;
-            end
-            if (pop) begin                                                        
-                q_data_out[i] <= q_data_prev[i];
-            end                   
-        end
-
-        always @(posedge clk) begin
             if (reset) begin
                 size_r[i] <= 0;
-            end else begin
-                if (writing && !reading) begin                                                       
-                    size_r[i] <= size_r[i] + SIZEW'(1);
+            end else begin            
+                if (writing) begin
+                    if (is_slot0) begin                                                       
+                        q_data_out[i] <= q_data_in;
+                    end
+                    if (!reading) begin                                                       
+                        size_r[i] <= size_r[i] + SIZEW'(1);
+                    end
                 end
-                if (reading && !writing) begin                                                        
-                    size_r[i] <= size_r[i] - SIZEW'(1);
+                if (reading) begin
+                    if (size_r[i] != 1) begin
+                        q_data_out[i] <= q_data_prev[i];
+                    end
+                    if (!writing) begin                                                        
+                        size_r[i] <= size_r[i] - SIZEW'(1);
+                    end
                 end
             end                   
         end
-
+        
         assign q_full[i] = (size_r[i] == SIZE);
         assign q_size[i] = size_r[i];
     end
