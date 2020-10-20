@@ -90,15 +90,19 @@ vx_buffer_h dst_buf  = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
-   std::cout << "Usage: [-s:testid] [-e:testid] [-k: kernel] [-n words] [-c] [-h: help]" << std::endl;
+   std::cout << "Usage: [-t:testid] [-s:testid] [-e:testid] [-k: kernel] [-n words] [-c] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:s:e:k:ch?")) != -1) {
+  while ((c = getopt(argc, argv, "n:t:s:e:k:ch?")) != -1) {
     switch (c) {
     case 'n':
       count = atoi(optarg);
+      break;
+    case 't':
+      testid_s = atoi(optarg);
+      testid_e = atoi(optarg);
       break;
     case 's':
       testid_s = atoi(optarg);

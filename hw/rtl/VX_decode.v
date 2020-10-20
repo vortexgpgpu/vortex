@@ -347,7 +347,7 @@ module VX_decode  #(
         assign decode_if.rd  = rd;
         assign decode_if.rs1 = rs1_qual;
         assign decode_if.rs2 = rs2;
-        assign decode_if.rs3 = rs3;
+        assign decode_if.rs3 = 0;
     `endif
 
     assign decode_if.use_rs3 = use_rs3;

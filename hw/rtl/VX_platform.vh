@@ -41,9 +41,9 @@
 
 `define STRINGIFY(x) `"x`"
 
-`define STATIC_ASSERT(cond, msg)    \
-    generate                        \
-        if (!(cond)) $error msg;   \
+`define STATIC_ASSERT(cond, msg) \
+    generate                     \
+        if (!(cond)) $error msg; \
     endgenerate
 
 `define ENABLE_TRACING  /* verilator tracing_on */
@@ -51,8 +51,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define USE_FAST_BRAM (* syn_ramstyle = "mlab" *)
-`define RELAXED_RW_BRAM (* syn_ramstyle = "no_rw_check" *)
+`define USE_FAST_BRAM   (* ramstyle="mlab" *)
+`define NO_RW_RAM_CHECK (* ramstyle="no_rw_check" *)
 
 ///////////////////////////////////////////////////////////////////////////////
 

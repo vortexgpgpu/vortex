@@ -7,7 +7,7 @@ CXXFLAGS += -I../include -I$(OPAE_HOME)/include  -I../../hw
 
 LDFLAGS += -L$(OPAE_HOME)/lib
 
-SCOPE=1
+#SCOPE=1
 
 # stack execution protection
 LDFLAGS +=-z noexecstack
@@ -31,8 +31,6 @@ FPGA_LIBS += -luuid -lopae-c
 ASE_LIBS += -luuid -lopae-c-ase
 
 VLSIM_LIBS += -lopae-c-vlsim
-
-LIB_DIR=../lib
 
 ASE_DIR = ase
 
@@ -67,10 +65,10 @@ fpga: $(SRCS)
 asesim: $(SRCS) $(ASE_DIR)
 	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $(PROJECT_ASE)
 
-vlsim: $(SRCS) opae-vlsim
-	$(CXX) $(CXXFLAGS) -L./vlsim -DUSE_VLSIM $(SRCS) $(LDFLAGS) $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
+vlsim: $(SRCS) vlsim-hw
+	$(CXX) $(CXXFLAGS) -DUSE_VLSIM $(SRCS) $(LDFLAGS) -L./vlsim $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
 
-opae-vlsim:
+vlsim-hw:
 	$(SET_SCOPE) $(MAKE) -C vlsim
 
 vortex.o: vortex.cpp

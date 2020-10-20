@@ -58,6 +58,7 @@ module VX_cache_miss_resrv #(
 );
     reg [`MRVQ_METADATA_WIDTH-1:0] metadata_table[MRVQ_SIZE-1:0];
     reg [MRVQ_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table;
+    
     reg [MRVQ_SIZE-1:0]            valid_table;
     reg [MRVQ_SIZE-1:0]            ready_table;
     reg [`LOG2UP(MRVQ_SIZE)-1:0]   schedule_ptr;
