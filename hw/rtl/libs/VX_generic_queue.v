@@ -3,7 +3,7 @@
 module VX_generic_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
-    parameter BUFFERED = 0,
+    parameter BUFFERED = 1,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1)
 ) ( 
@@ -85,7 +85,7 @@ module VX_generic_queue #(
                 .DATAW(DATAW),
                 .SIZE(SIZE),
                 .BUFFERED(0),
-                .RWCHECK(1)
+                .RWCHECK(0)
             ) dp_ram (
                 .clk(clk),	
                 .waddr(wr_ptr_a),                                
