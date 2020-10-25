@@ -6,6 +6,7 @@ module VX_dp_ram #(
     parameter BYTEENW  = 1,
     parameter BUFFERED = 1,
     parameter RWCHECK  = 1,
+    parameter RWBYPASS = 0,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1)
 ) ( 
@@ -29,19 +30,46 @@ module VX_dp_ram #(
                     if (wren[i])
                         mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
                 end
-                if (rden)
-                    dout_r <= mem[raddr];
             end
         end else begin
             always @(posedge clk) begin
                 if (wren)
                     mem[waddr] <= din;
-                if (rden)
-                    dout_r <= mem[raddr];
             end
-        end       
-                
+        end
+              
+        always @(posedge clk) begin
+            if (rden)
+                dout_r <= mem[raddr];
+        end
+
+    if (RWBYPASS) begin
+        reg [DATAW-1:0] din_r;
+        wire writing;
+             
+        if (BYTEENW > 1) begin
+            assign writing = (| wren);
+            always @(posedge clk) begin
+                for (integer i = 0; i < BYTEENW; i++) begin
+                    din_r[i * 8 +: 8] <= wren[i] ? din[i * 8 +: 8] : mem[waddr][i * 8 +: 8];
+                end
+            end
+        end else begin
+            assign writing = wren;
+            always @(posedge clk) begin
+                din_r <= din;
+            end
+        end
+        
+        reg bypass_r;
+        always @(posedge clk) begin
+            bypass_r <= writing && (raddr == waddr);
+        end
+
+        assign dout = bypass_r ? din_r : dout_r;
+    end else begin
         assign dout = dout_r;
+    end      
 
     end else begin
 
@@ -65,7 +93,7 @@ module VX_dp_ram #(
                 end
             end
 
-        `ifdef SYNTHESIS
+        if (RWBYPASS) begin
              reg [DATAW-1:0] din_r;
              wire writing;
              
@@ -89,13 +117,13 @@ module VX_dp_ram #(
             end
 
             assign dout = bypass_r ? din_r : mem[raddr];
-        `else
+        end else begin
             assign dout = mem[raddr];
-        `endif
+        end
 
         end else begin
 
-            reg [DATAW-1:0] mem [SIZE-1:0];            
+            `NO_RW_RAM_CHECK reg [DATAW-1:0] mem [SIZE-1:0];            
 
             if (BYTEENW > 1) begin
                 always @(posedge clk) begin

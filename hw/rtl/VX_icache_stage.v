@@ -20,8 +20,8 @@ module VX_icache_stage #(
 );
     `UNUSED_VAR (reset)
 
-    reg [31:0] rsp_PC_buf [`NUM_WARPS-1:0];
-    reg [`NUM_THREADS-1:0] rsp_tmask_buf [`NUM_WARPS-1:0];
+    `NO_RW_RAM_CHECK reg [31:0] rsp_PC_buf [`NUM_WARPS-1:0];
+    `NO_RW_RAM_CHECK reg [`NUM_THREADS-1:0] rsp_tmask_buf [`NUM_WARPS-1:0];
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     

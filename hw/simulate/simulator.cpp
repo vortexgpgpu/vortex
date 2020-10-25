@@ -28,15 +28,11 @@ Simulator::Simulator() {
   ram_ = nullptr;
   vortex_ = new VVortex();
 
-  dram_rsp_active_ = false;
-  snp_req_active_ = false;
-  csr_req_active_ = false;
-
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  trace_ = new VerilatedVcdC();
+  trace_ = new VerilatedFstC();
   vortex_->trace(trace_, 99);
-  trace_->open("trace.vcd");
+  trace_->open("trace.fst");
 #endif  
 
   // reset the device
@@ -66,27 +62,49 @@ void Simulator::reset() {
   std::cout << timestamp << ": [sim] reset()" << std::endl;
 #endif
 
-  vortex_->reset = 1;
-  this->step();  
-  vortex_->reset = 0;
-
+  print_bufs_.clear();
   dram_rsp_vec_.clear();
+
+  dram_rsp_active_ = false;
+  snp_req_active_ = false;
+  csr_req_active_ = false;
+
+  snp_req_size_ = 0;
+  pending_snp_reqs_ = 0;
+  csr_rsp_value_ = nullptr;
+
+  vortex_->dram_rsp_valid = 0;
+  vortex_->dram_req_ready = 0;
+  vortex_->io_req_ready = 0;
+  vortex_->io_rsp_valid = 0;
+  vortex_->snp_req_valid = 0;
+  vortex_->snp_rsp_ready = 0;  
+  vortex_->csr_io_req_valid  = 0;
+  vortex_->csr_io_rsp_ready  = 0;
+
+  vortex_->reset = 1;
+  
+  vortex_->clk = 0;
+  this->eval();
+  vortex_->clk = 1;
+  this->eval();
+
+  vortex_->reset = 0;
 
   // Turn on assertion after reset
   Verilated::assertOn(true);
 }
 
 void Simulator::step() {
-  vortex_->clk = 0;
-  this->eval();
-
-  vortex_->clk = 1;
-  this->eval();
-
   this->eval_dram_bus();
   this->eval_io_bus();
   this->eval_csr_bus();
   this->eval_snp_bus();
+
+  vortex_->clk = 0;
+  this->eval();
+  vortex_->clk = 1;
+  this->eval();
 }
 
 void Simulator::eval() {
@@ -104,14 +122,13 @@ void Simulator::eval_dram_bus() {
   }
 
   // schedule DRAM responses
-  int dequeue_index = -1;
-  for (int i = 0; i < dram_rsp_vec_.size(); i++) {
-    if (dram_rsp_vec_[i].cycles_left > 0) {
-      dram_rsp_vec_[i].cycles_left -= 1;
+  std::list<dram_req_t>::iterator dram_rsp_it(dram_rsp_vec_.end());
+  for (auto it = dram_rsp_vec_.begin(), ie = dram_rsp_vec_.end(); it != ie; ++it) {
+    if (it->cycles_left > 0) {
+      it->cycles_left -= 1;
     }
-    if ((dequeue_index == -1) 
-     && (dram_rsp_vec_[i].cycles_left == 0)) {
-      dequeue_index = i;
+    if ((dram_rsp_it == ie) && (it->cycles_left == 0)) {
+      dram_rsp_it = it;
     }
   }
 
@@ -122,11 +139,11 @@ void Simulator::eval_dram_bus() {
     dram_rsp_active_ = false;
   }
   if (!dram_rsp_active_) {
-    if (dequeue_index != -1) {
+    if (dram_rsp_it != dram_rsp_vec_.end()) {
       vortex_->dram_rsp_valid = 1;
-      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_vec_[dequeue_index].block.data(), GLOBAL_BLOCK_SIZE);
-      vortex_->dram_rsp_tag = dram_rsp_vec_[dequeue_index].tag;   
-      dram_rsp_vec_.erase(dram_rsp_vec_.begin() + dequeue_index);
+      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_it->block.data(), GLOBAL_BLOCK_SIZE);
+      vortex_->dram_rsp_tag = dram_rsp_it->tag;   
+      dram_rsp_vec_.erase(dram_rsp_it);
       dram_rsp_active_ = true;
     } else {
       vortex_->dram_rsp_valid = 0;
@@ -161,7 +178,7 @@ void Simulator::eval_dram_bus() {
         dram_req.cycles_left = DRAM_LATENCY;     
         dram_req.tag = vortex_->dram_req_tag;
         ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.block.data());
-        dram_rsp_vec_.push_back(dram_req);
+        dram_rsp_vec_.emplace_back(dram_req);
       } 
     }    
   }

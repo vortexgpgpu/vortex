@@ -183,15 +183,15 @@ module VX_tag_data_access #(
         if (valid_req_st1) begin             
             if ((| use_write_enable)) begin
                 if (writefill_st1) begin
-                    $display("%t: cache%0d:%0d store-fill: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1, writeladdr_st1, writetag_st1, use_write_data);
+                    $display("%t: cache%0d:%0d data-fill: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1, writeladdr_st1, writetag_st1, use_write_data);
                 end else begin
-                    $display("%t: cache%0d:%0d store-write: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1, writeladdr_st1, writetag_st1, wordsel_st1, writeword_st1);
+                    $display("%t: cache%0d:%0d data-write: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1, writeladdr_st1, writetag_st1, wordsel_st1, writeword_st1);
                 end
             end else
             if (miss_st1) begin
-                $display("%t: cache%0d:%0d store-miss: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1);
+                $display("%t: cache%0d:%0d data-miss: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1);
             end else begin
-                $display("%t: cache%0d:%0d store-read: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1, readaddr_st1, qual_read_tag_st1, wordsel_st1, qual_read_data_st1);
+                $display("%t: cache%0d:%0d data-read: wid=%0d, PC=%0h, tag=%0h, rd=%0d, dirty=%b, blk_addr=%0d, tag_id=%0h, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st1, debug_pc_st1, debug_tagid_st1, debug_rd_st1, dirty_st1, readaddr_st1, qual_read_tag_st1, wordsel_st1, qual_read_data_st1);
             end            
         end
     end    

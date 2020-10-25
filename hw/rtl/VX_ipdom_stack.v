@@ -16,8 +16,8 @@ module VX_ipdom_stack #(
 );
     localparam STACK_SIZE = 2 ** DEPTH;
 
-    reg [WIDTH-1:0] stack_1 [0:STACK_SIZE-1];
-    reg [WIDTH-1:0] stack_2 [0:STACK_SIZE-1];
+    `NO_RW_RAM_CHECK reg [WIDTH-1:0] stack_1 [0:STACK_SIZE-1];
+    `NO_RW_RAM_CHECK reg [WIDTH-1:0] stack_2 [0:STACK_SIZE-1];
     reg is_part [0:STACK_SIZE-1];
     
     reg [DEPTH-1:0] rd_ptr, wr_ptr;
