@@ -306,9 +306,9 @@ module VX_bank #(
 
     assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop; //valid if something is being popped
 
-    //decides which request to deal with. Priority: 1) DRAM fill, 2) Miss reserve 3) Core req 4) Snp req
-    assign qual_addr_st0 = dfpq_pop_unqual ? dfpq_addr_st0 :
-                           mrvq_pop_unqual ? mrvq_addr_st0 :
+    //Decides which request to deal with. Priority: 1) Miss reserve 2) DRAM fill 3) Core req 4) Snp req
+    assign qual_addr_st0 = mrvq_pop_unqual ? mrvq_addr_st0 :
+                           dfpq_pop_unqual ? dfpq_addr_st0 :
                            reqq_pop_unqual ? reqq_req_addr_st0[`LINE_SELECT_ADDR_RNG] :
                            snrq_pop_unqual ? snrq_addr_st0 :
                                              0;

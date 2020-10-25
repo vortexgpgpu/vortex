@@ -76,7 +76,7 @@ tar -zcvf output_files_1c.tar.gz `find ./build_fpga_1c -type f \( -iname \*.rpt 
 # compress VCD trace
 tar -zcvf vortex.vcd.tar.gz ./build_ase_1c/work/vortex.vcd
 tar -zcvf trace.vcd.tar.gz obj_dir/trace.vcd
-tar -zcvf trace.vcd.tar.gz trace.vcd
+tar -zcvf trace.fst.tar.gz trace.fst run.log
 tar -zcvf run.log.tar.gz run.log
 tar -cvjf vortex.vcd.tar.bz2 build_ase_1c/work/vortex.vcd
 tar -zcvf vortex.vcd.tar.gz build_ase_1c/work/vortex.vcd

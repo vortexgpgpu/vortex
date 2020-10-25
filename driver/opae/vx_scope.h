@@ -1,6 +1,6 @@
 #pragma once
 
-//#define HANG_TIMEOUT 60
+#define HANG_TIMEOUT 60
 
 int vx_scope_start(fpga_handle hfpga, uint64_t delay = -1);
 

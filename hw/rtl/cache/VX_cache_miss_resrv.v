@@ -56,7 +56,7 @@ module VX_cache_miss_resrv #(
     output wire                         miss_resrv_is_snp_st0,   
     output wire                         miss_resrv_snp_invalidate_st0
 );
-    reg [`MRVQ_METADATA_WIDTH-1:0] metadata_table[MRVQ_SIZE-1:0];
+    wire [`MRVQ_METADATA_WIDTH-1:0] metadata_table;
     reg [MRVQ_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table;
     
     reg [MRVQ_SIZE-1:0]            valid_table;
@@ -72,8 +72,8 @@ module VX_cache_miss_resrv #(
     assign miss_resrv_full = (size == $bits(size)'(MRVQ_SIZE));
     assign miss_resrv_stop = (size  > $bits(size)'(MRVQ_SIZE-5)); // need to add 5 cycles to prevent pipeline lock
 
-    wire                           enqueue_possible = !miss_resrv_full;
-    wire [`LOG2UP(MRVQ_SIZE)-1:0]  enqueue_index    = tail_ptr;    
+    wire enqueue_possible = !miss_resrv_full;
+    wire [`LOG2UP(MRVQ_SIZE)-1:0] enqueue_index = tail_ptr;    
 
     reg [MRVQ_SIZE-1:0] make_ready;
     reg [MRVQ_SIZE-1:0] make_ready_push;
@@ -86,11 +86,11 @@ module VX_cache_miss_resrv #(
 
     assign pending_hazard_st1 = |(valid_address_match);
 
-    wire                          dequeue_possible = valid_table[schedule_ptr] && ready_table[schedule_ptr];
+    wire dequeue_possible = valid_table[schedule_ptr] && ready_table[schedule_ptr];
     wire [`LOG2UP(MRVQ_SIZE)-1:0] dequeue_index    = schedule_ptr;
 
     assign miss_resrv_valid_st0 = dequeue_possible;
-    assign miss_resrv_addr_st0  = addr_table[dequeue_index];
+    assign miss_resrv_addr_st0 = addr_table[dequeue_index];
     assign {miss_resrv_data_st0, 
             miss_resrv_tid_st0, 
             miss_resrv_tag_st0, 
@@ -98,7 +98,7 @@ module VX_cache_miss_resrv #(
             miss_resrv_byteen_st0, 
             miss_resrv_wsel_st0, 
             miss_resrv_is_snp_st0, 
-            miss_resrv_snp_invalidate_st0} = metadata_table[dequeue_index];
+            miss_resrv_snp_invalidate_st0} = metadata_table;
 
     wire mrvq_push = miss_add && enqueue_possible && !is_mrvq;
     wire mrvq_pop  = miss_resrv_pop && dequeue_possible;
@@ -125,7 +125,6 @@ module VX_cache_miss_resrv #(
                 valid_table[enqueue_index]    <= 1;
                 ready_table[enqueue_index]    <= mrvq_init_ready_state;
                 addr_table[enqueue_index]     <= miss_add_addr;
-                metadata_table[enqueue_index] <= {miss_add_data, miss_add_tid, miss_add_tag, miss_add_rw, miss_add_byteen, miss_add_wsel, miss_add_is_snp, miss_add_snp_invalidate};
                 tail_ptr                      <= tail_ptr + $bits(tail_ptr)'(1);
             end else if (increment_head) begin
                 valid_table[head_ptr]         <= 0;
@@ -154,6 +153,22 @@ module VX_cache_miss_resrv #(
             end
         end
     end
+
+    VX_dp_ram #(
+        .DATAW(`MRVQ_METADATA_WIDTH),
+        .SIZE(MRVQ_SIZE),
+        .BYTEENW(1),
+        .BUFFERED(0),
+        .RWCHECK(1)
+    ) metadata_ram (
+        .clk(clk),	                
+        .waddr(enqueue_index),                                
+        .raddr(dequeue_index),                
+        .wren(mrvq_push),
+        .rden(1'b1),
+        .din({miss_add_data, miss_add_tid, miss_add_tag, miss_add_rw, miss_add_byteen, miss_add_wsel, miss_add_is_snp, miss_add_snp_invalidate}),
+        .dout(metadata_table)
+    );
 
 `ifdef DBG_PRINT_CACHE_MSRQ        
     always @(posedge clk) begin        

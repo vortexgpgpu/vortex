@@ -5,7 +5,7 @@
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
-#include <verilated_vcd_c.h>
+#include <verilated_fst_c.h>
 #endif
 
 #include <VX_config.h>
@@ -13,7 +13,7 @@
 
 #include <ostream>
 #include <future>
-#include <vector>
+#include <list>
 #include <unordered_map>
 
 #define CACHE_BLOCK_SIZE 64
@@ -41,18 +41,19 @@ private:
   typedef struct {
     int cycles_left;  
     std::array<uint8_t, CACHE_BLOCK_SIZE> block;
-    unsigned tag;
+    uint32_t tag;
   } dram_rd_req_t;
 
   typedef struct {
     int cycles_left;  
     std::array<uint8_t, CACHE_BLOCK_SIZE> block;
-    unsigned mdata;
+    uint64_t addr;
+    uint32_t mdata;
   } cci_rd_req_t;
 
   typedef struct {
     int cycles_left;  
-    unsigned mdata;
+    uint32_t mdata;
   } cci_wr_req_t;
 
   typedef struct {    
@@ -76,17 +77,17 @@ private:
 
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
 
-  std::vector<dram_rd_req_t> dram_reads_;
+  std::list<dram_rd_req_t> dram_reads_;
 
-  std::vector<cci_rd_req_t> cci_reads_;
+  std::list<cci_rd_req_t> cci_reads_;
 
-  std::vector<cci_wr_req_t> cci_writes_;
+  std::list<cci_wr_req_t> cci_writes_;
 
   std::mutex mutex_;
 
   RAM ram_;
   Vvortex_afu_shim *vortex_afu_;
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
+  VerilatedFstC *trace_;
 #endif
 };

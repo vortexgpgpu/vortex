@@ -36,8 +36,9 @@ module VX_scope #(
 	localparam GET_COUNT  = 3'd3;
 	localparam GET_OFFSET = 3'd6;
 
-	reg [DATAW-1:0] data_store [SIZE-1:0];
-	reg [DELTAW-1:0] delta_store [SIZE-1:0];
+	`NO_RW_RAM_CHECK reg [DATAW-1:0] data_store [SIZE-1:0];
+	`NO_RW_RAM_CHECK reg [DELTAW-1:0] delta_store [SIZE-1:0];
+
 	reg [UPDW-1:0] prev_trigger_id;
 	reg [DELTAW-1:0] delta;
 	reg [BUSW-1:0]  bus_out_r;	

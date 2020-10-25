@@ -78,7 +78,7 @@ module VX_tag_data_store #(
         .SIZE(`BANK_LINE_COUNT),
         .BYTEENW(`BANK_LINE_WORDS * WORD_SIZE),
         .BUFFERED(0),
-        .RWCHECK(0)
+        .RWCHECK(1)
     ) dp_ram (
         .clk(clk),	                
         .waddr(write_addr),                                
