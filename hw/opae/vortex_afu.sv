@@ -746,7 +746,6 @@ always @(posedge clk) begin
       cci_rd_req_ctr  <= cci_rd_req_ctr_next;
       if (cci_rd_req_tag == CCI_RD_RQ_TAGW'(CCI_RD_WINDOW_SIZE-1)) begin
         cci_rd_req_wait <= 1; // end current request batch
-        $display("*** %t: CCI Rd Rsp: STOP", $time);
       end 
     `ifdef DBG_PRINT_OPAE
       $display("%t: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr_next), cci_pending_reads_next);
@@ -757,7 +756,6 @@ always @(posedge clk) begin
       cci_rd_rsp_ctr <= cci_rd_rsp_ctr + CCI_RD_RQ_TAGW'(1);
       if (cci_rd_rsp_ctr == CCI_RD_RQ_TAGW'(CCI_RD_WINDOW_SIZE-1)) begin
         cci_rd_req_wait <= 0; // restart new request batch
-        $display("*** %t: CCI Rd Rsp: START", $time);
       end 
     `ifdef DBG_PRINT_OPAE
       $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr);
@@ -789,26 +787,25 @@ VX_generic_queue #(
   `UNUSED_PIN (size)
 );
 
-`DEBUG_BEGIN
-reg [CCI_RD_WINDOW_SIZE-1:0] dbg_cci_rd_rsp_mask;
-always @(posedge clk) begin
-  if (reset) begin
-    dbg_cci_rd_rsp_mask <= 0;
-  end else begin
-    if (cci_rd_rsp_fire) begin      
-      if (cci_rd_rsp_ctr == 0) begin
-        dbg_cci_rd_rsp_mask <= (CCI_RD_WINDOW_SIZE'(1) << cci_rd_rsp_tag);               
-      end else begin                
-        if (dbg_cci_rd_rsp_mask[cci_rd_rsp_tag] != 0) begin
-          $display("*** %t: Assert: CCI Rd Rsp: idx=%0d, ctr=%0d, mask=%0h, meta=%0h, data=%0h", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, dbg_cci_rd_rsp_mask, cp2af_sRxPort.c0.hdr.mdata, cp2af_sRxPort.c0.data);
-          assert(0);
-        end
-        dbg_cci_rd_rsp_mask[cci_rd_rsp_tag] <= 1;
-      end 
+`ifdef VERILATOR
+`DEBUG_BLOCK(
+  reg [CCI_RD_WINDOW_SIZE-1:0] dbg_cci_rd_rsp_mask;
+  always @(posedge clk) begin
+    if (reset) begin
+      dbg_cci_rd_rsp_mask <= 0;
+    end else begin
+      if (cci_rd_rsp_fire) begin      
+        if (cci_rd_rsp_ctr == 0) begin
+          dbg_cci_rd_rsp_mask <= (CCI_RD_WINDOW_SIZE'(1) << cci_rd_rsp_tag);               
+        end else begin                
+          assert(!dbg_cci_rd_rsp_mask[cci_rd_rsp_tag]);
+          dbg_cci_rd_rsp_mask[cci_rd_rsp_tag] <= 1;
+        end 
+      end
     end
   end
-end
-`DEBUG_END
+)
+`endif
 
 // CCI-P Write Request //////////////////////////////////////////////////////////
 

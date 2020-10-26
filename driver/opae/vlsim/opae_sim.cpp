@@ -206,11 +206,10 @@ void opae_sim::sRxPort_bus() {
     vortex_afu_->vcp2af_sRxPort_c0_rspValid = 1;
     memcpy(vortex_afu_->vcp2af_sRxPort_c0_data, cci_rd_it->block.data(), CACHE_BLOCK_SIZE);
     vortex_afu_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;    
-    printf("*** [vlsim] read-rsp: addr=%ld, mdata=%d, data=", cci_rd_it->addr, cci_rd_it->mdata);
-    for (int i = 0; i < CACHE_BLOCK_SIZE; ++i) {
+    /*printf("*** [vlsim] read-rsp: addr=%ld, mdata=%d, data=", cci_rd_it->addr, cci_rd_it->mdata);
+    for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
       printf("%02x", cci_rd_it->block[CACHE_BLOCK_SIZE-1-i]);
-    }
-    printf("\n");
+    printf("\n");*/
     fflush(stdout);
     cci_reads_.erase(cci_rd_it);
   }
@@ -226,7 +225,7 @@ void opae_sim::sTxPort_bus() {
     cci_req.mdata = vortex_afu_->af2cp_sTxPort_c0_hdr_mdata;
     auto host_ptr = (uint64_t*)(vortex_afu_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
     memcpy(cci_req.block.data(), host_ptr, CACHE_BLOCK_SIZE);
-    printf("*** [vlsim] read-req: addr=%ld, mdata=%d\n", vortex_afu_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
+    //printf("*** [vlsim] read-req: addr=%ld, mdata=%d\n", vortex_afu_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
     fflush(stdout);
     cci_reads_.emplace_back(cci_req);    
   }
