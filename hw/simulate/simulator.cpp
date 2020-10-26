@@ -96,15 +96,15 @@ void Simulator::reset() {
 }
 
 void Simulator::step() {
-  this->eval_dram_bus();
-  this->eval_io_bus();
-  this->eval_csr_bus();
-  this->eval_snp_bus();
-
   vortex_->clk = 0;
   this->eval();
   vortex_->clk = 1;
   this->eval();
+  
+  this->eval_dram_bus();
+  this->eval_io_bus();
+  this->eval_csr_bus();
+  this->eval_snp_bus();
 }
 
 void Simulator::eval() {
@@ -216,7 +216,7 @@ void Simulator::eval_snp_bus() {
     #endif
     }
     if (vortex_->snp_req_valid && vortex_->snp_req_ready) {            
-      if (snp_req_size_) {        
+      if (snp_req_size_ != 0) {        
         vortex_->snp_req_addr += 1;
         vortex_->snp_req_tag  += 1;
         --snp_req_size_;
@@ -289,7 +289,7 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   vortex_->snp_req_valid = 1;
   vortex_->snp_rsp_ready = 1;  
 
-  snp_req_size_   = (size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE; 
+  snp_req_size_ = (size + GLOBAL_BLOCK_SIZE - 1) / GLOBAL_BLOCK_SIZE; 
   --snp_req_size_;
   pending_snp_reqs_ = 1;
 
