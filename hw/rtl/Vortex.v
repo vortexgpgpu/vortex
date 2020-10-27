@@ -456,6 +456,32 @@ module Vortex (
         );
     end
 
+    `SCOPE_ASSIGN (reset, reset);
+
+    `SCOPE_ASSIGN (dram_req_fire,  dram_req_valid && dram_req_ready);
+    `SCOPE_ASSIGN (dram_req_addr,  {dram_req_addr, 4'b0});
+    `SCOPE_ASSIGN (dram_req_rw,    dram_req_rw);
+    `SCOPE_ASSIGN (dram_req_byteen,dram_req_byteen);
+    `SCOPE_ASSIGN (dram_req_data,  dram_req_data);
+    `SCOPE_ASSIGN (dram_req_tag,   dram_req_tag);
+
+    `SCOPE_ASSIGN (dram_rsp_fire,  dram_rsp_valid && dram_rsp_ready);
+    `SCOPE_ASSIGN (dram_rsp_data,  dram_rsp_data);
+    `SCOPE_ASSIGN (dram_rsp_tag,   dram_rsp_tag);
+
+    `SCOPE_ASSIGN (snp_req_fire, snp_req_valid && snp_req_ready);
+    `SCOPE_ASSIGN (snp_req_addr,  {snp_req_addr, 4'b0});
+    `SCOPE_ASSIGN (snp_req_invalidate, snp_req_invalidate);
+    `SCOPE_ASSIGN (snp_req_tag,   snp_req_tag);
+
+    `SCOPE_ASSIGN (snp_rsp_fire, snp_rsp_valid && snp_rsp_ready);
+    `SCOPE_ASSIGN (snp_rsp_tag,   snp_rsp_tag);
+
+    `SCOPE_ASSIGN (snp_rsp_fire, snp_rsp_valid && snp_rsp_ready);
+    `SCOPE_ASSIGN (snp_rsp_tag,   snp_rsp_tag);
+
+    `SCOPE_ASSIGN (busy, busy);
+
 `ifdef DBG_PRINT_DRAM
     always @(posedge clk) begin
         if (dram_req_valid && dram_req_ready) begin

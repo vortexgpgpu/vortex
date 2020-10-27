@@ -737,18 +737,18 @@ module VX_bank #(
     end    
 `endif
 
-`SCOPE_ASSIGN (scope_valid_st0, qual_valid_st0);
-`SCOPE_ASSIGN (scope_valid_st1, valid_st1);
-`SCOPE_ASSIGN (scope_valid_st2, valid_st2);
+`SCOPE_ASSIGN (valid_st0, qual_valid_st0);
+`SCOPE_ASSIGN (valid_st1, valid_st1);
+`SCOPE_ASSIGN (valid_st2, valid_st2);
 
-`SCOPE_ASSIGN (scope_is_mrvq_st1, is_mrvq_st1);
-`SCOPE_ASSIGN (scope_miss_st1,  miss_st1);
-`SCOPE_ASSIGN (scope_dirty_st1, dirty_st1);
-`SCOPE_ASSIGN (scope_force_miss_st1, force_request_miss_st1);
-`SCOPE_ASSIGN (scope_stall_pipe, stall_bank_pipe);
+`SCOPE_ASSIGN (is_mrvq_st1, is_mrvq_st1);
+`SCOPE_ASSIGN (miss_st1,  miss_st1);
+`SCOPE_ASSIGN (dirty_st1, dirty_st1);
+`SCOPE_ASSIGN (force_miss_st1, force_request_miss_st1);
+`SCOPE_ASSIGN (stall_pipe, stall_bank_pipe);
 
-`SCOPE_ASSIGN (scope_addr_st0, `LINE_TO_BYTE_ADDR(qual_addr_st0, BANK_ID));
-`SCOPE_ASSIGN (scope_addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
-`SCOPE_ASSIGN (scope_addr_st2, `LINE_TO_BYTE_ADDR(addr_st2, BANK_ID));
+`SCOPE_ASSIGN (addr_st0, `LINE_TO_BYTE_ADDR(qual_addr_st0, BANK_ID));
+`SCOPE_ASSIGN (addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
+`SCOPE_ASSIGN (addr_st2, `LINE_TO_BYTE_ADDR(addr_st2, BANK_ID));
 
 endmodule

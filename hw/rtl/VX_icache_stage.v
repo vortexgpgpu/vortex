@@ -60,16 +60,14 @@ module VX_icache_stage #(
     // Can accept new response?
     assign icache_rsp_if.ready = ifetch_rsp_if.ready;
 
-    `SCOPE_ASSIGN (scope_icache_req_valid, icache_req_if.valid);
-    `SCOPE_ASSIGN (scope_icache_req_wid,   ifetch_req_if.wid);
-    `SCOPE_ASSIGN (scope_icache_req_addr,  {icache_req_if.addr, 2'b0});    
-    `SCOPE_ASSIGN (scope_icache_req_tag,   req_tag);
-    `SCOPE_ASSIGN (scope_icache_req_ready, icache_req_if.ready);
+    `SCOPE_ASSIGN (icache_req_fire, icache_req_fire);
+    `SCOPE_ASSIGN (icache_req_wid,  ifetch_req_if.wid);
+    `SCOPE_ASSIGN (icache_req_addr, {icache_req_if.addr, 2'b0});    
+    `SCOPE_ASSIGN (icache_req_tag,  req_tag);
 
-    `SCOPE_ASSIGN (scope_icache_rsp_valid, icache_rsp_if.valid);
-    `SCOPE_ASSIGN (scope_icache_rsp_data,  icache_rsp_if.data);
-    `SCOPE_ASSIGN (scope_icache_rsp_tag,   rsp_tag);
-    `SCOPE_ASSIGN (scope_icache_rsp_ready, icache_rsp_if.ready);
+    `SCOPE_ASSIGN (icache_rsp_fire, icache_rsp_if.valid && icache_rsp_if.ready);
+    `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
+    `SCOPE_ASSIGN (icache_rsp_tag,  rsp_tag);
 
 `ifdef DBG_PRINT_CORE_ICACHE
     always @(posedge clk) begin

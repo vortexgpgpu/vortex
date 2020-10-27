@@ -100,38 +100,38 @@ module VX_issue #(
         .gpu_req_if     (gpu_req_if)
     );      
 
-    `SCOPE_ASSIGN (scope_issue_valid,       ibuf_deq_if.valid);
-    `SCOPE_ASSIGN (scope_issue_wid,         ibuf_deq_if.wid);
-    `SCOPE_ASSIGN (scope_issue_tmask,       ibuf_deq_if.tmask);
-    `SCOPE_ASSIGN (scope_issue_pc,          ibuf_deq_if.PC);
-    `SCOPE_ASSIGN (scope_issue_ex_type,     ibuf_deq_if.ex_type);
-    `SCOPE_ASSIGN (scope_issue_op_type,     ibuf_deq_if.op_type);
-    `SCOPE_ASSIGN (scope_issue_op_mod,      ibuf_deq_if.op_mod);
-    `SCOPE_ASSIGN (scope_issue_wb,          ibuf_deq_if.wb);
-    `SCOPE_ASSIGN (scope_issue_rd,          ibuf_deq_if.rd);
-    `SCOPE_ASSIGN (scope_issue_rs1,         ibuf_deq_if.rs1);
-    `SCOPE_ASSIGN (scope_issue_rs2,         ibuf_deq_if.rs2);
-    `SCOPE_ASSIGN (scope_issue_rs3,         ibuf_deq_if.rs3);
-    `SCOPE_ASSIGN (scope_issue_imm,         ibuf_deq_if.imm);
-    `SCOPE_ASSIGN (scope_issue_rs1_is_pc,   ibuf_deq_if.rs1_is_PC);
-    `SCOPE_ASSIGN (scope_issue_rs2_is_imm,  ibuf_deq_if.rs2_is_imm);
-    `SCOPE_ASSIGN (scope_issue_ready,       ibuf_deq_if.ready);
-    `SCOPE_ASSIGN (scope_scoreboard_delay,  scoreboard_delay); 
-    `SCOPE_ASSIGN (scope_gpr_delay,         ~gpr_req_if.ready); 
-    `SCOPE_ASSIGN (scope_execute_delay,     ~execute_if.ready);     
+    `SCOPE_ASSIGN (issue_fire,        ibuf_deq_if.valid && ibuf_deq_if.ready);
+    `SCOPE_ASSIGN (issue_wid,         ibuf_deq_if.wid);
+    `SCOPE_ASSIGN (issue_tmask,       ibuf_deq_if.tmask);
+    `SCOPE_ASSIGN (issue_pc,          ibuf_deq_if.PC);
+    `SCOPE_ASSIGN (issue_ex_type,     ibuf_deq_if.ex_type);
+    `SCOPE_ASSIGN (issue_op_type,     ibuf_deq_if.op_type);
+    `SCOPE_ASSIGN (issue_op_mod,      ibuf_deq_if.op_mod);
+    `SCOPE_ASSIGN (issue_wb,          ibuf_deq_if.wb);
+    `SCOPE_ASSIGN (issue_rd,          ibuf_deq_if.rd);
+    `SCOPE_ASSIGN (issue_rs1,         ibuf_deq_if.rs1);
+    `SCOPE_ASSIGN (issue_rs2,         ibuf_deq_if.rs2);
+    `SCOPE_ASSIGN (issue_rs3,         ibuf_deq_if.rs3);
+    `SCOPE_ASSIGN (issue_imm,         ibuf_deq_if.imm);
+    `SCOPE_ASSIGN (issue_rs1_is_pc,   ibuf_deq_if.rs1_is_PC);
+    `SCOPE_ASSIGN (issue_rs2_is_imm,  ibuf_deq_if.rs2_is_imm);
+    
+    `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
+    `SCOPE_ASSIGN (gpr_delay,         ~gpr_req_if.ready); 
+    `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);     
 
-    `SCOPE_ASSIGN (scope_gpr_rsp_valid,     gpr_rsp_if.valid);    
-    `SCOPE_ASSIGN (scope_gpr_rsp_wid,       gpr_rsp_if.wid);
-    `SCOPE_ASSIGN (scope_gpr_rsp_pc,        gpr_rsp_if.PC);    
-    `SCOPE_ASSIGN (scope_gpr_rsp_a,         gpr_rsp_if.rs1_data);
-    `SCOPE_ASSIGN (scope_gpr_rsp_b,         gpr_rsp_if.rs2_data);
-    `SCOPE_ASSIGN (scope_gpr_rsp_c,         gpr_rsp_if.rs3_data);
+    `SCOPE_ASSIGN (gpr_rsp_valid,     gpr_rsp_if.valid);    
+    `SCOPE_ASSIGN (gpr_rsp_wid,       gpr_rsp_if.wid);
+    `SCOPE_ASSIGN (gpr_rsp_pc,        gpr_rsp_if.PC);    
+    `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);
+    `SCOPE_ASSIGN (gpr_rsp_b,         gpr_rsp_if.rs2_data);
+    `SCOPE_ASSIGN (gpr_rsp_c,         gpr_rsp_if.rs3_data);
             
-    `SCOPE_ASSIGN (scope_writeback_valid,   writeback_if.valid);    
-    `SCOPE_ASSIGN (scope_writeback_wid,     writeback_if.wid);
-    `SCOPE_ASSIGN (scope_writeback_pc,      writeback_if.PC);  
-    `SCOPE_ASSIGN (scope_writeback_rd,      writeback_if.rd);
-    `SCOPE_ASSIGN (scope_writeback_data,    writeback_if.data);
+    `SCOPE_ASSIGN (writeback_valid,   writeback_if.valid);    
+    `SCOPE_ASSIGN (writeback_wid,     writeback_if.wid);
+    `SCOPE_ASSIGN (writeback_pc,      writeback_if.PC);  
+    `SCOPE_ASSIGN (writeback_rd,      writeback_if.rd);
+    `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin

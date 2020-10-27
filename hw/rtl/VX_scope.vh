@@ -5,7 +5,7 @@
 
 `include "scope-defs.vh"
 
-`define SCOPE_ASSIGN(d,s) assign d = s
+`define SCOPE_ASSIGN(d,s) assign scope_``d = s
 
 `else
 
@@ -35,7 +35,7 @@
 
 `define SCOPE_BIND_Vortex_cluster(__i__)
 
-`define SCOPE_BIND_top_vortex
+`define SCOPE_BIND_afu_vortex
 
 `define SCOPE_IO_VX_lsu_unit
 

@@ -2,7 +2,6 @@
 `include "platform_if.vh"
 import local_mem_cfg_pkg::*;
 `include "afu_json_info.vh"
-`include "VX_define.vh"
 `else
 `include "vortex_afu.vh"
 /* verilator lint_off IMPORTSTAR */ 
@@ -992,7 +991,7 @@ end
 assign cmd_run_done = !vx_busy;
 
 Vortex #() vortex (
-  `SCOPE_BIND_top_vortex
+  `SCOPE_BIND_afu_vortex
 
   .clk              (clk),
   .reset            (reset | vx_reset),
@@ -1068,36 +1067,19 @@ end
 
 `ifdef SCOPE
 
-`SCOPE_ASSIGN (scope_reset, vx_reset);
-
-`SCOPE_ASSIGN (scope_dram_req_valid, vx_dram_req_valid);
-`SCOPE_ASSIGN (scope_dram_req_addr,  {vx_dram_req_addr, 4'b0});
-`SCOPE_ASSIGN (scope_dram_req_rw,    vx_dram_req_rw);
-`SCOPE_ASSIGN (scope_dram_req_byteen,vx_dram_req_byteen);
-`SCOPE_ASSIGN (scope_dram_req_data,  vx_dram_req_data);
-`SCOPE_ASSIGN (scope_dram_req_tag,   vx_dram_req_tag);
-`SCOPE_ASSIGN (scope_dram_req_ready, vx_dram_req_ready);
-
-`SCOPE_ASSIGN (scope_dram_rsp_valid, vx_dram_rsp_valid);
-`SCOPE_ASSIGN (scope_dram_rsp_data,  vx_dram_rsp_data);
-`SCOPE_ASSIGN (scope_dram_rsp_tag,   vx_dram_rsp_tag);
-`SCOPE_ASSIGN (scope_dram_rsp_ready, vx_dram_rsp_ready);
-
-`SCOPE_ASSIGN (scope_snp_req_valid, vx_snp_req_valid);
-`SCOPE_ASSIGN (scope_snp_req_addr,  {vx_snp_req_addr, 4'b0});
-`SCOPE_ASSIGN (scope_snp_req_invalidate, vx_snp_req_invalidate);
-`SCOPE_ASSIGN (scope_snp_req_tag,   vx_snp_req_tag);
-`SCOPE_ASSIGN (scope_snp_req_ready, vx_snp_req_ready);
-
-`SCOPE_ASSIGN (scope_snp_rsp_valid, vx_snp_rsp_valid);
-`SCOPE_ASSIGN (scope_snp_rsp_tag,   vx_snp_rsp_tag);
-`SCOPE_ASSIGN (scope_snp_rsp_ready, vx_snp_rsp_ready);
-
-`SCOPE_ASSIGN (scope_snp_rsp_valid, vx_snp_rsp_valid);
-`SCOPE_ASSIGN (scope_snp_rsp_tag,   vx_snp_rsp_tag);
-`SCOPE_ASSIGN (scope_snp_rsp_ready, vx_snp_rsp_ready);
-
-`SCOPE_ASSIGN (scope_busy, vx_busy);
+`SCOPE_ASSIGN (ccip_sRxPort_c0_mmioRdValid, cp2af_sRxPort.c0.mmioRdValid);
+`SCOPE_ASSIGN (ccip_sRxPort_c0_mmioWrValid, cp2af_sRxPort.c0.mmioWrValid);
+`SCOPE_ASSIGN (mmio_hdr_address, mmio_hdr.address);
+`SCOPE_ASSIGN (mmio_hdr_length, mmio_hdr.length);
+`SCOPE_ASSIGN (ccip_sRxPort_c0_hdr_mdata, cp2af_sRxPort.c0.hdr.mdata);
+`SCOPE_ASSIGN (ccip_sRxPort_c0_rspValid, cp2af_sRxPort.c0.rspValid);
+`SCOPE_ASSIGN (ccip_sRxPort_c1_rspValid, cp2af_sRxPort.c1.rspValid);            
+`SCOPE_ASSIGN (ccip_sTxPort_c0_fire, af2cp_sTxPort.c0.valid && !cp2af_sRxPort.c0TxAlmFull);
+`SCOPE_ASSIGN (ccip_sTxPort_c0_hdr_address, af2cp_sTxPort.c0.hdr.address);
+`SCOPE_ASSIGN (ccip_sTxPort_c0_hdr_mdata, af2cp_sTxPort.c0.hdr.mdata);
+`SCOPE_ASSIGN (ccip_sTxPort_c1_fire, af2cp_sTxPort.c1.valid && !cp2af_sRxPort.c1TxAlmFull);
+`SCOPE_ASSIGN (ccip_sTxPort_c1_hdr_address, af2cp_sTxPort.c1.hdr.address);
+`SCOPE_ASSIGN (ccip_sTxPort_c2_mmioRdValid, af2cp_sTxPort.c2.mmioRdValid);
 
 wire scope_changed = `SCOPE_TRIGGER;
 

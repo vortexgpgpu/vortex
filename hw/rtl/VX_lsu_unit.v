@@ -192,20 +192,18 @@ module VX_lsu_unit #(
     assign dcache_rsp_if.ready = ~(stall_out || mem_rsp_stall);
 
     // scope registration
-    `SCOPE_ASSIGN (scope_dcache_req_valid, dcache_req_if.valid);   
-    `SCOPE_ASSIGN (scope_dcache_req_addr,  req_address);    
-    `SCOPE_ASSIGN (scope_dcache_req_rw,    req_rw);
-    `SCOPE_ASSIGN (scope_dcache_req_byteen,dcache_req_if.byteen);
-    `SCOPE_ASSIGN (scope_dcache_req_data,  dcache_req_if.data);
-    `SCOPE_ASSIGN (scope_dcache_req_tag,   req_tag);
-    `SCOPE_ASSIGN (scope_dcache_req_ready, dcache_req_if.ready); 
-    `SCOPE_ASSIGN (scope_dcache_req_wid,   req_wid);
-    `SCOPE_ASSIGN (scope_dcache_req_pc,    req_pc);
+    `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_if.valid & {`NUM_THREADS{dcache_req_if.ready}});    
+    `SCOPE_ASSIGN (dcache_req_wid,   req_wid);
+    `SCOPE_ASSIGN (dcache_req_pc,    req_pc);
+    `SCOPE_ASSIGN (dcache_req_addr,  req_address);    
+    `SCOPE_ASSIGN (dcache_req_rw,    req_rw);
+    `SCOPE_ASSIGN (dcache_req_byteen,dcache_req_if.byteen);
+    `SCOPE_ASSIGN (dcache_req_data,  dcache_req_if.data);
+    `SCOPE_ASSIGN (dcache_req_tag,   req_tag);
 
-    `SCOPE_ASSIGN (scope_dcache_rsp_valid, dcache_rsp_if.valid);
-    `SCOPE_ASSIGN (scope_dcache_rsp_data,  dcache_rsp_if.data);
-    `SCOPE_ASSIGN (scope_dcache_rsp_tag,   rsp_tag);
-    `SCOPE_ASSIGN (scope_dcache_rsp_ready, dcache_rsp_if.ready);
+    `SCOPE_ASSIGN (dcache_rsp_fire,  dcache_rsp_if.valid & {`NUM_THREADS{dcache_rsp_if.ready}});
+    `SCOPE_ASSIGN (dcache_rsp_data,  dcache_rsp_if.data);
+    `SCOPE_ASSIGN (dcache_rsp_tag,   rsp_tag);
     
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
