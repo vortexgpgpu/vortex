@@ -17,14 +17,10 @@ install:
   - ci/toolchain_install.sh -all
   - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
   - export VERILATOR_ROOT=/opt/verilator
-  - export PATH=$VERILATOR_ROOT/bin:$PATH
-    
-  # VORTEX
-  - git clone --recursive https://github.com/vortexgpgpu/vortex.git
-  - cd vortex
-  - make -j`nproc`
+  - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
+  - make -j`nproc`
   - ci/test_runtime.sh
   - ci/test_driver.sh
   - ci/test_riscv_isa.sh

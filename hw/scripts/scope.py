@@ -638,10 +638,7 @@ def gen_vl_header(file, modules, taps):
 
         print("`define SCOPE_TRIGGER \\", file=f)
         i = 0
-        excluded_list = []
         for key in toptaps:
-            if key in excluded_list:
-                continue
             tap = toptaps[key]
             if tap[2] != 2:
                 continue
@@ -653,16 +650,7 @@ def gen_vl_header(file, modules, taps):
                     print(" | \\", file=f)         
                 print("\t(", file=f, end='')            
                 name = trigger_name("scope_" + key.replace('/', '_') + su, size)
-                if key.endswith("_valid"):
-                    ready_signal = key[:-6] + "_ready"
-                    if ready_signal in toptaps:
-                        rname = trigger_name("scope_" + ready_signal.replace('/', '_') + su, size)
-                        print(name + " && " + rname, file=f, end='')
-                        excluded_list.append(ready_signal)
-                    else:
-                        print(name, file=f, end='')
-                else:
-                    print(name, file=f, end='')
+                print(name, file=f, end='')
                 print(")", file=f, end='')         
                 i += 1
         print("", file=f)
