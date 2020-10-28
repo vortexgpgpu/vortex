@@ -19,7 +19,7 @@
 #include "vortex_afu.h"
 #include "scope-defs.h"
 
-#define SCOPE_FRAME_WIDTH 1768
+#define FRAME_FLUSH_SIZE 100
 
 #define CHECK_RES(_expr)                            \
    do {                                             \
@@ -233,7 +233,8 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
                     CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &delta));
                     timestamp = print_clock(ofs, delta + 1, timestamp);            
                     signal_id = num_taps;
-                    if (0 == (frame_no % 100)) {
+                    if (0 == (frame_no % FRAME_FLUSH_SIZE)) {
+                        ofs << std::flush;
                         std::cout << "*** " << frame_no << " frames, timestamp=" << timestamp << std::endl;
                     }
                 }                     
