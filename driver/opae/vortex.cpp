@@ -26,14 +26,14 @@
 #define ALLOC_BASE_ADDR  0x10000000
 #define LOCAL_MEM_SIZE   0xffffffff
 
-#define CHECK_RES(_expr)                                            \
-   do {                                                             \
-     fpga_result res = _expr;                                       \
-     if (res == FPGA_OK)                                            \
-       break;                                                       \
-     printf("[VXDRV] Error: '%s' returned %d, %s!\n",                  \
-            #_expr, (int)res, fpgaErrStr(res));                     \
-     return -1;                                                     \
+#define CHECK_RES(_expr)                                \
+   do {                                                 \
+     fpga_result res = _expr;                           \
+     if (res == FPGA_OK)                                \
+       break;                                           \
+     printf("[VXDRV] Error: '%s' returned %d, %s!\n",   \
+            #_expr, (int)res, fpgaErrStr(res));         \
+     return -1;                                         \
    } while (false)
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -130,39 +130,57 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
 
-    fpga_result res;    
     fpga_handle accel_handle;    
     vx_device_t* device;   
 
 #ifndef USE_VLSIM
+    fpga_result res;    
     fpga_token accel_token;
     fpga_properties filter = nullptr;    
     fpga_guid guid; 
     uint32_t num_matches;
     
     // Set up a filter that will search for an accelerator
-    fpgaGetProperties(nullptr, &filter);
-    fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR);
+    CHECK_RES(fpgaGetProperties(nullptr, &filter));
+    res = fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR);
+    if (res != FPGA_OK) {
+        fprintf(stderr, "[VXDRV] Error: fpgaGetProperties() returned %d, %s!\n", (int)res, fpgaErrStr(res));
+        fpgaDestroyProperties(&filter);
+        return -1;
+    }
 
     // Add the desired UUID to the filter
     uuid_parse(AFU_ACCEL_UUID, guid);
-    fpgaPropertiesSetGUID(filter, guid);
+    res = fpgaPropertiesSetGUID(filter, guid);
+    if (res != FPGA_OK) {
+        fprintf(stderr, "[VXDRV] Error: fpgaPropertiesSetGUID() returned %d, %s!\n", (int)res, fpgaErrStr(res));
+        fpgaDestroyProperties(&filter);
+        return -1;
+    }
 
     // Do the search across the available FPGA contexts
     num_matches = 1;
-    fpgaEnumerate(&filter, 1, &accel_token, 1, &num_matches);
+    res = fpgaEnumerate(&filter, 1, &accel_token, 1, &num_matches);
+    if (res != FPGA_OK) {
+        fprintf(stderr, "[VXDRV] Error: fpgaEnumerate() returned %d, %s!\n", (int)res, fpgaErrStr(res));
+        fpgaDestroyProperties(&filter);
+        return -1;
+    }
 
     // Not needed anymore
     fpgaDestroyProperties(&filter);
 
     if (num_matches < 1) {
         fprintf(stderr, "[VXDRV] Error: accelerator %s not found!\n", AFU_ACCEL_UUID);
+        fpgaDestroyToken(&accel_token);
         return -1;
     }
 
     // Open accelerator
     res = fpgaOpen(accel_token, &accel_handle, 0);
-    if (FPGA_OK != res) {
+    if (res != FPGA_OK) {
+        fprintf(stderr, "[VXDRV] Error: fpgaOpen() returned %d, %s!\n", (int)res, fpgaErrStr(res));
+        fpgaDestroyToken(&accel_token);
         return -1;
     }
 
@@ -170,10 +188,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     fpgaDestroyToken(&accel_token);
 #else
     // Open accelerator
-    res = fpgaOpen(NULL, &accel_handle, 0);
-    if (FPGA_OK != res) {
-        return -1;
-    }
+    CHECK_RES(fpgaOpen(NULL, &accel_handle, 0));
 #endif
 
     // allocate device object
@@ -193,7 +208,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         ret |= vx_csr_get(device, 0, CSR_NC, &device->num_cores);        
         ret |= vx_csr_get(device, 0, CSR_NW, &device->num_warps);        
         ret |= vx_csr_get(device, 0, CSR_NT, &device->num_threads);        
-        if (ret != 0) {
+        if (ret != FPGA_OK) {
             fpgaClose(accel_handle);
             return ret;
         }
