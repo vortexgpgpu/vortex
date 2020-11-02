@@ -52,8 +52,8 @@ module VX_fair_arbiter #(
             .N(N)
         ) priority_encoder (
             .data_in   (requests_use),
-            .data_out  (grant_index ),
-            .valid_out (grant_valid )
+            .data_out  (grant_index),
+            .valid_out (grant_valid)
         );
 
         always @(*) begin

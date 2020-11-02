@@ -200,6 +200,7 @@ module VX_pipeline #(
         .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),        
         
+        .busy           (busy), 
         .ebreak         (ebreak)
     );    
 

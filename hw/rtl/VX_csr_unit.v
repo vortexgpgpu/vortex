@@ -13,7 +13,9 @@ module VX_csr_unit #(
     VX_csr_io_rsp_if    csr_io_rsp_if,
     
     VX_csr_req_if       csr_req_if,   
-    VX_exu_to_cmt_if    csr_commit_if
+    VX_exu_to_cmt_if    csr_commit_if,
+
+    input wire          busy
 );
     VX_csr_req_if       csr_pipe_req_if();
     VX_exu_to_cmt_if    csr_pipe_rsp_if();
@@ -53,7 +55,8 @@ module VX_csr_unit #(
         .write_enable   (csr_we_s1),        
         .write_addr     (csr_addr_s1), 
         .write_wid      (csr_pipe_rsp_if.wid),
-        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0])
+        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0]),
+        .busy           (busy)
     );    
 
     wire csr_hazard = (csr_addr_s1 == csr_pipe_req_if.csr_addr)

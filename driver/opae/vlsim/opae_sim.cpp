@@ -31,9 +31,9 @@ opae_sim::opae_sim() {
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  trace_ = new VerilatedFstC();
+  trace_ = new VerilatedVcdC();
   vortex_afu_->trace(trace_, 99);
-  trace_->open("trace.fst");
+  trace_->open("trace.vcd");
 #endif
 
   this->reset();

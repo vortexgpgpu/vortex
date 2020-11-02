@@ -5,7 +5,7 @@
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
-#include <verilated_fst_c.h>
+#include <verilated_vcd_c.h>
 #endif
 
 #include <VX_config.h>
@@ -76,6 +76,6 @@ private:
   RAM *ram_;
   VVortex *vortex_;
 #ifdef VCD_OUTPUT
-  VerilatedFstC *trace_;
+  VerilatedVcdC *trace_;
 #endif
 };

@@ -12,7 +12,7 @@ module VX_mem_unit # (
     VX_cache_core_req_if    core_dcache_req_if,
     VX_cache_core_rsp_if    core_dcache_rsp_if,
 
-    // Dram <-> Dcache
+    // DRAM <-> Dcache
     VX_cache_dram_req_if    dcache_dram_req_if,
     VX_cache_dram_rsp_if    dcache_dram_rsp_if,
     VX_cache_snp_req_if     dcache_snp_req_if,
@@ -22,7 +22,7 @@ module VX_mem_unit # (
     VX_cache_core_req_if    core_icache_req_if,  
     VX_cache_core_rsp_if    core_icache_rsp_if,
 
-    // Dram <-> Icache
+    // DRAM <-> Icache
     VX_cache_dram_req_if    icache_dram_req_if,
     VX_cache_dram_rsp_if    icache_dram_rsp_if
 );
@@ -65,11 +65,10 @@ module VX_mem_unit # (
         .NUM_REQUESTS           (`SNUM_REQUESTS),
         .CREQ_SIZE              (`SCREQ_SIZE),
         .MRVQ_SIZE              (8),
-        .DFPQ_SIZE              (1),
+        .DRPQ_SIZE              (1),
         .SNRQ_SIZE              (1),
         .CWBQ_SIZE              (`SCWBQ_SIZE),
-        .DWBQ_SIZE              (1),
-        .DFQQ_SIZE              (1),
+        .DREQ_SIZE              (1),
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (0),
         .WRITE_ENABLE           (1),
@@ -146,11 +145,10 @@ module VX_mem_unit # (
         .NUM_REQUESTS           (`DNUM_REQUESTS),
         .CREQ_SIZE              (`DCREQ_SIZE),
         .MRVQ_SIZE              (`DMRVQ_SIZE),
-        .DFPQ_SIZE              (`DDFPQ_SIZE),
+        .DRPQ_SIZE              (`DDRPQ_SIZE),
         .SNRQ_SIZE              (`DSNRQ_SIZE),
         .CWBQ_SIZE              (`DCWBQ_SIZE),
-        .DWBQ_SIZE              (`DDWBQ_SIZE),
-        .DFQQ_SIZE              (`DDFQQ_SIZE),
+        .DREQ_SIZE              (`DDREQ_SIZE),
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (1),
         .WRITE_ENABLE           (1),
@@ -228,11 +226,10 @@ module VX_mem_unit # (
         .NUM_REQUESTS           (`INUM_REQUESTS),
         .CREQ_SIZE              (`ICREQ_SIZE),
         .MRVQ_SIZE              (`IMRVQ_SIZE),
-        .DFPQ_SIZE              (`IDFPQ_SIZE),
+        .DRPQ_SIZE              (`IDRPQ_SIZE),
         .SNRQ_SIZE              (1),
         .CWBQ_SIZE              (`ICWBQ_SIZE),
-        .DWBQ_SIZE              (`IDWBQ_SIZE),
-        .DFQQ_SIZE              (`IDFQQ_SIZE),
+        .DREQ_SIZE              (`IDREQ_SIZE),
         .SNOOP_FORWARDING       (0),
         .DRAM_ENABLE            (1),
         .WRITE_ENABLE           (0),

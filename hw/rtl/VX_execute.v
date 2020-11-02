@@ -38,6 +38,7 @@ module VX_execute #(
     VX_fpu_to_cmt_if    fpu_commit_if,
     VX_exu_to_cmt_if    gpu_commit_if,
     
+    input wire          busy,
     output wire         ebreak
 );
     
@@ -69,11 +70,12 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),    
         .cmt_to_csr_if  (cmt_to_csr_if),    
-        .csr_to_issue_if  (csr_to_issue_if), 
+        .csr_to_issue_if(csr_to_issue_if), 
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
-        .csr_commit_if  (csr_commit_if)
+        .csr_commit_if  (csr_commit_if),
+        .busy           (busy)
     );
 
 `ifdef EXT_M_ENABLE

@@ -3,7 +3,7 @@
 module VX_generic_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
-    parameter BUFFERED = 1,
+    parameter BUFFERED = 0,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1)
 ) ( 
