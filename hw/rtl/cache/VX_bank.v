@@ -98,7 +98,10 @@ module VX_bank #(
 
     output wire                                   snp_rsp_valid,
     output wire [SNP_REQ_TAG_WIDTH-1:0]           snp_rsp_tag,
-    input  wire                                   snp_rsp_ready
+    input  wire                                   snp_rsp_ready,
+
+    //Misses
+    output wire misses
 );
 
 `ifdef DBG_CORE_REQ_INFO
@@ -443,6 +446,9 @@ module VX_bank #(
         .snp_to_mrvq_st1(snp_to_mrvq_st1),
         .mrvq_init_ready_state_st1(mrvq_init_ready_state_st1)
     );
+
+    assign misses = miss_st1; 
+
 
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
