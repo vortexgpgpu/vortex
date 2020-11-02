@@ -3,7 +3,7 @@
 module VX_icache_stage #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_ISTAGE_IO
+    `SCOPE_IO_VX_icache_stage
 
     input  wire             clk,
     input  wire             reset,
@@ -20,8 +20,8 @@ module VX_icache_stage #(
 );
     `UNUSED_VAR (reset)
 
-    reg [31:0] rsp_PC_buf [`NUM_WARPS-1:0];
-    reg [`NUM_THREADS-1:0] rsp_tmask_buf [`NUM_WARPS-1:0];
+    `NO_RW_RAM_CHECK reg [31:0] rsp_PC_buf [`NUM_WARPS-1:0];
+    `NO_RW_RAM_CHECK reg [`NUM_THREADS-1:0] rsp_tmask_buf [`NUM_WARPS-1:0];
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
@@ -29,8 +29,8 @@ module VX_icache_stage #(
     wire [`NW_BITS-1:0] rsp_tag = icache_rsp_if.tag[0][`NW_BITS-1:0];    
 
     always @(posedge clk) begin
-        if (icache_req_fire)  begin
-            rsp_PC_buf[req_tag]          <= ifetch_req_if.PC;  
+        if (icache_req_fire) begin
+            rsp_PC_buf[req_tag]    <= ifetch_req_if.PC;  
             rsp_tmask_buf[req_tag] <= ifetch_req_if.tmask;
         end    
     end    

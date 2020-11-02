@@ -60,9 +60,9 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -n 256
+./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -n16
 ./run_ase.sh build_ase_1c ../../driver/tests/demo/demo -n 16
-./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n1 -s4 -e4
+./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n16
 ./run_ase.sh build_ase_1c ../../benchmarks/opencl/vecadd/vecadd
 
 # modify "vsim_run.tcl" to dump VCD trace
@@ -76,11 +76,12 @@ tar -zcvf output_files_1c.tar.gz `find ./build_fpga_1c -type f \( -iname \*.rpt 
 # compress VCD trace
 tar -zcvf vortex.vcd.tar.gz ./build_ase_1c/work/vortex.vcd
 tar -zcvf trace.vcd.tar.gz obj_dir/trace.vcd
-tar -zcvf trace.vcd.tar.gz trace.vcd
+tar -zcvf trace.fst.tar.gz trace.fst run.log
 tar -zcvf run.log.tar.gz run.log
 tar -cvjf vortex.vcd.tar.bz2 build_ase_1c/work/vortex.vcd
 tar -zcvf vortex.vcd.tar.gz build_ase_1c/work/vortex.vcd
 tar -zcvf run.log.tar.gz build_ase_1c/work/run.log
+tar -zcvf vx_scope.vcd.tar.gz vx_scope.vcd
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
@@ -96,7 +97,7 @@ kill -9 <pid>
 # fixing device resource busy issue when deleting /build_ase_1c/
 lsof +D build_ase_1c
 
-# quick off cache synthesis
+# quick off synthesis
 make -C pipeline clean && make -C pipeline > pipeline/build.log 2>&1 &
 make -C cache clean && make -C cache > cache/build.log 2>&1 &
 make -C core clean && make -C core > core/build.log 2>&1 &

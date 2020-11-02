@@ -1,0 +1,195 @@
+{
+    "version": 1,
+    "includes":[
+        "../rtl/VX_config.vh", 
+        "../rtl/VX_platform.vh", 
+        "../rtl/VX_define.vh", 
+        "../rtl/cache/VX_cache_config.vh"
+    ],
+    "modules": {
+        "top": {            
+            "submodules": {
+                "vortex": {"type":"Vortex"}
+            }
+        },
+        "Vortex": {
+            "submodules": {
+                "cluster": {"type":"VX_cluster", "count":"`NUM_CLUSTERS"},
+                "l3cache": {"type":"VX_cache", "enabled":"`L3_ENABLE", "params":{"NUM_BANKS":"`L3NUM_BANKS"}}
+            }
+        },
+        "VX_cluster": {
+            "submodules": {
+                "core": {"type":"VX_core", "count":"`NUM_CORES", "enabled":true},
+                "l2cache": {"type":"VX_cache", "enabled":"`L2_ENABLE", "params":{"NUM_BANKS":"`L2NUM_BANKS"}}
+            }
+        },
+        "VX_core": {
+            "submodules": {
+                "pipeline": {"type":"VX_pipeline", "enabled":true},
+                "mem_unit": {"type":"VX_mem_unit", "enabled":true}
+            }
+        },
+        "VX_pipeline": {
+            "submodules": {
+                "fetch": {"type":"VX_fetch", "enabled":true},
+                "decode": {"type":"VX_decode", "enabled":true},
+                "issue": {"type":"VX_issue", "enabled":true},
+                "execute": {"type":"VX_execute", "enabled":true},
+                "commit": {"type":"VX_commit", "enabled":true}
+            }
+        },
+        "VX_fetch": {            
+            "submodules": {
+                "warp_sched": {"type":"VX_warp_sched"},
+                "icache_stage": {"type":"VX_icache_stage"}
+            }
+        },
+        "VX_warp_sched": {},
+        "VX_icache_stage": {},
+        "VX_decode": {},
+        "VX_issue": {},
+        "VX_execute": {                  
+            "submodules": {
+                "lsu_unit": {"type":"VX_lsu_unit"},
+                "gpu_unit": {"type":"VX_gpu_unit"}
+            }
+        },
+        "VX_commit": {},
+        "VX_lsu_unit": {},
+        "VX_gpu_unit": {},
+        "VX_mem_unit": {
+            "submodules": {                
+                "smem":   {"type":"VX_cache", "params":{"NUM_BANKS":"`SNUM_BANKS"}},
+                "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DNUM_BANKS"}},
+                "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"`INUM_BANKS"}}
+            }
+        },
+        "VX_cache": {
+            "submodules": {
+                "bank": {"type":"VX_bank", "count":"NUM_BANKS"}
+            }
+        },
+        "VX_bank": {}
+    },
+    "taps": {     
+        "top": {
+            "!reset": 1,
+            "?dram_req_valid": 1,
+            "dram_req_addr": 32,
+            "dram_req_rw": 1,
+            "dram_req_byteen":"`VX_DRAM_BYTEEN_WIDTH",
+            "dram_req_data":"`VX_DRAM_LINE_WIDTH",
+            "dram_req_tag":"`VX_DRAM_TAG_WIDTH",
+            "?dram_req_ready": 1,
+            "?dram_rsp_valid": 1,
+            "dram_rsp_data":"`VX_DRAM_LINE_WIDTH",
+            "dram_rsp_tag":"`VX_DRAM_TAG_WIDTH",
+            "?dram_rsp_ready": 1,                                    
+            "?snp_req_valid": 1,
+            "snp_req_addr": 32,
+            "snp_req_invalidate": 1,
+            "snp_req_tag":"`VX_SNP_TAG_WIDTH",
+            "?snp_req_ready": 1,
+            "?snp_rsp_valid": 1,
+            "snp_rsp_tag":"`VX_SNP_TAG_WIDTH",                                       
+            "?snp_rsp_ready": 1,    
+            "busy": 1       
+        },
+        "top/vortex/cluster/core/pipeline/fetch/icache_stage": {
+            "?icache_req_valid": 1,            
+            "icache_req_wid":"`NW_BITS",
+            "icache_req_addr": 32,
+            "icache_req_tag":"`ICORE_TAG_ID_BITS",
+            "?icache_req_ready": 1,
+            "?icache_rsp_valid": 1,
+            "icache_rsp_data": 32,
+            "icache_rsp_tag":"`ICORE_TAG_ID_BITS",
+            "?icache_rsp_ready": 1
+        },
+        "top/vortex/cluster/core/pipeline/fetch/warp_sched": {
+            "?wsched_scheduled_warp": 1,
+            "wsched_active_warps": "`NUM_WARPS",
+            "wsched_schedule_table": "`NUM_WARPS",
+            "wsched_schedule_ready": "`NUM_WARPS",
+            "wsched_warp_to_schedule": "`NW_BITS",
+            "wsched_warp_pc": "32"
+        },
+        "top/vortex/cluster/core/pipeline/execute/gpu_unit": {
+            "?gpu_req_valid": 1, 
+            "gpu_req_wid": "`NW_BITS",
+            "gpu_req_tmask": "`NUM_THREADS",
+            "gpu_req_op_type": "`GPU_BITS", 
+            "gpu_req_rs1": "32", 
+            "gpu_req_rs2": "32", 
+            "?gpu_req_ready": 1,
+            "?gpu_rsp_valid": 1, 
+            "gpu_rsp_wid": "`NW_BITS", 
+            "gpu_rsp_tmc": "`GPU_TMC_SIZE", 
+            "gpu_rsp_wspawn": "`GPU_WSPAWN_SIZE",             
+            "gpu_rsp_split": "`GPU_SPLIT_SIZE",
+            "gpu_rsp_barrier": "`GPU_BARRIER_SIZE"    
+        },
+        "top/vortex/cluster/core/pipeline/execute/lsu_unit": {
+            "?dcache_req_valid":"`NUM_THREADS",
+            "dcache_req_wid":"`NW_BITS",
+            "dcache_req_pc": 32,
+            "dcache_req_addr":"`NUM_THREADS * 32",
+            "dcache_req_rw": 1,
+            "dcache_req_byteen":"`NUM_THREADS * 4",
+            "dcache_req_data":  "`NUM_THREADS * 32",
+            "dcache_req_tag":"`DCORE_TAG_ID_BITS",  
+            "?dcache_req_ready": 1,
+            "?dcache_rsp_valid":"`NUM_THREADS",
+            "dcache_rsp_data":"`NUM_THREADS * 32",
+            "dcache_rsp_tag":"`DCORE_TAG_ID_BITS",
+            "?dcache_rsp_ready": 1
+        },
+        "top/vortex/cluster/core/pipeline/issue": {
+            "?issue_valid": 1,
+            "issue_wid":"`NW_BITS",
+            "issue_tmask":"`NUM_THREADS",
+            "issue_pc": 32,
+            "issue_ex_type":"`EX_BITS",
+            "issue_op_type":"`OP_BITS",
+            "issue_op_mod":"`MOD_BITS",
+            "issue_wb": 1,
+            "issue_rd":"`NR_BITS",
+            "issue_rs1":"`NR_BITS",
+            "issue_rs2":"`NR_BITS",
+            "issue_rs3":"`NR_BITS",
+            "issue_imm": 32,
+            "issue_rs1_is_pc": 1,
+            "issue_rs2_is_imm": 1,
+            "?issue_ready": 1,
+            "?gpr_rsp_valid": 1,
+            "gpr_rsp_wid":"`NW_BITS",
+            "gpr_rsp_pc": 32,
+            "gpr_rsp_a":"`NUM_THREADS * 32",
+            "gpr_rsp_b":"`NUM_THREADS * 32",
+            "gpr_rsp_c":"`NUM_THREADS * 32",
+            "!gpr_delay": 1,
+            "?writeback_valid": 1,
+            "writeback_wid":"`NW_BITS",
+            "writeback_pc": 32,
+            "writeback_rd":"`NR_BITS",
+            "writeback_data":"`NUM_THREADS * 32",
+            "!scoreboard_delay": 1,        
+            "!execute_delay": 1
+        },   
+        "top/vortex/l3cache/bank, top/vortex/cluster/l2cache/bank, top/vortex/cluster/core/mem_unit/dcache/bank, top/vortex/cluster/core/mem_unit/icache/bank, top/vortex/cluster/core/mem_unit/smem/bank": {
+            "?valid_st0": 1,
+            "?valid_st1": 1,
+            "?valid_st2": 1,
+            "addr_st0": 32,
+            "addr_st1": 32,
+            "addr_st2": 32,
+            "is_mrvq_st1": 1,
+            "miss_st1": 1,
+            "dirty_st1": 1,
+            "!force_miss_st1": 1,  
+            "!stall_pipe": 1
+        }
+    }
+ }
+ 

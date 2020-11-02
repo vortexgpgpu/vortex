@@ -3,7 +3,7 @@
 module VX_generic_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
-    parameter BUFFERED = 0,
+    parameter BUFFERED = 1,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1)
 ) ( 
@@ -17,30 +17,26 @@ module VX_generic_queue #(
     output wire             full,      
     output wire [SIZEW-1:0] size
 ); 
-    `STATIC_ASSERT(`ISPOW2(SIZE), "must be 0 or power of 2!")
-
-    reg [SIZEW-1:0] size_r;        
-    wire            reading;
-    wire            writing;
-
-    assign reading = pop && !empty;
-    assign writing = push && !full; 
-
-    if (SIZE == 1) begin // (SIZE == 1)
+    `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
+    
+    if (SIZE == 1) begin
 
         reg [DATAW-1:0] head_r;
+        reg size_r;
 
         always @(posedge clk) begin
             if (reset) begin
                 head_r <= 0;
                 size_r <= 0;                    
             end else begin
-                if (writing && !reading) begin
+                if (push && !pop) begin
+                    assert(!full);
                     size_r <= 1;
-                end else if (reading && !writing) begin
+                end else if (pop && !push) begin
+                    assert(!empty);
                     size_r <= 0;
                 end
-                if (writing) begin 
+                if (push) begin 
                     head_r <= data_in;
                 end
             end
@@ -51,15 +47,14 @@ module VX_generic_queue #(
         assign full     = (size_r != 0);
         assign size     = size_r;
 
-    end else begin // (SIZE > 1)
+    end else begin
 
-        `USE_FAST_BRAM reg [DATAW-1:0] data [SIZE-1:0];
-
-        if (0 == BUFFERED) begin                
+        if (0 == BUFFERED) begin          
 
             reg [ADDRW:0] rd_ptr_r;
             reg [ADDRW:0] wr_ptr_r;
-            
+            reg [ADDRW-1:0] used_r;
+
             wire [ADDRW-1:0] rd_ptr_a = rd_ptr_r[ADDRW-1:0];
             wire [ADDRW-1:0] wr_ptr_a = wr_ptr_r[ADDRW-1:0];
             
@@ -67,96 +62,126 @@ module VX_generic_queue #(
                 if (reset) begin
                     rd_ptr_r <= 0;
                     wr_ptr_r <= 0;
-                    size_r   <= 0;
+                    used_r   <= 0;
                 end else begin
-                    if (writing) begin                             
-                        data[wr_ptr_a] <= data_in;
-                        wr_ptr_r <= wr_ptr_r + 1;
-                        if (!reading) begin                                                       
-                            size_r <= size_r + 1;
+                    if (push) begin  
+                        assert(!full);          
+                        wr_ptr_r <= wr_ptr_r + (ADDRW+1)'(1);
+                        if (!pop) begin                                                       
+                            used_r <= used_r + ADDRW'(1);
                         end
                     end
-
-                    if (reading) begin
-                        rd_ptr_r <= rd_ptr_r + 1;
-                        if (!writing) begin                                                        
-                            size_r <= size_r - 1;
+                    if (pop) begin
+                        assert(!empty);
+                        rd_ptr_r <= rd_ptr_r + (ADDRW+1)'(1);
+                        if (!push) begin                                                        
+                            used_r <= used_r - ADDRW'(1);
                         end
                     end
                 end                   
-            end  
+            end
 
-            assign data_out = data[rd_ptr_a];
-            assign empty    = (wr_ptr_r == rd_ptr_r);
-            assign full     = (wr_ptr_a == rd_ptr_a) && (wr_ptr_r[ADDRW] != rd_ptr_r[ADDRW]);
-            assign size     = size_r;            
+            VX_dp_ram #(
+                .DATAW(DATAW),
+                .SIZE(SIZE),
+                .BUFFERED(0),
+                .RWCHECK(1)
+            ) dp_ram (
+                .clk(clk),	
+                .waddr(wr_ptr_a),                                
+                .raddr(rd_ptr_a),
+                .wren(push),
+                .rden(pop),
+                .din(data_in),
+                .dout(data_out)
+            );
+        
+            assign empty = (wr_ptr_r == rd_ptr_r);
+            assign full  = (wr_ptr_a == rd_ptr_a) && (wr_ptr_r[ADDRW] != rd_ptr_r[ADDRW]);
+            assign size  = {full, used_r};
 
         end else begin
 
-            reg [DATAW-1:0] head_r;
-            reg [DATAW-1:0] curr_r;
+            wire [DATAW-1:0] dout;
+
+            reg [DATAW-1:0] din_r;
             reg [ADDRW-1:0] wr_ptr_r;
             reg [ADDRW-1:0] rd_ptr_r;
-            reg [ADDRW-1:0] rd_ptr_next_r;
+            reg [ADDRW-1:0] rd_ptr_n_r;
+            reg [ADDRW-1:0] used_r;
             reg             empty_r;
             reg             full_r;
             reg             bypass_r;
 
             always @(posedge clk) begin
-                if (reset) begin
-                    size_r          <= 0;
-                    head_r          <= 0;
-                    curr_r          <= 0;
-                    wr_ptr_r        <= 0;
-                    rd_ptr_r        <= 0;
-                    rd_ptr_next_r   <= 1;
-                    empty_r         <= 1;                   
-                    full_r          <= 0;                    
+                if (reset) begin      
+                    wr_ptr_r   <= 0;
+                    rd_ptr_r   <= 0;
+                    rd_ptr_n_r <= 1;
+                    empty_r    <= 1;                   
+                    full_r     <= 0;                    
+                    used_r     <= 0;
                 end else begin
-                    if (writing) begin                            
-                        data[wr_ptr_r] <= data_in;
-                        wr_ptr_r <= wr_ptr_r + 1; 
+                    if (push) begin                 
+                        wr_ptr_r <= wr_ptr_r + ADDRW'(1); 
 
-                        if (!reading) begin                                
+                        if (!pop) begin                                
                             empty_r <= 0;
-                            if (size_r == ($bits(size_r)'(SIZE-1))) begin
+                            if (used_r == ADDRW'(SIZE-1)) begin
                                 full_r <= 1;
                             end
-                            size_r <= size_r + 1;
+                            used_r <= used_r + ADDRW'(1);
                         end
                     end
 
-                    if (reading) begin
-                        rd_ptr_r <= rd_ptr_next_r;   
+                    if (pop) begin
+                        rd_ptr_r <= rd_ptr_n_r;   
                         
                         if (SIZE > 2) begin        
-                            rd_ptr_next_r <= rd_ptr_r + $bits(rd_ptr_r)'(2);
+                            rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
                         end else begin // (SIZE == 2);
-                            rd_ptr_next_r <= ~rd_ptr_next_r;                                
+                            rd_ptr_n_r <= ~rd_ptr_n_r;                                
                         end
 
-                        if (!writing) begin                                
-                            if (size_r == 1) begin
-                                assert(rd_ptr_next_r == wr_ptr_r);
+                        if (!push) begin                      
+                            full_r <= 0;                          
+                            if (used_r == ADDRW'(1)) begin
+                                assert(rd_ptr_n_r == wr_ptr_r);
                                 empty_r <= 1;  
-                            end;                
-                            full_r <= 0;
-                            size_r <= size_r - 1;
+                            end;
+                            used_r <= used_r - ADDRW'(1);
                         end
                     end
-
-                    bypass_r <= writing 
-                             && (empty_r || ((1 == size_r) && reading)); // empty or about to go empty
-                                
-                    curr_r   <= data_in;
-                    head_r   <= data[reading ? rd_ptr_next_r : rd_ptr_r];
                 end
-            end 
+            end
 
-            assign data_out = bypass_r ? curr_r : head_r;
+            always @(posedge clk) begin
+                if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
+                    bypass_r <= 1;
+                    din_r <= data_in;
+                end else if (pop)
+                    bypass_r <= 0;
+            end
+
+            VX_dp_ram #(
+                .DATAW(DATAW),
+                .SIZE(SIZE),
+                .BUFFERED(1),
+                .RWCHECK(0)
+            ) dp_ram (
+                .clk(clk),	
+                .waddr(wr_ptr_r),                                
+                .raddr(rd_ptr_n_r),
+                .wren(push),
+                .rden(pop),
+                .din(data_in),
+                .dout(dout)
+            ); 
+
+            assign data_out = bypass_r ? din_r : dout;
             assign empty    = empty_r;
             assign full     = full_r;
-            assign size     = size_r;
+            assign size     = {full_r, used_r};        
         end
     end
 

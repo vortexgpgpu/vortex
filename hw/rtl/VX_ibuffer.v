@@ -20,15 +20,12 @@ module VX_ibuffer #(
     localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
-    `USE_FAST_BRAM reg [DATAW-1:0] entries [`NUM_WARPS-1:0][SIZE-1:0];
     reg [SIZEW-1:0] size_r [`NUM_WARPS-1:0];
-    reg [ADDRW:0] rd_ptr_r [`NUM_WARPS-1:0];
-    reg [ADDRW:0] wr_ptr_r [`NUM_WARPS-1:0];
-
+    
     wire [`NUM_WARPS-1:0] q_full;
     wire [`NUM_WARPS-1:0][SIZEW-1:0] q_size;
     wire [DATAW-1:0] q_data_in;
-    wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;
+    wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;    
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
 
     wire enq_fire = ibuf_enq_if.valid && ibuf_enq_if.ready;
@@ -39,21 +36,33 @@ module VX_ibuffer #(
         wire writing = enq_fire && (i == ibuf_enq_if.wid); 
         wire reading = deq_fire && (i == ibuf_deq_if.wid);
 
-        wire [ADDRW-1:0] rd_ptr_a = rd_ptr_r[i][ADDRW-1:0];
-        wire [ADDRW-1:0] wr_ptr_a = wr_ptr_r[i][ADDRW-1:0];
-        
+        wire is_slot0 = (0 == size_r[i]) || ((1 == size_r[i]) && reading);
+
+        wire push = writing && !is_slot0;
+        wire pop = reading && (size_r[i] != 1);
+
+        VX_generic_queue #(
+            .DATAW(DATAW),
+            .SIZE(SIZE)
+        ) queue (
+            .clk      (clk),
+            .reset    (reset),
+            .push     (push),
+            .pop      (pop),
+            .data_in  (q_data_in),
+            .data_out (q_data_prev[i]),
+            `UNUSED_PIN (empty),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (size)
+        );
+
         always @(posedge clk) begin
             if (reset) begin
-                rd_ptr_r[i] <= 0;
-                wr_ptr_r[i] <= 0;
-                size_r[i]   <= 0;
-            end else begin
-                if (writing) begin    
-                    if ((0 == size_r[i]) || ((1 == size_r[i]) && reading)) begin
+                size_r[i] <= 0;
+            end else begin            
+                if (writing) begin
+                    if (is_slot0) begin                                                       
                         q_data_out[i] <= q_data_in;
-                    end else begin
-                        entries[i][wr_ptr_a] <= q_data_in;
-                        wr_ptr_r[i] <= wr_ptr_r[i] + ADDRW'(1);
                     end
                     if (!reading) begin                                                       
                         size_r[i] <= size_r[i] + SIZEW'(1);
@@ -62,18 +71,16 @@ module VX_ibuffer #(
                 if (reading) begin
                     if (size_r[i] != 1) begin
                         q_data_out[i] <= q_data_prev[i];
-                        rd_ptr_r[i]   <= rd_ptr_r[i] + ADDRW'(1);
                     end
                     if (!writing) begin                                                        
                         size_r[i] <= size_r[i] - SIZEW'(1);
                     end
                 end
             end                   
-        end  
-
-        assign q_data_prev[i] = entries[i][rd_ptr_a];
-        assign q_full[i]      = (size_r[i] == SIZE);
-        assign q_size[i]      = size_r[i];
+        end
+        
+        assign q_full[i] = (size_r[i] == SIZE);
+        assign q_size[i] = size_r[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -144,9 +151,9 @@ module VX_ibuffer #(
                 schedule_table[deq_wid_n] <= 0;
             end
 
-            deq_valid  <= deq_valid_n;
-            deq_wid    <= deq_wid_n;
-            deq_instr  <= deq_instr_n;                 
+            deq_valid <= deq_valid_n;
+            deq_wid   <= deq_wid_n;
+            deq_instr <= deq_instr_n;                 
 
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);

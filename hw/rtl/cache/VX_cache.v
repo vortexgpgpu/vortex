@@ -51,15 +51,15 @@ module VX_cache #(
     parameter DRAM_TAG_WIDTH                = 28,
 
     // Number of snoop forwarding requests
-    parameter NUM_SNP_REQUESTS              = 2, 
+    parameter NUM_SNP_REQUESTS              = 1, 
 
     // Snooping request tag width
-    parameter SNP_REQ_TAG_WIDTH             = 28,
+    parameter SNP_REQ_TAG_WIDTH             = 1,
 
     // Snooping forward tag width
     parameter SNP_FWD_TAG_WIDTH             = 1
  ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_IO_VX_cache
     
     input wire clk,
     input wire reset,
@@ -167,7 +167,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_miss; 
     assign miss_vec = per_bank_miss; 
 
-    `SCOPE_SIGNALS_CACHE_BANK_SELECT
+   
 
     wire                         snp_req_valid_qual;    
     wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
@@ -376,7 +376,7 @@ module VX_cache #(
             .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
             .SNP_REQ_TAG_WIDTH  (SNP_REQ_TAG_WIDTH)
         ) bank (
-            `SCOPE_SIGNALS_CACHE_BANK_BIND
+            `SCOPE_BIND_VX_cache_bank(i)
             
             .clk                     (clk),
             .reset                   (reset),                

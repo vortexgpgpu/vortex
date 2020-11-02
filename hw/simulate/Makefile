@@ -13,6 +13,8 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_MSRQ
 DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM      
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
+DBG_PRINT_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CORE_REQ_INFO
@@ -42,7 +44,7 @@ gen-s:
 	verilator $(VF) -DNDEBUG  $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG $(SINGLECORE)'
 
 gen-sd:
-	verilator $(VF) -O0 $(SINGLECORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(SINGLECORE)' --trace $(DBG)
+	verilator $(VF) -O0 $(SINGLECORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(SINGLECORE)' --trace-fst --trace-threads 1 $(DBG)
 
 gen-st:
 	verilator $(VF) -DNDEBUG $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(SINGLECORE)' --threads $(THREADS)
@@ -51,7 +53,7 @@ gen-m:
 	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md:
-	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(MULTICORE)' --trace $(DBG)
+	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(MULTICORE)' --trace-fst --trace-threads 1 $(DBG)
 
 gen-mt:
 	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
@@ -75,11 +77,12 @@ build-mt: gen-mt
 	(cd obj_dir && make -j -f VVortex.mk)
 
 run: run-s
+
 run-s: build-s
 	(cd obj_dir && ./VVortex)
 
 run-sd: build-sd
-	(cd obj_dir && valgrind ./VVortex)
+	(cd obj_dir && ./VVortex)
 
 run-st: build-st
 	(cd obj_dir && ./VVortex)

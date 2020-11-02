@@ -6,7 +6,7 @@ module VX_tag_data_store #(
     // Size of line inside a bank in bytes
     parameter BANK_LINE_SIZE                = 0, 
     // Number of banks {1, 2, 4, 8,...} 
-    parameter NUM_BANKS                     = 0, 
+    parameter NUM_BANKS                     = 0, //unused parameter?
     // Size of a word in bytes
     parameter WORD_SIZE                     = 0
 ) (
@@ -30,7 +30,6 @@ module VX_tag_data_store #(
     input  wire                             fill_sent    
 );
 
-    reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0][7:0] data [`BANK_LINE_COUNT-1:0];    
     reg [`TAG_SELECT_BITS-1:0]                      tag [`BANK_LINE_COUNT-1:0];
     reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0]     dirtyb[`BANK_LINE_COUNT-1:0];
     reg [`BANK_LINE_COUNT-1:0]                     dirty;   
@@ -40,8 +39,7 @@ module VX_tag_data_store #(
     assign read_dirty  = dirty  [read_addr];
     assign read_dirtyb = dirtyb [read_addr];
     assign read_tag    = tag    [read_addr];
-    assign read_data   = data   [read_addr];
-
+    
     wire do_write = (| write_enable);
 
     always @(posedge clk) begin
@@ -69,15 +67,26 @@ module VX_tag_data_store #(
             if (invalidate) begin
                 valid[write_addr] <= 0;
             end
-
-            for (integer j = 0; j < `BANK_LINE_WORDS; j++) begin
-                for (integer i = 0; i < WORD_SIZE; i++) begin
-                    if (write_enable[j][i]) begin
-                        data[write_addr][j][i] <= write_data[j * `WORD_WIDTH + i * 8 +: 8];
-                    end
-                end
-            end
         end
     end
+
+    wire [(`BANK_LINE_WORDS * WORD_SIZE)-1:0] ram_wren;
+    assign ram_wren = write_enable & {(`BANK_LINE_WORDS * WORD_SIZE){!stall_bank_pipe}};
+
+    VX_dp_ram #(
+        .DATAW(`BANK_LINE_WORDS * WORD_SIZE * 8),
+        .SIZE(`BANK_LINE_COUNT),
+        .BYTEENW(`BANK_LINE_WORDS * WORD_SIZE),
+        .BUFFERED(0),
+        .RWCHECK(1)
+    ) dp_ram (
+        .clk(clk),	                
+        .waddr(write_addr),                                
+        .raddr(read_addr),                
+        .wren(ram_wren),
+        .rden(1'b1),
+        .din(write_data),
+        .dout(read_data)
+    );
 
 endmodule

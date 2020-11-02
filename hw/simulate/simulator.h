@@ -5,13 +5,14 @@
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
-#include <verilated_vcd_c.h>
+#include <verilated_fst_c.h>
 #endif
 
 #include <VX_config.h>
 #include "ram.h"
 
 #include <ostream>
+#include <list>
 #include <vector>
 #include <sstream> 
 #include <unordered_map>
@@ -62,7 +63,7 @@ private:
   void eval_csr_bus();
   void eval_snp_bus();
   
-  std::vector<dram_req_t> dram_rsp_vec_;
+  std::list<dram_req_t> dram_rsp_vec_;
   bool dram_rsp_active_;
   
   bool snp_req_active_;
@@ -75,6 +76,6 @@ private:
   RAM *ram_;
   VVortex *vortex_;
 #ifdef VCD_OUTPUT
-  VerilatedVcdC *trace_;
+  VerilatedFstC *trace_;
 #endif
 };

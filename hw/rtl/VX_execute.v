@@ -3,8 +3,7 @@
 module VX_execute #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_EXECUTE_IO
+    `SCOPE_IO_VX_execute
 
     input wire clk, 
     input wire reset, 
@@ -55,7 +54,7 @@ module VX_execute #(
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
     ) lsu_unit (
-        `SCOPE_SIGNALS_LSU_BIND
+        `SCOPE_BIND_VX_execute_lsu_unit
         .clk            (clk),
         .reset          (reset),
         .dcache_req_if  (dcache_req_if),
@@ -122,6 +121,7 @@ module VX_execute #(
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
     ) gpu_unit (
+        `SCOPE_BIND_VX_execute_gpu_unit
         .clk            (clk),
         .reset          (reset),    
         .gpu_req_if     (gpu_req_if),
