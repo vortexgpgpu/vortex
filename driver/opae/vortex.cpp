@@ -31,7 +31,7 @@
      fpga_result res = _expr;                                       \
      if (res == FPGA_OK)                                            \
        break;                                                       \
-     printf("OPAE Error: '%s' returned %d, %s!\n",                  \
+     printf("[VXDRV] Error: '%s' returned %d, %s!\n",                  \
             #_expr, (int)res, fpgaErrStr(res));                     \
      return -1;                                                     \
    } while (false)
@@ -118,7 +118,7 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
         *value = STARTUP_ADDR;
         break;
     default:
-        fprintf(stderr, "invalid caps id: %d\n", caps_id);
+        fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);
         std::abort();
         return -1;
     }
@@ -156,7 +156,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     fpgaDestroyProperties(&filter);
 
     if (num_matches < 1) {
-        fprintf(stderr, "Accelerator %s not found!\n", AFU_ACCEL_UUID);
+        fprintf(stderr, "[VXDRV] Error: accelerator %s not found!\n", AFU_ACCEL_UUID);
         return -1;
     }
 
@@ -197,9 +197,10 @@ extern int vx_dev_open(vx_device_h* hdevice) {
             fpgaClose(accel_handle);
             return ret;
         }
-
-        fprintf(stdout, "DEVCAPS: version=%d, num_cores=%d, num_warps=%d, num_threads=%d\n", 
+    #ifndef NDEBUG    
+        fprintf(stdout, "[VXDRV] DEVCAPS: version=%d, num_cores=%d, num_warps=%d, num_threads=%d\n", 
                 device->implementation_id, device->num_cores, device->num_warps, device->num_threads);
+    #endif
     }
     
 #ifdef SCOPE
@@ -236,18 +237,18 @@ extern int vx_dev_close(vx_device_h hdevice) {
             int ret = vx_get_perf(hdevice, core_id, &instrs, &cycles);
             assert(ret == 0);
             float IPC = (float)(double(instrs) / double(cycles));
-            fprintf(stdout, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
+            fprintf(stdout, "[VXDRV] PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
             total_instrs += instrs;
             total_cycles = std::max<uint64_t>(total_cycles, cycles);
         }
         float IPC = (float)(double(total_instrs) / double(total_cycles));
-        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
+        fprintf(stdout, "[VXDRV] PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
     } else {
         uint64_t instrs, cycles;
         int ret = vx_get_perf(hdevice, 0, &instrs, &cycles);
         float IPC = (float)(double(instrs) / double(cycles));
         assert(ret == 0);
-        fprintf(stdout, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
+        fprintf(stdout, "[VXDRV] PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
     }
 #endif
 
@@ -373,7 +374,7 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
         CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &data));
         if (0 == data || 0 == timeout) {
             if (data != 0) {
-                fprintf(stdout, "ready-wait timed out: status=%ld\n", data);
+                fprintf(stdout, "[VXDRV] ready-wait timed out: status=%ld\n", data);
             }
             break;
         }
@@ -509,12 +510,6 @@ extern int vx_start(vx_device_h hdevice) {
     // start execution    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN));
 
-#ifdef SCOPE
-    sleep(15);
-    vx_scope_stop(device->fpga, 0);
-    exit(0);
-#endif
-
     return 0;
 }
 
@@ -547,7 +542,7 @@ extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* valu
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
-        return -1; 
+        return -1;
 
     // write CSR value    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CSR_CORE, core_id));

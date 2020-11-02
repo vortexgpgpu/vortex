@@ -91,7 +91,7 @@ module VX_cache_core_rsp_merge #(
         .clk   (clk),
         .reset (reset),
         .stall (stall),
-        .flush (0),
+        .flush (1'b0),
         .in    ({core_rsp_valid_unqual, core_rsp_data_unqual, core_rsp_tag_unqual}),
         .out   ({core_rsp_valid,        core_rsp_data,        core_rsp_tag})
     );

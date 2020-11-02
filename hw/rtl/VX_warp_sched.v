@@ -3,6 +3,8 @@
 module VX_warp_sched #(
     parameter CORE_ID = 0
 ) (
+    `SCOPE_IO_VX_warp_sched
+    
     input wire          clk,
     input wire          reset,
 
@@ -247,5 +249,12 @@ module VX_warp_sched #(
     );
 
     assign busy = (active_warps != 0); 
+
+    `SCOPE_ASSIGN (scope_wsched_scheduled_warp, scheduled_warp);
+    `SCOPE_ASSIGN (scope_wsched_active_warps,   active_warps);
+    `SCOPE_ASSIGN (scope_wsched_schedule_table, schedule_table);
+    `SCOPE_ASSIGN (scope_wsched_schedule_ready, schedule_ready);
+    `SCOPE_ASSIGN (scope_wsched_warp_to_schedule, warp_to_schedule);
+    `SCOPE_ASSIGN (scope_wsched_warp_pc, warp_pc);
 
 endmodule

@@ -1,10 +1,13 @@
 OPAE_HOME ?= /tools/opae/1.4.0
 
+#CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../include -I$(OPAE_HOME)/include  -I../../hw
 
 LDFLAGS += -L$(OPAE_HOME)/lib
+
+#SCOPE=1
 
 # stack execution protection
 LDFLAGS +=-z noexecstack
@@ -21,9 +24,6 @@ CXXFLAGS += -fPIC
 # Dump perf stats
 CXXFLAGS += -DDUMP_PERF_STATS
 
-# Enable scope analyzer
-#CXXFLAGS += -DSCOPE
-
 LDFLAGS += -shared
 
 FPGA_LIBS += -luuid -lopae-c
@@ -31,8 +31,6 @@ FPGA_LIBS += -luuid -lopae-c
 ASE_LIBS += -luuid -lopae-c-ase
 
 VLSIM_LIBS += -lopae-c-vlsim
-
-LIB_DIR=../lib
 
 ASE_DIR = ase
 
@@ -46,7 +44,14 @@ PROJECT_VLSIM = $(VLSIM_DIR)/libvortex.so
 
 AFU_JSON_INFO = vortex_afu.h
 
-SRCS = vortex.cpp vx_scope.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp ../common/vx_utils.cpp
+
+# Enable scope analyzer
+ifdef SCOPE
+	CXXFLAGS += -DSCOPE	
+	SRCS += vx_scope.cpp
+	SET_SCOPE = SCOPE=1
+endif
 
 all: vlsim
 
@@ -57,14 +62,14 @@ json: ../../hw/opae/vortex_afu.json
 fpga: $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(FPGA_LIBS) -o $(PROJECT)
 
-ase: $(SRCS) $(ASE_DIR)
+asesim: $(SRCS) $(ASE_DIR)
 	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $(PROJECT_ASE)
 
-vlsim: $(SRCS) opae-vlsim
-	$(CXX) $(CXXFLAGS) -L./vlsim -DUSE_VLSIM $(SRCS) $(LDFLAGS) $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
+vlsim: $(SRCS) vlsim-hw
+	$(CXX) $(CXXFLAGS) -DUSE_VLSIM $(SRCS) $(LDFLAGS) -L./vlsim $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
 
-opae-vlsim:
-	$(MAKE) -C vlsim
+vlsim-hw:
+	$(SET_SCOPE) $(MAKE) -C vlsim
 
 vortex.o: vortex.cpp
 	$(CXX) $(CXXFLAGS) -c vortex.cpp -o $@

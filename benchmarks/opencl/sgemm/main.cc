@@ -106,7 +106,7 @@ int main (int argc, char **argv) {
   size_t kernel_size;
   cl_int binary_status;
 
-  srand(time(NULL));
+  srand(50);
 
   // read kernel binary from file  
   if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))

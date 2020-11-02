@@ -2,7 +2,6 @@
 `define VX_CACHE_CONFIG
 
 `include "VX_platform.vh"
-`include "VX_scope.vh"
 
 `ifdef DBG_CORE_REQ_INFO
 `include "VX_define.vh"

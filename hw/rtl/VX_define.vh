@@ -6,11 +6,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// `define SYNTHESIS 1
-// `define ASIC 1
-
-///////////////////////////////////////////////////////////////////////////////
-
 `define NW_BITS     `LOG2UP(`NUM_WARPS)
 
 `define NT_BITS     `LOG2UP(`NUM_THREADS)
@@ -248,7 +243,7 @@
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
 // Cache ID
-`define DCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 0)
+`define DCACHE_ID           32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0
 
 // TAG sharing enable       
 `define DCORE_TAG_ID_BITS   `LOG2UP(`LSUQ_SIZE)
@@ -277,7 +272,7 @@
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // Cache ID
-`define ICACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 1)
+`define ICACHE_ID           32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1
 
 // Core request address bits
 `define ICORE_ADDR_WIDTH    (32-`CLOG2(`IWORD_SIZE))
@@ -309,7 +304,7 @@
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
-`define SCACHE_ID           (((`L3_ENABLE && `L2_ENABLE) ? 2 : `L2_ENABLE ? 1 : 0) + (CORE_ID * 3) + 2)
+`define SCACHE_ID           32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 2
 
 // Number of Word requests per cycle {1, 2, 4, 8, ...}
 `define SNUM_REQUESTS       `NUM_THREADS
@@ -326,7 +321,7 @@
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
 // Cache ID
-`define L2CACHE_ID          (`L3_ENABLE ? 1 : 0)
+`define L2CACHE_ID          32'(`L3_ENABLE) + CLUSTER_ID
 
 // Core request tag bits
 `define L2CORE_TAG_WIDTH    (`DCORE_TAG_WIDTH + `CLOG2(`NUM_CORES))

@@ -18,7 +18,7 @@ module VX_scope #(
 	input wire bus_write,
 	input wire bus_read
 );
-	localparam DELTA_ENABLE  = (UPDW != 0);
+	localparam UPDW_ENABLE   = (UPDW != 0);
 	localparam MAX_DELTA     = (2 ** DELTAW) - 1;
 
 	localparam CMD_GET_VALID = 3'd0;
@@ -27,19 +27,22 @@ module VX_scope #(
 	localparam CMD_GET_COUNT = 3'd3;
 	localparam CMD_SET_DELAY = 3'd4;
 	localparam CMD_SET_STOP  = 3'd5;
-	localparam CMD_RESERVED1 = 3'd6;
+	localparam CMD_GET_OFFSET= 3'd6;
 	localparam CMD_RESERVED2 = 3'd7;
 
-	localparam GET_VALID = 2'd0;
-	localparam GET_DATA  = 2'd1;
-	localparam GET_WIDTH = 2'd2;
-	localparam GET_COUNT = 2'd3;
+	localparam GET_VALID  = 3'd0;
+	localparam GET_DATA   = 3'd1;
+	localparam GET_WIDTH  = 3'd2;
+	localparam GET_COUNT  = 3'd3;
+	localparam GET_OFFSET = 3'd6;
 
-	reg [DATAW-1:0] data_store [SIZE-1:0];
-	reg [DELTAW-1:0] delta_store [SIZE-1:0];
+	`NO_RW_RAM_CHECK reg [DATAW-1:0] data_store [SIZE-1:0];
+	`NO_RW_RAM_CHECK reg [DELTAW-1:0] delta_store [SIZE-1:0];
+
 	reg [UPDW-1:0] prev_trigger_id;
 	reg [DELTAW-1:0] delta;
 	reg [BUSW-1:0]  bus_out_r;	
+	reg [63:0] timestamp, start_time;
 
 	reg [`CLOG2(SIZE)-1:0] raddr, waddr, waddr_end;
 
@@ -49,8 +52,7 @@ module VX_scope #(
 
 	reg [BUSW-3:0] delay_val, delay_cntr;
 
-	reg [1:0] out_cmd;
-
+	reg [2:0] get_cmd;
 	wire [2:0] cmd_type;
 	wire [BUSW-4:0] cmd_data;
 	assign {cmd_data, cmd_type} = bus_in;
@@ -59,7 +61,7 @@ module VX_scope #(
 
 	always @(posedge clk) begin
 		if (reset) begin
-			out_cmd     	<= $bits(out_cmd)'(CMD_GET_VALID);
+			get_cmd     	<= $bits(get_cmd)'(CMD_GET_VALID);
 			raddr      		<= 0;	
 			waddr      		<= 0;	
 			waddr_end   	<= $bits(waddr)'(SIZE-1);
@@ -74,13 +76,18 @@ module VX_scope #(
 			read_offset		<= 0;
 			read_delta  	<= 0;
 			data_valid  	<= 0;
+			timestamp       <= 0;
 		end else begin
+
+			timestamp <= timestamp + 1;
+
 			if (bus_write) begin
 				case (cmd_type)
 					CMD_GET_VALID, 
 					CMD_GET_DATA, 
 					CMD_GET_WIDTH, 
-				    CMD_GET_COUNT:   out_cmd <= $bits(out_cmd)'(cmd_type); 
+					CMD_GET_OFFSET, 
+				    CMD_GET_COUNT:   get_cmd <= $bits(get_cmd)'(cmd_type); 
 					CMD_SET_DELAY: delay_val <= $bits(delay_val)'(cmd_data);
 		            CMD_SET_STOP:  waddr_end <= $bits(waddr)'(cmd_data);
 				    default:;
@@ -92,8 +99,10 @@ module VX_scope #(
 				delta_flush <= 1;	
 				if (0 == delay_val) begin					
 					start_wait  <= 0;
-					recording   <= 1;
-					delay_cntr  <= 0;					
+					recording   <= 1;					
+					delta       <= 0;
+					delay_cntr  <= 0;
+					start_time  <= timestamp;					
 				end else begin
 					start_wait <= 1;
 					recording  <= 0;
@@ -106,26 +115,29 @@ module VX_scope #(
 				if (1 == delay_cntr) begin				
 					start_wait <= 0;
 					recording  <= 1;
+					delta      <= 0;
+					start_time <= timestamp;
 				end 
 			end
 
 			if (recording) begin
-				if (DELTA_ENABLE) begin
+				if (UPDW_ENABLE) begin
 					if (delta_flush
 					 || changed
 					 || (trigger_id != prev_trigger_id)) begin
-						data_store[waddr]  <= data_in;
 						delta_store[waddr] <= delta;
-						waddr       <= waddr + 1;
+						data_store[waddr]  <= data_in;
+						waddr       <= waddr + $bits(waddr)'(1);
 						delta       <= 0;
 						delta_flush <= 0;
 					end else begin
-						delta       <= delta + 1;
+						delta       <= delta + DELTAW'(1);
 						delta_flush <= (delta == (MAX_DELTA-1));
 					end
 					prev_trigger_id <= trigger_id;
 				end else begin
-					data_store[waddr] <= data_in;
+					delta_store[waddr] <= 0;
+					data_store[waddr]  <= data_in;					
 					waddr <= waddr + 1;
 				end
 
@@ -134,12 +146,12 @@ module VX_scope #(
 					waddr      <= waddr;  // keep last address
 					recording  <= 0;
 					data_valid <= 1;
-					read_delta <= DELTA_ENABLE;					
+					read_delta <= 1;					
 				end
 			end
 
 			if (bus_read 			 
-			 && (out_cmd == GET_DATA)
+			 && (get_cmd == GET_DATA)
 			 && data_valid)  begin
 				if (read_delta) begin
 					read_delta <= 0; 
@@ -148,16 +160,16 @@ module VX_scope #(
 						if (read_offset < $bits(read_offset)'(DATAW-BUSW)) begin
 							read_offset <= read_offset + $bits(read_offset)'(BUSW);
 						end else begin
-							raddr       <= raddr + 1;
+							raddr       <= raddr + $bits(raddr)'(1);
 							read_offset <= 0;							
-							read_delta  <= DELTA_ENABLE; 
+							read_delta  <= 1; 
 							if (raddr == waddr) begin
 								data_valid <= 0;
 							end
 						end					
 					end else begin
 						raddr <= raddr + 1;					
-						read_delta <= DELTA_ENABLE; 
+						read_delta <= 1; 
 						if (raddr == waddr) begin
 							data_valid <= 0;
 						end
@@ -168,11 +180,14 @@ module VX_scope #(
 	end
 
 	always @(*) begin
-		case (out_cmd)
+		case (get_cmd)
 			GET_VALID : bus_out_r = BUSW'(data_valid);
 			GET_WIDTH : bus_out_r = BUSW'(DATAW);
 			GET_COUNT : bus_out_r = BUSW'(waddr) + BUSW'(1);
+			GET_OFFSET: bus_out_r = BUSW'(start_time);
+		/* verilator lint_off WIDTH */	
 			GET_DATA  : bus_out_r = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
+		/* verilator lint_on WIDTH */
 			default   : bus_out_r = 0;  
 		endcase
 	end
@@ -182,7 +197,7 @@ module VX_scope #(
 `ifdef DBG_PRINT_SCOPE
 	always @(posedge clk) begin
 		if (bus_read) begin
-			$display("%t: scope-read: cmd=%0d, out=%0h, addr=%0d", $time, out_cmd, bus_out, raddr);
+			$display("%t: scope-read: cmd=%0d, addr=%0d, value=%0h", $time, get_cmd, raddr, bus_out);
 		end
 		if (bus_write) begin
 			$display("%t: scope-write: cmd=%0d, value=%0d", $time, cmd_type, cmd_data);

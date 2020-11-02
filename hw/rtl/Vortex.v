@@ -1,11 +1,7 @@
 `include "VX_define.vh"
 
 module Vortex (
-    `SCOPE_SIGNALS_ISTAGE_IO
-    `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_ISSUE_IO
-    `SCOPE_SIGNALS_EXECUTE_IO
+    `SCOPE_IO_Vortex
 
     // Clock
     input  wire                             clk,
@@ -75,11 +71,7 @@ module Vortex (
         VX_cluster #(
             .CLUSTER_ID(0)
         ) cluster (
-            `SCOPE_SIGNALS_ISTAGE_BIND
-            `SCOPE_SIGNALS_LSU_BIND
-            `SCOPE_SIGNALS_CACHE_BIND
-            `SCOPE_SIGNALS_ISSUE_BIND
-            `SCOPE_SIGNALS_EXECUTE_BIND
+            `SCOPE_BIND_Vortex_cluster(0)
 
             .clk                (clk),
             .reset              (reset),
@@ -193,11 +185,7 @@ module Vortex (
             VX_cluster #(
                 .CLUSTER_ID(i)
             ) cluster (
-                `SCOPE_SIGNALS_ISTAGE_BIND
-                `SCOPE_SIGNALS_LSU_BIND
-                `SCOPE_SIGNALS_CACHE_BIND
-                `SCOPE_SIGNALS_ISSUE_BIND
-                `SCOPE_SIGNALS_EXECUTE_BIND
+                `SCOPE_BIND_Vortex_cluster(i)
 
                 .clk                (clk),
                 .reset              (reset),
@@ -384,7 +372,7 @@ module Vortex (
         assign l3_core_rsp_ready = (& per_cluster_dram_rsp_ready);
 
         VX_cache #(
-            .CACHE_ID           (0),
+            .CACHE_ID           (`L3CACHE_ID),
             .CACHE_SIZE         (`L3CACHE_SIZE),
             .BANK_LINE_SIZE     (`L3BANK_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
@@ -407,7 +395,7 @@ module Vortex (
             .SNP_REQ_TAG_WIDTH  (`L3SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
         ) l3cache (
-            `SCOPE_SIGNALS_CACHE_UNBIND
+            `SCOPE_BIND_Vortex_l3cache
 
             .clk                (clk),
             .reset              (reset),

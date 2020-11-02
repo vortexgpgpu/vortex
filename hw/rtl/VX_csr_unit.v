@@ -7,7 +7,7 @@ module VX_csr_unit #(
     input wire          reset,
 
     VX_cmt_to_csr_if    cmt_to_csr_if, 
-    VX_csr_to_issue_if    csr_to_issue_if,  
+    VX_csr_to_issue_if  csr_to_issue_if,  
     
     VX_csr_io_req_if    csr_io_req_if,    
     VX_csr_io_rsp_if    csr_io_rsp_if,
@@ -15,8 +15,8 @@ module VX_csr_unit #(
     VX_csr_req_if       csr_req_if,   
     VX_exu_to_cmt_if    csr_commit_if
 );
-    VX_csr_req_if    csr_pipe_req_if();
-    VX_exu_to_cmt_if csr_pipe_rsp_if();
+    VX_csr_req_if       csr_pipe_req_if();
+    VX_exu_to_cmt_if    csr_pipe_rsp_if();
 
     wire select_io_req = csr_io_req_if.valid;
     wire select_io_rsp;

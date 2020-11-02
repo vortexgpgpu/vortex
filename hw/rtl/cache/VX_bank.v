@@ -50,7 +50,7 @@ module VX_bank #(
     // Snooping request tag width
     parameter SNP_REQ_TAG_WIDTH             = 0
 ) (
-    `SCOPE_SIGNALS_CACHE_IO
+    `SCOPE_IO_VX_bank
 
     input wire clk,
     input wire reset,
@@ -146,7 +146,7 @@ module VX_bank #(
     ) snp_req_queue (
         .clk     (clk),
         .reset   (reset),
-        .push    (snp_req_valid),
+        .push    (snp_req_valid && snp_req_ready),
         .data_in ({snp_req_addr, snp_req_invalidate, snp_req_tag}),
         .pop     (snrq_pop),
         .data_out({snrq_addr_st0, snrq_invalidate_st0, snrq_tag_st0}),
@@ -169,7 +169,7 @@ module VX_bank #(
     ) dfp_queue (
         .clk     (clk),
         .reset   (reset),
-        .push    (dram_fill_rsp_valid),
+        .push    (dram_fill_rsp_valid && dram_fill_rsp_ready),
         .data_in ({dram_fill_rsp_addr, dram_fill_rsp_data}),
         .pop     (dfpq_pop),
         .data_out({dfpq_addr_st0, dfpq_filldata_st0}),
@@ -266,7 +266,9 @@ module VX_bank #(
 `DEBUG_BEGIN
     wire going_to_write_st1;    
 `DEBUG_END
-
+    
+    //determines if the if it is time to pop a req from the queues
+    //unqual - the req does NOT qualify for execution in the bank. 
     wire mrvq_pop_unqual = mrvq_valid_st0;
     wire dfpq_pop_unqual = !mrvq_pop_unqual && !dfpq_empty;
     wire reqq_pop_unqual = !mrvq_stop && !mrvq_pop_unqual && !dfpq_pop_unqual && !reqq_empty && reqq_req_st0 && !is_fill_st1 && !is_fill_st1;
@@ -276,7 +278,8 @@ module VX_bank #(
     assign dfpq_pop = dfpq_pop_unqual && !stall_bank_pipe;
     assign reqq_pop = reqq_pop_unqual && !stall_bank_pipe;
     assign snrq_pop = snrq_pop_unqual && !stall_bank_pipe;
-
+    
+    //signals to progress to the next stage
     wire                                  qual_is_fill_st0;
     wire                                  qual_valid_st0;
     wire [`LINE_ADDR_WIDTH-1:0]           qual_addr_st0;
@@ -289,7 +292,8 @@ module VX_bank #(
     wire                                  qual_going_to_write_st0;
     wire                                  qual_is_snp_st0;
     wire                                  qual_snp_invalidate_st0;
-
+    
+    //signals to be *used* in the next stage
     wire                                  valid_st1;
     wire [`LINE_ADDR_WIDTH-1:0]           addr_st1;
     wire [`UP(`WORD_SELECT_WIDTH)-1:0]    wsel_st1;
@@ -300,15 +304,19 @@ module VX_bank #(
     wire                                  snp_invalidate_st1;
     wire                                  is_mrvq_st1;
 
-    assign qual_is_fill_st0 = dfpq_pop_unqual;
+    //Determine which req will progress to the next stage
+    assign qual_is_fill_st0 = dfpq_pop_unqual; //dram is filling a request
 
-    assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop;
+    assign qual_valid_st0 = dfpq_pop || mrvq_pop || reqq_pop || snrq_pop; //valid if something is being popped
 
-    assign qual_addr_st0 = dfpq_pop_unqual ? dfpq_addr_st0 :
-                           mrvq_pop_unqual ? mrvq_addr_st0 :
+    //Decides which request to deal with. Priority: 1) Miss reserve 2) DRAM fill 3) Core req 4) Snp req
+    assign qual_addr_st0 = mrvq_pop_unqual ? mrvq_addr_st0 :
+                           dfpq_pop_unqual ? dfpq_addr_st0 :
                            reqq_pop_unqual ? reqq_req_addr_st0[`LINE_SELECT_ADDR_RNG] :
                            snrq_pop_unqual ? snrq_addr_st0 :
                                              0;
+    
+    //Word select does ? Does this just pick a specific word from the line instead of the whole line?
     if (`WORD_SELECT_WIDTH != 0) begin
         assign qual_wsel_st0 = reqq_pop_unqual ? reqq_req_addr_st0[`WORD_SELECT_WIDTH-1:0] :
                                mrvq_pop_unqual ? mrvq_wsel_st0 :
@@ -318,30 +326,35 @@ module VX_bank #(
         assign qual_wsel_st0 = 0;
     end
 
+    //if you are filling from dram then that is the write data? What about core? What is 57?
     assign qual_writedata_st0 = dfpq_pop_unqual ? dfpq_filldata_st0 : 57;
 
+    //note that this is stored even if a DRAM fill is processed
     assign qual_inst_meta_st0 = mrvq_pop_unqual ? {`REQ_TAG_WIDTH'(mrvq_tag_st0)    , mrvq_rw_st0,     mrvq_byteen_st0,     mrvq_tid_st0} :
                                 reqq_pop_unqual ? {`REQ_TAG_WIDTH'(reqq_req_tag_st0), reqq_req_rw_st0, reqq_req_byteen_st0, reqq_req_tid_st0} :
                                 snrq_pop_unqual ? {`REQ_TAG_WIDTH'(snrq_tag_st0),     1'b0,            WORD_SIZE'(0),       `REQS_BITS'(0)} :
                                                   0;
-
+    
+   
     assign qual_going_to_write_st0 = dfpq_pop_unqual ? 1 :
                                         (mrvq_pop_unqual && mrvq_rw_st0) ? 1 :
                                             (reqq_pop_unqual && reqq_req_rw_st0) ? 1 :
                                                 0;
 
+    //snp signals check to see if the miss reserve as a snp in it first. 
     assign qual_is_snp_st0 = mrvq_pop_unqual ? mrvq_is_snp_st0 :
                              snrq_pop_unqual ? 1 :
                                                0;
-
+    //if we are popping from the miss reserve then assign to the mrvq invalidate. If not and popping from the snoop queue use the snoop invalidate. Else this is 0
     assign qual_snp_invalidate_st0 = mrvq_pop_unqual ? mrvq_snp_invalidate_st0 :
                                      snrq_pop_unqual ? snrq_invalidate_st0 :
                                                        0;
-
+    //choose which word of the lien is being written to
     assign qual_writeword_st0 = mrvq_pop_unqual ? mrvq_writeword_st0     :
                                 reqq_pop_unqual ? reqq_req_writeword_st0 :
                                                   0;
 
+    
     assign qual_is_mrvq_st0 = mrvq_pop_unqual;
 
 `ifdef DBG_CORE_REQ_INFO
@@ -356,7 +369,7 @@ module VX_bank #(
         .clk   (clk),
         .reset (reset),
         .stall (stall_bank_pipe),
-        .flush (0),
+        .flush (1'b0),
         .in    ({qual_is_mrvq_st0, qual_is_snp_st0, qual_snp_invalidate_st0, qual_going_to_write_st0, qual_valid_st0, qual_addr_st0, qual_wsel_st0, qual_writeword_st0, qual_inst_meta_st0, qual_is_fill_st0, qual_writedata_st0}),
         .out   ({is_mrvq_st1  , is_snp_st1,   snp_invalidate_st1, going_to_write_st1,   valid_st1,   addr_st1,   wsel_st1,   writeword_st1,   inst_meta_st1,   is_fill_st1,   writedata_st1})
     );
@@ -453,6 +466,8 @@ module VX_bank #(
 `ifdef DBG_CORE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_pc_st1, debug_rd_st1, debug_wid_st1, debug_tagid_st1, debug_rw_st1, debug_byteen_st1, debug_tid_st1} = inst_meta_st1;
+    end else begin
+        assign {debug_pc_st1, debug_rd_st1, debug_wid_st1, debug_tagid_st1, debug_rw_st1, debug_byteen_st1, debug_tid_st1} = 0;
     end
 `endif
     
@@ -486,7 +501,7 @@ module VX_bank #(
         .clk   (clk),
         .reset (reset),
         .stall (stall_bank_pipe),
-        .flush (0),
+        .flush (1'b0),
         .in    ({mrvq_recover_ready_state_st1, is_mrvq_st1_st2, mrvq_init_ready_state_st1,       snp_to_mrvq_st1, is_snp_st1, snp_invalidate_st1, fill_saw_dirty_st1, is_fill_st1, qual_valid_st1_2, addr_st1, wsel_st1, writeword_st1, readword_st1, readdata_st1, readtag_st1, miss_st1, dirty_st1, dirtyb_st1, inst_meta_st1}),
         .out   ({mrvq_recover_ready_state_st2 , is_mrvq_st2     , mrvq_init_ready_state_unqual_st2, snp_to_mrvq_st2 , is_snp_st2 , snp_invalidate_st2,  fill_saw_dirty_st2 , is_fill_st2                  , valid_st2        , addr_st2,  wsel_st2,                   writeword_st2,                   readword_st2,  readdata_st2,  readtag_st2,  miss_st2,  dirty_st2,  dirtyb_st2,  inst_meta_st2})
     );    
@@ -728,18 +743,18 @@ module VX_bank #(
     end    
 `endif
 
-`SCOPE_ASSIGN (scope_bank_valid_st0, qual_valid_st0);
-`SCOPE_ASSIGN (scope_bank_valid_st1, valid_st1);
-`SCOPE_ASSIGN (scope_bank_valid_st2, valid_st2);
+`SCOPE_ASSIGN (scope_valid_st0, qual_valid_st0);
+`SCOPE_ASSIGN (scope_valid_st1, valid_st1);
+`SCOPE_ASSIGN (scope_valid_st2, valid_st2);
 
-`SCOPE_ASSIGN (scope_bank_is_mrvq_st1, is_mrvq_st1);
-`SCOPE_ASSIGN (scope_bank_miss_st1,  miss_st1);
-`SCOPE_ASSIGN (scope_bank_dirty_st1, dirty_st1);
-`SCOPE_ASSIGN (scope_bank_force_miss_st1, force_request_miss_st1);
-`SCOPE_ASSIGN (scope_bank_stall_pipe, stall_bank_pipe);
+`SCOPE_ASSIGN (scope_is_mrvq_st1, is_mrvq_st1);
+`SCOPE_ASSIGN (scope_miss_st1,  miss_st1);
+`SCOPE_ASSIGN (scope_dirty_st1, dirty_st1);
+`SCOPE_ASSIGN (scope_force_miss_st1, force_request_miss_st1);
+`SCOPE_ASSIGN (scope_stall_pipe, stall_bank_pipe);
 
-`SCOPE_ASSIGN (scope_bank_addr_st0, `LINE_TO_BYTE_ADDR(qual_addr_st0, BANK_ID));
-`SCOPE_ASSIGN (scope_bank_addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
-`SCOPE_ASSIGN (scope_bank_addr_st2, `LINE_TO_BYTE_ADDR(addr_st2, BANK_ID));
+`SCOPE_ASSIGN (scope_addr_st0, `LINE_TO_BYTE_ADDR(qual_addr_st0, BANK_ID));
+`SCOPE_ASSIGN (scope_addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
+`SCOPE_ASSIGN (scope_addr_st2, `LINE_TO_BYTE_ADDR(addr_st2, BANK_ID));
 
 endmodule

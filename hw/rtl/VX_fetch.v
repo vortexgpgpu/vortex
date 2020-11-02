@@ -3,7 +3,7 @@
 module VX_fetch #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_SIGNALS_ISTAGE_IO
+    `SCOPE_IO_VX_fetch
 
     input wire clk,
     input wire reset,
@@ -29,6 +29,8 @@ module VX_fetch #(
     VX_warp_sched #(
         .CORE_ID(CORE_ID)
     ) warp_sched (
+        `SCOPE_BIND_VX_fetch_warp_sched
+
         .clk              (clk),
         .reset            (reset),        
         .warp_ctl_if      (warp_ctl_if),
@@ -43,7 +45,7 @@ module VX_fetch #(
     VX_icache_stage #(
         .CORE_ID(CORE_ID)
     ) icache_stage (
-        `SCOPE_SIGNALS_ISTAGE_BIND
+        `SCOPE_BIND_VX_fetch_icache_stage
 
         .clk            (clk),
         .reset          (reset),        

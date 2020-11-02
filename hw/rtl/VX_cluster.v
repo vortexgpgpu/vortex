@@ -3,11 +3,7 @@
 module VX_cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
-    `SCOPE_SIGNALS_ISTAGE_IO
-    `SCOPE_SIGNALS_LSU_IO
-    `SCOPE_SIGNALS_CACHE_IO
-    `SCOPE_SIGNALS_ISSUE_IO
-    `SCOPE_SIGNALS_EXECUTE_IO
+    `SCOPE_IO_VX_cluster
 
     // Clock
     input  wire                             clk,
@@ -138,11 +134,7 @@ module VX_cluster #(
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) core (
-            `SCOPE_SIGNALS_ISTAGE_BIND
-            `SCOPE_SIGNALS_LSU_BIND
-            `SCOPE_SIGNALS_CACHE_BIND
-            `SCOPE_SIGNALS_ISSUE_BIND
-            `SCOPE_SIGNALS_EXECUTE_BIND
+            `SCOPE_BIND_VX_cluster_core(i)
 
             .clk                (clk),
             .reset              (reset),
@@ -380,7 +372,7 @@ module VX_cluster #(
             .SNP_REQ_TAG_WIDTH      (`L2SNP_TAG_WIDTH),
             .SNP_FWD_TAG_WIDTH      (`DSNP_TAG_WIDTH)
         ) l2cache (
-            `SCOPE_SIGNALS_CACHE_UNBIND
+            `SCOPE_BIND_VX_cluster_l2cache
             
             .clk                (clk),
             .reset              (reset),
