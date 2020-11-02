@@ -110,7 +110,7 @@ module VX_lsu_unit #(
     VX_cam_buffer #(
         .DATAW (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
         .SIZE  (`LSUQ_SIZE)
-    ) lsu_cam  (
+    ) lsu_cam (
         .clk          (clk),
         .reset        (reset),
         .write_addr   (req_tag),        

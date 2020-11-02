@@ -30,9 +30,9 @@ Simulator::Simulator() {
 
 #ifdef VCD_OUTPUT
   Verilated::traceEverOn(true);
-  trace_ = new VerilatedFstC();
+  trace_ = new VerilatedVcdC();
   vortex_->trace(trace_, 99);
-  trace_->open("trace.fst");
+  trace_->open("trace.vcd");
 #endif  
 
   // reset the device

@@ -17,25 +17,25 @@ module VX_snp_rsp_arb #(
     input  wire                         snp_rsp_ready    
 );
 
-    wire [`BANK_BITS-1:0] fsq_bank;
-    wire                  fsq_valid;
+    wire [`BANK_BITS-1:0] sel_bank;
+    wire                  sel_valid;
 
     VX_fixed_arbiter #(
         .N(NUM_BANKS)
-    ) sel_ffsq (
+    ) sel_arb (
         .clk         (clk),
         .reset       (reset),
         .requests    (per_bank_snp_rsp_valid),
-        .grant_index (fsq_bank),
-        .grant_valid (fsq_valid),
+        .grant_index (sel_bank),
+        .grant_valid (sel_valid),
         `UNUSED_PIN  (grant_onehot)
     );
 
-    assign snp_rsp_valid = fsq_valid;
-    assign snp_rsp_tag   = per_bank_snp_rsp_tag[fsq_bank];
+    assign snp_rsp_valid = sel_valid;
+    assign snp_rsp_tag = per_bank_snp_rsp_tag[sel_bank];
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-        assign per_bank_snp_rsp_ready[i] = snp_rsp_ready && (fsq_bank == `BANK_BITS'(i));
+        assign per_bank_snp_rsp_ready[i] = snp_rsp_ready && (sel_bank == `BANK_BITS'(i));
     end
 
 endmodule

@@ -26,7 +26,6 @@ module VX_bank_core_req_arb #(
 
     // Dequeue Data
     input  wire                             reqq_pop,
-    output wire                             reqq_req_st0,
     output wire [`REQS_BITS-1:0]            reqq_req_tid_st0,    
     output wire                             reqq_req_rw_st0,  
     output wire [WORD_SIZE-1:0]             reqq_req_byteen_st0,    
@@ -107,7 +106,6 @@ module VX_bank_core_req_arb #(
     );
 
     assign reqq_empty              = !qual_has_request;
-    assign reqq_req_st0            = qual_has_request;
     assign reqq_req_tid_st0        = qual_request_index;    
     assign reqq_req_byteen_st0     = qual_byteen[qual_request_index];
     assign reqq_req_addr_st0       = qual_addr[qual_request_index];

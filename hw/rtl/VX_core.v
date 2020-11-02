@@ -260,7 +260,7 @@ module VX_core #(
         .core_dcache_req_if (arb_dcache_req_if),
         .core_dcache_rsp_if (arb_dcache_rsp_if),
 
-        // Dram <-> Dcache
+        // DRAM <-> Dcache
         .dcache_dram_req_if (dcache_dram_req_if),
         .dcache_dram_rsp_if (dcache_dram_rsp_if),
         .dcache_snp_req_if  (dcache_snp_req_if),
@@ -270,7 +270,7 @@ module VX_core #(
         .core_icache_req_if (core_icache_req_if),
         .core_icache_rsp_if (core_icache_rsp_if),
 
-        // Dram <-> Icache
+        // DRAM <-> Icache
         .icache_dram_req_if (icache_dram_req_if),
         .icache_dram_rsp_if (icache_dram_rsp_if)
     );

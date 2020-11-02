@@ -12,7 +12,6 @@ module VX_tag_data_store #(
 ) (
     input  wire                             clk,
     input  wire                             reset,
-    input  wire                             stall_bank_pipe,
 
     input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
     output wire                             read_valid,
@@ -26,20 +25,14 @@ module VX_tag_data_store #(
     input  wire                             write_fill,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
     input  wire[`TAG_SELECT_BITS-1:0]       tag_index,
-    input  wire[`BANK_LINE_WIDTH-1:0]       write_data,
-    input  wire                             fill_sent    
+    input  wire[`BANK_LINE_WIDTH-1:0]       write_data
 );
-
-    reg [`TAG_SELECT_BITS-1:0]                      tag [`BANK_LINE_COUNT-1:0];
-    reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0]     dirtyb[`BANK_LINE_COUNT-1:0];
-    reg [`BANK_LINE_COUNT-1:0]                     dirty;   
-    reg [`BANK_LINE_COUNT-1:0]                     valid;    
+    reg [`BANK_LINE_COUNT-1:0] dirty;   
+    reg [`BANK_LINE_COUNT-1:0] valid;    
     
-    assign read_valid  = valid  [read_addr];
-    assign read_dirty  = dirty  [read_addr];
-    assign read_dirtyb = dirtyb [read_addr];
-    assign read_tag    = tag    [read_addr];
-    
+    assign read_valid = valid[read_addr];
+    assign read_dirty = dirty[read_addr];
+        
     wire do_write = (| write_enable);
 
     always @(posedge clk) begin
@@ -48,30 +41,40 @@ module VX_tag_data_store #(
                 valid[i] <= 0;
                 dirty[i] <= 0;
             end
-        end else if (!stall_bank_pipe) begin
-            if (do_write) begin
+        end else begin
+            if (do_write) begin                
+                assert(!invalidate);
+                dirty[write_addr] <= !write_fill;
                 valid[write_addr] <= 1;
-                tag  [write_addr] <= tag_index;
-                if (write_fill) begin
-                    dirty[write_addr]  <= 0;
-                    dirtyb[write_addr] <= 0;
-                end else begin
-                    dirty[write_addr]  <= 1;
-                    dirtyb[write_addr] <= dirtyb[write_addr] | write_enable;
-                end
-            end else if (fill_sent) begin
-                dirty[write_addr]  <= 0;
-                dirtyb[write_addr] <= 0;
-            end
-
-            if (invalidate) begin
+            end else if (invalidate) begin
                 valid[write_addr] <= 0;
             end
         end
     end
 
-    wire [(`BANK_LINE_WORDS * WORD_SIZE)-1:0] ram_wren;
-    assign ram_wren = write_enable & {(`BANK_LINE_WORDS * WORD_SIZE){!stall_bank_pipe}};
+    reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] dirtyb[`BANK_LINE_COUNT-1:0];
+    always @(posedge clk) begin
+        if (do_write) begin
+            dirtyb[write_addr] <= write_fill ? 0 : (dirtyb[write_addr] | write_enable);
+        end
+    end
+    assign read_dirtyb = dirtyb [read_addr];
+
+    VX_dp_ram #(
+        .DATAW(`TAG_SELECT_BITS),
+        .SIZE(`BANK_LINE_COUNT),
+        .BYTEENW(1),
+        .BUFFERED(0),
+        .RWCHECK(1)
+    ) tags (
+        .clk(clk),	                
+        .waddr(write_addr),                                
+        .raddr(read_addr),                
+        .wren(do_write),
+        .rden(1'b1),
+        .din(tag_index),
+        .dout(read_tag)
+    );
 
     VX_dp_ram #(
         .DATAW(`BANK_LINE_WORDS * WORD_SIZE * 8),
@@ -79,11 +82,11 @@ module VX_tag_data_store #(
         .BYTEENW(`BANK_LINE_WORDS * WORD_SIZE),
         .BUFFERED(0),
         .RWCHECK(1)
-    ) dp_ram (
+    ) data (
         .clk(clk),	                
         .waddr(write_addr),                                
         .raddr(read_addr),                
-        .wren(ram_wren),
+        .wren(write_enable),
         .rden(1'b1),
         .din(write_data),
         .dout(read_data)

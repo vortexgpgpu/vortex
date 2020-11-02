@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
   size_t buf_size = num_points * sizeof(uint32_t);
   
   std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "buffer size: " << std::hex << buf_size << std::dec <<  " bytes" << std::endl;
+  std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
   // upload program
   std::cout << "upload kernel" << std::endl;  

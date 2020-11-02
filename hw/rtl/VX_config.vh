@@ -213,29 +213,24 @@
 `define DMRVQ_SIZE `MAX(`NUM_WARPS*`NUM_THREADS, 8)
 `endif
 
-// Dram Fill Rsp Queue Size
-`ifndef DDFPQ_SIZE
-`define DDFPQ_SIZE 8
-`endif
-
-// Snoop Req Queue Size
-`ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 8
-`endif
-
 // Core Writeback Queue Size
 `ifndef DCWBQ_SIZE
 `define DCWBQ_SIZE `DCREQ_SIZE
 `endif
 
-// Dram Writeback Queue Size
-`ifndef DDWBQ_SIZE
-`define DDWBQ_SIZE 4
+// DRAM Request Queue Size
+`ifndef DDREQ_SIZE
+`define DDREQ_SIZE 8
 `endif
 
-// Dram Fill Req Queue Size
-`ifndef DDFQQ_SIZE
-`define DDFQQ_SIZE `DCREQ_SIZE
+// DRAM Response Queue Size
+`ifndef DDRPQ_SIZE
+`define DDRPQ_SIZE 8
+`endif
+
+// Snoop Req Queue Size
+`ifndef DSNRQ_SIZE
+`define DSNRQ_SIZE 8
 `endif
 
 // Icache Configurable Knobs ==================================================
@@ -270,24 +265,19 @@
 `define IMRVQ_SIZE `MAX(`ICREQ_SIZE, 8)
 `endif
 
-// Dram Fill Rsp Queue Size
-`ifndef IDFPQ_SIZE
-`define IDFPQ_SIZE 8
-`endif
-
 // Core Writeback Queue Size
 `ifndef ICWBQ_SIZE
 `define ICWBQ_SIZE `ICREQ_SIZE
 `endif
 
-// Dram Writeback Queue Size
-`ifndef IDWBQ_SIZE
-`define IDWBQ_SIZE 8
+// DRAM Request Queue Size
+`ifndef IDREQ_SIZE
+`define IDREQ_SIZE 8
 `endif
 
-// Dram Fill Req Queue Size
-`ifndef IDFQQ_SIZE
-`define IDFQQ_SIZE `ICREQ_SIZE
+// DRAM Response Queue Size
+`ifndef IDRPQ_SIZE
+`define IDRPQ_SIZE 8
 `endif
 
 // SM Configurable Knobs ======================================================
@@ -354,29 +344,24 @@
 `define L2MRVQ_SIZE `MAX(`L2CREQ_SIZE, 8)
 `endif
 
-// Dram Fill Rsp Queue Size
-`ifndef L2DFPQ_SIZE
-`define L2DFPQ_SIZE 8
-`endif
-
-// Snoop Req Queue Size
-`ifndef L2SNRQ_SIZE
-`define L2SNRQ_SIZE 8
-`endif
-
 // Core Writeback Queue Size
 `ifndef L2CWBQ_SIZE
 `define L2CWBQ_SIZE `L2CREQ_SIZE
 `endif
 
-// Dram Writeback Queue Size
-`ifndef L2DWBQ_SIZE
-`define L2DWBQ_SIZE 8
+// DRAM Request Queue Size
+`ifndef L2DREQ_SIZE
+`define L2DREQ_SIZE 8
 `endif
 
-// Dram Fill Req Queue Size
-`ifndef L2DFQQ_SIZE
-`define L2DFQQ_SIZE `L2CREQ_SIZE
+// DRAM Response Queue Size
+`ifndef L2DRPQ_SIZE
+`define L2DRPQ_SIZE 8
+`endif
+
+// Snoop Req Queue Size
+`ifndef L2SNRQ_SIZE
+`define L2SNRQ_SIZE 8
 `endif
 
 // L3cache Configurable Knobs =================================================
@@ -411,29 +396,24 @@
 `define L3MRVQ_SIZE `MAX(`L3CREQ_SIZE, 8)
 `endif
 
-// Dram Fill Rsp Queue Size
-`ifndef L3DFPQ_SIZE
-`define L3DFPQ_SIZE 8
-`endif
-
-// Snoop Req Queue Size
-`ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 8
-`endif
-
 // Core Writeback Queue Size
 `ifndef L3CWBQ_SIZE
 `define L3CWBQ_SIZE `L3CREQ_SIZE
 `endif
 
-// Dram Writeback Queue Size
-`ifndef L3DWBQ_SIZE
-`define L3DWBQ_SIZE 8
+// DRAM Request Queue Size
+`ifndef L3DREQ_SIZE
+`define L3DREQ_SIZE 8
 `endif
 
-// Dram Fill Req Queue Size
-`ifndef L3DFQQ_SIZE
-`define L3DFQQ_SIZE `L3CREQ_SIZE
+// DRAM Response Queue Size
+`ifndef L3DRPQ_SIZE
+`define L3DRPQ_SIZE 8
+`endif
+
+// Snoop Req Queue Size
+`ifndef L3SNRQ_SIZE
+`define L3SNRQ_SIZE 8
 `endif
 
 `endif

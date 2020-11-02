@@ -17,7 +17,9 @@ module VX_csr_data #(
     input wire                      write_enable, 
     input wire[`CSR_ADDR_BITS-1:0]  write_addr,
     input wire[`NW_BITS-1:0]        write_wid,
-    input wire[`CSR_WIDTH-1:0]      write_data
+    input wire[`CSR_WIDTH-1:0]      write_data,
+    
+    input wire                      busy
 );
     reg [`CSR_WIDTH-1:0] csr_satp;
     reg [`CSR_WIDTH-1:0] csr_mstatus;
@@ -86,7 +88,9 @@ module VX_csr_data #(
             csr_cycle   <= 0;
             csr_instret <= 0;
         end else begin
-            csr_cycle <= csr_cycle + 1;
+            if (busy) begin
+                csr_cycle <= csr_cycle + 1;
+            end
             if (cmt_to_csr_if.valid) begin
                 csr_instret <= csr_instret + 64'(cmt_to_csr_if.num_commits);
             end

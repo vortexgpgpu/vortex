@@ -72,23 +72,25 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = (`NW_BITS)'(gpu_req_if.rs2_data - 1);
 
     // output
-
-    assign warp_ctl_if.valid   = gpu_req_if.valid && gpu_commit_if.ready;
-    assign warp_ctl_if.wid     = gpu_commit_if.wid;
-    assign warp_ctl_if.tmc     = tmc;
-    assign warp_ctl_if.wspawn  = wspawn;
-    assign warp_ctl_if.split   = split;
-    assign warp_ctl_if.barrier = barrier;
-
-    assign gpu_commit_if.valid = gpu_req_if.valid;
-    assign gpu_commit_if.wid   = gpu_req_if.wid;
-    assign gpu_commit_if.tmask = gpu_req_if.tmask;
-    assign gpu_commit_if.PC    = gpu_req_if.PC;
-    assign gpu_commit_if.rd    = gpu_req_if.rd;
-    assign gpu_commit_if.wb    = gpu_req_if.wb;
     
+    wire stall = ~gpu_commit_if.ready && gpu_commit_if.valid;
+
+    VX_generic_register #(
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE)
+    ) csr_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (stall),
+        .flush (1'b0),
+        .in    ({gpu_req_if.valid,    gpu_req_if.wid,    gpu_req_if.tmask,    gpu_req_if.PC,    gpu_req_if.rd,    gpu_req_if.wb,    tmc,             wspawn,             split,             barrier}),
+        .out   ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier})
+    );  
+
+    assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready;
+    assign warp_ctl_if.wid   = gpu_commit_if.wid;
+
     // can accept new request?
-    assign gpu_req_if.ready = gpu_commit_if.ready;
+    assign gpu_req_if.ready = ~stall;
 
     `SCOPE_ASSIGN (gpu_req_fire, gpu_req_if.valid && gpu_req_if.ready);
     `SCOPE_ASSIGN (gpu_req_wid, gpu_req_if.wid);

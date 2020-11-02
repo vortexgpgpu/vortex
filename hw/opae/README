@@ -83,6 +83,8 @@ tar -zcvf vortex.vcd.tar.gz build_ase_1c/work/vortex.vcd
 tar -zcvf run.log.tar.gz build_ase_1c/work/run.log
 tar -zcvf vx_scope.vcd.tar.gz vx_scope.vcd
 tar -cvjf vx_scope.vcd.tar.bz2 vx_scope.vcd
+tar -cvjf trace.fst.tar.bz2 trace.fst run.log
+tar -cvjf trace.vcd.tar.bz2 trace.vcd run.log
 
 # decompress VCD trace
 tar -zxvf /mnt/c/Users/Blaise/Downloads/vortex.vcd.tar.gz
@@ -114,3 +116,6 @@ make -C ../../rtlsim clean && reset && make -C ../../rtlsim
 
 # split tar into multiple parts
 split -b 50M home.tar.bz2 "home.tar.bz2.part"
+
+
+cat run.log | grep -c "cache[0-9]*:[0-9]* dram_req"

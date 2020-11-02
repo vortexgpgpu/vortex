@@ -10,28 +10,28 @@ module VX_csr_io_arb #(
     input wire [REQS_BITS-1:0]              request_id,
 
     // input requests    
-    input wire                              in_csr_io_req_valid,
-    input wire [11:0]                       in_csr_io_req_addr,
-    input wire                              in_csr_io_req_rw,
-    input wire [31:0]                       in_csr_io_req_data,
-    output wire                             in_csr_io_req_ready,
+    input wire                              csr_io_req_valid_in,
+    input wire [11:0]                       csr_io_req_addr_in,
+    input wire                              csr_io_req_rw_in,
+    input wire [31:0]                       csr_io_req_data_in,
+    output wire                             csr_io_req_ready_in,
 
     // input response
-    input wire [NUM_REQUESTS-1:0]           in_csr_io_rsp_valid,
-    input wire [NUM_REQUESTS-1:0][31:0]     in_csr_io_rsp_data,
-    output wire [NUM_REQUESTS-1:0]          in_csr_io_rsp_ready,
+    input wire [NUM_REQUESTS-1:0]           csr_io_rsp_valid_in,
+    input wire [NUM_REQUESTS-1:0][31:0]     csr_io_rsp_data_in,
+    output wire [NUM_REQUESTS-1:0]          csr_io_rsp_ready_in,
 
     // output request
-    output wire [NUM_REQUESTS-1:0]          out_csr_io_req_valid,
-    output wire [NUM_REQUESTS-1:0][11:0]    out_csr_io_req_addr,
-    output wire [NUM_REQUESTS-1:0]          out_csr_io_req_rw,
-    output wire [NUM_REQUESTS-1:0][31:0]    out_csr_io_req_data,
-    input wire [NUM_REQUESTS-1:0]           out_csr_io_req_ready,
+    output wire [NUM_REQUESTS-1:0]          csr_io_req_valid_out,
+    output wire [NUM_REQUESTS-1:0][11:0]    csr_io_req_addr_out,
+    output wire [NUM_REQUESTS-1:0]          csr_io_req_rw_out,
+    output wire [NUM_REQUESTS-1:0][31:0]    csr_io_req_data_out,
+    input wire [NUM_REQUESTS-1:0]           csr_io_req_ready_out,
 
     // output response
-    output wire                             out_csr_io_rsp_valid,
-    output wire [31:0]                      out_csr_io_rsp_data,
-    input wire                              out_csr_io_rsp_ready
+    output wire                             csr_io_rsp_valid_out,
+    output wire [31:0]                      csr_io_rsp_data_out,
+    input wire                              csr_io_rsp_ready_out
 );
     if (NUM_REQUESTS == 1) begin
 
@@ -39,26 +39,26 @@ module VX_csr_io_arb #(
         `UNUSED_VAR (reset)
         `UNUSED_VAR (request_id)
 
-        assign out_csr_io_req_valid  = in_csr_io_req_valid;
-        assign out_csr_io_req_rw     = in_csr_io_req_rw;        
-        assign out_csr_io_req_addr   = in_csr_io_req_addr;
-        assign out_csr_io_req_data   = in_csr_io_req_data;
-        assign in_csr_io_req_ready   = out_csr_io_req_ready;
+        assign csr_io_req_valid_out  = csr_io_req_valid_in;
+        assign csr_io_req_rw_out     = csr_io_req_rw_in;        
+        assign csr_io_req_addr_out   = csr_io_req_addr_in;
+        assign csr_io_req_data_out   = csr_io_req_data_in;
+        assign csr_io_req_ready_in   = csr_io_req_ready_out;
 
-        assign out_csr_io_rsp_valid  = in_csr_io_rsp_valid;
-        assign out_csr_io_rsp_data   = in_csr_io_rsp_data;
-        assign in_csr_io_rsp_ready   = out_csr_io_rsp_ready;
+        assign csr_io_rsp_valid_out  = csr_io_rsp_valid_in;
+        assign csr_io_rsp_data_out   = csr_io_rsp_data_in;
+        assign csr_io_rsp_ready_in   = csr_io_rsp_ready_out;
 
     end else begin
 
         for (genvar i = 0; i < NUM_REQUESTS; i++) begin                
-            assign out_csr_io_req_valid[i]  = in_csr_io_req_valid && (request_id == `REQS_BITS'(i));
-            assign out_csr_io_req_rw[i]     = in_csr_io_req_rw;
-            assign out_csr_io_req_addr[i]   = in_csr_io_req_addr;
-            assign out_csr_io_req_data[i]   = in_csr_io_req_data;            
+            assign csr_io_req_valid_out[i]  = csr_io_req_valid_in && (request_id == `REQS_BITS'(i));
+            assign csr_io_req_rw_out[i]     = csr_io_req_rw_in;
+            assign csr_io_req_addr_out[i]   = csr_io_req_addr_in;
+            assign csr_io_req_data_out[i]   = csr_io_req_data_in;            
         end
 
-        assign in_csr_io_req_ready = out_csr_io_req_ready[request_id];
+        assign csr_io_req_ready_in = csr_io_req_ready_out[request_id];
 
         reg [REQS_BITS-1:0] bus_rsp_sel;
 
@@ -67,17 +67,17 @@ module VX_csr_io_arb #(
         ) arbiter (
             .clk         (clk),
             .reset       (reset),
-            .requests    (in_csr_io_rsp_valid),
+            .requests    (csr_io_rsp_valid_in),
             .grant_index (bus_rsp_sel),
             `UNUSED_PIN  (grant_valid),
             `UNUSED_PIN  (grant_onehot)
         );
 
-        assign out_csr_io_rsp_valid = in_csr_io_rsp_valid [bus_rsp_sel];
-        assign out_csr_io_rsp_data  = in_csr_io_rsp_data [bus_rsp_sel];       
+        assign csr_io_rsp_valid_out = csr_io_rsp_valid_in [bus_rsp_sel];
+        assign csr_io_rsp_data_out  = csr_io_rsp_data_in [bus_rsp_sel];       
 
         for (genvar i = 0; i < NUM_REQUESTS; i++) begin
-            assign in_csr_io_rsp_ready[i] = out_csr_io_rsp_ready && (bus_rsp_sel == `REQS_BITS'(i));
+            assign csr_io_rsp_ready_in[i] = csr_io_rsp_ready_out && (bus_rsp_sel == `REQS_BITS'(i));
         end
         
     end

@@ -7,6 +7,8 @@
 
 `define SCOPE_ASSIGN(d,s) assign scope_``d = s
 
+`define SCOPE_SIZE 4096 
+
 `else
 
 `define SCOPE_IO_VX_icache_stage
