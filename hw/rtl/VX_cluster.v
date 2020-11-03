@@ -521,8 +521,8 @@ module VX_cluster #(
             .snp_req_ready      (snp_req_ready),
 
             .snp_rsp_valid      (snp_rsp_valid),       
-            `UNUSED_PIN (snp_rsp_addr),
-            `UNUSED_PIN (snp_rsp_invalidate),
+            `UNUSED_PIN         (snp_rsp_addr),
+            `UNUSED_PIN         (snp_rsp_invalidate),
             .snp_rsp_tag        (snp_rsp_tag),
             .snp_rsp_ready      (snp_rsp_ready),   
 
