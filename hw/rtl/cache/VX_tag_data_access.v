@@ -136,7 +136,8 @@ module VX_tag_data_access #(
                      && use_read_valid_st1;
 
     wire fill_write = valid_req_st1 && writefill_st1 
-                   && !tags_match; // disable redundant fills because the block could be dirty
+                   && !tags_match  // disable redundant fills because the block could be dirty
+                   && !stall;      // do not fill the cache on stalls to preserve writeback
 
     for (genvar i = 0; i < `BANK_LINE_WORDS; i++) begin
         wire normal_write_w = ((`WORD_SELECT_WIDTH == 0) || (wordsel_st1 == `UP(`WORD_SELECT_WIDTH)'(i))) 
@@ -154,7 +155,7 @@ module VX_tag_data_access #(
     assign use_invalidate   = valid_req_st1 && is_snp_st1 && tags_match 
                            && (use_read_dirty_st1 || snp_invalidate_st1)  // block is dirty or need to force invalidation
                            && !force_miss_st1
-                           && !stall; // do not invalidate the cache on stalls
+                           && !stall; // do not invalidate the cache on stalls to preserve writeback
     
     wire core_req_miss = valid_req_st1 && !is_snp_st1 && !writefill_st1 // is core request
                       && (!use_read_valid_st1 || !tags_match);   // block missing or has wrong tag

@@ -183,12 +183,12 @@ module VX_cache_miss_resrv #(
                 if (is_msrq_st2)
                     $display("%t: cache%0d:%0d msrq-restore addr%0d=%0h ready=%b", $time, CACHE_ID, BANK_ID, restore_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2);
                 else
-                    $display("%t: cache%0d:%0d msrq-push addr%0d=%0h ready=%b wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2, debug_wid_st2, debug_pc_st2);
+                    $display("%t: cache%0d:%0d msrq-enq addr%0d=%0h ready=%b wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2, debug_wid_st2, debug_pc_st2);
             end 
             if (miss_resrv_schedule_st0)
                 $display("%t: cache%0d:%0d msrq-schedule addr%0d=%0h wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(miss_resrv_addr_st0, BANK_ID), debug_wid_st0, debug_pc_st0);      
             if (miss_resrv_pop_st2)
-                $display("%t: cache%0d:%0d msrq-pop addr%0d wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st2, debug_pc_st2);
+                $display("%t: cache%0d:%0d msrq-deq addr%0d wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st2, debug_pc_st2);
             $write("%t: cache%0d:%0d msrq-table", $time, CACHE_ID, BANK_ID);
             for (integer j = 0; j < MRVQ_SIZE; j++) begin
                 if (valid_table[j]) begin
