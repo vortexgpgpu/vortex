@@ -48,13 +48,45 @@ module VX_generic_queue #(
         assign size     = size_r;
 
     end else begin
+        
+        reg empty_r;
+        reg full_r;
+        reg [ADDRW-1:0] used_r;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                empty_r <= 1;                   
+                full_r  <= 0;        
+                used_r  <= 0;
+            end else begin
+                if (push) begin  
+                    assert(!full);          
+                    if (!pop) begin     
+                        empty_r <= 0; 
+                        if (used_r == ADDRW'(SIZE-1)) begin
+                            full_r <= 1;
+                        end                                                 
+                        used_r <= used_r + ADDRW'(1);
+                    end
+                end
+                if (pop) begin
+                    assert(!empty);
+                    if (!push) begin  
+                        full_r <= 0;                          
+                        if (used_r == ADDRW'(1)) begin
+                            empty_r <= 1;  
+                        end;                                                      
+                        used_r <= used_r - ADDRW'(1);
+                    end
+                end
+            end                   
+        end
 
         if (0 == BUFFERED) begin          
 
             reg [ADDRW:0] rd_ptr_r;
             reg [ADDRW:0] wr_ptr_r;
-            reg [ADDRW-1:0] used_r;
-
+        
             wire [ADDRW-1:0] rd_ptr_a = rd_ptr_r[ADDRW-1:0];
             wire [ADDRW-1:0] wr_ptr_a = wr_ptr_r[ADDRW-1:0];
             
@@ -62,21 +94,12 @@ module VX_generic_queue #(
                 if (reset) begin
                     rd_ptr_r <= 0;
                     wr_ptr_r <= 0;
-                    used_r   <= 0;
                 end else begin
-                    if (push) begin  
-                        assert(!full);          
+                    if (push) begin           
                         wr_ptr_r <= wr_ptr_r + (ADDRW+1)'(1);
-                        if (!pop) begin                                                       
-                            used_r <= used_r + ADDRW'(1);
-                        end
                     end
                     if (pop) begin
-                        assert(!empty);
                         rd_ptr_r <= rd_ptr_r + (ADDRW+1)'(1);
-                        if (!push) begin                                                        
-                            used_r <= used_r - ADDRW'(1);
-                        end
                     end
                 end                   
             end
@@ -95,22 +118,14 @@ module VX_generic_queue #(
                 .din(data_in),
                 .dout(data_out)
             );
-        
-            assign empty = (wr_ptr_r == rd_ptr_r);
-            assign full  = (wr_ptr_a == rd_ptr_a) && (wr_ptr_r[ADDRW] != rd_ptr_r[ADDRW]);
-            assign size  = {full, used_r};
 
         end else begin
 
             wire [DATAW-1:0] dout;
-
             reg [DATAW-1:0] din_r;
             reg [ADDRW-1:0] wr_ptr_r;
             reg [ADDRW-1:0] rd_ptr_r;
             reg [ADDRW-1:0] rd_ptr_n_r;
-            reg [ADDRW-1:0] used_r;
-            reg             empty_r;
-            reg             full_r;
             reg             bypass_r;
 
             always @(posedge clk) begin
@@ -118,38 +133,16 @@ module VX_generic_queue #(
                     wr_ptr_r   <= 0;
                     rd_ptr_r   <= 0;
                     rd_ptr_n_r <= 1;
-                    empty_r    <= 1;                   
-                    full_r     <= 0;                    
-                    used_r     <= 0;
                 end else begin
                     if (push) begin                 
-                        wr_ptr_r <= wr_ptr_r + ADDRW'(1); 
-
-                        if (!pop) begin                                
-                            empty_r <= 0;
-                            if (used_r == ADDRW'(SIZE-1)) begin
-                                full_r <= 1;
-                            end
-                            used_r <= used_r + ADDRW'(1);
-                        end
+                        wr_ptr_r <= wr_ptr_r + ADDRW'(1);
                     end
-
                     if (pop) begin
-                        rd_ptr_r <= rd_ptr_n_r;   
-                        
+                        rd_ptr_r <= rd_ptr_n_r;                           
                         if (SIZE > 2) begin        
                             rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
                         end else begin // (SIZE == 2);
                             rd_ptr_n_r <= ~rd_ptr_n_r;                                
-                        end
-
-                        if (!push) begin                      
-                            full_r <= 0;                          
-                            if (used_r == ADDRW'(1)) begin
-                                assert(rd_ptr_n_r == wr_ptr_r);
-                                empty_r <= 1;  
-                            end;
-                            used_r <= used_r - ADDRW'(1);
                         end
                     end
                 end
@@ -179,10 +172,11 @@ module VX_generic_queue #(
             ); 
 
             assign data_out = bypass_r ? din_r : dout;
-            assign empty    = empty_r;
-            assign full     = full_r;
-            assign size     = {full_r, used_r};        
         end
+        
+        assign empty = empty_r;
+        assign full  = full_r;
+        assign size  = {full_r, used_r};        
     end
 
 endmodule

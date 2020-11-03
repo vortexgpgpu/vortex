@@ -1,14 +1,14 @@
 `include "VX_cache_config.vh"
 
 module VX_cache_core_rsp_merge #(
-    // Number of banks {1, 2, 4, 8,...}
-    parameter NUM_BANKS                     = 0, 
+    // Number of banks
+    parameter NUM_BANKS                     = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 0, 
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 0, 
+    parameter WORD_SIZE                     = 1, 
+    // Number of Word requests per cycle
+    parameter NUM_REQUESTS                  = 1, 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 0,    
+    parameter CORE_TAG_WIDTH                = 1,    
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS              = 0
 ) (

@@ -2,13 +2,13 @@
 
 module VX_tag_data_store #(
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 0, 
+    parameter CACHE_SIZE                    = 1, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 0, 
-    // Number of banks {1, 2, 4, 8,...} 
-    parameter NUM_BANKS                     = 0, //unused parameter?
+    parameter BANK_LINE_SIZE                = 1, 
+    // Number of banks
+    parameter NUM_BANKS                     = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 0
+    parameter WORD_SIZE                     = 1
 ) (
     input  wire                             clk,
     input  wire                             reset,
