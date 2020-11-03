@@ -2,11 +2,11 @@
 
 module VX_snp_forwarder #(
     parameter CACHE_ID          = 0, 
-    parameter BANK_LINE_SIZE    = 0, 
-    parameter NUM_REQUESTS      = 0, 
-    parameter SNRQ_SIZE         = 0,
-    parameter SNP_REQ_TAG_WIDTH = 0,
-    parameter SNP_FWD_TAG_WIDTH = 0
+    parameter BANK_LINE_SIZE    = 1, 
+    parameter NUM_REQUESTS      = 1, 
+    parameter SNRQ_SIZE         = 1,
+    parameter SNP_REQ_TAG_WIDTH = 1,
+    parameter SNP_FWD_TAG_WIDTH = 1
 ) (
     input wire clk,
     input wire reset,

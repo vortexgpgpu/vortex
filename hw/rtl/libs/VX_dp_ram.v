@@ -73,7 +73,7 @@ module VX_dp_ram #(
 
     end else begin
 
-        `UNUSED_VAR(rden)
+        `UNUSED_VAR (rden)
 
         if (RWCHECK) begin
 

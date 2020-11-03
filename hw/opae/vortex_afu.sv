@@ -638,8 +638,8 @@ assign avs_rtq_push = vx_dram_rd_req_fire;
 assign avs_rtq_pop  = vx_dram_rd_rsp_fire;
 
 VX_generic_queue #(
-  .DATAW(`VX_DRAM_TAG_WIDTH + DRAM_LINE_LW),
-  .SIZE(AVS_RD_QUEUE_SIZE)
+  .DATAW (`VX_DRAM_TAG_WIDTH + DRAM_LINE_LW),
+  .SIZE  (AVS_RD_QUEUE_SIZE)
 ) avs_rd_req_queue (
   .clk      (clk),
   .reset    (reset),
@@ -660,8 +660,8 @@ assign avs_rdq_push = avs_readdatavalid;
 assign avs_rdq_pop  = vx_dram_rd_rsp_fire || cci_wr_req_fire; 
 
 VX_generic_queue #(
-  .DATAW(DRAM_LINE_WIDTH),
-  .SIZE(AVS_RD_QUEUE_SIZE)
+  .DATAW (DRAM_LINE_WIDTH),
+  .SIZE  (AVS_RD_QUEUE_SIZE)
 ) avs_rd_rsp_queue (
   .clk      (clk),
   .reset    (reset),

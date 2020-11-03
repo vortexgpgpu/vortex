@@ -3,21 +3,23 @@
 module VX_cache_miss_resrv #(
     parameter CACHE_ID                      = 0,
     parameter BANK_ID                       = 0, 
-    parameter CORE_TAG_ID_BITS              = 0,    
+    
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 0, 
-    // Number of banks {1, 2, 4, 8,...}
-    parameter NUM_BANKS                     = 0, 
+    parameter BANK_LINE_SIZE                = 1, 
+    // Number of banks
+    parameter NUM_BANKS                     = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 0, 
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 0, 
+    parameter WORD_SIZE                     = 1, 
+    // Number of Word requests per cycle
+    parameter NUM_REQUESTS                  = 1, 
     // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 0, 
+    parameter MRVQ_SIZE                     = 1, 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 0,
+    parameter CORE_TAG_WIDTH                = 1,
     // Snooping request tag width
-    parameter SNP_REQ_TAG_WIDTH             = 0
+    parameter SNP_REQ_TAG_WIDTH             = 1,
+    // size of tag id in core request tag
+    parameter CORE_TAG_ID_BITS              = 0    
 ) (
     input wire clk,
     input wire reset,
@@ -177,15 +179,17 @@ module VX_cache_miss_resrv #(
 `ifdef DBG_PRINT_CACHE_MSRQ        
     always @(posedge clk) begin        
         if (miss_add || miss_resrv_schedule_st0 || miss_resrv_pop_st2) begin
-            if (miss_add)
+            if (miss_add) begin
                 if (is_msrq_st2)
-                    $write("%t: cache%0d:%0d msrq-restore addr%0d=%0h ready=%b", $time, CACHE_ID, BANK_ID, restore_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2);
+                    $display("%t: cache%0d:%0d msrq-restore addr%0d=%0h ready=%b", $time, CACHE_ID, BANK_ID, restore_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2);
                 else
-                    $write("%t: cache%0d:%0d msrq-push addr%0d=%0h ready=%b wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2, debug_wid_st2, debug_pc_st2);
-            else if (miss_resrv_schedule_st0)
-                $write("%t: cache%0d:%0d msrq-schedule wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, debug_wid_st0, debug_pc_st0);                        
-            else if (miss_resrv_pop_st2)
-                $write("%t: cache%0d:%0d msrq-pop addr%0d wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st2, debug_pc_st2);                        
+                    $display("%t: cache%0d:%0d msrq-push addr%0d=%0h ready=%b wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(miss_add_addr, BANK_ID), init_ready_state_st2, debug_wid_st2, debug_pc_st2);
+            end 
+            if (miss_resrv_schedule_st0)
+                $display("%t: cache%0d:%0d msrq-schedule addr%0d=%0h wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(miss_resrv_addr_st0, BANK_ID), debug_wid_st0, debug_pc_st0);      
+            if (miss_resrv_pop_st2)
+                $display("%t: cache%0d:%0d msrq-pop addr%0d wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st2, debug_pc_st2);
+            $write("%t: cache%0d:%0d msrq-table", $time, CACHE_ID, BANK_ID);
             for (integer j = 0; j < MRVQ_SIZE; j++) begin
                 if (valid_table[j]) begin
                     $write(" ");                    

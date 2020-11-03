@@ -2,13 +2,13 @@
 
 module VX_bank_core_req_arb #(
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 0,     
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 0, 
+    parameter WORD_SIZE                     = 1,     
+    // Number of Word requests per cycle
+    parameter NUM_REQUESTS                  = 1, 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 0, 
+    parameter CREQ_SIZE                     = 1, 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 0,
+    parameter CORE_TAG_WIDTH                = 1,
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS              = 0
 ) (

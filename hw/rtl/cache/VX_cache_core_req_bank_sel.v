@@ -2,13 +2,13 @@
 
 module VX_cache_core_req_bank_sel #(
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 0, 
+    parameter BANK_LINE_SIZE                = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 0, 
-    // Number of banks {1, 2, 4, 8,...}
-    parameter NUM_BANKS                     = 0, 
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
-    parameter NUM_REQUESTS                  = 0
+    parameter WORD_SIZE                     = 1, 
+    // Number of banks
+    parameter NUM_BANKS                     = 1, 
+    // Number of Word requests per cycle
+    parameter NUM_REQUESTS                  = 1
 ) (
     input  wire [NUM_REQUESTS-1:0]                       core_req_valid,
 `IGNORE_WARNINGS_BEGIN    

@@ -2,33 +2,33 @@
 
 module VX_cache #(
     parameter CACHE_ID                      = 0,
+
     // Size of cache in bytes
     parameter CACHE_SIZE                    = 2048, 
     // Size of line inside a bank in bytes
     parameter BANK_LINE_SIZE                = 16, 
-    // Number of banks {1, 2, 4, 8,...}
-    parameter NUM_BANKS                     = 8, 
+    // Number of banks
+    parameter NUM_BANKS                     = 4, 
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
-    // Number of Word requests per cycle {1, 2, 4, 8, ...}
+    // Number of Word requests per cycle
     parameter NUM_REQUESTS                  = 4, 
 
-    // Queues feeding into banks Knobs {1, 2, 4, 8, ...}
-
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 8, 
+    parameter CREQ_SIZE                     = 4, 
     // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 16, 
+    parameter MRVQ_SIZE                     = 8, 
     // DRAM Response Queue Size
-    parameter DRPQ_SIZE                     = 16, 
+    parameter DRFQ_SIZE                     = 8, 
     // Snoop Req Queue Size
-    parameter SNRQ_SIZE                     = 16, 
+    parameter SNRQ_SIZE                     = 8, 
 
-    // Queues for writebacks Knobs {1, 2, 4, 8, ...}
     // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 8, 
+    parameter CWBQ_SIZE                     = 4, 
     // DRAM Request Queue Size
-    parameter DREQ_SIZE                     = 4, 
+    parameter DREQ_SIZE                     = 8, 
+    // Snoop Response Size
+    parameter SNPQ_SIZE                     = 8,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
@@ -36,14 +36,17 @@ module VX_cache #(
     // Enable dram update
     parameter DRAM_ENABLE                   = 1,
 
+    // Enable cache flush
+    parameter FLUSH_ENABLE                  = 1,
+
     // Enable snoop forwarding
     parameter SNOOP_FORWARDING              = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 42,
+    parameter CORE_TAG_WIDTH                = 4,
 
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 8,
+    parameter CORE_TAG_ID_BITS              = 4,
 
     // dram request tag size
     parameter DRAM_TAG_WIDTH                = 28,
@@ -336,13 +339,14 @@ module VX_cache #(
             .NUM_REQUESTS       (NUM_REQUESTS),
             .CREQ_SIZE          (CREQ_SIZE),
             .MRVQ_SIZE          (MRVQ_SIZE),
-            .DRPQ_SIZE          (DRPQ_SIZE),
+            .DRFQ_SIZE          (DRFQ_SIZE),
             .SNRQ_SIZE          (SNRQ_SIZE),
             .CWBQ_SIZE          (CWBQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),
+            .SNPQ_SIZE          (SNPQ_SIZE),
             .DRAM_ENABLE        (DRAM_ENABLE),
+            .FLUSH_ENABLE       (FLUSH_ENABLE),
             .WRITE_ENABLE       (WRITE_ENABLE),
-            .SNOOP_FORWARDING   (SNOOP_FORWARDING),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                
             .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
             .SNP_REQ_TAG_WIDTH  (SNP_REQ_TAG_WIDTH)
@@ -413,42 +417,66 @@ module VX_cache #(
         .core_rsp_data           (core_rsp_data),        
         .core_rsp_tag            (core_rsp_tag),
         .core_rsp_ready          (core_rsp_ready)
-    );  
+    ); 
 
-    VX_cache_dram_req_arb #(
-        .BANK_LINE_SIZE (BANK_LINE_SIZE),
-        .NUM_BANKS      (NUM_BANKS),
-        .WORD_SIZE      (WORD_SIZE)
-    ) cache_dram_req_arb (
-        .clk                        (clk),
-        .reset                      (reset),        
-        .per_bank_dram_req_valid    (per_bank_dram_req_valid),        
-        .per_bank_dram_req_rw       (per_bank_dram_req_rw),        
-        .per_bank_dram_req_byteen   (per_bank_dram_req_byteen),
-        .per_bank_dram_req_addr     (per_bank_dram_req_addr),
-        .per_bank_dram_req_data     (per_bank_dram_req_data),
-        .per_bank_dram_req_ready    (per_bank_dram_req_ready),
-        .dram_req_valid             (dram_req_valid),
-        .dram_req_rw                (dram_req_rw),        
-        .dram_req_byteen            (dram_req_byteen),        
-        .dram_req_addr              (dram_req_addr),
-        .dram_req_data              (dram_req_data),  
-        .dram_req_ready             (dram_req_ready)
-    );    
+    if (DRAM_ENABLE) begin
+        VX_cache_dram_req_arb #(
+            .BANK_LINE_SIZE (BANK_LINE_SIZE),
+            .NUM_BANKS      (NUM_BANKS),
+            .WORD_SIZE      (WORD_SIZE)
+        ) cache_dram_req_arb (
+            .clk                        (clk),
+            .reset                      (reset),        
+            .per_bank_dram_req_valid    (per_bank_dram_req_valid),        
+            .per_bank_dram_req_rw       (per_bank_dram_req_rw),        
+            .per_bank_dram_req_byteen   (per_bank_dram_req_byteen),
+            .per_bank_dram_req_addr     (per_bank_dram_req_addr),
+            .per_bank_dram_req_data     (per_bank_dram_req_data),
+            .per_bank_dram_req_ready    (per_bank_dram_req_ready),
+            .dram_req_valid             (dram_req_valid),
+            .dram_req_rw                (dram_req_rw),        
+            .dram_req_byteen            (dram_req_byteen),        
+            .dram_req_addr              (dram_req_addr),
+            .dram_req_data              (dram_req_data),  
+            .dram_req_ready             (dram_req_ready)
+        );    
+    end else begin
+        `UNUSED_VAR (per_bank_dram_req_valid)
+        `UNUSED_VAR (per_bank_dram_req_rw)
+        `UNUSED_VAR (per_bank_dram_req_byteen)
+        `UNUSED_VAR (per_bank_dram_req_addr)
+        `UNUSED_VAR (per_bank_dram_req_data)
+        assign per_bank_dram_req_ready = 0;
+        assign dram_req_valid  = 0;
+        assign dram_req_rw     = 0;
+        assign dram_req_byteen = 0;
+        assign dram_req_addr   = 0;
+        assign dram_req_data   = 0;
+        `UNUSED_VAR (dram_req_ready)
+    end
 
-    VX_snp_rsp_arb #(
-        .NUM_BANKS         (NUM_BANKS),
-        .BANK_LINE_SIZE    (BANK_LINE_SIZE),
-        .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
-    ) snp_rsp_arb ( 
-        .clk                    (clk),
-        .reset                  (reset),
-        .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
-        .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
-        .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
-        .snp_rsp_valid          (snp_rsp_valid),
-        .snp_rsp_tag            (snp_rsp_tag),
-        .snp_rsp_ready          (snp_rsp_ready)
-    );
+    if (FLUSH_ENABLE) begin
+        VX_snp_rsp_arb #(
+            .NUM_BANKS         (NUM_BANKS),
+            .BANK_LINE_SIZE    (BANK_LINE_SIZE),
+            .SNP_REQ_TAG_WIDTH (SNP_REQ_TAG_WIDTH)
+        ) snp_rsp_arb ( 
+            .clk                    (clk),
+            .reset                  (reset),
+            .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
+            .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
+            .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
+            .snp_rsp_valid          (snp_rsp_valid),
+            .snp_rsp_tag            (snp_rsp_tag),
+            .snp_rsp_ready          (snp_rsp_ready)
+        );
+    end else begin
+        `UNUSED_VAR (per_bank_snp_rsp_valid)
+        `UNUSED_VAR (per_bank_snp_rsp_tag)
+        assign per_bank_snp_rsp_ready = 0;
+        assign snp_rsp_valid = 0;
+        assign snp_rsp_tag   = 0;
+        `UNUSED_VAR (snp_rsp_ready)        
+    end
     
 endmodule
