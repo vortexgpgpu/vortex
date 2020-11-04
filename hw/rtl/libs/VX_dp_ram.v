@@ -13,7 +13,8 @@ module VX_dp_ram #(
 	input wire clk,	
 	input wire [ADDRW-1:0] waddr,
 	input wire [ADDRW-1:0] raddr,
-    input wire [BYTEENW-1:0] wren,
+    input wire wren,
+    input wire [BYTEENW-1:0] byteen,
 	input wire rden,
     input wire [DATAW-1:0] din,
 	output wire [DATAW-1:0] dout
@@ -26,14 +27,16 @@ module VX_dp_ram #(
 
         if (BYTEENW > 1) begin
             always @(posedge clk) begin
-                for (integer i = 0; i < BYTEENW; i++) begin
-                    if (wren[i])
-                        mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
+                if (wren) begin
+                    for (integer i = 0; i < BYTEENW; i++) begin
+                        if (byteen[i])
+                            mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
+                    end
                 end
             end
         end else begin
             always @(posedge clk) begin
-                if (wren)
+                if (wren && byteen)
                     mem[waddr] <= din;
             end
         end
@@ -48,14 +51,14 @@ module VX_dp_ram #(
         wire writing;
              
         if (BYTEENW > 1) begin
-            assign writing = (| wren);
             always @(posedge clk) begin
-                for (integer i = 0; i < BYTEENW; i++) begin
-                    din_r[i * 8 +: 8] <= wren[i] ? din[i * 8 +: 8] : mem[waddr][i * 8 +: 8];
+                if (wren) begin
+                    for (integer i = 0; i < BYTEENW; i++) begin
+                        din_r[i * 8 +: 8] <= byteen[i] ? din[i * 8 +: 8] : mem[waddr][i * 8 +: 8];
+                    end
                 end
             end
         end else begin
-            assign writing = wren;
             always @(posedge clk) begin
                 din_r <= din;
             end
@@ -63,7 +66,7 @@ module VX_dp_ram #(
         
         reg bypass_r;
         always @(posedge clk) begin
-            bypass_r <= writing && (raddr == waddr);
+            bypass_r <= wren && (raddr == waddr);
         end
 
         assign dout = bypass_r ? din_r : dout_r;
@@ -81,14 +84,16 @@ module VX_dp_ram #(
 
             if (BYTEENW > 1) begin
                 always @(posedge clk) begin
-                    for (integer i = 0; i < BYTEENW; i++) begin
-                        if (wren[i])
-                            mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
+                    if (wren) begin
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (byteen[i])
+                                mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
+                        end
                     end
                 end
             end else begin
                 always @(posedge clk) begin
-                    if (wren)
+                    if (wren && byteen)
                         mem[waddr] <= din;
                 end
             end
@@ -98,14 +103,14 @@ module VX_dp_ram #(
              wire writing;
              
              if (BYTEENW > 1) begin
-                assign writing = (| wren);
                 always @(posedge clk) begin
-                    for (integer i = 0; i < BYTEENW; i++) begin
-                        din_r[i * 8 +: 8] <= wren[i] ? din[i * 8 +: 8] : mem[waddr][i * 8 +: 8];
+                    if (wren) begin
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            din_r[i * 8 +: 8] <= byteen[i] ? din[i * 8 +: 8] : mem[waddr][i * 8 +: 8];
+                        end
                     end
                 end
             end else begin
-                assign writing = wren;
                 always @(posedge clk) begin
                     din_r <= din;
                 end
@@ -127,14 +132,16 @@ module VX_dp_ram #(
 
             if (BYTEENW > 1) begin
                 always @(posedge clk) begin
-                    for (integer i = 0; i < BYTEENW; i++) begin
-                        if (wren[i])
-                            mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
+                    if (wren) begin
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (byteen[i])
+                                mem[waddr][i * 8 +: 8] <= din[i * 8 +: 8];
+                        end
                     end
                 end
             end else begin
                 always @(posedge clk) begin
-                    if (wren)
+                    if (wren && byteen)
                         mem[waddr] <= din;
                 end
             end
