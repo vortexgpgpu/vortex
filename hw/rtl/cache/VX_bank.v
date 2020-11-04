@@ -339,7 +339,7 @@ module VX_bank #(
                                 reqq_pop_unqual ? reqq_req_writeword_st0 :
                                     0;
 
-    // we have a miss in msrq or going into it for the current address
+    // we have a miss in msrq or in stage 2 for the current address
     wire msrq_pending_hazard_st0 = msrq_pending_hazard_unqual_st0 
                                 || (miss_add_unqual && (addr_st2 == addr_st0));
 
@@ -486,7 +486,7 @@ module VX_bank #(
     assign is_msrq_miss_st2 = miss_add_unqual && is_msrq_st2;
 
     // a matching incoming fill request to the block is in stage 0    
-    wire incoming_st0_fill_st2 = is_fill_st0 && (addr_st2 == addr_st0);
+    wire incoming_st0_fill_st2 = is_fill_st0 && (addr_st2 == dfpq_addr_st0);
 
     // a matching incoming fill request to the block is in stage 1
     wire incoming_st1_fill_st2 = is_fill_st1 && (addr_st2 == addr_st1);
@@ -554,7 +554,7 @@ module VX_bank #(
 
             // fill
             .update_ready_st0        (update_ready_st0),
-            .fill_addr_st0           (addr_st0),
+            .addr_st0                (addr_st0),
             .pending_hazard_st0      (msrq_pending_hazard_unqual_st0),
             
             // dequeue
