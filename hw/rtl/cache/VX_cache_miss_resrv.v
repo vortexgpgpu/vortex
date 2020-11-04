@@ -56,7 +56,7 @@ module VX_cache_miss_resrv #(
 
     // fill
     input wire                          update_ready_st0,    
-    input wire[`LINE_ADDR_WIDTH-1:0]    fill_addr_st0,
+    input wire[`LINE_ADDR_WIDTH-1:0]    addr_st0,
     output wire                         pending_hazard_st0,
 
     // dequeue
@@ -93,7 +93,7 @@ module VX_cache_miss_resrv #(
 
     wire [MRVQ_SIZE-1:0] valid_address_match;
     for (genvar i = 0; i < MRVQ_SIZE; i++) begin
-        assign valid_address_match[i] = valid_table[i] && (addr_table[i] == fill_addr_st0);
+        assign valid_address_match[i] = valid_table[i] && (addr_table[i] == addr_st0);
     end
 
     assign pending_hazard_st0 = (| valid_address_match);
