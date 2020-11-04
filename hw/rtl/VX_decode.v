@@ -295,7 +295,7 @@ module VX_decode  #(
 
     wire use_rs1 = is_fpu 
                 || is_gpu
-                || ((is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || ~is_csr_imm || is_gpu) && (rs1 != 0));
+                || ((is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || !is_csr_imm || is_gpu) && (rs1 != 0));
 
     wire use_rs2 = (is_fpu && ~(is_fl || (fpu_op == `FPU_SQRT) || is_fcvti || is_fcvtf || is_fmvw_clss || is_fmvx))
                 || (is_gpu && (gpu_op == `GPU_BAR || gpu_op == `GPU_WSPAWN))

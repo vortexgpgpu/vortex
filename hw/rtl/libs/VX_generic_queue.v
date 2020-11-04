@@ -114,6 +114,7 @@ module VX_generic_queue #(
                 .waddr(wr_ptr_a),                                
                 .raddr(rd_ptr_a),
                 .wren(push),
+                .byteen(1'b1),
                 .rden(pop),
                 .din(data_in),
                 .dout(data_out)
@@ -166,6 +167,7 @@ module VX_generic_queue #(
                 .waddr(wr_ptr_r),                                
                 .raddr(rd_ptr_n_r),
                 .wren(push),
+                .byteen(1'b1),
                 .rden(pop),
                 .din(data_in),
                 .dout(dout)
