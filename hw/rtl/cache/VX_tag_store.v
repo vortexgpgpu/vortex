@@ -13,8 +13,6 @@ module VX_tag_store #(
     input  wire                             clk,
     input  wire                             reset,  
 
-    input  wire                             stall,
-
     input  wire                             write_enable,
     input  wire                             write_fill,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
@@ -35,7 +33,7 @@ module VX_tag_store #(
                 valid[i] <= 0;
                 dirty[i] <= 0;
             end
-        end else if(!stall) begin
+        end else begin
             if (write_enable) begin                
                 assert(!invalidate);
                 dirty[write_addr] <= !write_fill;

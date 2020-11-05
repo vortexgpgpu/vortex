@@ -181,14 +181,14 @@ module VX_cache_miss_resrv #(
         if (enqueue_st3 || schedule_st0 || dequeue_st3) begin
             if (enqueue_st3) begin
                 if (enqueue_msrq_st3)
-                    $display("%t: cache%0d:%0d msrq-restore addr%0d=%0h ready=%b", $time, CACHE_ID, BANK_ID, restore_ptr, `LINE_TO_BYTE_ADDR(enqueue_addr_st3, BANK_ID), enqueue_ready_st3);
+                    $display("%t: cache%0d:%0d msrq-restore: addr%0d=%0h, ready=%b", $time, CACHE_ID, BANK_ID, restore_ptr, `LINE_TO_BYTE_ADDR(enqueue_addr_st3, BANK_ID), enqueue_ready_st3);
                 else
-                    $display("%t: cache%0d:%0d msrq-enq addr%0d=%0h ready=%b wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(enqueue_addr_st3, BANK_ID), enqueue_ready_st3, debug_wid_st3, debug_pc_st3);
+                    $display("%t: cache%0d:%0d msrq-enq: addr%0d=%0h, ready=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(enqueue_addr_st3, BANK_ID), enqueue_ready_st3, debug_wid_st3, debug_pc_st3);
             end 
             if (schedule_st0)
-                $display("%t: cache%0d:%0d msrq-schedule addr%0d=%0h wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(dequeue_addr_st0, BANK_ID), debug_wid_st0, debug_pc_st0);      
+                $display("%t: cache%0d:%0d msrq-schedule: addr%0d=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(dequeue_addr_st0, BANK_ID), debug_wid_st0, debug_pc_st0);      
             if (dequeue_st3)
-                $display("%t: cache%0d:%0d msrq-deq addr%0d wid=%0d PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st3, debug_pc_st3);
+                $display("%t: cache%0d:%0d msrq-deq addr%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st3, debug_pc_st3);
             $write("%t: cache%0d:%0d msrq-table", $time, CACHE_ID, BANK_ID);
             for (integer j = 0; j < MRVQ_SIZE; j++) begin
                 if (valid_table[j]) begin
@@ -198,7 +198,7 @@ module VX_cache_miss_resrv #(
                     $write("addr%0d=%0h", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
                 end
                 else if (schedule_ptr == $bits(schedule_ptr)'(j)) begin
-                     $write(" *");                    
+                    $write(" *");                    
                     if (~ready_table[j]) $write("!");
                     $write("[addr%0d=%0h]", j, `LINE_TO_BYTE_ADDR(addr_table[j], BANK_ID));
                 end

@@ -26,12 +26,12 @@ module VX_bank_core_req_arb #(
 
     // Dequeue Data
     input  wire                             reqq_pop,
-    output wire [`REQS_BITS-1:0]            reqq_req_tid_st0,    
-    output wire                             reqq_req_rw_st0,  
-    output wire [WORD_SIZE-1:0]             reqq_req_byteen_st0,    
-    output wire [`WORD_ADDR_WIDTH-1:0]      reqq_req_addr_st0,
-    output wire [`WORD_WIDTH-1:0]           reqq_req_writedata_st0,
-    output wire [CORE_TAG_WIDTH-1:0]        reqq_req_tag_st0,    
+    output wire [`REQS_BITS-1:0]            reqq_tid_st0,    
+    output wire                             reqq_rw_st0,  
+    output wire [WORD_SIZE-1:0]             reqq_byteen_st0,    
+    output wire [`WORD_ADDR_WIDTH-1:0]      reqq_addr_st0,
+    output wire [`WORD_WIDTH-1:0]           reqq_writedata_st0,
+    output wire [CORE_TAG_WIDTH-1:0]        reqq_tag_st0,    
 
     // State Data
     output wire                             reqq_empty,
@@ -105,18 +105,18 @@ module VX_bank_core_req_arb #(
         `UNUSED_PIN  (grant_onehot)
     );
 
-    assign reqq_empty              = !qual_has_request;
-    assign reqq_req_tid_st0        = qual_request_index;    
-    assign reqq_req_byteen_st0     = qual_byteen[qual_request_index];
-    assign reqq_req_addr_st0       = qual_addr[qual_request_index];
-    assign reqq_req_writedata_st0  = qual_writedata[qual_request_index];
+    assign reqq_empty          = !qual_has_request;
+    assign reqq_tid_st0        = qual_request_index;    
+    assign reqq_byteen_st0     = qual_byteen[qual_request_index];
+    assign reqq_addr_st0       = qual_addr[qual_request_index];
+    assign reqq_writedata_st0  = qual_writedata[qual_request_index];
     
     if (CORE_TAG_ID_BITS != 0) begin
-        assign reqq_req_tag_st0 = qual_tag;
-        assign reqq_req_rw_st0  = qual_rw;
+        assign reqq_tag_st0 = qual_tag;
+        assign reqq_rw_st0  = qual_rw;
     end else begin
-        assign reqq_req_tag_st0 = qual_tag[qual_request_index];
-        assign reqq_req_rw_st0  = qual_rw[qual_request_index];
+        assign reqq_tag_st0 = qual_tag[qual_request_index];
+        assign reqq_rw_st0  = qual_rw[qual_request_index];
     end    
 
 `DEBUG_BLOCK(

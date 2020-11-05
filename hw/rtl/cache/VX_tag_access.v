@@ -77,8 +77,6 @@ module VX_tag_access #(
         .clk         (clk),
         .reset       (reset),
 
-        .stall       (stall),
-
         .read_addr   (addrline_st1),
         .read_valid  (qual_read_valid_st1),        
         .read_dirty  (qual_read_dirty_st1),
@@ -109,14 +107,17 @@ module VX_tag_access #(
     wire fill_write = valid_req_st1 && writefill_st1 
                    && !tags_match;  // discard redundant fills because the block could be dirty
 
-    assign use_write_enable = normal_write || fill_write;
+    assign use_write_enable = (normal_write || fill_write)
+                           && !stall;
 
-    assign use_invalidate   = valid_req_st1 && is_snp_st1 && tags_match 
-                           && (use_read_dirty_st1 || snp_invalidate_st1)  // block is dirty or need to force invalidation
-                           && !force_miss_st1;
+    assign use_invalidate = valid_req_st1 && is_snp_st1 
+                         && tags_match 
+                         && (use_read_dirty_st1 || snp_invalidate_st1)  // block is dirty or should invalidate
+                         && !force_miss_st1
+                         && !stall;
     
-    wire core_req_miss = valid_req_st1 && !is_snp_st1 && !writefill_st1 // is core request
-                      && (!use_read_valid_st1 || !tags_match);   // block missing or has wrong tag
+    wire core_req_miss = valid_req_st1 && !is_snp_st1 && !writefill_st1
+                      && !tags_match;
 
     assign miss_st1    = core_req_miss;
     assign dirty_st1   = valid_req_st1 && use_read_valid_st1 && use_read_dirty_st1;
@@ -130,15 +131,15 @@ module VX_tag_access #(
                 $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
             end    
             if (miss_st1) begin
-                $display("%t: cache%0d:%0d data-miss: addr=%0h, wid=%0d, PC=%0h, valid=%b, tagmatch=%b, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, use_read_dirty_st1, tags_match, addrline_st1, addrtag_st1);
+                $display("%t: cache%0d:%0d tag-miss: addr=%0h, wid=%0d, PC=%0h, valid=%b, blk_tag_id=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, use_read_dirty_st1, qual_read_tag_st1, addrline_st1, addrtag_st1);
             end else if ((| use_write_enable)) begin
                 if (writefill_st1) begin
-                    $display("%t: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), addrline_st1, addrtag_st1);
+                    $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), addrline_st1, addrtag_st1);
                 end else begin
-                    $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, addrline_st1, addrtag_st1);
+                    $display("%t: cache%0d:%0d tag-write: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, addrline_st1, addrtag_st1);
                 end
             end else begin
-                $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, addrline_st1, qual_read_tag_st1);
+                $display("%t: cache%0d:%0d tag-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, addrline_st1, qual_read_tag_st1);
             end            
         end
     end    
