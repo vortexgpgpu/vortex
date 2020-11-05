@@ -208,11 +208,11 @@
             "addr_st1": 32,
             "addr_st2": 32,
             "addr_st3": 32,
-            "is_mrvq_st1": 1,
+            "is_msrq_st1": 1,
             "miss_st1": 1,
             "dirty_st1": 1,
             "!force_miss_st1": 1,  
-            "!stall_pipe": 1
+            "!pipeline_stall": 1
         }
     }
  }

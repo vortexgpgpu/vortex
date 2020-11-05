@@ -5,7 +5,8 @@ module VX_generic_queue #(
     parameter SIZE     = 2,
     parameter BUFFERED = 0,
     parameter ADDRW    = $clog2(SIZE),
-    parameter SIZEW    = $clog2(SIZE+1)
+    parameter SIZEW    = $clog2(SIZE+1),
+    parameter FASTRAM  = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -108,7 +109,8 @@ module VX_generic_queue #(
                 .DATAW(DATAW),
                 .SIZE(SIZE),
                 .BUFFERED(0),
-                .RWCHECK(1)
+                .RWCHECK(1),
+                .FASTRAM(FASTRAM)
             ) dp_ram (
                 .clk(clk),	
                 .waddr(wr_ptr_a),                                
@@ -161,7 +163,8 @@ module VX_generic_queue #(
                 .DATAW(DATAW),
                 .SIZE(SIZE),
                 .BUFFERED(1),
-                .RWCHECK(0)
+                .RWCHECK(0),
+                .FASTRAM(FASTRAM)
             ) dp_ram (
                 .clk(clk),	
                 .waddr(wr_ptr_r),                                
