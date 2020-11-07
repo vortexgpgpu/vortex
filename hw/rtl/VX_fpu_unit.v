@@ -9,6 +9,7 @@ module VX_fpu_unit #(
 
 	// inputs
 	VX_fpu_req_if       fpu_req_if,
+    VX_csr_to_fpu_if    csr_to_fpu_if,
         
 	// outputs        
     VX_fpu_to_cmt_if    fpu_commit_if
@@ -56,6 +57,10 @@ module VX_fpu_unit #(
 
     wire valid_in = fpu_req_if.valid && ~fpuq_full;
 
+    // resolve dynamic FRM    
+    assign csr_to_fpu_if.wid = fpu_req_if.wid;
+    wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? csr_to_fpu_if.frm : fpu_req_if.op_mod;   
+
 `ifdef FPU_FAST
 
     VX_fp_fpga #(
@@ -70,7 +75,7 @@ module VX_fpu_unit #(
         .tag_in     (tag_in),
         
         .op_type    (fpu_req_if.op_type),
-        .frm        (fpu_req_if.frm),
+        .frm        (fpu_frm),
 
         .dataa      (fpu_req_if.rs1_data),
         .datab      (fpu_req_if.rs2_data),
@@ -104,7 +109,7 @@ module VX_fpu_unit #(
         .tag_in     (tag_in),
         
         .op_type    (fpu_req_if.op_type),
-        .frm        (fpu_req_if.frm),
+        .frm        (fpu_frm),
 
         .dataa      (fpu_req_if.rs1_data),
         .datab      (fpu_req_if.rs2_data),

@@ -28,7 +28,6 @@ module VX_execute #(
     VX_gpu_req_if       gpu_req_if,
     
     // outputs
-    VX_csr_to_issue_if  csr_to_issue_if,
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
     VX_exu_to_cmt_if    alu_commit_if,
@@ -41,6 +40,7 @@ module VX_execute #(
     input wire          busy,
     output wire         ebreak
 );
+    VX_csr_to_fpu_if    csr_to_fpu_if(); 
     
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
@@ -70,7 +70,7 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),    
         .cmt_to_csr_if  (cmt_to_csr_if),    
-        .csr_to_issue_if(csr_to_issue_if), 
+        .csr_to_fpu_if  (csr_to_fpu_if), 
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
@@ -104,7 +104,8 @@ module VX_execute #(
     ) fpu_unit (
         .clk            (clk),
         .reset          (reset),        
-        .fpu_req_if     (fpu_req_if),
+        .fpu_req_if     (fpu_req_if), 
+        .csr_to_fpu_if  (csr_to_fpu_if), 
         .fpu_commit_if  (fpu_commit_if)    
     );
 `else

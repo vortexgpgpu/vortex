@@ -98,7 +98,6 @@ module VX_pipeline #(
     assign csr_io_rsp_data     = csr_io_rsp_if.data; 
     assign csr_io_rsp_if.ready = csr_io_rsp_ready; 
 
-    VX_csr_to_issue_if  csr_to_issue_if();
     VX_cmt_to_csr_if    cmt_to_csr_if();
     VX_decode_if        decode_if();
     VX_branch_ctl_if    branch_ctl_if();
@@ -157,7 +156,6 @@ module VX_pipeline #(
 
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
-        .csr_to_issue_if(csr_to_issue_if),
 
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
@@ -181,7 +179,6 @@ module VX_pipeline #(
         .csr_io_req_if  (csr_io_req_if),
         .csr_io_rsp_if  (csr_io_rsp_if),
 
-        .csr_to_issue_if(csr_to_issue_if),
         .cmt_to_csr_if  (cmt_to_csr_if),                 
         
         .alu_req_if     (alu_req_if),

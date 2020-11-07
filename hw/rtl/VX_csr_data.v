@@ -7,7 +7,7 @@ module VX_csr_data #(
     input wire reset,
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
-    VX_csr_to_issue_if              csr_to_issue_if,  
+    VX_csr_to_fpu_if                csr_to_fpu_if,  
 
     input wire                      read_enable,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
@@ -144,6 +144,6 @@ module VX_csr_data #(
     end 
 
     assign read_data = read_data_r;
-    assign csr_to_issue_if.frm = csr_frm[csr_to_issue_if.wid]; 
+    assign csr_to_fpu_if.frm = csr_frm[csr_to_fpu_if.wid]; 
 
 endmodule
