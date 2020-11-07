@@ -15,7 +15,7 @@ interface VX_fpu_req_if ();
     wire [`NUM_THREADS-1:0] tmask;
     wire [31:0]             PC;
     wire [`FPU_BITS-1:0]    op_type;
-    wire [`FRM_BITS-1:0]    frm;
+    wire [`MOD_BITS-1:0]    op_mod;
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
     wire [`NUM_THREADS-1:0][31:0] rs2_data;
     wire [`NUM_THREADS-1:0][31:0] rs3_data;

@@ -17,24 +17,26 @@ module VX_skid_buffer #(
     reg             valid_out_r;
     reg             use_buffer;
     
+    wire push = valid_in && ready_in;
+    
     always @(posedge clk) begin
         if (reset) begin
             data_out_r  <= 0;
             buffer      <= 0;
             use_buffer  <= 0;
             valid_out_r <= 0; 
-        end else begin
-            if (valid_in && ready_in && valid_out && !ready_out) begin
-                assert(!use_buffer);
-                use_buffer <= 1;
-            end 
+        end else begin             
             if (ready_out) begin
                 use_buffer <= 0;
             end
-            if (valid_in && ready_in) begin
+            if (push) begin
                 buffer <= data_in;
+                if (valid_out_r && !ready_out) begin
+                    assert(!use_buffer);
+                    use_buffer <= 1;
+                end
             end
-            if (!valid_out || ready_out) begin
+            if (!valid_out_r || ready_out) begin
                 valid_out_r <= valid_in || use_buffer;
                 data_out_r  <= use_buffer ? buffer : data_in;
             end

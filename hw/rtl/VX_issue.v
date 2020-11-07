@@ -10,7 +10,6 @@ module VX_issue #(
 
     VX_decode_if        decode_if,
     VX_writeback_if     writeback_if,   
-    VX_csr_to_issue_if  csr_to_issue_if, 
     
     VX_alu_req_if       alu_req_if,
     VX_lsu_req_if       lsu_req_if,    
@@ -71,7 +70,7 @@ module VX_issue #(
     );
 
     `UNUSED_VAR (gpr_rsp_if.valid);
-    
+
     assign execute_if.valid     = ibuf_deq_if.valid && gpr_req_if.ready && ~scoreboard_delay;
     assign execute_if.wid       = ibuf_deq_if.wid;
     assign execute_if.tmask     = ibuf_deq_if.tmask;
@@ -91,7 +90,6 @@ module VX_issue #(
         .reset          (reset),
         .execute_if     (execute_if),
         .gpr_rsp_if     (gpr_rsp_if),
-        .csr_to_issue_if(csr_to_issue_if),
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
@@ -136,22 +134,22 @@ module VX_issue #(
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (alu_req_if.valid && alu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=ALU, tmask=%b, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, alu_req_if.wid, alu_req_if.PC, alu_req_if.tmask, alu_req_if.rs1_data, alu_req_if.rs2_data);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=ALU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, alu_req_if.wid, alu_req_if.PC, alu_req_if.tmask, alu_req_if.rd, alu_req_if.rs1_data, alu_req_if.rs2_data);   
         end
         if (lsu_req_if.valid && lsu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=LSU, tmask=%b, rw=%b, byteen=%b, baddr=%0h, offset=%0h, data=%0h", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, lsu_req_if.tmask, lsu_req_if.rw, lsu_req_if.byteen, lsu_req_if.base_addr, lsu_req_if.offset, lsu_req_if.store_data);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=LSU, tmask=%b, rd=%0d, rw=%b, byteen=%b, baddr=%0h, offset=%0h, data=%0h", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, lsu_req_if.tmask, lsu_req_if.rd, lsu_req_if.rw, lsu_req_if.byteen, lsu_req_if.base_addr, lsu_req_if.offset, lsu_req_if.store_data);   
         end
         if (csr_req_if.valid && csr_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, addr=%0h, mask=%0h", $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.csr_addr, csr_req_if.csr_mask);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, mask=%0h", $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.csr_addr, csr_req_if.csr_mask);   
         end
         if (mul_req_if.valid && mul_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=MUL, tmask=%b, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, mul_req_if.wid, mul_req_if.PC, mul_req_if.tmask, mul_req_if.rs1_data, mul_req_if.rs2_data);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=MUL, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, mul_req_if.wid, mul_req_if.PC, mul_req_if.tmask, mul_req_if.rd, mul_req_if.rs1_data, mul_req_if.rs2_data);   
         end
         if (fpu_req_if.valid && fpu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rs1_data=%0h, rs2_data=%0h, rs3_data=%0h", $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h, rs3_data=%0h", $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rd, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data);   
         end
         if (gpu_req_if.valid && gpu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=GPU, tmask=%b, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, gpu_req_if.wid, gpu_req_if.PC, gpu_req_if.tmask, gpu_req_if.rs1_data, gpu_req_if.rs2_data);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=GPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, gpu_req_if.wid, gpu_req_if.PC, gpu_req_if.tmask, gpu_req_if.rd, gpu_req_if.rs1_data, gpu_req_if.rs2_data);   
         end
     end
 `endif

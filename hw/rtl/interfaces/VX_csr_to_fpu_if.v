@@ -1,5 +1,5 @@
-`ifndef VX_CSR_TO_ISSUE_IF
-`define VX_CSR_TO_ISSUE_IF
+`ifndef VX_CSR_TO_FPU_IF
+`define VX_CSR_TO_FPU_IF
 
 `include "VX_define.vh"
 
@@ -7,7 +7,7 @@
     `IGNORE_WARNINGS_BEGIN
 `endif
 
-interface VX_csr_to_issue_if ();
+interface VX_csr_to_fpu_if ();
 
 	wire [`NW_BITS-1:0]  wid;
 	wire [`FRM_BITS-1:0] frm;

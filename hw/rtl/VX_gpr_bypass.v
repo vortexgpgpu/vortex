@@ -40,27 +40,25 @@ module VX_gpr_bypass #(
                 buffer2      <= 0;
             end else begin  
                 delayed_push <= push;    
-                assert(!use_buffer2 || use_buffer);
+                assert(!use_buffer2 || use_buffer); 
                 if (pop) begin
-                    if (use_buffer) begin
-                        buffer      <= buffer2;
-                        use_buffer  <= use_buffer2;
-                        use_buffer2 <= 0;
-                    end
+                    buffer      <= buffer2;
+                    use_buffer  <= use_buffer2;
+                    use_buffer2 <= 0;
                 end          
                 if (delayed_push) begin                
                     if (use_buffer) begin
-                        assert(!use_buffer2); // queue full!
+                        assert(!use_buffer2); // full!
+                        use_buffer <= 1;
                         if (pop) begin
                             buffer <= data_in;
                         end else begin                        
                             buffer2 <= data_in;
                             use_buffer2 <= 1; 
-                        end                    
-                        use_buffer <= 1;
+                        end
                     end else if (!pop) begin
                         buffer <= data_in;
-                        use_buffer <= 1;
+                        use_buffer <= 1;                        
                     end
                 end
             end
