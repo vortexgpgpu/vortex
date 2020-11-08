@@ -16,26 +16,26 @@ module VX_bank_core_req_arb #(
     input  wire reset,
 
     // Enqueue Data
-    input wire                                                  reqq_push,
-    input wire [NUM_REQUESTS-1:0]                               bank_valids,
-    input wire [`CORE_REQ_TAG_COUNT-1:0]                        bank_rw,  
-    input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]                bank_byteen,    
-    input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]              bank_writedata,
-    input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]         bank_addr,
-    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]    bank_tag,    
+    input wire                                                  push,
+    input wire [NUM_REQUESTS-1:0]                               valids_in,
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                        rw_in,  
+    input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]                byteen_in,    
+    input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]              writedata_in,
+    input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]         addr_in,
+    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]    tag_in,    
 
     // Dequeue Data
-    input  wire                             reqq_pop,
-    output wire [`REQS_BITS-1:0]            reqq_tid_st0,    
-    output wire                             reqq_rw_st0,  
-    output wire [WORD_SIZE-1:0]             reqq_byteen_st0,    
-    output wire [`WORD_ADDR_WIDTH-1:0]      reqq_addr_st0,
-    output wire [`WORD_WIDTH-1:0]           reqq_writedata_st0,
-    output wire [CORE_TAG_WIDTH-1:0]        reqq_tag_st0,    
+    input  wire                             pop,
+    output wire [`REQS_BITS-1:0]            tid_out,    
+    output wire                             rw_out,  
+    output wire [WORD_SIZE-1:0]             byteen_out,    
+    output wire [`WORD_ADDR_WIDTH-1:0]      addr_out,
+    output wire [`WORD_WIDTH-1:0]           writedata_out,
+    output wire [CORE_TAG_WIDTH-1:0]        tag_out,    
 
     // State Data
-    output wire                             reqq_empty,
-    output wire                             reqq_full
+    output wire                             empty,
+    output wire                             full
 );
 
     wire [NUM_REQUESTS-1:0]                             out_per_valids;    
@@ -64,21 +64,21 @@ module VX_bank_core_req_arb #(
     wire use_empty = !(| use_per_valids);
     wire out_empty = !(| out_per_valids) || o_empty;
 
-    wire push_qual = reqq_push && !reqq_full;
+    wire push_qual = push && !full;
     wire pop_qual  = !out_empty && use_empty;
 
     VX_generic_queue #(
-        .DATAW($bits(bank_valids) + $bits(bank_addr) + $bits(bank_writedata) + $bits(bank_tag) + $bits(bank_rw) + $bits(bank_byteen)), 
+        .DATAW($bits(valids_in) + $bits(addr_in) + $bits(writedata_in) + $bits(tag_in) + $bits(rw_in) + $bits(byteen_in)), 
         .SIZE(CREQ_SIZE)
     ) reqq_queue (
         .clk      (clk),
         .reset    (reset),
         .push     (push_qual),
-        .data_in  ({bank_valids,    bank_rw,    bank_byteen,    bank_addr,    bank_writedata,    bank_tag}),
+        .data_in  ({valids_in,    rw_in,    byteen_in,    addr_in,    writedata_in,    tag_in}),
         .pop      (pop_qual),
         .data_out ({out_per_valids, out_per_rw, out_per_byteen, out_per_addr, out_per_writedata, out_per_tag}),
         .empty    (o_empty),
-        .full     (reqq_full),
+        .full     (full),
         `UNUSED_PIN (size)
     );
 
@@ -91,43 +91,33 @@ module VX_bank_core_req_arb #(
     assign qual_rw         = use_per_rw;
     assign qual_byteen     = use_per_byteen;
 
-    wire[`REQS_BITS-1:0] qual_request_index;
-    wire                 qual_has_request;
-
+    wire sel_valid;
+    wire[`REQS_BITS-1:0] sel_idx;
+    
     VX_fixed_arbiter #(
         .N(NUM_REQUESTS)
     ) sel_bank (
         .clk         (clk),
         .reset       (reset),
         .requests    (qual_valids),
-        .grant_index (qual_request_index),
-        .grant_valid (qual_has_request),
+        .grant_valid (sel_valid),
+        .grant_index (sel_idx),
         `UNUSED_PIN  (grant_onehot)
     );
 
-    assign reqq_empty          = !qual_has_request;
-    assign reqq_tid_st0        = qual_request_index;    
-    assign reqq_byteen_st0     = qual_byteen[qual_request_index];
-    assign reqq_addr_st0       = qual_addr[qual_request_index];
-    assign reqq_writedata_st0  = qual_writedata[qual_request_index];
+    assign empty          = !sel_valid;
+    assign tid_out        = sel_idx;    
+    assign byteen_out     = qual_byteen[sel_idx];
+    assign addr_out       = qual_addr[sel_idx];
+    assign writedata_out  = qual_writedata[sel_idx];
     
     if (CORE_TAG_ID_BITS != 0) begin
-        assign reqq_tag_st0 = qual_tag;
-        assign reqq_rw_st0  = qual_rw;
+        assign tag_out = qual_tag;
+        assign rw_out  = qual_rw;
     end else begin
-        assign reqq_tag_st0 = qual_tag[qual_request_index];
-        assign reqq_rw_st0  = qual_rw[qual_request_index];
-    end    
-
-`DEBUG_BLOCK(
-    reg [NUM_REQUESTS-1:0] updated_valids;
-    always @(*) begin
-        updated_valids = qual_valids;
-        if (qual_has_request) begin
-            updated_valids[qual_request_index] = 0;
-        end
+        assign tag_out = qual_tag[sel_idx];
+        assign rw_out  = qual_rw[sel_idx];
     end
-)
 
     always @(posedge clk) begin
         if (reset) begin
@@ -140,8 +130,8 @@ module VX_bank_core_req_arb #(
                 use_per_addr      <= out_per_addr;
                 use_per_writedata <= out_per_writedata;
                 use_per_tag       <= out_per_tag;                
-            end else if (reqq_pop) begin
-                use_per_valids[qual_request_index] <= 0;
+            end else if (pop) begin
+                use_per_valids[sel_idx] <= 0;
             end
         end
     end

@@ -19,7 +19,7 @@ ase-2c: gen_sources setup-ase-2c
 
 ase-4c: gen_sources setup-ase-4c
 	make -C $(ASE_BUILD_DIR)_4c
-	cp ../rtl/fp_cores/altera/*.hex $(ASE_BUILD_DIR)_3c/work
+	cp ../rtl/fp_cores/altera/*.hex $(ASE_BUILD_DIR)_4c/work
 
 setup-ase-1c: $(ASE_BUILD_DIR)_1c/Makefile
 

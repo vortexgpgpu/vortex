@@ -216,27 +216,30 @@ module VX_bank #(
         .CORE_TAG_WIDTH   (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS (CORE_TAG_ID_BITS)
     ) core_req_arb (
-        .clk               (clk),
-        .reset             (reset),
+        .clk            (clk),
+        .reset          (reset),
+
         // Enqueue
-        .reqq_push         (core_req_fire),
-        .bank_valids       (core_req_valid),
-        .bank_rw           (core_req_rw),
-        .bank_byteen       (core_req_byteen),
-        .bank_addr         (core_req_addr),
-        .bank_writedata    (core_req_data),
-        .bank_tag          (core_req_tag),        
+        .push           (core_req_fire),
+        .tag_in         (core_req_tag),      
+        .valids_in      (core_req_valid),
+        .rw_in          (core_req_rw),
+        .byteen_in      (core_req_byteen),
+        .addr_in        (core_req_addr),
+        .writedata_in   (core_req_data),  
 
         // Dequeue
-        .reqq_pop          (reqq_pop),
-        .reqq_tid_st0      (reqq_tid_st0),
-        .reqq_rw_st0       (reqq_rw_st0),
-        .reqq_byteen_st0   (reqq_byteen_st0),
-        .reqq_addr_st0     (reqq_addr_st0),
-        .reqq_writedata_st0(reqq_writeword_st0),
-        .reqq_tag_st0      (reqq_tag_st0),
-        .reqq_empty        (reqq_empty),
-        .reqq_full         (reqq_full)
+        .pop            (reqq_pop),
+        .tag_out        (reqq_tag_st0),
+        .tid_out        (reqq_tid_st0),
+        .rw_out         (reqq_rw_st0),
+        .byteen_out     (reqq_byteen_st0),
+        .addr_out       (reqq_addr_st0),
+        .writedata_out  (reqq_writeword_st0),
+        
+        // States
+        .empty          (reqq_empty),
+        .full           (reqq_full)
     );    
 
     wire                                  msrq_pop;
@@ -252,7 +255,6 @@ module VX_bank #(
     wire [WORD_SIZE-1:0]                  msrq_byteen_st0;
     wire                                  msrq_is_snp_st0;
     wire                                  msrq_snp_invalidate_st0;
-    wire                                  msrq_pending_hazard_st1;
     wire                                  is_msrq_miss_st2;
     wire                                  is_msrq_miss_st3;
 
@@ -299,7 +301,9 @@ module VX_bank #(
     wire                                  snp_invalidate_st1;
     wire                                  is_msrq_st1;
     wire                                  msrq_pending_hazard_st1;
-    wire[`LINE_ADDR_WIDTH-1:0]            addr_st2;
+    wire                                  miss_st3;
+    wire                                  force_miss_st3;  
+    wire [`LINE_ADDR_WIDTH-1:0]           addr_st3;
 
     assign is_msrq_st0 = msrq_pop_unqual;
 
@@ -373,11 +377,11 @@ module VX_bank #(
     wire                        writeen_st2;
     wire                        miss_st1;
     wire                        miss_st2;
-    wire                        miss_st3;
     wire                        dirty_st1;
     wire                        mem_rw_st1;  
     wire [WORD_SIZE-1:0]        mem_byteen_st1;  
     wire                        force_miss_st2; 
+    wire[`LINE_ADDR_WIDTH-1:0]  addr_st2;
 `DEBUG_BEGIN
     wire [`REQ_TAG_WIDTH-1:0]   tag_st1;
     wire [`REQS_BITS-1:0]       tid_st1;
@@ -410,28 +414,28 @@ module VX_bank #(
         .reset          (reset),
 
     `ifdef DBG_CORE_REQ_INFO
-        .debug_pc_st1   (debug_pc_st1),
-        .debug_rd_st1   (debug_rd_st1),
-        .debug_wid_st1  (debug_wid_st1),
-        .debug_tagid_st1(debug_tagid_st1),
+        .debug_pc       (debug_pc_st1),
+        .debug_rd       (debug_rd_st1),
+        .debug_wid      (debug_wid_st1),
+        .debug_tagid    (debug_tagid_st1),
     `endif
 
         .stall          (pipeline_stall),
 
-        // Actual Read/Write
-        .valid_req_st1  (valid_st1),
-        .writefill_st1  (is_fill_st1),
-        .addr_st1       (addr_st1),
-        .mem_rw_st1     (mem_rw_st1),
-        .is_snp_st1     (is_snp_st1),
-        .snp_invalidate_st1(snp_invalidate_st1),
-        .force_miss_st1 (force_miss_st1),
+        // Inputs
+        .valid_in       (valid_st1),
+        .addr_in        (addr_st1),
+        .is_write_in    (mem_rw_st1),
+        .is_fill_in     (is_fill_st1),
+        .is_snp_in      (is_snp_st1),
+        .snp_invalidate_in(snp_invalidate_st1),
+        .force_miss_in  (force_miss_st1),
 
-        // Read Data
-        .readtag_st1    (readtag_st1),
-        .miss_st1       (miss_st1),
-        .dirty_st1      (dirty_st1),
-        .writeen_st1    (writeen_st1)
+        // Outputs
+        .readtag_out    (readtag_st1),
+        .miss_out       (miss_st1),
+        .dirty_out      (dirty_st1),
+        .writeen_out    (writeen_st1)
     );
     
     wire                            valid_st2;    
@@ -440,8 +444,7 @@ module VX_bank #(
     wire [`WORD_WIDTH-1:0]          readword_st2;
     wire [`BANK_LINE_WIDTH-1:0]     readdata_st2;
     wire [`BANK_LINE_WIDTH-1:0]     writedata_st2;
-    wire [WORD_SIZE-1:0]            mem_byteen_st2;   
-    wire                            miss_st2;
+    wire [WORD_SIZE-1:0]            mem_byteen_st2;  
     wire                            dirty_st2;
     wire [BANK_LINE_SIZE-1:0]       dirtyb_st2;
     wire [`REQ_INST_META_WIDTH-1:0] inst_meta_st2;
@@ -449,7 +452,6 @@ module VX_bank #(
     wire                            is_fill_st2;
     wire                            is_snp_st2;
     wire                            snp_invalidate_st2;
-    wire                            force_miss_st2;
     wire                            is_msrq_st2;
     
     VX_generic_register #(
@@ -486,37 +488,35 @@ module VX_bank #(
         .reset          (reset),
 
     `ifdef DBG_CORE_REQ_INFO
-        .debug_pc_st2   (debug_pc_st2),
-        .debug_rd_st2   (debug_rd_st2),
-        .debug_wid_st2  (debug_wid_st2),
-        .debug_tagid_st2(debug_tagid_st2),
+        .debug_pc       (debug_pc_st2),
+        .debug_rd       (debug_rd_st2),
+        .debug_wid      (debug_wid_st2),
+        .debug_tagid    (debug_tagid_st2),
     `endif
 
         .stall          (pipeline_stall),
 
-        // Actual Read/Write
-        .valid_req_st2  (valid_st2),
-        .writeen_st2    (writeen_st2),
-        .writefill_st2  (is_fill_st2),
-        .addr_st2       (addr_st2),
-        .wordsel_st2    (wsel_st2),
-        .mem_byteen_st2 (mem_byteen_st2),
-        .writeword_st2  (writeword_st2),
-        .writedata_st2  (writedata_st2),
+        // Inputs
+        .valid_in       (valid_st2),
+        .addr_in        (addr_st2),
+        .writeen_in     (writeen_st2),
+        .is_fill_in     (is_fill_st2),
+        .wordsel_in     (wsel_st2),
+        .byteen_in      (mem_byteen_st2),
+        .writeword_in   (writeword_st2),
+        .writedata_in   (writedata_st2),
 
-        // Read Data
-        .readword_st2   (readword_st2),
-        .readdata_st2   (readdata_st2),
-        .dirtyb_st2     (dirtyb_st2)
+        // Outputs
+        .readword_out   (readword_st2),
+        .readdata_out   (readdata_st2),
+        .dirtyb_out     (dirtyb_st2)
     );
 
-    wire                            valid_st3;    
-    wire [`LINE_ADDR_WIDTH-1:0]     addr_st3;
+    wire                            valid_st3;  
     wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st3;
     wire [`WORD_WIDTH-1:0]          writeword_st3;
     wire [`WORD_WIDTH-1:0]          readword_st3;
     wire [`BANK_LINE_WIDTH-1:0]     readdata_st3;
-    wire                            miss_st3;
     wire                            dirty_st3;
     wire [BANK_LINE_SIZE-1:0]       dirtyb_st3;
     wire [`REQ_INST_META_WIDTH-1:0] inst_meta_st3;
@@ -524,7 +524,6 @@ module VX_bank #(
     wire                            is_fill_st3;
     wire                            is_snp_st3;
     wire                            snp_invalidate_st3;
-    wire                            force_miss_st3;
     wire                            is_msrq_st3;
     
     VX_generic_register #(

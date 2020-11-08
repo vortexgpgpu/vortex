@@ -18,29 +18,22 @@ module VX_cache_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]        per_bank_valid,
     output wire                                          core_req_ready 
 );     
-    reg  [NUM_BANKS-1:0][NUM_REQUESTS-1:0] per_bank_valid_r;
-
-    if (NUM_BANKS == 1) begin
-        always @(*) begin            
-            per_bank_valid_r = 0;
-            for (integer i = 0; i < NUM_REQUESTS; i++) begin                    
-                per_bank_valid_r[0][i] = core_req_valid[i];
-            end
-        end        
-        assign core_req_ready = per_bank_ready;
-    end else begin            
+    if (NUM_BANKS > 1) begin
+        reg [NUM_BANKS-1:0][NUM_REQUESTS-1:0] per_bank_valid_r;
         reg [NUM_BANKS-1:0] per_bank_ready_sel;
         always @(*) begin
-            per_bank_valid_r = 0;
+            per_bank_valid_r   = 0;
             per_bank_ready_sel = {NUM_BANKS{1'b1}};
             for (integer i = 0; i < NUM_REQUESTS; i++) begin
                 per_bank_valid_r[core_req_addr[i][`BANK_SELECT_ADDR_RNG]][i] = core_req_valid[i];
                 per_bank_ready_sel[core_req_addr[i][`BANK_SELECT_ADDR_RNG]] = 0;
             end
         end        
-        assign core_req_ready = & (per_bank_ready | per_bank_ready_sel);
-    end
-
-    assign per_bank_valid = per_bank_valid_r;
+        assign per_bank_valid = per_bank_valid_r;
+        assign core_req_ready = & (per_bank_ready | per_bank_ready_sel);        
+    end else begin                
+        assign per_bank_valid = core_req_valid;
+        assign core_req_ready = per_bank_ready;
+    end   
 
 endmodule

@@ -93,24 +93,46 @@ module VX_snp_forwarder #(
 
     assign snp_req_ready = !sfq_full && fwdout_ready;
 
-    reg [`REQS_BITS-1:0] fwdin_sel;
+    if (NUM_REQUESTS > 1) begin
+        wire sel_valid;
+        wire [`REQS_BITS-1:0] sel_idx;
+        wire [NUM_REQUESTS-1:0] sel_1hot;
 
-    VX_fixed_arbiter #(
-        .N(NUM_REQUESTS)
-    ) arbiter (
-        .clk         (clk),
-        .reset       (reset),
-        .requests    (snp_fwdin_valid),
-        .grant_index (fwdin_sel),
-        `UNUSED_PIN  (grant_valid),
-        `UNUSED_PIN  (grant_onehot)
-    );
+        VX_fixed_arbiter #(
+            .N(NUM_REQUESTS)
+        ) sel_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (snp_fwdin_valid),
+            .grant_valid  (sel_valid),
+            .grant_index  (sel_idx),            
+            .grant_onehot (sel_1hot)
+        );
 
-    assign fwdin_valid = snp_fwdin_valid[fwdin_sel];
-    assign fwdin_tag   = snp_fwdin_tag[fwdin_sel];
+        assign fwdin_valid = snp_fwdin_valid[sel_idx];
+        assign fwdin_tag   = snp_fwdin_tag[sel_idx];
 
-    for (genvar i = 0; i < NUM_REQUESTS; i++) begin
-        assign snp_fwdin_ready[i] = fwdin_ready && (fwdin_sel == `REQS_BITS'(i));
+        wire stall = fwdin_valid && ~fwdin_ready;
+
+        VX_generic_register #(
+            .N(1 + `LOG2UP(SNRQ_SIZE)),
+            .PASSTHRU(NUM_REQUESTS <= 2)
+        ) pipe_reg (
+            .clk   (clk),
+            .reset (reset),
+            .stall (stall),
+            .flush (1'b0),
+            .in    ({sel_valid,   snp_fwdin_tag[sel_idx]}),
+            .out   ({fwdin_valid, fwdin_tag})
+        );
+
+        for (genvar i = 0; i < NUM_REQUESTS; i++) begin
+            assign snp_fwdin_ready[i] = sel_1hot[i] && !stall;
+        end
+    end else begin
+        assign fwdin_valid     = snp_fwdin_valid;
+        assign fwdin_tag       = snp_fwdin_tag;
+        assign snp_fwdin_ready = fwdin_ready;
     end
 
 `ifdef DBG_PRINT_CACHE_SNP
@@ -122,7 +144,7 @@ module VX_snp_forwarder #(
             $display("%t: cache%0d snp-fwd-out: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, `DRAM_TO_BYTE_ADDR(snp_fwdout_addr[0]), snp_fwdout_invalidate[0], snp_fwdout_tag[0]);
         end
         if (fwdin_valid && fwdin_ready) begin
-            $display("%t: cache%0d snp-fwd-in[%0d]: tag=%0h", $time, CACHE_ID, fwdin_sel, fwdin_tag);
+            $display("%t: cache%0d snp-fwd-in: tag=%0h", $time, CACHE_ID, fwdin_tag);
         end
         if (snp_rsp_valid && snp_rsp_ready) begin
             $display("%t: cache%0d snp-fwd-rsp: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_invalidate, snp_rsp_tag);

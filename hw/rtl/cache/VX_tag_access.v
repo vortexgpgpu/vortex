@@ -27,46 +27,44 @@ module VX_tag_access #(
 
 `ifdef DBG_CORE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
-    input wire[31:0]                    debug_pc_st1,
-    input wire[`NR_BITS-1:0]            debug_rd_st1,
-    input wire[`NW_BITS-1:0]            debug_wid_st1,
-    input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st1,
+    input wire[31:0]                    debug_pc,
+    input wire[`NR_BITS-1:0]            debug_rd,
+    input wire[`NW_BITS-1:0]            debug_wid,
+    input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid,
 `IGNORE_WARNINGS_END
 `endif
 
     input wire                          stall,
 
-    input wire                          is_snp_st1,
-    input wire                          snp_invalidate_st1,
+    // Inputs
+    input wire                          valid_in,
+    input wire[`LINE_ADDR_WIDTH-1:0]    addr_in,   
+    input wire                          is_write_in,
+    input wire                          is_fill_in,
+    input wire                          is_snp_in,
+    input wire                          snp_invalidate_in,
+    input wire                          force_miss_in,
 
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr_st1,
-    
-    input wire                          valid_req_st1,
-    input wire                          writefill_st1,
-
-    input wire                          mem_rw_st1,
-
-    input wire                          force_miss_st1,
-
-    output wire[`TAG_SELECT_BITS-1:0]   readtag_st1,
-    output wire                         miss_st1,
-    output wire                         dirty_st1,
-    output wire                         writeen_st1
+    // Outputs
+    output wire[`TAG_SELECT_BITS-1:0]   readtag_out,
+    output wire                         miss_out,
+    output wire                         dirty_out,
+    output wire                         writeen_out
 );
 
-    wire                        qual_read_valid_st1;
-    wire                        qual_read_dirty_st1;
-    wire[`TAG_SELECT_BITS-1:0]  qual_read_tag_st1;
+    wire                        qual_read_valid;
+    wire                        qual_read_dirty;
+    wire[`TAG_SELECT_BITS-1:0]  qual_read_tag;
 
-    wire                        use_read_valid_st1;
-    wire                        use_read_dirty_st1;
-    wire[`TAG_SELECT_BITS-1:0]  use_read_tag_st1;
+    wire                        use_read_valid;
+    wire                        use_read_dirty;
+    wire[`TAG_SELECT_BITS-1:0]  use_read_tag;
 
     wire                        use_write_enable;
     wire                        use_invalidate;  
     
-    wire[`TAG_SELECT_BITS-1:0] addrtag_st1 = addr_st1[`TAG_LINE_ADDR_RNG];
-    wire[`LINE_SELECT_BITS-1:0] addrline_st1 = addr_st1[`LINE_SELECT_BITS-1:0];
+    wire[`TAG_SELECT_BITS-1:0] addrtag = addr_in[`TAG_LINE_ADDR_RNG];
+    wire[`LINE_SELECT_BITS-1:0] addrline = addr_in[`LINE_SELECT_BITS-1:0];
 
     VX_tag_store #(
         .CACHE_SIZE (CACHE_SIZE),
@@ -77,69 +75,69 @@ module VX_tag_access #(
         .clk         (clk),
         .reset       (reset),
 
-        .read_addr   (addrline_st1),
-        .read_valid  (qual_read_valid_st1),        
-        .read_dirty  (qual_read_dirty_st1),
-        .read_tag    (qual_read_tag_st1),
+        .read_addr   (addrline),
+        .read_valid  (qual_read_valid),        
+        .read_dirty  (qual_read_dirty),
+        .read_tag    (qual_read_tag),
 
         .invalidate  (use_invalidate),
         .write_enable(use_write_enable),
-        .write_fill  (writefill_st1),
-        .write_addr  (addrline_st1),
-        .write_tag   (addrtag_st1)
+        .write_fill  (is_fill_in),
+        .write_addr  (addrline),
+        .write_tag   (addrtag)
     );
 
-    assign use_read_valid_st1 = qual_read_valid_st1 || !DRAM_ENABLE; // If shared memory, always valid
-    assign use_read_dirty_st1 = qual_read_dirty_st1 && DRAM_ENABLE && WRITE_ENABLE; // Dirty only applies in Dcache
-    assign use_read_tag_st1   = DRAM_ENABLE ? qual_read_tag_st1 : addrtag_st1; // Tag is always the same in SM
+    assign use_read_valid = qual_read_valid || !DRAM_ENABLE; // If shared memory, always valid
+    assign use_read_dirty = qual_read_dirty && DRAM_ENABLE && WRITE_ENABLE; // Dirty only applies in Dcache
+    assign use_read_tag   = DRAM_ENABLE ? qual_read_tag : addrtag; // Tag is always the same in SM
 
     // use "case equality" to handle uninitialized tag when block entry is not valid
-    wire tags_match = use_read_valid_st1 && (addrtag_st1 === use_read_tag_st1);
+    wire tags_match = use_read_valid && (addrtag === use_read_tag);
 
-    wire normal_write = valid_req_st1
-                     && mem_rw_st1  
-                     && use_read_valid_st1
-                     && !writefill_st1  
-                     && !is_snp_st1 
-                     && !miss_st1
-                     && !force_miss_st1;
+    wire normal_write = valid_in
+                     && is_write_in  
+                     && use_read_valid
+                     && !is_fill_in  
+                     && !is_snp_in 
+                     && !miss_out
+                     && !force_miss_in;
 
-    wire fill_write = valid_req_st1 && writefill_st1 
+    wire fill_write = valid_in && is_fill_in 
                    && !tags_match;  // discard redundant fills because the block could be dirty
 
     assign use_write_enable = (normal_write || fill_write)
                            && !stall;
 
-    assign use_invalidate = valid_req_st1 && is_snp_st1 
+    assign use_invalidate = valid_in && is_snp_in 
                          && tags_match 
-                         && (use_read_dirty_st1 || snp_invalidate_st1)  // block is dirty or should invalidate
-                         && !force_miss_st1
+                         && (use_read_dirty || snp_invalidate_in)  // block is dirty or should invalidate
+                         && !force_miss_in
                          && !stall;
     
-    wire core_req_miss = valid_req_st1 && !is_snp_st1 && !writefill_st1
+    wire core_req_miss = valid_in && !is_snp_in && !is_fill_in
                       && !tags_match;
 
-    assign miss_st1    = core_req_miss;
-    assign dirty_st1   = valid_req_st1 && use_read_valid_st1 && use_read_dirty_st1;
-    assign readtag_st1 = use_read_tag_st1;
-    assign writeen_st1 = use_write_enable;    
+    assign miss_out    = core_req_miss;
+    assign dirty_out   = valid_in && use_read_valid && use_read_dirty;
+    assign readtag_out = use_read_tag;
+    assign writeen_out = use_write_enable;    
 
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin            
-        if (valid_req_st1 && !stall) begin
-            if (writefill_st1 && use_read_valid_st1 && tags_match) begin
-                $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
+        if (valid_in && !stall) begin
+            if (is_fill_in && use_read_valid && tags_match) begin
+                $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID));
             end    
-            if (miss_st1) begin
-                $display("%t: cache%0d:%0d tag-miss: addr=%0h, wid=%0d, PC=%0h, valid=%b, blk_tag_id=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, use_read_dirty_st1, qual_read_tag_st1, addrline_st1, addrtag_st1);
+            if (miss_out) begin
+                $display("%t: cache%0d:%0d tag-miss: addr=%0h, wid=%0d, PC=%0h, valid=%b, blk_tag_id=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, use_read_dirty, qual_read_tag, addrline, addrtag);
             end else if ((| use_write_enable)) begin
-                if (writefill_st1) begin
-                    $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), addrline_st1, addrtag_st1);
+                if (is_fill_in) begin
+                    $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), addrline, addrtag);
                 end else begin
-                    $display("%t: cache%0d:%0d tag-write: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, addrline_st1, addrtag_st1);
+                    $display("%t: cache%0d:%0d tag-write: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, addrline, addrtag);
                 end
             end else begin
-                $display("%t: cache%0d:%0d tag-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), debug_wid_st1, debug_pc_st1, addrline_st1, qual_read_tag_st1);
+                $display("%t: cache%0d:%0d tag-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, addrline, qual_read_tag);
             end            
         end
     end    
