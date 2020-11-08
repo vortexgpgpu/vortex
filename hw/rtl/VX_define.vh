@@ -274,6 +274,9 @@
 // Cache ID
 `define ICACHE_ID           32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1
 
+// Number of banks
+`define INUM_BANKS          1
+
 // Core request address bits
 `define ICORE_ADDR_WIDTH    (32-`CLOG2(`IWORD_SIZE))
 

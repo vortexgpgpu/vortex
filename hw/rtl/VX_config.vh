@@ -8,7 +8,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 4
+`define NUM_CORES 2
 `endif
 
 `ifndef NUM_WARPS
@@ -248,11 +248,6 @@
 // Size of line inside a bank in bytes
 `ifndef IBANK_LINE_SIZE
 `define IBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
-`endif
-
-// Number of banks {1, 2, 4, 8,...}
-`ifndef INUM_BANKS
-`define INUM_BANKS 1
 `endif
 
 // Size of a word in bytes

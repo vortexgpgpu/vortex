@@ -8,10 +8,10 @@ module VX_gpu_unit #(
     input wire          clk,
     input wire          reset,
 
-    // Input
+    // Inputs
     VX_gpu_req_if       gpu_req_if,
 
-    // Output
+    // Outputs
     VX_warp_ctl_if      warp_ctl_if,
     VX_exu_to_cmt_if    gpu_commit_if
 );

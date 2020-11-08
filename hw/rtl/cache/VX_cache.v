@@ -46,7 +46,7 @@ module VX_cache #(
     parameter CORE_TAG_WIDTH                = 4,
 
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 4,
+    parameter CORE_TAG_ID_BITS              = 0,
 
     // dram request tag size
     parameter DRAM_TAG_WIDTH                = 28,
@@ -407,15 +407,15 @@ module VX_cache #(
         .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS)
     ) cache_core_rsp_merge (
         .clk                     (clk),
-        .reset                   (reset),       
-        .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),                
+        .reset                   (reset),                    
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
-        .per_bank_core_rsp_data  (per_bank_core_rsp_data),
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
+        .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),   
+        .per_bank_core_rsp_data  (per_bank_core_rsp_data),
         .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
-        .core_rsp_valid          (core_rsp_valid),
-        .core_rsp_data           (core_rsp_data),        
+        .core_rsp_valid          (core_rsp_valid),      
         .core_rsp_tag            (core_rsp_tag),
+        .core_rsp_data           (core_rsp_data),  
         .core_rsp_ready          (core_rsp_ready)
     ); 
 
