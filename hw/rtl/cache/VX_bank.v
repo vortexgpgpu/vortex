@@ -833,25 +833,25 @@ module VX_bank #(
             $display("%t: cache%0d:%0d pipeline-stall: msrq=%b, cwbq=%b, dwbq=%b, snpq=%b", $time, CACHE_ID, BANK_ID, msrq_push_stall, cwbq_push_stall, dwbq_push_stall, snpq_push_stall);
         end
         if (dfpq_pop) begin
-            $display("%t: cache%0d:%0d dram-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), dfpq_filldata_st0);
+            $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), dfpq_filldata_st0);
         end
         if (reqq_pop) begin
-            $display("%t: cache%0d:%0d core-req: addr=%0h, tag=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), reqq_tag_st0, debug_wid_st0, debug_pc_st0);
+            $display("%t: cache%0d:%0d core-req: addr=%0h, tag=%0h, tid=%0d, rw=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), reqq_tag_st0, reqq_tid_st0, reqq_rw_st0, debug_wid_st0, debug_pc_st0);
         end
         if (snrq_pop) begin
-            $display("%t: cache%0d:%0d snp-req: addr=%0h, tag=%0d, invalidate=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), snrq_tag_st0, snrq_invalidate_st0);
+            $display("%t: cache%0d:%0d snp-req: addr=%0h, tag=%0h, invalidate=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), snrq_tag_st0, snrq_invalidate_st0);
         end
         if (cwbq_push) begin
-            $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), cwbq_tag_st3, cwbq_data_st3, debug_wid_st3, debug_pc_st3);
+            $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, tid=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), cwbq_tag_st3, cwbq_tid_st3, cwbq_data_st3, debug_wid_st3, debug_pc_st3);
         end
         if (dwbq_push) begin
             if (dwbq_is_dwb_in)
-                $display("%t: cache%0d:%0d dram-wb: addr=%0h, data=%0h, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dwbq_req_addr, BANK_ID), readdata_st3, dirtyb_st3, debug_wid_st3, debug_pc_st3);
+                $display("%t: cache%0d:%0d writeback: addr=%0h, data=%0h, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dwbq_req_addr, BANK_ID), readdata_st3, dirtyb_st3, debug_wid_st3, debug_pc_st3);
             else
-                $display("%t: cache%0d:%0d dram-fill: addr=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dwbq_req_addr, BANK_ID), debug_wid_st3, debug_pc_st3);
+                $display("%t: cache%0d:%0d fill-req: addr=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dwbq_req_addr, BANK_ID), debug_wid_st3, debug_pc_st3);
         end
         if (snpq_push) begin
-            $display("%t: cache%0d:%0d snp-rsp: addr=%0h, tag=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), snpq_tag_st3);
+            $display("%t: cache%0d:%0d snp-rsp: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), snpq_tag_st3);
         end
     end    
 `endif
