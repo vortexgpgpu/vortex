@@ -109,9 +109,6 @@ module VX_snp_forwarder #(
             .grant_onehot (sel_1hot)
         );
 
-        assign fwdin_valid = snp_fwdin_valid[sel_idx];
-        assign fwdin_tag   = snp_fwdin_tag[sel_idx];
-
         wire stall = fwdin_valid && ~fwdin_ready;
 
         VX_generic_register #(

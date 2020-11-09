@@ -222,7 +222,7 @@ void Simulator::eval_snp_bus() {
         --snp_req_size_;
         ++pending_snp_reqs_;
       #ifdef DBG_PRINT_CACHE_SNP
-        std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << std::dec << " tag=" << vortex_->snp_req_tag << " remain=" << snp_req_size_ << std::endl;
+        std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << snp_req_size_ << std::endl;
       #endif
       } else {
         vortex_->snp_req_valid = 0;        
@@ -296,7 +296,7 @@ void Simulator::flush_caches(uint32_t mem_addr, uint32_t size) {
   snp_req_active_ = true;
     
   #ifdef DBG_PRINT_CACHE_SNP
-    std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << std::dec << " tag=" << vortex_->snp_req_tag << " remain=" << snp_req_size_ << std::endl;
+    std::cout << timestamp << ": [sim] snp req: addr=" << std::hex << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << snp_req_size_ << std::endl;
   #endif  
 }
 

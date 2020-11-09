@@ -938,7 +938,7 @@ always @(posedge clk) begin
       vx_snp_req_tag  <= (`VX_SNP_TAG_WIDTH)'(snp_req_ctr_next);
       snp_req_ctr     <= snp_req_ctr_next;
     `ifdef DBG_PRINT_OPAE
-      $display("%t: AFU Snp Req: addr=%0h, tag=%0d, rem=%0d", $time, `DRAM_TO_BYTE_ADDR(vx_snp_req_addr), (`VX_SNP_TAG_WIDTH)'(vx_snp_req_tag), (snp_req_size - snp_req_ctr_next));
+      $display("%t: AFU Snp Req: addr=%0h, tag=%0h, rem=%0d", $time, `DRAM_TO_BYTE_ADDR(vx_snp_req_addr), (`VX_SNP_TAG_WIDTH)'(vx_snp_req_tag), (snp_req_size - snp_req_ctr_next));
     `endif
     end
 
@@ -947,7 +947,7 @@ always @(posedge clk) begin
        assert(snp_rsp_ctr != 0);
        snp_rsp_ctr <= snp_rsp_ctr_next;
     `ifdef DBG_PRINT_OPAE
-      $display("%t: AFU Snp Rsp: tag=%0d, rem=%0d", $time, vx_snp_rsp_tag, snp_rsp_ctr_next);
+      $display("%t: AFU Snp Rsp: tag=%0h, rem=%0d", $time, vx_snp_rsp_tag, snp_rsp_ctr_next);
     `endif
     end
   end

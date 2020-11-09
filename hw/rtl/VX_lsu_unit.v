@@ -91,6 +91,10 @@ module VX_lsu_unit #(
     wire [1:0] rsp_sext;
     reg [`NUM_THREADS-1:0][31:0] rsp_data;
 
+`DEBUG_BLOCK(
+    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH-1:0] pending_tags;
+)
+
     reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] mem_rsp_mask;         
 
     wire [`DCORE_TAG_ID_BITS-1:0] req_tag, rsp_tag;
@@ -113,7 +117,7 @@ module VX_lsu_unit #(
     ) lsu_cam (
         .clk          (clk),
         .reset        (reset),
-        .write_addr   (req_tag),        
+        .write_addr   (req_tag),  
         .acquire_slot (lsuq_push),       
         .read_addr    (rsp_tag),
         .write_data   ({req_wid, req_pc, req_rd, req_wb, req_offset, req_sext}),                    
@@ -126,6 +130,7 @@ module VX_lsu_unit #(
     always @(posedge clk) begin
         if (lsuq_push)  begin
             mem_rsp_mask[req_tag] <= req_tmask;
+            pending_tags[req_tag] <= dcache_req_if.tag;
         end    
         if (lsuq_pop_part) begin
             mem_rsp_mask[rsp_tag] <= mem_rsp_mask_n;
@@ -214,6 +219,13 @@ module VX_lsu_unit #(
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 
                      $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd, dcache_rsp_if.data);
+        end
+        if (lsuq_full) begin
+            $write("%t: D$%0d queue-full:", $time, CORE_ID);
+            for (integer j = 0; j < `LSUQ_SIZE; j++) begin
+                $write(" tag%0d=%0h", j, pending_tags[j]);
+            end            
+            $write("\n");
         end
     end
 `endif
