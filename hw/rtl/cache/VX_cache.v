@@ -4,7 +4,7 @@ module VX_cache #(
     parameter CACHE_ID                      = 0,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 2048, 
+    parameter CACHE_SIZE                    = 4096, 
     // Size of line inside a bank in bytes
     parameter BANK_LINE_SIZE                = 16, 
     // Number of banks
@@ -15,7 +15,7 @@ module VX_cache #(
     parameter NUM_REQUESTS                  = 4, 
 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 4, 
+    parameter CREQ_SIZE                     = 8, 
     // Miss Reserv Queue Knob
     parameter MRVQ_SIZE                     = 8, 
     // DRAM Response Queue Size
@@ -24,7 +24,7 @@ module VX_cache #(
     parameter SNRQ_SIZE                     = 8, 
 
     // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 4, 
+    parameter CWBQ_SIZE                     = 8, 
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 8, 
     // Snoop Response Size
@@ -40,7 +40,7 @@ module VX_cache #(
     parameter FLUSH_ENABLE                  = 1,
 
     // Enable snoop forwarding
-    parameter SNOOP_FORWARDING              = 0,
+    parameter SNOOP_FORWARDING              = 1,
 
     // core request tag size
     parameter CORE_TAG_WIDTH                = 4,
@@ -52,13 +52,13 @@ module VX_cache #(
     parameter DRAM_TAG_WIDTH                = 28,
 
     // Number of snoop forwarding requests
-    parameter NUM_SNP_REQUESTS              = 1, 
+    parameter NUM_SNP_REQUESTS              = (SNOOP_FORWARDING ? 4 : 1), 
 
     // Snooping request tag width
-    parameter SNP_REQ_TAG_WIDTH             = 1,
+    parameter SNP_REQ_TAG_WIDTH             = (SNOOP_FORWARDING ? 4 : 1),
 
     // Snooping forward tag width
-    parameter SNP_FWD_TAG_WIDTH             = 1
+    parameter SNP_FWD_TAG_WIDTH             = (SNOOP_FORWARDING ? 4 : 1)
  ) (
     `SCOPE_IO_VX_cache
     
@@ -121,19 +121,6 @@ module VX_cache #(
 `IGNORE_WARNINGS_END
     output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdin_ready
 );
-
-`ifdef DBG_CORE_REQ_INFO
-    /* verilator lint_off UNUSED */
-    wire[31:0]           debug_core_req_use_pc;
-    wire[`NR_BITS-1:0]   debug_core_req_rd;
-    wire[`NW_BITS-1:0]   debug_core_req_wid;
-    wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_core_req_idx;
-    /* verilator lint_on UNUSED */
-
-    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
-        assign {debug_core_req_use_pc, debug_core_req_rd, debug_core_req_wid, debug_core_req_idx} = core_req_tag[0];
-    end
-`endif
 
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valid;
 

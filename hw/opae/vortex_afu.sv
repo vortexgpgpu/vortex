@@ -1058,13 +1058,6 @@ Vortex #() vortex (
   `UNUSED_PIN       (ebreak)
 );
 
-always @(posedge clk) begin
-  if (!reset) begin
-    // DRAM reads should only happen during vortex execution    
-    assert(vx_busy || !vx_dram_rd_req_enable);
-  end
-end
-
 // SCOPE //////////////////////////////////////////////////////////////////////
 
 `ifdef SCOPE

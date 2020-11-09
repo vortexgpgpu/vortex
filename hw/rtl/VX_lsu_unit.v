@@ -67,6 +67,7 @@ module VX_lsu_unit #(
 
 `IGNORE_WARNINGS_BEGIN
     wire [`NUM_THREADS-1:0][31:0] req_address;
+    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH-1:0] pending_tags;
 `IGNORE_WARNINGS_END
 
     wire valid_in;
@@ -74,7 +75,7 @@ module VX_lsu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32)))
-    ) lsu_req_reg (
+    ) req_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_in),
@@ -90,10 +91,6 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][1:0] rsp_offset;
     wire [1:0] rsp_sext;
     reg [`NUM_THREADS-1:0][31:0] rsp_data;
-
-`DEBUG_BLOCK(
-    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH-1:0] pending_tags;
-)
 
     reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] mem_rsp_mask;         
 
@@ -114,7 +111,7 @@ module VX_lsu_unit #(
     VX_cam_buffer #(
         .DATAW (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
         .SIZE  (`LSUQ_SIZE)
-    ) lsu_cam (
+    ) cam_buffer (
         .clk          (clk),
         .reset        (reset),
         .write_addr   (req_tag),  
@@ -184,7 +181,7 @@ module VX_lsu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
-    ) lsu_rsp_reg (
+    ) rsp_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),
