@@ -47,28 +47,30 @@ public:
   void step();
   void wait(uint32_t cycles); 
   void attach_ram(RAM* ram);
-
   void run();  //run until all reqs are empty
-  void clear_req(); 
+ 
+  //req/rsp
   void send_req(core_req_t *req);
+  void clear_req(); 
+  void stall_dram();
+  void send_snoop_req();
+  void send_snp_fwd_in(); 
+
+  //assert funcs
   bool assert_equal(unsigned int* data, unsigned int tag);
-  //void time_analyisis 
 
-  //display funcs
-
+  //debug funcs
   void get_dram_req();
-  void get_core_rsp(unsigned int (&rsp)[4]);
-  void get_core_req();
+  void get_core_req(unsigned int (&rsp)[4]);
+  void get_core_rsp();
   bool get_core_req_ready();
   bool get_core_rsp_ready();
   void get_dram_rsp();
-  void display_hit_miss(); 
-
+  void display_miss();
 
 private:  
 
   void eval();  
-
   void eval_reqs(); 
   void eval_rsps();
   void eval_dram_bus();

@@ -38,9 +38,9 @@ int REQ_RSP(CacheSim *sim){ //verified
 
   sim->run();
 
-  bool check = sim->assert_equal(data, write->tag);
+  int check = sim->assert_equal(data, write->tag);
   
-  return check;
+  if (check == 4) return 1; 
 }
 
 int HIT_1(CacheSim *sim){
@@ -82,8 +82,8 @@ int HIT_1(CacheSim *sim){
 
 int MISS_1(CacheSim *sim){
   unsigned int addr1[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
-  unsigned int addr2[4] = {0x12244444, 0xabb0bbbb, 0xcddd0ddd, 0xe0444444};
-  unsigned int addr3[4] = {0x12888888, 0xa0bbbbbb, 0xcddddd0d, 0xe4444440};
+  unsigned int addr2[4] = {0x12229222, 0xabbbb4bb, 0xcddd47dd, 0xe4423544};
+  unsigned int addr3[4] = {0x12223332, 0xabb454bb, 0xcdddeefd, 0xe4447744};
   unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
   unsigned int rsp[4] = {0,0,0,0};
   char responded = 0;
@@ -105,7 +105,6 @@ int MISS_1(CacheSim *sim){
   read1->data = data; 
   read1->tag = 0xff;
 
-  //read req
   core_req_t* read2 = new core_req_t;
   read2->valid = 0xf;
   read2->rw = 0;
@@ -113,8 +112,7 @@ int MISS_1(CacheSim *sim){
   read2->addr = addr2;
   read2->data = data; 
   read2->tag = 0xff;
-
-  //read req
+  
   core_req_t* read3 = new core_req_t;
   read3->valid = 0xf;
   read3->rw = 0;
@@ -127,11 +125,10 @@ int MISS_1(CacheSim *sim){
   sim->reset();
 
   //queue reqs
-  //sim->send_req(write);
+  sim->send_req(write);
   sim->send_req(read1);
   sim->send_req(read2);
   sim->send_req(read3);
-
 
   sim->run();
 
@@ -178,6 +175,7 @@ int FLUSH(CacheSim *sim){
 
 
 int BACK_PRESSURE(CacheSim *sim){
+  //happens whenever the core is stalled or DRAM is stalled
   unsigned int addr[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
   unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
   unsigned int rsp[4] = {0,0,0,0};

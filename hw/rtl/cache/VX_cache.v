@@ -119,7 +119,9 @@ module VX_cache #(
     input wire [NUM_SNP_REQUESTS-1:0]       snp_fwdin_valid,    
     input wire [NUM_SNP_REQUESTS-1:0][SNP_FWD_TAG_WIDTH-1:0] snp_fwdin_tag,
 `IGNORE_WARNINGS_END
-    output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdin_ready
+    output wire [NUM_SNP_REQUESTS-1:0]      snp_fwdin_ready,
+
+    output wire [NUM_BANKS-1:0] miss_vec
 );
 
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valid;
@@ -146,6 +148,11 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_valid;
     wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag;
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
+
+    wire [NUM_BANKS-1:0]                        per_bank_miss; 
+    assign miss_vec = per_bank_miss; 
+
+   
 
     wire                         snp_req_valid_qual;    
     wire [`DRAM_ADDR_WIDTH-1:0]  snp_req_addr_qual;
@@ -260,6 +267,9 @@ module VX_cache #(
         wire [SNP_REQ_TAG_WIDTH-1:0]    curr_bank_snp_rsp_tag;
         wire                            curr_bank_snp_rsp_ready;                    
 
+        wire                            curr_bank_core_req_ready;
+        wire                            curr_bank_miss; 
+
         // Core Req
         assign curr_bank_core_req_valid   = (per_bank_valid[i] & {NUM_REQUESTS{core_req_ready}});
         assign curr_bank_core_req_addr    = core_req_addr;
@@ -315,6 +325,9 @@ module VX_cache #(
         assign per_bank_snp_rsp_valid[i] = curr_bank_snp_rsp_valid;
         assign per_bank_snp_rsp_tag[i]   = curr_bank_snp_rsp_tag;
         assign curr_bank_snp_rsp_ready   = per_bank_snp_rsp_ready[i];
+
+        //Misses
+        assign per_bank_miss[i] = curr_bank_miss; 
         
         VX_bank #(                
             .BANK_ID            (i),
@@ -380,9 +393,12 @@ module VX_cache #(
             .snp_req_ready      (curr_bank_snp_req_ready),
 
             // Snoop response
-            .snp_rsp_valid      (curr_bank_snp_rsp_valid),
-            .snp_rsp_tag        (curr_bank_snp_rsp_tag),
-            .snp_rsp_ready      (curr_bank_snp_rsp_ready)
+            .snp_rsp_valid           (curr_bank_snp_rsp_valid),
+            .snp_rsp_tag             (curr_bank_snp_rsp_tag),
+            .snp_rsp_ready           (curr_bank_snp_rsp_ready),
+
+            //Misses
+            .misses                  (curr_bank_miss)
         );
     end   
 
