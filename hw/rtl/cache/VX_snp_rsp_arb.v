@@ -21,7 +21,7 @@ module VX_snp_rsp_arb #(
         wire [`BANK_BITS-1:0] sel_idx;
         wire [NUM_BANKS-1:0] sel_1hot;
 
-        VX_fixed_arbiter #(
+        VX_rr_arbiter #(
             .N(NUM_BANKS)
         ) sel_arb (
             .clk         (clk),

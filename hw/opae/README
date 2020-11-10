@@ -113,9 +113,3 @@ if slack = +1.664 -> minimal period = 5-1.664 = 3.336 -> fmax = 1/3.336 = 300 Mh
 
 # build rtlsim from driver tests
 make -C ../../rtlsim clean && reset && make -C ../../rtlsim
-
-# split tar into multiple parts
-split -b 50M home.tar.bz2 "home.tar.bz2.part"
-
-
-cat run.log | grep -c "cache[0-9]*:[0-9]* dram_req"

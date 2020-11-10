@@ -788,7 +788,7 @@ module VX_bank #(
         VX_generic_queue #(
             .DATAW(SNP_REQ_TAG_WIDTH), 
             .SIZE(SNPQ_SIZE)
-        ) snp_queue (
+        ) snp_rsp_queue (
             .clk     (clk),
             .reset   (reset),
             .push    (snpq_push),

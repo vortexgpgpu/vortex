@@ -57,7 +57,7 @@ module VX_snp_forwarder #(
     assign sfq_read_addr = fwdin_tag;
     
     assign sfq_acquire = snp_req_valid && !sfq_full && fwdout_ready;       
-    assign sfq_release = snp_rsp_valid;
+    assign sfq_release = snp_rsp_valid && snp_rsp_ready;
 
     VX_cam_buffer #(
         .DATAW (`DRAM_ADDR_WIDTH + 1 + SNP_REQ_TAG_WIDTH),
@@ -98,7 +98,7 @@ module VX_snp_forwarder #(
         wire [`REQS_BITS-1:0] sel_idx;
         wire [NUM_REQUESTS-1:0] sel_1hot;
 
-        VX_fixed_arbiter #(
+        VX_rr_arbiter #(
             .N(NUM_REQUESTS)
         ) sel_arb (
             .clk          (clk),
