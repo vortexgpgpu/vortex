@@ -94,7 +94,10 @@ module VX_bank #(
     // Snoop Response
     output wire                         snp_rsp_valid,
     output wire [SNP_REQ_TAG_WIDTH-1:0] snp_rsp_tag,
-    input  wire                         snp_rsp_ready
+    input  wire                         snp_rsp_ready,
+
+    // Misses
+    output wire misses
 );
 
 `ifdef DBG_CORE_REQ_INFO
@@ -441,6 +444,8 @@ module VX_bank #(
         .dirty_out      (dirty_st1),
         .writeen_out    (writeen_st1)
     );
+
+    assign misses = miss_st1;
     
     wire                            valid_st2;    
     wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st2;
