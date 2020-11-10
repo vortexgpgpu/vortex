@@ -2,7 +2,9 @@
 `include "fpnew_pkg.sv"
 `include "defs_div_sqrt_mvp.sv"
 
-module VX_fpnew #( 
+`TRACING_OFF
+module VX_fpnew 
+#(      
     parameter TAGW     = 1,
     parameter FMULADD  = 1,
     parameter FDIVSQRT = 1,
@@ -130,8 +132,6 @@ module VX_fpnew #(
             default:;
         endcase
     end  
-
-`DISABLE_TRACING
     
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         if (0 == i) begin
@@ -191,8 +191,6 @@ module VX_fpnew #(
         end
     end
 
-`ENABLE_TRACING
-
     assign fpu_valid_in = valid_in;
     assign ready_in = fpu_ready_in;
 
@@ -207,4 +205,5 @@ module VX_fpnew #(
     assign valid_out = fpu_valid_out;    
     assign fpu_ready_out = ready_out;
 
-endmodule
+endmodule 
+`TRACING_ON

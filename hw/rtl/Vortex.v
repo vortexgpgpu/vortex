@@ -316,7 +316,7 @@ module Vortex (
         );
 
         assign busy   = (| per_cluster_busy);
-        assign ebreak = (& per_cluster_ebreak);
+        assign ebreak = (| per_cluster_ebreak);
 
         // L3 Cache ///////////////////////////////////////////////////////////
 

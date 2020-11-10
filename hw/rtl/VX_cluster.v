@@ -275,7 +275,7 @@ module VX_cluster #(
     );
     
     assign busy = (| per_core_busy);
-    assign ebreak = (& per_core_ebreak);
+    assign ebreak = (| per_core_ebreak);
 
     if (`L2_ENABLE) begin
 

@@ -8,7 +8,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 2
+`define NUM_CORES 4
 `endif
 
 `ifndef NUM_WARPS
@@ -223,14 +223,14 @@
 `define DDREQ_SIZE 8
 `endif
 
-// Snoop Response Queue Size
-`ifndef DSNPQ_SIZE
-`define DSNPQ_SIZE 8
-`endif
-
 // DRAM Response Queue Size
 `ifndef DDRFQ_SIZE
 `define DDRFQ_SIZE 8
+`endif
+
+// Snoop Response Queue Size
+`ifndef DSNPQ_SIZE
+`define DSNPQ_SIZE 8
 `endif
 
 // Snoop Req Queue Size
@@ -359,7 +359,7 @@
 `define L2DRFQ_SIZE 8
 `endif
 
-// Snoop Req Queue Size
+// Snoop Request Queue Size
 `ifndef L2SNRQ_SIZE
 `define L2SNRQ_SIZE 8
 `endif
@@ -416,7 +416,7 @@
 `define L3DRFQ_SIZE 8
 `endif
 
-// Snoop Req Queue Size
+// Snoop Request Queue Size
 `ifndef L3SNRQ_SIZE
 `define L3SNRQ_SIZE 8
 `endif

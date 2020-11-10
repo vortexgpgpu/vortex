@@ -59,7 +59,7 @@ module VX_mem_arb #(
             .grant_onehot (req_1hot)
         );
 
-        wire stall = mem_req_valid_out && ~mem_req_ready_out;
+        wire stall = ~mem_req_ready_out && mem_req_valid_out;
 
         VX_generic_register #(
             .N(1 + TAG_OUT_WIDTH + ADDR_WIDTH + 1 + WORD_SIZE + WORD_WIDTH),
@@ -86,6 +86,7 @@ module VX_mem_arb #(
             assign mem_rsp_tag_in[i]   = mem_rsp_tag_out[REQS_BITS +: TAG_IN_WIDTH];        
             assign mem_rsp_data_in[i]  = mem_rsp_data_out;      
         end
+        
         assign mem_rsp_ready_out = mem_rsp_ready_in[rsp_sel];        
 
     end else begin

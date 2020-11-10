@@ -221,7 +221,7 @@ module VX_cache #(
     );
 
     assign dram_req_tag   = dram_req_addr;
-    assign dram_rsp_ready = (| per_bank_dram_rsp_ready);
+    assign dram_rsp_ready = (& per_bank_dram_rsp_ready);
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_valid;            

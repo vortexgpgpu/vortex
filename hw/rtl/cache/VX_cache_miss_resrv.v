@@ -178,7 +178,7 @@ module VX_cache_miss_resrv #(
 
 `ifdef DBG_PRINT_CACHE_MSRQ        
     always @(posedge clk) begin        
-        if (schedule_st0 || enqueue_st3 || dequeue_st3) begin
+        if (update_ready_st0 || schedule_st0 || enqueue_st3 || dequeue_st3) begin
             if (schedule_st0)
                 $display("%t: cache%0d:%0d msrq-schedule: addr%0d=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(dequeue_addr_st0, BANK_ID), debug_wid_st0, debug_pc_st0);      
             if (enqueue_st3) begin

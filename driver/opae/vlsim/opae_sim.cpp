@@ -263,7 +263,16 @@ void opae_sim::avs_bus() {
   if (dram_rd_it != dram_reads_.end()) {
     vortex_afu_->avs_readdatavalid = 1;
     memcpy(vortex_afu_->avs_readdata, dram_rd_it->block.data(), CACHE_BLOCK_SIZE);
+    uint32_t tag = dram_rd_it->tag;
     dram_reads_.erase(dram_rd_it);
+    /*printf("%0ld: VLSIM: DRAM rsp: addr=%x, pending={", timestamp, tag);
+    for (auto& req : dram_reads_) {
+      if (req.cycles_left != 0) 
+        printf(" !%0x",  req.tag);
+      else
+        printf(" %0x",  req.tag);
+    }
+    printf("}\n");*/
   }
 
   // handle DRAM stalls
@@ -293,10 +302,19 @@ void opae_sim::avs_bus() {
     if (vortex_afu_->avs_read) {
       assert(0 == vortex_afu_->mem_bank_select);
       dram_rd_req_t dram_req;
-      dram_req.cycles_left = DRAM_LATENCY;     
+      dram_req.cycles_left = DRAM_LATENCY;           
       unsigned base_addr = (vortex_afu_->avs_address * CACHE_BLOCK_SIZE);
       ram_.read(base_addr, CACHE_BLOCK_SIZE, dram_req.block.data());
+      dram_req.tag = base_addr;
       dram_reads_.emplace_back(dram_req);
+      /*printf("%0ld: VLSIM: DRAM req: addr=%x, pending={", timestamp, base_addr);
+      for (auto& req : dram_reads_) {
+        if (req.cycles_left != 0) 
+          printf(" !%0x",  req.tag);
+        else
+          printf(" %0x",  req.tag);
+      }
+      printf("}\n");*/
     }   
   }
 

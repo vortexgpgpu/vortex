@@ -60,7 +60,7 @@ module VX_csr_io_arb #(
             .grant_onehot (rsp_1hot)
         );   
 
-        wire stall = csr_io_rsp_valid_out && ~csr_io_rsp_ready_out;
+        wire stall = ~csr_io_rsp_ready_out && csr_io_rsp_valid_out;
 
         VX_generic_register #(
             .N(1 + 32),

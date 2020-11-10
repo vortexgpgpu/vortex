@@ -276,7 +276,7 @@ module VX_core #(
     );
 
     // select io bus
-    wire is_io_addr = ({core_dcache_req_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
+    wire is_io_addr    = ({core_dcache_req_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
     wire io_req_select = (| core_dcache_req_if.valid) ? is_io_addr : 0;
     wire io_rsp_select = (| arb_io_rsp_if.valid);
 
