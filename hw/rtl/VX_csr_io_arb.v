@@ -49,7 +49,7 @@ module VX_csr_io_arb #(
         wire [REQS_BITS-1:0] rsp_idx;
         wire [NUM_REQUESTS-1:0] rsp_1hot;
 
-        VX_fixed_arbiter #(
+        VX_rr_arbiter #(
             .N(NUM_REQUESTS)
         ) rsp_arb (
             .clk          (clk),
