@@ -13,12 +13,12 @@ module VX_tag_store #(
     input  wire                             clk,
     input  wire                             reset,  
 
-    input  wire                             write_enable,
-    input  wire                             write_fill,
+    input  wire                             do_fill,
+    input  wire                             do_write,
+    input  wire                             invalidate, 
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
     input  wire[`TAG_SELECT_BITS-1:0]       write_tag,   
-    input  wire                             invalidate, 
-
+    
     input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
     output wire[`TAG_SELECT_BITS-1:0]       read_tag,
     output wire                             read_valid,
@@ -34,10 +34,11 @@ module VX_tag_store #(
                 dirty[i] <= 0;
             end
         end else begin
-            if (write_enable) begin                
-                assert(!invalidate);
-                dirty[write_addr] <= !write_fill;
+            if (do_fill) begin
                 valid[write_addr] <= 1;
+                dirty[write_addr] <= 0;
+            end else if (do_write) begin
+                dirty[write_addr] <= 1;
             end else if (invalidate) begin
                 valid[write_addr] <= 0;
             end
@@ -54,7 +55,7 @@ module VX_tag_store #(
         .clk(clk),	                
         .waddr(write_addr),                                
         .raddr(read_addr),                
-        .wren(write_enable),
+        .wren(do_fill),
         .byteen(1'b1),
         .rden(1'b1),
         .din(write_tag),
