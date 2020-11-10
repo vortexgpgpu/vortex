@@ -60,7 +60,8 @@ module VX_tag_access #(
     wire                        use_read_dirty;
     wire[`TAG_SELECT_BITS-1:0]  use_read_tag;
 
-    wire                        use_write_enable;
+    wire                        use_do_fill;
+    wire                        use_do_write;
     wire                        use_invalidate;  
     
     wire[`TAG_SELECT_BITS-1:0] addrtag = addr_in[`TAG_LINE_ADDR_RNG];
@@ -80,9 +81,9 @@ module VX_tag_access #(
         .read_dirty  (qual_read_dirty),
         .read_tag    (qual_read_tag),
 
+        .do_fill     (use_do_fill),
+        .do_write    (use_do_write),
         .invalidate  (use_invalidate),
-        .write_enable(use_write_enable),
-        .write_fill  (is_fill_in),
         .write_addr  (addrline),
         .write_tag   (addrtag)
     );
@@ -92,52 +93,48 @@ module VX_tag_access #(
     assign use_read_tag   = DRAM_ENABLE ? qual_read_tag : addrtag; // Tag is always the same in SM
 
     // use "case equality" to handle uninitialized tag when block entry is not valid
-    wire tags_match = use_read_valid && (addrtag === use_read_tag);
+    wire tags_match = use_read_valid && (addrtag === use_read_tag);    
+    
+    wire core_req_miss = valid_in && !is_snp_in && !is_fill_in
+                      && !tags_match;
+                      
+    assign use_do_write = valid_in 
+                    && is_write_in  
+                    && use_read_valid                    
+                    && !core_req_miss
+                    && !force_miss_in
+                    && !stall;
 
-    wire normal_write = valid_in
-                     && is_write_in  
-                     && use_read_valid
-                     && !is_fill_in  
-                     && !is_snp_in 
-                     && !miss_out
-                     && !force_miss_in;
+    assign use_do_fill = valid_in 
+                   && is_fill_in 
+                   && !stall;
 
-    wire fill_write = valid_in && is_fill_in 
-                   && !tags_match;  // discard redundant fills because the block could be dirty
-
-    assign use_write_enable = (normal_write || fill_write)
-                           && !stall;
-
-    assign use_invalidate = valid_in && is_snp_in 
+    assign use_invalidate = valid_in 
+                         && is_snp_in 
                          && tags_match 
                          && (use_read_dirty || snp_invalidate_in)  // block is dirty or should invalidate
                          && !force_miss_in
                          && !stall;
-    
-    wire core_req_miss = valid_in && !is_snp_in && !is_fill_in
-                      && !tags_match;
 
     assign miss_out    = core_req_miss;
-    assign dirty_out   = valid_in && use_read_valid && use_read_dirty;
+    assign dirty_out   = valid_in && use_read_valid && use_read_dirty
+                      && !(is_fill_in && tags_match);  // disable writeback for redundant fills
+
     assign readtag_out = use_read_tag;
-    assign writeen_out = use_write_enable;    
+    assign writeen_out = (use_do_write || use_do_fill);    
 
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin            
         if (valid_in && !stall) begin
-            if (is_fill_in && use_read_valid && tags_match) begin
+            if (use_do_fill && tags_match) begin
                 $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID));
-            end    
-            if (miss_out) begin
-                $display("%t: cache%0d:%0d tag-miss: addr=%0h, wid=%0d, PC=%0h, valid=%b, blk_tag_id=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, use_read_dirty, qual_read_tag, addrline, addrtag);
-            end else if ((| use_write_enable)) begin
-                if (is_fill_in) begin
-                    $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), addrline, addrtag);
-                end else begin
-                    $display("%t: cache%0d:%0d tag-write: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, addrline, addrtag);
-                end
+            end 
+            if (use_do_fill) begin
+                $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), addrline, addrtag, qual_read_tag);   
+            end else if (tags_match) begin
+                $display("%t: cache%0d:%0d tag-hit: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, use_read_dirty, addrline, addrtag);                
             end else begin
-                $display("%t: cache%0d:%0d tag-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, addrline, qual_read_tag);
+                $display("%t: cache%0d:%0d tag-miss: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, use_read_dirty, addrline, addrtag, qual_read_tag);
             end            
         end
     end    

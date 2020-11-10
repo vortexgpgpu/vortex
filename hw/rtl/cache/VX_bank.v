@@ -328,9 +328,9 @@ module VX_bank #(
 
     assign writedata_st0 = dfpq_filldata_st0;
 
-    assign inst_meta_st0 = msrq_pop_unqual ? {`REQ_TAG_WIDTH'(msrq_tag_st0)    , msrq_rw_st0,     msrq_byteen_st0,     msrq_tid_st0} :
+    assign inst_meta_st0 = msrq_pop_unqual ? {`REQ_TAG_WIDTH'(msrq_tag_st0), msrq_rw_st0, msrq_byteen_st0, msrq_tid_st0} :
                            reqq_pop_unqual ? {`REQ_TAG_WIDTH'(reqq_tag_st0), reqq_rw_st0, reqq_byteen_st0, reqq_tid_st0} :
-                           snrq_pop_unqual ? {`REQ_TAG_WIDTH'(snrq_tag_st0),     1'b0,            WORD_SIZE'(0),       `REQS_BITS'(0)} :
+                           snrq_pop_unqual ? {`REQ_TAG_WIDTH'(snrq_tag_st0), 1'b0,        WORD_SIZE'(0),   `REQS_BITS'(0)} :
                                              0;
 
     assign is_snp_st0 = msrq_pop_unqual ? msrq_is_snp_st0 :
@@ -712,14 +712,14 @@ module VX_bank #(
 
     wire dwbq_empty, dwbq_full;
     
-    wire dwbq_is_dfl_in   = valid_st3 && miss_st3 && (!force_miss_st3 || is_msrq_st3);
-    wire dwbq_is_dwb_in   = valid_st3 && dirty_st3 && (is_fill_st3 || (!force_miss_st3 && is_snp_st3));
-    wire dwbq_push_unqual = dwbq_is_dfl_in || dwbq_is_dwb_in;    
+    wire dwbq_is_fill     = valid_st3 && miss_st3 && (!force_miss_st3 || is_msrq_st3);
+    wire dwbq_is_wb       = valid_st3 && dirty_st3 && (is_fill_st3 || (!force_miss_st3 && is_snp_st3));
+    wire dwbq_push_unqual = dwbq_is_fill || dwbq_is_wb;    
 
     assign dwbq_push_stall = dwbq_push_unqual && dwbq_full;
     
     wire dwbq_push = dwbq_push_unqual
-                  && !(dwbq_is_dfl_in && incoming_fill)  // not in 'dwbq_push_stall' to reduce clock delay
+                  && !(dwbq_is_fill && incoming_fill)  // not in 'dwbq_push_stall' to reduce clock delay
                   && !dwbq_full
                   && !msrq_push_stall
                   && !cwbq_push_stall
@@ -727,10 +727,10 @@ module VX_bank #(
 
     wire dwbq_pop = dram_req_valid && dram_req_ready;
 
-    wire [`LINE_ADDR_WIDTH-1:0] dwbq_addr = dwbq_is_dwb_in ? {readtag_st3, addr_st3[`LINE_SELECT_BITS-1:0]} : 
-                                                        addr_st3;
+    wire [`LINE_ADDR_WIDTH-1:0] dwbq_addr = dwbq_is_wb ? {readtag_st3, addr_st3[`LINE_SELECT_BITS-1:0]} : 
+                                                         addr_st3;
 
-    wire [BANK_LINE_SIZE-1:0] dwbq_byteen = dwbq_is_dwb_in ? dirtyb_st3 : {BANK_LINE_SIZE{1'b1}};
+    wire [BANK_LINE_SIZE-1:0] dwbq_byteen = dwbq_is_wb ? dirtyb_st3 : {BANK_LINE_SIZE{1'b1}};
 
     if (DRAM_ENABLE) begin       
         VX_generic_queue #(
@@ -741,8 +741,8 @@ module VX_bank #(
             .reset   (reset),
             .push    (dwbq_push),
             .pop     (dwbq_pop),
-            .data_in ({dwbq_is_dwb_in, dwbq_byteen,     dwbq_addr,     readdata_st3}),        
-            .data_out({dram_req_rw,    dram_req_byteen, dram_req_addr, dram_req_data}),
+            .data_in ({dwbq_is_wb,  dwbq_byteen,     dwbq_addr,     readdata_st3}),        
+            .data_out({dram_req_rw, dram_req_byteen, dram_req_addr, dram_req_data}),
             .empty   (dwbq_empty),
             .full    (dwbq_full),
             `UNUSED_PIN (size)
@@ -856,7 +856,7 @@ module VX_bank #(
             $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, tid=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), cwbq_tag_st3, cwbq_tid_st3, cwbq_data_st3, debug_wid_st3, debug_pc_st3);
         end
         if (dwbq_push) begin
-            if (dwbq_is_dwb_in)
+            if (dwbq_is_wb)
                 $display("%t: cache%0d:%0d writeback: addr=%0h, data=%0h, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dwbq_addr, BANK_ID), readdata_st3, dirtyb_st3, debug_wid_st3, debug_pc_st3);
             else
                 $display("%t: cache%0d:%0d fill-req: addr=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dwbq_addr, BANK_ID), debug_wid_st3, debug_pc_st3);
