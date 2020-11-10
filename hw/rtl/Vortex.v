@@ -453,7 +453,10 @@ module Vortex (
             // Snoop forwarding in
             .snp_fwdin_valid    (cluster_snp_fwdin_valid),
             .snp_fwdin_tag      (cluster_snp_fwdin_tag),
-            .snp_fwdin_ready    (cluster_snp_fwdin_ready)       
+            .snp_fwdin_ready    (cluster_snp_fwdin_ready),
+
+            // Miss status
+            `UNUSED_PIN (miss_vec)
         );
     end
 
