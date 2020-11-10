@@ -46,8 +46,8 @@
         if (!(cond)) $error msg; \
     endgenerate
 
-`define ENABLE_TRACING  /* verilator tracing_on */
-`define DISABLE_TRACING /* verilator tracing_off */
+`define TRACING_ON  /* verilator tracing_on */
+`define TRACING_OFF /* verilator tracing_off */
 
 ///////////////////////////////////////////////////////////////////////////////
 

@@ -1,5 +1,6 @@
 `include "VX_define.vh"
 
+`TRACING_OFF
 module VX_gpr_ram (
     input wire clk,   
     input wire [`NUM_THREADS-1:0] we,    
@@ -31,3 +32,4 @@ module VX_gpr_ram (
     assign rs2_data = q2;
 
 endmodule
+`TRACING_ON

@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_dp_ram #(
     parameter DATAW    = 1,
     parameter SIZE     = 1,
@@ -285,3 +286,4 @@ module VX_dp_ram #(
     end
 
 endmodule
+`TRACING_ON

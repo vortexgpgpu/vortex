@@ -109,7 +109,7 @@ module VX_snp_forwarder #(
             .grant_onehot (sel_1hot)
         );
 
-        wire stall = fwdin_valid && ~fwdin_ready;
+        wire stall = ~fwdin_ready && fwdin_valid;
 
         VX_generic_register #(
             .N(1 + `LOG2UP(SNRQ_SIZE)),

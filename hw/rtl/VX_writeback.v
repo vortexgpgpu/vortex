@@ -73,7 +73,7 @@ module VX_writeback #(
                                     0;
 
     always @(*) assert(writeback_if.ready);
-    wire stall = 0/*~writeback_if.ready && writeback_if.valid*/;
+    wire stall =~writeback_if.ready && writeback_if.valid;
     
     VX_generic_register #(
         .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32))

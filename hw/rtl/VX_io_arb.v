@@ -64,7 +64,7 @@ module VX_io_arb #(
             .grant_onehot (req_1hot)
         );
 
-        wire stall = (| io_req_valid_out) && ~io_req_ready_out;
+        wire stall = ~io_req_ready_out && (| io_req_valid_out);
 
         VX_generic_register #(
             .N(`NUM_THREADS + TAG_OUT_WIDTH + (`NUM_THREADS * ADDR_WIDTH) + 1 + (`NUM_THREADS * WORD_SIZE) + (`NUM_THREADS * WORD_WIDTH)),
@@ -91,6 +91,7 @@ module VX_io_arb #(
             assign io_rsp_tag_in[i]   = io_rsp_tag_out[REQS_BITS +: TAG_IN_WIDTH];   
             assign io_rsp_data_in[i]  = io_rsp_data_out;           
         end
+        
         assign io_rsp_ready_out = io_rsp_ready_in[rsp_sel];
         
     end else begin

@@ -561,7 +561,7 @@ module VX_bank #(
     wire[WORD_SIZE-1:0]         req_byteen_st3;
 
     wire msrq_push_unqual = miss_st3 || force_miss_st3;
-    assign msrq_push_stall = (miss_st3 || force_miss_st3) && msrq_full;
+    assign msrq_push_stall = msrq_push_unqual && msrq_full;
 
     wire msrq_push = msrq_push_unqual
                   && !msrq_full 
