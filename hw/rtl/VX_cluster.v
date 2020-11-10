@@ -430,7 +430,10 @@ module VX_cluster #(
             // Snoop forwarding in
             .snp_fwdin_valid    (core_snp_fwdin_valid),
             .snp_fwdin_tag      (core_snp_fwdin_tag),
-            .snp_fwdin_ready    (core_snp_fwdin_ready)      
+            .snp_fwdin_ready    (core_snp_fwdin_ready),
+
+            // Miss status
+            `UNUSED_PIN (miss_vec)
         );
 
     end else begin

@@ -135,7 +135,10 @@ module VX_mem_unit # (
          // Snoop forward in
         .snp_fwdin_valid    (1'b0),
         .snp_fwdin_tag      (0),    
-        `UNUSED_PIN (snp_fwdin_ready)
+        `UNUSED_PIN (snp_fwdin_ready),
+
+        // Miss status
+        `UNUSED_PIN (miss_vec)
     );
 
     VX_cache #(
@@ -218,7 +221,10 @@ module VX_mem_unit # (
          // Snoop forward in
         .snp_fwdin_valid    (1'b0),
         .snp_fwdin_tag      (0),    
-        `UNUSED_PIN (snp_fwdin_ready)
+        `UNUSED_PIN (snp_fwdin_ready),
+
+        // Miss status
+        `UNUSED_PIN (miss_vec)
     );
 
     VX_cache #(
@@ -300,7 +306,10 @@ module VX_mem_unit # (
          // Snoop forward in
         .snp_fwdin_valid       (1'b0),
         .snp_fwdin_tag         (0),    
-        `UNUSED_PIN (snp_fwdin_ready)
+        `UNUSED_PIN (snp_fwdin_ready),
+
+        // Miss status
+        `UNUSED_PIN (miss_vec)
     );
 
 endmodule
