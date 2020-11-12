@@ -18,35 +18,38 @@ module VX_commit #(
     VX_writeback_if     writeback_if,
     VX_cmt_to_csr_if    cmt_to_csr_if
 );
-    localparam NCMTW = $clog2(`NUM_EXS*`NUM_THREADS+1);
+    localparam CMTW = $clog2(`NUM_THREADS+1);
 
     // CSRs update
 
-    wire [`NUM_EXS-1-1:0] exu_committed;
-    wire [`NUM_THREADS-1:0] lsu_committed;
-    wire [$clog2(`NUM_EXS-1+1)-1:0] exu_commits;
-    wire [$clog2(`NUM_THREADS+1)-1:0] lsu_commits;
+    wire alu_commit_fire = alu_commit_if.valid && alu_commit_if.ready;
+    wire lsu_commit_fire = lsu_commit_if.valid && lsu_commit_if.ready;
+    wire csr_commit_fire = csr_commit_if.valid && csr_commit_if.ready;
+    wire mul_commit_fire = mul_commit_if.valid && mul_commit_if.ready;
+    wire fpu_commit_fire = fpu_commit_if.valid && fpu_commit_if.ready;
+    wire gpu_commit_fire = gpu_commit_if.valid && gpu_commit_if.ready;
 
-    assign exu_committed = {alu_commit_if.valid,                                                      
-                            csr_commit_if.valid,
-                            mul_commit_if.valid,
-                            fpu_commit_if.valid,
-                            gpu_commit_if.valid};
+    wire commit_fire = alu_commit_fire
+                    || lsu_commit_fire
+                    || csr_commit_fire
+                    || mul_commit_fire
+                    || fpu_commit_fire
+                    || gpu_commit_fire;
 
-    assign lsu_committed = {`NUM_THREADS{lsu_commit_if.valid}} & lsu_commit_if.tmask;
+    wire [`NUM_THREADS-1:0] commit_tmask = alu_commit_fire ? alu_commit_if.tmask:
+                                           lsu_commit_fire ? lsu_commit_if.tmask:
+                                           csr_commit_fire ? csr_commit_if.tmask:
+                                           mul_commit_fire ? mul_commit_if.tmask:
+                                           fpu_commit_fire ? fpu_commit_if.tmask:
+                                                             gpu_commit_if.tmask;
 
-    VX_countones #(
-        .N(`NUM_EXS-1)
-    ) exu_counter (
-        .valids(exu_committed),
-        .count (exu_commits)
-    );
+    wire [CMTW-1:0] commit_size;
 
     VX_countones #(
         .N(`NUM_THREADS)
-    ) lsu_counter (
-        .valids(lsu_committed),
-        .count (lsu_commits)
+    ) commit_ctr (
+        .valids(commit_tmask),
+        .count (commit_size)
     );
 
     fflags_t fflags;
@@ -63,25 +66,23 @@ module VX_commit #(
         end
     end
 
-    fflags_t fflags_r;
-    reg has_fflags_r;
-    reg [`NW_BITS-1:0] wid_r;
-    reg [$clog2(`NUM_EXS-1+1)-1:0] exu_cmt_r;
-    reg [$clog2(`NUM_THREADS+1)-1:0] lsu_cmt_r;
     reg csr_update_r;
+    reg [`NW_BITS-1:0] wid_r;
+    reg [CMTW-1:0] commit_size_r;
+    reg has_fflags_r;
+    fflags_t fflags_r;       
 
     always @(posedge clk) begin
-        csr_update_r <= (| exu_committed) | lsu_commit_if.valid;
-        fflags_r     <= fflags;
-        has_fflags_r <= fpu_commit_if.valid && fpu_commit_if.has_fflags;
-        wid_r        <= fpu_commit_if.wid;        
-        exu_cmt_r    <= exu_commits;
-        lsu_cmt_r    <= lsu_commits;
+        csr_update_r  <= commit_fire;                
+        wid_r         <= fpu_commit_if.wid;        
+        commit_size_r <= commit_size; 
+        has_fflags_r  <= fpu_commit_if.has_fflags;
+        fflags_r      <= fflags;        
     end
 
     assign cmt_to_csr_if.valid       = csr_update_r;            
     assign cmt_to_csr_if.wid         = wid_r;  
-    assign cmt_to_csr_if.num_commits = {exu_cmt_r, `NT_BITS'(0)} + NCMTW'(lsu_cmt_r);
+    assign cmt_to_csr_if.commit_size = commit_size_r;
     assign cmt_to_csr_if.has_fflags  = has_fflags_r;    
     assign cmt_to_csr_if.fflags      = fflags_r;
 

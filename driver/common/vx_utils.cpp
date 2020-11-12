@@ -91,23 +91,23 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
   return err;
 }
 
-extern int vx_get_perf(vx_device_h device, int core_id, size_t* cycles, size_t* instrs) {
+extern int vx_get_perf(vx_device_h device, int core_id, size_t* instrs, size_t* cycles) {
   int ret = 0;
 
   unsigned value;
-
-  if (cycles) {
-    ret |= vx_csr_get(device, core_id, CSR_CYCLE_H, &value);
-    *cycles = value;
-    ret |= vx_csr_get(device, core_id, CSR_CYCLE, &value);
-    *cycles = (*cycles << 32) | value;
-  }
   
   if (instrs) {
     ret |= vx_csr_get(device, core_id, CSR_INSTRET_H, &value);
     *instrs = value;
     ret |= vx_csr_get(device, core_id, CSR_INSTRET, &value);
     *instrs = (*instrs << 32) | value;
+  }
+
+  if (cycles) {
+    ret |= vx_csr_get(device, core_id, CSR_CYCLE_H, &value);
+    *cycles = value;
+    ret |= vx_csr_get(device, core_id, CSR_CYCLE, &value);
+    *cycles = (*cycles << 32) | value;
   }
 
   return ret;

@@ -392,12 +392,12 @@ module VX_cache #(
             .snp_req_ready      (curr_bank_snp_req_ready),
 
             // Snoop response
-            .snp_rsp_valid           (curr_bank_snp_rsp_valid),
-            .snp_rsp_tag             (curr_bank_snp_rsp_tag),
-            .snp_rsp_ready           (curr_bank_snp_rsp_ready),
+            .snp_rsp_valid      (curr_bank_snp_rsp_valid),
+            .snp_rsp_tag        (curr_bank_snp_rsp_tag),
+            .snp_rsp_ready      (curr_bank_snp_rsp_ready),
 
             //Misses
-            .misses                  (curr_bank_miss)
+            .misses             (curr_bank_miss)
         );
     end   
 
