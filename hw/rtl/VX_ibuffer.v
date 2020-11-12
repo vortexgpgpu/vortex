@@ -20,7 +20,7 @@ module VX_ibuffer #(
     localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
-    reg [SIZEW-1:0] size_r [`NUM_WARPS-1:0];
+    reg [`NUM_WARPS-1:0][SIZEW-1:0] size_r;
     
     wire [`NUM_WARPS-1:0] q_full;
     wire [`NUM_WARPS-1:0][SIZEW-1:0] q_size;

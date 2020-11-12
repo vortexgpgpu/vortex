@@ -61,8 +61,7 @@ module VX_gpr_stage #(
 	wire read_fire = gpr_req_if.valid && gpr_rsp_if.ready;
 
 	always @(posedge clk) begin
-		if (reset) begin
-			rs3_data <= 0;			
+		if (reset) begin			
 			read_rs3 <= 0;			
 		end else begin
 			if (rs3_delay) begin			

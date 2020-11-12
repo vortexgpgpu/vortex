@@ -267,7 +267,6 @@ module VX_cache #(
         wire [SNP_REQ_TAG_WIDTH-1:0]    curr_bank_snp_rsp_tag;
         wire                            curr_bank_snp_rsp_ready;                    
 
-        wire                            curr_bank_core_req_ready;
         wire                            curr_bank_miss; 
 
         // Core Req

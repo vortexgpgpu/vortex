@@ -21,10 +21,8 @@ module VX_skid_buffer #(
     
     always @(posedge clk) begin
         if (reset) begin
-            data_out_r  <= 0;
-            buffer      <= 0;
-            use_buffer  <= 0;
             valid_out_r <= 0; 
+            use_buffer  <= 0;
         end else begin             
             if (ready_out) begin
                 use_buffer <= 0;

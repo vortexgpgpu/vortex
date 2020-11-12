@@ -26,7 +26,6 @@ module VX_bypass_buffer #(
         always @(posedge clk) begin
             if (reset) begin
                 buffer_valid <= 0;
-                buffer <= 0;
             end else begin            
                 if (ready_out) begin
                     buffer_valid <= 0;
