@@ -904,7 +904,6 @@ always @(posedge clk) begin
   if (reset) begin
     vx_snp_req_valid <= 0;
     vx_snp_req_addr  <= 0;
-    vx_snp_req_tag   <= 0;
     vx_snp_rsp_ready <= 0;
     snp_req_ctr      <= 0;
     snp_rsp_ctr      <= 0;
@@ -971,7 +970,6 @@ assign cmd_csr_done = (STATE_CSR_WRITE == state) ? vx_csr_io_req_ready : vx_csr_
 always @(posedge clk) begin
   if (reset) begin
     csr_io_req_sent <= 0;
-    cmd_csr_rdata   <= 0;
   end
   else begin
     if (vx_csr_io_req_valid && vx_csr_io_req_ready) begin

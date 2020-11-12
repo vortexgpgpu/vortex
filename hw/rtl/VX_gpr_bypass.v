@@ -36,8 +36,6 @@ module VX_gpr_bypass #(
                 delayed_push <= 0;
                 use_buffer   <= 0;
                 use_buffer2  <= 0;
-                buffer       <= 0;            
-                buffer2      <= 0;
             end else begin  
                 delayed_push <= push;    
                 assert(!use_buffer2 || use_buffer); 
