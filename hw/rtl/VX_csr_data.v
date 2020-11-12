@@ -40,7 +40,7 @@ module VX_csr_data #(
     reg [31:0] read_data_r;
 
     always @(posedge clk) begin
-        if (cmt_to_csr_if.has_fflags) begin
+        if (cmt_to_csr_if.valid && cmt_to_csr_if.has_fflags) begin
             csr_fflags[cmt_to_csr_if.wid]               <= cmt_to_csr_if.fflags;
             csr_fcsr[cmt_to_csr_if.wid][`FFG_BITS-1:0]  <= cmt_to_csr_if.fflags;
         end
@@ -92,7 +92,7 @@ module VX_csr_data #(
                 csr_cycle <= csr_cycle + 1;
             end
             if (cmt_to_csr_if.valid) begin
-                csr_instret <= csr_instret + 64'(cmt_to_csr_if.num_commits);
+                csr_instret <= csr_instret + 64'(cmt_to_csr_if.commit_size);
             end
         end
     end
@@ -100,42 +100,42 @@ module VX_csr_data #(
     always @(*) begin
         read_data_r = 'x;
         case (read_addr)
-            `CSR_FFLAGS  : read_data_r = 32'(csr_fflags[read_wid]);
-            `CSR_FRM     : read_data_r = 32'(csr_frm[read_wid]);
-            `CSR_FCSR    : read_data_r = 32'(csr_fcsr[read_wid]);
+            `CSR_FFLAGS    : read_data_r = 32'(csr_fflags[read_wid]);
+            `CSR_FRM       : read_data_r = 32'(csr_frm[read_wid]);
+            `CSR_FCSR      : read_data_r = 32'(csr_fcsr[read_wid]);
 
-            `CSR_LWID    : read_data_r = 32'(read_wid);
-            `CSR_LTID    ,
-            `CSR_GTID    ,
-            `CSR_MHARTID ,
-            `CSR_GWID    : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
-            `CSR_GCID    : read_data_r = CORE_ID;
-            `CSR_NT      : read_data_r = `NUM_THREADS;
-            `CSR_NW      : read_data_r = `NUM_WARPS;
-            `CSR_NC      : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
+            `CSR_LWID      : read_data_r = 32'(read_wid);
+            `CSR_LTID      ,
+            `CSR_GTID      ,
+            `CSR_MHARTID   ,
+            `CSR_GWID      : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
+            `CSR_GCID      : read_data_r = CORE_ID;
+            `CSR_NT        : read_data_r = `NUM_THREADS;
+            `CSR_NW        : read_data_r = `NUM_WARPS;
+            `CSR_NC        : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
             
-            `CSR_SATP    : read_data_r = 32'(csr_satp);
+            `CSR_SATP      : read_data_r = 32'(csr_satp);
             
-            `CSR_MSTATUS : read_data_r = 32'(csr_mstatus);
-            `CSR_MISA    : read_data_r = `ISA_CODE;
-            `CSR_MEDELEG : read_data_r = 32'(csr_medeleg);
-            `CSR_MIDELEG : read_data_r = 32'(csr_mideleg);
-            `CSR_MIE     : read_data_r = 32'(csr_mie);
-            `CSR_MTVEC   : read_data_r = 32'(csr_mtvec);
+            `CSR_MSTATUS   : read_data_r = 32'(csr_mstatus);
+            `CSR_MISA      : read_data_r = `ISA_CODE;
+            `CSR_MEDELEG   : read_data_r = 32'(csr_medeleg);
+            `CSR_MIDELEG   : read_data_r = 32'(csr_mideleg);
+            `CSR_MIE       : read_data_r = 32'(csr_mie);
+            `CSR_MTVEC     : read_data_r = 32'(csr_mtvec);
 
-            `CSR_MEPC    : read_data_r = 32'(csr_mepc);
+            `CSR_MEPC      : read_data_r = 32'(csr_mepc);
 
-            `CSR_PMPCFG0 : read_data_r = 32'(csr_pmpcfg[0]);
-            `CSR_PMPADDR0: read_data_r = 32'(csr_pmpaddr[0]);
+            `CSR_PMPCFG0   : read_data_r = 32'(csr_pmpcfg[0]);
+            `CSR_PMPADDR0  : read_data_r = 32'(csr_pmpaddr[0]);
             
-            `CSR_CYCLE   : read_data_r = csr_cycle[31:0];
-            `CSR_CYCLE_H : read_data_r = csr_cycle[63:32];
-            `CSR_INSTRET : read_data_r = csr_instret[31:0];
-            `CSR_INSTRET_H:read_data_r = csr_instret[63:32];
+            `CSR_CYCLE     : read_data_r = csr_cycle[31:0];
+            `CSR_CYCLE_H   : read_data_r = csr_cycle[63:32];
+            `CSR_INSTRET   : read_data_r = csr_instret[31:0];
+            `CSR_INSTRET_H : read_data_r = csr_instret[63:32];
             
-            `CSR_MVENDORID:read_data_r = `VENDOR_ID;
-            `CSR_MARCHID : read_data_r = `ARCHITECTURE_ID;
-            `CSR_MIMPID  : read_data_r = `IMPLEMENTATION_ID;
+            `CSR_MVENDORID : read_data_r = `VENDOR_ID;
+            `CSR_MARCHID   : read_data_r = `ARCHITECTURE_ID;
+            `CSR_MIMPID    : read_data_r = `IMPLEMENTATION_ID;
 
             default: begin                      
                 assert(~read_enable) else $error("%t: invalid CSR read address: %0h", $time, read_addr);
@@ -144,6 +144,6 @@ module VX_csr_data #(
     end 
 
     assign read_data = read_data_r;
-    assign csr_to_fpu_if.frm = csr_frm[csr_to_fpu_if.wid]; 
+    assign csr_to_fpu_if.frm = csr_frm[csr_to_fpu_if.wid];
 
 endmodule

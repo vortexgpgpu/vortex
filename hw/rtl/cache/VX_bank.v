@@ -97,7 +97,7 @@ module VX_bank #(
     input  wire                         snp_rsp_ready,
 
     // Misses
-    output wire misses
+    output wire                         misses
 );
 
 `ifdef DBG_CORE_REQ_INFO

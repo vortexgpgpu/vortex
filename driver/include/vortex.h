@@ -72,7 +72,7 @@ int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_t size)
 int vx_upload_kernel_file(vx_device_h device, const char* filename);
 
 // get performance counters
-int vx_get_perf(vx_device_h device, int core_id, size_t* cycles, size_t* instrs);
+int vx_get_perf(vx_device_h device, int core_id, size_t* instrs, size_t* cycles);
 
 #ifdef __cplusplus
 }

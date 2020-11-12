@@ -72,8 +72,8 @@ module VX_writeback #(
                         fpu_valid ? fpu_commit_if.data :                                                               
                                     0;
 
-    always @(*) assert(writeback_if.ready);
     wire stall =~writeback_if.ready && writeback_if.valid;
+    always @(*) assert(writeback_if.ready); // the writeback currently has no backpressure from issue stage
     
     VX_generic_register #(
         .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32))
