@@ -18,7 +18,7 @@ CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1" make -C driver/opae/vlsim
 make -C driver/tests/dogfood run-vlsim
 make -C benchmarks/opencl/sgemm run-vlsim
 
-# test L3 and 2 L2's with 4 cores each
+# test L3 and 2xL2's with 4 cores each
 make -C driver/opae/vlsim clean
 CONFIGS="-DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1 -DL3_ENABLE=1" make -C driver/opae/vlsim
 make -C driver/tests/dogfood run-vlsim
