@@ -1,5 +1,5 @@
-#CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
-CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
+#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CFLAGS += -I../../include -I../../../hw/simulate -I../../../hw
 
@@ -20,10 +20,10 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
-#CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
-#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
-CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
-#CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=1
+#CONFIGS ?= -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
+#CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
+CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
+#CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 #DEBUG=1
 
@@ -63,6 +63,9 @@ else
 	VL_FLAGS += -DNDEBUG
 	CFLAGS   += -DNDEBUG
 endif
+
+# use DPI FPU
+VL_FLAGS += -DFPU_FAST
 
 PROJECT = libvortex.so
 # PROJECT = libvortex.dylib

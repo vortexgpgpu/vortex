@@ -1,7 +1,7 @@
 OPAE_HOME ?= /tools/opae/1.4.0
 
-#CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
+#CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../include -I$(OPAE_HOME)/include  -I../../hw
 

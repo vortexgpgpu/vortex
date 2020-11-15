@@ -34,7 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define NUM_DATA 66
+#define NUM_DATA 16
 
 #define CL_CHECK(_expr)                                                        \
   do {                                                                         \
@@ -286,7 +286,7 @@ int main(int argc, char **argv) {
   CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, global_offset,
                                   global_work_size, local_work_size, 0, NULL,
                                   &kernel_completion));
-  printf("Enqueue'd kerenel\n");
+  printf("Enqueue'd kernel\n");
   fflush(stdout);
   cl_ulong time_start, time_end;
   CL_CHECK(clWaitForEvents(1, &kernel_completion));

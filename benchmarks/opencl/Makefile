@@ -5,20 +5,15 @@ all:
 	$(MAKE) -C sfilter
 	$(MAKE) -C nearn
 	$(MAKE) -C guassian
+	
 run:
-	$(MAKE) -C vecadd run-rtlsim 
-	$(MAKE) -C sgemm run-rtlsim
-	$(MAKE) -C saxpy run-rtlsim
-	$(MAKE) -C sfilter run-rtlsim
-	$(MAKE) -C nearn run-rtlsim
-	$(MAKE) -C guassian run-rtlsim
-
 	$(MAKE) -C vecadd run-vlsim 
 	$(MAKE) -C sgemm run-vlsim
 	$(MAKE) -C saxpy run-vlsim
 	$(MAKE) -C sfilter run-vlsim
 	$(MAKE) -C nearn run-vlsim
 	$(MAKE) -C guassian run-vlsim
+
 clean:
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C sgemm clean
