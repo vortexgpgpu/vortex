@@ -25,7 +25,7 @@ module VX_data_access #(
     input wire                          clk,
     input wire                          reset,
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
     input wire[31:0]                    debug_pc,
     input wire[`NR_BITS-1:0]            debug_rd,

@@ -10,15 +10,16 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_CORE_DCACHE
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_BANK 
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_SNP 
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_MSRQ
+DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_TAG
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_DATA
 DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM      
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
-DBG_PRINT_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_PRINT_FLAGS += -DDBG_PRINT_AVS
 DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
-DBG_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
 FPU_INCLUDE = -I../rtl/fp_cores -I../rtl/fp_cores/svdpi -I../rtl/fp_cores/fpnew/src/common_cells/include -I../rtl/fp_cores/fpnew/src/common_cells/src -I../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I../rtl/fp_cores/fpnew/src 
 INCLUDE = -I../rtl/ -I../rtl/libs -I../rtl/interfaces -I../rtl/cache -I../rtl/simulate $(FPU_INCLUDE)
@@ -45,7 +46,7 @@ gen-s:
 	verilator $(VF) -DNDEBUG  $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG $(SINGLECORE)'
 
 gen-sd:
-	verilator $(VF) -O0 $(SINGLECORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(SINGLECORE)' --trace --trace-structs --trace-threads 1 $(DBG)
+	verilator $(VF) -O0 $(SINGLECORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(SINGLECORE)' --trace --trace-structs $(DBG)
 
 gen-st:
 	verilator $(VF) -DNDEBUG $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(SINGLECORE)' --threads $(THREADS)
@@ -54,7 +55,7 @@ gen-m:
 	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md:
-	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(MULTICORE)' --trace --trace-structs --trace-threads 1 $(DBG)
+	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(MULTICORE)' --trace --trace-structs $(DBG)
 
 gen-mt:
 	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
@@ -63,7 +64,7 @@ build-s: gen-s
 	(cd obj_dir && make -j -f VVortex.mk)
 
 build-sd: gen-sd
-	(cd obj_dir && OPT_FAST="-O0 -g" make -j -f VVortex.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-st: gen-st
 	(cd obj_dir && make -j -f VVortex.mk)
@@ -72,7 +73,7 @@ build-m: gen-m
 	(cd obj_dir && make -j -f VVortex.mk)
 
 build-md: gen-md
-	(cd obj_dir && OPT_FAST="-O0 -g" make -j -f VVortex.mk)
+	(cd obj_dir && make -j -f VVortex.mk)
 
 build-mt: gen-mt
 	(cd obj_dir && make -j -f VVortex.mk)

@@ -39,10 +39,6 @@ module VX_gpr_stage #(
     always @(posedge clk) begin	
         if (reset) begin
 			rsp_valid   <= 0;
-            rsp_wid     <= 0;   
-            rsp_pc      <= 0;
-            rs1_is_zero <= 0;
-            rs2_is_zero <= 0;
         end else begin
             rsp_valid   <= gpr_req_if.valid;
             rsp_wid     <= gpr_req_if.wid;   

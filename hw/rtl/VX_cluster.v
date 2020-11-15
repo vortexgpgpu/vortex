@@ -553,42 +553,42 @@ module VX_cluster #(
 
         VX_mem_arb #(
             .NUM_REQUESTS  (`L2NUM_REQUESTS),
-            .WORD_SIZE     (`L2BANK_LINE_SIZE),            
+            .DATA_WIDTH    (`L2DRAM_LINE_WIDTH),            
             .TAG_IN_WIDTH  (`DDRAM_TAG_WIDTH),
             .TAG_OUT_WIDTH (`L2DRAM_TAG_WIDTH)
         ) dram_arb (
-            .clk                   (clk),
-            .reset                 (reset),
+            .clk            (clk),
+            .reset          (reset),
 
             // Core request
-            .mem_req_valid_in      (core_dram_req_valid),
-            .mem_req_rw_in         (core_dram_req_rw),
-            .mem_req_byteen_in     (core_dram_req_byteen),
-            .mem_req_addr_in       (core_dram_req_addr),
-            .mem_req_data_in       (core_dram_req_data),  
-            .mem_req_tag_in        (core_dram_req_tag),  
-            .mem_req_ready_in      (core_dram_req_ready),
+            .req_valid_in   (core_dram_req_valid),
+            .req_rw_in      (core_dram_req_rw),
+            .req_byteen_in  (core_dram_req_byteen),
+            .req_addr_in    (core_dram_req_addr),
+            .req_data_in    (core_dram_req_data),  
+            .req_tag_in     (core_dram_req_tag),  
+            .req_ready_in   (core_dram_req_ready),
 
             // Core response
-            .mem_rsp_valid_in      (core_dram_rsp_valid),
-            .mem_rsp_data_in       (core_dram_rsp_data),
-            .mem_rsp_tag_in        (core_dram_rsp_tag),
-            .mem_rsp_ready_in      (core_dram_rsp_ready),
+            .rsp_valid_out  (core_dram_rsp_valid),
+            .rsp_data_out   (core_dram_rsp_data),
+            .rsp_tag_out    (core_dram_rsp_tag),
+            .rsp_ready_out  (core_dram_rsp_ready),
 
             // DRAM request
-            .mem_req_valid_out     (dram_req_valid),
-            .mem_req_rw_out        (dram_req_rw),        
-            .mem_req_byteen_out    (dram_req_byteen),        
-            .mem_req_addr_out      (dram_req_addr),
-            .mem_req_data_out      (dram_req_data),
-            .mem_req_tag_out       (dram_req_tag),
-            .mem_req_ready_out     (dram_req_ready),
+            .req_valid_out  (dram_req_valid),
+            .req_rw_out     (dram_req_rw),        
+            .req_byteen_out (dram_req_byteen),        
+            .req_addr_out   (dram_req_addr),
+            .req_data_out   (dram_req_data),
+            .req_tag_out    (dram_req_tag),
+            .req_ready_out  (dram_req_ready),
             
             // DRAM response
-            .mem_rsp_valid_out     (dram_rsp_valid),
-            .mem_rsp_tag_out       (dram_rsp_tag),
-            .mem_rsp_data_out      (dram_rsp_data),
-            .mem_rsp_ready_out     (dram_rsp_ready)
+            .rsp_valid_in   (dram_rsp_valid),
+            .rsp_tag_in     (dram_rsp_tag),
+            .rsp_data_in    (dram_rsp_data),
+            .rsp_ready_in   (dram_rsp_ready)
         );
 
     end

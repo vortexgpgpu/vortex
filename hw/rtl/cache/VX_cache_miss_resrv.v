@@ -24,7 +24,7 @@ module VX_cache_miss_resrv #(
     input wire clk,
     input wire reset,
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
     input wire[31:0]                    debug_pc_st0,
     input wire[`NR_BITS-1:0]            debug_rd_st0,
