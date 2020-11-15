@@ -20,7 +20,7 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
-  - make -j`nproc`
+  - make > /dev/null 2>&1
   - ci/test_runtime.sh
   - ci/test_driver.sh
   - ci/test_riscv_isa.sh
