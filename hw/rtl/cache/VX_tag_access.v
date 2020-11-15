@@ -25,7 +25,7 @@ module VX_tag_access #(
     input wire                          clk,
     input wire                          reset,
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
     input wire[31:0]                    debug_pc,
     input wire[`NR_BITS-1:0]            debug_rd,
@@ -122,7 +122,7 @@ module VX_tag_access #(
     assign readtag_out = use_read_tag;
     assign writeen_out = (use_do_write || use_do_fill);    
 
-`ifdef DBG_PRINT_CACHE_DATA
+`ifdef DBG_PRINT_CACHE_TAG
     always @(posedge clk) begin            
         if (valid_in && !stall) begin
             if (use_do_fill && tags_match) begin

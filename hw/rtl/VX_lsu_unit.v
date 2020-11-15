@@ -144,7 +144,7 @@ module VX_lsu_unit #(
     assign dcache_req_if.addr   = req_addr;
     assign dcache_req_if.data   = req_data;  
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
     assign dcache_req_if.tag = {req_pc, req_rd, req_wid, req_tag};
 `else
     assign dcache_req_if.tag = req_tag;

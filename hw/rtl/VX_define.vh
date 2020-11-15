@@ -234,10 +234,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CORE_REQ_INFO    // pc, rd,        wid       
-`define DBG_CORE_REQ_MDATAW  (32 + `NR_BITS + `NW_BITS)
+`ifdef DBG_CACHE_REQ_INFO    // pc, rd,        wid       
+`define DBG_CACHE_REQ_MDATAW  (32 + `NR_BITS + `NW_BITS)
 `else
-`define DBG_CORE_REQ_MDATAW  0
+`define DBG_CACHE_REQ_MDATAW  0
 `endif
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
@@ -249,7 +249,7 @@
 `define DCORE_TAG_ID_BITS   `LOG2UP(`LSUQ_SIZE)
 
 // Core request tag bits
-`define DCORE_TAG_WIDTH     (`DBG_CORE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
+`define DCORE_TAG_WIDTH     (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
  
 // DRAM request data bits
 `define DDRAM_LINE_WIDTH    (`DBANK_LINE_SIZE * 8)
@@ -287,7 +287,7 @@
 `define ICORE_TAG_ID_BITS   `NW_BITS
 
 // Core request tag bits
-`define ICORE_TAG_WIDTH     (`DBG_CORE_REQ_MDATAW + `ICORE_TAG_ID_BITS)
+`define ICORE_TAG_WIDTH     (`DBG_CACHE_REQ_MDATAW + `ICORE_TAG_ID_BITS)
 
 // DRAM request data bits
 `define IDRAM_LINE_WIDTH    (`IBANK_LINE_SIZE * 8)

@@ -4,20 +4,21 @@ CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 CFLAGS += -I../../../../hw
 
 # control RTL debug print states
+DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
 DBG_PRINT_FLAGS += -DDBG_PRINT_CORE_ICACHE
 DBG_PRINT_FLAGS += -DDBG_PRINT_CORE_DCACHE
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_BANK 
-DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_SNP 
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_MSRQ
+DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_TAG
 DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_DATA
-DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM      
-DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
+DBG_PRINT_FLAGS += -DDBG_PRINT_CACHE_SNP
+DBG_PRINT_FLAGS += -DDBG_PRINT_DRAM
 DBG_PRINT_FLAGS += -DDBG_PRINT_OPAE
-DBG_PRINT_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_PRINT_FLAGS += -DDBG_PRINT_AVS
 DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
-DBG_FLAGS += -DDBG_CORE_REQ_INFO
+DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
 #CONFIGS += -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1 -DL3_ENABLE=1 
 #CONFIGS += -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
@@ -59,7 +60,7 @@ VL_FLAGS += verilator.vlt
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --assert --trace --trace-structs --trace-threads 1 $(DBG_FLAGS)
+	VL_FLAGS += -DVCD_OUTPUT --assert --trace --trace-structs $(DBG_FLAGS)
 	CFLAGS   += -DVCD_OUTPUT $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
@@ -78,7 +79,7 @@ VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
 # use DPI FPU
-#VL_FLAGS += -DFPU_FAST
+VL_FLAGS += -DFPU_FAST
 
 RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 
@@ -94,7 +95,7 @@ $(RTL_DIR)/scope-defs.vh: $(SCRIPT_DIR)/scope.json
 	
 $(PROJECT): $(SRCS) $(SCOPE_VH)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
-	OPT_FAST="-O0 -g" make -j -C obj_dir -f V$(TOP).mk
+	make -j -C obj_dir -f V$(TOP).mk
 
 clean:
 	rm -rf $(PROJECT) obj_dir ../scope-defs.h $(RTL_DIR)/scope-defs.vh

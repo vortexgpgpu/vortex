@@ -45,7 +45,7 @@ module VX_icache_stage #(
     // Can accept new request?
     assign ifetch_req_if.ready = icache_req_if.ready;
 
-`ifdef DBG_CORE_REQ_INFO  
+`ifdef DBG_CACHE_REQ_INFO  
     assign icache_req_if.tag = {ifetch_req_if.PC, `NR_BITS'(0), ifetch_req_if.wid, req_tag};
 `else
     assign icache_req_if.tag = req_tag;

@@ -100,7 +100,7 @@ module VX_bank #(
     output wire                         misses
 );
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire[31:0]           debug_pc_st0;
     wire[`NR_BITS-1:0]   debug_rd_st0;
@@ -352,7 +352,7 @@ module VX_bank #(
     wire msrq_pending_hazard_st0 = msrq_pending_hazard_unqual_st0 
                                 || ((miss_st3 || force_miss_st3) && (addr_st3 == addr_st0));
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_pc_st0, debug_rd_st0, debug_wid_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = inst_meta_st0;
     end else begin
@@ -371,7 +371,7 @@ module VX_bank #(
         .out   ({is_msrq_st1, is_snp_st1, snp_invalidate_st1, msrq_pending_hazard_st1, valid_st1, addr_st1, wsel_st1, writeword_st1, inst_meta_st1, is_fill_st1, writedata_st1})
     );
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_pc_st1, debug_rd_st1, debug_wid_st1, debug_tagid_st1, debug_rw_st1, debug_byteen_st1, debug_tid_st1} = inst_meta_st1;
     end else begin
@@ -420,7 +420,7 @@ module VX_bank #(
         .clk            (clk),
         .reset          (reset),
 
-    `ifdef DBG_CORE_REQ_INFO
+    `ifdef DBG_CACHE_REQ_INFO
         .debug_pc       (debug_pc_st1),
         .debug_rd       (debug_rd_st1),
         .debug_wid      (debug_wid_st1),
@@ -474,7 +474,7 @@ module VX_bank #(
         .out   ({is_msrq_st2, writeen_st2, force_miss_st2, is_snp_st2, snp_invalidate_st2, is_fill_st2, valid_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, dirty_st2, writedata_st2, mem_byteen_st2, inst_meta_st2})
     );    
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_pc_st2, debug_rd_st2, debug_wid_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
     end else begin
@@ -498,7 +498,7 @@ module VX_bank #(
         .clk            (clk),
         .reset          (reset),
 
-    `ifdef DBG_CORE_REQ_INFO
+    `ifdef DBG_CACHE_REQ_INFO
         .debug_pc       (debug_pc_st2),
         .debug_rd       (debug_rd_st2),
         .debug_wid      (debug_wid_st2),
@@ -562,7 +562,7 @@ module VX_bank #(
         .out   ({is_msrq_st3, send_core_rsp_st3, send_fill_req_st3, do_writeback_st3, send_snp_rsp_st3, force_miss_st3, is_snp_st3, snp_invalidate_st3, valid_st3, addr_st3, wsel_st3, writeword_st3, readword_st3, readdata_st3, readtag_st3, miss_st3, dirtyb_st3, inst_meta_st3})
     );    
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
     if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
         assign {debug_pc_st3, debug_rd_st3, debug_wid_st3, debug_tagid_st3, debug_rw_st3, debug_byteen_st3, debug_tid_st3} = inst_meta_st3;
     end else begin
@@ -623,7 +623,7 @@ module VX_bank #(
             .clk                    (clk),
             .reset                  (reset),
 
-        `ifdef DBG_CORE_REQ_INFO
+        `ifdef DBG_CACHE_REQ_INFO
             .debug_pc_st0   (debug_pc_st0),
             .debug_rd_st0   (debug_rd_st0),
             .debug_wid_st0  (debug_wid_st0),

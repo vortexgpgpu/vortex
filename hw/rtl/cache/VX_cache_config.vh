@@ -3,7 +3,7 @@
 
 `include "VX_platform.vh"
 
-`ifdef DBG_CORE_REQ_INFO
+`ifdef DBG_CACHE_REQ_INFO
 `include "VX_define.vh"
 `endif
 
