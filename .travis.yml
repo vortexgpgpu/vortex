@@ -25,6 +25,7 @@ script:
   - ci/test_driver.sh
   - ci/test_riscv_isa.sh
   - ci/test_opencl.sh
+  - ci/blackbox.sh
   
 after_success:
   # Gather code coverage
