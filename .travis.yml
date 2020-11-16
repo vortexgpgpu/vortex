@@ -1,7 +1,7 @@
 language: cpp
 dist: bionic
 os: linux
-compiler: gcc
+compiler: clang
 addons:
     apt:
         sources:
@@ -20,7 +20,7 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
-  - make > /dev/null 2>&1
+  - make -j > /dev/null 2>&1
   - ci/test_runtime.sh
   - ci/test_driver.sh
   - ci/test_riscv_isa.sh

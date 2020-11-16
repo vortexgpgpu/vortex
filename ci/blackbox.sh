@@ -12,15 +12,21 @@ CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0" make -C driver/opae/vlsim
 make -C driver/tests/dogfood run-vlsim
 make -C benchmarks/opencl/sgemm run-vlsim
 
-# test L2 with 4 cores
+# test 4 cores with L2
 make -C driver/opae/vlsim clean
 CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
 make -C driver/tests/dogfood run-vlsim
 make -C benchmarks/opencl/sgemm run-vlsim
 
-# test L3 and 2xL2's with 4 cores each
+# test 8 cores with L2
 make -C driver/opae/vlsim clean
-CONFIGS="-DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1 -DL3_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
+CONFIGS="-DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
+make -C driver/tests/dogfood run-vlsim
+make -C benchmarks/opencl/sgemm run-vlsim
+
+# test 16 cores with L2 and L3
+make -C driver/opae/vlsim clean
+CONFIGS="-DNUM_CLUSTERS=4 -DNUM_CORES=4 -DL2_ENABLE=1 -DL3_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
 make -C driver/tests/dogfood run-vlsim
 make -C benchmarks/opencl/sgemm run-vlsim
 
