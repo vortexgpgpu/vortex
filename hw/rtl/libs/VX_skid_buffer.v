@@ -27,17 +27,21 @@ module VX_skid_buffer #(
             if (ready_out) begin
                 use_buffer <= 0;
             end
-            if (push) begin
-                buffer <= data_in;
-                if (valid_out_r && !ready_out) begin
-                    assert(!use_buffer);
-                    use_buffer <= 1;
-                end
+            if (push && valid_out_r && !ready_out) begin
+                assert(!use_buffer);
+                use_buffer <= 1;
             end
             if (!valid_out_r || ready_out) begin
                 valid_out_r <= valid_in || use_buffer;
-                data_out_r  <= use_buffer ? buffer : data_in;
             end
+        end
+
+        if (push) begin
+            buffer <= data_in;
+        end
+        
+        if (!valid_out_r || ready_out) begin
+            data_out_r <= use_buffer ? buffer : data_in;
         end
     end
 

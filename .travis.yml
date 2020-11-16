@@ -20,19 +20,19 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
-  - make -j
+  - make -j > /dev/null 2>&1
   - ci/test_runtime.sh
   - ci/test_driver.sh
   - ci/test_riscv_isa.sh
   - ci/test_opencl.sh
+  - ci/blackbox.sh -run_debug
+  - ci/blackbox.sh -run_scope
   - ci/blackbox.sh -run_1c
   - ci/blackbox.sh -run_2c
   - ci/blackbox.sh -run_4c
   - ci/blackbox.sh -run_4c_l2
   - ci/blackbox.sh -run_8c_2l2
   - ci/blackbox.sh -run_16c_4l2_l3
-  - ci/blackbox.sh -run_debug
-  - ci/blackbox.sh -run_scope
   
 after_success:
   # Gather code coverage

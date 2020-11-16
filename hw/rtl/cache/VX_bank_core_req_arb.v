@@ -126,13 +126,14 @@ module VX_bank_core_req_arb #(
                     end else begin
                         pop_mask[sel_idx] <= 1;
                     end
-                end    
-                if ((0 == q_valids_cnt_r) || pop) begin
-                    sel_tid       <= sel_idx;    
-                    sel_byteen    <= q_byteen[sel_idx];
-                    sel_addr      <= q_addr[sel_idx];
-                    sel_writedata <= q_writedata[sel_idx];
                 end
+            end
+
+            if ((0 == q_valids_cnt_r) || pop) begin
+                sel_tid       <= sel_idx;
+                sel_byteen    <= q_byteen[sel_idx];
+                sel_addr      <= q_addr[sel_idx];
+                sel_writedata <= q_writedata[sel_idx];
             end
         end
 
