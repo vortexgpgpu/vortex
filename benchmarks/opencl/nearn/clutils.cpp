@@ -868,7 +868,7 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
     // Create the program object
     //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);      
     cl_program clProgramReturn = clCreateProgramWithBinary(
-        context, 1, devices, &kernel_size, &kernel_bin, &binary_status, &status);  
+        context, 1, devices, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &status);  
     free(kernel_bin);
     cl_errChk(status, "Creating program", true);
     

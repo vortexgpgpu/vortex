@@ -211,7 +211,7 @@ int main(int argc, char **argv) {
   //  and store the binary for future use.
   std::cout << "Attempting to create program from binary..." << std::endl;
   cl_program program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
   if (program == NULL) {
     std::cerr << "Failed to write program binary" << std::endl;
     Cleanup(context, queue, program, kernel, memObjects);
@@ -264,8 +264,7 @@ int main(int argc, char **argv) {
   CL_CHECK(clSetKernelArg(kernel, 10, sizeof(m7), (&m7)));
   CL_CHECK(clSetKernelArg(kernel, 11, sizeof(m8), (&m8)));
 
-  printf("attempting to enqueue write buffer\n");
-  
+  printf("attempting to enqueue write buffer\n");  
   float* h_src = (float*)malloc(nbytes);
   for (int i = 0; i < NUM_DATA * NUM_DATA; i++) {
     h_src[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
@@ -294,8 +293,8 @@ int main(int argc, char **argv) {
     float data = h_dst[i];
     // printf(" %f", data);
   }
-  printf("\n");
-  printf("Passed!\n");
+  free(h_dst);
+
   CL_CHECK(clReleaseMemObject(memObjects[0]));
   CL_CHECK(clReleaseMemObject(memObjects[1]));
 

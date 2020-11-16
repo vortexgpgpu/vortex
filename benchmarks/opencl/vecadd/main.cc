@@ -113,7 +113,7 @@ int main (int argc, char **argv) {
 
   printf("Create program from kernel source\n");
   program = CL_CHECK2(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
   if (program == NULL) {
     cleanup();
     return -1;
