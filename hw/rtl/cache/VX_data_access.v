@@ -86,7 +86,7 @@ module VX_data_access #(
         .write_data  (use_write_data)
     );
 
-    assign use_read_dirtyb_out= qual_read_dirtyb_out;
+    assign use_read_dirtyb_out = qual_read_dirtyb_out;
     assign use_read_data  = qual_read_data;
     
     if (`WORD_SELECT_WIDTH != 0) begin

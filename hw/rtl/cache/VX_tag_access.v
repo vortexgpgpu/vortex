@@ -119,19 +119,21 @@ module VX_tag_access #(
     assign miss_out = core_req_miss;
 
     assign dirty_out = valid_in && use_read_valid && use_read_dirty 
-                    && !(is_fill_in && tags_match);  // disable writeback for redundant fills
+                    && !(is_fill_in && tags_match);  // discard writeback for redundant fills
 
     assign readtag_out = use_read_tag;
-    assign writeen_out = (use_do_write || use_do_fill);
+
+    assign writeen_out = use_do_write || (use_do_fill 
+                                       && !tags_match); // discard data update for redundant fills
 
 `ifdef DBG_PRINT_CACHE_TAG
     always @(posedge clk) begin            
         if (valid_in && !stall) begin
-            if (use_do_fill && tags_match) begin
-                $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID));
-            end
             if (use_do_fill) begin
                 $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), addrline, addrtag, qual_read_tag);   
+                if (tags_match) begin
+                    $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID));
+                end
             end else if (tags_match) begin
                 $display("%t: cache%0d:%0d tag-hit: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, use_read_dirty, addrline, addrtag);                
             end else begin
