@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# exit when any command fails
+set -e
+
 run_1c()
 {
     # test single core

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# exit when any command fails
+set -e
+
 REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
 
 riscv()
