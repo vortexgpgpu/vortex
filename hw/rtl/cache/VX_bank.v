@@ -168,11 +168,10 @@ module VX_bank #(
     wire [`LINE_ADDR_WIDTH-1:0] dfpq_addr_st0;
     wire [`BANK_LINE_WIDTH-1:0] dfpq_filldata_st0;    
 
+    wire dram_rsp_fire = dram_rsp_valid && dram_rsp_ready;
     assign dram_rsp_ready = !dfpq_full;
 
     if (DRAM_ENABLE) begin
-        wire dram_rsp_fire = dram_rsp_valid && dram_rsp_ready;
-
         VX_generic_queue #(
             .DATAW(`LINE_ADDR_WIDTH + $bits(dram_rsp_data)), 
             .SIZE(DRFQ_SIZE)
@@ -535,9 +534,10 @@ module VX_bank #(
     wire                            snp_invalidate_st3;
     wire                            is_msrq_st3;
     wire                            send_core_rsp_st3;
-    wire                            send_fill_req_st3;    
+    wire                            send_dwb_req_st3;    
     wire                            do_writeback_st3;
     wire                            send_snp_rsp_st3;
+    wire                            incoming_fill_st3;
 
     wire send_core_rsp_st2 = valid_st2 && !is_fill_st2 && !is_snp_st2 && !miss_st2 && !force_miss_st2;
 
@@ -549,17 +549,27 @@ module VX_bank #(
                           && (is_fill_st2 
                            || (!force_miss_st2 && is_snp_st2));
 
+    wire send_dwb_req_st2 = send_fill_req_st2 || do_writeback_st2;
+
     wire send_snp_rsp_st2 = valid_st2 && is_snp_st2 && !force_miss_st2;
+
+    // check if a matching fill request is comming
+    wire incoming_fill_dfp_st2 = dram_rsp_fire && (addr_st2 == dram_rsp_addr);
+    wire incoming_fill_st0_st2 = !dfpq_empty   && (addr_st2 == dfpq_addr_st0);
+    wire incoming_fill_st1_st2 = is_fill_st1   && (addr_st2 == addr_st1);
+    wire incoming_fill_st2 = incoming_fill_dfp_st2 
+                          || incoming_fill_st0_st2 
+                          || incoming_fill_st1_st2;
     
     VX_generic_register #(
-        .N(1+ 1+ 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE + `REQ_INST_META_WIDTH)
+        .N(1+ 1+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE + `REQ_INST_META_WIDTH)
     ) pipe_reg2 (
         .clk   (clk),
         .reset (reset),
         .stall (pipeline_stall),
         .flush (1'b0),
-        .in    ({is_msrq_st2, send_core_rsp_st2, send_fill_req_st2, do_writeback_st2, send_snp_rsp_st2, force_miss_st2, is_snp_st2, snp_invalidate_st2, valid_st2, addr_st2, wsel_st2, writeword_st2, readword_st2, readdata_st2, readtag_st2, miss_st2, dirtyb_st2, inst_meta_st2}),
-        .out   ({is_msrq_st3, send_core_rsp_st3, send_fill_req_st3, do_writeback_st3, send_snp_rsp_st3, force_miss_st3, is_snp_st3, snp_invalidate_st3, valid_st3, addr_st3, wsel_st3, writeword_st3, readword_st3, readdata_st3, readtag_st3, miss_st3, dirtyb_st3, inst_meta_st3})
+        .in    ({is_msrq_st2, incoming_fill_st2, send_core_rsp_st2, send_dwb_req_st2, do_writeback_st2, send_snp_rsp_st2, force_miss_st2, is_snp_st2, snp_invalidate_st2, valid_st2, addr_st2, wsel_st2, writeword_st2, readword_st2, readdata_st2, readtag_st2, miss_st2, dirtyb_st2, inst_meta_st2}),
+        .out   ({is_msrq_st3, incoming_fill_st3, send_core_rsp_st3, send_dwb_req_st3, do_writeback_st3, send_snp_rsp_st3, force_miss_st3, is_snp_st3, snp_invalidate_st3, valid_st3, addr_st3, wsel_st3, writeword_st3, readword_st3, readdata_st3, readtag_st3, miss_st3, dirtyb_st3, inst_meta_st3})
     );    
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -590,13 +600,9 @@ module VX_bank #(
 
     assign {req_tag_st3, req_rw_st3, req_byteen_st3, req_tid_st3} = inst_meta_st3;
 
-    // check if a matching fill request is comming
-    wire incoming_st0_fill_st3 = is_fill_st0 && (addr_st3 == dfpq_addr_st0);
-    wire incoming_st1_fill_st3 = is_fill_st1 && (addr_st3 == addr_st1);
-    wire incoming_st2_fill_st3 = is_fill_st2 && (addr_st3 == addr_st2);
-    wire incoming_fill = incoming_st2_fill_st3 
-                      || incoming_st1_fill_st3 
-                      || incoming_st0_fill_st3;
+    wire incoming_fill_dfp_st3 = dram_rsp_fire && (addr_st3 == dram_rsp_addr);
+    wire incoming_fill = incoming_fill_dfp_st3
+                      || incoming_fill_st3;
 
     if (DRAM_ENABLE) begin
         wire msrq_dequeue_st3 = valid_st3 && is_msrq_st3 && !msrq_push_unqual && !pipeline_stall;
@@ -732,12 +738,12 @@ module VX_bank #(
 
     wire dwbq_empty, dwbq_full;
     
-    wire dwbq_push_unqual = send_fill_req_st3 || do_writeback_st3;    
+    wire dwbq_push_unqual = send_dwb_req_st3;    
 
     assign dwbq_push_stall = dwbq_push_unqual && dwbq_full;
     
     wire dwbq_push = dwbq_push_unqual
-                  && !(send_fill_req_st3 && incoming_fill)  // not in 'dwbq_push_stall' to reduce clock delay
+                  && (do_writeback_st3 || !incoming_fill)  // not in 'dwbq_push_stall' to reduce clock delay
                   && !dwbq_full
                   && !msrq_push_stall
                   && !cwbq_push_stall
