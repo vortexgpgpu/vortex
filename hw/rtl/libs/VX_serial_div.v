@@ -58,30 +58,30 @@ module VX_serial_div #(
         if (reset) begin
             cntr    <= 0;
             is_busy <= 0;
-        end
-        else begin
+        end else begin
             if (push) begin                
-                for (integer i = 0; i < LANES; ++i) begin
-                    working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};                                        
-                    denom_r[i]  <= denom_qual[i];
-                    inv_quot[i] <= (denom[i] != 0) && signed_mode && (numer[i][31] ^ denom[i][31]);
-                    inv_rem[i]  <= signed_mode && numer[i][31];
-                end                              
-                tag_r   <= tag_in;
-                cntr    <= WIDTHN;
+                cntr <= WIDTHN;
                 is_busy <= 1;                
-            end
-            else begin
-                if (!done) begin                    
-                    for (integer i = 0; i < LANES; ++i) begin                        
-                        working[i] <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
-                                        {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
-                    end         
-                    cntr <= cntr - CNTRW'(1);       
-                end
+            end else if (!done) begin
+                cntr <= cntr - CNTRW'(1);
             end
             if (pop) begin
                 is_busy <= 0;
+            end
+        end
+
+        if (push) begin
+            for (integer i = 0; i < LANES; ++i) begin
+                working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
+                denom_r[i]  <= denom_qual[i];
+                inv_quot[i] <= (denom[i] != 0) && signed_mode && (numer[i][31] ^ denom[i][31]);
+                inv_rem[i]  <= signed_mode && numer[i][31];
+            end
+            tag_r <= tag_in;           
+        end else if (!done) begin                    
+            for (integer i = 0; i < LANES; ++i) begin
+                working[i] <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
+                                {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
             end
         end
     end

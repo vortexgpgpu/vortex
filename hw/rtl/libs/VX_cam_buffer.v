@@ -52,10 +52,6 @@ module VX_cam_buffer #(
             full_r       <= 1'b0;
             write_addr_r <= ADDRW'(1'b0);
         end else begin
-            if (acquire_slot) begin
-                assert(1 == free_slots[write_addr]) else $display("%t: inused slot at port %d", $time, write_addr); 
-                entries[write_addr] <= write_data;                
-            end
             for (integer i = 0; i < CPORTS; i++) begin 
                 if (release_slot[i]) begin
                     assert(0 == free_slots[release_addr[i]]) else $display("%t: freed slot at port %d", $time, release_addr[i]);
@@ -64,6 +60,11 @@ module VX_cam_buffer #(
             free_slots   <= free_slots_n;
             write_addr_r <= free_index;
             full_r       <= ~free_valid;
+        end
+
+        if (acquire_slot) begin
+            assert(1 == free_slots[write_addr]) else $display("%t: inused slot at port %d", $time, write_addr); 
+            entries[write_addr] <= write_data;                
         end
     end        
         

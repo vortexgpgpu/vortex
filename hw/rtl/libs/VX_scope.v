@@ -77,6 +77,7 @@ module VX_scope #(
 			read_delta  	<= 0;
 			data_valid  	<= 0;
 			timestamp       <= 0;
+			start_time      <= 0;
 		end else begin
 
 			timestamp <= timestamp + 1;
@@ -177,6 +178,20 @@ module VX_scope #(
 				end				
 			end
 		end		
+
+		if (recording) begin
+			if (UPDW_ENABLE) begin
+				if (delta_flush
+	             || changed
+				 || (trigger_id != prev_trigger_id)) begin
+					delta_store[waddr] <= delta;
+					data_store[waddr]  <= data_in;
+				end
+			end else begin
+				delta_store[waddr] <= 0;
+				data_store[waddr]  <= data_in;
+			end
+		end
 	end
 
 	always @(*) begin

@@ -123,8 +123,7 @@ module VX_cache_miss_resrv #(
             head_ptr     <= 0;
             tail_ptr     <= 0;
             size         <= 0;
-        end else begin        
-
+        end else begin
             if (update_ready_st0) begin                
                 ready_table <= ready_table | valid_address_match;
             end
@@ -140,7 +139,6 @@ module VX_cache_miss_resrv #(
                 end else begin
                     valid_table[tail_ptr] <= 1;                    
                     ready_table[tail_ptr] <= enqueue_ready_st3;
-                    addr_table[tail_ptr]  <= enqueue_addr_st3;
                     tail_ptr <= tail_ptr + $bits(tail_ptr)'(1);
                     size <= size + $bits(size)'(1);
                 end
@@ -156,6 +154,12 @@ module VX_cache_miss_resrv #(
                 valid_table[schedule_ptr] <= 0;    
                 schedule_ptr <= schedule_ptr + $bits(schedule_ptr)'(1);                
             end
+        end
+    end
+
+    always @(posedge clk) begin
+        if (enqueue_st3 && !enqueue_msrq_st3) begin
+            addr_table[tail_ptr] <= enqueue_addr_st3;
         end
     end
 

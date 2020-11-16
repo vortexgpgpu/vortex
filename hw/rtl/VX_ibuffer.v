@@ -60,23 +60,20 @@ module VX_ibuffer #(
             if (reset) begin
                 size_r[i] <= 0;
             end else begin            
-                if (writing) begin
-                    if (is_slot0) begin                                                       
-                        q_data_out[i] <= q_data_in;
-                    end
-                    if (!reading) begin                                                       
-                        size_r[i] <= size_r[i] + SIZEW'(1);
-                    end
+                if (writing && !reading) begin                                                       
+                    size_r[i] <= size_r[i] + SIZEW'(1);
                 end
-                if (reading) begin
-                    if (size_r[i] != 1) begin
-                        q_data_out[i] <= q_data_prev[i];
-                    end
-                    if (!writing) begin                                                        
-                        size_r[i] <= size_r[i] - SIZEW'(1);
-                    end
+                if (reading && !writing) begin                                                        
+                    size_r[i] <= size_r[i] - SIZEW'(1);
                 end
-            end                   
+            end 
+
+            if (writing && is_slot0) begin                                                       
+                q_data_out[i] <= q_data_in;
+            end
+            if (reading && (size_r[i] != 1)) begin
+                q_data_out[i] <= q_data_prev[i];
+            end                  
         end
         
         assign q_full[i] = (size_r[i] == SIZE);

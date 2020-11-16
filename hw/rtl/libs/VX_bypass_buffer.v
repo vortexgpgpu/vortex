@@ -32,9 +32,12 @@ module VX_bypass_buffer #(
                 end
                 if (valid_in && ~ready_out) begin
                     assert(!buffer_valid);
-                    buffer <= data_in;
                     buffer_valid <= 1;
                 end
+            end
+
+            if (valid_in && ~ready_out) begin
+                buffer <= data_in;
             end
         end
 

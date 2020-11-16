@@ -42,7 +42,6 @@ module VX_index_queue #(
             valid  <= 0;     
         end else begin
             if (enqueue)  begin
-                entries[wr_a]  <= write_data;
                 valid[wr_a] <= 1;
                 wr_ptr      <= wr_ptr + 1;
             end            
@@ -53,6 +52,10 @@ module VX_index_queue #(
                 valid[read_addr] <= 0;
             end
         end
+
+        if (enqueue)  begin
+            entries[wr_a] <= write_data;
+        end  
     end
 
     assign write_addr = wr_a;
