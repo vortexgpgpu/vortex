@@ -604,8 +604,8 @@ module VX_bank #(
         // mark msrq entry that match DRAM fill as 'ready'
         wire update_ready_st0 = dfpq_pop;
 
-        // push missed requests as 'ready' is this was a forced missed
-        // this request will be queued behind prior requests so will only pop when the fill arrives.
+        // push missed requests as 'ready' if it was a forced miss but actually had a hit 
+        // or the fill request is comming for the missed block
         wire msrq_init_ready_state_st3 = !miss_st3 || incoming_fill; 
 
         VX_cache_miss_resrv #(

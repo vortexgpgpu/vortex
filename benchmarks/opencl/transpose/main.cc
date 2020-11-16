@@ -311,7 +311,8 @@ int runTest( const int argc, const char** argv)
     cl_int binary_status = 0;
     cl_device_id device_id;
     // create the program
-    rv_program = clCreateProgramWithBinary(cxGPUContext, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, NULL);
+    rv_program = clCreateProgramWithBinary(
+        cxGPUContext, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, NULL);
     //rv_program = clCreateProgramWithSource(cxGPUContext, 1,
                      // (const char **)&source, &program_length, &ciErrNum);
     //oclCheckError(ciErrNum, CL_SUCCESS);

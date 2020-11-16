@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <chrono>
 
 //#define NUM_DATA 65536
 #define NUM_DATA 1024
@@ -136,7 +137,7 @@ int main(int argc, char **argv) {
   //  and store the binary for future use.
   std::cout << "Attempting to create program from binary..." << std::endl;
   cl_program program = CL_CHECK_ERR(clCreateProgramWithBinary(
-    context, 1, &device_id, &kernel_size, &kernel_bin, &binary_status, &_err));
+    context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
   if (program == NULL) {
     std::cerr << "Failed to write program binary" << std::endl;
     Cleanup(context, queue, program, kernel, memObjects);
@@ -148,17 +149,17 @@ int main(int argc, char **argv) {
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
+  size_t nbytes = sizeof(float) * NUM_DATA;
+
   printf("attempting to create input buffer\n");
-  fflush(stdout);
   cl_mem input_buffer;
   input_buffer = CL_CHECK_ERR(clCreateBuffer(
-      context, CL_MEM_READ_ONLY, sizeof(float) * NUM_DATA, NULL, &_err));
+      context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
 
   printf("attempting to create output buffer\n");
-  fflush(stdout);
   cl_mem output_buffer;
   output_buffer = CL_CHECK_ERR(clCreateBuffer(
-      context, CL_MEM_WRITE_ONLY, sizeof(float) * NUM_DATA, NULL, &_err));
+      context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
 
   memObjects[0] = input_buffer;
   memObjects[1] = output_buffer;
@@ -166,50 +167,42 @@ int main(int argc, char **argv) {
   float factor = ((float)rand() / (float)(RAND_MAX)) * 100.0;
 
   printf("attempting to create kernel\n");
-  fflush(stdout);
   kernel = CL_CHECK_ERR(clCreateKernel(program, "saxpy", &_err));
+
   printf("setting up kernel args cl_mem:%lx \n", input_buffer);
-  fflush(stdout);
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(input_buffer), &input_buffer));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(output_buffer), &output_buffer));
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(factor), &factor));
 
   printf("attempting to enqueue write buffer\n");
-  fflush(stdout);
+  float* h_src = (float*)malloc(nbytes);
   for (int i = 0; i < NUM_DATA; i++) {
-    float in = ((float)rand() / (float)(RAND_MAX)) * 100.0;
-    CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE,
-                                  i * sizeof(float), 4, &in, 0, NULL, NULL));
+    h_src[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
   }
+  CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, h_src, 0, NULL, NULL));
+  free(h_src);
 
-  cl_event kernel_completion;
-  size_t global_work_size[] = {NUM_DATA/2,NUM_DATA/2};
+  size_t global_work_size[] = {NUM_DATA/2, NUM_DATA/2};
   printf("attempting to enqueue kernel\n");
-  fflush(stdout);
+  auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, NULL, global_work_size,
-                                  NULL, 0, NULL, &kernel_completion));
-  printf("Enqueue'd kerenel\n");
-  fflush(stdout);
-  cl_ulong time_start, time_end;
-  CL_CHECK(clWaitForEvents(1, &kernel_completion));
-  CL_CHECK(clGetEventProfilingInfo(kernel_completion,
-                                   CL_PROFILING_COMMAND_START,
-                                   sizeof(time_start), &time_start, NULL));
-  CL_CHECK(clGetEventProfilingInfo(kernel_completion, CL_PROFILING_COMMAND_END,
-                                   sizeof(time_end), &time_end, NULL));
-  double elapsed = time_end - time_start;
-  printf("time(ns):%lg\n", elapsed);
-  CL_CHECK(clReleaseEvent(kernel_completion));
+                                  NULL, 0, NULL, NULL));
+  CL_CHECK(clFinish(queue));
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
+
+  printf("Download destination buffer\n");
+  float* h_dst = (float*)malloc(nbytes);
+  CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, h_dst, 0, NULL, NULL));
 
   printf("Result:");
   for (int i = 0; i < NUM_DATA; i++) {
-    float data;
-    CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE,
-                                 i * sizeof(float), 4, &data, 0, NULL, NULL));
+    float data = h_dst[i];
     // printf(" %f", data);
   }
-  printf("\n");
-  printf("Passed!\n");
+  free(h_dst);
+
   CL_CHECK(clReleaseMemObject(memObjects[0]));
   CL_CHECK(clReleaseMemObject(memObjects[1]));
 

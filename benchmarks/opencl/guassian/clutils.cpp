@@ -868,7 +868,7 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
     status = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
     cl_errChk(status, "read_kernel_file", true);
     cl_program clProgramReturn = clCreateProgramWithBinary(
-        context, 1, &device, &kernel_size, &kernel_bin, &binary_status, &status);
+        context, 1, &device, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &status);
     free(kernel_bin);
     cl_errChk(status, "Creating program", true);
     

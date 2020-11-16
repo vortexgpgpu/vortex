@@ -259,7 +259,7 @@ free(allPlatforms);*/
     std::abort();
 
  oclHandles.program = clCreateProgramWithBinary(
-    oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED], &kernel_size, &kernel_bin, &binary_status, &resultCL);
+    oclHandles.context, 1, &oclHandles.devices[DEVICE_ID_INUSED], &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &resultCL);
   free(kernel_bin);
 
   if ((resultCL != CL_SUCCESS) || (oclHandles.program == NULL))
