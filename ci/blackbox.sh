@@ -5,7 +5,6 @@ run_1c()
     # test single core
     make -C driver/opae/vlsim clean
     CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/dogfood run-vlsim
     make -C benchmarks/opencl/sgemm run-vlsim
 }
 
@@ -14,7 +13,6 @@ run_2c()
     # test 2 cores
     make -C driver/opae/vlsim clean
     CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/dogfood run-vlsim
     make -C benchmarks/opencl/sgemm run-vlsim
 }
 
@@ -23,7 +21,6 @@ run_4c()
     # test 4 cores
     make -C driver/opae/vlsim clean
     CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=0" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/dogfood run-vlsim
     make -C benchmarks/opencl/sgemm run-vlsim
 }
 
@@ -32,7 +29,6 @@ run_4c_l2()
     # test 4 cores with L2
     make -C driver/opae/vlsim clean
     CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/dogfood run-vlsim
     make -C benchmarks/opencl/sgemm run-vlsim
 }
 
@@ -41,16 +37,22 @@ run_8c_2l2()
     # test 8 cores with 2xL2
     make -C driver/opae/vlsim clean
     CONFIGS="-DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/dogfood run-vlsim
     make -C benchmarks/opencl/sgemm run-vlsim
 }
 
-run_16c_4l2_l3()
+run_4c_2l2_l3()
 {
-    # test 16 cores with L2 and L3
+    # test 4 cores with L2 and L3
     make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=4 -DNUM_CORES=4 -DL2_ENABLE=1 -DL3_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/dogfood run-vlsim
+    CONFIGS="-DNUM_CLUSTERS=2 -DNUM_CORES=2 -DL2_ENABLE=1 -DL3_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
+    make -C benchmarks/opencl/sgemm run-vlsim
+}
+
+run_8c_4l2_l3()
+{
+    # test 8 cores with L2 and L3
+    make -C driver/opae/vlsim clean
+    CONFIGS="-DNUM_CLUSTERS=4 -DNUM_CORES=2 -DL2_ENABLE=1 -DL3_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
     make -C benchmarks/opencl/sgemm run-vlsim
 }
 
@@ -59,7 +61,7 @@ run_debug()
     # test debug build
     make -C driver/opae/vlsim clean
     DEBUG=1 CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C driver/tests/demo run-vlsim
+    make -C benchmarks/opencl/sgemm run-vlsim
 }
 
 run_scope()
@@ -67,12 +69,12 @@ run_scope()
     # test build with scope analyzer
     make -C driver/opae clean
     SCOPE=1 CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae > /dev/null 2>&1
-    make -C driver/tests/demo run-vlsim
+    make -C benchmarks/opencl/sgemm run-vlsim
 }
 
 usage()
 {
-    echo "usage: blackbox [[-run_1c] [-run_2c] [-run_4c] [-run_4c_l2] [-run_8c_2l2] [-run_16c_4l2_l3] [-run_debug] [-run_scope] [-all] [-h|--help]]"
+    echo "usage: blackbox [[-run_1c] [-run_2c] [-run_4c] [-run_4c_l2] [-run_8c_2l2] [-run_4c_2l2_l3] [-run_8c_4l2_l3] [-run_debug] [-run_scope] [-all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
@@ -87,7 +89,9 @@ while [ "$1" != "" ]; do
                 ;;
         -run_8c_2l2 ) run_8c_2l2
                 ;;
-        -run_16c_4l2_l3 ) run_16c_4l2_l3
+        -run_4c_2l2_l3 ) run_4c_2l2_l3
+                ;;
+        -run_8c_4l2_l3 ) run_8c_4l2_l3
                 ;;
         -run_debug ) run_debug
                 ;;
@@ -98,7 +102,8 @@ while [ "$1" != "" ]; do
                run_4c
                run_4c_l2
                run_8c_2l2
-               run_16c_4l2_l3
+               run_4c_2l2_l3
+               run_8c_4l2_l3
                run_debug
                run_scope
                ;;
