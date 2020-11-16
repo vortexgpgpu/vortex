@@ -64,7 +64,7 @@ run_debug()
     # test debug build
     make -C driver/opae/vlsim clean
     DEBUG=1 CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
+    make -C benchmarks/opencl/sgemm run-vlsim > /dev/null 2>&1
 }
 
 run_scope()
