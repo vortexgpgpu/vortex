@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# exit when any command fails
+set -e
+
 OS_DIR=ubuntu/bionic
 SRCDIR=/opt
 DESTDIR=.

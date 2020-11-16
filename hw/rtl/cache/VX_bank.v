@@ -860,8 +860,8 @@ module VX_bank #(
 
 `ifdef DBG_PRINT_CACHE_BANK
     always @(posedge clk) begin        
-        if (miss_st3 && (incoming_st0_fill_st3 || incoming_st1_fill_st3 || incoming_st2_fill_st3)) begin
-            $display("%t: incoming fill - addr=%0h, st0=%b, st1=%b, st2=%b", $time, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), incoming_st0_fill_st3, incoming_st1_fill_st3, incoming_st2_fill_st3);
+        if (miss_st3 && incoming_fill) begin
+            $display("%t: incoming fill - addr=%0h, st3=%b, dfp=%b", $time, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), incoming_fill_st3, incoming_fill_dfp_st3);
             assert(!is_msrq_st3);
         end
         if (pipeline_stall) begin
