@@ -20,17 +20,17 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
-  - make
-  - ci/test_runtime.sh
-  - ci/test_driver.sh
-  - ci/test_riscv_isa.sh
-  - ci/test_opencl.sh
-  - ci/blackbox.sh -run_debug
-  - ci/blackbox.sh -run_scope
-  - ci/blackbox.sh -run_1c
-  - ci/blackbox.sh -run_2c
-  - ci/blackbox.sh -run_4c
-  - ci/blackbox.sh -run_4c_l2
+  - travis_wait 30 make
+  - travis_wait 30 ci/test_runtime.sh
+  - travis_wait 30 ci/test_driver.sh
+  - travis_wait 30 ci/test_riscv_isa.sh
+  - travis_wait 30 ci/test_opencl.sh
+  - travis_wait 30 ci/blackbox.sh -run_debug
+  - travis_wait 30 ci/blackbox.sh -run_scope
+  - travis_wait 30 ci/blackbox.sh -run_1c
+  - travis_wait 30 ci/blackbox.sh -run_2c
+  - travis_wait 30 ci/blackbox.sh -run_4c
+  - travis_wait 30 ci/blackbox.sh -run_4c_l2
   - travis_wait 30 ci/blackbox.sh -run_4c_2l2_l3
   - travis_wait 30 ci/blackbox.sh -run_8c_4l2_l3
   
