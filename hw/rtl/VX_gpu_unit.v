@@ -77,7 +77,7 @@ module VX_gpu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE)
-    ) csr_reg (
+    ) pipe_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),

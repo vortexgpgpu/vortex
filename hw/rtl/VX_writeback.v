@@ -77,7 +77,7 @@ module VX_writeback #(
     
     VX_generic_register #(
         .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32))
-    ) wb_reg (
+    ) pipe_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall),

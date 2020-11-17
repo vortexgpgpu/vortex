@@ -239,7 +239,7 @@ module VX_warp_sched #(
 
     VX_generic_register #( 
         .N(1 + `NUM_THREADS + 32 + `NW_BITS)
-    ) fetch_reg (
+    ) pipe_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),

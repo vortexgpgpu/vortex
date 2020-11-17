@@ -38,6 +38,8 @@ module VX_fp_noncomp #(
                 SIG_NAN     = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
+    reg valid_in_r;
+    reg [TAGW-1:0] tag_in_r;
     reg [`FPU_BITS-1:0] op_type_r;
     reg [`FRM_BITS-1:0] frm_r;
 
@@ -87,7 +89,7 @@ module VX_fp_noncomp #(
 
         VX_generic_register #(
             .N(1 + 1 + 8 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
-        ) fnc1_reg (
+        ) pipe_reg0 (
             .clk   (clk),
             .reset (reset),
             .stall (stall),
@@ -98,14 +100,14 @@ module VX_fp_noncomp #(
     end  
 
     VX_generic_register #(
-        .N(`FPU_BITS + `FRM_BITS + (2 * `NUM_THREADS * 32))
-    ) fnc2_reg (
+        .N(1 + TAGW + `FPU_BITS + `FRM_BITS + (2 * `NUM_THREADS * 32))
+    ) pipe_reg1 (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({op_type,   frm,   dataa,   datab}),
-        .out   ({op_type_r, frm_r, dataa_r, datab_r})
+        .in    ({valid_in,   tag_in,   op_type,   frm,   dataa,   datab}),
+        .out   ({valid_in_r, tag_in_r, op_type_r, frm_r, dataa_r, datab_r})
     ); 
 
     // FCLASS
@@ -155,7 +157,7 @@ module VX_fp_noncomp #(
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm_r)
-                0:  fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
+                0: fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
                 1: fsgnj_res[i] = {~b_sign[i], a_exponent[i], a_mantissa[i]};
                 2: fsgnj_res[i] = { a_sign[i] ^ b_sign[i], a_exponent[i], a_mantissa[i]};
           default: fsgnj_res[i] = 32'hdeadbeaf;  // don't care value
@@ -249,13 +251,13 @@ module VX_fp_noncomp #(
 
     VX_generic_register #(
         .N(1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS))
-    ) nc_reg (
+    ) pipe_reg2 (
         .clk   (clk),
         .reset (reset),
         .stall (stall),
         .flush (1'b0),
-        .in    ({valid_in,  tag_in,  tmp_result, tmp_has_fflags, tmp_fflags}),
-        .out   ({valid_out, tag_out, result,     has_fflags,     fflags})
+        .in    ({valid_in_r, tag_in_r, tmp_result, tmp_has_fflags, tmp_fflags}),
+        .out   ({valid_out,  tag_out,  result,     has_fflags,     fflags})
     );
 
     assign ready_in = ~stall;

@@ -41,7 +41,9 @@ module VX_mem_unit # (
     ) core_dcache_rsp_qual_if(), core_smem_rsp_if();
 
     // select shared memory bus
-    wire is_smem_addr    = (({core_dcache_req_if.addr[0], 2'b0} - `SHARED_MEM_BASE_ADDR) <= `SCACHE_SIZE);
+    wire is_smem_addr = ({core_dcache_req_if.addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) 
+                     && ({core_dcache_req_if.addr[0], 2'b0} < (`SHARED_MEM_BASE_ADDR + `SCACHE_SIZE));
+
     wire smem_req_select = (| core_dcache_req_if.valid) ? is_smem_addr : 0;
     wire smem_rsp_select = (| core_smem_rsp_if.valid);
 
