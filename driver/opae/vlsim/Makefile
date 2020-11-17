@@ -79,7 +79,7 @@ VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
 # use DPI FPU
-VL_FLAGS += -DFPU_FAST
+#VL_FLAGS += -DFPU_FAST
 
 RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 

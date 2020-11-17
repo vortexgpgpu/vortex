@@ -75,7 +75,7 @@ module VX_lsu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32)))
-    ) req_reg (
+    ) pipe_reg0 (
         .clk   (clk),
         .reset (reset),
         .stall (stall_in),
@@ -181,7 +181,7 @@ module VX_lsu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
-    ) rsp_reg (
+    ) pipe_reg1 (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),

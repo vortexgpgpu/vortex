@@ -98,7 +98,7 @@ module VX_alu_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 32 + 33)
-    ) alu_reg (
+    ) pipe_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),

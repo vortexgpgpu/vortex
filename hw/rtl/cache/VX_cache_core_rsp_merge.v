@@ -94,7 +94,7 @@ module VX_cache_core_rsp_merge #(
         VX_generic_register #(
             .N(NUM_REQUESTS + (NUM_REQUESTS *`WORD_WIDTH) + (`CORE_REQ_TAG_COUNT * CORE_TAG_WIDTH)),
             .PASSTHRU(NUM_BANKS <= 2)
-        ) core_wb_reg (
+        ) pipe_reg (
             .clk   (clk),
             .reset (reset),
             .stall (stall),

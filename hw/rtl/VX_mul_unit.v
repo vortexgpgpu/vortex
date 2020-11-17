@@ -145,7 +145,7 @@ module VX_mul_unit #(
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
-    ) mul_reg (
+    ) pipe_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),
