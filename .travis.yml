@@ -31,8 +31,8 @@ script:
   - ci/blackbox.sh -run_2c
   - ci/blackbox.sh -run_4c
   - ci/blackbox.sh -run_4c_l2
-  #- travis_wait 30 ci/blackbox.sh -run_4c_2l2_l3
-  #- travis_wait 30 ci/blackbox.sh -run_8c_4l2_l3
+  - travis_wait 30 ci/blackbox.sh -run_4c_2l2_l3
+  - travis_wait 30 ci/blackbox.sh -run_8c_4l2_l3
   
 after_success:
   # Gather code coverage
