@@ -186,7 +186,7 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({arb_valid,           arb_wid,           arb_tmask,                 arb_PC,           arb_rd,           arb_wb,           rsp_data}),
+        .in    ({arb_valid,           arb_wid,           arb_tmask,           arb_PC,           arb_rd,           arb_wb,           rsp_data}),
         .out   ({lsu_commit_if.valid, lsu_commit_if.wid, lsu_commit_if.tmask, lsu_commit_if.PC, lsu_commit_if.rd, lsu_commit_if.wb, lsu_commit_if.data})
     );
 
