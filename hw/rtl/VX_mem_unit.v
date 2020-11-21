@@ -75,7 +75,6 @@ module VX_mem_unit # (
         .DRAM_ENABLE            (0),
         .FLUSH_ENABLE           (0),
         .WRITE_ENABLE           (1),
-        .SNOOP_FORWARDING       (0),
         .CORE_TAG_WIDTH         (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`SDRAM_TAG_WIDTH)
@@ -127,44 +126,31 @@ module VX_mem_unit # (
         `UNUSED_PIN (snp_rsp_tag),
         .snp_rsp_ready      (1'b0),
 
-        // Snoop forward out
-        `UNUSED_PIN (snp_fwdout_valid),
-        `UNUSED_PIN (snp_fwdout_addr),    
-        `UNUSED_PIN (snp_fwdout_invalidate),
-        `UNUSED_PIN (snp_fwdout_tag),    
-        .snp_fwdout_ready   (1'b0),
-
-         // Snoop forward in
-        .snp_fwdin_valid    (1'b0),
-        .snp_fwdin_tag      (0),    
-        `UNUSED_PIN (snp_fwdin_ready),
-
         // Miss status
         `UNUSED_PIN (miss_vec)
     );
 
     VX_cache #(
-        .CACHE_ID               (`DCACHE_ID),
-        .CACHE_SIZE             (`DCACHE_SIZE),
-        .BANK_LINE_SIZE         (`DBANK_LINE_SIZE),
-        .NUM_BANKS              (`DNUM_BANKS),
-        .WORD_SIZE              (`DWORD_SIZE),
-        .NUM_REQUESTS           (`DNUM_REQUESTS),
-        .CREQ_SIZE              (`DCREQ_SIZE),
-        .MRVQ_SIZE              (`DMRVQ_SIZE),
-        .DRFQ_SIZE              (`DDRFQ_SIZE),
-        .SNRQ_SIZE              (`DSNRQ_SIZE),
-        .CWBQ_SIZE              (`DCWBQ_SIZE),
-        .DREQ_SIZE              (`DDREQ_SIZE),        
-        .SNPQ_SIZE              (`DSNPQ_SIZE),
-        .DRAM_ENABLE            (1),
-        .FLUSH_ENABLE           (1),
-        .WRITE_ENABLE           (1),
-        .SNOOP_FORWARDING       (0),
-        .CORE_TAG_WIDTH         (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS       (`DCORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
-        .SNP_REQ_TAG_WIDTH      (`DSNP_TAG_WIDTH)
+        .CACHE_ID           (`DCACHE_ID),
+        .CACHE_SIZE         (`DCACHE_SIZE),
+        .BANK_LINE_SIZE     (`DBANK_LINE_SIZE),
+        .NUM_BANKS          (`DNUM_BANKS),
+        .WORD_SIZE          (`DWORD_SIZE),
+        .NUM_REQUESTS       (`DNUM_REQUESTS),
+        .CREQ_SIZE          (`DCREQ_SIZE),
+        .MRVQ_SIZE          (`DMRVQ_SIZE),
+        .DRFQ_SIZE          (`DDRFQ_SIZE),
+        .SNRQ_SIZE          (`DSNRQ_SIZE),
+        .CWBQ_SIZE          (`DCWBQ_SIZE),
+        .DREQ_SIZE          (`DDREQ_SIZE),        
+        .SNPQ_SIZE          (`DSNPQ_SIZE),
+        .DRAM_ENABLE        (1),
+        .FLUSH_ENABLE       (1),
+        .WRITE_ENABLE       (1),
+        .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
+        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
+        .SNP_TAG_WIDTH      (`DSNP_TAG_WIDTH)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
         
@@ -212,18 +198,6 @@ module VX_mem_unit # (
         .snp_rsp_valid      (dcache_snp_rsp_if.valid),
         .snp_rsp_tag        (dcache_snp_rsp_if.tag),
         .snp_rsp_ready      (dcache_snp_rsp_if.ready),
-        
-        // Snoop forward out
-        `UNUSED_PIN (snp_fwdout_valid),
-        `UNUSED_PIN (snp_fwdout_addr),    
-        `UNUSED_PIN (snp_fwdout_invalidate),
-        `UNUSED_PIN (snp_fwdout_tag),    
-        .snp_fwdout_ready   (1'b0),
-
-         // Snoop forward in
-        .snp_fwdin_valid    (1'b0),
-        .snp_fwdin_tag      (0),    
-        `UNUSED_PIN (snp_fwdin_ready),
 
         // Miss status
         `UNUSED_PIN (miss_vec)
@@ -246,7 +220,6 @@ module VX_mem_unit # (
         .DRAM_ENABLE            (1),
         .FLUSH_ENABLE           (0),
         .WRITE_ENABLE           (0),
-        .SNOOP_FORWARDING       (0),
         .CORE_TAG_WIDTH         (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS       (`ICORE_TAG_ID_BITS),
         .DRAM_TAG_WIDTH         (`IDRAM_TAG_WIDTH)
@@ -297,18 +270,6 @@ module VX_mem_unit # (
         `UNUSED_PIN (snp_rsp_valid),
         `UNUSED_PIN (snp_rsp_tag),
         .snp_rsp_ready         (1'b0),
-
-        // Snoop forward out
-        `UNUSED_PIN (snp_fwdout_valid),
-        `UNUSED_PIN (snp_fwdout_addr),   
-        `UNUSED_PIN (snp_fwdout_invalidate), 
-        `UNUSED_PIN (snp_fwdout_tag),    
-        .snp_fwdout_ready      (1'b0),
-
-         // Snoop forward in
-        .snp_fwdin_valid       (1'b0),
-        .snp_fwdin_tag         (0),    
-        `UNUSED_PIN (snp_fwdin_ready),
 
         // Miss status
         `UNUSED_PIN (miss_vec)

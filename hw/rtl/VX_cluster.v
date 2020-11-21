@@ -304,30 +304,60 @@ module VX_cluster #(
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]           core_snp_fwdin_tag;
         wire[`NUM_CORES-1:0]                                core_snp_fwdin_ready;
 
+        wire                                                snp_fwd_rsp_valid;
+        wire [`L2DRAM_ADDR_WIDTH-1:0]                       snp_fwd_rsp_addr;
+        wire                                                snp_fwd_rsp_invalidate;
+        wire [`L2SNP_TAG_WIDTH-1:0]                         snp_fwd_rsp_tag;
+        wire                                                snp_fwd_rsp_ready;
+
+        reg [`L2NUM_REQUESTS-1:0] core_dram_rsp_ready_other;
+        reg core_dram_rsp_ready_all;
+
+        always @(*) begin            
+            core_dram_rsp_ready_other = {`L2NUM_REQUESTS{1'b1}};
+            core_dram_rsp_ready_all = 1'b1;
+
+            for (integer i = 0; i < `L2NUM_REQUESTS; i++) begin                
+                for (integer j = 0; j < `L2NUM_REQUESTS; j++) begin
+                    if (i != j) begin
+                        if (0 == (j & 1))
+                            core_dram_rsp_ready_other[i] &= (per_core_D_dram_rsp_ready [(j/2)] | !core_dram_rsp_valid [j]);
+                        else
+                            core_dram_rsp_ready_other[i] &= (per_core_I_dram_rsp_ready [(j/2)] | !core_dram_rsp_valid [j]);
+                    end
+                end
+                
+                if (0 == (i & 1))
+                    core_dram_rsp_ready_all &= (per_core_D_dram_rsp_ready [(i/2)] | !core_dram_rsp_valid [i]);
+                else
+                    core_dram_rsp_ready_all &= (per_core_I_dram_rsp_ready [(i/2)] | !core_dram_rsp_valid [i]);
+            end
+        end
+
         for (genvar i = 0; i < `L2NUM_REQUESTS; i = i + 2) begin
-            assign core_dram_req_valid [i]   = per_core_D_dram_req_valid[(i/2)];
-            assign core_dram_req_valid [i+1] = per_core_I_dram_req_valid[(i/2)];
+            assign core_dram_req_valid [i]   = per_core_D_dram_req_valid [(i/2)];
+            assign core_dram_req_valid [i+1] = per_core_I_dram_req_valid [(i/2)];
 
-            assign core_dram_req_rw  [i]   = per_core_D_dram_req_rw[(i/2)];
-            assign core_dram_req_rw  [i+1] = per_core_I_dram_req_rw[(i/2)];
+            assign core_dram_req_rw  [i]   = per_core_D_dram_req_rw [(i/2)];
+            assign core_dram_req_rw  [i+1] = per_core_I_dram_req_rw [(i/2)];
             
-            assign core_dram_req_byteen [i]   = per_core_D_dram_req_byteen[(i/2)];
-            assign core_dram_req_byteen [i+1] = per_core_I_dram_req_byteen[(i/2)];
+            assign core_dram_req_byteen [i]   = per_core_D_dram_req_byteen [(i/2)];
+            assign core_dram_req_byteen [i+1] = per_core_I_dram_req_byteen [(i/2)];
 
-            assign core_dram_req_addr  [i]   = per_core_D_dram_req_addr[(i/2)];
-            assign core_dram_req_addr  [i+1] = per_core_I_dram_req_addr[(i/2)];
+            assign core_dram_req_addr  [i]   = per_core_D_dram_req_addr [(i/2)];
+            assign core_dram_req_addr  [i+1] = per_core_I_dram_req_addr [(i/2)];
 
-            assign core_dram_req_data  [i]   = per_core_D_dram_req_data[(i/2)];
-            assign core_dram_req_data  [i+1] = per_core_I_dram_req_data[(i/2)];
+            assign core_dram_req_data  [i]   = per_core_D_dram_req_data [(i/2)];
+            assign core_dram_req_data  [i+1] = per_core_I_dram_req_data [(i/2)];
 
-            assign core_dram_req_tag   [i]   = per_core_D_dram_req_tag[(i/2)];
-            assign core_dram_req_tag   [i+1] = per_core_I_dram_req_tag[(i/2)];
+            assign core_dram_req_tag   [i]   = per_core_D_dram_req_tag [(i/2)];
+            assign core_dram_req_tag   [i+1] = per_core_I_dram_req_tag [(i/2)];
 
             assign per_core_D_dram_req_ready [(i/2)] = core_dram_req_ready;
             assign per_core_I_dram_req_ready [(i/2)] = core_dram_req_ready;
 
-            assign per_core_D_dram_rsp_valid [(i/2)] = core_dram_rsp_valid[i] && core_dram_rsp_ready;
-            assign per_core_I_dram_rsp_valid [(i/2)] = core_dram_rsp_valid[i+1] && core_dram_rsp_ready;
+            assign per_core_D_dram_rsp_valid [(i/2)] = core_dram_rsp_valid[i] & core_dram_rsp_ready_other [i];
+            assign per_core_I_dram_rsp_valid [(i/2)] = core_dram_rsp_valid[i+1] & core_dram_rsp_ready_other [i+1];
 
             assign per_core_D_dram_rsp_data  [(i/2)] = core_dram_rsp_data[i];
             assign per_core_I_dram_rsp_data  [(i/2)] = core_dram_rsp_data[i+1];
@@ -346,32 +376,63 @@ module VX_cluster #(
             assign per_core_snp_rsp_ready [(i/2)] = core_snp_fwdin_ready [(i/2)];
         end
 
-        assign core_dram_rsp_ready = (& per_core_D_dram_rsp_ready) && (& per_core_I_dram_rsp_ready);
+        assign core_dram_rsp_ready = core_dram_rsp_ready_all;
+
+        VX_snp_forwarder #(
+            .CACHE_ID           (`L2CACHE_ID),            
+            .NUM_REQUESTS       (`NUM_CORES), 
+            .SRC_ADDR_WIDTH     (`L2DRAM_ADDR_WIDTH), 
+            .DST_ADDR_WIDTH     (`DDRAM_ADDR_WIDTH),             
+            .SNP_TAG_WIDTH      (`L2SNP_TAG_WIDTH),
+            .SNRQ_SIZE          (`L2SNRQ_SIZE)
+        ) snp_forwarder (
+            .clk                (clk),
+            .reset              (reset),
+
+            .snp_req_valid      (snp_req_valid),
+            .snp_req_addr       (snp_req_addr),
+            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_tag        (snp_req_tag),
+            .snp_req_ready      (snp_req_ready),
+
+            .snp_rsp_valid      (snp_fwd_rsp_valid),       
+            .snp_rsp_addr       (snp_fwd_rsp_addr),
+            .snp_rsp_invalidate (snp_fwd_rsp_invalidate),
+            .snp_rsp_tag        (snp_fwd_rsp_tag),
+            .snp_rsp_ready      (snp_fwd_rsp_ready),   
+
+            .snp_fwdout_valid   (core_snp_fwdout_valid),
+            .snp_fwdout_addr    (core_snp_fwdout_addr),
+            .snp_fwdout_invalidate(core_snp_fwdout_invalidate),
+            .snp_fwdout_tag     (core_snp_fwdout_tag),
+            .snp_fwdout_ready   (core_snp_fwdout_ready),
+
+            .snp_fwdin_valid    (core_snp_fwdin_valid),
+            .snp_fwdin_tag      (core_snp_fwdin_tag),
+            .snp_fwdin_ready    (core_snp_fwdin_ready)      
+        );
 
         VX_cache #(
-            .CACHE_ID               (`L2CACHE_ID),
-            .CACHE_SIZE             (`L2CACHE_SIZE),
-            .BANK_LINE_SIZE         (`L2BANK_LINE_SIZE),
-            .NUM_BANKS              (`L2NUM_BANKS),
-            .WORD_SIZE              (`L2WORD_SIZE),
-            .NUM_REQUESTS           (`L2NUM_REQUESTS),
-            .CREQ_SIZE              (`L2CREQ_SIZE),
-            .MRVQ_SIZE              (`L2MRVQ_SIZE),
-            .DRFQ_SIZE              (`L2DRFQ_SIZE),
-            .SNRQ_SIZE              (`L2SNRQ_SIZE),
-            .CWBQ_SIZE              (`L2CWBQ_SIZE),
-            .DREQ_SIZE              (`L2DREQ_SIZE),
-            .SNPQ_SIZE              (`L2SNPQ_SIZE),
-            .DRAM_ENABLE            (1),
-            .FLUSH_ENABLE           (1),
-            .WRITE_ENABLE           (1),
-            .SNOOP_FORWARDING       (1),
-            .CORE_TAG_WIDTH         (`DDRAM_TAG_WIDTH),
-            .CORE_TAG_ID_BITS       (0),
-            .DRAM_TAG_WIDTH         (`L2DRAM_TAG_WIDTH),
-            .NUM_SNP_REQUESTS       (`NUM_CORES),
-            .SNP_REQ_TAG_WIDTH      (`L2SNP_TAG_WIDTH),
-            .SNP_FWD_TAG_WIDTH      (`DSNP_TAG_WIDTH)
+            .CACHE_ID           (`L2CACHE_ID),
+            .CACHE_SIZE         (`L2CACHE_SIZE),
+            .BANK_LINE_SIZE     (`L2BANK_LINE_SIZE),
+            .NUM_BANKS          (`L2NUM_BANKS),
+            .WORD_SIZE          (`L2WORD_SIZE),
+            .NUM_REQUESTS       (`L2NUM_REQUESTS),
+            .CREQ_SIZE          (`L2CREQ_SIZE),
+            .MRVQ_SIZE          (`L2MRVQ_SIZE),
+            .DRFQ_SIZE          (`L2DRFQ_SIZE),
+            .SNRQ_SIZE          (`L2SNRQ_SIZE),
+            .CWBQ_SIZE          (`L2CWBQ_SIZE),
+            .DREQ_SIZE          (`L2DREQ_SIZE),
+            .SNPQ_SIZE          (`L2SNPQ_SIZE),
+            .DRAM_ENABLE        (1),
+            .FLUSH_ENABLE       (1),
+            .WRITE_ENABLE       (1),          
+            .CORE_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
+            .CORE_TAG_ID_BITS   (0),
+            .DRAM_TAG_WIDTH     (`L2DRAM_TAG_WIDTH),
+            .SNP_TAG_WIDTH      (`L2SNP_TAG_WIDTH)
         ) l2cache (
             `SCOPE_BIND_VX_cluster_l2cache
             
@@ -409,28 +470,16 @@ module VX_cluster #(
             .dram_rsp_ready     (dram_rsp_ready),   
 
             // Snoop request
-            .snp_req_valid      (snp_req_valid),
-            .snp_req_addr       (snp_req_addr),
-            .snp_req_invalidate (snp_req_invalidate),
-            .snp_req_tag        (snp_req_tag),
-            .snp_req_ready      (snp_req_ready),
+            .snp_req_valid      (snp_fwd_rsp_valid),
+            .snp_req_addr       (snp_fwd_rsp_addr),
+            .snp_req_invalidate (snp_fwd_rsp_invalidate),
+            .snp_req_tag        (snp_fwd_rsp_tag),
+            .snp_req_ready      (snp_fwd_rsp_ready),
 
             // Snoop response
             .snp_rsp_valid      (snp_rsp_valid),
             .snp_rsp_tag        (snp_rsp_tag),
             .snp_rsp_ready      (snp_rsp_ready),
-
-            // Snoop forwarding out
-            .snp_fwdout_valid   (core_snp_fwdout_valid),
-            .snp_fwdout_addr    (core_snp_fwdout_addr),
-            .snp_fwdout_invalidate(core_snp_fwdout_invalidate),
-            .snp_fwdout_tag     (core_snp_fwdout_tag),
-            .snp_fwdout_ready   (core_snp_fwdout_ready),
-
-            // Snoop forwarding in
-            .snp_fwdin_valid    (core_snp_fwdin_valid),
-            .snp_fwdin_tag      (core_snp_fwdin_tag),
-            .snp_fwdin_ready    (core_snp_fwdin_ready),
 
             // Miss status
             `UNUSED_PIN (miss_vec)
@@ -508,11 +557,12 @@ module VX_cluster #(
 
     if (`NUM_CORES > 1) begin
         VX_snp_forwarder #(
-            .CACHE_ID           (`L2CACHE_ID),
-            .BANK_LINE_SIZE     (`L2BANK_LINE_SIZE), 
-            .NUM_REQUESTS       (`NUM_CORES), 
-            .SNRQ_SIZE          (`L2SNRQ_SIZE),
-            .SNP_REQ_TAG_WIDTH  (`L2SNP_TAG_WIDTH)
+            .CACHE_ID       (`L2CACHE_ID),            
+            .NUM_REQUESTS   (`NUM_CORES), 
+            .SRC_ADDR_WIDTH (`L2DRAM_ADDR_WIDTH), 
+            .DST_ADDR_WIDTH (`DDRAM_ADDR_WIDTH),             
+            .SNP_TAG_WIDTH  (`L2SNP_TAG_WIDTH),
+            .SNRQ_SIZE      (`L2SNRQ_SIZE)
         ) snp_forwarder (
             .clk                (clk),
             .reset              (reset),

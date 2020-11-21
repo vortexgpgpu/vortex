@@ -57,33 +57,23 @@ if args.outc != 'none':
         print('\n#endif', file=f)
 
 translation_rules = [
-    (re.compile(r'^$'), r''),
-    (re.compile(r'^(\s*)`ifndef\s+([^ ]+)'), r'\1#ifndef \2'),
-    (re.compile(r'^(\s*)`define\s+([^ ]+)'), r'\1#define \2'),
-    (re.compile(r'^(\s*)`include "VX_user_config\.vh"'), r''),
-    (re.compile(r'^(\s*)`define\s+([^ ]+) (.+)'), r'\1#define \2 \3'),
-    (re.compile(r'^(\s*)`endif\s+'), r'\1#endif'),
-    (re.compile(r'^(\s*)//(.*)'), r'\1// \2'),
-]
+    # preprocessor directives
+    (re.compile(r'^\s*`include .*$'), r''),
+    (re.compile(r'`ifdef'), r'#ifdef'),
+    (re.compile(r'`ifndef'), r'#ifndef'),    
+    (re.compile(r'`elif'), r'#elif'),
+    (re.compile(r'`else'), r'#else'),
+    (re.compile(r'`define'), r'#define'),    
+    (re.compile(r'`endif'), r'#endif'),
 
-post_rules = [
-    (re.compile(r"\d+'d(\d+)"), r'\1'),
-
-    # non-standard C but supported by GCC and Clang
-    (re.compile(r"\d+'b([01]+)"), r'0b\1'),
-    (re.compile(r"\d+'h([\da-fA-F]+)"), r'0x\1'),
-
-    # fix macro references (does not support escaped identifiers §5.6.1)
+    # macro expansion
     (re.compile(r"`([A-Za-z_][$_0-9A-Za-z]*)"), r'\1'),
+
+    # literals
+    (re.compile(r"\d+'d(\d+)"), r'\1'),
+    (re.compile(r"\d+'b([01]+)"), r'0b\1'),
+    (re.compile(r"\d+'h([\da-fA-F]+)"), r'0x\1')   
 ]
-
-def post_process_line(line):
-    for pat, repl in post_rules:
-        line = pat.sub(repl, line)
-    return line
-
-
-in_expansion = False
 
 if args.outc != 'none':
     with open(args.outc, 'a') as f:
@@ -96,36 +86,14 @@ if args.outc != 'none':
         with open(path.join(script_dir, '../rtl/VX_config.vh'), 'r') as r:
             lineno = 0
             for line in r:
-                if in_expansion:
-                    f.write(post_process_line(line))
-                    if not line.strip().endswith('\\'):
-                        in_expansion = False
-                else:
-                    for pat, repl in translation_rules:
-                        if pat.match(line):
-                            if line.strip().endswith('\\'):
-                                in_expansion = True
-                            f.write(post_process_line(pat.sub(repl, line)))
-                            break
-                    else:
-                        raise ValueError('failed to find rule for: "' + line + '" (' + str(lineno) + ')')
+                for pat, repl in translation_rules:
+                    match = pat.search(line)
+                    if match:                        
+                        line = re.sub(pat, repl, line)
+                        #print("*** match @" + str(lineno) + ": " + match.group() + " => " + line)
+                f.write(line)
                 lineno = lineno + 1
-
         print('''
-// Misc
-
-#define THREADS_PER_WARP NUM_THREADS
-#define WARPS_PER_CORE NUM_WARPS
-#define NUM_WI (NUM_WARPS * NUM_THREADS * NUM_CORES_PER_CLUSTER * NUM_CLUSTERS)
-
-// legacy
-#define TOTAL_THREADS NUM_WI
-#define TOTAL_WARPS (NUM_WARPS * NUM_CORES_PER_CLUSTER * NUM_CLUSTERS)
-
-// COLORS
-#define GREEN "\\033[32m"
-#define RED "\\033[31m"
-#define DEFAULT "\\033[39m"
 '''[1:], file=f)
 
 

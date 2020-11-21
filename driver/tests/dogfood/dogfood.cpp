@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
                               (void*)vx_host_ptr(src1_buf), 
                               (void*)vx_host_ptr(src2_buf));
     if (errors != 0) {
-      std::cout << "found " << errors << " errors!" << std::endl;
+      std::cout << "found " << std::dec << errors << " errors!" << std::endl;
       std::cout << "Test" << t << "-" << name << " FAILED!" << std::endl << std::flush;
       if (stop_on_error) {
         cleanup();

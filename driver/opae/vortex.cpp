@@ -7,11 +7,11 @@
 #include <assert.h>
 #include <cmath>
 
-#ifdef USE_VLSIM
-#include "vlsim/fpga.h"
-#else
+#if defined(USE_FPGA) || defined(USE_ASE) 
 #include <opae/fpga.h>
 #include <uuid/uuid.h>
+#elif defined(USE_VLSIM)
+#include "vlsim/fpga.h"
 #endif
 
 #include <vortex.h>

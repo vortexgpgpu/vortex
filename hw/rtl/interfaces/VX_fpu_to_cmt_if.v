@@ -5,7 +5,8 @@
 
 interface VX_fpu_to_cmt_if ();
 
-    wire                    valid;      
+    wire                    valid;   
+       
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;    
     wire [31:0]             PC;
@@ -14,6 +15,7 @@ interface VX_fpu_to_cmt_if ();
     wire                    wb;
     wire                    has_fflags;
     fflags_t [`NUM_THREADS-1:0] fflags;
+
     wire                    ready;
 
 endinterface

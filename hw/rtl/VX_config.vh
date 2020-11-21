@@ -8,7 +8,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 2
+`define NUM_CORES 4
 `endif
 
 `ifndef NUM_WARPS
@@ -23,8 +23,20 @@
 `define NUM_BARRIERS 4
 `endif
 
+`ifndef L2_ENABLE
+`define L2_ENABLE (`NUM_CORES > 2)
+`endif
+
+`ifndef L3_ENABLE
+`define L3_ENABLE (`NUM_CLUSTERS > 1)
+`endif
+
 `ifndef GLOBAL_BLOCK_SIZE
-`define GLOBAL_BLOCK_SIZE 16
+`define GLOBAL_BLOCK_SIZE 64
+`endif
+
+`ifndef L1_BLOCK_SIZE
+`define L1_BLOCK_SIZE 16
 `endif
 
 `ifndef STARTUP_ADDR
@@ -56,14 +68,6 @@
 `endif
 
 `define FRAME_BUFFER_SIZE (FRAME_BUFFER_WIDTH * FRAME_BUFFER_HEIGHT)
-
-`ifndef L2_ENABLE
-`define L2_ENABLE 0
-`endif
-
-`ifndef L3_ENABLE
-`define L3_ENABLE (`NUM_CLUSTERS > 1)
-`endif
 
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
@@ -159,7 +163,7 @@
 `define CSR_MIMPID      12'hF13
 `define CSR_MHARTID     12'hF14
 
-// Pipeline Queues ============================================================
+// Pipeline Queues ////////////////////////////////////////////////////////////
 
 // Size of instruction queue
 `ifndef IBUF_SIZE
@@ -181,26 +185,16 @@
 `define FPUQ_SIZE 8
 `endif
 
-// Dcache Configurable Knobs ==================================================
+// Dcache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
-`define DCACHE_SIZE 4096
+`define DCACHE_SIZE 8192
 `endif
 
-// Size of line inside a bank in bytes
-`ifndef DBANK_LINE_SIZE
-`define DBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
-`endif
-
-// Number of banks {1, 2, 4, 8,...}
+// Number of banks
 `ifndef DNUM_BANKS
 `define DNUM_BANKS 4
-`endif
-
-// Size of a word in bytes
-`ifndef DWORD_SIZE
-`define DWORD_SIZE 4
 `endif
 
 // Core Request Queue Size
@@ -238,21 +232,11 @@
 `define DSNRQ_SIZE 8
 `endif
 
-// Icache Configurable Knobs ==================================================
+// Icache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
-`define ICACHE_SIZE 2048
-`endif
-
-// Size of line inside a bank in bytes
-`ifndef IBANK_LINE_SIZE
-`define IBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
-`endif
-
-// Size of a word in bytes
-`ifndef IWORD_SIZE
-`define IWORD_SIZE 4
+`define ICACHE_SIZE 8192
 `endif
 
 // Core Request Queue Size
@@ -280,26 +264,16 @@
 `define IDRFQ_SIZE 8
 `endif
 
-// SM Configurable Knobs ======================================================
+// SM Configurable Knobs //////////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef SCACHE_SIZE
-`define SCACHE_SIZE 1024
+`define SCACHE_SIZE 4096
 `endif
 
-// Size of line inside a bank in bytes
-`ifndef SBANK_LINE_SIZE
-`define SBANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
-`endif
-
-// Number of banks {1, 2, 4, 8,...}
+// Number of banks
 `ifndef SNUM_BANKS
 `define SNUM_BANKS 4
-`endif
-
-// Size of a word in bytes
-`ifndef SWORD_SIZE
-`define SWORD_SIZE 4
 `endif
 
 // Core Request Queue Size
@@ -312,26 +286,16 @@
 `define SCWBQ_SIZE `SCREQ_SIZE
 `endif
 
-// L2cache Configurable Knobs =================================================
+// L2cache Configurable Knobs /////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef L2CACHE_SIZE
-`define L2CACHE_SIZE 4096
+`define L2CACHE_SIZE 131072
 `endif
 
-// Size of line inside a bank in bytes
-`ifndef L2BANK_LINE_SIZE
-`define L2BANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
-`endif
-
-// Number of banks {1, 2, 4, 8,...}
+// Number of banks
 `ifndef L2NUM_BANKS
 `define L2NUM_BANKS 4
-`endif
-
-// Size of a word in bytes
-`ifndef L2WORD_SIZE
-`define L2WORD_SIZE `L2BANK_LINE_SIZE
 `endif
 
 // Core Request Queue Size
@@ -369,26 +333,16 @@
 `define L2SNPQ_SIZE 8
 `endif
 
-// L3cache Configurable Knobs =================================================
+// L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef L3CACHE_SIZE
-`define L3CACHE_SIZE 8192
+`define L3CACHE_SIZE 262144
 `endif
 
-// Size of line inside a bank in bytes
-`ifndef L3BANK_LINE_SIZE
-`define L3BANK_LINE_SIZE `GLOBAL_BLOCK_SIZE
-`endif
-
-// Number of banks {1, 2, 4, 8,...}
+// Number of banks
 `ifndef L3NUM_BANKS
 `define L3NUM_BANKS 4
-`endif
-
-// Size of a word in bytes
-`ifndef L3WORD_SIZE
-`define L3WORD_SIZE `L3BANK_LINE_SIZE
 `endif
 
 // Core Request Queue Size

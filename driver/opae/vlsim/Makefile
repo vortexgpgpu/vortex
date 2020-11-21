@@ -1,5 +1,5 @@
-CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
-#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+#CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
+CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CFLAGS += -I../../../../hw
 
@@ -30,7 +30,7 @@ CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
 CFLAGS += -fPIC
 
-CFLAGS += -DUSE_RTLSIM $(CONFIGS)
+CFLAGS += -DUSE_VLSIM $(CONFIGS)
 
 CFLAGS += -DDUMP_PERF_STATS
 
@@ -79,7 +79,7 @@ VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
 # use DPI FPU
-#VL_FLAGS += -DFPU_FAST
+VL_FLAGS += -DFPU_FAST
 
 RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 

@@ -168,9 +168,9 @@ module VX_ibuffer #(
                 for (integer i = 0; i < `NUM_WARPS; i++) begin
                     nw += 32'(q_size[i] != 0);
                 end
-                assert(nw == 32'(num_warps)) else $display("%t: error: invalid num_warps: nw=%0d, ref=%0d", $time, num_warps, nw);
-                assert(~deq_valid || (q_size[deq_wid] != 0)) else $display("%t: error: invalid schedule: wid=%0d", $time, deq_wid);
-                assert(~deq_fire || (q_size[deq_wid] != 0)) else $display("%t: error: invalid dequeu: wid=%0d", $time, deq_wid);
+                assert(nw == 32'(num_warps)) else $error("%t: error: invalid num_warps: nw=%0d, ref=%0d", $time, num_warps, nw);
+                assert(~deq_valid || (q_size[deq_wid] != 0)) else $error("%t: error: invalid schedule: wid=%0d", $time, deq_wid);
+                assert(~deq_fire || (q_size[deq_wid] != 0)) else $error("%t: error: invalid dequeu: wid=%0d", $time, deq_wid);
             end
         `endif
         end

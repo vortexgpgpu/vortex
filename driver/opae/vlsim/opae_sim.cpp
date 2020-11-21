@@ -206,11 +206,10 @@ void opae_sim::sRxPort_bus() {
     vortex_afu_->vcp2af_sRxPort_c0_rspValid = 1;
     memcpy(vortex_afu_->vcp2af_sRxPort_c0_data, cci_rd_it->block.data(), CACHE_BLOCK_SIZE);
     vortex_afu_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;    
-    /*printf("*** [vlsim] read-rsp: addr=%ld, mdata=%d, data=", cci_rd_it->addr, cci_rd_it->mdata);
+    /*printf("%0ld: [sim] CCI Rd Rsp: addr=%ld, mdata=%d, data=", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
     for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
       printf("%02x", cci_rd_it->block[CACHE_BLOCK_SIZE-1-i]);
     printf("\n");*/
-    fflush(stdout);
     cci_reads_.erase(cci_rd_it);
   }
 }
@@ -225,8 +224,7 @@ void opae_sim::sTxPort_bus() {
     cci_req.mdata = vortex_afu_->af2cp_sTxPort_c0_hdr_mdata;
     auto host_ptr = (uint64_t*)(vortex_afu_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
     memcpy(cci_req.block.data(), host_ptr, CACHE_BLOCK_SIZE);
-    //printf("*** [vlsim] read-req: addr=%ld, mdata=%d\n", vortex_afu_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
-    fflush(stdout);
+    //printf("%0ld: [sim] CCI Rd Req: addr=%ld, mdata=%d\n", timestamp, vortex_afu_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
     cci_reads_.emplace_back(cci_req);    
   }
 
@@ -265,12 +263,12 @@ void opae_sim::avs_bus() {
     memcpy(vortex_afu_->avs_readdata, dram_rd_it->block.data(), CACHE_BLOCK_SIZE);
     uint32_t tag = dram_rd_it->tag;
     dram_reads_.erase(dram_rd_it);
-    /*printf("%0ld: VLSIM: DRAM rsp: addr=%x, pending={", timestamp, tag);
+    /*printf("%0ld: [sim] DRAM Rd Rsp: addr=%x, pending={", timestamp, tag);
     for (auto& req : dram_reads_) {
       if (req.cycles_left != 0) 
-        printf(" !%0x",  req.tag);
+        printf(" !%0x", req.tag);
       else
-        printf(" %0x",  req.tag);
+        printf(" %0x", req.tag);
     }
     printf("}\n");*/
   }
@@ -288,7 +286,8 @@ void opae_sim::avs_bus() {
 
   // process DRAM requests
   if (!dram_stalled) {
-    if (vortex_afu_->avs_write) {
+    assert(!vortex_afu_->avs_read || !vortex_afu_->avs_write);
+    if (vortex_afu_->avs_write) {      
       assert(0 == vortex_afu_->mem_bank_select);
       uint64_t byteen = vortex_afu_->avs_byteenable;
       unsigned base_addr = (vortex_afu_->avs_address * CACHE_BLOCK_SIZE);
@@ -307,12 +306,12 @@ void opae_sim::avs_bus() {
       ram_.read(base_addr, CACHE_BLOCK_SIZE, dram_req.block.data());
       dram_req.tag = base_addr;
       dram_reads_.emplace_back(dram_req);
-      /*printf("%0ld: VLSIM: DRAM req: addr=%x, pending={", timestamp, base_addr);
+      /*printf("%0ld: [sim] DRAM Rd Req: addr=%x, pending={", timestamp, base_addr);
       for (auto& req : dram_reads_) {
         if (req.cycles_left != 0) 
-          printf(" !%0x",  req.tag);
+          printf(" !%0x", req.tag);
         else
-          printf(" %0x",  req.tag);
+          printf(" %0x", req.tag);
       }
       printf("}\n");*/
     }   

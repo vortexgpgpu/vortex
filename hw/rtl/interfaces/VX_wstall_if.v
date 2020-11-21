@@ -5,7 +5,7 @@
 
 interface VX_wstall_if();
 
-    wire                valid;
+    wire                valid;    
     wire [`NW_BITS-1:0]	wid;
 
 endinterface

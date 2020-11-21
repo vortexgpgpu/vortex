@@ -9,15 +9,13 @@
 
 interface VX_fpu_to_csr_if ();
 
-	wire valid;
-
+	wire				valid;
 	wire [`NW_BITS-1:0] wid;
-
-	wire fflags_NV;
-	wire fflags_DZ;
-	wire fflags_OF;
-	wire fflags_UF;
-	wire fflags_NX;
+	wire 				fflags_NV;
+	wire 				fflags_DZ;
+	wire 				fflags_OF;
+	wire 				fflags_UF;
+	wire 				fflags_NX;
 
 endinterface
 

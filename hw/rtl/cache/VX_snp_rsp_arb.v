@@ -3,17 +3,17 @@
 module VX_snp_rsp_arb #(
     parameter NUM_BANKS         = 1,
     parameter BANK_LINE_SIZE    = 1,
-    parameter SNP_REQ_TAG_WIDTH = 1
+    parameter SNP_TAG_WIDTH     = 1
 ) (
     input  wire clk,
     input  wire reset,
     
     input  wire [NUM_BANKS-1:0]         per_bank_snp_rsp_valid,
-    input  wire [NUM_BANKS-1:0][SNP_REQ_TAG_WIDTH-1:0] per_bank_snp_rsp_tag,
+    input  wire [NUM_BANKS-1:0][SNP_TAG_WIDTH-1:0] per_bank_snp_rsp_tag,
     output wire [NUM_BANKS-1:0]         per_bank_snp_rsp_ready,
 
     output wire                         snp_rsp_valid,
-    output wire [SNP_REQ_TAG_WIDTH-1:0] snp_rsp_tag,
+    output wire [SNP_TAG_WIDTH-1:0]     snp_rsp_tag,
     input  wire                         snp_rsp_ready    
 );
     if (NUM_BANKS > 1) begin
@@ -35,7 +35,7 @@ module VX_snp_rsp_arb #(
         wire stall = ~snp_rsp_ready && snp_rsp_valid;
 
         VX_generic_register #(
-            .N(1 + SNP_REQ_TAG_WIDTH),
+            .N(1 + SNP_TAG_WIDTH),
             .PASSTHRU(NUM_BANKS <= 2)
         ) pipe_reg (
             .clk   (clk),
