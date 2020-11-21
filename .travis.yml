@@ -32,6 +32,7 @@ script:
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=1 
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=2
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=4
+  - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=2 --l2cache
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=4 --l2cache
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=2 --l2cache --clusters=2
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=2 --l2cache --clusters=4
