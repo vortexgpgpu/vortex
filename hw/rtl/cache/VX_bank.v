@@ -47,7 +47,7 @@ module VX_bank #(
     parameter CORE_TAG_ID_BITS              = 0,
 
     // Snooping request tag width
-    parameter SNP_REQ_TAG_WIDTH             = 1
+    parameter SNP_TAG_WIDTH                 = 1
 ) (
     `SCOPE_IO_VX_bank
 
@@ -88,12 +88,12 @@ module VX_bank #(
     input  wire                         snp_req_valid,
     input  wire [`LINE_ADDR_WIDTH-1:0]  snp_req_addr,
     input  wire                         snp_req_invalidate,
-    input  wire [SNP_REQ_TAG_WIDTH-1:0] snp_req_tag,
+    input  wire [SNP_TAG_WIDTH-1:0]     snp_req_tag,
     output wire                         snp_req_ready,
 
     // Snoop Response
     output wire                         snp_rsp_valid,
-    output wire [SNP_REQ_TAG_WIDTH-1:0] snp_rsp_tag,
+    output wire [SNP_TAG_WIDTH-1:0]     snp_rsp_tag,
     input  wire                         snp_rsp_ready,
 
     // Misses
@@ -142,13 +142,13 @@ module VX_bank #(
     
     wire [`LINE_ADDR_WIDTH-1:0] snrq_addr_st0;
     wire snrq_invalidate_st0;
-    wire [SNP_REQ_TAG_WIDTH-1:0] snrq_tag_st0;
+    wire [SNP_TAG_WIDTH-1:0] snrq_tag_st0;
 
     wire snp_req_fire = snp_req_valid && snp_req_ready;
     assign snp_req_ready = !snrq_full;
 
     VX_generic_queue #(
-        .DATAW(`LINE_ADDR_WIDTH + 1 + SNP_REQ_TAG_WIDTH), 
+        .DATAW(`LINE_ADDR_WIDTH + 1 + SNP_TAG_WIDTH), 
         .SIZE(SNRQ_SIZE)
     ) snp_req_queue (
         .clk     (clk),
@@ -352,7 +352,7 @@ module VX_bank #(
                                 || ((miss_st3 || force_miss_st3) && (addr_st3 == addr_st0));
 
 `ifdef DBG_CACHE_REQ_INFO
-    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
         assign {debug_pc_st0, debug_rd_st0, debug_wid_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = inst_meta_st0;
     end else begin
         assign {debug_pc_st0, debug_rd_st0, debug_wid_st0, debug_tagid_st0, debug_rw_st0, debug_byteen_st0, debug_tid_st0} = 0;
@@ -371,7 +371,7 @@ module VX_bank #(
     );
 
 `ifdef DBG_CACHE_REQ_INFO
-    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
         assign {debug_pc_st1, debug_rd_st1, debug_wid_st1, debug_tagid_st1, debug_rw_st1, debug_byteen_st1, debug_tid_st1} = inst_meta_st1;
     end else begin
         assign {debug_pc_st1, debug_rd_st1, debug_wid_st1, debug_tagid_st1, debug_rw_st1, debug_byteen_st1, debug_tid_st1} = 0;
@@ -474,7 +474,7 @@ module VX_bank #(
     );    
 
 `ifdef DBG_CACHE_REQ_INFO
-    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
         assign {debug_pc_st2, debug_rd_st2, debug_wid_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = inst_meta_st2;
     end else begin
         assign {debug_pc_st2, debug_rd_st2, debug_wid_st2, debug_tagid_st2, debug_rw_st2, debug_byteen_st2, debug_tid_st2} = 0;
@@ -574,7 +574,7 @@ module VX_bank #(
     );    
 
 `ifdef DBG_CACHE_REQ_INFO
-    if (WORD_SIZE != `GLOBAL_BLOCK_SIZE) begin
+    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
         assign {debug_pc_st3, debug_rd_st3, debug_wid_st3, debug_tagid_st3, debug_rw_st3, debug_byteen_st3, debug_tid_st3} = inst_meta_st3;
     end else begin
         assign {debug_pc_st3, debug_rd_st3, debug_wid_st3, debug_tagid_st3, debug_rw_st3, debug_byteen_st3, debug_tid_st3} = 0;
@@ -621,7 +621,7 @@ module VX_bank #(
             .NUM_REQUESTS           (NUM_REQUESTS),
             .MRVQ_SIZE              (MRVQ_SIZE),
             .CORE_TAG_WIDTH         (CORE_TAG_WIDTH),
-            .SNP_REQ_TAG_WIDTH      (SNP_REQ_TAG_WIDTH)
+            .SNP_TAG_WIDTH          (SNP_TAG_WIDTH)
         ) cache_miss_resrv (
             .clk                    (clk),
             .reset                  (reset),
@@ -803,12 +803,12 @@ module VX_bank #(
 
     wire snpq_pop = snp_rsp_valid && snp_rsp_ready;
 
-    wire [SNP_REQ_TAG_WIDTH-1:0] snpq_tag_st3 = SNP_REQ_TAG_WIDTH'(req_tag_st3);
+    wire [SNP_TAG_WIDTH-1:0] snpq_tag_st3 = SNP_TAG_WIDTH'(req_tag_st3);
 
     if (FLUSH_ENABLE) begin
         VX_generic_queue #(
-            .DATAW(SNP_REQ_TAG_WIDTH), 
-            .SIZE(SNPQ_SIZE)
+            .DATAW  (SNP_TAG_WIDTH), 
+            .SIZE   (SNPQ_SIZE)
         ) snp_rsp_queue (
             .clk     (clk),
             .reset   (reset),

@@ -7,7 +7,7 @@
 `include "VX_define.vh"
 `endif
 
-`define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_REQ_TAG_WIDTH)
+`define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_TAG_WIDTH)
 
 `define REQS_BITS               `LOG2UP(NUM_REQUESTS)
 

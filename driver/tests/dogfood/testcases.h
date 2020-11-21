@@ -14,29 +14,36 @@ union Float_t {
     } parts;
 };
 
-inline float fround(float x, int32_t precision = 4) {
+inline float fround(float x, int32_t precision = 8) {
   auto power_of_10 = std::pow(10, precision);
   return std::round(x * power_of_10) / power_of_10;
 }
 
-inline bool almost_equal_eps(float a, float b, float eps = std::numeric_limits<float>::epsilon()) {
-  auto tolerance = std::min(fabs(a), fabs(b)) * eps;
-  return fabs(a - b) <= tolerance;
+inline bool almost_equal_eps(float a, float b, int ulp = 128) {
+  auto eps = std::numeric_limits<float>::epsilon() * (std::max(fabs(a), fabs(b)) * ulp);
+  auto d = fabs(a - b);
+  if (d > eps) {
+    std::cout << "*** almost_equal_eps: d=" << d << ", eps=" << eps << std::endl;
+    return false;
+  }
+  return true;
 }
 
-inline bool almost_equal_ulp(float a, float b, int32_t ulp = 4) {
+inline bool almost_equal_ulp(float a, float b, int32_t ulp = 6) {
   Float_t fa{a}, fb{b};
   auto d = std::abs(fa.i - fb.i);
   if (d > ulp) {
-    std::cout << "*** float compare: a=" << a << ", b=" << b << ", ulp=" << d << ", ia=" << std::hex << fa.i << ", ib=" << fb.i << std::endl;
+    std::cout << "*** almost_equal_ulp: a=" << a << ", b=" << b << ", ulp=" << d << ", ia=" << std::hex << fa.i << ", ib=" << fb.i << std::endl;
     return false;
   }
   return true;
 }
 
 inline bool almost_equal(float a, float b) {
-  if (almost_equal_eps(a, b))
+  if (a == b)
     return true;
+  /*if (almost_equal_eps(a, b))
+    return true;*/
   return almost_equal_ulp(a, b);
 }
 

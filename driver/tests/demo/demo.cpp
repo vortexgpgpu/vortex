@@ -92,7 +92,7 @@ int run_test(const kernel_arg_t& kernel_arg,
       }
     }
     if (errors != 0) {
-      std::cout << "Found " << errors << " errors!" << std::endl;
+      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
       std::cout << "FAILED!" << std::endl;
       return 1;  
     }

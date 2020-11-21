@@ -3,6 +3,10 @@
 #include <fstream>
 #include <iomanip>
 
+#define GREEN   "\\033[32m"
+#define RED     "\\033[31m"
+#define DEFAULT "\\033[39m"
+
 #define ALL_TESTS
 
 int main(int argc, char **argv) {

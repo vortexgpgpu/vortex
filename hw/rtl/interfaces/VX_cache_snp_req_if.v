@@ -9,9 +9,11 @@ interface VX_cache_snp_req_if #(
 ) ();
 
     wire                        valid;
+    
     wire [DRAM_ADDR_WIDTH-1:0]  addr; 
     wire                        invalidate;   
-    wire [SNP_TAG_WIDTH-1:0]    tag;    
+    wire [SNP_TAG_WIDTH-1:0]    tag;   
+
     wire                        ready;
 
 endinterface

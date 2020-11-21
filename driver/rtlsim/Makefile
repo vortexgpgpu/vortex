@@ -1,5 +1,5 @@
-CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
-#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+#CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
+CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CFLAGS += -I../../include -I../../../hw/simulate -I../../../hw
 
@@ -65,7 +65,7 @@ else
 endif
 
 # use DPI FPU
-#VL_FLAGS += -DFPU_FAST
+VL_FLAGS += -DFPU_FAST
 
 PROJECT = libvortex.so
 # PROJECT = libvortex.dylib

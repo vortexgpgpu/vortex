@@ -3,107 +3,130 @@
 # exit when any command fails
 set -e
 
-run_1c()
+show_usage()
 {
-    # test single core
-    make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
+    echo "Vortex BlackBox Test Driver v1.0"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--app=vecadd|sgemm|basic|demo|dogfood][--help]]"
 }
 
-run_2c()
-{
-    # test 2 cores
-    make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
-}
+DRIVER=vlsim
+APP=sgemm
+CLUSTERS=1
+CORES=2
+WARPS=4
+THREADS=4
+L2=0
+DEBUG=0
+SCOPE=0
 
-run_4c()
-{
-    # test 4 cores
-    make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=0" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
-}
-
-run_4c_l2()
-{
-    # test 4 cores with L2
-    make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
-}
-
-run_4c_2l2_l3()
-{
-    # test 4 cores with L2 and L3
-    make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=2 -DNUM_CORES=2 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
-}
-
-run_8c_4l2_l3()
-{
-    # test 8 cores with L2 and L3
-    make -C driver/opae/vlsim clean
-    CONFIGS="-DNUM_CLUSTERS=4 -DNUM_CORES=2 -DL2_ENABLE=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
-}
-
-run_debug()
-{
-    # test debug build
-    make -C driver/opae/vlsim clean
-    DEBUG=1 CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae/vlsim > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim > /dev/null 2>&1
-}
-
-run_scope()
-{
-    # test build with scope analyzer
-    make -C driver/opae clean
-    SCOPE=1 CONFIGS="-DNUM_CLUSTERS=1 -DNUM_CORES=1" make -C driver/opae > /dev/null 2>&1
-    make -C benchmarks/opencl/sgemm run-vlsim
-}
-
-usage()
-{
-    echo "usage: blackbox [[-run_1c] [-run_2c] [-run_4c] [-run_4c_l2] [-run_4c_2l2_l3] [-run_8c_4l2_l3] [-run_debug] [-run_scope] [-all] [-h|--help]]"
-}
-
-while [ "$1" != "" ]; do
-    case $1 in
-        -run_1c ) run_1c
-                ;;
-        -run_2c ) run_2c
-                ;;
-        -run_4c ) run_4c
-                ;;
-        -run_4c_l2 ) run_4c_l2
-                ;;
-        -run_4c_2l2_l3 ) run_4c_2l2_l3
-                ;;
-        -run_8c_4l2_l3 ) run_8c_4l2_l3
-                ;;
-        -run_debug ) run_debug
-                ;;
-        -run_scope ) run_scope
-                ;;
-        -all ) run_1c
-               run_2c
-               run_4c
-               run_4c_l2
-               run_4c_2l2_l3
-               run_8c_4l2_l3
-               run_debug
-               run_scope
-               ;;
-        -h | --help ) usage
-                      exit
-                      ;;
-        * )           usage
-                      exit 1
-    esac
-    shift
+for i in "$@"
+do
+case $i in
+    --driver=*)
+        DRIVER=${i#*=}
+        shift
+        ;;
+    --app=*)
+        APP=${i#*=}
+        shift
+        ;;
+    --clusters=*)
+        CLUSTERS=${i#*=}
+        shift
+        ;;
+    --cores=*)
+        CORES=${i#*=}
+        shift
+        ;;
+    --warps=*)
+        WARPS=${i#*=}
+        shift
+        ;;
+    --threads=*)
+        THREADS=${i#*=}
+        shift
+        ;;
+    --l2cache)
+        L2=1
+        shift
+        ;;
+    --debug)
+        DEBUG=1
+        shift
+        ;;
+    --scope)
+        SCOPE=1
+        shift
+        ;;
+    --help)
+        show_usage
+        exit
+        ;;
+    *)
+    show_usage   
+    exit       
+    ;;
+esac
 done
+
+case $DRIVER in
+    rtlsim)
+        DRIVER_PATH=driver/rtlsim
+        DRIVER_EXTRA=
+        ;;
+    vlsim)
+        DRIVER_PATH=driver/opae
+        DRIVER_EXTRA=vlsim
+        ;;
+    *)
+        echo "invalid driver: $DRIVER"
+        exit
+        ;;
+esac
+
+case $APP in
+    sgemm)
+        APP_PATH=benchmarks/opencl/sgemm
+        ;;
+    vecadd)
+        APP_PATH=benchmarks/opencl/vacadd
+        ;;
+    basic)
+        APP_PATH=driver/tests/basic
+        ;;
+    demo)
+        APP_PATH=driver/tests/demo
+        ;;
+    dogfood)
+        APP_PATH=driver/tests/dogfood
+        ;;
+    *)
+        echo "invalid app: $APP"
+        exit
+        ;;
+esac
+
+CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2"
+
+echo "CONFIGS=$CONFIGS"
+
+make -C $DRIVER_PATH clean
+
+if [[ $DEBUG -eq 1 ]] 
+then
+    if [[ $SCOPE -eq 1 ]]  
+    then
+        DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+    else
+        DEBUG=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+    fi    
+else
+    if [[ $SCOPE -eq 1 ]]  
+    then
+        SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+    else
+        CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+    fi
+fi
+
+make -C $APP_PATH run-$DRIVER > run.log 2>&1

@@ -10,18 +10,15 @@ interface VX_decode_if ();
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
     wire [31:0]             PC;
-
     wire [`EX_BITS-1:0]     ex_type;    
     wire [`OP_BITS-1:0]     op_type; 
     wire [`MOD_BITS-1:0]    op_mod;    
     wire                    wb;
-
     wire [`NR_BITS-1:0]     rd;
     wire [`NR_BITS-1:0]     rs1;
     wire [`NR_BITS-1:0]     rs2;
     wire [`NR_BITS-1:0]     rs3;
-    wire [31:0]             imm;    
-
+    wire [31:0]             imm; 
     wire                    rs1_is_PC;
     wire                    rs2_is_imm;      
     wire                    use_rs3; 

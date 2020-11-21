@@ -54,7 +54,7 @@ module VX_cam_buffer #(
         end else begin
             for (integer i = 0; i < CPORTS; i++) begin 
                 if (release_slot[i]) begin
-                    assert(0 == free_slots[release_addr[i]]) else $display("%t: freed slot at port %d", $time, release_addr[i]);
+                    assert(0 == free_slots[release_addr[i]]) else $error("%t: releasing invalid slot at port %d", $time, release_addr[i]);
                 end
             end
             free_slots   <= free_slots_n;
@@ -63,7 +63,7 @@ module VX_cam_buffer #(
         end
 
         if (acquire_slot) begin
-            assert(1 == free_slots[write_addr]) else $display("%t: inused slot at port %d", $time, write_addr); 
+            assert(1 == free_slots[write_addr]) else $error("%t: acquiring used slot at port %d", $time, write_addr); 
             entries[write_addr] <= write_data;                
         end
     end        

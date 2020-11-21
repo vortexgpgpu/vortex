@@ -501,7 +501,6 @@ wire [AVS_REQ_TAGW-1:0] vx_dram_rsp_tag_unqual;
 wire cci_dram_rd_req_valid, cci_dram_wr_req_valid;
 wire [DRAM_ADDR_WIDTH-1:0] cci_dram_rd_req_addr, cci_dram_wr_req_addr;
 wire [CCI_RD_RQ_DATAW-1:0] cci_rdq_dout;
-wire [VX_DRAM_LINE_IDX-1:0] vx_dram_req_idx, vx_dram_rsp_idx;
 
 //--
 
@@ -526,20 +525,19 @@ assign vx_dram_req_valid_qual = vx_dram_req_valid && vx_enabled;
 assign vx_dram_req_addr_qual = vx_dram_req_addr[`VX_DRAM_ADDR_WIDTH-1:`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH];
 
 if (`VX_DRAM_LINE_WIDTH != DRAM_LINE_WIDTH) begin
-  assign vx_dram_req_idx         = vx_dram_req_addr[VX_DRAM_LINE_IDX-1:0];
+  wire [VX_DRAM_LINE_IDX-1:0] vx_dram_req_idx = vx_dram_req_addr[VX_DRAM_LINE_IDX-1:0];
+  wire [VX_DRAM_LINE_IDX-1:0] vx_dram_rsp_idx = vx_dram_rsp_tag_unqual[VX_DRAM_LINE_IDX-1:0];
   assign vx_dram_req_byteen_qual = 64'(vx_dram_req_byteen) << (6'(vx_dram_req_addr[VX_DRAM_LINE_IDX-1:0]) << (VX_DRAM_LINE_LW-3));  
   assign vx_dram_req_data_qual   = DRAM_LINE_WIDTH'(vx_dram_req_data) << ((DRAM_LINE_LW'(vx_dram_req_idx)) << VX_DRAM_LINE_LW);
   assign vx_dram_req_tag_qual    = {vx_dram_req_tag, vx_dram_req_idx};
-  assign vx_dram_rsp_data        = vx_dram_rsp_data_unqual[vx_dram_rsp_idx];
+  assign vx_dram_rsp_data        = vx_dram_rsp_data_unqual[vx_dram_rsp_idx];  
 end else begin
-  assign vx_dram_req_idx         = VX_DRAM_LINE_IDX'(0);
   assign vx_dram_req_byteen_qual = vx_dram_req_byteen;
   assign vx_dram_req_tag_qual    = vx_dram_req_tag;
   assign vx_dram_req_data_qual   = vx_dram_req_data;
   assign vx_dram_rsp_data        = vx_dram_rsp_data_unqual;
 end
 
-assign vx_dram_rsp_idx = vx_dram_rsp_tag_unqual[VX_DRAM_LINE_IDX-1:0];
 assign vx_dram_rsp_tag = vx_dram_rsp_tag_unqual[`VX_DRAM_TAG_WIDTH+VX_DRAM_LINE_IDX-1:VX_DRAM_LINE_IDX];
 
 //--
@@ -723,15 +721,15 @@ always @(posedge clk) begin
         cci_rd_req_wait <= 0; // restart new request batch
       end 
     `ifdef DBG_PRINT_OPAE
-      $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr);
+      $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d, data=%0h", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
     `endif
     end
 
-    if (cci_rdq_pop) begin
+    /*if (cci_rdq_pop) begin
     `ifdef DBG_PRINT_OPAE
       $display("%t: CCI Rd Queue Pop: pending=%0d", $time, cci_pending_reads_next);
     `endif
-    end
+    end*/
 
     if (cci_dram_wr_req_fire) begin                
       cci_dram_wr_req_addr_unqual <= cci_dram_wr_req_addr_unqual + ((CCI_RD_RQ_TAGW'(cci_dram_wr_req_ctr) == CCI_RD_RQ_TAGW'(CCI_RD_WINDOW_SIZE-1)) ? DRAM_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE) : DRAM_ADDR_WIDTH'(0));
@@ -836,15 +834,15 @@ begin
       cci_wr_req_addr <= cci_wr_req_addr + t_ccip_clAddr'(1);        
       cci_wr_req_ctr  <= cci_wr_req_ctr - DRAM_ADDR_WIDTH'(1);
     `ifdef DBG_PRINT_OPAE
-      $display("%t: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes_next);
+      $display("%t: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d, data=%0h", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes_next, af2cp_sTxPort.c1.data);
     `endif
     end
 
-  `ifdef DBG_PRINT_OPAE
+  /*`ifdef DBG_PRINT_OPAE
     if (cci_wr_rsp_fire) begin      
       $display("%t: CCI Wr Rsp: pending=%0d", $time, cci_pending_writes_next);      
     end
-  `endif
+  `endif*/
 
     if (cci_dram_rd_req_fire) begin
       cci_dram_rd_req_addr_unqual <= cci_dram_rd_req_addr_unqual + DRAM_ADDR_WIDTH'(1);       
