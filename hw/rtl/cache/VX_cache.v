@@ -101,6 +101,8 @@ module VX_cache #(
     output wire [NUM_BANKS-1:0] miss_vec
 );
 
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQUESTS, ("invalid value"))
+
     wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valid;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;

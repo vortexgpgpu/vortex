@@ -167,7 +167,7 @@
 
 // Size of instruction queue
 `ifndef IBUF_SIZE
-`define IBUF_SIZE 8
+`define IBUF_SIZE 4
 `endif
 
 // Size of LSU Request Queue
@@ -177,12 +177,12 @@
 
 // Size of MUL Request Queue
 `ifndef MULQ_SIZE
-`define MULQ_SIZE 8
+`define MULQ_SIZE 4
 `endif
 
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
-`define FPUQ_SIZE 8
+`define FPUQ_SIZE 4
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -194,74 +194,74 @@
 
 // Number of banks
 `ifndef DNUM_BANKS
-`define DNUM_BANKS 4
+`define DNUM_BANKS `MIN(`NUM_THREADS, 4)
 `endif
 
 // Core Request Queue Size
 `ifndef DCREQ_SIZE
-`define DCREQ_SIZE `NUM_WARPS
+`define DCREQ_SIZE 4
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef DMRVQ_SIZE
-`define DMRVQ_SIZE `MAX(`NUM_WARPS*`NUM_THREADS, 8)
+`define DMRVQ_SIZE `MAX(`LSUQ_SIZE, 4)
 `endif
 
 // Core Writeback Queue Size
 `ifndef DCWBQ_SIZE
-`define DCWBQ_SIZE `DCREQ_SIZE
+`define DCWBQ_SIZE 4
 `endif
 
 // DRAM Request Queue Size
 `ifndef DDREQ_SIZE
-`define DDREQ_SIZE 8
+`define DDREQ_SIZE 4
 `endif
 
 // DRAM Response Queue Size
 `ifndef DDRFQ_SIZE
-`define DDRFQ_SIZE 8
+`define DDRFQ_SIZE 4
 `endif
 
 // Snoop Response Queue Size
 `ifndef DSNPQ_SIZE
-`define DSNPQ_SIZE 8
+`define DSNPQ_SIZE 4
 `endif
 
-// Snoop Req Queue Size
+// Snoop Request Queue Size
 `ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 8
+`define DSNRQ_SIZE 4
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
-`define ICACHE_SIZE 8192
+`define ICACHE_SIZE 4096
 `endif
 
 // Core Request Queue Size
 `ifndef ICREQ_SIZE
-`define ICREQ_SIZE `NUM_WARPS
+`define ICREQ_SIZE 4
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef IMRVQ_SIZE
-`define IMRVQ_SIZE `MAX(`ICREQ_SIZE, 8)
+`define IMRVQ_SIZE 4
 `endif
 
 // Core Writeback Queue Size
 `ifndef ICWBQ_SIZE
-`define ICWBQ_SIZE `ICREQ_SIZE
+`define ICWBQ_SIZE 4
 `endif
 
 // DRAM Request Queue Size
 `ifndef IDREQ_SIZE
-`define IDREQ_SIZE 8
+`define IDREQ_SIZE 4
 `endif
 
 // DRAM Response Queue Size
 `ifndef IDRFQ_SIZE
-`define IDRFQ_SIZE 8
+`define IDRFQ_SIZE 4
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -273,17 +273,17 @@
 
 // Number of banks
 `ifndef SNUM_BANKS
-`define SNUM_BANKS 4
+`define SNUM_BANKS `NUM_THREADS
 `endif
 
 // Core Request Queue Size
 `ifndef SCREQ_SIZE
-`define SCREQ_SIZE `NUM_WARPS
+`define SCREQ_SIZE 4
 `endif
 
 // Core Writeback Queue Size
 `ifndef SCWBQ_SIZE
-`define SCWBQ_SIZE `SCREQ_SIZE
+`define SCWBQ_SIZE 4
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////
@@ -295,42 +295,42 @@
 
 // Number of banks
 `ifndef L2NUM_BANKS
-`define L2NUM_BANKS 4
+`define L2NUM_BANKS `MIN((`NUM_CORES * 2), 4)
 `endif
 
 // Core Request Queue Size
 `ifndef L2CREQ_SIZE
-`define L2CREQ_SIZE 8
+`define L2CREQ_SIZE 4
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef L2MRVQ_SIZE
-`define L2MRVQ_SIZE `MAX(`L2CREQ_SIZE, 8)
+`define L2MRVQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
 `ifndef L2CWBQ_SIZE
-`define L2CWBQ_SIZE `L2CREQ_SIZE
+`define L2CWBQ_SIZE 4
 `endif
 
 // DRAM Request Queue Size
 `ifndef L2DREQ_SIZE
-`define L2DREQ_SIZE 8
+`define L2DREQ_SIZE 4
 `endif
 
 // DRAM Response Queue Size
 `ifndef L2DRFQ_SIZE
-`define L2DRFQ_SIZE 8
+`define L2DRFQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size
 `ifndef L2SNRQ_SIZE
-`define L2SNRQ_SIZE 8
+`define L2SNRQ_SIZE 4
 `endif
 
 // Snoop Response Queue Size
 `ifndef L2SNPQ_SIZE
-`define L2SNPQ_SIZE 8
+`define L2SNPQ_SIZE 4
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -342,42 +342,42 @@
 
 // Number of banks
 `ifndef L3NUM_BANKS
-`define L3NUM_BANKS 4
+`define L3NUM_BANKS `MIN(`NUM_CLUSTERS, 4)
 `endif
 
 // Core Request Queue Size
 `ifndef L3CREQ_SIZE
-`define L3CREQ_SIZE 8
+`define L3CREQ_SIZE 4
 `endif
 
 // Miss Reserv Queue Knob
 `ifndef L3MRVQ_SIZE
-`define L3MRVQ_SIZE `MAX(`L3CREQ_SIZE, 8)
+`define L3MRVQ_SIZE 8
 `endif
 
 // Core Writeback Queue Size
 `ifndef L3CWBQ_SIZE
-`define L3CWBQ_SIZE `L3CREQ_SIZE
+`define L3CWBQ_SIZE 4
 `endif
 
 // DRAM Request Queue Size
 `ifndef L3DREQ_SIZE
-`define L3DREQ_SIZE 8
+`define L3DREQ_SIZE 4
 `endif
 
 // DRAM Response Queue Size
 `ifndef L3DRFQ_SIZE
-`define L3DRFQ_SIZE 8
+`define L3DRFQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size
 `ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 8
+`define L3SNRQ_SIZE 4
 `endif
 
 // Snoop Response Queue Size
 `ifndef L3SNPQ_SIZE
-`define L3SNPQ_SIZE 8
+`define L3SNPQ_SIZE 4
 `endif
 
 `endif
