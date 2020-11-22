@@ -6,7 +6,7 @@ set -e
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--travis] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
 }
 
 DRIVER=vlsim
@@ -18,6 +18,7 @@ THREADS=4
 L2=0
 DEBUG=0
 SCOPE=0
+TRAVIS=0
 HAS_ARGS=0
 
 for i in "$@"
@@ -62,6 +63,10 @@ case $i in
     --args=*)
         ARGS=${i#*=}
         HAS_ARGS=1
+        shift
+        ;;
+    --travis)
+        TRAVIS=1
         shift
         ;;
     --help)
@@ -120,6 +125,11 @@ make -C $DRIVER_PATH clean
 
 if [ $DEBUG -eq 1 ]
 then
+    if [ $TRAVIS -eq 1 ]
+    then
+        while sleep 9m; do echo "===[ $SECONDS sec still running ]==="; done &
+    fi
+    
     if [ $SCOPE -eq 1 ]
     then
         DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
@@ -133,12 +143,27 @@ then
     else
         make -C $APP_PATH run-$DRIVER > run.log 2>&1
     fi
+
+    if [ $TRAVIS -eq 1 ]
+    then
+        kill %1
+    fi
 else
+    if [ $TRAVIS -eq 1 ]
+    then
+        while sleep 9m; do echo "===[ $SECONDS sec still running ]==="; done &
+    fi
+
     if [ $SCOPE -eq 1 ]
     then
         SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     else
         CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+    fi
+
+    if [ $TRAVIS -eq 1 ]
+    then
+        kill %1
     fi
     
     if [ $HAS_ARGS -eq 1 ]
