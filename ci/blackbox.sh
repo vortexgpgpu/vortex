@@ -127,7 +127,8 @@ if [ $DEBUG -eq 1 ]
 then
     if [ $TRAVIS -eq 1 ]
     then
-        while sleep 9m; do echo "===[ $SECONDS sec still running ]==="; done &
+        while sleep 5m; do echo "*** still running..."; done &
+        sleep_pid=$!
     fi
     
     if [ $SCOPE -eq 1 ]
@@ -146,12 +147,13 @@ then
 
     if [ $TRAVIS -eq 1 ]
     then
-        kill %1
+        kill $sleep_pid
     fi
 else
     if [ $TRAVIS -eq 1 ]
     then
-        while sleep 9m; do echo "===[ $SECONDS sec still running ]==="; done &
+        while sleep 5m; do echo "*** still running..."; done &
+        sleep_pid=$!
     fi
 
     if [ $SCOPE -eq 1 ]
@@ -163,7 +165,7 @@ else
 
     if [ $TRAVIS -eq 1 ]
     then
-        kill %1
+        kill $sleep_pid
     fi
     
     if [ $HAS_ARGS -eq 1 ]
