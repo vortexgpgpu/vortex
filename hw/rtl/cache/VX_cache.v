@@ -4,9 +4,9 @@ module VX_cache #(
     parameter CACHE_ID                      = 0,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 4096, 
+    parameter CACHE_SIZE                    = 8092, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 16, 
+    parameter BANK_LINE_SIZE                = 64, 
     // Number of banks
     parameter NUM_BANKS                     = 4, 
     // Size of a word in bytes
@@ -15,20 +15,20 @@ module VX_cache #(
     parameter NUM_REQUESTS                  = 4, 
 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 8, 
+    parameter CREQ_SIZE                     = 4, 
     // Miss Reserv Queue Knob
     parameter MRVQ_SIZE                     = 8, 
     // DRAM Response Queue Size
-    parameter DRFQ_SIZE                     = 8, 
+    parameter DRFQ_SIZE                     = 4, 
     // Snoop Req Queue Size
-    parameter SNRQ_SIZE                     = 8, 
+    parameter SNRQ_SIZE                     = 4, 
 
     // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 8, 
+    parameter CWBQ_SIZE                     = 4, 
     // DRAM Request Queue Size
-    parameter DREQ_SIZE                     = 8, 
+    parameter DREQ_SIZE                     = 4, 
     // Snoop Response Size
-    parameter SNPQ_SIZE                     = 8,
+    parameter SNPQ_SIZE                     = 4,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,

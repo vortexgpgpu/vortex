@@ -112,21 +112,21 @@ echo "CONFIGS=$CONFIGS"
 
 make -C $DRIVER_PATH clean
 
-if [[ $DEBUG -eq 1 ]] 
+if [ $DEBUG -eq 1 ]
 then
-    if [[ $SCOPE -eq 1 ]]  
+    if [ $SCOPE -eq 1 ]
     then
         DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     else
         DEBUG=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     fi    
+    make -C $APP_PATH run-$DRIVER > run.log 2>&1
 else
-    if [[ $SCOPE -eq 1 ]]  
+    if [ $SCOPE -eq 1 ]
     then
         SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     else
         CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     fi
+    make -C $APP_PATH run-$DRIVER
 fi
-
-make -C $APP_PATH run-$DRIVER > run.log 2>&1
