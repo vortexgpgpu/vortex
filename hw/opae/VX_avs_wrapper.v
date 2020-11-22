@@ -116,9 +116,9 @@ module VX_avs_wrapper #(
     always @(posedge clk) begin
         if (dram_req_valid && dram_req_ready) begin
             if (dram_req_rw) 
-                $display("%t: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h", $time, `DRAM_TO_BYTE_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, dram_req_data);                
+                $display("%t: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, dram_req_data);                
             else    
-                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `DRAM_TO_BYTE_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, avs_pending_reads_n);
+                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, avs_pending_reads_n);
         end   
         if (dram_rsp_valid && dram_rsp_ready) begin
             $display("%t: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d", $time, dram_rsp_tag, dram_rsp_data, avs_pending_reads_n);

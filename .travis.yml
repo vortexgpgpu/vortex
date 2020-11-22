@@ -27,7 +27,7 @@ script:
   - travis_wait 45 ci/test_opencl.sh
   - travis_wait 45 ci/blackbox.sh --driver=rtlsim
   - travis_wait 45 ci/blackbox.sh --driver=vlsim
-  - travis_wait 45 ci/blackbox.sh --driver=vlsim --scope
+  - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=demo --args="-n1"
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --debug
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=1 
   - travis_wait 45 ci/blackbox.sh --driver=vlsim --cores=2

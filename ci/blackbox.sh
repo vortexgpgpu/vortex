@@ -6,7 +6,7 @@ set -e
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--app=vecadd|sgemm|basic|demo|dogfood][--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
 }
 
 DRIVER=vlsim
@@ -18,6 +18,7 @@ THREADS=4
 L2=0
 DEBUG=0
 SCOPE=0
+HAS_ARGS=0
 
 for i in "$@"
 do
@@ -56,6 +57,11 @@ case $i in
         ;;
     --scope)
         SCOPE=1
+        shift
+        ;;
+    --args=*)
+        ARGS=${i#*=}
+        HAS_ARGS=1
         shift
         ;;
     --help)
@@ -120,7 +126,13 @@ then
     else
         DEBUG=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     fi    
-    make -C $APP_PATH run-$DRIVER > run.log 2>&1
+    
+    if [ $HAS_ARGS -eq 1 ]
+    then
+        OPTS=$ARGS make -C $APP_PATH run-$DRIVER > run.log 2>&1
+    else
+        make -C $APP_PATH run-$DRIVER > run.log 2>&1
+    fi
 else
     if [ $SCOPE -eq 1 ]
     then
@@ -128,5 +140,11 @@ else
     else
         CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
     fi
-    make -C $APP_PATH run-$DRIVER
+    
+    if [ $HAS_ARGS -eq 1 ]
+    then
+        OPTS=$ARGS make -C $APP_PATH run-$DRIVER
+    else
+        make -C $APP_PATH run-$DRIVER
+    fi
 fi

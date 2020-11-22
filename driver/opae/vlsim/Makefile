@@ -60,7 +60,7 @@ VL_FLAGS += verilator.vlt
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --assert --trace --trace-structs $(DBG_FLAGS)
+	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
 	CFLAGS   += -DVCD_OUTPUT $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG

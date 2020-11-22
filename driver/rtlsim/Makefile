@@ -46,7 +46,7 @@ SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/svdpi -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src 
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
-VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
+VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
@@ -57,7 +57,7 @@ VL_FLAGS += verilator.vlt
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --assert --trace --trace-structs $(DBG_FLAGS)
+	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
 	CFLAGS   += -DVCD_OUTPUT $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG

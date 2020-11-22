@@ -80,6 +80,6 @@
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
 
-`define DRAM_TO_BYTE_ADDR(x)    {x, (32-$bits(x))'(0)}
+`define TO_FULL_ADDR(x)    {x, (32-$bits(x))'(0)}
 
 `endif
