@@ -15,8 +15,8 @@ VX_LDFLAGS += $(VORTEX_RT_PATH)/libvortexrt.a
 
 VX_SRCS = kernel.c
 
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
-#CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../../include
 
