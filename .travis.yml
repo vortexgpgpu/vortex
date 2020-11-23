@@ -25,17 +25,17 @@ script:
   - travis_wait 45 ci/test_driver.sh
   - travis_wait 45 ci/test_riscv_isa.sh
   - travis_wait 45 ci/test_opencl.sh
-  - travis_wait 45 ci/blackbox.sh --travis --driver=rtlsim
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=1 --scope --app=demo --args="-n1"
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --debug
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=1 
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=2
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=4
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=2 --l2cache
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=4 --l2cache
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=2 --l2cache --clusters=2
-  - travis_wait 45 ci/blackbox.sh --travis --driver=vlsim --cores=2 --l2cache --clusters=4
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=demo --args="-n1"
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --debug
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=2
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=4
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=2 --l2cache
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=4 --l2cache
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=2 --l2cache --clusters=2
+  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=2 --l2cache --clusters=4
   
 after_success:
   # Gather code coverage
