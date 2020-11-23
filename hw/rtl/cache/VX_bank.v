@@ -869,7 +869,10 @@ module VX_bank #(
             $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), dfpq_filldata_st0);
         end
         if (reqq_pop) begin
-            $display("%t: cache%0d:%0d core-req: addr=%0h, tag=%0h, tid=%0d, rw=%b, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), reqq_tag_st0, reqq_tid_st0, reqq_rw_st0, reqq_byteen_st0, reqq_writeword_st0, debug_wid_st0, debug_pc_st0);
+            if (reqq_rw_st0)
+                $display("%t: cache%0d:%0d core-wr-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), reqq_tag_st0, reqq_tid_st0, reqq_byteen_st0, reqq_writeword_st0, debug_wid_st0, debug_pc_st0);
+            else
+                $display("%t: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), reqq_tag_st0, reqq_tid_st0, reqq_byteen_st0, reqq_writeword_st0, debug_wid_st0, debug_pc_st0);
         end
         if (snrq_pop) begin
             $display("%t: cache%0d:%0d snp-req: addr=%0h, tag=%0h, invalidate=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), snrq_tag_st0, snrq_invalidate_st0);
