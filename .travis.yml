@@ -20,7 +20,7 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
-  - travis_wait 45 make
+  - travis_wait 45 make -s
   - travis_wait 45 ci/test_runtime.sh
   - travis_wait 45 ci/test_driver.sh
   - travis_wait 45 ci/test_riscv_isa.sh
