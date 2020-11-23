@@ -9,7 +9,7 @@
 #define CCI_WQ_SIZE 16
 
 #define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 4
+#define DRAM_LATENCY 100
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
 
@@ -261,14 +261,14 @@ void opae_sim::avs_bus() {
   if (dram_rd_it != dram_reads_.end()) {
     vortex_afu_->avs_readdatavalid = 1;
     memcpy(vortex_afu_->avs_readdata, dram_rd_it->block.data(), CACHE_BLOCK_SIZE);
-    uint32_t tag = dram_rd_it->tag;
+    uint32_t addr = dram_rd_it->addr;
     dram_reads_.erase(dram_rd_it);
-    /*printf("%0ld: [sim] DRAM Rd Rsp: addr=%x, pending={", timestamp, tag);
+    /*printf("%0ld: [sim] DRAM Rd Rsp: addr=%x, pending={", timestamp, addr * CACHE_BLOCK_SIZE);
     for (auto& req : dram_reads_) {
       if (req.cycles_left != 0) 
-        printf(" !%0x", req.tag);
+        printf(" !%0x", req.addr * CACHE_BLOCK_SIZE);
       else
-        printf(" %0x", req.tag);
+        printf(" %0x", req.addr * CACHE_BLOCK_SIZE);
     }
     printf("}\n");*/
   }
@@ -300,18 +300,27 @@ void opae_sim::avs_bus() {
     }
     if (vortex_afu_->avs_read) {
       assert(0 == vortex_afu_->mem_bank_select);
-      dram_rd_req_t dram_req;
-      dram_req.cycles_left = DRAM_LATENCY;           
-      unsigned base_addr = (vortex_afu_->avs_address * CACHE_BLOCK_SIZE);
-      ram_.read(base_addr, CACHE_BLOCK_SIZE, dram_req.block.data());
-      dram_req.tag = base_addr;
+      dram_rd_req_t dram_req;      
+
+      dram_req.addr = vortex_afu_->avs_address;
+
+      ram_.read(vortex_afu_->avs_address * CACHE_BLOCK_SIZE, CACHE_BLOCK_SIZE, dram_req.block.data());      
+
+      dram_req.cycles_left = DRAM_LATENCY;     
+      for (auto& req : dram_reads_) {
+        if (req.addr == dram_req.addr) {
+          dram_req.cycles_left = req.cycles_left;
+          break;
+        }
+      }
+
       dram_reads_.emplace_back(dram_req);
-      /*printf("%0ld: [sim] DRAM Rd Req: addr=%x, pending={", timestamp, base_addr);
+      /*printf("%0ld: [sim] DRAM Rd Req: addr=%x, pending={", timestamp, dram_req.addr * CACHE_BLOCK_SIZE);
       for (auto& req : dram_reads_) {
         if (req.cycles_left != 0) 
-          printf(" !%0x", req.tag);
+          printf(" !%0x", req.addr * CACHE_BLOCK_SIZE);
         else
-          printf(" %0x", req.tag);
+          printf(" %0x", req.addr * CACHE_BLOCK_SIZE);
       }
       printf("}\n");*/
     }   
