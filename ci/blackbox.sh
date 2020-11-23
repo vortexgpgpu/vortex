@@ -122,9 +122,9 @@ if [ $DEBUG -eq 1 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
-        DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+        DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
     else
-        DEBUG=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+        DEBUG=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
     fi    
     
     if [ $HAS_ARGS -eq 1 ]
@@ -136,9 +136,9 @@ then
 else
     if [ $SCOPE -eq 1 ]
     then
-        SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+        SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
     else
-        CONFIGS="$CONFIGS" make -C $DRIVER_PATH $DRIVER_EXTRA > build.log 2>&1
+        CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
     fi
     
     if [ $HAS_ARGS -eq 1 ]
