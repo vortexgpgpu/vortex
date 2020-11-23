@@ -210,11 +210,15 @@ module VX_lsu_unit #(
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
         if ((| dcache_req_if.valid) && dcache_req_if.ready) begin
-            $display("%t: D$%0d req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, rw=%0b, byteen=%0h, data=%0h", 
-                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.rw, dcache_req_if.byteen, dcache_req_if.data);
+            if (dcache_req_if.rw)
+                $display("%t: D$%0d Rw Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, byteen=%0h, data=%0h", 
+                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.byteen, dcache_req_if.data);
+            else
+                $display("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, byteen=%0h", 
+                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.byteen, dcache_req_if.data);
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
-            $display("%t: D$%0d rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 
+            $display("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 
                      $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd, dcache_rsp_if.data);
         end
         if (lsuq_full) begin
