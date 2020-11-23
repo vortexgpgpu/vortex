@@ -147,7 +147,7 @@ module VX_fp_noncomp #(
                 case (frm_r) // use LSB to distinguish MIN and MAX
                     3: fminmax_res[i] = a_smaller[i] ? dataa_r[i] : datab_r[i];
                     4: fminmax_res[i] = a_smaller[i] ? datab_r[i] : dataa_r[i];
-              default: fminmax_res[i] = 32'hdeadbeaf;  // don't care value
+              default: fminmax_res[i] = 'x;  // don't care value
                 endcase
             end
         end
@@ -160,7 +160,7 @@ module VX_fp_noncomp #(
                 0: fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
                 1: fsgnj_res[i] = {~b_sign[i], a_exponent[i], a_mantissa[i]};
                 2: fsgnj_res[i] = { a_sign[i] ^ b_sign[i], a_exponent[i], a_mantissa[i]};
-          default: fsgnj_res[i] = 32'hdeadbeaf;  // don't care value
+          default: fsgnj_res[i] = 'x;  // don't care value
             endcase
         end
     end
@@ -192,8 +192,8 @@ module VX_fp_noncomp #(
                 `FRM_RDN: begin
                     if (a_type[i].is_nan || b_type[i].is_nan) begin
                         fcmp_res[i]  = 32'h0;        // result is 0 when either operand is NaN
-                        // ** FEQS only raise NV flag when either operand is signaling NaN
-                        fcmp_excp[i] = {(a_type[i].is_signaling | b_type[i].is_signaling), 4'h0};
+                        // FEQS only raise NV flag when either operand is signaling NaN
+                        fcmp_excp[i] = {(a_type[i].is_signaling | b_type[i].is_signaling), 4'h0}; 
                     end
                     else begin
                         fcmp_res[i] = {31'h0, ab_equal[i]};
@@ -201,7 +201,7 @@ module VX_fp_noncomp #(
                     end
                 end
                 default: begin
-                    fcmp_res[i] = 32'hdeadbeaf;  // don't care value
+                    fcmp_res[i]  = 'x;  // don't care value
                     fcmp_excp[i] = 5'h0;                        
                 end
             endcase
@@ -226,7 +226,7 @@ module VX_fp_noncomp #(
                 end      
                 //`FPU_MISC:
                 default: begin
-                    case (frm)
+                    case (frm_r)
                         0,1,2:  begin
                             tmp_result[i] = fsgnj_res[i];
                             {tmp_fflags[i].NV, tmp_fflags[i].DZ, tmp_fflags[i].OF, tmp_fflags[i].UF, tmp_fflags[i].NX} = 5'h0;

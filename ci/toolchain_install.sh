@@ -5,6 +5,8 @@ set -e
 
 REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
 
+DESTDIR="${DESTDIR:=/opt}"
+
 riscv()
 {
     for x in {a..o} 
@@ -14,7 +16,7 @@ riscv()
     cat riscv-gnu-toolchain.tar.bz2.parta* > riscv-gnu-toolchain.tar.bz2
     tar -xvf riscv-gnu-toolchain.tar.bz2
     rm -f riscv-gnu-toolchain.tar.bz2*
-    sudo cp -r riscv-gnu-toolchain /opt/
+    cp -r riscv-gnu-toolchain $DESTDIR
     rm -rf riscv-gnu-toolchain
 }
 
@@ -27,7 +29,7 @@ llvm()
     cat llvm-riscv.tar.bz2.parta* > llvm-riscv.tar.bz2
     tar -xvf llvm-riscv.tar.bz2
     rm -f llvm-riscv.tar.bz2*
-    sudo cp -r llvm-riscv /opt/
+    cp -r llvm-riscv $DESTDIR
     rm -rf llvm-riscv
 }
 
@@ -36,7 +38,7 @@ pocl()
     wget $REPOSITORY/pocl/ubuntu/bionic/pocl.tar.bz2
     tar -xvf pocl.tar.bz2
     rm -f pocl.tar.bz2
-    sudo cp -r pocl /opt/
+    cp -r pocl $DESTDIR
     rm -rf pocl
 }
 
@@ -45,7 +47,7 @@ verilator()
     wget $REPOSITORY/verilator/ubuntu/bionic/verilator.tar.bz2
     tar -xvf verilator.tar.bz2
     rm -f verilator.tar.bz2
-    sudo cp -r verilator /opt/
+    cp -r verilator $DESTDIR
     rm -rf verilator
 }
 
