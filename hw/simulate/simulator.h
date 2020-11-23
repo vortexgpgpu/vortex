@@ -52,7 +52,6 @@ private:
     int cycles_left;  
     std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
     uint32_t tag;
-    uint32_t addr;
   } dram_req_t;
 
   std::unordered_map<int, std::stringstream> print_bufs_;

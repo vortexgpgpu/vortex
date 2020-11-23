@@ -301,19 +301,9 @@ void opae_sim::avs_bus() {
     if (vortex_afu_->avs_read) {
       assert(0 == vortex_afu_->mem_bank_select);
       dram_rd_req_t dram_req;      
-
       dram_req.addr = vortex_afu_->avs_address;
-
       ram_.read(vortex_afu_->avs_address * CACHE_BLOCK_SIZE, CACHE_BLOCK_SIZE, dram_req.block.data());      
-
-      dram_req.cycles_left = DRAM_LATENCY;     
-      for (auto& req : dram_reads_) {
-        if (req.addr == dram_req.addr) {
-          dram_req.cycles_left = req.cycles_left;
-          break;
-        }
-      }
-
+      dram_req.cycles_left = DRAM_LATENCY;
       dram_reads_.emplace_back(dram_req);
       /*printf("%0ld: [sim] DRAM Rd Req: addr=%x, pending={", timestamp, dram_req.addr * CACHE_BLOCK_SIZE);
       for (auto& req : dram_reads_) {

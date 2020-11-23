@@ -179,20 +179,10 @@ void Simulator::eval_dram_bus() {
           }
         }
       } else {
-        dram_req_t dram_req;
-        
-        dram_req.tag = vortex_->dram_req_tag;        
-        dram_req.addr = vortex_->dram_req_addr;
-        
+        dram_req_t dram_req;        
+        dram_req.tag = vortex_->dram_req_tag;   
         ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.block.data());
-
         dram_req.cycles_left = DRAM_LATENCY;     
-        for (auto& req : dram_rsp_vec_) {
-          if (req.addr == dram_req.addr) {
-            dram_req.cycles_left = req.cycles_left;
-            break;
-          }
-        }        
         dram_rsp_vec_.emplace_back(dram_req);
       } 
     }    
