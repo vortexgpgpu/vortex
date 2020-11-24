@@ -20,22 +20,15 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
 
 script:   
-  - travis_wait 45 make -s
-  - travis_wait 45 ci/test_runtime.sh
-  - travis_wait 45 ci/test_driver.sh
-  - travis_wait 45 ci/test_riscv_isa.sh
-  - travis_wait 45 ci/test_opencl.sh
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=demo --args="-n1"
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --debug
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=2
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=4
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=4 --l2cache
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=2
-  - travis_wait 45 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=4
+  - make -s
+  - ./ci/test_runtime.sh
+  - ./ci/test_driver.sh
+  - ./ci/test_riscv_isa.sh
+  - ./ci/test_opencl.sh
+  - ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=4 --l2cache
+  - ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --debug 
+  - ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=demo --args="-n1"
+  - ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=2  
   
 after_success:
   # Gather code coverage
