@@ -489,9 +489,9 @@ module Vortex (
     always @(posedge clk) begin
         if (dram_req_valid && dram_req_ready) begin
             if (dram_req_rw)
-                $display("%t: DRAM Wr Req: rw=%b addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen, dram_req_data);
+                $display("%t: DRAM Wr Req: addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen, dram_req_data);
             else
-                $display("%t: DRAM Rd Req: rw=%b addr=%0h, tag=%0h, byteen=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen);
+                $display("%t: DRAM Rd Req: addr=%0h, tag=%0h, byteen=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_tag, dram_req_byteen);
         end
         if (dram_rsp_valid && dram_rsp_ready) begin
             $display("%t: DRAM Rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
