@@ -74,7 +74,7 @@ all: $(PROJECT)
 	
 $(PROJECT): $(SRCS)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
-	make -j -C obj_dir -f V$(TOP).mk
+	make OPT_FAST="-Wno-aligned-new -Wmaybe-uninitialized" OPT_SLOW="-Wno-aligned-new -Wmaybe-uninitialized" -j -C obj_dir -f V$(TOP).mk
 
 clean:
 	rm -rf $(PROJECT) obj_dir
