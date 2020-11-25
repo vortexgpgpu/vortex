@@ -29,9 +29,10 @@ SRCS += ../rtl/fp_cores/svdpi/float_dpi.cpp
 
 all: build-s
 
-CF += -std=c++11 -fms-extensions -I../..
+CF += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors -I../..
+#CF += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors -I../..
 
-VF += --language 1800-2009 --assert -Wall -Wpedantic
+VF += -O2 --language 1800-2009 --assert -Wall -Wpedantic
 VF += -Wno-DECLFILENAME
 VF += --x-initial unique --x-assign unique
 VF += --exe $(SRCS) $(INCLUDE)
@@ -42,41 +43,44 @@ DBG += -DVCD_OUTPUT $(DBG_FLAGS)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
+OPT_FAST = "-Wno-aligned-new -Wmaybe-uninitialized" 
+OPT_SLOW = "-Wno-aligned-new -Wmaybe-uninitialized"
+
 gen-s:
 	verilator $(VF) -DNDEBUG  $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG $(SINGLECORE)'
 
 gen-sd:
-	verilator $(VF) -O0 $(SINGLECORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(SINGLECORE)' --trace --trace-structs $(DBG)
+	verilator $(VF) $(SINGLECORE) -CFLAGS '$(CF) $(DBG) $(SINGLECORE)' --trace --trace-structs $(DBG)
 
 gen-st:
-	verilator $(VF) -DNDEBUG $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(SINGLECORE)' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG $(SINGLECORE) -CFLAGS '$(CF) -DNDEBUG $(SINGLECORE)' --threads $(THREADS)
 
 gen-m:
 	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)'
 	
 gen-md:
-	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) -O0 -g $(DBG) $(MULTICORE)' --trace --trace-structs $(DBG)
+	verilator $(VF) $(MULTICORE) -CFLAGS '$(CF) $(DBG) $(MULTICORE)' --trace --trace-structs $(DBG)
 
 gen-mt:
-	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG -O2 $(MULTICORE)' --threads $(THREADS)
+	verilator $(VF) -DNDEBUG $(MULTICORE) -CFLAGS '$(CF) -DNDEBUG $(MULTICORE)' --threads $(THREADS)
 
 build-s: gen-s
-	(cd obj_dir && make -j -f VVortex.mk)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f VVortex.mk
 
 build-sd: gen-sd
-	(cd obj_dir && make -j -f VVortex.mk)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f VVortex.mk
 
 build-st: gen-st
-	(cd obj_dir && make -j -f VVortex.mk)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f VVortex.mk
 
 build-m: gen-m
-	(cd obj_dir && make -j -f VVortex.mk)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f VVortex.mk
 
 build-md: gen-md
-	(cd obj_dir && make -j -f VVortex.mk)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f VVortex.mk
 
 build-mt: gen-mt
-	(cd obj_dir && make -j -f VVortex.mk)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f VVortex.mk
 
 run: run-s
 

@@ -9,10 +9,13 @@ module VX_fpu_unit #(
 
 	// inputs
 	VX_fpu_req_if       fpu_req_if,
-    VX_csr_to_fpu_if    csr_to_fpu_if,
         
-	// outputs        
-    VX_fpu_to_cmt_if    fpu_commit_if
+	// outputs     
+    VX_fpu_to_csr_if    fpu_to_csr_if,
+    VX_commit_if        fpu_commit_if,
+
+    input wire[`NUM_WARPS-1:0] csr_pending,
+    output wire[`NUM_WARPS-1:0] pending
 ); 
     localparam FPUQ_BITS = `LOG2UP(`FPUQ_SIZE);
 
@@ -53,13 +56,13 @@ module VX_fpu_unit #(
     );
     
     // can accept new request?
-    assign fpu_req_if.ready = ready_in && ~fpuq_full;
+    assign fpu_req_if.ready = ready_in && ~fpuq_full && !csr_pending[fpu_req_if.wid];
 
-    wire valid_in = fpu_req_if.valid && ~fpuq_full;
+    wire valid_in = fpu_req_if.valid && ~fpuq_full && !csr_pending[fpu_req_if.wid];
 
-    // resolve dynamic FRM    
-    assign csr_to_fpu_if.wid = fpu_req_if.wid;
-    wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? csr_to_fpu_if.frm : fpu_req_if.op_mod;   
+    // resolve dynamic FRM from CSR   
+    assign fpu_to_csr_if.read_wid = fpu_req_if.wid;
+    wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_req_if.op_mod;   
 
 `ifdef FPU_FAST
 
@@ -127,19 +130,57 @@ module VX_fpu_unit #(
     
 `endif
 
-    wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;   
+    reg has_fflags_r;
+    fflags_t fflags_r;
+    
+    fflags_t rsp_fflags;
+    always @(*) begin
+        rsp_fflags = 0;        
+        for (integer i = 0; i < `NUM_THREADS; i++) begin
+            if (rsp_tmask[i]) begin
+                rsp_fflags.NX |= fflags[i].NX;
+                rsp_fflags.UF |= fflags[i].UF;
+                rsp_fflags.OF |= fflags[i].OF;
+                rsp_fflags.DZ |= fflags[i].DZ;
+                rsp_fflags.NV |= fflags[i].NV;
+            end
+        end
+    end
+
+    wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + (`NUM_THREADS * `FFG_BITS))
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFG_BITS)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,               fflags}),
-        .out   ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, fpu_commit_if.has_fflags, fpu_commit_if.fflags})
+        .in    ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,   rsp_fflags}),
+        .out   ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, has_fflags_r, fflags_r})
     );
 
     assign ready_out = ~stall_out;
+
+    // CSR fflags Update    
+    assign fpu_to_csr_if.write_enable = fpu_commit_if.valid && fpu_commit_if.ready && has_fflags_r;
+    assign fpu_to_csr_if.write_wid    = fpu_commit_if.wid;     
+    assign fpu_to_csr_if.write_fflags = fflags_r;
+
+    // pending request
+    reg [`NUM_WARPS-1:0] pending_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            pending_r <= 0;
+        end else begin
+            if (fpu_commit_if.valid && fpu_commit_if.ready) begin
+                 pending_r[fpu_commit_if.wid] <= 0;
+            end          
+            if (fpu_req_if.valid && fpu_req_if.ready) begin
+                 pending_r[fpu_req_if.wid] <= 1;
+            end
+        end
+    end
+    assign pending = pending_r;
 
 endmodule

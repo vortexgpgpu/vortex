@@ -1,9 +1,9 @@
-`ifndef VX_EXU_TO_CMT_IF
-`define VX_EXU_TO_CMT_IF
+`ifndef VX_COMMIT_IF
+`define VX_COMMIT_IF
 
 `include "VX_define.vh"
 
-interface VX_exu_to_cmt_if ();
+interface VX_commit_if ();
 
     wire                    valid;
 

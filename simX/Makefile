@@ -20,6 +20,9 @@ LIGHTW=-Wno-UNOPTFLAT -Wno-WIDTH
 DEB=--trace -DVL_DEBUG=1 
 EXE=--exe $(LIB_OBJS)
 
+OPT_FAST = "-Wno-aligned-new -Wmaybe-uninitialized" 
+OPT_SLOW = "-Wno-aligned-new -Wmaybe-uninitialized"
+
 all: simX
 
 # simX:
@@ -28,7 +31,7 @@ all: simX
 
 simX:
 	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW) $(DEB)
-	(cd obj_dir && make -j`nproc` -f Vcache_simX.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1)
+	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f Vcache_simX.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1
 
 clean:
 	rm -rf *~ \#* *.o *.a *.so include/*~ include/\#* simX.run obj_dir

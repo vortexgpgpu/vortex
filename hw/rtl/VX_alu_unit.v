@@ -11,7 +11,7 @@ module VX_alu_unit #(
 
     // Outputs
     VX_branch_ctl_if    branch_ctl_if,
-    VX_exu_to_cmt_if    alu_commit_if    
+    VX_commit_if        alu_commit_if    
 );    
     reg [`NUM_THREADS-1:0][31:0] alu_result;    
     reg [`NUM_THREADS-1:0][31:0] add_result;   

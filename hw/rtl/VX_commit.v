@@ -3,16 +3,16 @@
 module VX_commit #(
     parameter CORE_ID = 0
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire      clk,
+    input wire      reset,
 
     // inputs
-    VX_exu_to_cmt_if    alu_commit_if,
-    VX_exu_to_cmt_if    lsu_commit_if,  
-    VX_exu_to_cmt_if    mul_commit_if,    
-    VX_exu_to_cmt_if    csr_commit_if,
-    VX_fpu_to_cmt_if    fpu_commit_if,
-    VX_exu_to_cmt_if    gpu_commit_if,
+    VX_commit_if    alu_commit_if,
+    VX_commit_if    lsu_commit_if,  
+    VX_commit_if    mul_commit_if,    
+    VX_commit_if    csr_commit_if,
+    VX_commit_if    fpu_commit_if,
+    VX_commit_if    gpu_commit_if,
 
     // outputs
     VX_writeback_if     writeback_if,
@@ -52,39 +52,8 @@ module VX_commit #(
         .count (commit_size)
     );
 
-    fflags_t fflags;
-    always @(*) begin
-        fflags = 0;        
-        for (integer i = 0; i < `NUM_THREADS; i++) begin
-            if (fpu_commit_if.tmask[i]) begin
-                fflags.NX |= fpu_commit_if.fflags[i].NX;
-                fflags.UF |= fpu_commit_if.fflags[i].UF;
-                fflags.OF |= fpu_commit_if.fflags[i].OF;
-                fflags.DZ |= fpu_commit_if.fflags[i].DZ;
-                fflags.NV |= fpu_commit_if.fflags[i].NV;
-            end
-        end
-    end
-
-    reg csr_update_r;
-    reg [`NW_BITS-1:0] wid_r;
-    reg [CMTW-1:0] commit_size_r;
-    reg has_fflags_r;
-    fflags_t fflags_r;       
-
-    always @(posedge clk) begin
-        csr_update_r  <= commit_fire;                
-        wid_r         <= fpu_commit_if.wid;        
-        commit_size_r <= commit_size; 
-        has_fflags_r  <= fpu_commit_if.has_fflags;
-        fflags_r      <= fflags;        
-    end
-
-    assign cmt_to_csr_if.valid       = csr_update_r;            
-    assign cmt_to_csr_if.wid         = wid_r;  
-    assign cmt_to_csr_if.commit_size = commit_size_r;
-    assign cmt_to_csr_if.has_fflags  = has_fflags_r;    
-    assign cmt_to_csr_if.fflags      = fflags_r;
+    assign cmt_to_csr_if.valid       = commit_fire;
+    assign cmt_to_csr_if.commit_size = commit_size;
 
     // Writeback
 

@@ -7,18 +7,20 @@ module VX_csr_unit #(
     input wire          reset,
 
     VX_cmt_to_csr_if    cmt_to_csr_if, 
-    VX_csr_to_fpu_if    csr_to_fpu_if,  
+    VX_fpu_to_csr_if    fpu_to_csr_if,  
     
     VX_csr_io_req_if    csr_io_req_if,    
     VX_csr_io_rsp_if    csr_io_rsp_if,
     
     VX_csr_req_if       csr_req_if,   
-    VX_exu_to_cmt_if    csr_commit_if,
+    VX_commit_if        csr_commit_if,
 
-    input wire          busy
+    input wire          busy,
+    input wire[`NUM_WARPS-1:0] fpu_pending,
+    output wire[`NUM_WARPS-1:0] pending
 );
-    VX_csr_req_if       csr_pipe_req_if();
-    VX_exu_to_cmt_if    csr_pipe_rsp_if();
+    VX_csr_req_if   csr_pipe_req_if();
+    VX_commit_if    csr_pipe_rsp_if();
 
     wire select_io_req = csr_io_req_if.valid;
     wire select_io_rsp;
@@ -47,7 +49,7 @@ module VX_csr_unit #(
         .clk            (clk),
         .reset          (reset),
         .cmt_to_csr_if  (cmt_to_csr_if),
-        .csr_to_fpu_if  (csr_to_fpu_if), 
+        .fpu_to_csr_if  (fpu_to_csr_if), 
         .read_enable    (csr_pipe_req_if.valid),
         .read_addr      (csr_pipe_req_if.csr_addr),
         .read_wid       (csr_pipe_req_if.wid),      
@@ -90,7 +92,8 @@ module VX_csr_unit #(
     
     wire csr_we_s0 = csr_we_s0_unqual && csr_pipe_req_if.valid;
 
-    wire stall = ~csr_pipe_rsp_if.ready && csr_pipe_rsp_if.valid;
+    wire stall = (~csr_pipe_rsp_if.ready && csr_pipe_rsp_if.valid) 
+              || fpu_pending[csr_pipe_req_if.wid];
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 1 + 32 + 32)
@@ -111,5 +114,21 @@ module VX_csr_unit #(
 
     // can accept new request?
     assign csr_pipe_req_if.ready = ~stall;
+
+    // pending request
+    reg [`NUM_WARPS-1:0] pending_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            pending_r <= 0;
+        end else begin
+            if (csr_pipe_rsp_if.valid && csr_pipe_rsp_if.ready) begin
+                 pending_r[csr_pipe_rsp_if.wid] <= 0;
+            end          
+            if (csr_pipe_req_if.valid && csr_pipe_req_if.ready) begin
+                 pending_r[csr_pipe_req_if.wid] <= 1;
+            end
+        end
+    end
+    assign pending = pending_r;
 
 endmodule
