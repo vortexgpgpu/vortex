@@ -3,10 +3,6 @@
 #include <fstream>
 #include <iomanip>
 
-#define GREEN   "\\033[32m"
-#define RED     "\\033[31m"
-#define DEFAULT "\\033[39m"
-
 #define ALL_TESTS
 
 int main(int argc, char **argv) {
@@ -14,7 +10,7 @@ int main(int argc, char **argv) {
 	if (argc == 1) {
 #ifdef ALL_TESTS
   std::string tests[] = {
-	  "../../../benchmarks/riscv_tests/isa/rv32ui-p-add.hex",
+		"../../../benchmarks/riscv_tests/isa/rv32ui-p-add.hex",
 	 	"../../../benchmarks/riscv_tests/isa/rv32ui-p-addi.hex",
 	 	"../../../benchmarks/riscv_tests/isa/rv32ui-p-and.hex",
 	 	"../../../benchmarks/riscv_tests/isa/rv32ui-p-andi.hex",
@@ -81,7 +77,7 @@ int main(int argc, char **argv) {
 	 };
 
 	for (std::string test : tests) {
-		std::cout << DEFAULT << "\n---------------------------------------\n";
+		std::cout << "\n---------------------------------------\n";
 
 		std::cout << test << std::endl;
 
@@ -93,16 +89,15 @@ int main(int argc, char **argv) {
 
 		bool status = (1 == simulator.get_last_wb_value(3));
 
-		if (status) std::cout << GREEN << "Test Passed: " << test << std::endl;
-		if (!status) std::cout << RED   << "Test Failed: " << test << std::endl;
-		std::cout << DEFAULT;
+		if (status) std::cout << "Passed: " << test << std::endl;
+		if (!status) std::cout << "Failed: " << test << std::endl;
 		passed = passed && status;
 		if (!passed)
 			break;
 	}
 
 	for (std::string test : tests_fp) {
-		std::cout << DEFAULT << "\n---------------------------------------\n";
+		std::cout << "\n---------------------------------------\n";
 
 		std::cout << test << std::endl;
 
@@ -114,18 +109,17 @@ int main(int argc, char **argv) {
 
 		bool status = (1 == simulator.get_last_wb_value(3));
 
-		if (status) std::cout << GREEN << "Test Passed: " << test << std::endl;
-		if (!status) std::cout << RED   << "Test Failed: " << test << std::endl;
-		std::cout << DEFAULT;
+		if (status) std::cout << "Passed: " << test << std::endl;
+		if (!status) std::cout << "Failed: " << test << std::endl;
 		passed = passed && status;
 		if (!passed)
 			break;
 	}
 
-	std::cout << DEFAULT << "\n***************************************\n";
+	std::cout << "\n***************************************\n";
 
-	if (passed) std::cout << DEFAULT << "PASSED ALL TESTS\n";
-	if (!passed) std::cout << DEFAULT << "Failed one or more tests\n";
+	if (passed) std::cout << "PASSED ALL TESTS\n";
+	if (!passed) std::cout << "Failed one or more tests\n";
 
 	return !passed;
 

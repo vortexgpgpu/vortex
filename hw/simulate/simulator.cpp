@@ -61,10 +61,6 @@ void Simulator::reset() {
   print_bufs_.clear();
   dram_rsp_vec_.clear();
 
-  dram_rsp_active_ = false;
-  snp_req_active_ = false;
-  csr_req_active_ = false;
-
   snp_req_size_ = 0;
   pending_snp_reqs_ = 0;
   csr_rsp_value_ = nullptr;
@@ -95,10 +91,6 @@ void Simulator::step() {
 
   vortex_->clk = 0;
   this->eval();
-
-  dram_rsp_ready_   = vortex_->dram_rsp_ready;
-  snp_req_ready_    = vortex_->snp_req_ready;  
-  csr_io_req_ready_ = vortex_->csr_io_req_ready;
   
   vortex_->clk = 1;
   this->eval();
@@ -140,7 +132,7 @@ void Simulator::eval_dram_bus() {
 
   // send DRAM response  
   if (dram_rsp_active_
-   && vortex_->dram_rsp_valid && dram_rsp_ready_) {
+   && vortex_->dram_rsp_valid && vortex_->dram_rsp_ready) {
     dram_rsp_active_ = false;
   }
   if (!dram_rsp_active_) {
@@ -213,7 +205,7 @@ void Simulator::eval_io_bus() {
 
 void Simulator::eval_snp_bus() {
   if (snp_req_active_) {      
-    if (vortex_->snp_req_valid && snp_req_ready_) {            
+    if (vortex_->snp_req_valid && vortex_->snp_req_ready) {            
       assert(snp_req_size_);
     #ifdef DBG_PRINT_CACHE_SNP
       std::cout << std::dec << timestamp << ": [sim] SNP Req: addr=" << std::hex << vortex_->snp_req_addr << " tag=" << vortex_->snp_req_tag << " remain=" << (snp_req_size_-1) << std::endl;
@@ -246,7 +238,7 @@ void Simulator::eval_snp_bus() {
 
 void Simulator::eval_csr_bus() {
   if (csr_req_active_) { 
-    if (vortex_->csr_io_req_valid && csr_io_req_ready_) {
+    if (vortex_->csr_io_req_valid && vortex_->csr_io_req_ready) {
     #ifndef NDEBUG
       if (vortex_->csr_io_req_rw)
         std::cout << std::dec << timestamp << ": [sim] CSR Wr Req: core=" << (int)vortex_->csr_io_req_coreid << ", addr=" << std::hex << vortex_->csr_io_req_addr << ", value=" << vortex_->csr_io_req_data << std::endl;

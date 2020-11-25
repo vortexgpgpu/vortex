@@ -7,10 +7,10 @@ module VX_mul_unit #(
     input wire reset,
     
     // Inputs
-    VX_mul_req_if       mul_req_if,
+    VX_mul_req_if   mul_req_if,
 
     // Outputs
-    VX_exu_to_cmt_if    mul_commit_if
+    VX_commit_if    mul_commit_if
 ); 
     localparam MULQ_BITS = `LOG2UP(`MULQ_SIZE);
 

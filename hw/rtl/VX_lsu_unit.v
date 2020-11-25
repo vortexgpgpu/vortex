@@ -13,10 +13,10 @@ module VX_lsu_unit #(
     VX_cache_core_rsp_if dcache_rsp_if,
 
     // inputs
-    VX_lsu_req_if       lsu_req_if,
+    VX_lsu_req_if   lsu_req_if,
 
     // outputs
-    VX_exu_to_cmt_if    lsu_commit_if
+    VX_commit_if    lsu_commit_if
 );
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire                          req_rw;

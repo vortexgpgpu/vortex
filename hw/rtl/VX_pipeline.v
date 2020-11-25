@@ -112,12 +112,12 @@ module VX_pipeline #(
     VX_writeback_if     writeback_if();     
     VX_wstall_if        wstall_if();
     VX_join_if          join_if();
-    VX_exu_to_cmt_if    alu_commit_if();
-    VX_exu_to_cmt_if    lsu_commit_if();        
-    VX_exu_to_cmt_if    csr_commit_if(); 
-    VX_exu_to_cmt_if    mul_commit_if();     
-    VX_fpu_to_cmt_if    fpu_commit_if();     
-    VX_exu_to_cmt_if    gpu_commit_if();     
+    VX_commit_if        alu_commit_if();
+    VX_commit_if        lsu_commit_if();        
+    VX_commit_if        csr_commit_if(); 
+    VX_commit_if        mul_commit_if();     
+    VX_commit_if        fpu_commit_if();     
+    VX_commit_if        gpu_commit_if();     
 
     VX_fetch #(
         .CORE_ID(CORE_ID)

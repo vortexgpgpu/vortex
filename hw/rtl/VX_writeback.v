@@ -3,19 +3,19 @@
 module VX_writeback #(
     parameter CORE_ID = 0
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire      clk,
+    input wire      reset,
 
     // inputs
-    VX_exu_to_cmt_if    alu_commit_if,
-    VX_exu_to_cmt_if    lsu_commit_if,  
-    VX_exu_to_cmt_if    csr_commit_if,
-    VX_exu_to_cmt_if    mul_commit_if,
-    VX_fpu_to_cmt_if    fpu_commit_if,        
-    VX_exu_to_cmt_if    gpu_commit_if,
+    VX_commit_if    alu_commit_if,
+    VX_commit_if    lsu_commit_if,  
+    VX_commit_if    csr_commit_if,
+    VX_commit_if    mul_commit_if,
+    VX_commit_if    fpu_commit_if,        
+    VX_commit_if    gpu_commit_if,
 
     // outputs
-    VX_writeback_if     writeback_if
+    VX_writeback_if writeback_if
 );
     wire alu_valid = alu_commit_if.valid && alu_commit_if.wb;
     wire lsu_valid = lsu_commit_if.valid && lsu_commit_if.wb;

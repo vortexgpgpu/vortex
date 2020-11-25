@@ -3,19 +3,14 @@
 
 `include "VX_define.vh"
 
-`ifndef EXTF_F_ENABLE
-    `IGNORE_WARNINGS_BEGIN
-`endif
-
 interface VX_fpu_to_csr_if ();
 
-	wire				valid;
-	wire [`NW_BITS-1:0] wid;
-	wire 				fflags_NV;
-	wire 				fflags_DZ;
-	wire 				fflags_OF;
-	wire 				fflags_UF;
-	wire 				fflags_NX;
+	wire				 write_enable;
+	wire [`NW_BITS-1:0]  write_wid;
+	fflags_t 			 write_fflags;
+
+	wire [`NW_BITS-1:0]  read_wid;
+	wire [`FRM_BITS-1:0] read_frm;
 
 endinterface
 

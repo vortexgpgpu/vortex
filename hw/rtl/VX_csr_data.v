@@ -7,7 +7,7 @@ module VX_csr_data #(
     input wire reset,
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
-    VX_csr_to_fpu_if                csr_to_fpu_if,  
+    VX_fpu_to_csr_if                fpu_to_csr_if,  
 
     input wire                      read_enable,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
@@ -40,9 +40,9 @@ module VX_csr_data #(
     reg [31:0] read_data_r;
 
     always @(posedge clk) begin
-        if (cmt_to_csr_if.valid && cmt_to_csr_if.has_fflags) begin
-            csr_fflags[cmt_to_csr_if.wid]               <= cmt_to_csr_if.fflags;
-            csr_fcsr[cmt_to_csr_if.wid][`FFG_BITS-1:0]  <= cmt_to_csr_if.fflags;
+        if (fpu_to_csr_if.write_enable) begin
+            csr_fflags[fpu_to_csr_if.write_wid]               <= fpu_to_csr_if.write_fflags;
+            csr_fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0]  <= fpu_to_csr_if.write_fflags;
         end
 
         if (write_enable) begin
@@ -144,6 +144,6 @@ module VX_csr_data #(
     end 
 
     assign read_data = read_data_r;
-    assign csr_to_fpu_if.frm = csr_frm[csr_to_fpu_if.wid];
+    assign fpu_to_csr_if.read_frm = csr_frm[fpu_to_csr_if.read_wid];
 
 endmodule

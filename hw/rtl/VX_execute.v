@@ -30,17 +30,19 @@ module VX_execute #(
     // outputs
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
-    VX_exu_to_cmt_if    alu_commit_if,
-    VX_exu_to_cmt_if    lsu_commit_if,    
-    VX_exu_to_cmt_if    csr_commit_if,
-    VX_exu_to_cmt_if    mul_commit_if,
-    VX_fpu_to_cmt_if    fpu_commit_if,
-    VX_exu_to_cmt_if    gpu_commit_if,
+    VX_commit_if        alu_commit_if,
+    VX_commit_if        lsu_commit_if,    
+    VX_commit_if        csr_commit_if,
+    VX_commit_if        mul_commit_if,
+    VX_commit_if        fpu_commit_if,
+    VX_commit_if        gpu_commit_if,
     
     input wire          busy,
     output wire         ebreak
 );
-    VX_csr_to_fpu_if    csr_to_fpu_if(); 
+    VX_fpu_to_csr_if     fpu_to_csr_if(); 
+    wire[`NUM_WARPS-1:0] csr_pending;
+    wire[`NUM_WARPS-1:0] fpu_pending;
     
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
@@ -70,11 +72,13 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),    
         .cmt_to_csr_if  (cmt_to_csr_if),    
-        .csr_to_fpu_if  (csr_to_fpu_if), 
+        .fpu_to_csr_if  (fpu_to_csr_if), 
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if),
+        .fpu_pending    (fpu_pending),
+        .pending        (csr_pending),
         .busy           (busy)
     );
 
@@ -105,8 +109,10 @@ module VX_execute #(
         .clk            (clk),
         .reset          (reset),        
         .fpu_req_if     (fpu_req_if), 
-        .csr_to_fpu_if  (csr_to_fpu_if), 
-        .fpu_commit_if  (fpu_commit_if)    
+        .fpu_to_csr_if  (fpu_to_csr_if), 
+        .fpu_commit_if  (fpu_commit_if),
+        .csr_pending    (csr_pending),
+        .pending        (fpu_pending) 
     );
 `else
     assign fpu_req_if.ready     = 0;
