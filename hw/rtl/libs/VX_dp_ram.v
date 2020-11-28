@@ -11,14 +11,14 @@ module VX_dp_ram #(
     parameter SIZEW    = $clog2(SIZE+1),
     parameter FASTRAM  = 0
 ) ( 
-	input wire clk,	
-	input wire [ADDRW-1:0] waddr,
-	input wire [ADDRW-1:0] raddr,
-    input wire wren,
+    input wire              clk,
+    input wire [ADDRW-1:0]  waddr,
+    input wire [ADDRW-1:0]  raddr,
+    input wire              wren,
     input wire [BYTEENW-1:0] byteen,
-	input wire rden,
-    input wire [DATAW-1:0] din,
-	output wire [DATAW-1:0] dout
+    input wire              rden,
+    input wire [DATAW-1:0]  din,
+    output wire [DATAW-1:0] dout
 );
 
     if (FASTRAM) begin

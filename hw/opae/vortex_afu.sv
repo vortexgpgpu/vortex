@@ -602,7 +602,7 @@ VX_avs_wrapper #(
   .avs_address        (avs_address),
   .avs_waitrequest    (avs_waitrequest),
   .avs_write          (avs_write),
-  .avs_read	          (avs_read),
+  .avs_read           (avs_read),
   .avs_byteenable     (avs_byteenable),
   .avs_burstcount     (avs_burstcount),
   .avs_readdatavalid  (avs_readdatavalid),
@@ -610,16 +610,16 @@ VX_avs_wrapper #(
 
   // DRAM request 
   .dram_req_valid     (dram_req_valid),
-  .dram_req_rw   	    (dram_req_rw),
+  .dram_req_rw        (dram_req_rw),
   .dram_req_byteen    (dram_req_byteen),
-  .dram_req_addr 		  (dram_req_addr),
-  .dram_req_data		  (dram_req_data),
+  .dram_req_addr      (dram_req_addr),
+  .dram_req_data      (dram_req_data),
   .dram_req_tag       (dram_req_tag),
   .dram_req_ready     (dram_req_ready),
 
   // DRAM response  
-  .dram_rsp_valid 	  (dram_rsp_valid),
-  .dram_rsp_data	    (dram_rsp_data),
+  .dram_rsp_valid     (dram_rsp_valid),
+  .dram_rsp_data      (dram_rsp_data),
   .dram_rsp_tag       (dram_rsp_tag),
   .dram_rsp_ready     (dram_rsp_ready)
 );
@@ -973,28 +973,28 @@ Vortex #() vortex (
 
   // DRAM request 
   .dram_req_valid   (vx_dram_req_valid),
-  .dram_req_rw   	  (vx_dram_req_rw),
+  .dram_req_rw      (vx_dram_req_rw),
   .dram_req_byteen  (vx_dram_req_byteen),
-  .dram_req_addr 		(vx_dram_req_addr),
-  .dram_req_data		(vx_dram_req_data),
+  .dram_req_addr    (vx_dram_req_addr),
+  .dram_req_data    (vx_dram_req_data),
   .dram_req_tag     (vx_dram_req_tag),
   .dram_req_ready   (vx_dram_req_ready),
 
   // DRAM response  
-  .dram_rsp_valid 	(vx_dram_rsp_valid),
-  .dram_rsp_data	  (vx_dram_rsp_data),
+  .dram_rsp_valid   (vx_dram_rsp_valid),
+  .dram_rsp_data    (vx_dram_rsp_data),
   .dram_rsp_tag     (vx_dram_rsp_tag),
   .dram_rsp_ready   (vx_dram_rsp_ready),
 
   // Snoop request
-  .snp_req_valid 	  (vx_snp_req_valid),
+  .snp_req_valid    (vx_snp_req_valid),
   .snp_req_addr     (vx_snp_req_addr),
   .snp_req_invalidate(vx_snp_req_invalidate),
   .snp_req_tag      (vx_snp_req_tag),
   .snp_req_ready    (vx_snp_req_ready),
 
   // Snoop response
-  .snp_rsp_valid 	  (vx_snp_rsp_valid),
+  .snp_rsp_valid    (vx_snp_rsp_valid),
   .snp_rsp_tag      (vx_snp_rsp_tag),
   .snp_rsp_ready    (vx_snp_rsp_ready),
 
@@ -1027,7 +1027,7 @@ Vortex #() vortex (
   .csr_io_rsp_ready (vx_csr_io_rsp_ready),
  
   // status
-  .busy 				    (vx_busy),
+  .busy             (vx_busy),
   `UNUSED_PIN       (ebreak)
 );
 

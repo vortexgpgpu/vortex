@@ -3,14 +3,14 @@
 module VX_fpu_unit #(
     parameter CORE_ID = 0
 ) (
-	// inputs 
-	input wire clk,
-	input wire reset,   
+    // inputs
+    input wire clk,
+    input wire reset,
 
-	// inputs
-	VX_fpu_req_if       fpu_req_if,
+    // inputs
+    VX_fpu_req_if       fpu_req_if,
         
-	// outputs     
+    // outputs  
     VX_fpu_to_csr_if    fpu_to_csr_if,
     VX_commit_if        fpu_commit_if,
 

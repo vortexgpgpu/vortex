@@ -12,8 +12,8 @@ module VX_skid_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 ); 
-    reg	[DATAW-1:0]	data_out_r;
-    reg	[DATAW-1:0]	buffer;
+    reg [DATAW-1:0] data_out_r;
+    reg [DATAW-1:0] buffer;
     reg             valid_out_r;
     reg             use_buffer;
     

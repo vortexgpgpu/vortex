@@ -34,8 +34,8 @@ module VX_csr_data #(
     reg [63:0] csr_instret;
     
     reg [`FFG_BITS-1:0]           csr_fflags [`NUM_WARPS-1:0];
-	reg [`FRM_BITS-1:0]           csr_frm [`NUM_WARPS-1:0];
-	reg [`FRM_BITS+`FFG_BITS-1:0] csr_fcsr [`NUM_WARPS-1:0];  // fflags + frm
+    reg [`FRM_BITS-1:0]           csr_frm [`NUM_WARPS-1:0];
+    reg [`FRM_BITS+`FFG_BITS-1:0] csr_fcsr [`NUM_WARPS-1:0];  // fflags + frm
 
     reg [31:0] read_data_r;
 

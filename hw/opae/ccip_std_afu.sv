@@ -113,7 +113,7 @@ module ccip_std_afu #(
         .avs_address         (avs_address),
         .avs_waitrequest     (avs_waitrequest),
         .avs_write           (avs_write),
-        .avs_read	         (avs_read),
+        .avs_read            (avs_read),
         .avs_byteenable      (avs_byteenable),
         .avs_burstcount      (avs_burstcount),
         .avs_readdatavalid   (avs_readdatavalid),

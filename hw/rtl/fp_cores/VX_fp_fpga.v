@@ -3,14 +3,14 @@
 module VX_fp_fpga #( 
     parameter TAGW = 1
 ) (
-	input wire clk,
-	input wire reset,   
+    input wire clk,
+    input wire reset,
 
     input wire  valid_in,
     output wire ready_in,
 
     input wire [TAGW-1:0] tag_in,
-	
+    
     input wire [`FPU_BITS-1:0] op_type,
     input wire [`MOD_BITS-1:0] frm,
 

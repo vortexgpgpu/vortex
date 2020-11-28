@@ -2,7 +2,7 @@
 `include "VX_define.vh"
 
 module VX_fp_type (
-	// inputs 
+    // inputs
     input  [7:0]  exponent,
     input  [22:0] mantissa,
     // outputs
