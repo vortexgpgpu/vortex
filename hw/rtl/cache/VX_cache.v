@@ -17,7 +17,7 @@ module VX_cache #(
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 4, 
     // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 8, 
+    parameter MSHR_SIZE                     = 8, 
     // DRAM Response Queue Size
     parameter DRFQ_SIZE                     = 4, 
     // Snoop Req Queue Size
@@ -264,7 +264,7 @@ module VX_cache #(
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQUESTS       (NUM_REQUESTS),
             .CREQ_SIZE          (CREQ_SIZE),
-            .MRVQ_SIZE          (MRVQ_SIZE),
+            .MSHR_SIZE          (MSHR_SIZE),
             .DRFQ_SIZE          (DRFQ_SIZE),
             .SNRQ_SIZE          (SNRQ_SIZE),
             .CWBQ_SIZE          (CWBQ_SIZE),

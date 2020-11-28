@@ -393,7 +393,7 @@ module Vortex (
             .WORD_SIZE          (`L3WORD_SIZE),
             .NUM_REQUESTS       (`L3NUM_REQUESTS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
-            .MRVQ_SIZE          (`L3MRVQ_SIZE),
+            .MSHR_SIZE          (`L3MSHR_SIZE),
             .DRFQ_SIZE          (`L3DRFQ_SIZE),
             .SNRQ_SIZE          (`L3SNRQ_SIZE),
             .CWBQ_SIZE          (`L3CWBQ_SIZE),

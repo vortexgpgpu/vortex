@@ -13,7 +13,7 @@ module VX_cache_miss_resrv #(
     // Number of Word requests per cycle
     parameter NUM_REQUESTS                  = 1, 
     // Miss Reserv Queue Knob
-    parameter MRVQ_SIZE                     = 1, 
+    parameter MSHR_SIZE                     = 1, 
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
     // Snooping request tag width
@@ -48,7 +48,7 @@ module VX_cache_miss_resrv #(
     input wire[WORD_SIZE-1:0]           enqueue_byteen_st3,    
     input wire                          enqueue_is_snp_st3,
     input wire                          enqueue_snp_inv_st3,
-    input wire                          enqueue_msrq_st3,
+    input wire                          enqueue_mshr_st3,
     input wire                          enqueue_ready_st3,
     output wire                         enqueue_full,
     output wire                         enqueue_almfull,
@@ -74,24 +74,24 @@ module VX_cache_miss_resrv #(
 );
     localparam FULL_DISTANCE = 3; // need 3 cycles window to prevent pipeline lock
 
-    wire [`MRVQ_METADATA_WIDTH-1:0] metadata_table;
-    `NO_RW_RAM_CHECK reg [`LINE_ADDR_WIDTH-1:0] addr_table [MRVQ_SIZE-1:0];
+    wire [`MSHR_METADATA_WIDTH-1:0] metadata_table;
+    `NO_RW_RAM_CHECK reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
     
-    reg [MRVQ_SIZE-1:0]            valid_table;
-    reg [MRVQ_SIZE-1:0]            ready_table;
-    reg [`LOG2UP(MRVQ_SIZE)-1:0]   schedule_ptr, restore_ptr;
-    reg [`LOG2UP(MRVQ_SIZE)-1:0]   head_ptr;
-    reg [`LOG2UP(MRVQ_SIZE)-1:0]   tail_ptr;
+    reg [MSHR_SIZE-1:0]            valid_table;
+    reg [MSHR_SIZE-1:0]            ready_table;
+    reg [`LOG2UP(MSHR_SIZE)-1:0]   schedule_ptr, restore_ptr;
+    reg [`LOG2UP(MSHR_SIZE)-1:0]   head_ptr;
+    reg [`LOG2UP(MSHR_SIZE)-1:0]   tail_ptr;
 
-    reg [`LOG2UP(MRVQ_SIZE+1)-1:0] size;
+    reg [`LOG2UP(MSHR_SIZE+1)-1:0] size;
 
-    `STATIC_ASSERT(MRVQ_SIZE > FULL_DISTANCE, ("invalid size"))
+    `STATIC_ASSERT(MSHR_SIZE > FULL_DISTANCE, ("invalid size"))
 
-    assign enqueue_full = (size == $bits(size)'(MRVQ_SIZE));
-    assign enqueue_almfull = (size >= $bits(size)'(MRVQ_SIZE-FULL_DISTANCE));
+    assign enqueue_full = (size == $bits(size)'(MSHR_SIZE));
+    assign enqueue_almfull = (size >= $bits(size)'(MSHR_SIZE-FULL_DISTANCE));
 
-    wire [MRVQ_SIZE-1:0] valid_address_match;
-    for (genvar i = 0; i < MRVQ_SIZE; i++) begin
+    wire [MSHR_SIZE-1:0] valid_address_match;
+    for (genvar i = 0; i < MSHR_SIZE; i++) begin
         assign valid_address_match[i] = valid_table[i] && (addr_table[i] == addr_st0);
     end
 
@@ -110,9 +110,9 @@ module VX_cache_miss_resrv #(
             dequeue_is_snp_st0, 
             dequeue_snp_inv_st0} = metadata_table;
 
-    wire msrq_push = enqueue_st3 && !enqueue_msrq_st3;
+    wire mshr_push = enqueue_st3 && !enqueue_mshr_st3;
 
-    wire [`LOG2UP(MRVQ_SIZE)-1:0] head_ptr_n = head_ptr + $bits(head_ptr)'(1);
+    wire [`LOG2UP(MSHR_SIZE)-1:0] head_ptr_n = head_ptr + $bits(head_ptr)'(1);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -130,7 +130,7 @@ module VX_cache_miss_resrv #(
 
             if (enqueue_st3) begin
                 assert(!enqueue_full);
-                if (enqueue_msrq_st3) begin
+                if (enqueue_mshr_st3) begin
                     // returning missed msrq entry, restore schedule  
                     valid_table[restore_ptr] <= 1;
                     ready_table[restore_ptr] <= enqueue_ready_st3;                    
@@ -158,14 +158,14 @@ module VX_cache_miss_resrv #(
     end
 
     always @(posedge clk) begin
-        if (enqueue_st3 && !enqueue_msrq_st3) begin
+        if (enqueue_st3 && !enqueue_mshr_st3) begin
             addr_table[tail_ptr] <= enqueue_addr_st3;
         end
     end
 
     VX_dp_ram #(
-        .DATAW(`MRVQ_METADATA_WIDTH),
-        .SIZE(MRVQ_SIZE),
+        .DATAW(`MSHR_METADATA_WIDTH),
+        .SIZE(MSHR_SIZE),
         .BYTEENW(1),
         .BUFFERED(0),
         .RWCHECK(1)
@@ -173,20 +173,20 @@ module VX_cache_miss_resrv #(
         .clk(clk),
         .waddr(tail_ptr),                                
         .raddr(schedule_ptr),                
-        .wren(msrq_push),
+        .wren(mshr_push),
         .byteen(1'b1),
         .rden(1'b1),
         .din({enqueue_data_st3, enqueue_tid_st3, enqueue_tag_st3, enqueue_rw_st3, enqueue_byteen_st3, enqueue_wsel_st3, enqueue_is_snp_st3, enqueue_snp_inv_st3}),
         .dout(metadata_table)
     );
 
-`ifdef DBG_PRINT_CACHE_MSRQ        
+`ifdef DBG_PRINT_CACHE_MSHR        
     always @(posedge clk) begin        
         if (update_ready_st0 || schedule_st0 || enqueue_st3 || dequeue_st3) begin
             if (schedule_st0)
                 $display("%t: cache%0d:%0d msrq-schedule: addr%0d=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(dequeue_addr_st0, BANK_ID), debug_wid_st0, debug_pc_st0);      
             if (enqueue_st3) begin
-                if (enqueue_msrq_st3)
+                if (enqueue_mshr_st3)
                     $display("%t: cache%0d:%0d msrq-restore: addr%0d=%0h, ready=%b", $time, CACHE_ID, BANK_ID, restore_ptr, `LINE_TO_BYTE_ADDR(enqueue_addr_st3, BANK_ID), enqueue_ready_st3);
                 else
                     $display("%t: cache%0d:%0d msrq-enq: addr%0d=%0h, ready=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, tail_ptr, `LINE_TO_BYTE_ADDR(enqueue_addr_st3, BANK_ID), enqueue_ready_st3, debug_wid_st3, debug_pc_st3);
@@ -194,7 +194,7 @@ module VX_cache_miss_resrv #(
             if (dequeue_st3)
                 $display("%t: cache%0d:%0d msrq-deq addr%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, head_ptr, debug_wid_st3, debug_pc_st3);
             $write("%t: cache%0d:%0d msrq-table", $time, CACHE_ID, BANK_ID);
-            for (integer j = 0; j < MRVQ_SIZE; j++) begin
+            for (integer j = 0; j < MSHR_SIZE; j++) begin
                 if (valid_table[j]) begin
                     $write(" ");                    
                     if (schedule_ptr == $bits(schedule_ptr)'(j)) $write("*");                   
