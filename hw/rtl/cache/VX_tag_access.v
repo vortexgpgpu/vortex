@@ -93,15 +93,13 @@ module VX_tag_access #(
     assign use_read_tag   = DRAM_ENABLE ? qual_read_tag : addrtag; // Tag is always the same in SM
 
     // use "case equality" to handle uninitialized tag when block entry is not valid
-    wire tags_match = use_read_valid && (addrtag === use_read_tag);    
-    
-    wire core_req_miss = valid_in && !is_snp_in && !is_fill_in
-                      && !tags_match;
+    wire tags_match = use_read_valid && (addrtag === use_read_tag);  
                       
-    assign use_do_write = valid_in 
-                       && is_write_in
-                       && use_read_valid                 
-                       && !core_req_miss
+    assign use_do_write = valid_in                        
+                       && tags_match
+                       && !is_snp_in
+                       && !is_fill_in
+                       && is_write_in                       
                        && !force_miss_in
                        && !stall;
 
@@ -110,13 +108,16 @@ module VX_tag_access #(
                       && !stall;
 
     assign use_invalidate = valid_in 
-                         && is_snp_in 
-                         && tags_match 
+                         && tags_match
+                         && is_snp_in                         
                          && (use_read_dirty || snp_invalidate_in)
                          && !force_miss_in
                          && !stall;
 
-    assign miss_out = core_req_miss;
+    assign miss_out = valid_in 
+                   && !tags_match
+                   && !is_snp_in 
+                   && !is_fill_in;
 
     assign dirty_out = valid_in && use_read_valid && use_read_dirty 
                     && !(is_fill_in && tags_match);  // discard writeback for redundant fills
