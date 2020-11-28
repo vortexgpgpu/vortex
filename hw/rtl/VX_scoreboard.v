@@ -51,7 +51,9 @@ module VX_scoreboard  #(
                 inuse_registers[{ibuf_deq_if.wid, ibuf_deq_if.rd}] <= ibuf_deq_if.tmask;
             end       
             if (release_reg) begin
-                assert(inuse_reg_mask[writeback_if.wid][writeback_if.rd] != 0);
+                assert(inuse_reg_mask[writeback_if.wid][writeback_if.rd] != 0) 
+                    else $error("*** %t: core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
+                        $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd);            
                 inuse_registers[{writeback_if.wid, writeback_if.rd}] <= inuse_registers_n;
             end            
             inuse_reg_mask <= inuse_reg_mask_n;
@@ -79,7 +81,7 @@ module VX_scoreboard  #(
             stall_ctr <= 0;
         end else if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
             stall_ctr <= stall_ctr + 1;
-            assert(stall_ctr < 100000) else $error("%t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b, gpr=%b",
+            assert(stall_ctr < 100000) else $error("*** %t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b, gpr=%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
                     inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay, gpr_delay);            
         end else if (ibuf_deq_if.valid && ibuf_deq_if.ready) begin

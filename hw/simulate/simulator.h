@@ -66,6 +66,10 @@ private:
   std::list<dram_req_t> dram_rsp_vec_;
   bool dram_rsp_active_;
 
+  bool dram_rsp_ready_;  
+  bool snp_req_ready_;
+  bool csr_io_req_ready_;
+
   bool snp_req_active_;
   bool csr_req_active_;
 
