@@ -170,7 +170,7 @@ module VX_cache_miss_resrv #(
         .BUFFERED(0),
         .RWCHECK(1)
     ) metadata (
-        .clk(clk),	                
+        .clk(clk),
         .waddr(tail_ptr),                                
         .raddr(schedule_ptr),                
         .wren(msrq_push),

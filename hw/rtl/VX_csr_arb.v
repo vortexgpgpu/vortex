@@ -19,12 +19,12 @@ module VX_csr_arb (
     input wire       select_io_rsp
 );
     // requests
-	assign csr_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : csr_io_req_if.valid;
+    assign csr_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : csr_io_req_if.valid;
     assign csr_req_if.wid       = (~select_io_req) ? csr_core_req_if.wid      : 0; 
     assign csr_req_if.tmask     = (~select_io_req) ? csr_core_req_if.tmask    : 0;
     assign csr_req_if.PC        = (~select_io_req) ? csr_core_req_if.PC       : 0;
-	assign csr_req_if.op_type   = (~select_io_req) ? csr_core_req_if.op_type  : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
-	assign csr_req_if.csr_addr  = (~select_io_req) ? csr_core_req_if.csr_addr : csr_io_req_if.addr;	
+    assign csr_req_if.op_type   = (~select_io_req) ? csr_core_req_if.op_type  : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
+    assign csr_req_if.csr_addr  = (~select_io_req) ? csr_core_req_if.csr_addr : csr_io_req_if.addr;
     assign csr_req_if.csr_mask  = (~select_io_req) ? csr_core_req_if.csr_mask : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
     assign csr_req_if.rd        = (~select_io_req) ? csr_core_req_if.rd       : 0;
     assign csr_req_if.wb        = (~select_io_req) ? csr_core_req_if.wb       : 0;

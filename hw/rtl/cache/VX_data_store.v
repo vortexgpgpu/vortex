@@ -40,7 +40,7 @@ module VX_data_store #(
         .BUFFERED(0),
         .RWCHECK(1)
     ) data (
-        .clk(clk),	                
+        .clk(clk),
         .waddr(write_addr),                                
         .raddr(read_addr),                
         .wren(write_enable),  

@@ -32,13 +32,13 @@ module VX_divide #(
     );
 
     defparam
-		divide.lpm_type = "LPM_DIVIDE",
-        divide.lpm_widthn = WIDTHN,        
-		divide.lpm_widthd = WIDTHD,		
-		divide.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
+        divide.lpm_type     = "LPM_DIVIDE",
+        divide.lpm_widthn   = WIDTHN,        
+        divide.lpm_widthd   = WIDTHD,
+        divide.lpm_nrepresentation = NSIGNED ? "SIGNED" : "UNSIGNED",
         divide.lpm_drepresentation = DSIGNED ? "SIGNED" : "UNSIGNED",
-		divide.lpm_hint = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
-		divide.lpm_pipeline = LATENCY;
+        divide.lpm_hint     = "MAXIMIZE_SPEED=6,LPM_REMAINDERPOSITIVE=FALSE",
+        divide.lpm_pipeline = LATENCY;
 
     assign quotient  = quotient_unqual [WIDTHQ-1:0];
     assign remainder = remainder_unqual [WIDTHR-1:0];

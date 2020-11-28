@@ -112,7 +112,7 @@ module VX_generic_queue #(
                 .RWCHECK(1),
                 .FASTRAM(FASTRAM)
             ) dp_ram (
-                .clk(clk),	
+                .clk(clk),
                 .waddr(wr_ptr_a),                                
                 .raddr(rd_ptr_a),
                 .wren(push),
@@ -166,7 +166,7 @@ module VX_generic_queue #(
                 .RWCHECK(0),
                 .FASTRAM(FASTRAM)
             ) dp_ram (
-                .clk(clk),	
+                .clk(clk),
                 .waddr(wr_ptr_r),                                
                 .raddr(rd_ptr_n_r),
                 .wren(push),

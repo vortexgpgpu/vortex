@@ -52,7 +52,7 @@ module VX_tag_store #(
         .BUFFERED(0),
         .RWCHECK(1)
     ) tags (
-        .clk(clk),	                
+        .clk(clk),                 
         .waddr(write_addr),                                
         .raddr(read_addr),                
         .wren(do_fill),

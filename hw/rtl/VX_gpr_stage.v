@@ -36,9 +36,9 @@ module VX_gpr_stage #(
         .rs2_data (rs2_data)
     );       
 
-    always @(posedge clk) begin	
+    always @(posedge clk) begin
         if (reset) begin
-			rsp_valid <= 0;
+            rsp_valid <= 0;
         end else begin
             rsp_valid <= gpr_req_if.valid;
         end
@@ -47,40 +47,40 @@ module VX_gpr_stage #(
         rsp_pc      <= gpr_req_if.PC;
         rs1_is_zero <= (0 == gpr_req_if.rs1);
         rs2_is_zero <= (0 == gpr_req_if.rs2);
-	end
+    end
 
 `ifdef EXT_F_ENABLE   
 
     reg [`NUM_THREADS-1:0][31:0] rs3_data;
-	reg read_rs3, save_rs3;
+    reg read_rs3, save_rs3;
 
-	wire rs3_delay = gpr_req_if.valid && gpr_req_if.use_rs3 && !read_rs3;
-	wire read_fire = gpr_req_if.valid && gpr_rsp_if.ready;
+    wire rs3_delay = gpr_req_if.valid && gpr_req_if.use_rs3 && !read_rs3;
+    wire read_fire = gpr_req_if.valid && gpr_rsp_if.ready;
 
-	always @(posedge clk) begin
-		if (reset) begin			
-			read_rs3 <= 0;			
-		end else begin
-			if (rs3_delay) begin			
+    always @(posedge clk) begin
+        if (reset) begin
+            read_rs3 <= 0;
+        end else begin
+            if (rs3_delay) begin
                 read_rs3 <= 1;
-			end else if (read_fire) begin
-				read_rs3 <= 0;
-			end
-			assert(!read_rs3 || rsp_wid == gpr_req_if.wid);
-		end
+            end else if (read_fire) begin
+                read_rs3 <= 0;
+            end
+            assert(!read_rs3 || rsp_wid == gpr_req_if.wid);
+        end
 
-        if (rs3_delay) begin			
+        if (rs3_delay) begin
             save_rs3 <= 1;
         end
         if (save_rs3) begin
             rs3_data <= rs1_data;
             save_rs3 <= 0;
         end
-	end
+    end
 
-	assign raddr1 = {gpr_req_if.wid, (rs3_delay ? gpr_req_if.rs3 : gpr_req_if.rs1)};
+    assign raddr1 = {gpr_req_if.wid, (rs3_delay ? gpr_req_if.rs3 : gpr_req_if.rs1)};
     assign gpr_req_if.ready = ~rs3_delay;
-	assign gpr_rsp_if.rs3_data = rs3_data; 
+    assign gpr_rsp_if.rs3_data = rs3_data;
 
 `else
 
