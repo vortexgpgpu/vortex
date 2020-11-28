@@ -208,7 +208,7 @@
             "addr_st1": 32,
             "addr_st2": 32,
             "addr_st3": 32,
-            "is_msrq_st1": 1,
+            "is_mshr_st1": 1,
             "miss_st1": 1,
             "dirty_st1": 1,
             "!force_miss_st1": 1,  

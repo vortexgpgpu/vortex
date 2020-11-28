@@ -420,7 +420,7 @@ module VX_cluster #(
             .WORD_SIZE          (`L2WORD_SIZE),
             .NUM_REQUESTS       (`L2NUM_REQUESTS),
             .CREQ_SIZE          (`L2CREQ_SIZE),
-            .MRVQ_SIZE          (`L2MRVQ_SIZE),
+            .MSHR_SIZE          (`L2MSHR_SIZE),
             .DRFQ_SIZE          (`L2DRFQ_SIZE),
             .SNRQ_SIZE          (`L2SNRQ_SIZE),
             .CWBQ_SIZE          (`L2CWBQ_SIZE),

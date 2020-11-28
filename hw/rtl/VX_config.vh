@@ -207,9 +207,9 @@
 `define DCWBQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef DMRVQ_SIZE
-`define DMRVQ_SIZE `MAX(`LSUQ_SIZE, 4)
+// Miss Handling Register Size
+`ifndef DMSHR_SIZE
+`define DMSHR_SIZE `MAX(`LSUQ_SIZE, 4)
 `endif
 
 // DRAM Request Queue Size
@@ -249,9 +249,9 @@
 `define ICWBQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef IMRVQ_SIZE
-`define IMRVQ_SIZE 4
+// Miss Handling Register Size
+`ifndef IMSHR_SIZE
+`define IMSHR_SIZE 4
 `endif
 
 // DRAM Request Queue Size
@@ -308,9 +308,9 @@
 `define L2CWBQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef L2MRVQ_SIZE
-`define L2MRVQ_SIZE 8
+// Miss Handling Register Size
+`ifndef L2MSHR_SIZE
+`define L2MSHR_SIZE 8
 `endif
 
 // DRAM Request Queue Size
@@ -355,9 +355,9 @@
 `define L3CWBQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef L3MRVQ_SIZE
-`define L3MRVQ_SIZE 8
+// Miss Handling Register Size
+`ifndef L3MSHR_SIZE
+`define L3MSHR_SIZE 8
 `endif
 
 // DRAM Request Queue Size
