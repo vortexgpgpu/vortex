@@ -202,14 +202,14 @@
 `define DCREQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef DMRVQ_SIZE
-`define DMRVQ_SIZE `MAX(`LSUQ_SIZE, 4)
-`endif
-
 // Core Writeback Queue Size
 `ifndef DCWBQ_SIZE
 `define DCWBQ_SIZE 4
+`endif
+
+// Miss Reserv Queue Knob
+`ifndef DMRVQ_SIZE
+`define DMRVQ_SIZE `MAX(`LSUQ_SIZE, 4)
 `endif
 
 // DRAM Request Queue Size
@@ -244,14 +244,14 @@
 `define ICREQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef IMRVQ_SIZE
-`define IMRVQ_SIZE 4
-`endif
-
 // Core Writeback Queue Size
 `ifndef ICWBQ_SIZE
 `define ICWBQ_SIZE 4
+`endif
+
+// Miss Reserv Queue Knob
+`ifndef IMRVQ_SIZE
+`define IMRVQ_SIZE 4
 `endif
 
 // DRAM Request Queue Size
@@ -303,14 +303,14 @@
 `define L2CREQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef L2MRVQ_SIZE
-`define L2MRVQ_SIZE 8
-`endif
-
 // Core Writeback Queue Size
 `ifndef L2CWBQ_SIZE
 `define L2CWBQ_SIZE 4
+`endif
+
+// Miss Reserv Queue Knob
+`ifndef L2MRVQ_SIZE
+`define L2MRVQ_SIZE 8
 `endif
 
 // DRAM Request Queue Size
@@ -350,14 +350,14 @@
 `define L3CREQ_SIZE 4
 `endif
 
-// Miss Reserv Queue Knob
-`ifndef L3MRVQ_SIZE
-`define L3MRVQ_SIZE 8
-`endif
-
 // Core Writeback Queue Size
 `ifndef L3CWBQ_SIZE
 `define L3CWBQ_SIZE 4
+`endif
+
+// Miss Reserv Queue Knob
+`ifndef L3MRVQ_SIZE
+`define L3MRVQ_SIZE 8
 `endif
 
 // DRAM Request Queue Size

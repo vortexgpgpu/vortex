@@ -1,37 +1,37 @@
-################################################################################
-# HARPtools by Chad D. Kersey, Summer 2011                                     #
-################################################################################
+CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
+#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CXXFLAGS ?= -std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
-#CXXFLAGS ?= -std=c++11 -fPIC -g -O0 -Wall -Wextra -pedantic -DUSE_DEBUG=3 -DPRINT_ACTIVE_THREADS
+CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
 
-LIB_OBJS=simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
+CFLAGS += -I../../hw
 
+TOP = cache_simX
 
-INCLUDE=-I../hw/old_rtl -I../hw/old_rtl/interfaces -I../hw/old_rtl/cache -I../hw/old_rtl/shared_memory
-FILE=cache_simX.v
-COMP=--compiler gcc
-LIB=
+RTL_DIR = ../hw/old_rtl
 
-CF=-CFLAGS '-std=c++11 -fPIC -O3 -Wall -Wextra -pedantic -I../../hw'
-#CF=-CFLAGS '-std=c++11 -fPIC -O0 -g -Wall -Wextra -pedantic'
+SRCS = simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
 
-LIGHTW=-Wno-UNOPTFLAT -Wno-WIDTH
-DEB=--trace -DVL_DEBUG=1 
-EXE=--exe $(LIB_OBJS)
+RTL_INCLUDE=-I$(RTL_DIR) -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/shared_memory
 
-OPT_FAST = "-Wno-aligned-new -Wmaybe-uninitialized" 
-OPT_SLOW = "-Wno-aligned-new -Wmaybe-uninitialized"
+VL_FLAGS += -O2 --language 1800-2009 --assert
+VL_FLAGS += -Wno-DECLFILENAME
+VL_FLAGS += --x-initial unique --x-assign unique
+VL_FLAGS += -Wno-UNOPTFLAT -Wno-WIDTH
+
+# Debugigng
+ifdef DEBUG
+	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
+	CFLAGS   += -DVCD_OUTPUT $(DBG_FLAGS)
+else    
+	VL_FLAGS += -DNDEBUG
+	CFLAGS   += -DNDEBUG
+endif
 
 all: simX
 
-# simX:
-# 	g++ $(LDFLAGS) $(LIB_OBJS) -o simX.run
-
-
 simX:
-	verilator $(COMP) -cc $(FILE) $(INCLUDE) $(EXE) $(LIB) $(CF) $(LIGHTW) $(DEB)
-	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f Vcache_simX.mk OPT='-DVL_DEBUG' VL_DEBUG=1 DVL_DEBUG=1
+	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)'
+	make -j -C obj_dir -f V$(TOP).mk
 
 clean:
-	rm -rf *~ \#* *.o *.a *.so include/*~ include/\#* simX.run obj_dir
+	rm -rf obj_dir

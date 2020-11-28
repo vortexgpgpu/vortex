@@ -187,7 +187,6 @@ int main(int argc, char **argv) {
   cl_device_id device_id;
   size_t kernel_size;
   cl_int binary_status = 0;
-  int i;
 
   // read kernel binary from file  
   if (0 != read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size))
@@ -250,7 +249,7 @@ int main(int argc, char **argv) {
 
   printf("attempting to create kernel\n");
   kernel = CL_CHECK_ERR(clCreateKernel(program, "sfilter", &_err));
-  printf("setting up kernel args cl_mem:%lx \n", input_buffer);
+  printf("setting up kernel args\n");
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(input_buffer), &input_buffer));
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(output_buffer), &output_buffer));
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(ldc), (&ldc)));
@@ -288,11 +287,11 @@ int main(int argc, char **argv) {
   float* h_dst = (float*)malloc(nbytes);
   CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, h_dst, 0, NULL, NULL));
 
-  printf("Result:");
+  /*printf("Result:");
   for (int i = 0; i < NUM_DATA * NUM_DATA; i++) {
     float data = h_dst[i];
-    // printf(" %f", data);
-  }
+    printf(" %f", data);
+  }*/
   free(h_dst);
 
   CL_CHECK(clReleaseMemObject(memObjects[0]));
