@@ -211,8 +211,8 @@ module VX_lsu_unit #(
    always @(posedge clk) begin
         if ((| dcache_req_if.valid) && dcache_req_if.ready) begin
             if (dcache_req_if.rw)
-                $display("%t: D$%0d Rw Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, byteen=%0h, data=%0h", 
-                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.byteen, dcache_req_if.data);
+                $display("%t: D$%0d Rw Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
+                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
             else
                 $display("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, byteen=%0h", 
                      $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.byteen, dcache_req_if.data);

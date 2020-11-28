@@ -1,5 +1,7 @@
-#CFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Wfatal-errors
-CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
+#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+
+CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
 
 CFLAGS += -I../../../../hw
 
@@ -24,9 +26,6 @@ DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 #CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
 CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 #CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
-
-#DEBUG=1
-#SCOPE=1
 
 CFLAGS += -fPIC
 
@@ -83,9 +82,6 @@ VL_FLAGS += -DFPU_FAST
 
 RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 
-OPT_FAST = "-Wno-aligned-new -Wmaybe-uninitialized" 
-OPT_SLOW = "-Wno-aligned-new -Wmaybe-uninitialized"
-
 PROJECT = libopae-c-vlsim.so
 
 all: $(PROJECT)
@@ -98,7 +94,7 @@ $(RTL_DIR)/scope-defs.vh: $(SCRIPT_DIR)/scope.json
 	
 $(PROJECT): $(SRCS) $(SCOPE_VH)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
-	make OPT_FAST=$(OPT_FAST) OPT_SLOW=$(OPT_SLOW) -j -C obj_dir -f V$(TOP).mk
+	make -j -C obj_dir -f V$(TOP).mk
 
 clean:
 	rm -rf $(PROJECT) obj_dir ../scope-defs.h $(RTL_DIR)/scope-defs.vh

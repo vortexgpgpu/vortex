@@ -18,9 +18,9 @@ install:
   - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
   - export VERILATOR_ROOT=/opt/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
-
-script:   
   - make -s
+
+script:     
   - ./ci/test_runtime.sh
   - ./ci/test_riscv_isa.sh  
   - ./ci/test_opencl.sh
