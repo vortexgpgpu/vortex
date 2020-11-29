@@ -25,7 +25,7 @@ module Vortex (
     // Snoop request
     input wire                              snp_req_valid,
     input wire [`VX_DRAM_ADDR_WIDTH-1:0]    snp_req_addr,
-    input wire                              snp_req_invalidate,
+    input wire                              snp_req_inv,
     input wire [`VX_SNP_TAG_WIDTH-1:0]      snp_req_tag,
     output wire                             snp_req_ready, 
 
@@ -91,7 +91,7 @@ module Vortex (
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
-            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_inv        (snp_req_inv),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
@@ -144,7 +144,7 @@ module Vortex (
 
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_valid;
         wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_snp_req_addr;
-        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_invalidate;
+        wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_inv;
         wire [`NUM_CLUSTERS-1:0][`L2SNP_TAG_WIDTH-1:0]   per_cluster_snp_req_tag;
         wire [`NUM_CLUSTERS-1:0]                         per_cluster_snp_req_ready;
 
@@ -205,7 +205,7 @@ module Vortex (
 
                 .snp_req_valid      (per_cluster_snp_req_valid  [i]),
                 .snp_req_addr       (per_cluster_snp_req_addr   [i]),
-                .snp_req_invalidate (per_cluster_snp_req_invalidate[i]),
+                .snp_req_inv        (per_cluster_snp_req_inv    [i]),
                 .snp_req_tag        (per_cluster_snp_req_tag    [i]),
                 .snp_req_ready      (per_cluster_snp_req_ready  [i]),
 
@@ -327,7 +327,7 @@ module Vortex (
 
         wire                                                 snp_fwd_rsp_valid;
         wire [`L3DRAM_ADDR_WIDTH-1:0]                        snp_fwd_rsp_addr;
-        wire                                                 snp_fwd_rsp_invalidate;
+        wire                                                 snp_fwd_rsp_inv;
         wire [`L3SNP_TAG_WIDTH-1:0]                          snp_fwd_rsp_tag;
         wire                                                 snp_fwd_rsp_ready;
 
@@ -364,19 +364,19 @@ module Vortex (
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
-            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_inv        (snp_req_inv),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
             .snp_rsp_valid      (snp_fwd_rsp_valid),       
             .snp_rsp_addr       (snp_fwd_rsp_addr),
-            .snp_rsp_invalidate (snp_fwd_rsp_invalidate),
+            .snp_rsp_inv        (snp_fwd_rsp_inv),
             .snp_rsp_tag        (snp_fwd_rsp_tag),
             .snp_rsp_ready      (snp_fwd_rsp_ready),   
 
             .snp_fwdout_valid   (per_cluster_snp_req_valid),
             .snp_fwdout_addr    (per_cluster_snp_req_addr),
-            .snp_fwdout_invalidate(per_cluster_snp_req_invalidate),
+            .snp_fwdout_inv     (per_cluster_snp_req_inv),
             .snp_fwdout_tag     (per_cluster_snp_req_tag),
             .snp_fwdout_ready   (per_cluster_snp_req_ready),
 
@@ -445,7 +445,7 @@ module Vortex (
             // Snoop request
             .snp_req_valid      (snp_fwd_rsp_valid),
             .snp_req_addr       (snp_fwd_rsp_addr),
-            .snp_req_invalidate (snp_fwd_rsp_invalidate),
+            .snp_req_inv        (snp_fwd_rsp_inv),
             .snp_req_tag        (snp_fwd_rsp_tag),
             .snp_req_ready      (snp_fwd_rsp_ready),
 
@@ -474,7 +474,7 @@ module Vortex (
 
     `SCOPE_ASSIGN (snp_req_fire,  snp_req_valid && snp_req_ready);
     `SCOPE_ASSIGN (snp_req_addr,  `TO_FULL_ADDR(snp_req_addr));
-    `SCOPE_ASSIGN (snp_req_invalidate, snp_req_invalidate);
+    `SCOPE_ASSIGN (snp_req_inv,   snp_req_inv);
     `SCOPE_ASSIGN (snp_req_tag,   snp_req_tag);
 
     `SCOPE_ASSIGN (snp_rsp_fire,  snp_rsp_valid && snp_rsp_ready);

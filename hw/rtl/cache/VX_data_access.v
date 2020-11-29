@@ -16,9 +16,6 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 0,
 
-    // Enable dram update
-    parameter DRAM_ENABLE       = 0,
-
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS  = 0
 ) (
@@ -54,14 +51,12 @@ module VX_data_access #(
     output wire[BANK_LINE_SIZE-1:0]     dirtyb_out
 );
 
-    wire[BANK_LINE_SIZE-1:0]    qual_read_dirtyb_out;
-    wire[`BANK_LINE_WIDTH-1:0]  qual_read_data;
+    wire[BANK_LINE_SIZE-1:0]    read_dirtyb_out;
+    wire[`BANK_LINE_WIDTH-1:0]  read_data;
 
-    wire[BANK_LINE_SIZE-1:0]    use_read_dirtyb_out;
-    wire[`BANK_LINE_WIDTH-1:0]  use_read_data;
-    wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] use_byte_enable;
-    wire[`BANK_LINE_WIDTH-1:0]  use_write_data;
-    wire                        use_write_enable;
+    wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable;    
+    wire                        write_enable;
+    wire[`BANK_LINE_WIDTH-1:0]  write_data;
 
     wire[`LINE_SELECT_BITS-1:0] addrline = addr_in[`LINE_SELECT_BITS-1:0];
 
@@ -69,68 +64,63 @@ module VX_data_access #(
         .CACHE_SIZE     (CACHE_SIZE),
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
-        .WORD_SIZE      (WORD_SIZE)
+        .WORD_SIZE      (WORD_SIZE),
+        .WRITE_ENABLE   (WRITE_ENABLE)
     ) data_store (
         .clk         (clk),
 
         .reset       (reset),
 
         .read_addr   (addrline),
-        .read_dirtyb (qual_read_dirtyb_out),
-        .read_data   (qual_read_data),
+        .read_dirtyb (read_dirtyb_out),
+        .read_data   (read_data),
 
-        .write_enable(use_write_enable),
+        .write_enable(write_enable),
         .write_fill  (is_fill_in),
-        .byte_enable (use_byte_enable),
+        .byte_enable (byte_enable),
         .write_addr  (addrline),        
-        .write_data  (use_write_data)
+        .write_data  (write_data)
     );
-
-    assign use_read_dirtyb_out = qual_read_dirtyb_out;
-    assign use_read_data  = qual_read_data;
     
     if (`WORD_SELECT_WIDTH != 0) begin
-        wire [`WORD_WIDTH-1:0] readword = use_read_data[wordsel_in * `WORD_WIDTH +: `WORD_WIDTH];
+        wire [`WORD_WIDTH-1:0] readword = read_data[wordsel_in * `WORD_WIDTH +: `WORD_WIDTH];
         for (genvar i = 0; i < WORD_SIZE; i++) begin
             assign readword_out[i * 8 +: 8] = readword[i * 8 +: 8] & {8{byteen_in[i]}};
         end
     end else begin
         for (genvar i = 0; i < WORD_SIZE; i++) begin
-            assign readword_out[i * 8 +: 8] = use_read_data[i * 8 +: 8] & {8{byteen_in[i]}};
+            assign readword_out[i * 8 +: 8] = read_data[i * 8 +: 8] & {8{byteen_in[i]}};
         end
     end
 
-    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable;
-    wire [`BANK_LINE_WIDTH-1:0] data_write;
-
     for (genvar i = 0; i < `BANK_LINE_WORDS; i++) begin
-        wire word_sel = ((`WORD_SELECT_WIDTH == 0) || (wordsel_in == `UP(`WORD_SELECT_WIDTH)'(i)));
+        wire word_sel = (`WORD_SELECT_WIDTH == 0) || (wordsel_in == `UP(`WORD_SELECT_WIDTH)'(i));
         
         assign byte_enable[i] = is_fill_in ? {WORD_SIZE{1'b1}} : 
-                                    word_sel ? byteen_in :
-                                        {WORD_SIZE{1'b0}};
+                                        word_sel ? byteen_in :
+                                            {WORD_SIZE{1'b0}};
 
-        assign data_write[i * `WORD_WIDTH +: `WORD_WIDTH] = is_fill_in ? writedata_in[i * `WORD_WIDTH +: `WORD_WIDTH] : writeword_in;
+        assign write_data[i * `WORD_WIDTH +: `WORD_WIDTH] = is_fill_in ? writedata_in[i * `WORD_WIDTH +: `WORD_WIDTH] : writeword_in;
     end
 
-    assign use_write_enable = valid_in && writeen_in && !stall;
-    assign use_byte_enable  = byte_enable;
-    assign use_write_data   = data_write;
+    assign write_enable = valid_in 
+                          && writeen_in 
+                          && !stall;
 
-    assign dirtyb_out   = use_read_dirtyb_out;
-    assign readdata_out = use_read_data;
+    assign dirtyb_out   = read_dirtyb_out;
+    assign readdata_out = read_data;
 
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin            
         if (valid_in && !stall) begin
-            if (use_write_enable) begin
+            if (write_enable) begin
                 if (is_fill_in) begin
-                    $display("%t: cache%0d:%0d data-fill: addr=%0h, dirty=%b, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), dirtyb_out, addrline, use_write_data);
+                    $display("%t: cache%0d:%0d data-fill: addr=%0h, dirty=%b, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), dirtyb_out, addrline, write_data);
                 end else begin
                     $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, dirty=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, byte_enable, dirtyb_out, addrline, wordsel_in, writeword_in);
                 end
             end else begin
-                $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, dirtyb_out, addrline, wordsel_in, qual_read_data);
+                $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, dirtyb_out, addrline, wordsel_in, read_data);
             end            
         end
     end    
