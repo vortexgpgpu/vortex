@@ -8,7 +8,10 @@ module VX_data_store #(
     // Number of banks
     parameter NUM_BANKS                     = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 1
+    parameter WORD_SIZE                     = 1,
+
+    // Enable cache writeable
+    parameter WRITE_ENABLE                  = 0
 ) (
     input  wire                             clk,
     input  wire                             reset,
@@ -25,13 +28,19 @@ module VX_data_store #(
 );
     `UNUSED_VAR (reset)
 
-    reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] dirtyb[`BANK_LINE_COUNT-1:0];
-    always @(posedge clk) begin
-        if (write_enable) begin
-            dirtyb[write_addr] <= write_fill ? 0 : (dirtyb[write_addr] | byte_enable);
+    if (WRITE_ENABLE) begin
+        reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] dirtyb[`BANK_LINE_COUNT-1:0];
+        always @(posedge clk) begin
+            if (write_enable) begin
+                dirtyb[write_addr] <= write_fill ? 0 : (dirtyb[write_addr] | byte_enable);
+            end
         end
+        assign read_dirtyb = dirtyb [read_addr];
+    end else begin
+        `UNUSED_VAR (write_fill)
+        `UNUSED_VAR (byte_enable)
+        assign read_dirtyb = 0;
     end
-    assign read_dirtyb = dirtyb [read_addr];
 
     VX_dp_ram #(
         .DATAW(`BANK_LINE_WORDS * WORD_SIZE * 8),

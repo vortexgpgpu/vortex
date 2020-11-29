@@ -42,7 +42,7 @@ module VX_core #(
     // Snoop request
     input  wire                             snp_req_valid,
     input  wire [`DDRAM_ADDR_WIDTH-1:0]     snp_req_addr,
-    input wire                              snp_req_invalidate,
+    input wire                              snp_req_inv,
     input  wire [`DSNP_TAG_WIDTH-1:0]       snp_req_tag,
     output wire                             snp_req_ready,
 
@@ -238,11 +238,11 @@ module VX_core #(
         .SNP_TAG_WIDTH(`DSNP_TAG_WIDTH)
     ) dcache_snp_rsp_if();
 
-    assign dcache_snp_req_if.valid      = snp_req_valid;
-    assign dcache_snp_req_if.addr       = snp_req_addr;
-    assign dcache_snp_req_if.invalidate = snp_req_invalidate;
-    assign dcache_snp_req_if.tag        = snp_req_tag;
-    assign snp_req_ready                = dcache_snp_req_if.ready;
+    assign dcache_snp_req_if.valid = snp_req_valid;
+    assign dcache_snp_req_if.addr  = snp_req_addr;
+    assign dcache_snp_req_if.invalidate = snp_req_inv;
+    assign dcache_snp_req_if.tag   = snp_req_tag;
+    assign snp_req_ready           = dcache_snp_req_if.ready;
 
     assign snp_rsp_valid = dcache_snp_rsp_if.valid;
     assign snp_rsp_tag   = dcache_snp_rsp_if.tag;

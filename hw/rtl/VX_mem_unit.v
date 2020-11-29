@@ -117,7 +117,7 @@ module VX_mem_unit # (
         // Snoop request
         .snp_req_valid      (1'b0),
         .snp_req_addr       (0),
-        .snp_req_invalidate (0),
+        .snp_req_inv        (0),
         .snp_req_tag        (0),
         `UNUSED_PIN (snp_req_ready),
 
@@ -190,7 +190,7 @@ module VX_mem_unit # (
         // Snoop request
         .snp_req_valid      (dcache_snp_req_if.valid),
         .snp_req_addr       (dcache_snp_req_if.addr),
-        .snp_req_invalidate (dcache_snp_req_if.invalidate),
+        .snp_req_inv        (dcache_snp_req_if.invalidate),
         .snp_req_tag        (dcache_snp_req_if.tag),
         .snp_req_ready      (dcache_snp_req_if.ready),
 
@@ -262,7 +262,7 @@ module VX_mem_unit # (
         // Snoop request
         .snp_req_valid         (1'b0),
         .snp_req_addr          (0),
-        .snp_req_invalidate    (1'b0),
+        .snp_req_inv           (1'b0),
         .snp_req_tag           (0),
         `UNUSED_PIN (snp_req_ready),
 

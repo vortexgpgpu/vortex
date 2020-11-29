@@ -89,7 +89,7 @@ module VX_cache #(
     // Snoop request
     input wire                              snp_req_valid,
     input wire [`DRAM_ADDR_WIDTH-1:0]       snp_req_addr,
-    input wire                              snp_req_invalidate,
+    input wire                              snp_req_inv,
     input wire [SNP_TAG_WIDTH-1:0]          snp_req_tag,
     output wire                             snp_req_ready,
 
@@ -186,7 +186,7 @@ module VX_cache #(
 
         wire                            curr_bank_snp_req_valid;
         wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_snp_req_addr;
-        wire                            curr_bank_snp_req_invalidate;
+        wire                            curr_bank_snp_req_inv;
         wire [SNP_TAG_WIDTH-1:0]        curr_bank_snp_req_tag;
         wire                            curr_bank_snp_req_ready;    
 
@@ -243,9 +243,9 @@ module VX_cache #(
             assign curr_bank_snp_req_valid = snp_req_valid && (`DRAM_ADDR_BANK(snp_req_addr) == i);
             assign curr_bank_snp_req_addr  = `DRAM_TO_LINE_ADDR(snp_req_addr);
         end
-        assign curr_bank_snp_req_invalidate = snp_req_invalidate;
-        assign curr_bank_snp_req_tag        = snp_req_tag;
-        assign per_bank_snp_req_ready[i]    = curr_bank_snp_req_ready;
+        assign curr_bank_snp_req_inv     = snp_req_inv;
+        assign curr_bank_snp_req_tag     = snp_req_tag;
+        assign per_bank_snp_req_ready[i] = curr_bank_snp_req_ready;
 
         // Snoop response            
         assign per_bank_snp_rsp_valid[i] = curr_bank_snp_rsp_valid;
@@ -314,7 +314,7 @@ module VX_cache #(
             // Snoop request
             .snp_req_valid      (curr_bank_snp_req_valid),
             .snp_req_addr       (curr_bank_snp_req_addr),
-            .snp_req_invalidate (curr_bank_snp_req_invalidate),
+            .snp_req_inv        (curr_bank_snp_req_inv),
             .snp_req_tag        (curr_bank_snp_req_tag),
             .snp_req_ready      (curr_bank_snp_req_ready),
 

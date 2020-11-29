@@ -114,7 +114,7 @@ wire vx_dram_rsp_ready;
 
 reg vx_snp_req_valid;
 reg [`VX_DRAM_ADDR_WIDTH-1:0] vx_snp_req_addr;
-wire vx_snp_req_invalidate = 0;
+wire vx_snp_req_inv = 0;
 wire [`VX_SNP_TAG_WIDTH-1:0] vx_snp_req_tag;
 wire vx_snp_req_ready;
 
@@ -989,7 +989,7 @@ Vortex #() vortex (
   // Snoop request
   .snp_req_valid    (vx_snp_req_valid),
   .snp_req_addr     (vx_snp_req_addr),
-  .snp_req_invalidate(vx_snp_req_invalidate),
+  .snp_req_inv      (vx_snp_req_inv),
   .snp_req_tag      (vx_snp_req_tag),
   .snp_req_ready    (vx_snp_req_ready),
 

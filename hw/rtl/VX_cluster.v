@@ -27,7 +27,7 @@ module VX_cluster #(
     // Snoop request
     input wire                              snp_req_valid,
     input wire [`L2DRAM_ADDR_WIDTH-1:0]     snp_req_addr,
-    input wire                              snp_req_invalidate,
+    input wire                              snp_req_inv,
     input wire [`L2SNP_TAG_WIDTH-1:0]       snp_req_tag,
     output wire                             snp_req_ready, 
 
@@ -96,7 +96,7 @@ module VX_cluster #(
 
     wire [`NUM_CORES-1:0]                        per_core_snp_req_valid;    
     wire [`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0] per_core_snp_req_addr;
-    wire [`NUM_CORES-1:0]                        per_core_snp_req_invalidate;
+    wire [`NUM_CORES-1:0]                        per_core_snp_req_inv;
     wire [`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]   per_core_snp_req_tag;
     wire [`NUM_CORES-1:0]                        per_core_snp_req_ready;
     
@@ -165,7 +165,7 @@ module VX_cluster #(
 
             .snp_req_valid      (per_core_snp_req_valid     [i]),
             .snp_req_addr       (per_core_snp_req_addr      [i]),
-            .snp_req_invalidate (per_core_snp_req_invalidate[i]),
+            .snp_req_inv        (per_core_snp_req_inv       [i]),
             .snp_req_tag        (per_core_snp_req_tag       [i]),
             .snp_req_ready      (per_core_snp_req_ready     [i]),
 
@@ -296,7 +296,7 @@ module VX_cluster #(
 
         wire[`NUM_CORES-1:0]                                core_snp_fwdout_valid;
         wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0]         core_snp_fwdout_addr;
-        wire[`NUM_CORES-1:0]                                core_snp_fwdout_invalidate;
+        wire[`NUM_CORES-1:0]                                core_snp_fwdout_inv;
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]           core_snp_fwdout_tag;
         wire[`NUM_CORES-1:0]                                core_snp_fwdout_ready;    
 
@@ -306,7 +306,7 @@ module VX_cluster #(
 
         wire                                                snp_fwd_rsp_valid;
         wire [`L2DRAM_ADDR_WIDTH-1:0]                       snp_fwd_rsp_addr;
-        wire                                                snp_fwd_rsp_invalidate;
+        wire                                                snp_fwd_rsp_inv;
         wire [`L2SNP_TAG_WIDTH-1:0]                         snp_fwd_rsp_tag;
         wire                                                snp_fwd_rsp_ready;
 
@@ -367,7 +367,7 @@ module VX_cluster #(
 
             assign per_core_snp_req_valid      [(i/2)] = core_snp_fwdout_valid [(i/2)];
             assign per_core_snp_req_addr       [(i/2)] = core_snp_fwdout_addr [(i/2)];    
-            assign per_core_snp_req_invalidate [(i/2)] = core_snp_fwdout_invalidate [(i/2)];    
+            assign per_core_snp_req_inv        [(i/2)] = core_snp_fwdout_inv [(i/2)];    
             assign per_core_snp_req_tag        [(i/2)] = core_snp_fwdout_tag [(i/2)];
             assign core_snp_fwdout_ready       [(i/2)] = per_core_snp_req_ready[(i/2)];
 
@@ -391,19 +391,19 @@ module VX_cluster #(
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
-            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_inv        (snp_req_inv),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
             .snp_rsp_valid      (snp_fwd_rsp_valid),       
             .snp_rsp_addr       (snp_fwd_rsp_addr),
-            .snp_rsp_invalidate (snp_fwd_rsp_invalidate),
+            .snp_rsp_inv        (snp_fwd_rsp_inv),
             .snp_rsp_tag        (snp_fwd_rsp_tag),
             .snp_rsp_ready      (snp_fwd_rsp_ready),   
 
             .snp_fwdout_valid   (core_snp_fwdout_valid),
             .snp_fwdout_addr    (core_snp_fwdout_addr),
-            .snp_fwdout_invalidate(core_snp_fwdout_invalidate),
+            .snp_fwdout_inv     (core_snp_fwdout_inv),
             .snp_fwdout_tag     (core_snp_fwdout_tag),
             .snp_fwdout_ready   (core_snp_fwdout_ready),
 
@@ -472,7 +472,7 @@ module VX_cluster #(
             // Snoop request
             .snp_req_valid      (snp_fwd_rsp_valid),
             .snp_req_addr       (snp_fwd_rsp_addr),
-            .snp_req_invalidate (snp_fwd_rsp_invalidate),
+            .snp_req_inv        (snp_fwd_rsp_inv),
             .snp_req_tag        (snp_fwd_rsp_tag),
             .snp_req_ready      (snp_fwd_rsp_ready),
 
@@ -502,7 +502,7 @@ module VX_cluster #(
 
         wire[`NUM_CORES-1:0]                             core_snp_fwdout_valid;
         wire[`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0]      core_snp_fwdout_addr;
-        wire[`NUM_CORES-1:0]                             core_snp_fwdout_invalidate;
+        wire[`NUM_CORES-1:0]                             core_snp_fwdout_inv;
         wire[`NUM_CORES-1:0][`DSNP_TAG_WIDTH-1:0]        core_snp_fwdout_tag;
         wire[`NUM_CORES-1:0]                             core_snp_fwdout_ready;    
 
@@ -546,7 +546,7 @@ module VX_cluster #(
 
             assign per_core_snp_req_valid      [(i/2)] = core_snp_fwdout_valid [(i/2)];
             assign per_core_snp_req_addr       [(i/2)] = core_snp_fwdout_addr [(i/2)];    
-            assign per_core_snp_req_invalidate [(i/2)] = core_snp_fwdout_invalidate [(i/2)];   
+            assign per_core_snp_req_inv        [(i/2)] = core_snp_fwdout_inv [(i/2)];   
             assign per_core_snp_req_tag        [(i/2)] = core_snp_fwdout_tag [(i/2)];
             assign core_snp_fwdout_ready       [(i/2)] = per_core_snp_req_ready[(i/2)];
 
@@ -569,19 +569,19 @@ module VX_cluster #(
 
             .snp_req_valid      (snp_req_valid),
             .snp_req_addr       (snp_req_addr),
-            .snp_req_invalidate (snp_req_invalidate),
+            .snp_req_inv        (snp_req_inv),
             .snp_req_tag        (snp_req_tag),
             .snp_req_ready      (snp_req_ready),
 
             .snp_rsp_valid      (snp_rsp_valid),       
             `UNUSED_PIN         (snp_rsp_addr),
-            `UNUSED_PIN         (snp_rsp_invalidate),
+            `UNUSED_PIN         (snp_rsp_inv),
             .snp_rsp_tag        (snp_rsp_tag),
             .snp_rsp_ready      (snp_rsp_ready),   
 
             .snp_fwdout_valid   (core_snp_fwdout_valid),
             .snp_fwdout_addr    (core_snp_fwdout_addr),
-            .snp_fwdout_invalidate(core_snp_fwdout_invalidate),
+            .snp_fwdout_inv     (core_snp_fwdout_inv),
             .snp_fwdout_tag     (core_snp_fwdout_tag),
             .snp_fwdout_ready   (core_snp_fwdout_ready),
 
@@ -590,11 +590,11 @@ module VX_cluster #(
             .snp_fwdin_ready    (core_snp_fwdin_ready)      
         );
     end else begin
-        assign core_snp_fwdout_valid      = snp_req_valid;
-        assign core_snp_fwdout_addr       = snp_req_addr;
-        assign core_snp_fwdout_invalidate = snp_req_invalidate;
-        assign core_snp_fwdout_tag        = snp_req_tag;
-        assign snp_req_ready              = core_snp_fwdout_ready;
+        assign core_snp_fwdout_valid= snp_req_valid;
+        assign core_snp_fwdout_addr = snp_req_addr;
+        assign core_snp_fwdout_inv  = snp_req_inv;
+        assign core_snp_fwdout_tag  = snp_req_tag;
+        assign snp_req_ready        = core_snp_fwdout_ready;
  
         assign snp_rsp_valid        = core_snp_fwdin_valid;
         assign snp_rsp_tag          = core_snp_fwdin_tag;
