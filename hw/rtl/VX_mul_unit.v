@@ -144,7 +144,8 @@ module VX_mul_unit #(
     wire [`NUM_THREADS-1:0][31:0] result = mul_valid_out ? mul_result : div_result;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

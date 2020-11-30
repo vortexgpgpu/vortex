@@ -68,6 +68,7 @@ module VX_io_arb #(
 
         VX_generic_register #(
             .N(`NUM_THREADS + TAG_OUT_WIDTH + (`NUM_THREADS * ADDR_WIDTH) + 1 + (`NUM_THREADS * WORD_SIZE) + (`NUM_THREADS * WORD_WIDTH)),
+            .R(`NUM_THREADS),
             .PASSTHRU(NUM_REQUESTS <= 2)
         ) pipe_reg (
             .clk   (clk),

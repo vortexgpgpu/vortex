@@ -76,7 +76,8 @@ module VX_gpu_unit #(
     wire stall = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

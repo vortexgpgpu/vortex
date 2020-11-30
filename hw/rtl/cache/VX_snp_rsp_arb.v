@@ -36,6 +36,7 @@ module VX_snp_rsp_arb #(
 
         VX_generic_register #(
             .N(1 + SNP_TAG_WIDTH),
+            .R(1),
             .PASSTHRU(NUM_BANKS <= 2)
         ) pipe_reg (
             .clk   (clk),

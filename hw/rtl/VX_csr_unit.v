@@ -99,7 +99,8 @@ module VX_csr_unit #(
     wire stall_out = ~csr_pipe_rsp_if.ready && csr_pipe_rsp_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 1 + 32 + 32)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 1 + 32 + 32),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

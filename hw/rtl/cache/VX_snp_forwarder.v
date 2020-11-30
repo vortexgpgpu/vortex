@@ -179,6 +179,7 @@ module VX_snp_forwarder #(
 
         VX_generic_register #(
             .N(1 + `LOG2UP(SNRQ_SIZE)),
+            .R(1),
             .PASSTHRU(NUM_REQUESTS <= 2)
         ) pipe_reg (
             .clk   (clk),

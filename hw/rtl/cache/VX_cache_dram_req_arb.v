@@ -48,6 +48,7 @@ module VX_cache_dram_req_arb #(
 
         VX_generic_register #(
             .N(1 + `DRAM_ADDR_WIDTH + 1 + BANK_LINE_SIZE + `BANK_LINE_WIDTH),
+            .R(1),
             .PASSTHRU(NUM_BANKS <= 2)
         ) pipe_reg (
             .clk   (clk),

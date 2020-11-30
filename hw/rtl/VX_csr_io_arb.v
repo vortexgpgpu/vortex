@@ -64,6 +64,7 @@ module VX_csr_io_arb #(
 
         VX_generic_register #(
             .N(1 + 32),
+            .R(1),
             .PASSTHRU(NUM_REQUESTS <= 2)
         ) pipe_reg (
             .clk   (clk),

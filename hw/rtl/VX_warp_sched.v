@@ -238,7 +238,8 @@ module VX_warp_sched #(
     assign scheduled_warp = schedule_valid && ~stall_out;
 
     VX_generic_register #( 
-        .N(1 + `NUM_THREADS + 32 + `NW_BITS)
+        .N(1 + `NUM_THREADS + 32 + `NW_BITS),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

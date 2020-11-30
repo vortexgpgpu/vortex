@@ -47,7 +47,8 @@ module VX_opd_collect #(
     wire stall_out = valid_out && ~ready_out;
 
     VX_generic_register #(
-        .N(1+INSTW+OPDSW)
+        .N(1 + INSTW + OPDSW),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

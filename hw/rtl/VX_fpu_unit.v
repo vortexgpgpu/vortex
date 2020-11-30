@@ -150,7 +150,8 @@ module VX_fpu_unit #(
     wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFG_BITS)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFG_BITS),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

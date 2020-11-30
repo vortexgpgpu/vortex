@@ -104,8 +104,8 @@ module VX_data_access #(
     end
 
     assign write_enable = valid_in 
-                          && writeen_in 
-                          && !stall;
+                       && writeen_in 
+                       && !stall;
 
     assign dirtyb_out   = read_dirtyb_out;
     assign readdata_out = read_data;
