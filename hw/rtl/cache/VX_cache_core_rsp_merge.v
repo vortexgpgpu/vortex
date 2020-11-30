@@ -29,18 +29,6 @@ module VX_cache_core_rsp_merge #(
     input  wire                                             core_rsp_ready
 );
     if (NUM_REQUESTS > 1) begin
-        wire [`BANK_BITS-1:0] sel_idx;
-
-        VX_rr_arbiter #(
-            .N(NUM_BANKS)
-        ) sel_arb (
-            .clk         (clk),
-            .reset       (reset),
-            .requests    (per_bank_core_rsp_valid),
-            `UNUSED_PIN  (grant_valid),
-            .grant_index (sel_idx),        
-            `UNUSED_PIN  (grant_onehot)
-        );
 
         reg [NUM_REQUESTS-1:0] core_rsp_valid_unqual;
         reg [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
@@ -48,6 +36,19 @@ module VX_cache_core_rsp_merge #(
         reg [NUM_BANKS-1:0] core_rsp_bank_select;
         
         if (CORE_TAG_ID_BITS != 0) begin
+            wire [`BANK_BITS-1:0] sel_idx;
+
+            VX_rr_arbiter #(
+                .N(NUM_BANKS)
+            ) sel_arb (
+                .clk         (clk),
+                .reset       (reset),
+                .requests    (per_bank_core_rsp_valid),
+                `UNUSED_PIN  (grant_valid),
+                .grant_index (sel_idx),        
+                `UNUSED_PIN  (grant_onehot)
+            );
+
             always @(*) begin
                 core_rsp_valid_unqual = 0;
                 core_rsp_tag_unqual   = per_bank_core_rsp_tag[sel_idx];
@@ -65,17 +66,10 @@ module VX_cache_core_rsp_merge #(
             end
         end else begin
             always @(*) begin
-                core_rsp_valid_unqual = 0;
-                core_rsp_valid_unqual[per_bank_core_rsp_tid[sel_idx]] = per_bank_core_rsp_valid[sel_idx];
-                
-                core_rsp_tag_unqual = 'x;
-                core_rsp_tag_unqual[per_bank_core_rsp_tid[sel_idx]] = per_bank_core_rsp_tag[sel_idx];
-
-                core_rsp_data_unqual = 'x;            
-                core_rsp_data_unqual[per_bank_core_rsp_tid[sel_idx]] = per_bank_core_rsp_data[sel_idx];
-                
-                core_rsp_bank_select = 0;
-                core_rsp_bank_select[sel_idx] = 1;
+                core_rsp_valid_unqual = 0;                
+                core_rsp_tag_unqual   = 'x;
+                core_rsp_data_unqual  = 'x;                
+                core_rsp_bank_select  = 0;
                 
                 for (integer i = 0; i < NUM_BANKS; i++) begin 
                     if (per_bank_core_rsp_valid[i] 

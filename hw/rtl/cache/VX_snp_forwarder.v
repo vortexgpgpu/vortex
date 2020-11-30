@@ -64,7 +64,7 @@ module VX_snp_forwarder #(
     VX_cam_buffer #(
         .DATAW (SRC_ADDR_WIDTH + 1 + SNP_TAG_WIDTH),
         .SIZE  (SNRQ_SIZE)
-    ) snp_fwd_cam (
+    ) req_metadata_buf (
         .clk            (clk),
         .reset          (reset),
         .write_addr     (sfq_write_addr),                

@@ -3,8 +3,6 @@
 module VX_cam_buffer #(
     parameter DATAW  = 1,
     parameter SIZE   = 1,
-    parameter RPORTS = 1,
-    parameter CPORTS = 1,
     parameter ADDRW  = `LOG2UP(SIZE)
 ) (
     input  wire clk,
@@ -12,13 +10,12 @@ module VX_cam_buffer #(
     output wire [ADDRW-1:0] write_addr,
     input  wire [DATAW-1:0] write_data,            
     input  wire acquire_slot,
-    input  wire [RPORTS-1:0][ADDRW-1:0] read_addr,
-    output wire [RPORTS-1:0][DATAW-1:0] read_data,
-    input  wire [CPORTS-1:0][ADDRW-1:0] release_addr,
-    input  wire [CPORTS-1:0] release_slot,        
+    input  wire [ADDRW-1:0] read_addr,
+    output wire [DATAW-1:0] read_data,
+    input  wire [ADDRW-1:0] release_addr,
+    input  wire release_slot,
     output wire full
 );
-    reg [DATAW-1:0] entries [SIZE-1:0];
     reg [SIZE-1:0] free_slots, free_slots_n;
     reg [ADDRW-1:0] write_addr_r;
     reg full_r;
@@ -36,13 +33,12 @@ module VX_cam_buffer #(
 
     always @(*) begin
         free_slots_n = free_slots;
-        for (integer i = 0; i < CPORTS; i++) begin 
-            if (release_slot[i]) begin
-                free_slots_n[release_addr[i]] = 1;                
-            end            
+        if (release_slot) begin
+            free_slots_n[release_addr] = 1;                
         end
         if (acquire_slot)  begin
-            free_slots_n[write_addr_r] = 0;
+             assert(1 == free_slots[write_addr]) else $error("%t: acquiring used slot at port %d", $time, write_addr);
+             free_slots_n[write_addr_r] = 0;
         end            
     end    
 
@@ -52,28 +48,33 @@ module VX_cam_buffer #(
             full_r       <= 1'b0;
             write_addr_r <= ADDRW'(1'b0);
         end else begin
-            for (integer i = 0; i < CPORTS; i++) begin 
-                if (release_slot[i]) begin
-                    assert(0 == free_slots[release_addr[i]]) else begin 
-                        $display("%t: releasing invalid slot at port %d", $time, release_addr[i]);
-                    end
+            if (release_slot) begin
+                assert(0 == free_slots[release_addr]) else begin 
+                    $display("%t: releasing invalid slot at port %d", $time, release_addr);
                 end
             end
             free_slots   <= free_slots_n;
             write_addr_r <= free_index;
             full_r       <= ~free_valid;
-        end
-
-        if (acquire_slot) begin
-            assert(1 == free_slots[write_addr]) else $error("%t: acquiring used slot at port %d", $time, write_addr); 
-            entries[write_addr] <= write_data;                
-        end
-    end        
-        
-    for (genvar i = 0; i < RPORTS; i++) begin 
-        assign read_data[i] = entries[read_addr[i]];            
+        end        
     end
 
+    VX_dp_ram #(
+        .DATAW(DATAW),
+        .SIZE(SIZE),
+        .BUFFERED(0),
+        .RWCHECK(0)
+    ) req_metadata (
+        .clk(clk),
+        .waddr(write_addr),                                
+        .raddr(read_addr),
+        .wren(acquire_slot),
+        .byteen(1'b1),
+        .rden(1'b1),
+        .din(write_data),
+        .dout(read_data)
+    );       
+        
     assign write_addr = write_addr_r;
     assign full       = full_r;
 

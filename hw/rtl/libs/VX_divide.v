@@ -73,8 +73,8 @@ module VX_divide #(
         assign quotient  = quotient_unqual [WIDTHQ-1:0];
         assign remainder = remainder_unqual [WIDTHR-1:0];
     end else begin
-        reg [WIDTHN-1:0] quotient_pipe [0:LATENCY-1];
-        reg [WIDTHD-1:0] remainder_pipe [0:LATENCY-1];
+        reg [WIDTHN-1:0] quotient_pipe [LATENCY-1:0];
+        reg [WIDTHD-1:0] remainder_pipe [LATENCY-1:0];
 
         for (genvar i = 0; i < LATENCY; i++) begin
             always @(posedge clk) begin                

@@ -48,14 +48,14 @@ module VX_fp_sqrt #(
     end
 
     VX_shift_register #(
-        .DATAW(TAGW + 1),
+        .DATAW(1 + TAGW),
         .DEPTH(`LATENCY_FSQRT)
     ) shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in ({tag_in,  valid_in}),
-        .out({tag_out, valid_out})
+        .in ({valid_in,  tag_in}),
+        .out({valid_out, tag_out})
     );
 
     assign ready_in = enable;

@@ -20,20 +20,26 @@ module VX_icache_stage #(
 );
     `UNUSED_VAR (reset)
 
-    `NO_RW_RAM_CHECK reg [31:0] rsp_PC_buf [`NUM_WARPS-1:0];
-    `NO_RW_RAM_CHECK reg [`NUM_THREADS-1:0] rsp_tmask_buf [`NUM_WARPS-1:0];
-
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
     wire [`NW_BITS-1:0] req_tag = ifetch_req_if.wid;
-    wire [`NW_BITS-1:0] rsp_tag = icache_rsp_if.tag[0][`NW_BITS-1:0];    
+    wire [`NW_BITS-1:0] rsp_tag = icache_rsp_if.tag[0][`NW_BITS-1:0];
 
-    always @(posedge clk) begin
-        if (icache_req_fire) begin
-            rsp_PC_buf[req_tag]    <= ifetch_req_if.PC;  
-            rsp_tmask_buf[req_tag] <= ifetch_req_if.tmask;
-        end    
-    end    
+    VX_dp_ram #(
+        .DATAW(32 + `NUM_THREADS),
+        .SIZE(`NUM_WARPS),
+        .BUFFERED(0),
+        .RWCHECK(0)
+    ) req_metadata (
+        .clk(clk),
+        .waddr(req_tag),                                
+        .raddr(rsp_tag),
+        .wren(icache_req_fire),
+        .byteen(1'b1),
+        .rden(1'b1),
+        .din({ifetch_req_if.PC,  ifetch_req_if.tmask}),
+        .dout({ifetch_rsp_if.PC, ifetch_rsp_if.tmask})
+    );
 
     // Icache Request
     assign icache_req_if.valid  = ifetch_req_if.valid;
@@ -53,8 +59,6 @@ module VX_icache_stage #(
 
     assign ifetch_rsp_if.valid = icache_rsp_if.valid;
     assign ifetch_rsp_if.wid   = rsp_tag;
-    assign ifetch_rsp_if.tmask = rsp_tmask_buf[rsp_tag];
-    assign ifetch_rsp_if.PC    = rsp_PC_buf[rsp_tag];
     assign ifetch_rsp_if.instr = icache_rsp_if.data[0];
     
     // Can accept new response?
@@ -66,7 +70,7 @@ module VX_icache_stage #(
     `SCOPE_ASSIGN (icache_req_tag,  req_tag);
 
     `SCOPE_ASSIGN (icache_rsp_fire, icache_rsp_if.valid && icache_rsp_if.ready);
-    `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
+    `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data[0]);
     `SCOPE_ASSIGN (icache_rsp_tag,  rsp_tag);
 
 `ifdef DBG_PRINT_CORE_ICACHE

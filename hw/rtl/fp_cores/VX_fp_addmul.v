@@ -178,14 +178,14 @@ module VX_fp_addmul #(
     end
     
     VX_shift_register #(
-        .DATAW(TAGW + 1 + 1 + 1),
+        .DATAW(1 + TAGW + 1 + 1),
         .DEPTH(`LATENCY_FADDMUL)
     ) shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in({tag_in,   valid_in,  do_sub,   do_mul}),
-        .out({tag_out, valid_out, do_sub_r, do_mul_r})
+        .in({valid_in,   tag_in,  do_sub,   do_mul}),
+        .out({valid_out, tag_out, do_sub_r, do_mul_r})
     );
 
     assign ready_in = enable;

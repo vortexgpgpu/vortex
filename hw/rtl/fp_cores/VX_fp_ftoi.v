@@ -68,14 +68,14 @@ module VX_fp_ftoi #(
     end
 
     VX_shift_register #(
-        .DATAW(TAGW + 1 + 1),
+        .DATAW(1 + TAGW + 1),
         .DEPTH(`LATENCY_FTOI)
     ) shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in ({tag_in,  valid_in,  is_signed}),
-        .out({tag_out, valid_out, is_signed_r})
+        .in ({valid_in,  tag_in,  is_signed}),
+        .out({valid_out, tag_out, is_signed_r})
     );
 
     assign ready_in = enable;

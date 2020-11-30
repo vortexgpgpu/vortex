@@ -16,14 +16,11 @@ module VX_ipdom_stack #(
 );
     localparam STACK_SIZE = 2 ** DEPTH;
 
-    `NO_RW_RAM_CHECK reg [WIDTH-1:0] stack_1 [0:STACK_SIZE-1];
-    `NO_RW_RAM_CHECK reg [WIDTH-1:0] stack_2 [0:STACK_SIZE-1];
-    reg is_part [0:STACK_SIZE-1];
+    reg is_part [STACK_SIZE-1:0];
     
     reg [DEPTH-1:0] rd_ptr, wr_ptr;
 
-    reg [WIDTH - 1:0] d1, d2;
-    reg p;
+    wire [WIDTH - 1:0] d1, d2;
 
     always @(posedge clk) begin
         if (reset) begin   
@@ -38,22 +35,24 @@ module VX_ipdom_stack #(
                 rd_ptr <= rd_ptr - DEPTH'(is_part[rd_ptr]);
             end
         end
-    end
+    end    
 
-    always @(posedge clk) begin
-        if (push) begin
-            stack_1[wr_ptr] <= q1;  
-        end
-    end
-    assign d1 = stack_1[rd_ptr];
-
-    always @(posedge clk) begin
-        if (push) begin
-            stack_2[wr_ptr] <= q2;
-        end
-    end
-    assign d2 = stack_2[rd_ptr];
-
+    VX_dp_ram #(
+        .DATAW(WIDTH * 2),
+        .SIZE(STACK_SIZE),
+        .BUFFERED(0),
+        .RWCHECK(0)
+    ) store (
+        .clk(clk),
+        .waddr(wr_ptr),                                
+        .raddr(rd_ptr),
+        .wren(push),
+        .byteen(1'b1),
+        .rden(1'b1),
+        .din({q2, q1}),
+        .dout({d2, d1})
+    );
+    
     always @(posedge clk) begin
         if (push) begin
             is_part[wr_ptr] <= 0;   
@@ -61,7 +60,7 @@ module VX_ipdom_stack #(
             is_part[rd_ptr] <= 1;
         end
     end
-    assign p = is_part[rd_ptr];
+    wire p = is_part[rd_ptr];
 
     assign d     = p ? d1 : d2;
     assign empty = ~(| wr_ptr);

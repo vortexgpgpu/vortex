@@ -47,7 +47,7 @@ module VX_multiplier #(
     if (LATENCY == 0) begin
         assign result = result_unqual;
     end else begin        
-        reg [WIDTHP-1:0] result_pipe [0:LATENCY-1];
+        reg [WIDTHP-1:0] result_pipe [LATENCY-1:0];
 
         for (genvar i = 0; i < LATENCY; i++) begin
             always @(posedge clk) begin

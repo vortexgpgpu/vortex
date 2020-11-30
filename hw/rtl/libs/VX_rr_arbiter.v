@@ -22,7 +22,7 @@ module VX_rr_arbiter #(
 
     end else begin
 
-        reg [`CLOG2(N)-1:0] grant_table [0:N-1];
+        reg [`CLOG2(N)-1:0] grant_table [N-1:0];
         reg [`CLOG2(N)-1:0] state;  
         reg [N-1:0] grant_onehot_r;
 
