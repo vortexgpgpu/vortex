@@ -1,7 +1,8 @@
 `include "VX_platform.vh"
 
 module VX_generic_register #( 
-    parameter N = 1, 
+    parameter N        = 1, 
+    parameter R        = N, 
     parameter PASSTHRU = 0
 ) (
     input wire          clk,
@@ -17,13 +18,24 @@ module VX_generic_register #(
         `UNUSED_VAR (stall)
         assign out = flush ? N'(0) : in;    
     end else begin        
-        reg [(N-1):0] value;
+        reg [N-1:0] value;
 
-        always @(posedge clk) begin
-            if (reset || flush) begin
-                value <= N'(0);
-            end else if (~stall) begin
-                value <= in;
+        if (R != 0) begin
+            always @(posedge clk) begin
+                if (~stall) begin
+                    value <= in;
+                end
+                if (reset || flush) begin
+                    value[N-1:N-R] <= R'(0);
+                end 
+            end
+        end else begin
+            `UNUSED_VAR (reset)
+            `UNUSED_VAR (flush)
+            always @(posedge clk) begin
+                if (~stall) begin
+                    value <= in;
+                end
             end
         end
 

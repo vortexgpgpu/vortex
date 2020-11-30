@@ -63,6 +63,7 @@ module VX_mem_arb #(
 
         VX_generic_register #(
             .N(1 + TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH),
+            .R(1),
             .PASSTHRU(NUM_REQUESTS <= 2)
         ) pipe_reg (
             .clk   (clk),

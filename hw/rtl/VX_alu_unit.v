@@ -97,7 +97,8 @@ module VX_alu_unit #(
     wire stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
 
     VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 32 + 33)
+        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 32 + 33),
+        .R(1)
     ) pipe_reg (
         .clk   (clk),
         .reset (reset),

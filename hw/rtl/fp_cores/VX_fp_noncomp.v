@@ -88,7 +88,8 @@ module VX_fp_noncomp #(
         wire tmp_ab_equal  = (dataa[i] == datab[i]) | (tmp_a_type[4] & tmp_b_type[4]);
 
         VX_generic_register #(
-            .N(1 + 1 + 8 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1)
+            .N(1 + 1 + 8 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1),
+            .R(0)
         ) pipe_reg0 (
             .clk   (clk),
             .reset (reset),
@@ -100,7 +101,8 @@ module VX_fp_noncomp #(
     end  
 
     VX_generic_register #(
-        .N(1 + TAGW + `FPU_BITS + `FRM_BITS + (2 * `NUM_THREADS * 32))
+        .N(1 + TAGW + `FPU_BITS + `FRM_BITS + (2 * `NUM_THREADS * 32)),
+        .R(1)
     ) pipe_reg1 (
         .clk   (clk),
         .reset (reset),
@@ -250,7 +252,8 @@ module VX_fp_noncomp #(
                        || (op_type_r == `FPU_CMP); // CMP
 
     VX_generic_register #(
-        .N(1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS))
+        .N(1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS)),
+        .R(1)
     ) pipe_reg2 (
         .clk   (clk),
         .reset (reset),

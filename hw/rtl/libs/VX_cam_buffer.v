@@ -54,7 +54,9 @@ module VX_cam_buffer #(
         end else begin
             for (integer i = 0; i < CPORTS; i++) begin 
                 if (release_slot[i]) begin
-                    assert(0 == free_slots[release_addr[i]]) else $error("%t: releasing invalid slot at port %d", $time, release_addr[i]);
+                    assert(0 == free_slots[release_addr[i]]) else begin 
+                        $display("%t: releasing invalid slot at port %d", $time, release_addr[i]);
+                    end
                 end
             end
             free_slots   <= free_slots_n;
