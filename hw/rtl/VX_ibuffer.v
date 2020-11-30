@@ -43,7 +43,8 @@ module VX_ibuffer #(
 
         VX_generic_queue #(
             .DATAW(DATAW),
-            .SIZE(SIZE)
+            .SIZE(SIZE),
+            .BUFFERED(1)
         ) queue (
             .clk      (clk),
             .reset    (reset),

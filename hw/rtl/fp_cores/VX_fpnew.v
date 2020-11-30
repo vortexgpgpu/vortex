@@ -78,7 +78,7 @@ module VX_fpnew
     wire [FMTI_BITS-1:0] fpu_int_fmt = fpnew_pkg::INT32;
 
     wire [`NUM_THREADS-1:0][31:0] fpu_result;
-    fpnew_pkg::status_t [0:`NUM_THREADS-1] fpu_status;
+    fpnew_pkg::status_t [`NUM_THREADS-1:0] fpu_status;
 
     reg [FOP_BITS-1:0] fpu_op;
     reg [`FRM_BITS-1:0] fpu_rnd;

@@ -6,7 +6,7 @@ module VX_generic_queue #(
     parameter BUFFERED = 0,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1),
-    parameter FASTRAM  = 1
+    parameter FASTRAM  = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -117,7 +117,7 @@ module VX_generic_queue #(
                 .raddr(rd_ptr_a),
                 .wren(push),
                 .byteen(1'b1),
-                .rden(pop),
+                .rden(1'b1),
                 .din(data_in),
                 .dout(data_out)
             );
@@ -125,11 +125,10 @@ module VX_generic_queue #(
         end else begin
 
             wire [DATAW-1:0] dout;
-            reg [DATAW-1:0] din_r;
+            reg [DATAW-1:0] dout_r;
             reg [ADDRW-1:0] wr_ptr_r;
             reg [ADDRW-1:0] rd_ptr_r;
             reg [ADDRW-1:0] rd_ptr_n_r;
-            reg             bypass_r;
 
             always @(posedge clk) begin
                 if (reset) begin      
@@ -151,19 +150,11 @@ module VX_generic_queue #(
                 end
             end
 
-            always @(posedge clk) begin
-                if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
-                    bypass_r <= 1;
-                    din_r <= data_in;
-                end else if (pop)
-                    bypass_r <= 0;
-            end
-
             VX_dp_ram #(
                 .DATAW(DATAW),
                 .SIZE(SIZE),
-                .BUFFERED(1),
-                .RWCHECK(0),
+                .BUFFERED(0),
+                .RWCHECK(1),
                 .FASTRAM(FASTRAM)
             ) dp_ram (
                 .clk(clk),
@@ -171,12 +162,20 @@ module VX_generic_queue #(
                 .raddr(rd_ptr_n_r),
                 .wren(push),
                 .byteen(1'b1),
-                .rden(pop),
+                .rden(1'b1),
                 .din(data_in),
                 .dout(dout)
             ); 
 
-            assign data_out = bypass_r ? din_r : dout;
+            always @(posedge clk) begin
+                if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
+                    dout_r <= data_in;
+                end else if (pop) begin
+                    dout_r <= dout;                
+                end
+            end
+
+            assign data_out = dout_r;
         end
         
         assign empty = empty_r;

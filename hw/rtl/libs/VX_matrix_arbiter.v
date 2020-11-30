@@ -22,8 +22,8 @@ module VX_matrix_arbiter #(
 
     end else begin
 
-        reg [N-1:1] state [0:N-1];  
-        wire [N-1:0] pri [0:N-1];
+        reg [N-1:1] state [N-1:0];  
+        wire [N-1:0] pri [N-1:0];
         
         for (genvar i = 0; i < N; i++) begin      
             for (genvar j = 0; j < N; j++) begin

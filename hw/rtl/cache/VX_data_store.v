@@ -43,9 +43,9 @@ module VX_data_store #(
     end
 
     VX_dp_ram #(
-        .DATAW(`BANK_LINE_WORDS * WORD_SIZE * 8),
+        .DATAW(BANK_LINE_SIZE * 8),
         .SIZE(`BANK_LINE_COUNT),
-        .BYTEENW(`BANK_LINE_WORDS * WORD_SIZE),
+        .BYTEENW(BANK_LINE_SIZE),
         .BUFFERED(0),
         .RWCHECK(1)
     ) data (

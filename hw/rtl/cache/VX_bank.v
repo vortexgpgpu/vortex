@@ -498,6 +498,7 @@ if (DRAM_ENABLE) begin
 end else begin
 
     `UNUSED_VAR (mshr_pending_hazard_unqual_st0)
+    `UNUSED_VAR (addr_st0)
 
     assign {tag_st1, mem_rw_st1, mem_byteen_st1, tid_st1} = inst_meta_st1;
 
@@ -510,7 +511,7 @@ end else begin
     assign writedata_st1= writedata_st0;
     assign inst_meta_st1= inst_meta_st0;
     assign snp_inv_st1  = snp_inv_st0;
-    assign addr_st1     = addr_st0;
+    assign addr_st1     = reqq_addr_st0[`LINE_SELECT_ADDR_RNG];
     assign dirty_st1    = 0;
     assign readtag_st1  = 0;
     assign miss_st1     = 0;
@@ -782,7 +783,8 @@ end
   
     VX_generic_queue #(
         .DATAW(`REQS_BITS + CORE_TAG_WIDTH + `WORD_WIDTH), 
-        .SIZE(CWBQ_SIZE)
+        .SIZE(CWBQ_SIZE),
+        .BUFFERED(1)
     ) cwb_queue (
         .clk     (clk),
         .reset   (reset),
