@@ -55,7 +55,7 @@ module VX_csr_arb (
     assign csr_rsp_if.ready = select_io_rsp ? csr_io_rsp_tmp_if.ready : csr_commit_if.ready;
 
     // Use skid buffer on CSR IO bus to stop backpressure delay propagation
-    VX_elastic_buffer #(
+    VX_skid_buffer #(
         .DATAW (32)
     ) io_skid_buffer (
         .clk       (clk),
