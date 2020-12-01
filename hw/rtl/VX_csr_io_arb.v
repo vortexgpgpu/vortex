@@ -73,7 +73,7 @@ module VX_csr_io_arb #(
             .flush (1'b0),
             .in    ({csr_io_rsp_valid_in[rsp_idx], csr_io_rsp_data_in[rsp_idx]}),
             .out   ({csr_io_rsp_valid_out,         csr_io_rsp_data_out})
-        );  
+        );
 
         for (genvar i = 0; i < NUM_REQUESTS; i++) begin
             assign csr_io_rsp_ready_in[i] = rsp_1hot[i] && ~stall;

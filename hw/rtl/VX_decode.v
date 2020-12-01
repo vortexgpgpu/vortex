@@ -79,7 +79,7 @@ module VX_decode  #(
             `INST_L, 
             `INST_FL: src2_imm = {{20{u_12[11]}}, u_12};
             `INST_B:  src2_imm = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};
-            default: src2_imm = 32'hdeadbeef;
+            default: src2_imm = 'x;
         endcase
     end     
 

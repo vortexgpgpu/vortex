@@ -63,11 +63,11 @@ module VX_csr_unit #(
         .busy           (busy)
     );    
 
-    wire csr_hazard = (csr_addr_s1 == csr_pipe_req_if.csr_addr)
-                   && (csr_pipe_rsp_if.wid == csr_pipe_req_if.wid) 
-                   && csr_pipe_rsp_if.valid;
+    wire write_hazard = (csr_addr_s1 == csr_pipe_req_if.csr_addr)
+                     && (csr_pipe_rsp_if.wid == csr_pipe_req_if.wid) 
+                     && csr_pipe_rsp_if.valid;
 
-    wire [31:0] csr_read_data_qual = csr_hazard ? csr_updated_data_s1 : csr_read_data; 
+    wire [31:0] csr_read_data_qual = write_hazard ? csr_updated_data_s1 : csr_read_data; 
 
     reg [31:0] csr_updated_data;   
 
@@ -88,7 +88,7 @@ module VX_csr_unit #(
                 csr_updated_data = csr_read_data_qual & (32'hFFFFFFFF - csr_pipe_req_if.csr_mask);
                 csr_we_s0_unqual = (csr_pipe_req_if.csr_mask != 0);
             end
-            default: csr_updated_data = 32'hdeadbeef;
+            default: csr_updated_data = 'x;
         endcase
     end
 
