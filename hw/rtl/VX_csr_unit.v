@@ -26,6 +26,9 @@ module VX_csr_unit #(
     wire select_io_rsp;
 
     VX_csr_arb csr_arb (
+        .clk              (clk),
+        .reset            (reset),
+        
         .select_io_req    (select_io_req),
         .select_io_rsp    (select_io_rsp),
 

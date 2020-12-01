@@ -7,13 +7,16 @@ module VX_cam_buffer #(
 ) (
     input  wire clk,
     input  wire reset,
+
     output wire [ADDRW-1:0] write_addr,
     input  wire [DATAW-1:0] write_data,            
     input  wire acquire_slot,
+
     input  wire [ADDRW-1:0] read_addr,
     output wire [DATAW-1:0] read_data,
     input  wire [ADDRW-1:0] release_addr,
     input  wire release_slot,
+    
     output wire full
 );
     reg [SIZE-1:0] free_slots, free_slots_n;

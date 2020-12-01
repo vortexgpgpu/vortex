@@ -5,7 +5,7 @@ module VX_countones #(
     parameter N = 10,
     parameter N_BITS = $clog2(N+1)
 ) (
-    input wire [N-1:0]  valids,
+    input wire [N-1:0]       valids,
     output wire [N_BITS-1:0] count    
 );
     reg [N_BITS-1:0] count_r;
