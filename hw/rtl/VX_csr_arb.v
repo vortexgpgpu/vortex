@@ -1,22 +1,23 @@
 `include "VX_define.vh"
 
 module VX_csr_arb (    
-    // inputs
+    // bus select
+    input wire       select_io_req,
+    input wire       select_io_rsp,
+
+    // input requets
     VX_csr_req_if    csr_core_req_if,
     VX_csr_io_req_if csr_io_req_if,    
 
-    // output
+    // output request
     VX_csr_req_if    csr_req_if,
 
-    // input
+    // input response
     VX_commit_if     csr_rsp_if,     
 
-    // outputs
+    // outputs responses
     VX_commit_if     csr_commit_if,
-    VX_csr_io_rsp_if csr_io_rsp_if,    
-
-    input wire       select_io_req,
-    input wire       select_io_rsp
+    VX_csr_io_rsp_if csr_io_rsp_if
 );
     // requests
     assign csr_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : csr_io_req_if.valid;
