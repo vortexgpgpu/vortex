@@ -23,7 +23,7 @@ vortex_afu.json
 QI:vortex_afu.qsf
 ccip_interface_reg.sv
 ccip_std_afu.sv
-VX_avs_wrapper.sv
+VX_avs_wrapper.v
 vortex_afu.sv
 
 C:sources.txt
