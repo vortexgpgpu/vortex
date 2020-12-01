@@ -7,10 +7,12 @@ module VX_opd_collect #(
 ) ( 
     input  wire             clk,
     input  wire             reset,
+    
     input  wire             valid_in,
     output wire             ready_in,        
     input  wire [INSTW-1:0] inst_in,
     input  wire [OPDSW-1:0] opds_in,
+
     output wire [INSTW+OPDSW-1:0] data_out,
     output wire             valid_out,    
     input  wire             ready_out

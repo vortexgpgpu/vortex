@@ -5,9 +5,11 @@ module VX_skid_buffer #(
 ) ( 
     input  wire             clk,
     input  wire             reset,
+    
     input  wire             valid_in,
     output wire             ready_in,        
     input  wire [DATAW-1:0] data_in,
+
     output wire [DATAW-1:0] data_out,
     input  wire             ready_out,
     output wire             valid_out
