@@ -9,7 +9,7 @@ module VX_generic_queue #(
     parameter FASTRAM  = 0
 ) ( 
     input  wire             clk,
-    input  wire             reset,
+    input  wire             reset,    
     input  wire             push,
     input  wire             pop,        
     input  wire [DATAW-1:0] data_in,
