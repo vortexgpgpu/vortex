@@ -72,33 +72,44 @@ module VX_bank_core_req_arb #(
 
     if (NUM_REQUESTS > 1) begin
 
-        reg [CORE_TAG_WIDTH-1:0]        sel_tag;    
-        reg [`REQS_BITS-1:0]            sel_tid;
-        reg [`WORD_ADDR_WIDTH-1:0]      sel_addr;
-        reg                             sel_rw;  
-        reg [WORD_SIZE-1:0]             sel_byteen;
-        reg [`WORD_WIDTH-1:0]           sel_writedata;        
-        
+        reg [`REQS_BITS-1:0]        sel_idx, sel_idx_r;        
+        reg [CORE_TAG_WIDTH-1:0]    sel_tag, sel_tag_r;
+        reg [`WORD_ADDR_WIDTH-1:0]  sel_addr, sel_addr_r;
+        reg                         sel_rw, sel_rw_r;  
+        reg [WORD_SIZE-1:0]         sel_byteen, sel_byteen_r;
+        reg [`WORD_WIDTH-1:0]       sel_writedata, sel_writedata_r;        
+    
         reg [$clog2(NUM_REQUESTS+1)-1:0]  q_valids_cnt_r;
         wire [$clog2(NUM_REQUESTS+1)-1:0] q_valids_cnt;
-        reg [NUM_REQUESTS-1:0]            pop_mask;
-        reg                               fast_track;
-
+        
+        reg [NUM_REQUESTS-1:0]  pop_mask;
+        reg                     fast_track;
+        
         assign q_push = push;
         assign q_pop  = pop && (q_valids_cnt_r == 1 || q_valids_cnt_r == 2) && !fast_track;
 
-        wire [`REQS_BITS-1:0] sel_idx;
-        
-        VX_fixed_arbiter #(
-            .N(NUM_REQUESTS)
-        ) sel_arb (
-            .clk         (clk),
-            .reset       (reset),
-            .requests    (q_valids & ~pop_mask),
-            `UNUSED_PIN  (grant_valid),
-            .grant_index (sel_idx),
-            `UNUSED_PIN  (grant_onehot)
-        ); 
+        wire [NUM_REQUESTS-1:0] requests = q_valids & ~pop_mask;
+
+        always @(*) begin
+            sel_idx       = 0;
+            sel_tag       = 'x;
+            sel_addr      = 'x;
+            sel_rw        = 'x;
+            sel_byteen    = 'x;
+            sel_writedata = 'x;
+
+            for (integer i = 0; i < NUM_REQUESTS; i++) begin
+                if (requests[i]) begin
+                    sel_idx       = `REQS_BITS'(i);
+                    sel_tag       = q_tag[i];
+                    sel_addr      = q_addr[i];
+                    sel_rw        = q_rw[i];
+                    sel_byteen    = q_byteen[i];
+                    sel_writedata = q_writedata[i];
+                    break;
+                end
+            end
+        end 
 
         VX_countones #(
             .N(NUM_REQUESTS)
@@ -130,35 +141,37 @@ module VX_bank_core_req_arb #(
             end
 
             if ((0 == q_valids_cnt_r) || pop) begin
-                sel_tid       <= sel_idx;
-                sel_byteen    <= q_byteen[sel_idx];
-                sel_addr      <= q_addr[sel_idx];
-                sel_writedata <= q_writedata[sel_idx];
+                sel_idx_r       <= sel_idx;
+                sel_byteen_r    <= sel_byteen;
+                sel_addr_r      <= sel_addr;
+                sel_writedata_r <= sel_writedata;
             end
         end
 
         if (CORE_TAG_ID_BITS != 0) begin
+            `UNUSED_VAR (sel_tag)
+            `UNUSED_VAR (sel_rw)
             always @(posedge clk) begin
                 if ((0 == q_valids_cnt_r) || pop) begin
-                    sel_tag <= q_tag;
-                    sel_rw  <= q_rw;
+                    sel_tag_r <= q_tag;
+                    sel_rw_r  <= q_rw;
                 end
             end
         end else begin
             always @(posedge clk) begin
                 if ((0 == q_valids_cnt_r) || pop) begin
-                    sel_tag <= q_tag[sel_idx];
-                    sel_rw  <= q_rw[sel_idx];
+                    sel_tag_r <= sel_tag;
+                    sel_rw_r  <= sel_rw;
                 end
             end
         end
 
-        assign tag_out       = sel_tag;
-        assign addr_out      = sel_addr;
-        assign rw_out        = sel_rw;
-        assign byteen_out    = sel_byteen;
-        assign writedata_out = sel_writedata; 
-        assign tid_out       = sel_tid;       
+        assign tag_out       = sel_tag_r;
+        assign addr_out      = sel_addr_r;
+        assign rw_out        = sel_rw_r;
+        assign byteen_out    = sel_byteen_r;
+        assign writedata_out = sel_writedata_r; 
+        assign tid_out       = sel_idx_r;       
 
         assign empty         = (0 == q_valids_cnt_r);
         assign full          = q_full;

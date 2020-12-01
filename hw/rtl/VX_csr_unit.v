@@ -26,16 +26,16 @@ module VX_csr_unit #(
     wire select_io_rsp;
 
     VX_csr_arb csr_arb (
+        .select_io_req    (select_io_req),
+        .select_io_rsp    (select_io_rsp),
+
         .csr_core_req_if  (csr_req_if),
         .csr_io_req_if    (csr_io_req_if),
         .csr_req_if       (csr_pipe_req_if),
 
         .csr_rsp_if       (csr_pipe_rsp_if),
         .csr_io_rsp_if    (csr_io_rsp_if),        
-        .csr_commit_if    (csr_commit_if),
-
-        .select_io_req    (select_io_req),
-        .select_io_rsp    (select_io_rsp)
+        .csr_commit_if    (csr_commit_if)
     ); 
 
     wire csr_we_s1;
