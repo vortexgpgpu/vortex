@@ -85,7 +85,7 @@ module VX_tag_access #(
     );
 
     // use "case equality" to handle uninitialized tag when block entry is not valid
-    wire tags_match = read_valid && (addrtag === read_tag);  
+    wire tags_match = read_valid && (addrtag == read_tag);  
                       
     assign do_write = WRITE_ENABLE
                    && valid_in                        

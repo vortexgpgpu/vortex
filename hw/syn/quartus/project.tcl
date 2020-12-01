@@ -40,7 +40,6 @@ set_global_assignment -name VERILOG_MACRO NDEBUG
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name VERILOG_MACRO FPU_FAST
 
-set_global_assignment -name AUTO_SHIFT_REGISTER_RECOGNITION AUTO
 set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
