@@ -101,9 +101,11 @@ module VX_bank_core_req_arb #(
             for (integer i = 0; i < NUM_REQUESTS; i++) begin
                 if (requests[i]) begin
                     sel_idx       = `REQS_BITS'(i);
-                    sel_tag       = q_tag[i];
-                    sel_addr      = q_addr[i];
-                    sel_rw        = q_rw[i];
+                    sel_addr = q_addr[i];
+                    if (0 == CORE_TAG_ID_BITS) begin
+                        sel_tag  = q_tag[i];
+                        sel_rw   = q_rw[i];
+                    end                    
                     sel_byteen    = q_byteen[i];
                     sel_writedata = q_writedata[i];
                     break;
