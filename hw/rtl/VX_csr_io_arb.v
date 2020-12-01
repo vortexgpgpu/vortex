@@ -16,17 +16,17 @@ module VX_csr_io_arb #(
     input wire [31:0]                       csr_io_req_data_in,
     output wire                             csr_io_req_ready_in,
 
-    // input response
-    input wire [NUM_REQUESTS-1:0]           csr_io_rsp_valid_in,
-    input wire [NUM_REQUESTS-1:0][31:0]     csr_io_rsp_data_in,
-    output wire [NUM_REQUESTS-1:0]          csr_io_rsp_ready_in,
-
     // output request
     output wire [NUM_REQUESTS-1:0]          csr_io_req_valid_out,
     output wire [NUM_REQUESTS-1:0][11:0]    csr_io_req_addr_out,
     output wire [NUM_REQUESTS-1:0]          csr_io_req_rw_out,
     output wire [NUM_REQUESTS-1:0][31:0]    csr_io_req_data_out,
     input wire [NUM_REQUESTS-1:0]           csr_io_req_ready_out,
+
+    // input response
+    input wire [NUM_REQUESTS-1:0]           csr_io_rsp_valid_in,
+    input wire [NUM_REQUESTS-1:0][31:0]     csr_io_rsp_data_in,
+    output wire [NUM_REQUESTS-1:0]          csr_io_rsp_ready_in,
 
     // output response
     output wire                             csr_io_rsp_valid_out,

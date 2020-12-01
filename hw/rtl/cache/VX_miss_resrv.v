@@ -1,6 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_miss_resrv #(
+module VX_miss_resrv #(
     parameter CACHE_ID                      = 0,
     parameter BANK_ID                       = 0, 
     
@@ -51,7 +51,6 @@ module VX_cache_miss_resrv #(
     input wire                          enqueue_mshr_st3,
     input wire                          enqueue_ready_st3,
     output wire                         enqueue_full,
-    output wire                         enqueue_almfull,
 
     // fill
     input wire                          update_ready_st0,    
@@ -72,9 +71,8 @@ module VX_cache_miss_resrv #(
     output wire                         dequeue_snp_inv_st0,
     input wire                          dequeue_st3
 );
-    localparam FULL_DISTANCE = 3; // need 3 cycles window to prevent pipeline lock
-
     wire [`MSHR_METADATA_WIDTH-1:0] metadata_table;
+
     `NO_RW_RAM_CHECK reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
     
     reg [MSHR_SIZE-1:0]            valid_table;
@@ -82,13 +80,9 @@ module VX_cache_miss_resrv #(
     reg [`LOG2UP(MSHR_SIZE)-1:0]   schedule_ptr, restore_ptr;
     reg [`LOG2UP(MSHR_SIZE)-1:0]   head_ptr;
     reg [`LOG2UP(MSHR_SIZE)-1:0]   tail_ptr;
-
     reg [`LOG2UP(MSHR_SIZE+1)-1:0] size;
 
-    `STATIC_ASSERT(MSHR_SIZE > FULL_DISTANCE, ("invalid size"))
-
     assign enqueue_full = (size == $bits(size)'(MSHR_SIZE));
-    assign enqueue_almfull = (size >= $bits(size)'(MSHR_SIZE-FULL_DISTANCE));
 
     wire [MSHR_SIZE-1:0] valid_address_match;
     for (genvar i = 0; i < MSHR_SIZE; i++) begin

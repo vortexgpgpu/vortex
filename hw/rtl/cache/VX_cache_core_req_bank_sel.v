@@ -24,7 +24,7 @@ module VX_cache_core_req_bank_sel #(
         
         always @(*) begin
             per_bank_valid_r      = 0;
-            per_bank_ready_other = {NUM_BANKS{1'b1}};
+            per_bank_ready_other  = {NUM_BANKS{1'b1}};
             per_bank_ready_ignore = {NUM_BANKS{1'b1}};            
             
             for (integer i = 0; i < NUM_BANKS; i++) begin

@@ -209,7 +209,7 @@
 
 // Miss Handling Register Size
 `ifndef DMSHR_SIZE
-`define DMSHR_SIZE `MAX(`LSUQ_SIZE, 4)
+`define DMSHR_SIZE `LSUQ_SIZE
 `endif
 
 // DRAM Request Queue Size
@@ -251,7 +251,7 @@
 
 // Miss Handling Register Size
 `ifndef IMSHR_SIZE
-`define IMSHR_SIZE `MAX(`NUM_WARPS, 4)
+`define IMSHR_SIZE `NUM_WARPS
 `endif
 
 // DRAM Request Queue Size

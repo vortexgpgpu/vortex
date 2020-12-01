@@ -297,17 +297,17 @@ module Vortex (
             .csr_io_req_data_in     (csr_io_req_data),
             .csr_io_req_ready_in    (csr_io_req_ready),
 
-            // input responses
-            .csr_io_rsp_valid_in    (per_cluster_csr_io_rsp_valid),
-            .csr_io_rsp_data_in     (per_cluster_csr_io_rsp_data),
-            .csr_io_rsp_ready_in    (per_cluster_csr_io_rsp_ready),
-
             // output request
             .csr_io_req_valid_out   (per_cluster_csr_io_req_valid),
             .csr_io_req_addr_out    (per_cluster_csr_io_req_addr),            
             .csr_io_req_rw_out      (per_cluster_csr_io_req_rw),
             .csr_io_req_data_out    (per_cluster_csr_io_req_data),  
-            .csr_io_req_ready_out   (per_cluster_csr_io_req_ready),            
+            .csr_io_req_ready_out   (per_cluster_csr_io_req_ready),
+
+            // input responses
+            .csr_io_rsp_valid_in    (per_cluster_csr_io_rsp_valid),
+            .csr_io_rsp_data_in     (per_cluster_csr_io_rsp_data),
+            .csr_io_rsp_ready_in    (per_cluster_csr_io_rsp_ready),            
             
             // output response
             .csr_io_rsp_valid_out   (csr_io_rsp_valid),
