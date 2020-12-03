@@ -43,29 +43,29 @@ module VX_mem_arb #(
     input wire [DATA_WIDTH-1:0]                 rsp_data_in,
     output wire                                 rsp_ready_in
 );
-    wire [NUM_REQS-1:0][(TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH)-1:0] data_in;
-    for (genvar i = 0; i < NUM_REQS; i++) begin
-        assign data_in[i] = {{req_tag_in[i], REQS_BITS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
-    end
-
-    VX_stream_arbiter #(
-        .NUM_REQS(NUM_REQS),
-        .DATAW(TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH),
-        .BUFFERED(NUM_REQS >= 4)
-    ) req_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (req_valid_in), 
-        .valid_out  (req_valid_out),
-        .data_in    (data_in),                        
-        .data_out   ({req_tag_out, req_addr_out, req_rw_out, req_byteen_out, req_data_out}),  
-        .ready_in   (req_ready_in),
-        .ready_out  (req_ready_out)
-    );
-
-    ///////////////////////////////////////////////////////////////////////
-
     if (NUM_REQS > 1) begin
+
+        wire [NUM_REQS-1:0][(TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH)-1:0] data_in;
+        for (genvar i = 0; i < NUM_REQS; i++) begin
+            assign data_in[i] = {{req_tag_in[i], REQS_BITS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
+        end
+
+        VX_stream_arbiter #(
+            .NUM_REQS(NUM_REQS),
+            .DATAW(TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH),
+            .BUFFERED(NUM_REQS >= 4)
+        ) req_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (req_valid_in), 
+            .valid_out  (req_valid_out),
+            .data_in    (data_in),                        
+            .data_out   ({req_tag_out, req_addr_out, req_rw_out, req_byteen_out, req_data_out}),  
+            .ready_in   (req_ready_in),
+            .ready_out  (req_ready_out)
+        );
+
+        ///////////////////////////////////////////////////////////////////////
 
         wire [REQS_BITS-1:0] rsp_sel = rsp_tag_in [REQS_BITS-1:0];
         

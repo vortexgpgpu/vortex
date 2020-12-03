@@ -62,6 +62,7 @@ module VX_cache_core_rsp_merge #(
                     end
                 end
             end
+
         end else begin
 
             always @(*) begin
@@ -80,6 +81,7 @@ module VX_cache_core_rsp_merge #(
                     end
                 end    
             end
+
         end   
 
         wire stall = ~core_rsp_ready && (| core_rsp_valid);
@@ -100,30 +102,51 @@ module VX_cache_core_rsp_merge #(
         for (genvar i = 0; i < NUM_BANKS; i++) begin
             assign per_bank_core_rsp_ready[i] = core_rsp_bank_select[i] && ~stall;
         end
+
     end else begin
+
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
 
         if (NUM_REQS > 1) begin
 
-            assign core_rsp_valid[per_bank_core_rsp_tid[0]] = per_bank_core_rsp_valid;
+            reg [NUM_REQS-1:0] core_rsp_valid_unqual;
+            reg [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
+            reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
+
             if (CORE_TAG_ID_BITS != 0) begin
-                assign core_rsp_tag = per_bank_core_rsp_tag[0];
+                always @(*) begin
+                    core_rsp_valid_unqual = 0;                
+                    core_rsp_tag_unqual   = per_bank_core_rsp_tag[0];
+                    core_rsp_data_unqual  = 'x;
+                    core_rsp_valid_unqual[per_bank_core_rsp_tid[0]] = per_bank_core_rsp_valid;
+                    core_rsp_data_unqual[per_bank_core_rsp_tid[0]]  = per_bank_core_rsp_data[0];  
+                end                
             end else begin
-                assign core_rsp_tag[per_bank_core_rsp_tid[0]] = per_bank_core_rsp_tag[0];
+                always @(*) begin
+                    core_rsp_valid_unqual = 0;                
+                    core_rsp_tag_unqual   = 'x;
+                    core_rsp_data_unqual  = 'x;
+                    core_rsp_valid_unqual[per_bank_core_rsp_tid[0]] = per_bank_core_rsp_valid;
+                    core_rsp_tag_unqual[per_bank_core_rsp_tid[0]]   = per_bank_core_rsp_tag[0];
+                    core_rsp_data_unqual[per_bank_core_rsp_tid[0]]  = per_bank_core_rsp_data[0];  
+                end                
             end
-            assign core_rsp_data[per_bank_core_rsp_tid[0]]  = per_bank_core_rsp_data[0];
+
+            assign core_rsp_valid = core_rsp_valid_unqual;
+            assign core_rsp_tag   = core_rsp_tag_unqual;
+            assign core_rsp_data  = core_rsp_data_unqual;            
             assign per_bank_core_rsp_ready[0] = core_rsp_ready;
 
         end else begin
 
             `UNUSED_VAR(per_bank_core_rsp_tid)
             assign core_rsp_valid = per_bank_core_rsp_valid;
-            assign core_rsp_tag = per_bank_core_rsp_tag[0];
-            assign core_rsp_data = per_bank_core_rsp_data[0];
+            assign core_rsp_tag   = per_bank_core_rsp_tag[0];
+            assign core_rsp_data  = per_bank_core_rsp_data[0];
             assign per_bank_core_rsp_ready[0] = core_rsp_ready;
 
-        end
+        end        
     end
 
 endmodule

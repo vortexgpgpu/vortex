@@ -16,7 +16,7 @@
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 8
+`define NUM_THREADS 4
 `endif
 
 `ifndef NUM_BARRIERS
@@ -36,7 +36,7 @@
 `endif
 
 `ifndef L1_BLOCK_SIZE
-`define L1_BLOCK_SIZE 16
+`define L1_BLOCK_SIZE (`NUM_THREADS * 4)
 `endif
 
 `ifndef STARTUP_ADDR

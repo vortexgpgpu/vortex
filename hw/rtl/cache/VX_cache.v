@@ -6,13 +6,13 @@ module VX_cache #(
     // Size of cache in bytes
     parameter CACHE_SIZE                    = 8092, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 64, 
+    parameter BANK_LINE_SIZE                = 16, 
     // Number of banks
     parameter NUM_BANKS                     = 4, 
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle
-    parameter NUM_REQS                      = 4, 
+    parameter NUM_REQS                      = NUM_BANKS, 
 
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 4, 
@@ -39,14 +39,14 @@ module VX_cache #(
     // Enable cache flush
     parameter FLUSH_ENABLE                  = 1,
 
-    // core request tag size
-    parameter CORE_TAG_WIDTH                = 4,
-
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 0,
+    parameter CORE_TAG_ID_BITS              = $clog2(MSHR_SIZE),
+
+    // core request tag size
+    parameter CORE_TAG_WIDTH                = CORE_TAG_ID_BITS,
 
     // dram request tag size
-    parameter DRAM_TAG_WIDTH                = 28,
+    parameter DRAM_TAG_WIDTH                = (32 - $clog2(BANK_LINE_SIZE)),
 
     // Snooping request tag width
     parameter SNP_TAG_WIDTH                 = 1
