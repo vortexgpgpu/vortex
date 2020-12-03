@@ -34,10 +34,11 @@ module VX_cache_core_rsp_merge #(
         reg [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
         reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
         reg [NUM_BANKS-1:0] core_rsp_bank_select;
-        reg [CORE_TAG_ID_BITS-1:0] sel_tag_id;
-        
+                
         if (CORE_TAG_ID_BITS != 0) begin
 
+            reg [CORE_TAG_ID_BITS-1:0] sel_tag_id;
+            
             always @(*) begin
                 core_rsp_valid_unqual = 0;
                 core_rsp_tag_unqual   = 'x;
