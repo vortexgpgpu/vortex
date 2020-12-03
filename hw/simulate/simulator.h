@@ -51,6 +51,7 @@ private:
   typedef struct {
     int cycles_left;  
     std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
+    uint32_t addr;
     uint32_t tag;
   } dram_req_t;
 
