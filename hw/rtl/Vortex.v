@@ -243,7 +243,7 @@ module Vortex (
         end
 
         VX_io_arb #(
-            .NUM_REQUESTS  (`NUM_CLUSTERS),
+            .NUM_REQS      (`NUM_CLUSTERS),
             .WORD_SIZE     (4),
             .TAG_IN_WIDTH  (`L2CORE_TAG_WIDTH),
             .TAG_OUT_WIDTH (`L3CORE_TAG_WIDTH)
@@ -260,12 +260,6 @@ module Vortex (
             .io_req_tag_in          (per_cluster_io_req_tag),  
             .io_req_ready_in        (per_cluster_io_req_ready),
 
-            // input responses
-            .io_rsp_valid_in        (per_cluster_io_rsp_valid),
-            .io_rsp_data_in         (per_cluster_io_rsp_data),
-            .io_rsp_tag_in          (per_cluster_io_rsp_tag),
-            .io_rsp_ready_in        (per_cluster_io_rsp_ready),
-
             // output request
             .io_req_valid_out       (io_req_valid),
             .io_req_rw_out          (io_req_rw),        
@@ -274,6 +268,12 @@ module Vortex (
             .io_req_data_out        (io_req_data),
             .io_req_tag_out         (io_req_tag),
             .io_req_ready_out       (io_req_ready),
+
+            // input responses
+            .io_rsp_valid_in        (per_cluster_io_rsp_valid),
+            .io_rsp_data_in         (per_cluster_io_rsp_data),
+            .io_rsp_tag_in          (per_cluster_io_rsp_tag),
+            .io_rsp_ready_in        (per_cluster_io_rsp_ready),
             
             // output response
             .io_rsp_valid_out       (io_rsp_valid),
@@ -283,7 +283,9 @@ module Vortex (
         );
 
         VX_csr_io_arb #(
-            .NUM_REQUESTS (`NUM_CLUSTERS)
+            .NUM_REQS   (`NUM_CLUSTERS),
+            .DATA_WIDTH (32),
+            .ADDR_WIDTH (12)
         ) csr_io_arb (
             .clk                    (clk),
             .reset                  (reset),
@@ -353,7 +355,7 @@ module Vortex (
 
         VX_snp_forwarder #(
             .CACHE_ID           (`L3CACHE_ID),            
-            .NUM_REQUESTS       (`NUM_CLUSTERS), 
+            .NUM_REQS           (`NUM_CLUSTERS), 
             .SRC_ADDR_WIDTH     (`L3DRAM_ADDR_WIDTH), 
             .DST_ADDR_WIDTH     (`L2DRAM_ADDR_WIDTH),             
             .SNP_TAG_WIDTH      (`L3SNP_TAG_WIDTH),
@@ -391,7 +393,7 @@ module Vortex (
             .BANK_LINE_SIZE     (`L3BANK_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
             .WORD_SIZE          (`L3WORD_SIZE),
-            .NUM_REQUESTS       (`L3NUM_REQUESTS),
+            .NUM_REQS           (`L3NUM_REQUESTS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
             .MSHR_SIZE          (`L3MSHR_SIZE),
             .DRFQ_SIZE          (`L3DRFQ_SIZE),

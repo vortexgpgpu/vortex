@@ -4,51 +4,52 @@ module VX_snp_forwarder #(
     parameter CACHE_ID       = 0, 
     parameter SRC_ADDR_WIDTH = 1, 
     parameter DST_ADDR_WIDTH = 1, 
-    parameter NUM_REQUESTS   = 1, 
+    parameter NUM_REQS       = 1, 
     parameter SNP_TAG_WIDTH  = 1,
-    parameter SNRQ_SIZE      = 1
+    parameter SNRQ_SIZE      = 1,
+    parameter LOG_SNRQ_SIZE  = `LOG2UP(SNRQ_SIZE)
 ) (
     input wire clk,
     input wire reset,
 
     // Snoop request
-    input wire                          snp_req_valid,
-    input wire [SRC_ADDR_WIDTH-1:0]     snp_req_addr,
-    input wire                          snp_req_inv,
-    input wire [SNP_TAG_WIDTH-1:0]      snp_req_tag,
-    output wire                         snp_req_ready,
+    input wire                      snp_req_valid,
+    input wire [SRC_ADDR_WIDTH-1:0] snp_req_addr,
+    input wire                      snp_req_inv,
+    input wire [SNP_TAG_WIDTH-1:0]  snp_req_tag,
+    output wire                     snp_req_ready,
 
     // Snoop response
-    output wire                         snp_rsp_valid,    
-    output wire [SRC_ADDR_WIDTH-1:0]    snp_rsp_addr,
-    output wire                         snp_rsp_inv,
-    output wire [SNP_TAG_WIDTH-1:0]     snp_rsp_tag,
-    input  wire                         snp_rsp_ready,
+    output wire                     snp_rsp_valid,    
+    output wire [SRC_ADDR_WIDTH-1:0] snp_rsp_addr,
+    output wire                     snp_rsp_inv,
+    output wire [SNP_TAG_WIDTH-1:0] snp_rsp_tag,
+    input  wire                     snp_rsp_ready,
 
     // Snoop Forwarding out
-    output wire [NUM_REQUESTS-1:0]      snp_fwdout_valid,
-    output wire [NUM_REQUESTS-1:0][DST_ADDR_WIDTH-1:0] snp_fwdout_addr,
-    output wire [NUM_REQUESTS-1:0]      snp_fwdout_inv,
-    output wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdout_tag,
-    input wire [NUM_REQUESTS-1:0]       snp_fwdout_ready,
+    output wire [NUM_REQS-1:0]      snp_fwdout_valid,
+    output wire [NUM_REQS-1:0][DST_ADDR_WIDTH-1:0] snp_fwdout_addr,
+    output wire [NUM_REQS-1:0]      snp_fwdout_inv,
+    output wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdout_tag,
+    input wire [NUM_REQS-1:0]       snp_fwdout_ready,
 
     // Snoop forwarding in
-    input wire [NUM_REQUESTS-1:0]       snp_fwdin_valid,    
-    input wire [NUM_REQUESTS-1:0][`LOG2UP(SNRQ_SIZE)-1:0] snp_fwdin_tag,
-    output wire [NUM_REQUESTS-1:0]      snp_fwdin_ready
+    input wire [NUM_REQS-1:0]       snp_fwdin_valid,    
+    input wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdin_tag,
+    output wire [NUM_REQS-1:0]      snp_fwdin_ready
 );
     localparam ADDR_DIFF         = DST_ADDR_WIDTH - SRC_ADDR_WIDTH;
-    localparam NUM_REQUESTS_QUAL = NUM_REQUESTS * (1 << ADDR_DIFF);
+    localparam NUM_REQUESTS_QUAL = NUM_REQS * (1 << ADDR_DIFF);
     localparam REQ_QUAL_BITS     = `LOG2UP(NUM_REQUESTS_QUAL);
 
-    `STATIC_ASSERT(NUM_REQUESTS > 1, ("invalid value"))
+    `STATIC_ASSERT(NUM_REQS > 1, ("invalid value"))
 
     reg [REQ_QUAL_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
     
-    wire [`LOG2UP(SNRQ_SIZE)-1:0] sfq_write_addr, sfq_read_addr;
+    wire [LOG_SNRQ_SIZE-1:0] sfq_write_addr, sfq_read_addr;
     wire sfq_full;
 
-    wire [`LOG2UP(SNRQ_SIZE)-1:0] fwdin_tag;
+    wire [LOG_SNRQ_SIZE-1:0] fwdin_tag;
     wire fwdin_valid;
     
     wire fwdin_ready = snp_rsp_ready || (1 != pending_cntrs[sfq_read_addr]);
@@ -78,14 +79,14 @@ module VX_snp_forwarder #(
     );   
     
     wire fwdout_valid;
-    wire [`LOG2UP(SNRQ_SIZE)-1:0] fwdout_tag;
+    wire [LOG_SNRQ_SIZE-1:0] fwdout_tag;
     wire [DST_ADDR_WIDTH-1:0] fwdout_addr;    
     wire fwdout_inv;
     wire fwdout_ready;
     wire dispatch_hold;
 
     if (ADDR_DIFF != 0) begin
-        reg [`LOG2UP(SNRQ_SIZE)-1:0] fwdout_tag_r;
+        reg [LOG_SNRQ_SIZE-1:0] fwdout_tag_r;
         reg [DST_ADDR_WIDTH-1:0] fwdout_addr_r;        
         reg fwdout_inv_r;
         reg dispatch_hold_r;
@@ -136,9 +137,9 @@ module VX_snp_forwarder #(
         end
     end
 
-    reg [NUM_REQUESTS-1:0] snp_fwdout_ready_other;
+    reg [NUM_REQS-1:0] snp_fwdout_ready_other;
 
-    for (genvar i = 0; i < NUM_REQUESTS; i++) begin
+    for (genvar i = 0; i < NUM_REQS; i++) begin
         assign snp_fwdout_valid[i] = fwdout_valid && snp_fwdout_ready_other[i];
         assign snp_fwdout_addr[i]  = fwdout_addr;
         assign snp_fwdout_inv[i]   = fwdout_inv;
@@ -146,9 +147,9 @@ module VX_snp_forwarder #(
     end
 
     always @(*) begin
-        snp_fwdout_ready_other = {NUM_REQUESTS{1'b1}};
-        for (integer i = 0; i < NUM_REQUESTS; i++) begin
-            for (integer j = 0; j < NUM_REQUESTS; j++) begin
+        snp_fwdout_ready_other = {NUM_REQS{1'b1}};
+        for (integer i = 0; i < NUM_REQS; i++) begin
+            for (integer j = 0; j < NUM_REQS; j++) begin
                 if (i != j)
                     snp_fwdout_ready_other[i] &= snp_fwdout_ready[j];
             end
@@ -159,45 +160,20 @@ module VX_snp_forwarder #(
 
     assign snp_req_ready = fwdout_ready && !sfq_full && !dispatch_hold;
 
-    if (NUM_REQUESTS > 1) begin
-        wire sel_valid;
-        wire [`REQS_BITS-1:0] sel_idx;
-        wire [NUM_REQUESTS-1:0] sel_1hot;
-
-        VX_rr_arbiter #(
-            .N(NUM_REQUESTS)
-        ) sel_arb (
-            .clk          (clk),
-            .reset        (reset),
-            .requests     (snp_fwdin_valid),
-            .grant_valid  (sel_valid),
-            .grant_index  (sel_idx),            
-            .grant_onehot (sel_1hot)
-        );
-
-        wire stall = ~fwdin_ready && fwdin_valid;
-
-        VX_generic_register #(
-            .N(1 + `LOG2UP(SNRQ_SIZE)),
-            .R(1),
-            .PASSTHRU(NUM_REQUESTS <= 2)
-        ) pipe_reg (
-            .clk   (clk),
-            .reset (reset),
-            .stall (stall),
-            .flush (1'b0),
-            .in    ({sel_valid,   snp_fwdin_tag[sel_idx]}),
-            .out   ({fwdin_valid, fwdin_tag})
-        );
-
-        for (genvar i = 0; i < NUM_REQUESTS; i++) begin
-            assign snp_fwdin_ready[i] = sel_1hot[i] && !stall;
-        end
-    end else begin
-        assign fwdin_valid     = snp_fwdin_valid;
-        assign fwdin_tag       = snp_fwdin_tag;
-        assign snp_fwdin_ready = fwdin_ready;
-    end
+    VX_stream_arbiter #(
+        .NUM_REQS(NUM_REQS),
+        .DATAW(LOG_SNRQ_SIZE),
+        .BUFFERED(NUM_REQS >= 4)
+    ) snp_fwdin_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (snp_fwdin_valid),
+        .valid_out  (fwdin_valid),  
+        .data_in    (snp_fwdin_tag),
+        .data_out   (fwdin_tag),       
+        .ready_in   (snp_fwdin_ready),       
+        .ready_out  (fwdin_ready)
+    );
 
 `ifdef DBG_PRINT_CACHE_SNP
      always @(posedge clk) begin

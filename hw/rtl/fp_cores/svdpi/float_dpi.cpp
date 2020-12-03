@@ -21,6 +21,7 @@ extern "C" {
   void dpi_ftou(int inst, bool enable, int a, int* result);
   void dpi_itof(int inst, bool enable, int a, int* result);
   void dpi_utof(int inst, bool enable, int a, int* result);
+  void dpi_delayed_assert(int inst, bool cond);
 }
 
 class ShiftRegister {
@@ -238,4 +239,17 @@ void dpi_utof(int inst, bool enable, int a, int* result) {
   sr.ensure_init(LATENCY_ITOF);
   sr.push(fr.i, enable);
   *result = sr.top();
+}
+
+void dpi_delayed_assert(int inst, bool cond) {
+  ShiftRegister& sr = instances.get(inst);
+
+  sr.ensure_init(2);
+  sr.push(!cond, 1);
+
+  auto status = sr.top();
+  if (status) {
+    printf("delayed assertion at %s!\n", svGetNameFromScope(svGetScope()));
+    std::abort();
+  }
 }

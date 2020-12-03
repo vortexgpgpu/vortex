@@ -9,7 +9,7 @@
 
 `define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_TAG_WIDTH)
 
-`define REQS_BITS               `LOG2UP(NUM_REQUESTS)
+`define REQS_BITS               `LOG2UP(NUM_REQS)
 
 //                               tag              rw   byteen      tid
 `define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
@@ -70,7 +70,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CORE_REQ_TAG_COUNT      ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQUESTS)
+`define CORE_REQ_TAG_COUNT      ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
 `define DRAM_ADDR_BANK(x)       x[`BANK_SELECT_BITS-1:0]
 

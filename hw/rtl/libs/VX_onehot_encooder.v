@@ -11,7 +11,7 @@ module VX_onehot_encoder #(
     reg valid_r;
 
     always @(*) begin        
-        binary_r = `LOG2UP(N)'(0);                
+        binary_r = 'x;                
         valid_r  = 1'b0;    
         for (integer i = 0; i < N; i++) begin
             if (onehot[i]) begin                

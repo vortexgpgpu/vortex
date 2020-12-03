@@ -106,14 +106,14 @@ module VX_core #(
     assign D_dram_rsp_ready = dcache_dram_rsp_if.ready;
 
     VX_cache_core_req_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
+        .NUM_REQS(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
     ) core_dcache_req_if(),arb_dcache_req_if(), arb_io_req_if();
 
     VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`DNUM_REQUESTS), 
+        .NUM_REQS(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
@@ -159,14 +159,14 @@ module VX_core #(
     assign I_dram_rsp_ready = icache_dram_rsp_if.ready;  
     
     VX_cache_core_req_if #(
-        .NUM_REQUESTS(`INUM_REQUESTS), 
+        .NUM_REQS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     ) core_icache_req_if();
 
     VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`INUM_REQUESTS), 
+        .NUM_REQS(`INUM_REQUESTS), 
         .WORD_SIZE(`IWORD_SIZE), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
@@ -277,7 +277,7 @@ module VX_core #(
 
     // select io bus
     wire is_io_addr    = ({core_dcache_req_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
-    wire io_req_select = (| core_dcache_req_if.valid) ? is_io_addr : 0;
+    wire io_req_select = (| core_dcache_req_if.valid) && is_io_addr;
     wire io_rsp_select = (| arb_io_rsp_if.valid);
 
     VX_dcache_arb dcache_io_arb (        

@@ -1,17 +1,20 @@
 `include "VX_platform.vh"
 
 module VX_rr_arbiter #(
-    parameter N = 1
+    parameter NUM_REQS     = 1,
+    parameter LOCK_ENABLE  = 0,
+    parameter LOG_NUM_REQS = $clog2(NUM_REQS)
 ) (
-    input  wire                  clk,
-    input  wire                  reset,
-    input  wire [N-1:0]          requests,           
-    output wire [`LOG2UP(N)-1:0] grant_index,
-    output wire [N-1:0]          grant_onehot,   
-    output wire                  grant_valid
+    input  wire                     clk,
+    input  wire                     reset,
+    input  wire [NUM_REQS-1:0]      requests,           
+    input  wire                     enable,
+    output wire [LOG_NUM_REQS-1:0]  grant_index,
+    output wire [NUM_REQS-1:0]      grant_onehot,   
+    output wire                     grant_valid
   );
 
-    if (N == 1)  begin
+    if (NUM_REQS == 1)  begin
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -22,30 +25,33 @@ module VX_rr_arbiter #(
 
     end else begin
 
-        reg [`CLOG2(N)-1:0] grant_table [N-1:0];
-        reg [`CLOG2(N)-1:0] state;  
-        reg [N-1:0] grant_onehot_r;
-
+        reg [LOG_NUM_REQS-1:0] grant_table [NUM_REQS-1:0];
+        reg [LOG_NUM_REQS-1:0] state;  
+        
         always @(*) begin
-            for (integer i = 0; i < N; i++) begin  
-                grant_table[i] = `CLOG2(N)'(i);    
-                for (integer j = 0; j < N; j++) begin    
-                    if (requests[(i+j) % N]) begin                        
-                        grant_table[i] = `CLOG2(N)'((i+j) % N);
+            for (integer i = 0; i < NUM_REQS; i++) begin  
+                grant_table[i] = LOG_NUM_REQS'(i);    
+                for (integer j = 0; j < NUM_REQS; j++) begin    
+                    if (requests[(i+j) % NUM_REQS]) begin                        
+                        grant_table[i] = LOG_NUM_REQS'((i+j) % NUM_REQS);
                     end
                 end
             end
-            grant_onehot_r = N'(0);
-            grant_onehot_r[grant_table[state]] = 1;
         end  
 
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end else begin
+            end else if (!LOCK_ENABLE || enable) begin
                 state <= grant_table[state];
             end
         end      
+
+        reg [NUM_REQS-1:0] grant_onehot_r;
+        always @(*) begin
+            grant_onehot_r = NUM_REQS'(0);
+            grant_onehot_r[grant_table[state]] = 1;
+        end
 
         assign grant_index  = grant_table[state];
         assign grant_onehot = grant_onehot_r; 

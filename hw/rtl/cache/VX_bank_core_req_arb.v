@@ -2,27 +2,27 @@
 
 module VX_bank_core_req_arb #(
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 1,     
+    parameter WORD_SIZE         = 1,     
     // Number of Word requests per cycle
-    parameter NUM_REQUESTS                  = 1, 
+    parameter NUM_REQS          = 1, 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 1, 
+    parameter CREQ_SIZE         = 1, 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 1,
+    parameter CORE_TAG_WIDTH    = 1,
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 0
+    parameter CORE_TAG_ID_BITS  = 0
 ) (
     input  wire clk,
     input  wire reset,
 
     // Enqueue
-    input wire                                                  push,
-    input wire [NUM_REQUESTS-1:0]                               valids_in,
-    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]    tag_in, 
-    input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]         addr_in,   
-    input wire [`CORE_REQ_TAG_COUNT-1:0]                        rw_in,  
-    input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]                byteen_in,    
-    input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]              writedata_in,
+    input wire                                              push,
+    input wire [NUM_REQS-1:0]                               valids_in,
+    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] tag_in, 
+    input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]         addr_in,   
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                    rw_in,  
+    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]                byteen_in,    
+    input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]              writedata_in,
 
     // Dequeue
     input  wire                         pop,
@@ -38,16 +38,16 @@ module VX_bank_core_req_arb #(
     output wire                         full
 );
 
-    wire [NUM_REQUESTS-1:0]                             q_valids;       
-    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]  q_tag;
-    wire [`CORE_REQ_TAG_COUNT-1:0]                      q_rw;  
-    wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              q_byteen;
-    wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       q_addr;    
-    wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]            q_writedata;     
-    wire                                                q_push;
-    wire                                                q_pop;
-    wire                                                q_empty;
-    wire                                                q_full;
+    wire [NUM_REQS-1:0]                             q_valids;       
+    wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] q_tag;
+    wire [`CORE_REQ_TAG_COUNT-1:0]                  q_rw;  
+    wire [NUM_REQS-1:0][WORD_SIZE-1:0]              q_byteen;
+    wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]       q_addr;    
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]            q_writedata;     
+    wire                                            q_push;
+    wire                                            q_pop;
+    wire                                            q_empty;
+    wire                                            q_full;
     
     always @(*) begin   
         assert(!push || (| valids_in));
@@ -70,7 +70,7 @@ module VX_bank_core_req_arb #(
         `UNUSED_PIN (size)
     );
 
-    if (NUM_REQUESTS > 1) begin
+    if (NUM_REQS > 1) begin
 
         reg [`REQS_BITS-1:0]        sel_idx, sel_idx_r;        
         reg [CORE_TAG_WIDTH-1:0]    sel_tag, sel_tag_r;
@@ -79,16 +79,16 @@ module VX_bank_core_req_arb #(
         reg [WORD_SIZE-1:0]         sel_byteen, sel_byteen_r;
         reg [`WORD_WIDTH-1:0]       sel_writedata, sel_writedata_r;        
     
-        reg [$clog2(NUM_REQUESTS+1)-1:0]  q_valids_cnt_r;
-        wire [$clog2(NUM_REQUESTS+1)-1:0] q_valids_cnt;
+        reg [$clog2(NUM_REQS+1)-1:0]  q_valids_cnt_r;
+        wire [$clog2(NUM_REQS+1)-1:0] q_valids_cnt;
         
-        reg [NUM_REQUESTS-1:0]  pop_mask;
+        reg [NUM_REQS-1:0]  pop_mask;
         reg                     fast_track;
         
         assign q_push = push;
         assign q_pop  = pop && (q_valids_cnt_r == 1 || q_valids_cnt_r == 2) && !fast_track;
 
-        wire [NUM_REQUESTS-1:0] requests = q_valids & ~pop_mask;
+        wire [NUM_REQS-1:0] requests = q_valids & ~pop_mask;
 
         always @(*) begin
             sel_idx       = 0;
@@ -98,9 +98,9 @@ module VX_bank_core_req_arb #(
             sel_byteen    = 'x;
             sel_writedata = 'x;
 
-            for (integer i = 0; i < NUM_REQUESTS; i++) begin
+            for (integer i = 0; i < NUM_REQS; i++) begin
                 if (requests[i]) begin
-                    sel_idx       = `REQS_BITS'(i);
+                    sel_idx  = `REQS_BITS'(i);
                     sel_addr = q_addr[i];
                     if (0 == CORE_TAG_ID_BITS) begin
                         sel_tag  = q_tag[i];
@@ -114,7 +114,7 @@ module VX_bank_core_req_arb #(
         end 
 
         VX_countones #(
-            .N(NUM_REQUESTS)
+            .N(NUM_REQS)
         ) counter (
             .valids (q_valids),
             .count  (q_valids_cnt)
@@ -129,7 +129,7 @@ module VX_bank_core_req_arb #(
                 if (!q_empty
                  && ((0 == q_valids_cnt_r) || (pop && fast_track))) begin                   
                     q_valids_cnt_r <= q_valids_cnt;
-                    pop_mask       <= (NUM_REQUESTS'(1) << sel_idx);
+                    pop_mask       <= (NUM_REQS'(1) << sel_idx);
                     fast_track     <= 0; 
                 end else if (pop) begin                                                            
                     q_valids_cnt_r <= q_valids_cnt_r - 1;                
