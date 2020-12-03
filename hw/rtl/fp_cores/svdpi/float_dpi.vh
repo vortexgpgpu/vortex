@@ -15,4 +15,6 @@ import "DPI-C" context function void dpi_ftou(int inst, input logic enable, inpu
 import "DPI-C" context function void dpi_itof(int inst, input logic enable, input int a, output int result);
 import "DPI-C" context function void dpi_utof(int inst, input logic enable, input int a, output int result);
 
+import "DPI-C" context function void dpi_delayed_assert(int inst, input logic cond);
+
 `endif

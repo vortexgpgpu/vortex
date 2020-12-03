@@ -11,7 +11,7 @@ module VX_miss_resrv #(
     // Size of a word in bytes
     parameter WORD_SIZE                     = 1, 
     // Number of Word requests per cycle
-    parameter NUM_REQUESTS                  = 1, 
+    parameter NUM_REQS                      = 1, 
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 1, 
     // core request tag size
@@ -73,7 +73,7 @@ module VX_miss_resrv #(
 );
     wire [`MSHR_METADATA_WIDTH-1:0] metadata_table;
 
-    `NO_RW_RAM_CHECK reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
+    reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
     
     reg [MSHR_SIZE-1:0]            valid_table;
     reg [MSHR_SIZE-1:0]            ready_table;

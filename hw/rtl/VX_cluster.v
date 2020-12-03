@@ -202,7 +202,7 @@ module VX_cluster #(
     end     
 
     VX_io_arb #(
-        .NUM_REQUESTS  (`NUM_CORES),
+        .NUM_REQS      (`NUM_CORES),
         .WORD_SIZE     (4),
         .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
         .TAG_OUT_WIDTH (`L2CORE_TAG_WIDTH)
@@ -219,12 +219,6 @@ module VX_cluster #(
         .io_req_tag_in         (per_core_io_req_tag),  
         .io_req_ready_in       (per_core_io_req_ready),
 
-        // input responses
-        .io_rsp_valid_in       (per_core_io_rsp_valid),
-        .io_rsp_data_in        (per_core_io_rsp_data),
-        .io_rsp_tag_in         (per_core_io_rsp_tag),
-        .io_rsp_ready_in       (per_core_io_rsp_ready),
-
         // output request
         .io_req_valid_out      (io_req_valid),
         .io_req_rw_out         (io_req_rw),        
@@ -233,6 +227,12 @@ module VX_cluster #(
         .io_req_data_out       (io_req_data),
         .io_req_tag_out        (io_req_tag),
         .io_req_ready_out      (io_req_ready),
+
+        // input responses
+        .io_rsp_valid_in       (per_core_io_rsp_valid),
+        .io_rsp_data_in        (per_core_io_rsp_data),
+        .io_rsp_tag_in         (per_core_io_rsp_tag),
+        .io_rsp_ready_in       (per_core_io_rsp_ready),
          
         // output response
         .io_rsp_valid_out      (io_rsp_valid),
@@ -242,7 +242,9 @@ module VX_cluster #(
     );   
 
     VX_csr_io_arb #(
-        .NUM_REQUESTS (`NUM_CORES)
+        .NUM_REQS   (`NUM_CORES),
+        .DATA_WIDTH (32),
+        .ADDR_WIDTH (12)
     ) csr_io_arb (
         .clk                    (clk),
         .reset                  (reset),
@@ -380,7 +382,7 @@ module VX_cluster #(
 
         VX_snp_forwarder #(
             .CACHE_ID           (`L2CACHE_ID),            
-            .NUM_REQUESTS       (`NUM_CORES), 
+            .NUM_REQS           (`NUM_CORES), 
             .SRC_ADDR_WIDTH     (`L2DRAM_ADDR_WIDTH), 
             .DST_ADDR_WIDTH     (`DDRAM_ADDR_WIDTH),             
             .SNP_TAG_WIDTH      (`L2SNP_TAG_WIDTH),
@@ -418,7 +420,7 @@ module VX_cluster #(
             .BANK_LINE_SIZE     (`L2BANK_LINE_SIZE),
             .NUM_BANKS          (`L2NUM_BANKS),
             .WORD_SIZE          (`L2WORD_SIZE),
-            .NUM_REQUESTS       (`L2NUM_REQUESTS),
+            .NUM_REQS           (`L2NUM_REQUESTS),
             .CREQ_SIZE          (`L2CREQ_SIZE),
             .MSHR_SIZE          (`L2MSHR_SIZE),
             .DRFQ_SIZE          (`L2DRFQ_SIZE),
@@ -558,7 +560,7 @@ module VX_cluster #(
     if (`NUM_CORES > 1) begin
         VX_snp_forwarder #(
             .CACHE_ID       (`L2CACHE_ID),            
-            .NUM_REQUESTS   (`NUM_CORES), 
+            .NUM_REQS       (`NUM_CORES), 
             .SRC_ADDR_WIDTH (`L2DRAM_ADDR_WIDTH), 
             .DST_ADDR_WIDTH (`DDRAM_ADDR_WIDTH),             
             .SNP_TAG_WIDTH  (`L2SNP_TAG_WIDTH),
@@ -602,7 +604,7 @@ module VX_cluster #(
     end
 
         VX_mem_arb #(
-            .NUM_REQUESTS  (`L2NUM_REQUESTS),
+            .NUM_REQS      (`L2NUM_REQUESTS),
             .DATA_WIDTH    (`L2DRAM_LINE_WIDTH),            
             .TAG_IN_WIDTH  (`DDRAM_TAG_WIDTH),
             .TAG_OUT_WIDTH (`L2DRAM_TAG_WIDTH)
@@ -619,12 +621,6 @@ module VX_cluster #(
             .req_tag_in     (core_dram_req_tag),  
             .req_ready_in   (core_dram_req_ready),
 
-            // Core response
-            .rsp_valid_out  (core_dram_rsp_valid),
-            .rsp_data_out   (core_dram_rsp_data),
-            .rsp_tag_out    (core_dram_rsp_tag),
-            .rsp_ready_out  (core_dram_rsp_ready),
-
             // DRAM request
             .req_valid_out  (dram_req_valid),
             .req_rw_out     (dram_req_rw),        
@@ -633,6 +629,12 @@ module VX_cluster #(
             .req_data_out   (dram_req_data),
             .req_tag_out    (dram_req_tag),
             .req_ready_out  (dram_req_ready),
+
+            // Core response
+            .rsp_valid_out  (core_dram_rsp_valid),
+            .rsp_data_out   (core_dram_rsp_data),
+            .rsp_tag_out    (core_dram_rsp_tag),
+            .rsp_ready_out  (core_dram_rsp_ready),
             
             // DRAM response
             .rsp_valid_in   (dram_rsp_valid),

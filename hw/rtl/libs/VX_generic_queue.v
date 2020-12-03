@@ -154,7 +154,7 @@ module VX_generic_queue #(
                 .DATAW(DATAW),
                 .SIZE(SIZE),
                 .BUFFERED(0),
-                .RWCHECK(1),
+                .RWCHECK(0),
                 .FASTRAM(FASTRAM)
             ) dp_ram (
                 .clk(clk),

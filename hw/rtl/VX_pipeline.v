@@ -57,14 +57,14 @@ module VX_pipeline #(
 );
     // Dcache
     VX_cache_core_req_if #(
-        .NUM_REQUESTS(`NUM_THREADS), 
+        .NUM_REQS(`NUM_THREADS), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
     ) core_dcache_req_if();
 
     VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(`NUM_THREADS), 
+        .NUM_REQS(`NUM_THREADS), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
@@ -72,14 +72,14 @@ module VX_pipeline #(
 
     // Icache 
     VX_cache_core_req_if #(
-        .NUM_REQUESTS(1), 
+        .NUM_REQS(1), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
     )  core_icache_req_if();
 
     VX_cache_core_rsp_if #(
-        .NUM_REQUESTS(1), 
+        .NUM_REQS(1), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)

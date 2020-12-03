@@ -1,8 +1,8 @@
 `include "VX_define.vh"
 
-module VX_csr_arb (    
-    input wire       clk,
-    input wire       reset,
+module VX_csr_arb (
+    input wire      clk,    
+    input wire      reset,
 
     // bus select
     input wire       select_io_req,
@@ -22,8 +22,8 @@ module VX_csr_arb (
     VX_commit_if     csr_commit_if,
     VX_csr_io_rsp_if csr_io_rsp_if
 );
-    
-    VX_csr_io_rsp_if csr_io_rsp_tmp_if();
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
     // requests
     assign csr_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : csr_io_req_if.valid;
@@ -41,8 +41,8 @@ module VX_csr_arb (
     assign csr_io_req_if.ready  = csr_req_if.ready && select_io_req;   
     
     // responses
-    assign csr_io_rsp_tmp_if.valid = csr_rsp_if.valid & select_io_rsp;
-    assign csr_io_rsp_tmp_if.data  = csr_rsp_if.data[0];  
+    assign csr_io_rsp_if.valid  = csr_rsp_if.valid & select_io_rsp;
+    assign csr_io_rsp_if.data   = csr_rsp_if.data[0];  
 
     assign csr_commit_if.valid  = csr_rsp_if.valid & ~select_io_rsp;
     assign csr_commit_if.wid    = csr_rsp_if.wid;    
@@ -52,20 +52,6 @@ module VX_csr_arb (
     assign csr_commit_if.wb     = csr_rsp_if.wb;
     assign csr_commit_if.data   = csr_rsp_if.data;
 
-    assign csr_rsp_if.ready = select_io_rsp ? csr_io_rsp_tmp_if.ready : csr_commit_if.ready;
-
-    // Use skid buffer on CSR IO bus to stop backpressure delay propagation
-    VX_skid_buffer #(
-        .DATAW (32)
-    ) io_skid_buffer (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (csr_io_rsp_tmp_if.valid),
-        .ready_in  (csr_io_rsp_tmp_if.ready),
-        .data_in   (csr_io_rsp_tmp_if.data),
-        .data_out  (csr_io_rsp_if.data),
-        .valid_out (csr_io_rsp_if.valid),
-        .ready_out (csr_io_rsp_if.ready)
-    );
+    assign csr_rsp_if.ready = select_io_rsp ? csr_io_rsp_if.ready : csr_commit_if.ready;
 
 endmodule

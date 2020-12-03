@@ -543,7 +543,7 @@ assign vx_dram_rsp_tag = vx_dram_rsp_tag_unqual[`VX_DRAM_TAG_WIDTH+VX_DRAM_LINE_
 //--
 
 VX_mem_arb #(
-  .NUM_REQUESTS  (2),
+  .NUM_REQS      (2),
   .DATA_WIDTH    ($bits(t_local_mem_data)),
   .ADDR_WIDTH    ($bits(t_local_mem_addr)),
   .TAG_IN_WIDTH  (AVS_REQ_TAGW),
@@ -561,12 +561,6 @@ VX_mem_arb #(
   .req_tag_in     ({cci_dram_req_tag,     vx_dram_req_tag_qual}),  
   .req_ready_in   ({cci_dram_req_ready,   vx_dram_req_ready}),
 
-  // Source response
-  .rsp_valid_out  ({cci_dram_rsp_valid,   vx_dram_rsp_valid}),
-  .rsp_data_out   ({cci_dram_rsp_data,    vx_dram_rsp_data_unqual}),
-  .rsp_tag_out    ({cci_dram_rsp_tag,     vx_dram_rsp_tag_unqual}),
-  .rsp_ready_out  ({cci_dram_rsp_ready,   vx_dram_rsp_ready}),
-
   // DRAM request
   .req_valid_out  (dram_req_valid),
   .req_rw_out     (dram_req_rw),        
@@ -575,6 +569,12 @@ VX_mem_arb #(
   .req_data_out   (dram_req_data),
   .req_tag_out    (dram_req_tag),
   .req_ready_out  (dram_req_ready),
+
+  // Source response
+  .rsp_valid_out  ({cci_dram_rsp_valid,   vx_dram_rsp_valid}),
+  .rsp_data_out   ({cci_dram_rsp_data,    vx_dram_rsp_data_unqual}),
+  .rsp_tag_out    ({cci_dram_rsp_tag,     vx_dram_rsp_tag_unqual}),
+  .rsp_ready_out  ({cci_dram_rsp_ready,   vx_dram_rsp_ready}),
   
   // DRAM response
   .rsp_valid_in   (dram_rsp_valid),

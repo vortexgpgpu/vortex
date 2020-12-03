@@ -13,7 +13,7 @@ module VX_bank #(
     // Size of a word in bytes
     parameter WORD_SIZE                     = 1, 
     // Number of Word requests per cycle
-    parameter NUM_REQUESTS                  = 1, 
+    parameter NUM_REQS                      = 1, 
 
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 1, 
@@ -55,13 +55,13 @@ module VX_bank #(
     input wire reset,
 
     // Core Request    
-    input wire [NUM_REQUESTS-1:0]                               core_req_valid,        
-    input wire [`CORE_REQ_TAG_COUNT-1:0]                        core_req_rw,  
-    input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]                core_req_byteen,
-    input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]         core_req_addr,
-    input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]              core_req_data,
-    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]    core_req_tag,
-    output wire                                                 core_req_ready,
+    input wire [NUM_REQS-1:0]                               core_req_valid,        
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                    core_req_rw,  
+    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]                core_req_byteen,
+    input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]         core_req_addr,
+    input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]              core_req_data,
+    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
+    output wire                                             core_req_ready,
     
     // Core Response    
     output wire                         core_rsp_valid,
@@ -152,7 +152,8 @@ module VX_bank #(
 
         VX_generic_queue #(
             .DATAW(`LINE_ADDR_WIDTH + 1 + SNP_TAG_WIDTH), 
-            .SIZE(SNRQ_SIZE)
+            .SIZE(SNRQ_SIZE),
+            .BUFFERED(1)
         ) snp_req_queue (
             .clk     (clk),
             .reset   (reset),
@@ -192,7 +193,8 @@ module VX_bank #(
 
         VX_generic_queue #(
             .DATAW(`LINE_ADDR_WIDTH + $bits(dram_rsp_data)), 
-            .SIZE(DRFQ_SIZE)
+            .SIZE(DRFQ_SIZE),
+            .BUFFERED(1)
         ) dfp_queue (
             .clk     (clk),
             .reset   (reset),
@@ -231,7 +233,7 @@ module VX_bank #(
 
     VX_bank_core_req_arb #(
         .WORD_SIZE        (WORD_SIZE),
-        .NUM_REQUESTS     (NUM_REQUESTS),
+        .NUM_REQS         (NUM_REQS),
         .CREQ_SIZE        (CREQ_SIZE),
         .CORE_TAG_WIDTH   (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS (CORE_TAG_ID_BITS)
@@ -704,7 +706,7 @@ end
             .BANK_LINE_SIZE     (BANK_LINE_SIZE),
             .NUM_BANKS          (NUM_BANKS),
             .WORD_SIZE          (WORD_SIZE),
-            .NUM_REQUESTS       (NUM_REQUESTS),
+            .NUM_REQS           (NUM_REQS),
             .MSHR_SIZE          (MSHR_SIZE),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),
             .SNP_TAG_WIDTH      (SNP_TAG_WIDTH)
@@ -960,7 +962,7 @@ end
             if (creq_rw_st0)
                 $display("%t: cache%0d:%0d core-wr-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag_st0, creq_tid_st0, creq_byteen_st0, creq_writeword_st0, debug_wid_st0, debug_pc_st0);
             else
-                $display("%t: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag_st0, creq_tid_st0, creq_byteen_st0, creq_writeword_st0, debug_wid_st0, debug_pc_st0);
+                $display("%t: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag_st0, creq_tid_st0, creq_byteen_st0, debug_wid_st0, debug_pc_st0);
         end
         if (snrq_pop) begin
             $display("%t: cache%0d:%0d snp-req: addr=%0h, tag=%0h, invalidate=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), snrq_tag_st0, snrq_inv_st0);

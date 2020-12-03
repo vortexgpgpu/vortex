@@ -27,14 +27,14 @@ module VX_mem_unit # (
     VX_cache_dram_rsp_if    icache_dram_rsp_if
 );
     VX_cache_core_req_if #(
-        .NUM_REQUESTS       (`DNUM_REQUESTS), 
+        .NUM_REQS           (`DNUM_REQUESTS), 
         .WORD_SIZE          (`DWORD_SIZE), 
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
     ) core_dcache_req_qual_if(), core_smem_req_if();
 
     VX_cache_core_rsp_if #(
-        .NUM_REQUESTS       (`DNUM_REQUESTS), 
+        .NUM_REQS           (`DNUM_REQUESTS), 
         .WORD_SIZE          (`DWORD_SIZE), 
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS)
@@ -64,7 +64,7 @@ module VX_mem_unit # (
         .BANK_LINE_SIZE         (`SBANK_LINE_SIZE),
         .NUM_BANKS              (`SNUM_BANKS),
         .WORD_SIZE              (`SWORD_SIZE),
-        .NUM_REQUESTS           (`SNUM_REQUESTS),
+        .NUM_REQS               (`SNUM_REQUESTS),
         .CREQ_SIZE              (`SCREQ_SIZE),
         .MSHR_SIZE              (8),
         .DRFQ_SIZE              (1),
@@ -136,7 +136,7 @@ module VX_mem_unit # (
         .BANK_LINE_SIZE     (`DBANK_LINE_SIZE),
         .NUM_BANKS          (`DNUM_BANKS),
         .WORD_SIZE          (`DWORD_SIZE),
-        .NUM_REQUESTS       (`DNUM_REQUESTS),
+        .NUM_REQS           (`DNUM_REQUESTS),
         .CREQ_SIZE          (`DCREQ_SIZE),
         .MSHR_SIZE          (`DMSHR_SIZE),
         .DRFQ_SIZE          (`DDRFQ_SIZE),
@@ -209,7 +209,7 @@ module VX_mem_unit # (
         .BANK_LINE_SIZE         (`IBANK_LINE_SIZE),
         .NUM_BANKS              (`INUM_BANKS),
         .WORD_SIZE              (`IWORD_SIZE),
-        .NUM_REQUESTS           (`INUM_REQUESTS),
+        .NUM_REQS               (`INUM_REQUESTS),
         .CREQ_SIZE              (`ICREQ_SIZE),
         .MSHR_SIZE              (`IMSHR_SIZE),
         .DRFQ_SIZE              (`IDRFQ_SIZE),

@@ -12,7 +12,7 @@ module VX_cache #(
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle
-    parameter NUM_REQUESTS                  = 4, 
+    parameter NUM_REQS                      = 4, 
 
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 4, 
@@ -57,19 +57,19 @@ module VX_cache #(
     input wire reset,
 
     // Core request    
-    input wire [NUM_REQUESTS-1:0]                           core_req_valid,
-    input wire [`CORE_REQ_TAG_COUNT-1:0]                    core_req_rw,
-    input wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]            core_req_byteen,
-    input wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]     core_req_addr,
-    input wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]          core_req_data,
+    input wire [NUM_REQS-1:0]                           core_req_valid,
+    input wire [`CORE_REQ_TAG_COUNT-1:0]                core_req_rw,
+    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]            core_req_byteen,
+    input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]     core_req_addr,
+    input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]          core_req_data,
     input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
-    output wire                                             core_req_ready,
+    output wire                                         core_req_ready,
 
     // Core response
-    output wire [NUM_REQUESTS-1:0]                          core_rsp_valid,    
-    output wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]         core_rsp_data,
+    output wire [NUM_REQS-1:0]                          core_rsp_valid,    
+    output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]         core_rsp_data,
     output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
-    input  wire                                             core_rsp_ready,   
+    input  wire                                         core_rsp_ready,   
     
     // DRAM request
     output wire                             dram_req_valid,
@@ -101,9 +101,9 @@ module VX_cache #(
     output wire [NUM_BANKS-1:0] miss_vec
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQUESTS, ("invalid value"))
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
 
-    wire [NUM_BANKS-1:0][NUM_REQUESTS-1:0]      per_bank_valid;
+    wire [NUM_BANKS-1:0][NUM_REQS-1:0]          per_bank_valid;
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
     
@@ -141,7 +141,7 @@ module VX_cache #(
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
-        .NUM_REQUESTS   (NUM_REQUESTS)
+        .NUM_REQS       (NUM_REQS)
     ) cache_core_req_bank_sel (
         .core_req_valid  (core_req_valid),
         .core_req_addr   (core_req_addr),
@@ -158,13 +158,13 @@ module VX_cache #(
     end
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-        wire [NUM_REQUESTS-1:0]                             curr_bank_core_req_valid;            
-        wire [`CORE_REQ_TAG_COUNT-1:0]                      curr_bank_core_req_rw;  
-        wire [NUM_REQUESTS-1:0][WORD_SIZE-1:0]              curr_bank_core_req_byteen;
-        wire [NUM_REQUESTS-1:0][`WORD_ADDR_WIDTH-1:0]       curr_bank_core_req_addr;
-        wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0]  curr_bank_core_req_tag;
-        wire [NUM_REQUESTS-1:0][`WORD_WIDTH-1:0]            curr_bank_core_req_data;
-        wire                                                curr_bank_core_req_ready;
+        wire [NUM_REQS-1:0]                             curr_bank_core_req_valid;            
+        wire [`CORE_REQ_TAG_COUNT-1:0]                  curr_bank_core_req_rw;  
+        wire [NUM_REQS-1:0][WORD_SIZE-1:0]              curr_bank_core_req_byteen;
+        wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]       curr_bank_core_req_addr;
+        wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
+        wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]            curr_bank_core_req_data;
+        wire                                            curr_bank_core_req_ready;
 
         wire                            curr_bank_core_rsp_valid;
         wire [`REQS_BITS-1:0]           curr_bank_core_rsp_tid;
@@ -197,7 +197,7 @@ module VX_cache #(
         wire                            curr_bank_miss; 
 
         // Core Req
-        assign curr_bank_core_req_valid   = (per_bank_valid[i] & {NUM_REQUESTS{core_req_ready}});
+        assign curr_bank_core_req_valid   = (per_bank_valid[i] & {NUM_REQS{core_req_ready}});
         assign curr_bank_core_req_addr    = core_req_addr;
         assign curr_bank_core_req_rw      = core_req_rw;
         assign curr_bank_core_req_byteen  = core_req_byteen;
@@ -262,7 +262,7 @@ module VX_cache #(
             .BANK_LINE_SIZE     (BANK_LINE_SIZE),
             .NUM_BANKS          (NUM_BANKS),
             .WORD_SIZE          (WORD_SIZE),
-            .NUM_REQUESTS       (NUM_REQUESTS),
+            .NUM_REQS           (NUM_REQS),
             .CREQ_SIZE          (CREQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
             .DRFQ_SIZE          (DRFQ_SIZE),
@@ -331,7 +331,7 @@ module VX_cache #(
     VX_cache_core_rsp_merge #(
         .NUM_BANKS          (NUM_BANKS),
         .WORD_SIZE          (WORD_SIZE),
-        .NUM_REQUESTS       (NUM_REQUESTS),
+        .NUM_REQS           (NUM_REQS),
         .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS)
     ) cache_core_rsp_merge (
@@ -349,26 +349,25 @@ module VX_cache #(
     ); 
 
     if (DRAM_ENABLE) begin
-        VX_cache_dram_req_arb #(
-            .BANK_LINE_SIZE (BANK_LINE_SIZE),
-            .NUM_BANKS      (NUM_BANKS),
-            .WORD_SIZE      (WORD_SIZE)
-        ) cache_dram_req_arb (
-            .clk                        (clk),
-            .reset                      (reset),        
-            .per_bank_dram_req_valid    (per_bank_dram_req_valid),        
-            .per_bank_dram_req_rw       (per_bank_dram_req_rw),        
-            .per_bank_dram_req_byteen   (per_bank_dram_req_byteen),
-            .per_bank_dram_req_addr     (per_bank_dram_req_addr),
-            .per_bank_dram_req_data     (per_bank_dram_req_data),
-            .per_bank_dram_req_ready    (per_bank_dram_req_ready),
-            .dram_req_valid             (dram_req_valid),
-            .dram_req_rw                (dram_req_rw),        
-            .dram_req_byteen            (dram_req_byteen),        
-            .dram_req_addr              (dram_req_addr),
-            .dram_req_data              (dram_req_data),  
-            .dram_req_ready             (dram_req_ready)
-        );    
+        wire [NUM_BANKS-1:0][(`DRAM_ADDR_WIDTH + 1 + BANK_LINE_SIZE + `BANK_LINE_WIDTH)-1:0] data_in;
+        for (genvar i = 0; i < NUM_BANKS; i++) begin
+            assign data_in[i] = {per_bank_dram_req_addr[i], per_bank_dram_req_rw[i], per_bank_dram_req_byteen[i], per_bank_dram_req_data[i]};
+        end
+
+        VX_stream_arbiter #(
+            .NUM_REQS(NUM_BANKS),
+            .DATAW(`DRAM_ADDR_WIDTH + 1 + BANK_LINE_SIZE + `BANK_LINE_WIDTH),
+            .BUFFERED(NUM_BANKS >= 4)
+        ) dram_req_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (per_bank_dram_req_valid), 
+            .valid_out  (dram_req_valid),
+            .data_in    (data_in),                        
+            .data_out   ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),  
+            .ready_in   (per_bank_dram_req_ready),
+            .ready_out  (dram_req_ready)
+        );
     end else begin
         `UNUSED_VAR (per_bank_dram_req_valid)
         `UNUSED_VAR (per_bank_dram_req_rw)
@@ -385,19 +384,19 @@ module VX_cache #(
     end
 
     if (FLUSH_ENABLE) begin
-        VX_snp_rsp_arb #(
-            .NUM_BANKS      (NUM_BANKS),
-            .BANK_LINE_SIZE (BANK_LINE_SIZE),
-            .SNP_TAG_WIDTH  (SNP_TAG_WIDTH)
-        ) snp_rsp_arb ( 
-            .clk                    (clk),
-            .reset                  (reset),
-            .per_bank_snp_rsp_valid (per_bank_snp_rsp_valid),
-            .per_bank_snp_rsp_tag   (per_bank_snp_rsp_tag),
-            .per_bank_snp_rsp_ready (per_bank_snp_rsp_ready),
-            .snp_rsp_valid          (snp_rsp_valid),
-            .snp_rsp_tag            (snp_rsp_tag),
-            .snp_rsp_ready          (snp_rsp_ready)
+        VX_stream_arbiter #(
+            .NUM_REQS(NUM_BANKS),
+            .DATAW(SNP_TAG_WIDTH),
+            .BUFFERED(NUM_BANKS >= 4)
+        ) snp_rsp_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (per_bank_snp_rsp_valid),
+            .valid_out  (snp_rsp_valid),  
+            .data_in    (per_bank_snp_rsp_tag),
+            .data_out   (snp_rsp_tag),       
+            .ready_in   (per_bank_snp_rsp_ready),       
+            .ready_out  (snp_rsp_ready)
         );
     end else begin
         `UNUSED_VAR (per_bank_snp_rsp_valid)

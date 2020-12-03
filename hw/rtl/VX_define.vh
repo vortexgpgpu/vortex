@@ -14,7 +14,7 @@
 
 `define NB_BITS         `LOG2UP(`NUM_BARRIERS)
 
-`define REQS_BITS       `LOG2UP(NUM_REQUESTS)
+`define REQS_BITS       `LOG2UP(NUM_REQS)
 
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        64
