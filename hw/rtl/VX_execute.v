@@ -31,7 +31,8 @@ module VX_execute #(
     VX_branch_ctl_if    branch_ctl_if,    
     VX_warp_ctl_if      warp_ctl_if,
     VX_commit_if        alu_commit_if,
-    VX_commit_if        lsu_commit_if,    
+    VX_commit_if        ld_commit_if,
+    VX_commit_if        st_commit_if,
     VX_commit_if        csr_commit_if,
     VX_commit_if        mul_commit_if,
     VX_commit_if        fpu_commit_if,
@@ -63,7 +64,8 @@ module VX_execute #(
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
         .lsu_req_if     (lsu_req_if),
-        .lsu_commit_if  (lsu_commit_if)
+        .ld_commit_if   (ld_commit_if),
+        .st_commit_if   (st_commit_if)
     );
 
     VX_csr_unit #(

@@ -113,8 +113,9 @@ module VX_pipeline #(
     VX_wstall_if        wstall_if();
     VX_join_if          join_if();
     VX_commit_if        alu_commit_if();
-    VX_commit_if        lsu_commit_if();        
-    VX_commit_if        csr_commit_if(); 
+    VX_commit_if        ld_commit_if();
+    VX_commit_if        st_commit_if();
+    VX_commit_if        csr_commit_if();
     VX_commit_if        mul_commit_if();     
     VX_commit_if        fpu_commit_if();     
     VX_commit_if        gpu_commit_if();     
@@ -191,7 +192,8 @@ module VX_pipeline #(
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),        
         .alu_commit_if  (alu_commit_if),
-        .lsu_commit_if  (lsu_commit_if),        
+        .ld_commit_if   (ld_commit_if),        
+        .st_commit_if   (st_commit_if),       
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
         .fpu_commit_if  (fpu_commit_if),
@@ -208,7 +210,8 @@ module VX_pipeline #(
         .reset          (reset),
 
         .alu_commit_if  (alu_commit_if),
-        .lsu_commit_if  (lsu_commit_if),        
+        .ld_commit_if   (ld_commit_if),        
+        .st_commit_if   (st_commit_if),
         .csr_commit_if  (csr_commit_if),
         .mul_commit_if  (mul_commit_if),
         .fpu_commit_if  (fpu_commit_if),

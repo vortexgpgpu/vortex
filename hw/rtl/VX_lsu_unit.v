@@ -16,7 +16,8 @@ module VX_lsu_unit #(
     VX_lsu_req_if   lsu_req_if,
 
     // outputs
-    VX_commit_if    lsu_commit_if
+    VX_commit_if    ld_commit_if,
+    VX_commit_if    st_commit_if
 );
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire                          req_rw;
@@ -135,7 +136,7 @@ module VX_lsu_unit #(
         end
     end
 
-    wire stall_out = ~lsu_commit_if.ready && lsu_commit_if.valid;
+    wire stall_out = ~ld_commit_if.ready && ld_commit_if.valid;
     wire store_stall = valid_in && req_rw && stall_out;
 
     // Core Request
@@ -168,18 +169,23 @@ module VX_lsu_unit #(
         end        
     end   
 
-    wire is_store_req = valid_in && ~lsuq_full && req_rw && dcache_req_if.ready;
+    // send store commit
+
+    wire is_store_rsp = valid_in && ~lsuq_full && req_rw && dcache_req_if.ready;
+
+    assign st_commit_if.valid = is_store_rsp;
+    assign st_commit_if.wid   = req_wid;
+    assign st_commit_if.tmask = req_tmask;
+    assign st_commit_if.PC    = req_pc;
+    assign st_commit_if.rd    = 0;
+    assign st_commit_if.wb    = 0;
+    assign st_commit_if.data  = 0;
+    `UNUSED_VAR (st_commit_if.ready)
+
+    // send load commit
+
     wire is_load_rsp  = (| dcache_rsp_if.valid);
-
-    wire mem_rsp_stall = is_load_rsp && is_store_req; // arbitration prioritizes stores
-
-    wire                    arb_valid = is_store_req || is_load_rsp;
-    wire [`NW_BITS-1:0]       arb_wid = is_store_req ? req_wid : rsp_wid;
-    wire [`NUM_THREADS-1:0] arb_tmask = is_store_req ? req_tmask : dcache_rsp_if.valid;
-    wire [31:0]                arb_PC = is_store_req ? req_pc : rsp_pc;
-    wire [`NR_BITS-1:0]        arb_rd = is_store_req ? 0 : rsp_rd;
-    wire                       arb_wb = is_store_req ? 0 : rsp_wb;
-
+    
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .R(1)
@@ -188,12 +194,12 @@ module VX_lsu_unit #(
         .reset (reset),
         .stall (stall_out),
         .flush (1'b0),
-        .in    ({arb_valid,           arb_wid,           arb_tmask,           arb_PC,           arb_rd,           arb_wb,           rsp_data}),
-        .out   ({lsu_commit_if.valid, lsu_commit_if.wid, lsu_commit_if.tmask, lsu_commit_if.PC, lsu_commit_if.rd, lsu_commit_if.wb, lsu_commit_if.data})
+        .in    ({is_load_rsp,        rsp_wid,          dcache_rsp_if.valid, rsp_pc,          rsp_rd,          rsp_wb,          rsp_data}),
+        .out   ({ld_commit_if.valid, ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data})
     );
 
     // Can accept new cache response?
-    assign dcache_rsp_if.ready = ~(stall_out || mem_rsp_stall);
+    assign dcache_rsp_if.ready = ~stall_out;
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_if.valid & {`NUM_THREADS{dcache_req_if.ready}});    

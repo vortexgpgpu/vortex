@@ -6,7 +6,7 @@
 interface VX_cmt_to_csr_if ();
 
     wire                              valid;
-    wire [$clog2(`NUM_THREADS+1)-1:0] commit_size;
+    wire [$clog2(3*`NUM_THREADS+1)-1:0] commit_size;
 
 endinterface
 

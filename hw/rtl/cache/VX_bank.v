@@ -835,10 +835,12 @@ end
 
     wire dwbq_pop = dram_req_valid && dram_req_ready;
 
-    wire [`LINE_ADDR_WIDTH-1:0] dwbq_addr = do_writeback_st3 ? {readtag_st3, addr_st3[`LINE_SELECT_BITS-1:0]} : 
-                                                               addr_st3;
+    wire writeback = WRITE_ENABLE && do_writeback_st3;
 
-    wire [BANK_LINE_SIZE-1:0] dwbq_byteen = do_writeback_st3 ? dirtyb_st3 : {BANK_LINE_SIZE{1'b1}};
+    wire [`LINE_ADDR_WIDTH-1:0] dwbq_addr = writeback ? {readtag_st3, addr_st3[`LINE_SELECT_BITS-1:0]} : 
+                                                        addr_st3;
+
+    wire [BANK_LINE_SIZE-1:0] dwbq_byteen = writeback ? dirtyb_st3 : {BANK_LINE_SIZE{1'b1}};
 
     if (DRAM_ENABLE) begin       
         VX_generic_queue #(
@@ -850,8 +852,8 @@ end
             .reset   (reset),
             .push    (dwbq_push),
             .pop     (dwbq_pop),
-            .data_in ({do_writeback_st3, dwbq_byteen,     dwbq_addr,     readdata_st3}),        
-            .data_out({dram_req_rw,      dram_req_byteen, dram_req_addr, dram_req_data}),
+            .data_in ({writeback,   dwbq_byteen,     dwbq_addr,     readdata_st3}),        
+            .data_out({dram_req_rw, dram_req_byteen, dram_req_addr, dram_req_data}),
             .empty   (dwbq_empty),
             .full    (dwbq_full),
             `UNUSED_PIN (size)
@@ -864,6 +866,7 @@ end
         `UNUSED_VAR (readtag_st3)
         `UNUSED_VAR (dirtyb_st3)
         `UNUSED_VAR (readdata_st3)         
+        `UNUSED_VAR (writeback)
         `UNUSED_VAR (dram_req_ready)
         assign dwbq_empty   = 1;       
         assign dwbq_full    = 0;
@@ -895,8 +898,8 @@ end
 
     if (FLUSH_ENABLE) begin
         VX_generic_queue #(
-            .DATAW  (SNP_TAG_WIDTH), 
-            .SIZE   (SNPQ_SIZE),
+            .DATAW (SNP_TAG_WIDTH), 
+            .SIZE  (SNPQ_SIZE),
             .BUFFERED(1)
         ) snp_rsp_queue (
             .clk     (clk),
@@ -933,7 +936,7 @@ end
     `SCOPE_ASSIGN (valid_st2, valid_st2);
     `SCOPE_ASSIGN (valid_st3, valid_st3);
 
-    `SCOPE_ASSIGN (is_mshr_st0,    is_mshr_st0);
+    `SCOPE_ASSIGN (is_mshr_st0, is_mshr_st0);
 
     `SCOPE_ASSIGN (miss_st1,       miss_st1);
     `SCOPE_ASSIGN (dirty_st1,      dirty_st1);
