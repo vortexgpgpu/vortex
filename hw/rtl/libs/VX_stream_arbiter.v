@@ -3,7 +3,7 @@
 module VX_stream_arbiter #(
     parameter NUM_REQS = 1,
     parameter DATAW    = 1,
-    parameter TYPE     = "F",
+    parameter TYPE     = "R",
     parameter BUFFERED = 0
 ) (
     input  wire clk,
