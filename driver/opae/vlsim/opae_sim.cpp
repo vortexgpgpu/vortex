@@ -245,15 +245,17 @@ void opae_sim::sTxPort_bus() {
 }
   
 void opae_sim::avs_bus() {
-  // schedule DRAM read responses
+  // update DRAM responses schedule
+  for (auto& rsp : dram_reads_) {
+    if (rsp.cycles_left > 0)
+      rsp.cycles_left -= 1;
+  }
+
+  // schedule DRAM responses in FIFO order
   std::list<dram_rd_req_t>::iterator dram_rd_it(dram_reads_.end());
-  for (auto it = dram_reads_.begin(), ie = dram_reads_.end(); it != ie; ++it) {
-    if (it->cycles_left > 0) {
-      it->cycles_left -= 1;
-    }
-    if ((it != ie) && (it->cycles_left == 0)) {
-      dram_rd_it = it;
-    }
+  if (!dram_reads_.empty() 
+   && (0 == dram_reads_.begin()->cycles_left)) {
+      dram_rd_it = dram_reads_.begin();
   }
 
   // send DRAM response  
@@ -304,6 +306,12 @@ void opae_sim::avs_bus() {
       dram_req.addr = vortex_afu_->avs_address;
       ram_.read(vortex_afu_->avs_address * CACHE_BLOCK_SIZE, CACHE_BLOCK_SIZE, dram_req.block.data());      
       dram_req.cycles_left = DRAM_LATENCY;
+      for (auto& rsp : dram_reads_) {
+        if (dram_req.addr == rsp.addr) {
+          dram_req.cycles_left = rsp.cycles_left;
+          break;
+        }
+      }
       dram_reads_.emplace_back(dram_req);
       /*printf("%0ld: [sim] DRAM Rd Req: addr=%x, pending={", timestamp, dram_req.addr * CACHE_BLOCK_SIZE);
       for (auto& req : dram_reads_) {
