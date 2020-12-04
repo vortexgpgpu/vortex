@@ -8,7 +8,7 @@ module VX_countones #(
     input wire [N-1:0]       valids,
     output wire [N_BITS-1:0] count    
 );
-    reg [N_BITS-1:0] count_r;
+    /*reg [N_BITS-1:0] count_r;
 
     always @(*) begin
         count_r = 0;
@@ -19,6 +19,8 @@ module VX_countones #(
         end
     end
 
-    assign count = count_r;
+    assign count = count_r;*/
+
+    assign count = $countones(valids);
 
 endmodule
