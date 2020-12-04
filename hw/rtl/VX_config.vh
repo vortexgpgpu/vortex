@@ -194,7 +194,7 @@
 
 // Number of banks
 `ifndef DNUM_BANKS
-`define DNUM_BANKS `MIN(`NUM_THREADS, 4)
+`define DNUM_BANKS `NUM_THREADS
 `endif
 
 // Core Request Queue Size

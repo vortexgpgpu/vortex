@@ -60,8 +60,17 @@ module VX_commit #(
         .count (commit_size)
     );
 
-    assign cmt_to_csr_if.valid       = commit_fire;
-    assign cmt_to_csr_if.commit_size = commit_size;
+    VX_generic_register #(
+        .N(1 + CMTW),
+        .R(1)
+    ) pipe_reg (
+        .clk   (clk),
+        .reset (reset),
+        .stall (1'b0),
+        .flush (1'b0),
+        .in    ({commit_fire,         commit_size}),
+        .out   ({cmt_to_csr_if.valid, cmt_to_csr_if.commit_size})
+    );
 
     // Writeback
 
