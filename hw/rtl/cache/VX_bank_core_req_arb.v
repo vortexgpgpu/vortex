@@ -57,7 +57,8 @@ module VX_bank_core_req_arb #(
 
     VX_generic_queue #(
         .DATAW($bits(valids_in) + $bits(tag_in) + $bits(addr_in) + $bits(rw_in) + $bits(byteen_in) + $bits(writedata_in)), 
-        .SIZE(CREQ_SIZE)
+        .SIZE(CREQ_SIZE),
+        .BUFFERED(1)
     ) req_queue (
         .clk      (clk),
         .reset    (reset),

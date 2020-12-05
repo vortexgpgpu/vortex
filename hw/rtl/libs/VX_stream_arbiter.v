@@ -106,12 +106,12 @@ module VX_stream_arbiter #(
                 .N(1 + DATAW),
                 .R(1)
             ) pipe_reg (
-                .clk   (clk),
-                .reset (reset),
-                .stall (stall),
-                .flush (1'b0),
-                .in    ({sel_valid, data_in[sel_idx]}),
-                .out   ({valid_out, data_out})
+                .clk      (clk),
+                .reset    (reset),
+                .stall    (stall),
+                .flush    (1'b0),
+                .data_in  ({sel_valid, data_in[sel_idx]}),
+                .data_out ({valid_out, data_out})
             );
 
             for (genvar i = 0; i < NUM_REQS; i++) begin

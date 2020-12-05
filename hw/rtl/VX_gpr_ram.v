@@ -4,33 +4,79 @@
 
 module VX_gpr_ram (
     input wire clk,   
-    input wire [`NUM_THREADS-1:0] we,    
+    input wire wren,    
+    input wire [`NUM_THREADS-1:0] tmask, 
     input wire [`NW_BITS+`NR_BITS-1:0] waddr,
     input wire [`NUM_THREADS-1:0][31:0] wdata,    
-    input wire [`NW_BITS+`NR_BITS-1:0] rs1,
-    input wire [`NW_BITS+`NR_BITS-1:0] rs2,
-    output wire [`NUM_THREADS-1:0][31:0] rs1_data,
-    output wire [`NUM_THREADS-1:0][31:0] rs2_data
+    input wire [`NW_BITS+`NR_BITS-1:0] raddr1,
+    input wire [`NW_BITS+`NR_BITS-1:0] raddr2,
+    input wire [`NW_BITS+`NR_BITS-1:0] raddr3,
+    output wire [`NUM_THREADS-1:0][31:0] rdata1,
+    output wire [`NUM_THREADS-1:0][31:0] rdata2,
+    output wire [`NUM_THREADS-1:0][31:0] rdata3
 ); 
+    localparam RAM_DATAW  = `NUM_THREADS * 32;    
+    localparam RAM_ADDRW  = `NW_BITS + `NR_BITS;
+    localparam RAM_DEPTH  = `NUM_WARPS * `NUM_REGS;
+    localparam RAM_BYTEEN = `NUM_THREADS * 4;
 
-    reg [`NUM_THREADS-1:0][3:0][7:0] mem [(`NUM_WARPS * `NUM_REGS)-1:0];
-    reg [`NUM_THREADS-1:0][31:0] q1, q2;
-            
-    always @(posedge clk) begin
-        for (integer i = 0; i < `NUM_THREADS; i++) begin
-            if (we[i]) begin
-                mem[waddr][i][0] <= wdata[i][07:00];
-                mem[waddr][i][1] <= wdata[i][15:08];
-                mem[waddr][i][2] <= wdata[i][23:16];
-                mem[waddr][i][3] <= wdata[i][31:24];
+    `UNUSED_VAR (raddr3)
+
+`ifdef EXT_F_ENABLE
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        
+        reg [31:0] mem_i [(RAM_DEPTH/2)-1:0];
+        reg [31:0] mem_f [(RAM_DEPTH/2)-1:0];
+
+        initial mem_i = '{default: 0};
+
+        wire waddr_is_fp  = waddr[RAM_ADDRW-1];
+        wire raddr1_is_fp = raddr1[RAM_ADDRW-1];
+        wire raddr2_is_fp = raddr2[RAM_ADDRW-1];
+
+        wire [RAM_ADDRW-2:0] waddr_qual  = waddr[RAM_ADDRW-2:0];
+        wire [RAM_ADDRW-2:0] raddr1_qual = raddr1[RAM_ADDRW-2:0];
+        wire [RAM_ADDRW-2:0] raddr2_qual = raddr2[RAM_ADDRW-2:0];
+        wire [RAM_ADDRW-2:0] raddr3_qual = raddr3[RAM_ADDRW-2:0];
+
+        always @(posedge clk) begin
+            if (wren && tmask[i] && !waddr_is_fp) begin
+                mem_i[waddr_qual] <= wdata[i];
             end
         end
-        q1 <= mem[rs1];
-        q2 <= mem[rs2];
+
+        always @(posedge clk) begin
+            if (wren && tmask[i] && waddr_is_fp) begin
+                mem_f[waddr_qual] <= wdata[i];
+            end
+        end
+
+        assign rdata1[i] = raddr1_is_fp ? mem_f[raddr1_qual] : mem_i[raddr1_qual];
+        assign rdata2[i] = raddr2_is_fp ? mem_f[raddr2_qual] : mem_i[raddr2_qual];
+        assign rdata3[i] = mem_f[raddr3_qual];
     end
 
-    assign rs1_data = q1;
-    assign rs2_data = q2;
+`else
+    
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        
+        reg [31:0] mem [RAM_DEPTH-1:0];
+
+        initial mem = '{default: 0};
+
+        always @(posedge clk) begin
+            if (wren && tmask[i]) begin
+                mem[waddr] <= wdata[i];
+            end
+        end
+
+        assign rdata1[i] = mem[raddr1];
+        assign rdata2[i] = mem[raddr2];
+        assign rdata3[i] = 0;
+    end
+
+`endif    
 
 endmodule
 

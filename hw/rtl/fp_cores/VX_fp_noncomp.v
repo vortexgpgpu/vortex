@@ -91,12 +91,12 @@ module VX_fp_noncomp #(
             .N(1 + 1 + 8 + 23 + $bits(fp_type_t) + $bits(fp_type_t) + 1 + 1),
             .R(0)
         ) pipe_reg0 (
-            .clk   (clk),
-            .reset (reset),
-            .stall (stall),
-            .flush (1'b0),
-            .in    ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
-            .out   ({a_sign[i],  b_sign[i],  a_exponent[i],  a_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
+            .clk      (clk),
+            .reset    (reset),
+            .stall    (stall),
+            .flush    (1'b0),
+            .data_in  ({tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
+            .data_out ({a_sign[i],  b_sign[i],  a_exponent[i],  a_mantissa[i],  a_type[i],  b_type[i],  a_smaller[i],  ab_equal[i]})
         );
     end  
 
@@ -104,12 +104,12 @@ module VX_fp_noncomp #(
         .N(1 + TAGW + `FPU_BITS + `FRM_BITS + (2 * `NUM_THREADS * 32)),
         .R(1)
     ) pipe_reg1 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (1'b0),
-        .in    ({valid_in,   tag_in,   op_type,   frm,   dataa,   datab}),
-        .out   ({valid_in_r, tag_in_r, op_type_r, frm_r, dataa_r, datab_r})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall),
+        .flush    (1'b0),
+        .data_in  ({valid_in,   tag_in,   op_type,   frm,   dataa,   datab}),
+        .data_out ({valid_in_r, tag_in_r, op_type_r, frm_r, dataa_r, datab_r})
     ); 
 
     // FCLASS
@@ -255,12 +255,12 @@ module VX_fp_noncomp #(
         .N(1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS)),
         .R(1)
     ) pipe_reg2 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (1'b0),
-        .in    ({valid_in_r, tag_in_r, tmp_result, tmp_has_fflags, tmp_fflags}),
-        .out   ({valid_out,  tag_out,  result,     has_fflags,     fflags})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall),
+        .flush    (1'b0),
+        .data_in  ({valid_in_r, tag_in_r, tmp_result, tmp_has_fflags, tmp_fflags}),
+        .data_out ({valid_out,  tag_out,  result,     has_fflags,     fflags})
     );
 
     assign ready_in = ~stall;

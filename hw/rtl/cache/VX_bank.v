@@ -435,12 +435,12 @@ if (DRAM_ENABLE) begin
         .N(1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `REQ_INST_META_WIDTH + 1 + `BANK_LINE_WIDTH),
         .R(1)
     ) pipe_reg0 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (pipeline_stall),
-        .flush (1'b0),
-        .in    ({valid_st0, is_mshr_st0, is_snp_st0, snp_inv_st0, mshr_pending_hazard_st0, addr_st0, wsel_st0, writeword_st0, inst_meta_st0, is_fill_st0, writedata_st0}),
-        .out   ({valid_st1, is_mshr_st1, is_snp_st1, snp_inv_st1, mshr_pending_hazard_st1, addr_st1, wsel_st1, writeword_st1, inst_meta_st1, is_fill_st1, writedata_st1})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (pipeline_stall),
+        .flush    (1'b0),
+        .data_in  ({valid_st0, is_mshr_st0, is_snp_st0, snp_inv_st0, mshr_pending_hazard_st0, addr_st0, wsel_st0, writeword_st0, inst_meta_st0, is_fill_st0, writedata_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_snp_st1, snp_inv_st1, mshr_pending_hazard_st1, addr_st1, wsel_st1, writeword_st1, inst_meta_st1, is_fill_st1, writedata_st1})
     );
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -508,12 +508,12 @@ if (DRAM_ENABLE) begin
         .N(1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `BANK_LINE_WIDTH + WORD_SIZE + `REQ_INST_META_WIDTH),
         .R(1)
     ) pipe_reg1 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (pipeline_stall),
-        .flush (1'b0),
-        .in    ({valid_st1, core_req_hit_st1, is_mshr_st1, writeen_st1, force_miss_st1, dirty_st1, is_snp_st1, snp_inv_st1, is_fill_st1, addr_st1, wsel_st1, writeword_st1, readtag_st1, miss_st1, writedata_st1, mem_byteen_st1, inst_meta_st1}),
-        .out   ({valid_st2, core_req_hit_st2, is_mshr_st2, writeen_st2, force_miss_st2, dirty_st2, is_snp_st2, snp_inv_st2, is_fill_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, writedata_st2, mem_byteen_st2, inst_meta_st2})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (pipeline_stall),
+        .flush    (1'b0),
+        .data_in  ({valid_st1, core_req_hit_st1, is_mshr_st1, writeen_st1, force_miss_st1, dirty_st1, is_snp_st1, snp_inv_st1, is_fill_st1, addr_st1, wsel_st1, writeword_st1, readtag_st1, miss_st1, writedata_st1, mem_byteen_st1, inst_meta_st1}),
+        .data_out ({valid_st2, core_req_hit_st2, is_mshr_st2, writeen_st2, force_miss_st2, dirty_st2, is_snp_st2, snp_inv_st2, is_fill_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, writedata_st2, mem_byteen_st2, inst_meta_st2})
     );
     
 end else begin
@@ -650,12 +650,12 @@ end
         .N(1 + 1+ 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `WORD_WIDTH + `BANK_LINE_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE + `REQ_INST_META_WIDTH),
         .R(1)
     ) pipe_reg2 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (pipeline_stall),
-        .flush (1'b0),
-        .in    ({valid_st2, core_req_hit_st2, send_dwb_req_st2, do_writeback_st2, incoming_fill_st2, force_miss_st2, is_mshr_st2, is_snp_st2, snp_inv_st2, addr_st2, wsel_st2, writeword_st2, readword_st2, readdata_st2, readtag_st2, miss_st2, dirtyb_st2, inst_meta_st2}),
-        .out   ({valid_st3, core_req_hit_st3, send_dwb_req_st3, do_writeback_st3, incoming_fill_st3, force_miss_st3, is_mshr_st3, is_snp_st3, snp_inv_st3, addr_st3, wsel_st3, writeword_st3, readword_st3, readdata_st3, readtag_st3, miss_st3, dirtyb_st3, inst_meta_st3})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (pipeline_stall),
+        .flush    (1'b0),
+        .data_in  ({valid_st2, core_req_hit_st2, send_dwb_req_st2, do_writeback_st2, incoming_fill_st2, force_miss_st2, is_mshr_st2, is_snp_st2, snp_inv_st2, addr_st2, wsel_st2, writeword_st2, readword_st2, readdata_st2, readtag_st2, miss_st2, dirtyb_st2, inst_meta_st2}),
+        .data_out ({valid_st3, core_req_hit_st3, send_dwb_req_st3, do_writeback_st3, incoming_fill_st3, force_miss_st3, is_mshr_st3, is_snp_st3, snp_inv_st3, addr_st3, wsel_st3, writeword_st3, readword_st3, readdata_st3, readtag_st3, miss_st3, dirtyb_st3, inst_meta_st3})
     );    
 
 `ifdef DBG_CACHE_REQ_INFO

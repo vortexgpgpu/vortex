@@ -147,12 +147,12 @@ module VX_mul_unit #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .R(1)
     ) pipe_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall_out),
-        .flush (1'b0),
-        .in    ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result}),
-        .out   ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.tmask, mul_commit_if.PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall_out),
+        .flush    (1'b0),
+        .data_in  ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result}),
+        .data_out ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.tmask, mul_commit_if.PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
     );
 
     // can accept new request?

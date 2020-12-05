@@ -10,7 +10,6 @@ module VX_scoreboard  #(
     VX_writeback_if     writeback_if,  
     input wire [`NW_BITS-1:0] deq_wid_next,
     input wire          exe_delay,
-    input wire          gpr_delay,
 
     output wire         delay
 );
@@ -63,14 +62,14 @@ module VX_scoreboard  #(
     end
 
     // issue the instruction
-    assign ibuf_deq_if.ready = ~(delay || exe_delay || gpr_delay);
+    assign ibuf_deq_if.ready = ~(delay || exe_delay);
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
-            $display("%t: core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b, gpr=%b",
+            $display("%t: core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
-                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay, gpr_delay);            
+                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay);            
         end
     end    
 `endif
@@ -81,9 +80,9 @@ module VX_scoreboard  #(
             stall_ctr <= 0;
         end else if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
             stall_ctr <= stall_ctr + 1;
-            assert(stall_ctr < 100000) else $error("*** %t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b, gpr=%b",
+            assert(stall_ctr < 100000) else $error("*** %t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b, exe=%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
-                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay, gpr_delay);            
+                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3], exe_delay);            
         end else if (ibuf_deq_if.valid && ibuf_deq_if.ready) begin
             stall_ctr <= 0;
         end

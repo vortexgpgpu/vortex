@@ -64,12 +64,12 @@ module VX_commit #(
         .N(1 + CMTW),
         .R(1)
     ) pipe_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (1'b0),
-        .flush (1'b0),
-        .in    ({commit_fire,         commit_size}),
-        .out   ({cmt_to_csr_if.valid, cmt_to_csr_if.commit_size})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (1'b0),
+        .flush    (1'b0),
+        .data_in  ({commit_fire,         commit_size}),
+        .data_out ({cmt_to_csr_if.valid, cmt_to_csr_if.commit_size})
     );
 
     // Writeback

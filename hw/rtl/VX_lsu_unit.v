@@ -19,6 +19,7 @@ module VX_lsu_unit #(
     VX_commit_if    ld_commit_if,
     VX_commit_if    st_commit_if
 );
+    wire                          req_valid;
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire                          req_rw;
     wire [`NUM_THREADS-1:0][29:0] req_addr;    
@@ -71,19 +72,18 @@ module VX_lsu_unit #(
     reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH-1:0] pending_tags;
 `IGNORE_WARNINGS_END
 
-    wire valid_in;
     wire stall_in; 
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32))),
         .R(1)
     ) pipe_reg0 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall_in),
-        .flush (1'b0),
-        .in    ({lsu_req_if.valid, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
-        .out   ({valid_in,         req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall_in),
+        .flush    (1'b0),
+        .data_in  ({lsu_req_if.valid, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
+        .data_out ({req_valid,        req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
     );
 
     wire [`NW_BITS-1:0] rsp_wid;
@@ -136,11 +136,11 @@ module VX_lsu_unit #(
         end
     end
 
-    wire stall_out = ~ld_commit_if.ready && ld_commit_if.valid;
-    wire store_stall = valid_in && req_rw && stall_out;
+    wire load_req_stall  = req_valid && !req_rw && lsuq_full;
+    wire store_req_stall = req_valid && req_rw && !st_commit_if.ready;
 
     // Core Request
-    assign dcache_req_if.valid  = {`NUM_THREADS{valid_in && ~lsuq_full && ~store_stall}} & req_tmask;
+    assign dcache_req_if.valid  = {`NUM_THREADS{req_valid && !load_req_stall && !store_req_stall}} & req_tmask;
     assign dcache_req_if.rw     = req_rw;
     assign dcache_req_if.byteen = req_byteen;
     assign dcache_req_if.addr   = req_addr;
@@ -152,7 +152,9 @@ module VX_lsu_unit #(
     assign dcache_req_if.tag = req_tag;
 `endif
 
-    assign stall_in = ~dcache_req_if.ready || lsuq_full || store_stall;
+    assign stall_in = ~dcache_req_if.ready 
+                   || load_req_stall
+                   || store_req_stall;
 
     // Can accept new request?
     assign lsu_req_if.ready = ~stall_in;
@@ -171,7 +173,7 @@ module VX_lsu_unit #(
 
     // send store commit
 
-    wire is_store_rsp = valid_in && ~lsuq_full && req_rw && dcache_req_if.ready;
+    wire is_store_rsp = req_valid && req_rw && dcache_req_if.ready;
 
     assign st_commit_if.valid = is_store_rsp;
     assign st_commit_if.wid   = req_wid;
@@ -180,26 +182,27 @@ module VX_lsu_unit #(
     assign st_commit_if.rd    = 0;
     assign st_commit_if.wb    = 0;
     assign st_commit_if.data  = 0;
-    `UNUSED_VAR (st_commit_if.ready)
 
     // send load commit
 
-    wire is_load_rsp  = (| dcache_rsp_if.valid);
+    wire is_load_rsp = (| dcache_rsp_if.valid);
+
+    wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
     
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .R(1)
     ) pipe_reg1 (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall_out),
-        .flush (1'b0),
-        .in    ({is_load_rsp,        rsp_wid,          dcache_rsp_if.valid, rsp_pc,          rsp_rd,          rsp_wb,          rsp_data}),
-        .out   ({ld_commit_if.valid, ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (load_rsp_stall),
+        .flush    (1'b0),
+        .data_in  ({is_load_rsp,        rsp_wid,          dcache_rsp_if.valid, rsp_pc,          rsp_rd,          rsp_wb,          rsp_data}),
+        .data_out ({ld_commit_if.valid, ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data})
     );
 
     // Can accept new cache response?
-    assign dcache_rsp_if.ready = ~stall_out;
+    assign dcache_rsp_if.ready = ~load_rsp_stall;
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_if.valid & {`NUM_THREADS{dcache_req_if.ready}});    
