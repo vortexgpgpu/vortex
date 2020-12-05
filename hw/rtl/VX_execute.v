@@ -117,6 +117,8 @@ module VX_execute #(
         .pending        (fpu_pending) 
     );
 `else
+    `UNUSED_VAR (csr_pending)
+    `UNUSED_VAR (fpu_to_csr_if.read_frm)
     assign fpu_req_if.ready     = 0;
     assign fpu_commit_if.valid  = 0;
     assign fpu_commit_if.wid    = 0;
@@ -124,9 +126,12 @@ module VX_execute #(
     assign fpu_commit_if.tmask  = 0;
     assign fpu_commit_if.wb     = 0;
     assign fpu_commit_if.rd     = 0;
-    assign fpu_commit_if.data   = 0;
-    assign fpu_commit_if.has_fflags = 0;
-    assign fpu_commit_if.fflags = 0;
+    assign fpu_commit_if.data   = 0;  
+    assign fpu_to_csr_if.write_enable = 0;  
+    assign fpu_to_csr_if.write_wid = 0;
+    assign fpu_to_csr_if.write_fflags = 0;
+    assign fpu_to_csr_if.read_wid = 0;
+    assign fpu_pending = 0;
 `endif
 
     VX_gpu_unit #(

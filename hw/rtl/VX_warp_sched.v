@@ -241,12 +241,12 @@ module VX_warp_sched #(
         .N(1 + `NUM_THREADS + 32 + `NW_BITS),
         .R(1)
     ) pipe_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall_out),
-        .flush (1'b0),
-        .in    ({scheduled_warp,      thread_mask,         warp_pc,          warp_to_schedule}),
-        .out   ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall_out),
+        .flush    (1'b0),
+        .data_in  ({scheduled_warp,      thread_mask,         warp_pc,          warp_to_schedule}),
+        .data_out ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );
 
     assign busy = (active_warps != 0); 

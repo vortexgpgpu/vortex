@@ -12,15 +12,15 @@ module VX_csr_unit #(
     VX_csr_io_req_if    csr_io_req_if,    
     VX_csr_io_rsp_if    csr_io_rsp_if,
     
-    VX_csr_req_if       csr_req_if,   
+    VX_csr_req_if       csr_req_if,
     VX_commit_if        csr_commit_if,
 
     input wire          busy,
     input wire[`NUM_WARPS-1:0] fpu_pending,
     output wire[`NUM_WARPS-1:0] pending
 );
-    VX_csr_req_if   csr_pipe_req_if();
-    VX_commit_if    csr_pipe_rsp_if();
+    VX_csr_pipe_req_if csr_pipe_req_if();
+    VX_commit_if       csr_pipe_rsp_if();
 
     wire select_io_req = csr_io_req_if.valid;
     wire select_io_rsp;
@@ -34,9 +34,9 @@ module VX_csr_unit #(
 
         .csr_core_req_if  (csr_req_if),
         .csr_io_req_if    (csr_io_req_if),
-        .csr_req_if       (csr_pipe_req_if),
+        .csr_pipe_req_if  (csr_pipe_req_if),
 
-        .csr_rsp_if       (csr_pipe_rsp_if),
+        .csr_pipe_rsp_if  (csr_pipe_rsp_if),
         .csr_io_rsp_if    (csr_io_rsp_if),        
         .csr_commit_if    (csr_commit_if)
     ); 
@@ -105,12 +105,12 @@ module VX_csr_unit #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 1 + 32 + 32),
         .R(1)
     ) pipe_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall_out),
-        .flush (1'b0),
-        .in    ({pipe_req_valid_qual,   csr_pipe_req_if.wid, csr_pipe_req_if.tmask, csr_pipe_req_if.PC, csr_pipe_req_if.rd, csr_pipe_req_if.wb, csr_we_s0_unqual, csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data_qual, csr_updated_data}),
-        .out   ({csr_pipe_rsp_if.valid, csr_pipe_rsp_if.wid, csr_pipe_rsp_if.tmask, csr_pipe_rsp_if.PC, csr_pipe_rsp_if.rd, csr_pipe_rsp_if.wb, csr_we_s1,        csr_addr_s1,              select_io_rsp,         csr_read_data_s1,   csr_updated_data_s1})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall_out),
+        .flush    (1'b0),
+        .data_in  ({pipe_req_valid_qual,   csr_pipe_req_if.wid, csr_pipe_req_if.tmask, csr_pipe_req_if.PC, csr_pipe_req_if.rd, csr_pipe_req_if.wb, csr_we_s0_unqual, csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data_qual, csr_updated_data}),
+        .data_out ({csr_pipe_rsp_if.valid, csr_pipe_rsp_if.wid, csr_pipe_rsp_if.tmask, csr_pipe_rsp_if.PC, csr_pipe_rsp_if.rd, csr_pipe_rsp_if.wb, csr_we_s1,        csr_addr_s1,              select_io_rsp,         csr_read_data_s1,   csr_updated_data_s1})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin

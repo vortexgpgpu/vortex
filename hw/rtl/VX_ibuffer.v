@@ -14,7 +14,7 @@ module VX_ibuffer #(
     output wire [`NW_BITS-1:0] deq_wid_next,
     VX_decode_if  ibuf_deq_if
 );
-    localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + 1 + `NUM_REGS;
+    localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + `NUM_REGS;
     localparam SIZE    = `IBUF_SIZE;
     localparam SIZEW   = $clog2(SIZE+1);
     localparam ADDRW   = $clog2(SIZE);
@@ -192,8 +192,7 @@ module VX_ibuffer #(
                         ibuf_enq_if.rs3, 
                         ibuf_enq_if.imm, 
                         ibuf_enq_if.rs1_is_PC, 
-                        ibuf_enq_if.rs2_is_imm, 
-                        ibuf_enq_if.use_rs3, 
+                        ibuf_enq_if.rs2_is_imm,
                         ibuf_enq_if.used_regs};
 
     assign ibuf_deq_if.valid = deq_valid;
@@ -211,7 +210,6 @@ module VX_ibuffer #(
             ibuf_deq_if.imm, 
             ibuf_deq_if.rs1_is_PC, 
             ibuf_deq_if.rs2_is_imm, 
-            ibuf_deq_if.use_rs3, 
             ibuf_deq_if.used_regs} = deq_instr;
 
 endmodule

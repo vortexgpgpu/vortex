@@ -78,12 +78,12 @@ module VX_writeback #(
         .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32)),
         .R(1)
     ) pipe_reg (
-        .clk   (clk),
-        .reset (reset),
-        .stall (stall),
-        .flush (1'b0),
-        .in    ({wb_valid,           wb_wid,           wb_PC,           wb_tmask,           wb_rd,           wb_data}),
-        .out   ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data})
+        .clk      (clk),
+        .reset    (reset),
+        .stall    (stall),
+        .flush    (1'b0),
+        .data_in  ({wb_valid,           wb_wid,           wb_PC,           wb_tmask,           wb_rd,           wb_data}),
+        .data_out ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data})
     );
     
     assign alu_commit_if.ready = !stall;    

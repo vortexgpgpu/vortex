@@ -5,7 +5,7 @@ module VX_dp_ram #(
     parameter DATAW    = 1,
     parameter SIZE     = 1,
     parameter BYTEENW  = 1,
-    parameter BUFFERED = 1,
+    parameter BUFFERED = 0,
     parameter RWCHECK  = 1,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1),
@@ -26,8 +26,10 @@ module VX_dp_ram #(
     localparam DATA32W   = DATAW / 32;
     localparam BYTEEN32W = BYTEENW / 4;
 
-    if (FASTRAM) begin
-        if (BUFFERED) begin            
+//`ifndef QUARTUS
+
+     if (FASTRAM) begin
+        if (BUFFERED) begin        
             reg [DATAW-1:0] dout_r;
 
             if (BYTEENW > 1) begin
@@ -206,6 +208,96 @@ module VX_dp_ram #(
             end
         end
     end
+
+/*`else
+
+    localparam OUTDATA_REG_B  = BUFFERED ? "CLOCK0" : "UNREGISTERED";
+    localparam RAM_BLOCK_TYPE = FASTRAM ? "MLAB" : "AUTO";
+
+    if (RWCHECK) begin
+
+        altsyncram	#(
+            .init_file      (),
+            .operation_mode ("DUAL_PORT"),
+            .numwords_a     (SIZE),
+            .numwords_b     (SIZE),
+            .widthad_a      (ADDRW),
+            .widthad_b      (ADDRW),
+            .width_a        (DATAW),
+            .width_b        (DATAW),
+            .width_byteena_a(BYTEENW),
+            .address_reg_b  ("CLOCK0"),
+            .outdata_reg_b  (OUTDATA_REG_B),
+            .ram_block_type (RAM_BLOCK_TYPE)
+        ) mem (
+            .clocken0 (1'b1),
+            .clocken1 (),
+            .clocken2 (),
+            .clocken3 (),
+            .clock0 (clk),
+            .clock1 (),
+            .address_a (waddr),
+            .address_b (raddr),
+            .byteena_a (byteen),
+            .byteena_b (1'b1),
+            .wren_a (wren),
+            .wren_b (1'b0),
+            .data_a (din),        
+            .data_b (),        
+            .rden_a (),        
+            .rden_b (1'b1),        
+            .q_a (),
+            .q_b (dout),
+            .addressstall_a (1'b0),
+            .addressstall_b (1'b0),        
+            .aclr0 (1'b0),
+            .aclr1 (1'b0),
+            .eccstatus ()
+        );
+
+    end else begin
+
+        `NO_RW_RAM_CHECK altsyncram	#(
+            .init_file      (),
+            .operation_mode ("DUAL_PORT"),
+            .numwords_a     (SIZE),
+            .numwords_b     (SIZE),
+            .widthad_a      (ADDRW),
+            .widthad_b      (ADDRW),
+            .width_a        (DATAW),
+            .width_b        (DATAW),
+            .width_byteena_a(BYTEENW),
+            .outdata_reg_b  (OUTDATA_REG_B),
+            .ram_block_type (RAM_BLOCK_TYPE)
+        ) mem (
+            .clocken0 (1'b1),
+            .clocken1 (1'b1),
+            .clocken2 (1'b1),
+            .clocken3 (1'b1),
+            .clock0 (clk),
+            .clock1 (clk),
+            .address_a (waddr),
+            .address_b (raddr),
+            .byteena_a (byteen),
+            .byteena_b (1'b1),
+            .wren_a (wren),
+            .wren_b (1'b0),
+            .data_a (din),        
+            .data_b (),        
+            .rden_a (),        
+            .rden_b (1'b1),        
+            .q_a (),
+            .q_b (dout),
+            .addressstall_a (1'b0),
+            .addressstall_b (1'b0),        
+            .aclr0 (1'b0),
+            .aclr1 (1'b0),
+            .eccstatus ()
+        );
+
+    end
+
+`endif*/
 
 endmodule
 `TRACING_ON
