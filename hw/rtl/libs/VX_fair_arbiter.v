@@ -7,8 +7,8 @@ module VX_fair_arbiter #(
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire [NUM_REQS-1:0]      requests,           
     input  wire                     enable,
+    input  wire [NUM_REQS-1:0]      requests, 
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
@@ -24,12 +24,13 @@ module VX_fair_arbiter #(
 
     end else begin    
 
-       reg  [NUM_REQS-1:0] remaining;       
-       wire [NUM_REQS-1:0] remaining_next;
-       wire [NUM_REQS-1:0] requests_use;
-       reg  use_buffer;     
+        reg [NUM_REQS-1:0] remaining;
+        reg use_buffer;     
 
-       always @(posedge clk) begin
+        wire [NUM_REQS-1:0] requests_use = use_buffer ? remaining : requests;
+        wire [NUM_REQS-1:0] remaining_next = requests_use & ~grant_onehot;
+
+        always @(posedge clk) begin
             if (reset) begin
                 remaining  <= 0;
                 use_buffer <= 0;
@@ -38,26 +39,19 @@ module VX_fair_arbiter #(
                 use_buffer <= (remaining_next != 0);
             end
         end
-
-        assign requests_use = use_buffer ? remaining : requests;
-        
-        VX_priority_encoder #(
-            .N(NUM_REQS)
-        ) priority_encoder (
-            .data_in   (requests_use),
-            .data_out  (grant_index),
-            .valid_out (grant_valid)
+               
+        VX_fixed_arbiter #(
+            .NUM_REQS(NUM_REQS),
+            .LOCK_ENABLE(LOCK_ENABLE)
+        ) fixed_arbiter (
+            .clk          (clk),
+            .reset        (reset),
+            .enable       (enable),
+            .requests     (requests_use), 
+            .grant_index  (grant_index),
+            .grant_onehot (grant_onehot),
+            .grant_valid  (grant_valid)
         );
-
-        reg [NUM_REQS-1:0] grant_onehot_r;
-        always @(*) begin
-            grant_onehot_r = NUM_REQS'(0);
-            grant_onehot_r[grant_index] = 1;
-        end
-
-        assign remaining_next = requests_use & ~grant_onehot_r;
-
-        assign grant_onehot = grant_onehot_r;
     end
     
 endmodule

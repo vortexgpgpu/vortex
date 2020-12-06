@@ -18,6 +18,7 @@ module VX_cache_core_req_bank_sel #(
     input  wire [NUM_BANKS-1:0]                      per_bank_ready    
 );     
     if (NUM_BANKS > 1) begin
+    
         reg [NUM_BANKS-1:0][NUM_REQS-1:0] per_bank_valid_r;                
         reg [NUM_BANKS-1:0] per_bank_ready_ignore;
         reg [NUM_BANKS-1:0] per_bank_ready_other;
@@ -29,8 +30,9 @@ module VX_cache_core_req_bank_sel #(
             
             for (integer i = 0; i < NUM_BANKS; i++) begin
                 for (integer j = 0; j < NUM_BANKS; j++) begin
-                    if (i != j)
+                    if (i != j) begin
                         per_bank_ready_other[i] &= (per_bank_ready[j] | per_bank_ready_ignore[j]);
+                    end
                 end
             end
 
@@ -45,11 +47,15 @@ module VX_cache_core_req_bank_sel #(
                 assign per_bank_valid[i][j] = per_bank_valid_r[i][j] & per_bank_ready_other[i];
             end
         end       
+
         assign core_req_ready = & (per_bank_ready | per_bank_ready_ignore);        
-    end else begin                
+
+    end else begin   
+
         `UNUSED_VAR (core_req_addr)
         assign per_bank_valid = core_req_valid;
         assign core_req_ready = per_bank_ready;
+
     end   
 
 endmodule

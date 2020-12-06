@@ -11,7 +11,7 @@ module VX_priority_encoder #(
     reg [`LOG2UP(N)-1:0] data_out_r;
 
     always @(*) begin
-        data_out_r = 0;
+        data_out_r = 'x;
         for (integer i = 0; i < N; i++) begin
             if (data_in[i]) begin
                 data_out_r = LOGN'(i);

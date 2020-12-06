@@ -55,13 +55,28 @@ module VX_pipeline #(
     output wire                             busy, 
     output wire                             ebreak
 );
-    // Dcache
+    //
+    // Dcache request
+    //
+
     VX_cache_core_req_if #(
         .NUM_REQS(`NUM_THREADS), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
     ) core_dcache_req_if();
+
+    assign dcache_req_valid  = core_dcache_req_if.valid;
+    assign dcache_req_rw     = core_dcache_req_if.rw;
+    assign dcache_req_byteen = core_dcache_req_if.byteen;
+    assign dcache_req_addr   = core_dcache_req_if.addr;
+    assign dcache_req_data   = core_dcache_req_if.data;
+    assign dcache_req_tag    = core_dcache_req_if.tag;
+    assign core_dcache_req_if.ready = dcache_req_ready;
+ 
+    //
+    // Dcache response
+    //
 
     VX_cache_core_rsp_if #(
         .NUM_REQS(`NUM_THREADS), 
@@ -70,33 +85,69 @@ module VX_pipeline #(
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
     ) core_dcache_rsp_if();
 
-    // Icache 
+    assign core_dcache_rsp_if.valid = dcache_rsp_valid;
+    assign core_dcache_rsp_if.data  = dcache_rsp_data;
+    assign core_dcache_rsp_if.tag   = dcache_rsp_tag;
+    assign dcache_rsp_ready = core_dcache_rsp_if.ready;
+
+    //
+    // Icache request
+    //
+
     VX_cache_core_req_if #(
         .NUM_REQS(1), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
-    )  core_icache_req_if();
+    ) core_icache_req_if();       
+
+    assign icache_req_valid  = core_icache_req_if.valid;
+    assign icache_req_rw     = core_icache_req_if.rw;
+    assign icache_req_byteen = core_icache_req_if.byteen;
+    assign icache_req_addr   = core_icache_req_if.addr;
+    assign icache_req_data   = core_icache_req_if.data;
+    assign icache_req_tag    = core_icache_req_if.tag;
+    assign core_icache_req_if.ready = icache_req_ready;
+
+    //
+    // Icache response
+    //
 
     VX_cache_core_rsp_if #(
         .NUM_REQS(1), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
-    )  core_icache_rsp_if();
+    )  core_icache_rsp_if();    
 
-    // CSR I/O
+    assign core_icache_rsp_if.valid = icache_rsp_valid;
+    assign core_icache_rsp_if.data  = icache_rsp_data;
+    assign core_icache_rsp_if.tag   = icache_rsp_tag;
+    assign icache_rsp_ready = core_icache_rsp_if.ready;
+
+    //
+    // CSR IO request
+    //
+
     VX_csr_io_req_if csr_io_req_if();
+
     assign csr_io_req_if.valid = csr_io_req_valid;
     assign csr_io_req_if.rw    = csr_io_req_rw;
     assign csr_io_req_if.addr  = csr_io_req_addr;
     assign csr_io_req_if.data  = csr_io_req_data;
     assign csr_io_req_ready    = csr_io_req_if.ready;
 
+    //
+    // CSR IO response
+    //
+
     VX_csr_io_rsp_if csr_io_rsp_if();
+
     assign csr_io_rsp_valid    = csr_io_rsp_if.valid; 
     assign csr_io_rsp_data     = csr_io_rsp_if.data; 
-    assign csr_io_rsp_if.ready = csr_io_rsp_ready; 
+    assign csr_io_rsp_if.ready = csr_io_rsp_ready;
+
+    ///////////////////////////////////////////////////////////////////////////
 
     VX_cmt_to_csr_if    cmt_to_csr_if();
     VX_decode_if        decode_if();
@@ -219,32 +270,6 @@ module VX_pipeline #(
         
         .writeback_if   (writeback_if),
         .cmt_to_csr_if  (cmt_to_csr_if)
-    );   
-
-    assign dcache_req_valid  = core_dcache_req_if.valid;
-    assign dcache_req_rw     = core_dcache_req_if.rw;
-    assign dcache_req_byteen = core_dcache_req_if.byteen;
-    assign dcache_req_addr   = core_dcache_req_if.addr;
-    assign dcache_req_data   = core_dcache_req_if.data;
-    assign dcache_req_tag    = core_dcache_req_if.tag;
-    assign core_dcache_req_if.ready = dcache_req_ready;
-
-    assign core_dcache_rsp_if.valid = dcache_rsp_valid;
-    assign core_dcache_rsp_if.data  = dcache_rsp_data;
-    assign core_dcache_rsp_if.tag   = dcache_rsp_tag;
-    assign dcache_rsp_ready = core_dcache_rsp_if.ready;
-
-    assign icache_req_valid  = core_icache_req_if.valid;
-    assign icache_req_rw     = core_icache_req_if.rw;
-    assign icache_req_byteen = core_icache_req_if.byteen;
-    assign icache_req_addr   = core_icache_req_if.addr;
-    assign icache_req_data   = core_icache_req_if.data;
-    assign icache_req_tag    = core_icache_req_if.tag;
-    assign core_icache_req_if.ready = icache_req_ready;
-
-    assign core_icache_rsp_if.valid = icache_rsp_valid;
-    assign core_icache_rsp_if.data  = icache_rsp_data;
-    assign core_icache_rsp_if.tag   = icache_rsp_tag;
-    assign icache_rsp_ready = core_icache_rsp_if.ready;
+    );
 
 endmodule

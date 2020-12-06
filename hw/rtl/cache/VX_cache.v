@@ -361,11 +361,11 @@ module VX_cache #(
         ) dram_req_arb (
             .clk        (clk),
             .reset      (reset),
-            .valid_in   (per_bank_dram_req_valid), 
-            .valid_out  (dram_req_valid),
-            .data_in    (data_in),                        
-            .data_out   ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),  
-            .ready_in   (per_bank_dram_req_ready),
+            .valid_in   (per_bank_dram_req_valid),
+            .data_in    (data_in),
+            .ready_in   (per_bank_dram_req_ready),   
+            .valid_out  (dram_req_valid),   
+            .data_out   ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),
             .ready_out  (dram_req_ready)
         );
     end else begin
@@ -392,10 +392,10 @@ module VX_cache #(
             .clk        (clk),
             .reset      (reset),
             .valid_in   (per_bank_snp_rsp_valid),
-            .valid_out  (snp_rsp_valid),  
             .data_in    (per_bank_snp_rsp_tag),
-            .data_out   (snp_rsp_tag),       
-            .ready_in   (per_bank_snp_rsp_ready),       
+            .ready_in   (per_bank_snp_rsp_ready),
+            .valid_out  (snp_rsp_valid),
+            .data_out   (snp_rsp_tag),         
             .ready_out  (snp_rsp_ready)
         );
     end else begin
