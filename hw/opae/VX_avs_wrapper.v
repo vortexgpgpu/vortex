@@ -71,7 +71,8 @@ module VX_avs_wrapper #(
     
     VX_generic_queue #(
         .DATAW (REQ_TAGW),
-        .SIZE  (RD_QUEUE_SIZE)
+        .SIZE  (RD_QUEUE_SIZE),
+        .BUFFERED (1)
     ) rd_req_queue (
         .clk      (clk),
         .reset    (reset),
@@ -86,7 +87,8 @@ module VX_avs_wrapper #(
 
     VX_generic_queue #(
         .DATAW (AVS_DATAW),
-        .SIZE  (RD_QUEUE_SIZE)
+        .SIZE  (RD_QUEUE_SIZE),
+        .BUFFERED (1)
     ) rd_rsp_queue (
         .clk      (clk),
         .reset    (reset),

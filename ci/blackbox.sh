@@ -6,7 +6,7 @@ set -e
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
 }
 
 DRIVER=vlsim
@@ -16,6 +16,7 @@ CORES=2
 WARPS=4
 THREADS=4
 L2=0
+L3=0
 DEBUG=0
 SCOPE=0
 HAS_ARGS=0
@@ -49,6 +50,10 @@ case $i in
         ;;
     --l2cache)
         L2=1
+        shift
+        ;;
+    --l3cache)
+        L3=1
         shift
         ;;
     --debug)
@@ -112,7 +117,7 @@ case $APP in
         ;;
 esac
 
-CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2"
+CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3"
 
 echo "CONFIGS=$CONFIGS"
 
