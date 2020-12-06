@@ -267,8 +267,8 @@
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
 // Size of cache in bytes
-`ifndef SCACHE_SIZE
-`define SCACHE_SIZE 4096
+`ifndef SMEM_SIZE
+`define SMEM_SIZE 4096
 `endif
 
 // Number of banks
@@ -295,7 +295,7 @@
 
 // Number of banks
 `ifndef L2NUM_BANKS
-`define L2NUM_BANKS `MIN((`NUM_CORES * 2), 4)
+`define L2NUM_BANKS `MIN(`NUM_CORES, 4)
 `endif
 
 // Core Request Queue Size

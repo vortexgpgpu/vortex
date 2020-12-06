@@ -363,13 +363,10 @@
 `define L2DRAM_BYTEEN_WIDTH     `L2BANK_LINE_SIZE
 
 // DRAM request tag bits
-`define L2DRAM_TAG_WIDTH        (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`L2DRAM_ADDR_WIDTH+`CLOG2(`NUM_CORES*2)))
+`define L2DRAM_TAG_WIDTH        (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`XDRAM_TAG_WIDTH+`CLOG2(`NUM_CORES)))
 
 // Snoop request tag bits
 `define L2SNP_TAG_WIDTH         (`L3_ENABLE ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
-
-// Core request size
-`define L2NUM_REQUESTS          (2 * `NUM_CORES)
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
@@ -398,10 +395,7 @@
 `define L3DRAM_TAG_WIDTH        (`L3_ENABLE ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
 
 // Snoop request tag bits
-`define L3SNP_TAG_WIDTH         16 
-
-// Core request size
-`define L3NUM_REQUESTS          `NUM_CLUSTERS
+`define L3SNP_TAG_WIDTH         16
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -413,7 +407,9 @@
 `define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
 `define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
 
-`define TO_FULL_ADDR(x)    {x, (32-$bits(x))'(0)}
+`define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
+
+`define XDRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH+`CLOG2(2))
 
 `include "VX_types.vh"
 

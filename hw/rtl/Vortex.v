@@ -242,7 +242,7 @@ module Vortex (
             );
         end
 
-        VX_io_arb #(
+        VX_databus_arb #(
             .NUM_REQS      (`NUM_CLUSTERS),
             .WORD_SIZE     (4),
             .TAG_IN_WIDTH  (`L2CORE_TAG_WIDTH),
@@ -322,30 +322,31 @@ module Vortex (
 
         // L3 Cache ///////////////////////////////////////////////////////////
 
-        wire [`L3NUM_REQUESTS-1:0]                           cluster_dram_rsp_valid;        
-        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_LINE_WIDTH-1:0]   cluster_dram_rsp_data;
-        wire [`L3NUM_REQUESTS-1:0][`L2DRAM_TAG_WIDTH-1:0]    cluster_dram_rsp_tag;
-        wire                                                 cluster_dram_rsp_ready;    
+        wire [`NUM_CLUSTERS-1:0]                           cluster_dram_rsp_valid;        
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0]   cluster_dram_rsp_data;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]    cluster_dram_rsp_tag;
+        wire                                               cluster_dram_rsp_ready;    
 
-        wire                                                 snp_fwd_rsp_valid;
-        wire [`L3DRAM_ADDR_WIDTH-1:0]                        snp_fwd_rsp_addr;
-        wire                                                 snp_fwd_rsp_inv;
-        wire [`L3SNP_TAG_WIDTH-1:0]                          snp_fwd_rsp_tag;
-        wire                                                 snp_fwd_rsp_ready;
+        wire                                               snp_fwd_rsp_valid;
+        wire [`L3DRAM_ADDR_WIDTH-1:0]                      snp_fwd_rsp_addr;
+        wire                                               snp_fwd_rsp_inv;
+        wire [`L3SNP_TAG_WIDTH-1:0]                        snp_fwd_rsp_tag;
+        wire                                               snp_fwd_rsp_ready;
 
-        reg [`L3NUM_REQUESTS-1:0] cluster_dram_rsp_ready_other;
+        reg [`NUM_CLUSTERS-1:0] cluster_dram_rsp_ready_other;
 
         always @(*) begin
-            cluster_dram_rsp_ready_other = {`L3NUM_REQUESTS{1'b1}};
-            for (integer i = 0; i < `L3NUM_REQUESTS; i++) begin
-                for (integer j = 0; j < `L3NUM_REQUESTS; j++) begin
-                    if (i != j)
+            cluster_dram_rsp_ready_other = {`NUM_CLUSTERS{1'b1}};
+            for (integer i = 0; i < `NUM_CLUSTERS; i++) begin
+                for (integer j = 0; j < `NUM_CLUSTERS; j++) begin
+                    if (i != j) begin
                         cluster_dram_rsp_ready_other[i] &= (per_cluster_dram_rsp_ready [j] | !cluster_dram_rsp_valid [j]);
+                    end
                 end
             end
         end
 
-        for (genvar i = 0; i < `L3NUM_REQUESTS; i++) begin     
+        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin     
             // Core Response
             assign per_cluster_dram_rsp_valid [i] = cluster_dram_rsp_valid [i] & cluster_dram_rsp_ready_other [i];
             assign per_cluster_dram_rsp_data  [i] = cluster_dram_rsp_data [i];
@@ -393,7 +394,7 @@ module Vortex (
             .BANK_LINE_SIZE     (`L3BANK_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
             .WORD_SIZE          (`L3WORD_SIZE),
-            .NUM_REQS           (`L3NUM_REQUESTS),
+            .NUM_REQS           (`NUM_CLUSTERS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
             .MSHR_SIZE          (`L3MSHR_SIZE),
             .DRFQ_SIZE          (`L3DRFQ_SIZE),
