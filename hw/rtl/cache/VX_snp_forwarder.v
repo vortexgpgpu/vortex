@@ -27,22 +27,42 @@ module VX_snp_forwarder #(
     input  wire                     snp_rsp_ready,
 
     // Snoop Forwarding out
-    output wire [NUM_REQS-1:0]      snp_fwdout_valid,
+    output wire [NUM_REQS-1:0]                     snp_fwdout_valid,
     output wire [NUM_REQS-1:0][DST_ADDR_WIDTH-1:0] snp_fwdout_addr,
-    output wire [NUM_REQS-1:0]      snp_fwdout_inv,
-    output wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdout_tag,
-    input wire [NUM_REQS-1:0]       snp_fwdout_ready,
+    output wire [NUM_REQS-1:0]                     snp_fwdout_inv,
+    output wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0]  snp_fwdout_tag,
+    input wire [NUM_REQS-1:0]                      snp_fwdout_ready,
 
     // Snoop forwarding in
-    input wire [NUM_REQS-1:0]       snp_fwdin_valid,    
+    input wire [NUM_REQS-1:0]                    snp_fwdin_valid,    
     input wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdin_tag,
-    output wire [NUM_REQS-1:0]      snp_fwdin_ready
+    output wire [NUM_REQS-1:0]                   snp_fwdin_ready
 );
     localparam ADDR_DIFF         = DST_ADDR_WIDTH - SRC_ADDR_WIDTH;
     localparam NUM_REQUESTS_QUAL = NUM_REQS * (1 << ADDR_DIFF);
     localparam REQ_QUAL_BITS     = `LOG2UP(NUM_REQUESTS_QUAL);
 
     `STATIC_ASSERT(NUM_REQS > 1, ("invalid value"))
+
+    // Inputs buffering
+    wire [NUM_REQS-1:0]                    snp_fwdin_valid_qual;    
+    wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdin_tag_qual;
+    wire [NUM_REQS-1:0]                    snp_fwdin_ready_qual;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        VX_skid_buffer #(
+            .DATAW (LOG_SNRQ_SIZE),
+            .PASSTHRU (NUM_REQS < 4)
+        ) snp_fwdin_buffer (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (snp_fwdin_valid[i]),        
+            .data_in   (snp_fwdin_tag[i]),
+            .ready_in  (snp_fwdin_ready[i]),        
+            .valid_out (snp_fwdin_valid_qual[i]),
+            .data_out  (snp_fwdin_tag_qual[i]),
+            .ready_out (snp_fwdin_ready_qual[i])
+        );
+    end
 
     reg [REQ_QUAL_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
     
@@ -167,11 +187,11 @@ module VX_snp_forwarder #(
     ) snp_fwdin_arb (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (snp_fwdin_valid),
-        .valid_out  (fwdin_valid),  
-        .data_in    (snp_fwdin_tag),
-        .data_out   (fwdin_tag),       
-        .ready_in   (snp_fwdin_ready),       
+        .valid_in   (snp_fwdin_valid_qual),
+        .data_in    (snp_fwdin_tag_qual),
+        .ready_in   (snp_fwdin_ready_qual),
+        .valid_out  (fwdin_valid),
+        .data_out   (fwdin_tag),           
         .ready_out  (fwdin_ready)
     );
 

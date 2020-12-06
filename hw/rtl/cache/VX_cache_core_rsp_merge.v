@@ -42,10 +42,11 @@ module VX_cache_core_rsp_merge #(
             always @(*) begin
                 core_rsp_valid_unqual = 0;
                 core_rsp_tag_unqual   = 'x;
-                sel_tag_id            = 'x;
-                core_rsp_data_unqual  = 'x;
-                core_rsp_bank_select  = 0;                
+                core_rsp_data_unqual  = 'x;                
+                core_rsp_bank_select  = 0; 
 
+                sel_tag_id = 'x;
+                
                 for (integer i = 0; i < NUM_BANKS; i++) begin
                     if (per_bank_core_rsp_valid[i]) begin
                         core_rsp_tag_unqual = per_bank_core_rsp_tag[i];
@@ -90,7 +91,7 @@ module VX_cache_core_rsp_merge #(
         VX_generic_register #(
             .N(NUM_REQS + (NUM_REQS *`WORD_WIDTH) + (`CORE_REQ_TAG_COUNT * CORE_TAG_WIDTH)),
             .R(NUM_REQS),
-            .PASSTHRU(NUM_BANKS <= 2)
+            .PASSTHRU(NUM_BANKS < 4)
         ) pipe_reg (
             .clk      (clk),
             .reset    (reset),

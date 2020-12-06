@@ -248,38 +248,38 @@ module Vortex (
             .TAG_IN_WIDTH  (`L2CORE_TAG_WIDTH),
             .TAG_OUT_WIDTH (`L3CORE_TAG_WIDTH)
         ) io_arb (
-            .clk                    (clk),
-            .reset                  (reset),
+            .clk            (clk),
+            .reset          (reset),
 
             // input requests
-            .io_req_valid_in        (per_cluster_io_req_valid),
-            .io_req_rw_in           (per_cluster_io_req_rw),
-            .io_req_byteen_in       (per_cluster_io_req_byteen),
-            .io_req_addr_in         (per_cluster_io_req_addr),
-            .io_req_data_in         (per_cluster_io_req_data),  
-            .io_req_tag_in          (per_cluster_io_req_tag),  
-            .io_req_ready_in        (per_cluster_io_req_ready),
+            .req_valid_in   (per_cluster_io_req_valid),
+            .req_rw_in      (per_cluster_io_req_rw),
+            .req_byteen_in  (per_cluster_io_req_byteen),
+            .req_addr_in    (per_cluster_io_req_addr),
+            .req_data_in    (per_cluster_io_req_data),  
+            .req_tag_in     (per_cluster_io_req_tag),  
+            .req_ready_in   (per_cluster_io_req_ready),
 
             // output request
-            .io_req_valid_out       (io_req_valid),
-            .io_req_rw_out          (io_req_rw),        
-            .io_req_byteen_out      (io_req_byteen),        
-            .io_req_addr_out        (io_req_addr),
-            .io_req_data_out        (io_req_data),
-            .io_req_tag_out         (io_req_tag),
-            .io_req_ready_out       (io_req_ready),
+            .req_valid_out  (io_req_valid),
+            .req_rw_out     (io_req_rw),        
+            .req_byteen_out (io_req_byteen),        
+            .req_addr_out   (io_req_addr),
+            .req_data_out   (io_req_data),
+            .req_tag_out    (io_req_tag),
+            .req_ready_out  (io_req_ready),
 
             // input responses
-            .io_rsp_valid_in        (per_cluster_io_rsp_valid),
-            .io_rsp_data_in         (per_cluster_io_rsp_data),
-            .io_rsp_tag_in          (per_cluster_io_rsp_tag),
-            .io_rsp_ready_in        (per_cluster_io_rsp_ready),
+            .rsp_valid_in   (per_cluster_io_rsp_valid),
+            .rsp_data_in    (per_cluster_io_rsp_data),
+            .rsp_tag_in     (per_cluster_io_rsp_tag),
+            .rsp_ready_in   (per_cluster_io_rsp_ready),
             
             // output response
-            .io_rsp_valid_out       (io_rsp_valid),
-            .io_rsp_tag_out         (io_rsp_tag),
-            .io_rsp_data_out        (io_rsp_data),
-            .io_rsp_ready_out       (io_rsp_ready)
+            .rsp_valid_out  (io_rsp_valid),
+            .rsp_tag_out    (io_rsp_tag),
+            .rsp_data_out   (io_rsp_data),
+            .rsp_ready_out  (io_rsp_ready)
         );
 
         VX_csr_io_arb #(
@@ -287,34 +287,34 @@ module Vortex (
             .DATA_WIDTH (32),
             .ADDR_WIDTH (12)
         ) csr_io_arb (
-            .clk                    (clk),
-            .reset                  (reset),
+            .clk            (clk),
+            .reset          (reset),
 
-            .request_id             (csr_io_request_id),
+            .request_id     (csr_io_request_id),
 
             // input requests
-            .csr_io_req_valid_in    (csr_io_req_valid),    
-            .csr_io_req_addr_in     (csr_io_req_addr),
-            .csr_io_req_rw_in       (csr_io_req_rw),
-            .csr_io_req_data_in     (csr_io_req_data),
-            .csr_io_req_ready_in    (csr_io_req_ready),
+            .req_valid_in   (csr_io_req_valid),    
+            .req_addr_in    (csr_io_req_addr),
+            .req_rw_in      (csr_io_req_rw),
+            .req_data_in    (csr_io_req_data),
+            .req_ready_in   (csr_io_req_ready),
 
             // output request
-            .csr_io_req_valid_out   (per_cluster_csr_io_req_valid),
-            .csr_io_req_addr_out    (per_cluster_csr_io_req_addr),            
-            .csr_io_req_rw_out      (per_cluster_csr_io_req_rw),
-            .csr_io_req_data_out    (per_cluster_csr_io_req_data),  
-            .csr_io_req_ready_out   (per_cluster_csr_io_req_ready),
+            .req_valid_out  (per_cluster_csr_io_req_valid),
+            .req_addr_out   (per_cluster_csr_io_req_addr),            
+            .req_rw_out     (per_cluster_csr_io_req_rw),
+            .req_data_out   (per_cluster_csr_io_req_data),  
+            .req_ready_out  (per_cluster_csr_io_req_ready),
 
             // input responses
-            .csr_io_rsp_valid_in    (per_cluster_csr_io_rsp_valid),
-            .csr_io_rsp_data_in     (per_cluster_csr_io_rsp_data),
-            .csr_io_rsp_ready_in    (per_cluster_csr_io_rsp_ready),            
+            .rsp_valid_in   (per_cluster_csr_io_rsp_valid),
+            .rsp_data_in    (per_cluster_csr_io_rsp_data),
+            .rsp_ready_in   (per_cluster_csr_io_rsp_ready),            
             
             // output response
-            .csr_io_rsp_valid_out   (csr_io_rsp_valid),
-            .csr_io_rsp_data_out    (csr_io_rsp_data),
-            .csr_io_rsp_ready_out   (csr_io_rsp_ready)
+            .rsp_valid_out  (csr_io_rsp_valid),
+            .rsp_data_out   (csr_io_rsp_data),
+            .rsp_ready_out  (csr_io_rsp_ready)
         );
 
         assign busy   = (| per_cluster_busy);
