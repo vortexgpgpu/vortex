@@ -35,7 +35,8 @@ module VX_fixed_arbiter #(
             for (integer i = 0; i < NUM_REQS; ++i) begin            
                 if (requests[i]) begin
                     grant_index_r  = LOG_NUM_REQS'(i);
-                    grant_onehot_r = NUM_REQS'(1) << i;
+                    grant_onehot_r = NUM_REQS'(0);
+                    grant_onehot_r[i] = 1;
                     break;
                 end
             end

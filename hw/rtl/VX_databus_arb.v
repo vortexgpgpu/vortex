@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_io_arb #(    
+module VX_databus_arb #(    
     parameter NUM_REQS      = 1, 
     parameter WORD_SIZE     = 1, 
     parameter TAG_IN_WIDTH  = 1,
