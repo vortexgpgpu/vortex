@@ -150,7 +150,7 @@ module VX_cache #(
         .per_bank_ready  (per_bank_core_req_ready)        
     );
 
-    assign dram_req_tag   = dram_req_addr;
+    assign dram_req_tag = dram_req_addr;
     if (NUM_BANKS == 1) begin
         assign dram_rsp_ready = per_bank_dram_rsp_ready;
     end else begin

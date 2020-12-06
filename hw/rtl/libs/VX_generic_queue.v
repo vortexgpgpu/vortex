@@ -66,8 +66,7 @@ module VX_generic_queue #(
                         empty_r <= 0; 
                         if (used_r == ADDRW'(SIZE-1)) begin
                             full_r <= 1;
-                        end                                                 
-                        used_r <= used_r + ADDRW'(1);
+                        end                            
                     end
                 end
                 if (pop) begin
@@ -76,10 +75,10 @@ module VX_generic_queue #(
                         full_r <= 0;                          
                         if (used_r == ADDRW'(1)) begin
                             empty_r <= 1;  
-                        end;                                                      
-                        used_r <= used_r - ADDRW'(1);
+                        end;                           
                     end
                 end
+                used_r <= used_r + ADDRW'(push) - ADDRW'(pop);
             end                   
         end
 
@@ -96,12 +95,8 @@ module VX_generic_queue #(
                     rd_ptr_r <= 0;
                     wr_ptr_r <= 0;
                 end else begin
-                    if (push) begin           
-                        wr_ptr_r <= wr_ptr_r + (ADDRW+1)'(1);
-                    end
-                    if (pop) begin
-                        rd_ptr_r <= rd_ptr_r + (ADDRW+1)'(1);
-                    end
+                    wr_ptr_r <= wr_ptr_r + (ADDRW+1)'(push);
+                    rd_ptr_r <= rd_ptr_r + (ADDRW+1)'(pop);
                 end                   
             end
 

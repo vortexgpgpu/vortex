@@ -5,9 +5,9 @@ module VX_snp_forwarder #(
     parameter SRC_ADDR_WIDTH = 1, 
     parameter DST_ADDR_WIDTH = 1, 
     parameter NUM_REQS       = 1, 
-    parameter SNP_TAG_WIDTH  = 1,
     parameter SNRQ_SIZE      = 1,
-    parameter LOG_SNRQ_SIZE  = `LOG2UP(SNRQ_SIZE)
+    parameter TAG_IN_WIDTH   = 1,
+    parameter TAG_OUT_WIDTH  = `LOG2UP(SNRQ_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -16,184 +16,203 @@ module VX_snp_forwarder #(
     input wire                      snp_req_valid,
     input wire [SRC_ADDR_WIDTH-1:0] snp_req_addr,
     input wire                      snp_req_inv,
-    input wire [SNP_TAG_WIDTH-1:0]  snp_req_tag,
+    input wire [TAG_IN_WIDTH-1:0]   snp_req_tag,
     output wire                     snp_req_ready,
 
     // Snoop response
     output wire                     snp_rsp_valid,    
     output wire [SRC_ADDR_WIDTH-1:0] snp_rsp_addr,
     output wire                     snp_rsp_inv,
-    output wire [SNP_TAG_WIDTH-1:0] snp_rsp_tag,
+    output wire [TAG_IN_WIDTH-1:0] snp_rsp_tag,
     input  wire                     snp_rsp_ready,
 
     // Snoop Forwarding out
     output wire [NUM_REQS-1:0]                     snp_fwdout_valid,
     output wire [NUM_REQS-1:0][DST_ADDR_WIDTH-1:0] snp_fwdout_addr,
     output wire [NUM_REQS-1:0]                     snp_fwdout_inv,
-    output wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0]  snp_fwdout_tag,
+    output wire [NUM_REQS-1:0][TAG_OUT_WIDTH-1:0]  snp_fwdout_tag,
     input wire [NUM_REQS-1:0]                      snp_fwdout_ready,
 
     // Snoop forwarding in
     input wire [NUM_REQS-1:0]                    snp_fwdin_valid,    
-    input wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdin_tag,
+    input wire [NUM_REQS-1:0][TAG_OUT_WIDTH-1:0] snp_fwdin_tag,
     output wire [NUM_REQS-1:0]                   snp_fwdin_ready
 );
     localparam ADDR_DIFF         = DST_ADDR_WIDTH - SRC_ADDR_WIDTH;
     localparam NUM_REQUESTS_QUAL = NUM_REQS * (1 << ADDR_DIFF);
     localparam REQ_QUAL_BITS     = `LOG2UP(NUM_REQUESTS_QUAL);
 
-    `STATIC_ASSERT(NUM_REQS > 1, ("invalid value"))
+    if (NUM_REQS > 1) begin
 
-    // Inputs buffering
-    wire [NUM_REQS-1:0]                    snp_fwdin_valid_qual;    
-    wire [NUM_REQS-1:0][LOG_SNRQ_SIZE-1:0] snp_fwdin_tag_qual;
-    wire [NUM_REQS-1:0]                    snp_fwdin_ready_qual;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        VX_skid_buffer #(
-            .DATAW (LOG_SNRQ_SIZE),
-            .PASSTHRU (NUM_REQS < 4)
-        ) snp_fwdin_buffer (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (snp_fwdin_valid[i]),        
-            .data_in   (snp_fwdin_tag[i]),
-            .ready_in  (snp_fwdin_ready[i]),        
-            .valid_out (snp_fwdin_valid_qual[i]),
-            .data_out  (snp_fwdin_tag_qual[i]),
-            .ready_out (snp_fwdin_ready_qual[i])
-        );
-    end
+        // Inputs buffering
+        wire [NUM_REQS-1:0]                    snp_fwdin_valid_qual;
+        wire [NUM_REQS-1:0][TAG_OUT_WIDTH-1:0] snp_fwdin_tag_qual;
+        wire [NUM_REQS-1:0]                    snp_fwdin_ready_qual;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            VX_skid_buffer #(
+                .DATAW (TAG_OUT_WIDTH),
+                .PASSTHRU (NUM_REQS < 4)
+            ) snp_fwdin_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (snp_fwdin_valid[i]),    
+                .data_in   (snp_fwdin_tag[i]),
+                .ready_in  (snp_fwdin_ready[i]),    
+                .valid_out (snp_fwdin_valid_qual[i]),
+                .data_out  (snp_fwdin_tag_qual[i]),
+                .ready_out (snp_fwdin_ready_qual[i])
+            );
+        end
 
-    reg [REQ_QUAL_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
-    
-    wire [LOG_SNRQ_SIZE-1:0] sfq_write_addr, sfq_read_addr;
-    wire sfq_full;
+        reg [REQ_QUAL_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
+        
+        wire [TAG_OUT_WIDTH-1:0] sfq_write_addr, sfq_read_addr;
+        wire sfq_full;
 
-    wire [LOG_SNRQ_SIZE-1:0] fwdin_tag;
-    wire fwdin_valid;
-    
-    wire fwdin_ready = snp_rsp_ready || (1 != pending_cntrs[sfq_read_addr]);
-    wire fwdin_fire  = fwdin_valid && fwdin_ready;  
+        wire [TAG_OUT_WIDTH-1:0] fwdin_tag;
+        wire fwdin_valid;
+        
+        wire fwdin_ready = snp_rsp_ready || (1 != pending_cntrs[sfq_read_addr]);
+        wire fwdin_fire  = fwdin_valid && fwdin_ready;
 
-    assign snp_rsp_valid = fwdin_valid && (1 == pending_cntrs[sfq_read_addr]);
-    
-    assign sfq_read_addr = fwdin_tag;
-    
-    wire sfq_acquire = snp_req_valid && snp_req_ready;
-    wire sfq_release = snp_rsp_valid && snp_rsp_ready;
+        assign snp_rsp_valid = fwdin_valid && (1 == pending_cntrs[sfq_read_addr]);
+        
+        assign sfq_read_addr = fwdin_tag;
+        
+        wire sfq_acquire = snp_req_valid && snp_req_ready;
+        wire sfq_release = snp_rsp_valid && snp_rsp_ready;
 
-    VX_cam_buffer #(
-        .DATAW (SRC_ADDR_WIDTH + 1 + SNP_TAG_WIDTH),
-        .SIZE  (SNRQ_SIZE)
-    ) req_metadata_buf (
-        .clk            (clk),
-        .reset          (reset),
-        .write_addr     (sfq_write_addr),                
-        .acquire_slot   (sfq_acquire),       
-        .read_addr      (sfq_read_addr),
-        .write_data     ({snp_req_addr, snp_req_inv, snp_req_tag}),            
-        .read_data      ({snp_rsp_addr, snp_rsp_inv, snp_rsp_tag}),
-        .release_addr   (sfq_read_addr),
-        .release_slot   (sfq_release),     
-        .full           (sfq_full)
-    );   
-    
-    wire fwdout_valid;
-    wire [LOG_SNRQ_SIZE-1:0] fwdout_tag;
-    wire [DST_ADDR_WIDTH-1:0] fwdout_addr;    
-    wire fwdout_inv;
-    wire fwdout_ready;
-    wire dispatch_hold;
+        VX_cam_buffer #(
+            .DATAW (SRC_ADDR_WIDTH + 1 + TAG_IN_WIDTH),
+            .SIZE  (SNRQ_SIZE)
+        ) req_metadata_buf (
+            .clk            (clk),
+            .reset          (reset),
+            .write_addr     (sfq_write_addr),            
+            .acquire_slot   (sfq_acquire),   
+            .read_addr      (sfq_read_addr),
+            .write_data     ({snp_req_addr, snp_req_inv, snp_req_tag}),        
+            .read_data      ({snp_rsp_addr, snp_rsp_inv, snp_rsp_tag}),
+            .release_addr   (sfq_read_addr),
+            .release_slot   (sfq_release), 
+            .full           (sfq_full)
+        );   
+        
+        wire fwdout_valid;
+        wire [TAG_OUT_WIDTH-1:0] fwdout_tag;
+        wire [DST_ADDR_WIDTH-1:0] fwdout_addr;
+        wire fwdout_inv;
+        wire fwdout_ready;
+        wire dispatch_hold;
 
-    if (ADDR_DIFF != 0) begin
-        reg [LOG_SNRQ_SIZE-1:0] fwdout_tag_r;
-        reg [DST_ADDR_WIDTH-1:0] fwdout_addr_r;        
-        reg fwdout_inv_r;
-        reg dispatch_hold_r;
+        if (ADDR_DIFF != 0) begin
+            reg [TAG_OUT_WIDTH-1:0] fwdout_tag_r;
+            reg [DST_ADDR_WIDTH-1:0] fwdout_addr_r;    
+            reg fwdout_inv_r;
+            reg dispatch_hold_r;
 
-        always @(posedge clk) begin
-            if (reset) begin
-                dispatch_hold_r <= 0;
-            end else begin   
-                if (snp_req_valid && snp_req_ready) begin
-                    dispatch_hold_r <= 1;
+            always @(posedge clk) begin
+                if (reset) begin
+                    dispatch_hold_r <= 0;
+                end else begin   
+                    if (snp_req_valid && snp_req_ready) begin
+                        dispatch_hold_r <= 1;
+                    end
+
+                    if (dispatch_hold_r 
+                    && fwdout_ready
+                    && (fwdout_addr[ADDR_DIFF-1:0] == ((1 << ADDR_DIFF)-1))) begin
+                        dispatch_hold_r <= 0;
+                    end 
                 end
 
-                if (dispatch_hold_r 
-                 && fwdout_ready
-                 && (fwdout_addr[ADDR_DIFF-1:0] == ((1 << ADDR_DIFF)-1))) begin
-                    dispatch_hold_r <= 0;
-                end 
-            end
+                if (fwdout_valid && fwdout_ready) begin
+                    fwdout_addr_r <= fwdout_addr + DST_ADDR_WIDTH'(1'b1);
+                end
 
-            if (fwdout_valid && fwdout_ready) begin
-                fwdout_addr_r <= fwdout_addr + DST_ADDR_WIDTH'(1'b1);
+                if (snp_req_valid && snp_req_ready) begin                 
+                    fwdout_inv_r <= snp_req_inv;
+                    fwdout_tag_r <= sfq_write_addr;
+                end
             end
+            assign fwdout_valid = dispatch_hold_r || (snp_req_valid && !sfq_full);
+            assign fwdout_tag   = dispatch_hold_r ? fwdout_tag_r : sfq_write_addr;
+            assign fwdout_addr  = dispatch_hold_r ? fwdout_addr_r : {snp_req_addr, ADDR_DIFF'(0)};
+            assign fwdout_inv   = dispatch_hold_r ? fwdout_inv_r : snp_req_inv;
+            assign dispatch_hold= dispatch_hold_r;    
+        end else begin 
+            assign fwdout_valid = snp_req_valid && !sfq_full;
+            assign fwdout_tag   = sfq_write_addr;
+            assign fwdout_addr  = snp_req_addr;
+            assign fwdout_inv   = snp_req_inv;
+            assign dispatch_hold= 1'b0;    
+        end
 
-            if (snp_req_valid && snp_req_ready) begin                     
-                fwdout_inv_r <= snp_req_inv;
-                fwdout_tag_r <= sfq_write_addr;
+        always @(posedge clk) begin
+            if (sfq_acquire)  begin
+                pending_cntrs[sfq_write_addr] <= NUM_REQUESTS_QUAL;
+            end  
+            if (fwdin_fire) begin
+                pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
             end
         end
-        assign fwdout_valid = dispatch_hold_r || (snp_req_valid && !sfq_full);
-        assign fwdout_tag   = dispatch_hold_r ? fwdout_tag_r : sfq_write_addr;
-        assign fwdout_addr  = dispatch_hold_r ? fwdout_addr_r : {snp_req_addr, ADDR_DIFF'(0)};
-        assign fwdout_inv   = dispatch_hold_r ? fwdout_inv_r : snp_req_inv;
-        assign dispatch_hold= dispatch_hold_r;        
-    end else begin     
-        assign fwdout_valid = snp_req_valid && !sfq_full;
-        assign fwdout_tag   = sfq_write_addr;
-        assign fwdout_addr  = snp_req_addr;
-        assign fwdout_inv   = snp_req_inv;
-        assign dispatch_hold= 1'b0;        
-    end
 
-    always @(posedge clk) begin
-        if (sfq_acquire)  begin
-            pending_cntrs[sfq_write_addr] <= NUM_REQUESTS_QUAL;
-        end      
-        if (fwdin_fire) begin
-            pending_cntrs[sfq_read_addr] <= pending_cntrs[sfq_read_addr] - 1;
+        reg [NUM_REQS-1:0] snp_fwdout_ready_other;
+
+        for (genvar i = 0; i < NUM_REQS; i++) begin
+            assign snp_fwdout_valid[i] = fwdout_valid && snp_fwdout_ready_other[i];
+            assign snp_fwdout_addr[i]  = fwdout_addr;
+            assign snp_fwdout_inv[i]   = fwdout_inv;
+            assign snp_fwdout_tag[i]   = fwdout_tag;
         end
-    end
 
-    reg [NUM_REQS-1:0] snp_fwdout_ready_other;
-
-    for (genvar i = 0; i < NUM_REQS; i++) begin
-        assign snp_fwdout_valid[i] = fwdout_valid && snp_fwdout_ready_other[i];
-        assign snp_fwdout_addr[i]  = fwdout_addr;
-        assign snp_fwdout_inv[i]   = fwdout_inv;
-        assign snp_fwdout_tag[i]   = fwdout_tag;
-    end
-
-    always @(*) begin
-        snp_fwdout_ready_other = {NUM_REQS{1'b1}};
-        for (integer i = 0; i < NUM_REQS; i++) begin
-            for (integer j = 0; j < NUM_REQS; j++) begin
-                if (i != j)
-                    snp_fwdout_ready_other[i] &= snp_fwdout_ready[j];
+        always @(*) begin
+            snp_fwdout_ready_other = {NUM_REQS{1'b1}};
+            for (integer i = 0; i < NUM_REQS; i++) begin
+                for (integer j = 0; j < NUM_REQS; j++) begin
+                    if (i != j)
+                        snp_fwdout_ready_other[i] &= snp_fwdout_ready[j];
+                end
             end
         end
+
+        assign fwdout_ready = (& snp_fwdout_ready);
+
+        assign snp_req_ready = fwdout_ready && !sfq_full && !dispatch_hold;
+
+        VX_stream_arbiter #(
+            .NUM_REQS(NUM_REQS),
+            .DATAW(TAG_OUT_WIDTH),
+            .BUFFERED(NUM_REQS >= 4)
+        ) snp_fwdin_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (snp_fwdin_valid_qual),
+            .data_in    (snp_fwdin_tag_qual),
+            .ready_in   (snp_fwdin_ready_qual),
+            .valid_out  (fwdin_valid),
+            .data_out   (fwdin_tag),       
+            .ready_out  (fwdin_ready)
+        );
+
+    end else begin
+
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+
+        assign snp_fwdout_valid = snp_req_valid;
+        assign snp_fwdout_addr  = snp_req_addr;
+        assign snp_fwdout_inv   = snp_req_inv;
+        assign snp_fwdout_tag   = snp_req_tag;
+        assign snp_req_ready    = snp_fwdout_ready;
+ 
+        assign snp_rsp_valid   = snp_fwdin_valid;
+        assign snp_rsp_addr    = snp_req_addr;
+        assign snp_rsp_inv     = snp_req_inv;
+        assign snp_rsp_tag     = snp_fwdin_tag;
+        assign snp_fwdin_ready = snp_rsp_ready;
+
     end
-
-    assign fwdout_ready = (& snp_fwdout_ready);
-
-    assign snp_req_ready = fwdout_ready && !sfq_full && !dispatch_hold;
-
-    VX_stream_arbiter #(
-        .NUM_REQS(NUM_REQS),
-        .DATAW(LOG_SNRQ_SIZE),
-        .BUFFERED(NUM_REQS >= 4)
-    ) snp_fwdin_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (snp_fwdin_valid_qual),
-        .data_in    (snp_fwdin_tag_qual),
-        .ready_in   (snp_fwdin_ready_qual),
-        .valid_out  (fwdin_valid),
-        .data_out   (fwdin_tag),           
-        .ready_out  (fwdin_ready)
-    );
 
 `ifdef DBG_PRINT_CACHE_SNP
      always @(posedge clk) begin

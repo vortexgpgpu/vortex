@@ -24,11 +24,11 @@
 `endif
 
 `ifndef L2_ENABLE
-`define L2_ENABLE (`NUM_CORES > 2)
+`define L2_ENABLE (`NUM_CORES >= 4)
 `endif
 
 `ifndef L3_ENABLE
-`define L3_ENABLE (`NUM_CLUSTERS > 1)
+`define L3_ENABLE (`NUM_CLUSTERS >= 4)
 `endif
 
 `ifndef GLOBAL_BLOCK_SIZE

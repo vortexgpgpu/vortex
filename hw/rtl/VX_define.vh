@@ -366,7 +366,7 @@
 `define L2DRAM_TAG_WIDTH        (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`XDRAM_TAG_WIDTH+`CLOG2(`NUM_CORES)))
 
 // Snoop request tag bits
-`define L2SNP_TAG_WIDTH         (`L3_ENABLE ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
+`define L2SNP_TAG_WIDTH         ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
@@ -392,10 +392,10 @@
 `define L3DRAM_BYTEEN_WIDTH     `L3BANK_LINE_SIZE
 
 // DRAM request tag bits
-`define L3DRAM_TAG_WIDTH        (`L3_ENABLE ? `L3DRAM_ADDR_WIDTH : `L2DRAM_TAG_WIDTH)
+`define L3DRAM_TAG_WIDTH        (`L3_ENABLE ? `L3DRAM_ADDR_WIDTH : (`L2DRAM_TAG_WIDTH+`CLOG2(`NUM_CLUSTERS)))
 
 // Snoop request tag bits
-`define L3SNP_TAG_WIDTH         16
+`define L3SNP_TAG_WIDTH         `VX_SNP_TAG_WIDTH
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -403,7 +403,7 @@
 `define VX_DRAM_ADDR_WIDTH      `L3DRAM_ADDR_WIDTH
 `define VX_DRAM_LINE_WIDTH      `L3DRAM_LINE_WIDTH
 `define VX_DRAM_TAG_WIDTH       `L3DRAM_TAG_WIDTH
-`define VX_SNP_TAG_WIDTH        `L3SNP_TAG_WIDTH    
+`define VX_SNP_TAG_WIDTH        16    
 `define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
 `define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
 
