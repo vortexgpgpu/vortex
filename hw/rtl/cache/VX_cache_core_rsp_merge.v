@@ -22,7 +22,7 @@ module VX_cache_core_rsp_merge #(
     input  wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]    per_bank_core_rsp_data, 
     output wire [NUM_BANKS-1:0]                     per_bank_core_rsp_ready,
 
-    // Core Writeback
+    // Core Response
     output wire [NUM_REQS-1:0]                      core_rsp_valid,
     output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]     core_rsp_data,      

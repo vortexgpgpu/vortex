@@ -270,7 +270,7 @@ module Vortex (
         .DST_ADDR_WIDTH     (`L2DRAM_ADDR_WIDTH),             
         .TAG_IN_WIDTH       (`L3SNP_TAG_WIDTH),
         .TAG_OUT_WIDTH      (`L2SNP_TAG_WIDTH),
-        .SNRQ_SIZE          (`L3SNRQ_SIZE)
+        .SREQ_SIZE          (`L3SREQ_SIZE)
     ) snp_forwarder (
         .clk                (clk),
         .reset              (reset),
@@ -339,11 +339,11 @@ module Vortex (
             .NUM_REQS           (`NUM_CLUSTERS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
             .MSHR_SIZE          (`L3MSHR_SIZE),
-            .DRPQ_SIZE          (`L3DRPQ_SIZE),
-            .SNRQ_SIZE          (`L3SNRQ_SIZE),
-            .CWBQ_SIZE          (`L3CWBQ_SIZE),
+            .DRSQ_SIZE          (`L3DRSQ_SIZE),
+            .SREQ_SIZE          (`L3SREQ_SIZE),
+            .CRSQ_SIZE          (`L3CRSQ_SIZE),
             .DREQ_SIZE          (`L3DREQ_SIZE),
-            .SNPQ_SIZE          (`L3SNPQ_SIZE),
+            .SRSQ_SIZE          (`L3SRSQ_SIZE),
             .DRAM_ENABLE        (1),
             .FLUSH_ENABLE       (1), 
             .WRITE_ENABLE       (1),
