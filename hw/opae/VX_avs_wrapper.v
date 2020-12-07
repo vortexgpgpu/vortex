@@ -1,4 +1,4 @@
-`include "VX_platform.vh"
+`include "VX_define.vh"
 
 module VX_avs_wrapper #(
     parameter AVS_DATAW     = 1, 

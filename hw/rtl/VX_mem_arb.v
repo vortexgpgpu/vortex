@@ -32,16 +32,16 @@ module VX_mem_arb #(
     input wire                                  req_ready_out,
 
     // input response
-    output wire [NUM_REQS-1:0]                  rsp_valid_out,
-    output wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0] rsp_tag_out,
-    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0]  rsp_data_out,
-    input wire  [NUM_REQS-1:0]                  rsp_ready_out,
-
-    // output response
     input wire                                  rsp_valid_in,
     input wire [TAG_OUT_WIDTH-1:0]              rsp_tag_in,
     input wire [DATA_WIDTH-1:0]                 rsp_data_in,
-    output wire                                 rsp_ready_in
+    output wire                                 rsp_ready_in,
+
+    // output responses
+    output wire [NUM_REQS-1:0]                  rsp_valid_out,
+    output wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0] rsp_tag_out,
+    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0]  rsp_data_out,
+    input wire  [NUM_REQS-1:0]                  rsp_ready_out    
 );
     localparam DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
 

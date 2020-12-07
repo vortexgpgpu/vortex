@@ -36,6 +36,10 @@ ASE_DIR = ase
 
 VLSIM_DIR = vlsim
 
+RTL_DIR=../../hw/rtl
+
+SCRIPT_DIR=../../hw/scripts
+
 PROJECT = libvortex.so
 
 PROJECT_ASE = $(ASE_DIR)/libvortex.so
@@ -50,7 +54,8 @@ SRCS = vortex.cpp ../common/vx_utils.cpp
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
 	SRCS += vx_scope.cpp
-	SET_SCOPE = SCOPE=1
+	SCOPE_ENABLE = SCOPE=1
+	SCOPE_H = scope-defs.h 
 endif
 
 all: vlsim
@@ -59,7 +64,16 @@ all: vlsim
 json: ../../hw/opae/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
-fpga: $(SRCS)
+scope-defs.h: $(SCRIPT_DIR)/scope.json
+	$(SCRIPT_DIR)/scope.py $(RTL_INCLUDE) $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
+
+# generate scope data
+scope: scope-defs.h
+
+vlsim-hw: $(SCOPE_H)
+	$(SCOPE_ENABLE) $(MAKE) -C vlsim
+
+fpga: $(SRCS) $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -DUSE_FPGA $^ $(LDFLAGS) $(FPGA_LIBS) -o $(PROJECT)
 
 asesim: $(SRCS) $(ASE_DIR)
@@ -67,9 +81,6 @@ asesim: $(SRCS) $(ASE_DIR)
 
 vlsim: $(SRCS) vlsim-hw
 	$(CXX) $(CXXFLAGS) -DUSE_VLSIM $(SRCS) $(LDFLAGS) -L./vlsim $(VLSIM_LIBS) -o $(PROJECT_VLSIM)
-
-vlsim-hw:
-	$(SET_SCOPE) $(MAKE) -C vlsim
 
 vortex.o: vortex.cpp
 	$(CXX) $(CXXFLAGS) -c vortex.cpp -o $@
