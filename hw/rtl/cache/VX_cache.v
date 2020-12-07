@@ -19,7 +19,7 @@ module VX_cache #(
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 8, 
     // DRAM Response Queue Size
-    parameter DRFQ_SIZE                     = 4, 
+    parameter DRPQ_SIZE                     = 4, 
     // Snoop Req Queue Size
     parameter SNRQ_SIZE                     = 4, 
 
@@ -265,7 +265,7 @@ module VX_cache #(
             .NUM_REQS           (NUM_REQS),
             .CREQ_SIZE          (CREQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
-            .DRFQ_SIZE          (DRFQ_SIZE),
+            .DRPQ_SIZE          (DRPQ_SIZE),
             .SNRQ_SIZE          (SNRQ_SIZE),
             .CWBQ_SIZE          (CWBQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),

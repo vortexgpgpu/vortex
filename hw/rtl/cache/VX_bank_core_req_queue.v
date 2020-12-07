@@ -1,6 +1,6 @@
 `include "VX_cache_config.vh"
 
-module VX_bank_core_req_arb #(
+module VX_bank_core_req_queue #(
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,     
     // Number of Word requests per cycle

@@ -40,8 +40,6 @@ TOP = vortex_afu_shim
 
 RTL_DIR=../../../hw/rtl
 
-SCRIPT_DIR=../../../hw/scripts
-
 SRCS = fpga.cpp opae_sim.cpp
 SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
 
@@ -70,7 +68,6 @@ endif
 ifdef SCOPE
 	VL_FLAGS += -DSCOPE
 	CFLAGS += -DSCOPE
-	SCOPE_VH = $(RTL_DIR)/scope-defs.vh 
 endif
 
 # use our OPAE shim
@@ -85,14 +82,8 @@ RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 PROJECT = libopae-c-vlsim.so
 
 all: $(PROJECT)
-
-# generate scope data
-scope: $(RTL_DIR)/scope-defs.vh
-
-$(RTL_DIR)/scope-defs.vh: $(SCRIPT_DIR)/scope.json
-	$(SCRIPT_DIR)/scope.py $(RTL_INCLUDE) $(CONFIGS) -cc ../scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
 	
-$(PROJECT): $(SRCS) $(SCOPE_VH)
+$(PROJECT): $(SRCS)
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	make -j -C obj_dir -f V$(TOP).mk
 

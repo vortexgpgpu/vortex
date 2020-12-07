@@ -336,7 +336,7 @@ module VX_cluster #(
             .NUM_REQS           (`NUM_CORES),
             .CREQ_SIZE          (`L2CREQ_SIZE),
             .MSHR_SIZE          (`L2MSHR_SIZE),
-            .DRFQ_SIZE          (`L2DRFQ_SIZE),
+            .DRPQ_SIZE          (`L2DRPQ_SIZE),
             .SNRQ_SIZE          (`L2SNRQ_SIZE),
             .CWBQ_SIZE          (`L2CWBQ_SIZE),
             .DREQ_SIZE          (`L2DREQ_SIZE),

@@ -89,6 +89,14 @@ case $DRIVER in
         DRIVER_PATH=driver/opae
         DRIVER_EXTRA=vlsim
         ;;
+    asesim)
+        DRIVER_PATH=driver/opae
+        DRIVER_EXTRA=asesim
+        ;;
+    fpga)
+        DRIVER_PATH=driver/opae
+        DRIVER_EXTRA=fpga
+        ;;
     *)
         echo "invalid driver: $DRIVER"
         exit -1

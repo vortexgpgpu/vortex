@@ -218,8 +218,8 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef DDRFQ_SIZE
-`define DDRFQ_SIZE 4
+`ifndef DDRPQ_SIZE
+`define DDRPQ_SIZE 4
 `endif
 
 // Snoop Response Queue Size
@@ -260,8 +260,8 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef IDRFQ_SIZE
-`define IDRFQ_SIZE 4
+`ifndef IDRPQ_SIZE
+`define IDRPQ_SIZE 4
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -319,8 +319,8 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef L2DRFQ_SIZE
-`define L2DRFQ_SIZE 4
+`ifndef L2DRPQ_SIZE
+`define L2DRPQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size
@@ -366,8 +366,8 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef L3DRFQ_SIZE
-`define L3DRFQ_SIZE 4
+`ifndef L3DRPQ_SIZE
+`define L3DRPQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size

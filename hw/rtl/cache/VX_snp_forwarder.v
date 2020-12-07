@@ -195,6 +195,14 @@ module VX_snp_forwarder #(
             .ready_out  (fwdin_ready)
         );
 
+    `ifdef DBG_PRINT_CACHE_SNP
+        always @(posedge clk) begin
+            if (fwdin_valid && fwdin_ready) begin
+                $display("%t: cache%0d snp-fwd-in: tag=%0h", $time, CACHE_ID, fwdin_tag);
+            end
+        end
+    `endif
+
     end else begin
 
         `UNUSED_VAR (clk)
@@ -221,9 +229,6 @@ module VX_snp_forwarder #(
         end
         if (snp_fwdout_valid[0] && snp_fwdout_ready[0]) begin
             $display("%t: cache%0d snp-fwd-out: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, `TO_FULL_ADDR(snp_fwdout_addr[0]), snp_fwdout_inv[0], snp_fwdout_tag[0]);
-        end
-        if (fwdin_valid && fwdin_ready) begin
-            $display("%t: cache%0d snp-fwd-in: tag=%0h", $time, CACHE_ID, fwdin_tag);
         end
         if (snp_rsp_valid && snp_rsp_ready) begin
             $display("%t: cache%0d snp-fwd-rsp: addr=%0h, invalidate=%0d, tag=%0h", $time, CACHE_ID, snp_rsp_addr, snp_rsp_inv, snp_rsp_tag);

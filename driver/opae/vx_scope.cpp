@@ -57,7 +57,7 @@ static std::thread g_timeout_thread;
 static std::mutex g_timeout_mutex;
 
 static void timeout_callback(fpga_handle fpga) {
-    std::this_thread::sleep_for(std::chrono::seconds{60});
+    std::this_thread::sleep_for(std::chrono::seconds{HANG_TIMEOUT});
     vx_scope_stop(fpga, HANG_TIMEOUT);
     fpgaClose(fpga);
     exit(0);
@@ -109,7 +109,7 @@ int vx_scope_start(fpga_handle hfpga, uint64_t delay) {
         // set start delay
         uint64_t cmd_delay = ((delay << 3) | CMD_SET_DELAY);
         CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_delay));    
-        std::cout << "scope start delay: " << delay << std::endl;
+        std::cout << "scope start delay: " << std::dec << delay << "s" << std::endl;
     }
 
 #ifdef HANG_TIMEOUT
@@ -133,8 +133,10 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
         // stop recording
         uint64_t cmd_stop = ((delay << 3) | CMD_SET_STOP);
         CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
-        std::cout << "scope stop delay: " << delay << std::endl;
+        std::cout << "scope stop delay: " << std::dec << delay << "s" << std::endl;
     }
+
+    std::cout << "scope trace dump begin..." << std::endl;
 
     std::ofstream ofs("vx_scope.vcd");
 
@@ -146,6 +148,8 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     dump_taps(ofs, -1);
     ofs << "$upscope $end" << std::endl;
     ofs << "enddefinitions $end" << std::endl;
+
+    std::cout << "OK" << std::flush << std::endl;
     
     uint64_t frame_width, max_frames, data_valid, offset, delta;   
     uint64_t timestamp = 0;
@@ -163,7 +167,7 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
     } while (true);
 
-    std::cout << "scope trace dump begin..." << std::endl;    
+    std::cout << "OK" << std::flush << std::endl;
 
     // get frame width
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_WIDTH));
@@ -235,7 +239,7 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
                     signal_id = num_taps;
                     if (0 == (frame_no % FRAME_FLUSH_SIZE)) {
                         ofs << std::flush;
-                        std::cout << "*** " << frame_no << " frames, timestamp=" << timestamp << std::endl;
+                        std::cout << "*** " << frame_no << " frames, timestamp=" << timestamp << std::flush << std::endl;
                     }
                 }                     
             }
