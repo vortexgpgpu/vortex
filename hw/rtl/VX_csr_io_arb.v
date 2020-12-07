@@ -20,11 +20,6 @@ module VX_csr_io_arb #(
     input wire [DATA_WIDTH-1:0]         req_data_in,
     output wire                         req_ready_in,
 
-    // output response
-    output wire                         rsp_valid_out,
-    output wire [DATA_WIDTH-1:0]        rsp_data_out,
-    input wire                          rsp_ready_out,
-
     // output request
     output wire [NUM_REQS-1:0]                 req_valid_out,
     output wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] req_addr_out,
@@ -35,7 +30,12 @@ module VX_csr_io_arb #(
     // input response
     input wire [NUM_REQS-1:0]                 rsp_valid_in,
     input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_in,
-    output wire [NUM_REQS-1:0]                rsp_ready_in
+    output wire [NUM_REQS-1:0]                rsp_ready_in,   
+
+    // output response
+    output wire                         rsp_valid_out,
+    output wire [DATA_WIDTH-1:0]        rsp_data_out,
+    input wire                          rsp_ready_out
 );
     if (NUM_REQS > 1) begin       
 
