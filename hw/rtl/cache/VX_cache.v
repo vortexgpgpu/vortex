@@ -19,16 +19,16 @@ module VX_cache #(
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 8, 
     // DRAM Response Queue Size
-    parameter DRPQ_SIZE                     = 4, 
-    // Snoop Req Queue Size
-    parameter SNRQ_SIZE                     = 4, 
+    parameter DRSQ_SIZE                     = 4, 
+    // Snoop Request Queue Size
+    parameter SREQ_SIZE                     = 4, 
 
-    // Core Writeback Queue Size
-    parameter CWBQ_SIZE                     = 4, 
+    // Core Response Queue Size
+    parameter CRSQ_SIZE                     = 4, 
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 4, 
     // Snoop Response Size
-    parameter SNPQ_SIZE                     = 4,
+    parameter SRSQ_SIZE                     = 4,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
@@ -265,11 +265,11 @@ module VX_cache #(
             .NUM_REQS           (NUM_REQS),
             .CREQ_SIZE          (CREQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
-            .DRPQ_SIZE          (DRPQ_SIZE),
-            .SNRQ_SIZE          (SNRQ_SIZE),
-            .CWBQ_SIZE          (CWBQ_SIZE),
+            .DRSQ_SIZE          (DRSQ_SIZE),
+            .SREQ_SIZE          (SREQ_SIZE),
+            .CRSQ_SIZE          (CRSQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),
-            .SNPQ_SIZE          (SNPQ_SIZE),
+            .SRSQ_SIZE          (SRSQ_SIZE),
             .DRAM_ENABLE        (DRAM_ENABLE),
             .FLUSH_ENABLE       (FLUSH_ENABLE),
             .WRITE_ENABLE       (WRITE_ENABLE),

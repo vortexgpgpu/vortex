@@ -273,7 +273,7 @@
 `define DNUM_REQUESTS           `NUM_THREADS
 
 // Snoop request tag bits
-`define DSNP_TAG_WIDTH          ((`NUM_CORES > 1) ? `LOG2UP(`L2SNRQ_SIZE) : `L2SNP_TAG_WIDTH)
+`define DSNP_TAG_WIDTH          ((`NUM_CORES > 1) ? `LOG2UP(`L2SREQ_SIZE) : `L2SNP_TAG_WIDTH)
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
@@ -366,7 +366,7 @@
 `define L2DRAM_TAG_WIDTH        (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`XDRAM_TAG_WIDTH+`CLOG2(`NUM_CORES)))
 
 // Snoop request tag bits
-`define L2SNP_TAG_WIDTH         ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SNRQ_SIZE) : `L3SNP_TAG_WIDTH)
+`define L2SNP_TAG_WIDTH         ((`NUM_CLUSTERS > 1) ? `LOG2UP(`L3SREQ_SIZE) : `L3SNP_TAG_WIDTH)
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 

@@ -5,9 +5,9 @@ module VX_snp_forwarder #(
     parameter SRC_ADDR_WIDTH = 1, 
     parameter DST_ADDR_WIDTH = 1, 
     parameter NUM_REQS       = 1, 
-    parameter SNRQ_SIZE      = 1,
+    parameter SREQ_SIZE      = 1,
     parameter TAG_IN_WIDTH   = 1,
-    parameter TAG_OUT_WIDTH  = `LOG2UP(SNRQ_SIZE)
+    parameter TAG_OUT_WIDTH  = `LOG2UP(SREQ_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -64,7 +64,7 @@ module VX_snp_forwarder #(
             );
         end
 
-        reg [REQ_QUAL_BITS:0] pending_cntrs [SNRQ_SIZE-1:0];
+        reg [REQ_QUAL_BITS:0] pending_cntrs [SREQ_SIZE-1:0];
         
         wire [TAG_OUT_WIDTH-1:0] sfq_write_addr, sfq_read_addr;
         wire sfq_full;
@@ -84,7 +84,7 @@ module VX_snp_forwarder #(
 
         VX_cam_buffer #(
             .DATAW (SRC_ADDR_WIDTH + 1 + TAG_IN_WIDTH),
-            .SIZE  (SNRQ_SIZE)
+            .SIZE  (SREQ_SIZE)
         ) req_metadata_buf (
             .clk            (clk),
             .reset          (reset),

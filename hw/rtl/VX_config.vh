@@ -202,9 +202,9 @@
 `define DCREQ_SIZE 4
 `endif
 
-// Core Writeback Queue Size
-`ifndef DCWBQ_SIZE
-`define DCWBQ_SIZE 4
+// Core Response Queue Size
+`ifndef DCRSQ_SIZE
+`define DCRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -218,18 +218,18 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef DDRPQ_SIZE
-`define DDRPQ_SIZE 4
-`endif
-
-// Snoop Response Queue Size
-`ifndef DSNPQ_SIZE
-`define DSNPQ_SIZE 4
+`ifndef DDRSQ_SIZE
+`define DDRSQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size
-`ifndef DSNRQ_SIZE
-`define DSNRQ_SIZE 4
+`ifndef DSREQ_SIZE
+`define DSREQ_SIZE 4
+`endif
+
+// Snoop Response Queue Size
+`ifndef DSRSQ_SIZE
+`define DSRSQ_SIZE 4
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -244,9 +244,9 @@
 `define ICREQ_SIZE 4
 `endif
 
-// Core Writeback Queue Size
-`ifndef ICWBQ_SIZE
-`define ICWBQ_SIZE 4
+// Core Response Queue Size
+`ifndef ICRSQ_SIZE
+`define ICRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -260,8 +260,8 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef IDRPQ_SIZE
-`define IDRPQ_SIZE 4
+`ifndef IDRSQ_SIZE
+`define IDRSQ_SIZE 4
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -281,9 +281,9 @@
 `define SCREQ_SIZE 4
 `endif
 
-// Core Writeback Queue Size
-`ifndef SCWBQ_SIZE
-`define SCWBQ_SIZE 4
+// Core Response Queue Size
+`ifndef SCRSQ_SIZE
+`define SCRSQ_SIZE 4
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////
@@ -303,9 +303,9 @@
 `define L2CREQ_SIZE 4
 `endif
 
-// Core Writeback Queue Size
-`ifndef L2CWBQ_SIZE
-`define L2CWBQ_SIZE 4
+// Core Response Queue Size
+`ifndef L2CRSQ_SIZE
+`define L2CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -319,18 +319,18 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef L2DRPQ_SIZE
-`define L2DRPQ_SIZE 4
+`ifndef L2DRSQ_SIZE
+`define L2DRSQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size
-`ifndef L2SNRQ_SIZE
-`define L2SNRQ_SIZE 4
+`ifndef L2SREQ_SIZE
+`define L2SREQ_SIZE 4
 `endif
 
 // Snoop Response Queue Size
-`ifndef L2SNPQ_SIZE
-`define L2SNPQ_SIZE 4
+`ifndef L2SRSQ_SIZE
+`define L2SRSQ_SIZE 4
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -350,9 +350,9 @@
 `define L3CREQ_SIZE 4
 `endif
 
-// Core Writeback Queue Size
-`ifndef L3CWBQ_SIZE
-`define L3CWBQ_SIZE 4
+// Core Response Queue Size
+`ifndef L3CRSQ_SIZE
+`define L3CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -366,18 +366,18 @@
 `endif
 
 // DRAM Response Queue Size
-`ifndef L3DRPQ_SIZE
-`define L3DRPQ_SIZE 4
+`ifndef L3DRSQ_SIZE
+`define L3DRSQ_SIZE 4
 `endif
 
 // Snoop Request Queue Size
-`ifndef L3SNRQ_SIZE
-`define L3SNRQ_SIZE 4
+`ifndef L3SREQ_SIZE
+`define L3SREQ_SIZE 4
 `endif
 
 // Snoop Response Queue Size
-`ifndef L3SNPQ_SIZE
-`define L3SNPQ_SIZE 4
+`ifndef L3SRSQ_SIZE
+`define L3SRSQ_SIZE 4
 `endif
 
 `endif
