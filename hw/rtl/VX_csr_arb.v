@@ -4,8 +4,7 @@ module VX_csr_arb (
     input wire          clk,    
     input wire          reset,
 
-    // bus select
-    input wire          select_io_req,
+    // bus select    
     input wire          select_io_rsp,
 
     // input requets
@@ -28,19 +27,20 @@ module VX_csr_arb (
     wire [31:0] csr_core_req_mask = csr_core_req_if.rs2_is_imm ? 32'(csr_core_req_if.rs1) : csr_core_req_if.rs1_data;
 
     // requests
-    assign csr_pipe_req_if.valid     = (~select_io_req) ? csr_core_req_if.valid    : csr_io_req_if.valid;
-    assign csr_pipe_req_if.wid       = (~select_io_req) ? csr_core_req_if.wid      : 0; 
-    assign csr_pipe_req_if.tmask     = (~select_io_req) ? csr_core_req_if.tmask    : 0;
-    assign csr_pipe_req_if.PC        = (~select_io_req) ? csr_core_req_if.PC       : 0;
-    assign csr_pipe_req_if.op_type   = (~select_io_req) ? csr_core_req_if.op_type  : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
-    assign csr_pipe_req_if.csr_addr  = (~select_io_req) ? csr_core_req_if.csr_addr : csr_io_req_if.addr;
-    assign csr_pipe_req_if.csr_mask  = (~select_io_req) ? csr_core_req_mask        : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
-    assign csr_pipe_req_if.rd        = (~select_io_req) ? csr_core_req_if.rd       : 0;
-    assign csr_pipe_req_if.wb        = (~select_io_req) ? csr_core_req_if.wb       : 0;
-    assign csr_pipe_req_if.is_io     = select_io_req;
+    assign csr_pipe_req_if.valid     = csr_core_req_if.valid || csr_io_req_if.valid;
+    assign csr_pipe_req_if.wid       = csr_core_req_if.wid; 
+    assign csr_pipe_req_if.tmask     = csr_core_req_if.tmask;
+    assign csr_pipe_req_if.PC        = csr_core_req_if.PC;
+    assign csr_pipe_req_if.op_type   = csr_core_req_if.valid ? csr_core_req_if.op_type  : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
+    assign csr_pipe_req_if.csr_addr  = csr_core_req_if.valid ? csr_core_req_if.csr_addr : csr_io_req_if.addr;
+    assign csr_pipe_req_if.csr_mask  = csr_core_req_if.valid ? csr_core_req_mask        : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
+    assign csr_pipe_req_if.rd        = csr_core_req_if.rd;
+    assign csr_pipe_req_if.wb        = csr_core_req_if.wb;
+    assign csr_pipe_req_if.is_io     = !csr_core_req_if.valid;
 
-    assign csr_core_req_if.ready = csr_pipe_req_if.ready && (~select_io_req);
-    assign csr_io_req_if.ready    = csr_pipe_req_if.ready && select_io_req;   
+    // core always takes priority over IO bus
+    assign csr_core_req_if.ready = csr_pipe_req_if.ready;
+    assign csr_io_req_if.ready   = csr_pipe_req_if.ready && !csr_core_req_if.valid;   
     
     // responses
     assign csr_io_rsp_if.valid  = csr_pipe_rsp_if.valid & select_io_rsp;

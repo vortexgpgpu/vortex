@@ -22,14 +22,12 @@ module VX_csr_unit #(
     VX_csr_pipe_req_if csr_pipe_req_if();
     VX_commit_if       csr_pipe_rsp_if();
 
-    wire select_io_req = csr_io_req_if.valid;
     wire select_io_rsp;
 
     VX_csr_arb csr_arb (
         .clk              (clk),
         .reset            (reset),
         
-        .select_io_req    (select_io_req),
         .select_io_rsp    (select_io_rsp),
 
         .csr_core_req_if  (csr_req_if),
