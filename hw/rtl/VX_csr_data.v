@@ -6,6 +6,12 @@ module VX_csr_data #(
     input wire clk,
     input wire reset,
 
+    // PERF: total reads
+    `ifdef PERF_ENABLE
+    VX_perf_cache_if                perf_cache_if,
+    VX_perf_pipeline_stall_if       perf_pipeline_stall_if,
+    `endif
+
     VX_cmt_to_csr_if                cmt_to_csr_if,
     VX_fpu_to_csr_if                fpu_to_csr_if,  
 
@@ -113,6 +119,51 @@ module VX_csr_data #(
             `CSR_NT        : read_data_r = `NUM_THREADS;
             `CSR_NW        : read_data_r = `NUM_WARPS;
             `CSR_NC        : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
+            
+            `ifdef PERF_ENABLE
+            // PERF: cache
+            `CSR_R_MISS       : read_data_r = perf_cache_if.read_miss[31:0];
+            `CSR_R_MISS_H     : read_data_r = perf_cache_if.read_miss[63:32];
+            `CSR_W_MISS       : read_data_r = perf_cache_if.write_miss[31:0];
+            `CSR_W_MISS_H     : read_data_r = perf_cache_if.write_miss[63:32];
+            `CSR_DRAM_ST      : read_data_r = perf_cache_if.dram_stall[31:0];
+            `CSR_DRAM_ST_H    : read_data_r = perf_cache_if.dram_stall[63:32];
+            `CSR_CORE_RSP_ST  : read_data_r = perf_cache_if.core_rsp_stall[31:0];
+            `CSR_CORE_RSP_ST_H: read_data_r = perf_cache_if.core_rsp_stall[63:32];
+            `CSR_MSRQ_ST      : read_data_r = perf_cache_if.msrq_stall[31:0];
+            `CSR_MSRQ_ST_H    : read_data_r = perf_cache_if.msrq_stall[63:32];
+            `CSR_TOTAL_ST     : read_data_r = perf_cache_if.total_stall[31:0];
+            `CSR_TOTAL_ST_H   : read_data_r = perf_cache_if.total_stall[63:32];
+            `CSR_TOTAL_R      : read_data_r = perf_cache_if.total_read[31:0];
+            `CSR_TOTAL_R_H    : read_data_r = perf_cache_if.total_read[63:32];
+            `CSR_TOTAL_W      : read_data_r = perf_cache_if.total_write[31:0];
+            `CSR_TOTAL_W_H    : read_data_r = perf_cache_if.total_write[63:32];
+            `CSR_TOTAL_EV     : read_data_r = perf_cache_if.total_eviction[31:0];
+            `CSR_TOTAL_EV_H   : read_data_r = perf_cache_if.total_eviction[63:32];
+            `CSR_DRAM_LAT     : read_data_r = perf_cache_if.dram_latency[31:0];
+            `CSR_DRAM_LAT_H   : read_data_r = perf_cache_if.dram_latency[63:32];
+            `CSR_DRAM_RSP     : read_data_r = perf_cache_if.dram_rsp[31:0];
+            `CSR_DRAM_RSP_H   : read_data_r = perf_cache_if.dram_rsp[63:32];
+            // PERF: pipeline stalls
+            `CSR_LSU_ST       : read_data_r = perf_pipeline_stall_if.lsu_stall[31:0];
+            `CSR_LSU_ST_H     : read_data_r = perf_pipeline_stall_if.lsu_stall[63:32];
+            `CSR_FPU_ST       : read_data_r = perf_pipeline_stall_if.fpu_stall[31:0];
+            `CSR_FPU_ST_H     : read_data_r = perf_pipeline_stall_if.fpu_stall[63:32];
+            `CSR_MUL_ST       : read_data_r = perf_pipeline_stall_if.mul_stall[31:0];
+            `CSR_MUL_ST_H     : read_data_r = perf_pipeline_stall_if.mul_stall[63:32];
+            `CSR_CSR_ST       : read_data_r = perf_pipeline_stall_if.csr_stall[31:0];
+            `CSR_CSR_ST_H     : read_data_r = perf_pipeline_stall_if.csr_stall[63:32];
+            `CSR_ALU_ST       : read_data_r = perf_pipeline_stall_if.alu_stall[31:0];
+            `CSR_ALU_ST_H     : read_data_r = perf_pipeline_stall_if.alu_stall[63:32];
+            `CSR_GPU_ST       : read_data_r = perf_pipeline_stall_if.gpu_stall[31:0];
+            `CSR_GPU_ST_H     : read_data_r = perf_pipeline_stall_if.gpu_stall[63:32];
+            `CSR_IBUF_ST      : read_data_r = perf_pipeline_stall_if.ibuffer_stall[31:0];
+            `CSR_IBUF_ST_H    : read_data_r = perf_pipeline_stall_if.ibuffer_stall[63:32];
+            `CSR_SCRBRD_ST    : read_data_r = perf_pipeline_stall_if.scoreboard_stall[31:0];
+            `CSR_SCRBRD_ST_H  : read_data_r = perf_pipeline_stall_if.scoreboard_stall[63:32];
+            `CSR_ICACHE_ST    : read_data_r = perf_pipeline_stall_if.icache_stall[31:0];
+            `CSR_ICACHE_ST_H  : read_data_r = perf_pipeline_stall_if.icache_stall[63:32];
+            `endif
             
             `CSR_SATP      : read_data_r = 32'(csr_satp);
             

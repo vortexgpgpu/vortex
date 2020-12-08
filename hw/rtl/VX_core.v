@@ -66,6 +66,10 @@ module VX_core #(
     output wire                             busy, 
     output wire                             ebreak
 );
+    `ifdef PERF_ENABLE
+    VX_perf_cache_if    perf_cache_if();
+    `endif
+
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
         .DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH),
@@ -220,6 +224,11 @@ module VX_core #(
         .csr_io_rsp_data    (csr_io_rsp_data),
         .csr_io_rsp_ready   (csr_io_rsp_ready),
 
+        // PERF: total reads
+        `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_cache_if),
+        `endif
+
         // Status
         .busy(busy), 
         .ebreak(ebreak)
@@ -238,6 +247,11 @@ module VX_core #(
         // Core <-> Dcache
         .core_dcache_req_if (core_dcache_req_if),
         .core_dcache_rsp_if (core_dcache_rsp_if),
+        
+        // PERF: total reads
+        `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_cache_if),
+        `endif
 
         // Core <-> Icache
         .core_icache_req_if (core_icache_req_if),
