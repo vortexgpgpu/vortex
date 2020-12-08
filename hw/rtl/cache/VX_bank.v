@@ -264,7 +264,9 @@ module VX_bank #(
         .full           (creq_full)
     );   
 
-    reg [$clog2(MSHR_SIZE+1)-1:0]   mshr_pending_size;    
+    reg [$clog2(MSHR_SIZE+1)-1:0]   mshr_pending_size;   
+    wire [$clog2(MSHR_SIZE+1)-1:0]  mshr_pending_size_n;   
+    reg                             mshr_going_full; 
     wire                            mshr_pop;    
     wire                            mshr_valid_st0;
     wire[`REQS_BITS-1:0]            mshr_tid_st0;
@@ -346,14 +348,12 @@ module VX_bank #(
     wire dreq_push_stall;    
     wire srsq_push_stall;
     wire pipeline_stall;
-
+    
     wire is_mshr_miss_st2 = valid_st2 && is_mshr_st2 && (miss_st2 || force_miss_st2);
     wire is_mshr_miss_st3 = valid_st3 && is_mshr_st3 && (miss_st3 || force_miss_st3);
 
     wire creq_commit = valid_st1 && core_req_hit_st1 && !pipeline_stall;
 
-    wire mshr_going_full = (mshr_pending_size == MSHR_SIZE);
-    
     // determine which queue to pop next in piority order
     wire mshr_pop_unqual = mshr_valid_st0;
     wire drsq_pop_unqual = !mshr_pop_unqual && !drsq_empty;
@@ -367,13 +367,16 @@ module VX_bank #(
     assign sreq_pop = sreq_pop_unqual && !pipeline_stall;
 
     // MSHR pending size    
+    assign mshr_pending_size_n = mshr_pending_size + 
+                ((creq_pop && !creq_commit) ? 1 : ((creq_commit && !creq_pop) ? -1 : 0));
     always @(posedge clk) begin
         if (reset) begin
             mshr_pending_size <= 0;
+            mshr_going_full   <= 0;
         end else begin
-            mshr_pending_size <= mshr_pending_size + 
-                ((creq_pop && !creq_commit) ? 1 : ((creq_commit && !creq_pop) ? -1 : 0));
-        end
+            mshr_pending_size <= mshr_pending_size_n;
+            mshr_going_full <= (mshr_pending_size_n == MSHR_SIZE);
+        end        
     end
 
     assign is_mshr_st0 = mshr_pop_unqual;
@@ -736,7 +739,7 @@ end
             .enqueue_byteen_st3 (req_byteen_st3),
             .enqueue_is_snp_st3 (is_snp_st3),
             .enqueue_snp_inv_st3(snp_inv_st3),
-            .enqueue_mshr_st3   (is_mshr_st3),
+            .enqueue_is_mshr_st3(is_mshr_st3),
             .enqueue_ready_st3  (mshr_init_ready_state_st3),
             .enqueue_full       (mshr_full),
 

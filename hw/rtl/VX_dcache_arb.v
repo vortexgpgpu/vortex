@@ -36,7 +36,7 @@ module VX_dcache_arb (
     wire core_req_valid;
 
     VX_skid_buffer #(
-        .DATAW    (REQ_DATAW)
+        .DATAW (REQ_DATAW)
     ) req_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -121,9 +121,10 @@ module VX_dcache_arb (
     assign rsp_valid_in[2] = (| io_rsp_if.valid);
 
     VX_stream_arbiter #(
-        .NUM_REQS (3),
-        .DATAW    (RSP_DATAW),
-        .BUFFERED (1)
+        .NUM_REQS   (3),
+        .DATAW      (RSP_DATAW),        
+        .IN_BUFFER  (1),
+        .OUT_BUFFER (1)
     ) rsp_arb (
         .clk        (clk),
         .reset      (reset),
@@ -138,6 +139,7 @@ module VX_dcache_arb (
     assign cache_rsp_if.ready = rsp_ready_in[0];
     assign smem_rsp_if.ready  = rsp_ready_in[1];
     assign io_rsp_if.ready    = rsp_ready_in[2];
+
     assign core_rsp_if.valid  = core_rsp_tmask & {`NUM_THREADS{core_rsp_valid}};
 
 endmodule

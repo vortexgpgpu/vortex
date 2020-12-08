@@ -149,8 +149,6 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
     ofs << "$upscope $end" << std::endl;
     ofs << "enddefinitions $end" << std::endl;
 
-    std::cout << "OK" << std::flush << std::endl;
-    
     uint64_t frame_width, max_frames, data_valid, offset, delta;   
     uint64_t timestamp = 0;
     uint64_t frame_offset = 0;
@@ -166,8 +164,6 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
             break;
         std::this_thread::sleep_for(std::chrono::seconds(1));
     } while (true);
-
-    std::cout << "OK" << std::flush << std::endl;
 
     // get frame width
     CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_WIDTH));
@@ -239,7 +235,7 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
                     signal_id = num_taps;
                     if (0 == (frame_no % FRAME_FLUSH_SIZE)) {
                         ofs << std::flush;
-                        std::cout << "*** " << frame_no << " frames, timestamp=" << timestamp << std::flush << std::endl;
+                        std::cout << "*** " << frame_no << "/" << max_frames << " frames" << std::endl;
                     }
                 }                     
             }

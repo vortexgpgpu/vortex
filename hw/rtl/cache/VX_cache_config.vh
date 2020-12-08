@@ -15,7 +15,7 @@
 `define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
 //                                data         metadata               word_sel                  is_snp  snp_inv 
-`define MSHR_METADATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1     + 1)
+`define MSHR_DATA_WIDTH     (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1     + 1)
 
 `define BANK_BITS               `LOG2UP(NUM_BANKS)
 

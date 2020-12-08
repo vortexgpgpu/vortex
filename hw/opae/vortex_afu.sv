@@ -548,7 +548,7 @@ VX_mem_arb #(
   .ADDR_WIDTH    ($bits(t_local_mem_addr)),
   .TAG_IN_WIDTH  (AVS_REQ_TAGW),
   .TAG_OUT_WIDTH (AVS_REQ_TAGW+1)
-) vx_cci_avs_arb (
+) dram_arb (
   .clk            (clk),
   .reset          (reset),
 
