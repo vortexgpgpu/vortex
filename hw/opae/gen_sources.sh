@@ -1,7 +1,10 @@
 #!/bin/bash
 
-dir_list='../rtl/libs ../rtl/cache ../rtl/interfaces ../rtl ../rtl/fp_cores/fpnew/src/common_cells/include ../rtl/fp_cores ../rtl/fp_cores/altera'
-exclude_list='VX_fpnew.v' 
+rtl_dir="../rtl"
+
+dir_list="$rtl_dir/libs $rtl_dir/cache $rtl_dir/interfaces $rtl_dir $rtl_dir/fp_cores/fpnew/src/common_cells/include $rtl_dir/fp_cores $rtl_dir/fp_cores/altera $rtl_dir/afu"
+
+exclude_list="VX_fpnew.v"
 
 # read design sources
 for dir in $dir_list; do

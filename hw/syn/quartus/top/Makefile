@@ -2,7 +2,7 @@ PROJECT = vortex_afu
 TOP_LEVEL_ENTITY = vortex_afu
 SRC_FILE = vortex_afu.sv
 FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache;../../../opae;../../../opae/ccip
+RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache;../../../rtl/afu;../../../rtl/afu/ccip
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family

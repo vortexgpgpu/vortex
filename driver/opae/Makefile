@@ -93,7 +93,8 @@ $(ASE_DIR):
 
 clean:
 	rm -rf $(PROJECT) $(PROJECT_ASE) $(PROJECT_VLSIM) *.o .depend
-	$(MAKE) -C vlsim clean	
+	$(MAKE) -C vlsim clean
+	$(MAKE) -C ase clean	
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
