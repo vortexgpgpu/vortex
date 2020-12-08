@@ -369,6 +369,11 @@ module VX_cluster #(
             .core_rsp_tag       (core_dram_rsp_tag),
             .core_rsp_ready     (core_dram_rsp_ready),
 
+            // PERF: total read
+            `ifdef PERF_ENABLE
+            `UNUSED_PIN (perf_cache_if),
+            `endif
+            
             // DRAM request
             .dram_req_valid     (dram_req_valid),
             .dram_req_rw        (dram_req_rw),        

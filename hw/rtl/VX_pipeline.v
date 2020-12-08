@@ -51,6 +51,10 @@ module VX_pipeline #(
     output wire[31:0]                       csr_io_rsp_data,
     input wire                              csr_io_rsp_ready,      
 
+    // PERF: total reads
+    `ifdef PERF_ENABLE
+    VX_perf_cache_if                        perf_cache_if,
+    `endif
     // Status
     output wire                             busy, 
     output wire                             ebreak
@@ -171,6 +175,10 @@ module VX_pipeline #(
     VX_commit_if        fpu_commit_if();     
     VX_commit_if        gpu_commit_if();     
 
+    `ifdef PERF_ENABLE
+    VX_perf_pipeline_stall_if perf_pipeline_stall_if();
+    `endif
+
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
@@ -206,6 +214,10 @@ module VX_pipeline #(
         .clk            (clk),
         .reset          (reset),        
 
+        `ifdef PERF_ENABLE
+        .perf_pipeline_stall_if (perf_pipeline_stall_if),
+        `endif
+
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
 
@@ -224,7 +236,13 @@ module VX_pipeline #(
         
         .clk            (clk),
         .reset          (reset),    
-        
+
+        // PERF: total reads
+        `ifdef PERF_ENABLE
+        .perf_cache_if    (perf_cache_if),
+        .perf_pipeline_stall_if (perf_pipeline_stall_if),
+        `endif 
+
         .dcache_req_if  (core_dcache_req_if),
         .dcache_rsp_if  (core_dcache_rsp_if),
         
@@ -272,4 +290,27 @@ module VX_pipeline #(
         .cmt_to_csr_if  (cmt_to_csr_if)
     );
 
+
+    `ifdef PERF_ENABLE
+    reg [63:0] perf_icache_stall;
+    reg [63:0] perf_ibuffer_stall;
+    always @ (posedge clk) begin
+        if(reset) begin
+            perf_icache_stall <= 0;
+            perf_ibuffer_stall <= 0;
+        end else begin
+            // icache_stall
+            if (core_icache_req_if.valid & !core_icache_req_if.ready) begin
+                perf_icache_stall <= perf_icache_stall + 64'd1;
+            end
+            // ibuffer_stall: decode_if == issue->ibuffer->ibuf_enq_if
+            if(decode_if.valid & !decode_if.ready) begin
+                perf_ibuffer_stall <= perf_ibuffer_stall + 64'd1;
+            end
+        end
+    end
+    assign perf_pipeline_stall_if.icache_stall = perf_icache_stall; 
+    assign perf_pipeline_stall_if.ibuffer_stall = perf_ibuffer_stall;
+    `endif
+    
 endmodule

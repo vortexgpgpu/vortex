@@ -12,6 +12,10 @@ module VX_mem_unit # (
     VX_cache_core_req_if    core_dcache_req_if,
     VX_cache_core_rsp_if    core_dcache_rsp_if,
     
+    `ifdef PERF_ENABLE
+    VX_perf_cache_if        perf_cache_if,
+    `endif
+
     // Core <-> Icache    
     VX_cache_core_req_if    core_icache_req_if,  
     VX_cache_core_rsp_if    core_icache_rsp_if,
@@ -28,6 +32,11 @@ module VX_mem_unit # (
     VX_cache_core_req_if    io_req_if,
     VX_cache_core_rsp_if    io_rsp_if
 );
+    
+    `ifdef PERF_ENABLE
+    VX_perf_cache_if        perf_cache_smem_if(), perf_cache_icache_if(), perf_cache_dcache_if();
+    `endif
+
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH (`DDRAM_LINE_WIDTH),
         .DRAM_ADDR_WIDTH (`DDRAM_ADDR_WIDTH),
@@ -124,6 +133,10 @@ module VX_mem_unit # (
         .core_rsp_tag       (dcache_rsp_if.tag),
         .core_rsp_ready     (dcache_rsp_if.ready),
 
+        `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_cache_dcache_if),
+        `endif
+
         // DRAM request
         .dram_req_valid     (dcache_dram_req_if.valid),
         .dram_req_rw        (dcache_dram_req_if.rw),        
@@ -195,6 +208,11 @@ module VX_mem_unit # (
         .core_rsp_data      (core_icache_rsp_if.data),
         .core_rsp_tag       (core_icache_rsp_if.tag),
         .core_rsp_ready     (core_icache_rsp_if.ready),
+
+        // PERF: cache read
+        `ifdef PERF_ENABLE
+        .perf_cache_if          (perf_cache_icache_if),
+        `endif
 
         // DRAM Req
         .dram_req_valid     (icache_dram_req_if.valid),
@@ -268,6 +286,11 @@ module VX_mem_unit # (
         .core_rsp_tag       (smem_rsp_if.tag),
         .core_rsp_ready     (smem_rsp_if.ready),
 
+        // PERF: cache read
+        `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_cache_smem_if),
+        `endif
+
         // DRAM request
         `UNUSED_PIN (dram_req_valid),
         `UNUSED_PIN (dram_req_rw),        
@@ -340,4 +363,42 @@ module VX_mem_unit # (
         .rsp_ready_in   (dram_rsp_if.ready)
     );
 
+    // PERF: cache
+    // TODO: some cache has dram and write disabled, hence some stats can can be removed.
+    `ifdef PERF_ENABLE
+    assign perf_cache_if.read_miss =        perf_cache_smem_if.read_miss + 
+                                            perf_cache_icache_if.read_miss + 
+                                            perf_cache_dcache_if.read_miss;
+    assign perf_cache_if.write_miss =       perf_cache_smem_if.write_miss + 
+                                            perf_cache_icache_if.write_miss + 
+                                            perf_cache_dcache_if.write_miss;
+    assign perf_cache_if.dram_stall =       perf_cache_smem_if.dram_stall + 
+                                            perf_cache_icache_if.dram_stall + 
+                                            perf_cache_dcache_if.dram_stall;
+    assign perf_cache_if.core_rsp_stall =   perf_cache_smem_if.core_rsp_stall + 
+                                            perf_cache_icache_if.core_rsp_stall + 
+                                            perf_cache_dcache_if.core_rsp_stall;
+    assign perf_cache_if.msrq_stall =       perf_cache_smem_if.msrq_stall + 
+                                            perf_cache_icache_if.msrq_stall + 
+                                            perf_cache_dcache_if.msrq_stall;
+    assign perf_cache_if.total_stall =      perf_cache_smem_if.total_stall + 
+                                            perf_cache_icache_if.total_stall + 
+                                            perf_cache_dcache_if.total_stall;
+    assign perf_cache_if.total_read =       perf_cache_smem_if.total_read + 
+                                            perf_cache_icache_if.total_read + 
+                                            perf_cache_dcache_if.total_read;
+    assign perf_cache_if.total_write =      perf_cache_smem_if.total_write +
+                                            perf_cache_icache_if.total_write + 
+                                            perf_cache_dcache_if.total_write;
+    assign perf_cache_if.total_eviction =   perf_cache_smem_if.total_eviction + 
+                                            perf_cache_icache_if.total_eviction + 
+                                            perf_cache_dcache_if.total_eviction;
+    assign perf_cache_if.dram_latency =     perf_cache_smem_if.dram_latency + 
+                                            perf_cache_icache_if.dram_latency + 
+                                            perf_cache_dcache_if.dram_latency;
+    assign perf_cache_if.dram_rsp =         perf_cache_smem_if.dram_rsp + 
+                                            perf_cache_icache_if.dram_rsp + 
+                                            perf_cache_dcache_if.dram_rsp;
+    `endif
+    
 endmodule

@@ -70,7 +70,12 @@ module VX_cache #(
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]         core_rsp_data,
     output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     input  wire                                         core_rsp_ready,   
-    
+
+    // PERF
+`ifdef PERF_ENABLE
+    VX_perf_cache_if                        perf_cache_if,
+`endif
+
     // DRAM request
     output wire                             dram_req_valid,
     output wire                             dram_req_rw,    
@@ -130,7 +135,16 @@ module VX_cache #(
 
     wire [NUM_BANKS-1:0]                        per_bank_miss; 
     assign miss_vec = per_bank_miss;  
-    
+
+
+`ifdef PERF_ENABLE
+    wire [NUM_BANKS-1:0] perf_msrq_stall_per_bank;
+    wire [NUM_BANKS-1:0] perf_total_stall_per_bank;
+    wire [NUM_BANKS-1:0] perf_evict_per_bank;
+    wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
+    wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
+`endif
+
     if (NUM_BANKS == 1) begin
         assign snp_req_ready = per_bank_snp_req_ready;
     end else begin
@@ -311,6 +325,15 @@ module VX_cache #(
             .dram_rsp_addr      (curr_bank_dram_rsp_addr),
             .dram_rsp_ready     (curr_bank_dram_rsp_ready),
 
+            // PERF: perf_msrq_stall
+            `ifdef PERF_ENABLE
+            .perf_msrq_stall         (perf_msrq_stall_per_bank[i]),
+            .perf_total_stall        (perf_total_stall_per_bank[i]),
+            .perf_evict              (perf_evict_per_bank[i]),
+            .perf_read_miss          (perf_read_miss_per_bank[i]),
+            .perf_write_miss         (perf_write_miss_per_bank[i]),
+            `endif
+
             // Snoop request
             .snp_req_valid      (curr_bank_snp_req_valid),
             .snp_req_addr       (curr_bank_snp_req_addr),
@@ -407,4 +430,148 @@ module VX_cache #(
         `UNUSED_VAR (snp_rsp_ready)        
     end
     
+    `ifdef PERF_ENABLE
+    // per cycle: core_req_r, core_req_w
+    reg[($clog2(NUM_REQS+1)-1):0] perf_core_req_r_per_cycle, perf_core_req_w_per_cycle;
+    if (CORE_TAG_ID_BITS != 0) begin // core_req_rw is 1-bit wide
+        VX_countones #( // core_req_r
+            .N(NUM_REQS) 
+        ) perf_countones_core_req_r_count (
+            .valids     (core_req_valid & {NUM_REQS{(~core_req_rw) & core_req_ready}}),
+            .count      (perf_core_req_r_per_cycle)
+        );
+        VX_countones #( // core_req_w
+            .N(NUM_REQS) 
+        ) perf_countones_core_req_w_count (
+            .valids     (core_req_valid & {NUM_REQS{(core_req_rw) & core_req_ready}}),
+            .count      (perf_core_req_w_per_cycle)
+        );
+    end else begin // core_req_rw is NUM_REQS-bit wide
+        VX_countones #( // core_req_r
+            .N(NUM_REQS) 
+        ) perf_countones_core_req_r_count (
+            .valids     (core_req_valid & (~core_req_rw) & {NUM_REQS{core_req_ready}}),
+            .count      (perf_core_req_r_per_cycle)
+        );
+        VX_countones #( // core_req_w
+            .N(NUM_REQS) 
+        ) perf_countones_core_req_w_count (
+            .valids     (core_req_valid & (core_req_rw) & {NUM_REQS{core_req_ready}}),
+            .count      (perf_core_req_w_per_cycle)
+        );
+    end
+    // per cycle: dram_latency
+    reg[63:0] perf_dram_lat_per_cycle;
+    always@(posedge clk) begin
+        if(reset) begin
+            perf_dram_lat_per_cycle <= 0;
+        end else begin
+            if(dram_req_valid & (~dram_req_rw) & dram_req_ready & dram_rsp_valid & dram_rsp_ready) begin
+                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle;
+            end else if(dram_req_valid & (~dram_req_rw) & dram_req_ready) begin
+                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 64'd1;
+            end else if(dram_rsp_valid & dram_rsp_ready) begin
+                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle - 64'd1;
+            end
+        end
+    end
+    // per cycle: msrq stalls, total stalls, total eviction, read miss, write miss
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_msrq_stall_per_cycle;
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_total_stall_per_cycle;
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_total_eviction_per_cycle;
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_read_miss_per_cycle;
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_write_miss_per_cycle;
+    VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_msrq_stall_count (
+        .valids     (perf_msrq_stall_per_bank),
+        .count      (perf_msrq_stall_per_cycle)
+    );
+    VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_total_stall_count (
+        .valids     (perf_total_stall_per_bank),
+        .count      (perf_total_stall_per_cycle)
+    );
+    VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_total_evict_count (
+        .valids     (perf_evict_per_bank),
+        .count      (perf_total_eviction_per_cycle)
+    );
+    VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_read_miss_count (
+        .valids     (perf_read_miss_per_bank),
+        .count      (perf_read_miss_per_cycle)
+    );
+    VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_write_miss_count (
+        .valids     (perf_write_miss_per_bank),
+        .count      (perf_write_miss_per_cycle)
+    );
+    reg [63:0] perf_core_req_r, perf_core_req_w;
+    reg [63:0] perf_dram_lat, perf_dram_rsp;
+    reg [63:0] perf_msrq_stall;
+    reg [63:0] perf_total_stall;
+    reg [63:0] perf_total_eviction;
+    reg [63:0] perf_read_miss, perf_write_miss;
+    reg [63:0] perf_core_rsp_stall, perf_dram_stall;
+    always @ (posedge clk) begin
+        if (reset) begin
+            perf_core_req_r <= 0;
+            perf_core_req_w <= 0;
+            perf_dram_lat <= 0;
+            perf_dram_rsp <= 0;
+            perf_msrq_stall <= 0;
+            perf_total_stall <= 0;
+            perf_total_eviction <= 0;
+            perf_read_miss <= 0;
+            perf_write_miss <= 0;
+            perf_core_rsp_stall <= 0;
+            perf_dram_stall <= 0;
+        end else begin
+            // core_req_r, core_req_w
+            perf_core_req_r <= perf_core_req_r + $bits(perf_core_req_r)'(perf_core_req_r_per_cycle);
+            perf_core_req_w <= perf_core_req_w + $bits(perf_core_req_w)'(perf_core_req_w_per_cycle);
+            // dram_latency
+            perf_dram_lat <= perf_dram_lat + perf_dram_lat_per_cycle;
+            if (dram_rsp_valid & dram_rsp_ready) begin
+                perf_dram_rsp <= perf_dram_rsp + 64'd1;
+            end
+            // miss reserve queue stalls: bank->msrq_push_stall
+            perf_msrq_stall <= perf_msrq_stall + $bits(perf_msrq_stall)'(perf_msrq_stall_per_cycle);
+            // total stalls: from bank->pipeline_stall
+            perf_total_stall <= perf_total_stall + $bits(perf_total_stall)'(perf_total_stall_per_cycle);
+            // total eviction: from bank-> dwbq_push & do_writeback_st3 & !is_snp_st3
+            perf_total_eviction <= perf_total_eviction + $bits(perf_total_eviction)'(perf_total_eviction_per_cycle);
+            // read miss: from bank-> !pipeline_stall & miss_st1 & !is_msrq_st1 & !mem_rw_st1
+            perf_read_miss <= perf_read_miss + $bits(perf_read_miss)'(perf_read_miss_per_cycle);
+            // write miss: from bank-> !pipeline_stall & miss_st1 & !is_msrq_st1 & mem_rw_st1
+            perf_write_miss <= perf_write_miss + $bits(perf_write_miss)'(perf_write_miss_per_cycle);
+            // core_rsp_stall
+            if ((| core_rsp_valid) & !core_rsp_ready) begin
+                perf_core_rsp_stall <= perf_core_rsp_stall + 64'd1;
+            end
+            // dram_stall
+            if (dram_req_valid & !dram_req_ready) begin
+                perf_dram_stall <= perf_dram_stall + 64'd1;
+            end
+        end
+    end
+    assign perf_cache_if.total_read = perf_core_req_r;
+    assign perf_cache_if.total_write = perf_core_req_w;
+    assign perf_cache_if.dram_latency = perf_dram_lat; 
+    assign perf_cache_if.dram_rsp = perf_dram_rsp;   
+    assign perf_cache_if.msrq_stall = perf_msrq_stall;
+    assign perf_cache_if.total_stall = perf_total_stall;
+    assign perf_cache_if.total_eviction = perf_total_eviction;
+    assign perf_cache_if.read_miss = perf_read_miss;
+    assign perf_cache_if.write_miss = perf_write_miss;
+    assign perf_cache_if.core_rsp_stall = perf_core_rsp_stall;
+    assign perf_cache_if.dram_stall = perf_dram_stall;
+
+    `endif
+
 endmodule

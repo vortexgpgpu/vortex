@@ -62,7 +62,8 @@ int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value);
 
 // get device constant registers
 int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* value);
-
+// get device constant registers (64 bit long int)
+int vx_csr_get_l(vx_device_h hdevice, int core_id, int addr, int addr_h, uint64_t* value);
 ////////////////////////////// UTILITY FUNCIONS ///////////////////////////////
 
 // upload kernel bytes to device

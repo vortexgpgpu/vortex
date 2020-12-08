@@ -124,6 +124,12 @@
 `define LATENCY_FCONV 3
 `endif
 
+///////////////////////////////////////
+`ifndef PERF_ENABLE
+`define PERF_ENABLE
+`endif
+///////////////////////////////////////
+
 // CSR Addresses //////////////////////////////////////////////////////////////
 
 `define CSR_FFLAGS      12'h001
@@ -138,6 +144,52 @@
 `define CSR_NT          12'h025
 `define CSR_NW          12'h026
 `define CSR_NC          12'h027
+
+// PERF: cache
+`define CSR_R_MISS      12'h030     // read misses
+`define CSR_R_MISS_H    12'h031
+`define CSR_W_MISS      12'h032     // write misses
+`define CSR_W_MISS_H    12'h033
+`define CSR_DRAM_ST     12'h034     // dram stalls
+`define CSR_DRAM_ST_H   12'h035
+`define CSR_CORE_RSP_ST 12'h036     // core_rsp stalls
+`define CSR_CORE_RSP_ST_H 12'h037
+`define CSR_MSRQ_ST     12'h038     // miss reserve queue stalls
+`define CSR_MSRQ_ST_H   12'h039
+`define CSR_TOTAL_ST    12'h03A     // total stalls
+`define CSR_TOTAL_ST_H  12'h03B
+`define CSR_TOTAL_R     12'h03C     // total reads
+`define CSR_TOTAL_R_H   12'h03D
+`define CSR_TOTAL_W     12'h03E     // total writes
+`define CSR_TOTAL_W_H   12'h03F 
+`define CSR_TOTAL_EV    12'h040     // total evictions
+`define CSR_TOTAL_EV_H  12'h041 
+`define CSR_DRAM_LAT    12'h042     // dram latency (total)
+`define CSR_DRAM_LAT_H  12'h043
+`define CSR_DRAM_RSP    12'h044     // dram responses
+`define CSR_DRAM_RSP_H  12'h045
+// PERF: pipeline stalls
+`define CSR_FPU_ST      12'h046
+`define CSR_FPU_ST_H    12'h047
+`define CSR_MUL_ST      12'h048
+`define CSR_MUL_ST_H    12'h049
+`define CSR_CSR_ST      12'h04A
+`define CSR_CSR_ST_H    12'h04B
+`define CSR_ALU_ST      12'h04C
+`define CSR_ALU_ST_H    12'h04D
+`define CSR_GPU_ST      12'h04E
+`define CSR_GPU_ST_H    12'h04F
+`define CSR_LSU_ST      12'h050
+`define CSR_LSU_ST_H    12'h051
+`define CSR_IBUF_ST     12'h052
+`define CSR_IBUF_ST_H   12'h053
+`define CSR_SCRBRD_ST   12'h054
+`define CSR_SCRBRD_ST_H 12'h055
+`define CSR_ICACHE_ST   12'h056
+`define CSR_ICACHE_ST_H 12'h057
+
+
+//////////////////////////////////////////////////////////////
 
 `define CSR_SATP        12'h180
 
