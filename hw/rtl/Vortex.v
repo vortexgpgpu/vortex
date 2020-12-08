@@ -206,17 +206,17 @@ module Vortex (
         .req_tag_out    (io_req_tag),
         .req_ready_out  (io_req_ready),
 
-        // input responses
-        .rsp_valid_in   (per_cluster_io_rsp_valid),
-        .rsp_data_in    (per_cluster_io_rsp_data),
-        .rsp_tag_in     (per_cluster_io_rsp_tag),
-        .rsp_ready_in   (per_cluster_io_rsp_ready),
-        
-        // output response
-        .rsp_valid_out  (io_rsp_valid),
-        .rsp_tag_out    (io_rsp_tag),
-        .rsp_data_out   (io_rsp_data),
-        .rsp_ready_out  (io_rsp_ready)
+        // input response
+        .rsp_valid_in   (io_rsp_valid),
+        .rsp_tag_in     (io_rsp_tag),
+        .rsp_data_in    (io_rsp_data),
+        .rsp_ready_in   (io_rsp_ready),
+
+        // output responses
+        .rsp_valid_out  (per_cluster_io_rsp_valid),
+        .rsp_data_out   (per_cluster_io_rsp_data),
+        .rsp_tag_out    (per_cluster_io_rsp_tag),
+        .rsp_ready_out  (per_cluster_io_rsp_ready)
     );
 
     VX_csr_io_arb #(
@@ -300,35 +300,29 @@ module Vortex (
 
     if (`L3_ENABLE) begin
 
-        wire [`NUM_CLUSTERS-1:0]                           cluster_dram_rsp_valid;        
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0]   cluster_dram_rsp_data;
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]    cluster_dram_rsp_tag;
-        wire                                               cluster_dram_rsp_ready;       
+        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_valid_qual;
+        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_rw_qual;    
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen_qual;    
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_dram_req_addr_qual;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_req_data_qual;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_req_tag_qual;
+        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_ready_qual;
 
-        reg [`NUM_CLUSTERS-1:0] cluster_dram_rsp_ready_other;
-        always @(*) begin
-            cluster_dram_rsp_ready_other = {`NUM_CLUSTERS{1'b1}};
-            for (integer i = 0; i < `NUM_CLUSTERS; i++) begin
-                for (integer j = 0; j < `NUM_CLUSTERS; j++) begin
-                    if (i != j) begin
-                        cluster_dram_rsp_ready_other[i] &= (per_cluster_dram_rsp_ready [j] | !cluster_dram_rsp_valid [j]);
-                    end
-                end
-            end
+        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin 
+            VX_skid_buffer #(
+                .DATAW    (1 + `L2DRAM_BYTEEN_WIDTH + `L2DRAM_ADDR_WIDTH + `L2DRAM_LINE_WIDTH + `L2DRAM_TAG_WIDTH),
+                .PASSTHRU (`NUM_CLUSTERS < 4)
+            ) dram_req_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (per_cluster_dram_req_valid[i]),        
+                .data_in   ({per_cluster_dram_req_rw[i], per_cluster_dram_req_byteen[i], per_cluster_dram_req_addr[i], per_cluster_dram_req_data[i], per_cluster_dram_req_tag[i]}),
+                .ready_in  (per_cluster_dram_req_ready[i]),        
+                .valid_out (per_cluster_dram_req_valid_qual[i]),
+                .data_out  ({per_cluster_dram_req_rw_qual[i], per_cluster_dram_req_byteen_qual[i], per_cluster_dram_req_addr_qual[i], per_cluster_dram_req_data_qual[i], per_cluster_dram_req_tag_qual[i]}),
+                .ready_out (per_cluster_dram_req_ready_qual[i])
+            );
         end
-
-        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin     
-            // Core Response
-            assign per_cluster_dram_rsp_valid [i] = cluster_dram_rsp_valid [i] & cluster_dram_rsp_ready_other [i];
-            assign per_cluster_dram_rsp_data  [i] = cluster_dram_rsp_data [i];
-            assign per_cluster_dram_rsp_tag   [i] = cluster_dram_rsp_tag [i];
-        end
-        assign cluster_dram_rsp_ready = & (per_cluster_dram_rsp_ready | ~cluster_dram_rsp_valid);
-
-        wire cluster_dram_req_ready;
-        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
-            assign per_cluster_dram_req_ready[i] = cluster_dram_req_ready;
-        end    
 
         VX_cache #(
             .CACHE_ID           (`L3CACHE_ID),
@@ -358,19 +352,19 @@ module Vortex (
             .reset              (reset),
 
             // Core request    
-            .core_req_valid     (per_cluster_dram_req_valid),
-            .core_req_rw        (per_cluster_dram_req_rw),
-            .core_req_byteen    (per_cluster_dram_req_byteen),
-            .core_req_addr      (per_cluster_dram_req_addr),
-            .core_req_data      (per_cluster_dram_req_data),
-            .core_req_tag       (per_cluster_dram_req_tag),
-            .core_req_ready     (cluster_dram_req_ready),
+            .core_req_valid     (per_cluster_dram_req_valid_qual),
+            .core_req_rw        (per_cluster_dram_req_rw_qual),
+            .core_req_byteen    (per_cluster_dram_req_byteen_qual),
+            .core_req_addr      (per_cluster_dram_req_addr_qual),
+            .core_req_data      (per_cluster_dram_req_data_qual),
+            .core_req_tag       (per_cluster_dram_req_tag_qual),
+            .core_req_ready     (per_cluster_dram_req_ready_qual),
 
             // Core response
-            .core_rsp_valid     (cluster_dram_rsp_valid),
-            .core_rsp_data      (cluster_dram_rsp_data),
-            .core_rsp_tag       (cluster_dram_rsp_tag),              
-            .core_rsp_ready     (cluster_dram_rsp_ready),
+            .core_rsp_valid     (per_cluster_dram_rsp_valid),
+            .core_rsp_data      (per_cluster_dram_rsp_data),
+            .core_rsp_tag       (per_cluster_dram_rsp_tag),              
+            .core_rsp_ready     (per_cluster_dram_rsp_ready),
 
             // DRAM request
             .dram_req_valid     (dram_req_valid),

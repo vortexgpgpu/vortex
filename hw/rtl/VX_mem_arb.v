@@ -6,9 +6,9 @@ module VX_mem_arb #(
     parameter TAG_IN_WIDTH  = 1,
     parameter TAG_OUT_WIDTH = 1,
     
-    parameter DATA_SIZE  = (DATA_WIDTH / 8), 
-    parameter ADDR_WIDTH = 32 - `CLOG2(DATA_SIZE),
-    parameter REQS_BITS  = `CLOG2(NUM_REQS)
+    parameter DATA_SIZE     = (DATA_WIDTH / 8), 
+    parameter ADDR_WIDTH    = 32 - `CLOG2(DATA_SIZE),
+    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS)
 ) (
     input wire clk,
     input wire reset,
@@ -43,45 +43,27 @@ module VX_mem_arb #(
     output wire [NUM_REQS-1:0][DATA_WIDTH-1:0]  rsp_data_out,
     input wire  [NUM_REQS-1:0]                  rsp_ready_out    
 );
-    localparam DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
+    localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
+    localparam RSP_DATAW = TAG_IN_WIDTH + DATA_WIDTH;
 
     if (NUM_REQS > 1) begin
 
-        wire [NUM_REQS-1:0][DATAW-1:0] data_in;
+        wire [NUM_REQS-1:0][REQ_DATAW-1:0] data_in;
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign data_in[i] = {{req_tag_in[i], REQS_BITS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
-        end
-
-        // Inputs buffering
-        wire [NUM_REQS-1:0]            req_valid_in_qual; 
-        wire [NUM_REQS-1:0][DATAW-1:0] req_data_in_qual;
-        wire [NUM_REQS-1:0]            req_ready_in_qual;
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            VX_skid_buffer #(
-                .DATAW    (DATAW),
-                .PASSTHRU (NUM_REQS < 4)
-            ) req_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (req_valid_in[i]),        
-                .data_in   (data_in[i]),
-                .ready_in  (req_ready_in[i]),        
-                .valid_out (req_valid_in_qual[i]),
-                .data_out  (req_data_in_qual[i]),
-                .ready_out (req_ready_in_qual[i])
-            );
+            assign data_in[i] = {{req_tag_in[i], LOG_NUM_REQS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
         end
 
         VX_stream_arbiter #(
-            .NUM_REQS (NUM_REQS),
-            .DATAW    (DATAW),
-            .BUFFERED (NUM_REQS >= 4)
+            .NUM_REQS   (NUM_REQS),
+            .DATAW      (REQ_DATAW),
+            .IN_BUFFER  (NUM_REQS >= 4),
+            .OUT_BUFFER (NUM_REQS >= 4)
         ) req_arb (
             .clk        (clk),
             .reset      (reset),
-            .valid_in   (req_valid_in_qual),
-            .data_in    (req_data_in_qual),
-            .ready_in   (req_ready_in_qual),
+            .valid_in   (req_valid_in),
+            .data_in    (data_in),
+            .ready_in   (req_ready_in),
             .valid_out  (req_valid_out),
             .data_out   ({req_tag_out, req_addr_out, req_rw_out, req_byteen_out, req_data_out}),
             .ready_out  (req_ready_out)
@@ -89,15 +71,15 @@ module VX_mem_arb #(
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [REQS_BITS-1:0] rsp_sel = rsp_tag_in [REQS_BITS-1:0];
+        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_tag_in [LOG_NUM_REQS-1:0];
         
         for (genvar i = 0; i < NUM_REQS; i++) begin                
-            assign rsp_valid_out [i] = rsp_valid_in && (rsp_sel == REQS_BITS'(i));
-            assign rsp_tag_out [i]   = rsp_tag_in[REQS_BITS +: TAG_IN_WIDTH];        
-            assign rsp_data_out [i]  = rsp_data_in;      
+            assign rsp_valid_out [i] = rsp_valid_in && (rsp_sel == LOG_NUM_REQS'(i));
+            assign rsp_tag_out   [i] = rsp_tag_in[LOG_NUM_REQS +: TAG_IN_WIDTH];        
+            assign rsp_data_out  [i] = rsp_data_in;      
         end
         
-        assign rsp_ready_in = rsp_ready_out [rsp_sel];        
+        assign rsp_ready_in = rsp_ready_out [rsp_sel];
 
     end else begin
 

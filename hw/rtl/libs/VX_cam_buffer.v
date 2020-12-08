@@ -52,9 +52,7 @@ module VX_cam_buffer #(
             write_addr_r <= ADDRW'(1'b0);
         end else begin
             if (release_slot) begin
-                assert(0 == free_slots[release_addr]) else begin 
-                    $display("%t: releasing invalid slot at port %d", $time, release_addr);
-                end
+                assert(0 == free_slots[release_addr]) else $error("%t: releasing invalid slot at port %d", $time, release_addr);
             end
             free_slots   <= free_slots_n;
             write_addr_r <= free_index;
