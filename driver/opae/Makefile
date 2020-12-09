@@ -21,6 +21,9 @@ CXXFLAGS +=-fstack-protector
 # Position independent code
 CXXFLAGS += -fPIC
 
+# Add external configuration
+CXXFLAGS += $(CONFIGS)
+
 # Dump perf stats
 CXXFLAGS += -DDUMP_PERF_STATS
 
