@@ -58,6 +58,12 @@ ifdef SCOPE
 	SCOPE_H = scope-defs.h 
 endif
 
+# Enable perf counters
+ifdef PERF
+	CXXFLAGS += -DPERF_ENABLE
+	PERF_ENABLE = PERF=1
+endif
+
 all: vlsim
 
 # AFU info from JSON file, including AFU UUID
@@ -71,7 +77,7 @@ scope-defs.h: $(SCRIPT_DIR)/scope.json
 scope: scope-defs.h
 
 vlsim-hw: $(SCOPE_H)
-	$(SCOPE_ENABLE) $(MAKE) -C vlsim
+	$(SCOPE_ENABLE) $(PERF_ENABLE) $(MAKE) -C vlsim
 
 fpga: $(SRCS) $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -DUSE_FPGA $^ $(LDFLAGS) $(FPGA_LIBS) -o $(PROJECT)
@@ -94,7 +100,6 @@ $(ASE_DIR):
 clean:
 	rm -rf $(PROJECT) $(PROJECT_ASE) $(PROJECT_VLSIM) *.o .depend
 	$(MAKE) -C vlsim clean
-	$(MAKE) -C ase clean	
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

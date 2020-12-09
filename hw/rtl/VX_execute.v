@@ -16,8 +16,13 @@ module VX_execute #(
     VX_cache_core_req_if dcache_req_if,
     VX_cache_core_rsp_if dcache_rsp_if,
 
-    // perf
+    // commit status
     VX_cmt_to_csr_if    cmt_to_csr_if,
+
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if    perf_memsys_if,
+    VX_perf_pipeline_if perf_pipeline_if,
+ `endif
     
     // inputs    
     VX_alu_req_if       alu_req_if,
@@ -72,7 +77,11 @@ module VX_execute #(
         .CORE_ID(CORE_ID)
     ) csr_unit (
         .clk            (clk),
-        .reset          (reset),    
+        .reset          (reset),   
+    `ifdef PERF_ENABLE
+        .perf_memsys_if  (perf_memsys_if),
+        .perf_pipeline_if (perf_pipeline_if),
+    `endif    
         .cmt_to_csr_if  (cmt_to_csr_if),    
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .csr_io_req_if  (csr_io_req_if),           

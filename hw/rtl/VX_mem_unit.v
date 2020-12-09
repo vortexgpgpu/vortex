@@ -7,6 +7,10 @@ module VX_mem_unit # (
 
     input wire              clk,
     input wire              reset,
+    
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if       perf_memsys_if,
+`endif
 
     // Core <-> Dcache    
     VX_cache_core_req_if    core_dcache_req_if,
@@ -28,6 +32,11 @@ module VX_mem_unit # (
     VX_cache_core_req_if    io_req_if,
     VX_cache_core_rsp_if    io_rsp_if
 );
+    
+`ifdef PERF_ENABLE
+    VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_smem_if();
+`endif
+
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH (`DDRAM_LINE_WIDTH),
         .DRAM_ADDR_WIDTH (`DDRAM_ADDR_WIDTH),
@@ -80,6 +89,82 @@ module VX_mem_unit # (
         .smem_rsp_if    (smem_rsp_if),  
         .io_rsp_if      (io_rsp_if),          
         .core_rsp_if    (core_dcache_rsp_if)
+    );    
+
+    VX_cache #(
+        .CACHE_ID           (`ICACHE_ID),
+        .CACHE_SIZE         (`ICACHE_SIZE),
+        .BANK_LINE_SIZE     (`IBANK_LINE_SIZE),
+        .NUM_BANKS          (`INUM_BANKS),
+        .WORD_SIZE          (`IWORD_SIZE),
+        .NUM_REQS           (`INUM_REQUESTS),
+        .CREQ_SIZE          (`ICREQ_SIZE),
+        .MSHR_SIZE          (`IMSHR_SIZE),
+        .DRSQ_SIZE          (`IDRSQ_SIZE),
+        .SREQ_SIZE          (1),
+        .CRSQ_SIZE          (`ICRSQ_SIZE),
+        .DREQ_SIZE          (`IDREQ_SIZE),
+        .SRSQ_SIZE          (1),
+        .DRAM_ENABLE        (1),
+        .FLUSH_ENABLE       (0),
+        .WRITE_ENABLE       (0),
+        .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
+        .DRAM_TAG_WIDTH     (`IDRAM_TAG_WIDTH)
+    ) icache (
+        `SCOPE_BIND_VX_mem_unit_icache
+
+        .clk                (clk),
+        .reset              (reset),
+
+        // Core request
+        .core_req_valid     (core_icache_req_if.valid),
+        .core_req_rw        (core_icache_req_if.rw),
+        .core_req_byteen    (core_icache_req_if.byteen),
+        .core_req_addr      (core_icache_req_if.addr),
+        .core_req_data      (core_icache_req_if.data),        
+        .core_req_tag       (core_icache_req_if.tag),
+        .core_req_ready     (core_icache_req_if.ready),
+
+        // Core response
+        .core_rsp_valid     (core_icache_rsp_if.valid),
+        .core_rsp_data      (core_icache_rsp_if.data),
+        .core_rsp_tag       (core_icache_rsp_if.tag),
+        .core_rsp_ready     (core_icache_rsp_if.ready),
+
+    `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_icache_if),
+    `endif
+
+        // DRAM Req
+        .dram_req_valid     (icache_dram_req_if.valid),
+        .dram_req_rw        (icache_dram_req_if.rw),        
+        .dram_req_byteen    (icache_dram_req_if.byteen),        
+        .dram_req_addr      (icache_dram_req_if.addr),
+        .dram_req_data      (icache_dram_req_if.data),
+        .dram_req_tag       (icache_dram_req_if.tag),
+        .dram_req_ready     (icache_dram_req_if.ready),        
+
+        // DRAM response
+        .dram_rsp_valid     (icache_dram_rsp_if.valid),        
+        .dram_rsp_data      (icache_dram_rsp_if.data),
+        .dram_rsp_tag       (icache_dram_rsp_if.tag),
+        .dram_rsp_ready     (icache_dram_rsp_if.ready),
+
+        // Snoop request
+        .snp_req_valid      (1'b0),
+        .snp_req_addr       (0),
+        .snp_req_inv        (1'b0),
+        .snp_req_tag        (0),
+        `UNUSED_PIN (snp_req_ready),
+
+        // Snoop response
+        `UNUSED_PIN (snp_rsp_valid),
+        `UNUSED_PIN (snp_rsp_tag),
+        .snp_rsp_ready         (1'b0),
+
+        // Miss status
+        `UNUSED_PIN (miss_vec)
     );
 
     VX_cache #(
@@ -124,6 +209,10 @@ module VX_mem_unit # (
         .core_rsp_tag       (dcache_rsp_if.tag),
         .core_rsp_ready     (dcache_rsp_if.ready),
 
+    `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_dcache_if),
+    `endif
+
         // DRAM request
         .dram_req_valid     (dcache_dram_req_if.valid),
         .dram_req_rw        (dcache_dram_req_if.rw),        
@@ -150,78 +239,6 @@ module VX_mem_unit # (
         .snp_rsp_valid      (dcache_snp_rsp_if.valid),
         .snp_rsp_tag        (dcache_snp_rsp_if.tag),
         .snp_rsp_ready      (dcache_snp_rsp_if.ready),
-
-        // Miss status
-        `UNUSED_PIN (miss_vec)
-    );
-
-    VX_cache #(
-        .CACHE_ID           (`ICACHE_ID),
-        .CACHE_SIZE         (`ICACHE_SIZE),
-        .BANK_LINE_SIZE     (`IBANK_LINE_SIZE),
-        .NUM_BANKS          (`INUM_BANKS),
-        .WORD_SIZE          (`IWORD_SIZE),
-        .NUM_REQS           (`INUM_REQUESTS),
-        .CREQ_SIZE          (`ICREQ_SIZE),
-        .MSHR_SIZE          (`IMSHR_SIZE),
-        .DRSQ_SIZE          (`IDRSQ_SIZE),
-        .SREQ_SIZE          (1),
-        .CRSQ_SIZE          (`ICRSQ_SIZE),
-        .DREQ_SIZE          (`IDREQ_SIZE),
-        .SRSQ_SIZE          (1),
-        .DRAM_ENABLE        (1),
-        .FLUSH_ENABLE       (0),
-        .WRITE_ENABLE       (0),
-        .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`IDRAM_TAG_WIDTH)
-    ) icache (
-        `SCOPE_BIND_VX_mem_unit_icache
-
-        .clk                (clk),
-        .reset              (reset),
-
-        // Core request
-        .core_req_valid     (core_icache_req_if.valid),
-        .core_req_rw        (core_icache_req_if.rw),
-        .core_req_byteen    (core_icache_req_if.byteen),
-        .core_req_addr      (core_icache_req_if.addr),
-        .core_req_data      (core_icache_req_if.data),        
-        .core_req_tag       (core_icache_req_if.tag),
-        .core_req_ready     (core_icache_req_if.ready),
-
-        // Core response
-        .core_rsp_valid     (core_icache_rsp_if.valid),
-        .core_rsp_data      (core_icache_rsp_if.data),
-        .core_rsp_tag       (core_icache_rsp_if.tag),
-        .core_rsp_ready     (core_icache_rsp_if.ready),
-
-        // DRAM Req
-        .dram_req_valid     (icache_dram_req_if.valid),
-        .dram_req_rw        (icache_dram_req_if.rw),        
-        .dram_req_byteen    (icache_dram_req_if.byteen),        
-        .dram_req_addr      (icache_dram_req_if.addr),
-        .dram_req_data      (icache_dram_req_if.data),
-        .dram_req_tag       (icache_dram_req_if.tag),
-        .dram_req_ready     (icache_dram_req_if.ready),        
-
-        // DRAM response
-        .dram_rsp_valid     (icache_dram_rsp_if.valid),        
-        .dram_rsp_data      (icache_dram_rsp_if.data),
-        .dram_rsp_tag       (icache_dram_rsp_if.tag),
-        .dram_rsp_ready     (icache_dram_rsp_if.ready),
-
-        // Snoop request
-        .snp_req_valid      (1'b0),
-        .snp_req_addr       (0),
-        .snp_req_inv        (1'b0),
-        .snp_req_tag        (0),
-        `UNUSED_PIN (snp_req_ready),
-
-        // Snoop response
-        `UNUSED_PIN (snp_rsp_valid),
-        `UNUSED_PIN (snp_rsp_tag),
-        .snp_rsp_ready         (1'b0),
 
         // Miss status
         `UNUSED_PIN (miss_vec)
@@ -267,6 +284,10 @@ module VX_mem_unit # (
         .core_rsp_data      (smem_rsp_if.data),
         .core_rsp_tag       (smem_rsp_if.tag),
         .core_rsp_ready     (smem_rsp_if.ready),
+
+    `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_smem_if),
+    `endif
 
         // DRAM request
         `UNUSED_PIN (dram_req_valid),
@@ -340,4 +361,65 @@ module VX_mem_unit # (
         .rsp_ready_in   (dram_rsp_if.ready)
     );
 
+`ifdef PERF_ENABLE
+    
+    assign perf_memsys_if.icache_if.read_misses = perf_icache_if.read_misses;
+    assign perf_memsys_if.icache_if.write_misses = perf_icache_if.write_misses;
+    assign perf_memsys_if.icache_if.mshr_stalls = perf_icache_if.mshr_stalls;
+    assign perf_memsys_if.icache_if.crsp_stalls = perf_icache_if.crsp_stalls;
+    assign perf_memsys_if.icache_if.dreq_stalls = perf_icache_if.dreq_stalls;
+    assign perf_memsys_if.icache_if.pipe_stalls = perf_icache_if.pipe_stalls;
+    assign perf_memsys_if.icache_if.reads = perf_icache_if.reads;
+    assign perf_memsys_if.icache_if.writes = perf_icache_if.writes;
+    assign perf_memsys_if.icache_if.evictions = perf_icache_if.evictions;
+
+    assign perf_memsys_if.dcache_if.read_misses = perf_dcache_if.read_misses;
+    assign perf_memsys_if.dcache_if.write_misses = perf_dcache_if.write_misses;
+    assign perf_memsys_if.dcache_if.mshr_stalls = perf_dcache_if.mshr_stalls;
+    assign perf_memsys_if.dcache_if.crsp_stalls = perf_dcache_if.crsp_stalls;
+    assign perf_memsys_if.dcache_if.dreq_stalls = perf_dcache_if.dreq_stalls;
+    assign perf_memsys_if.dcache_if.pipe_stalls = perf_dcache_if.pipe_stalls;
+    assign perf_memsys_if.dcache_if.reads = perf_dcache_if.reads;
+    assign perf_memsys_if.dcache_if.writes = perf_dcache_if.writes;
+    assign perf_memsys_if.dcache_if.evictions = perf_dcache_if.evictions;
+
+    reg [63:0] perf_dram_lat_per_cycle;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_dram_lat_per_cycle <= 0;
+        end else begin
+            if (dram_req_if.valid & (~dram_req_if.rw) & dram_req_if.ready & dram_rsp_if.valid & dram_rsp_if.ready) begin
+                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle;
+            end else if (dram_req_if.valid & (~dram_req_if.rw) & dram_req_if.ready) begin
+                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 64'd1;
+            end else if (dram_rsp_if.valid & dram_rsp_if.ready) begin
+                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle - 64'd1;
+            end
+        end
+    end
+    
+    reg [63:0] perf_dram_req, perf_dram_rsp, perf_dram_lat;
+
+    always @(posedge clk) begin
+        if (reset) begin       
+            perf_dram_req <= 0;     
+            perf_dram_rsp <= 0;            
+            perf_dram_lat <= 0;
+        end else begin            
+            if (dram_req_if.valid & dram_req_if.ready) begin
+                perf_dram_req <= perf_dram_req + 64'd1;
+            end
+            if (dram_rsp_if.valid & dram_rsp_if.ready) begin
+                perf_dram_rsp <= perf_dram_rsp + 64'd1;
+            end
+            perf_dram_lat <= perf_dram_lat + perf_dram_lat_per_cycle;
+        end
+    end
+
+    assign perf_memsys_if.dram_requests  = perf_dram_req;       
+    assign perf_memsys_if.dram_responses = perf_dram_rsp;
+    assign perf_memsys_if.dram_latency   = perf_dram_lat; 
+`endif
+    
 endmodule

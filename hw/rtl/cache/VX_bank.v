@@ -96,6 +96,14 @@ module VX_bank #(
     output wire [SNP_TAG_WIDTH-1:0]     snp_rsp_tag,
     input  wire                         snp_rsp_ready,
 
+`ifdef PERF_ENABLE
+    output wire perf_mshr_stall,
+    output wire perf_pipe_stall,
+    output wire perf_evict,
+    output wire perf_read_miss,
+    output wire perf_write_miss,
+`endif
+
     // Misses
     output wire                         misses
 );
@@ -567,7 +575,6 @@ end else begin
     assign incoming_fill_st2 = 0;
 
     assign misses = 0;
-
 end
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -950,6 +957,18 @@ end
     `SCOPE_ASSIGN (addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
     `SCOPE_ASSIGN (addr_st2, `LINE_TO_BYTE_ADDR(addr_st2, BANK_ID));
     `SCOPE_ASSIGN (addr_st3, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID));
+
+`ifdef PERF_ENABLE
+    assign perf_pipe_stall = pipeline_stall;
+    assign perf_mshr_stall = mshr_going_full;
+    assign perf_read_miss  = !pipeline_stall & miss_st1 & !is_mshr_st1 & !mem_rw_st1;
+    assign perf_write_miss = !pipeline_stall & miss_st1 & !is_mshr_st1 & mem_rw_st1;
+    if (DRAM_ENABLE) begin
+        assign perf_evict = dreq_push & do_writeback_st3 & !is_snp_st3;
+    end else begin
+        assign perf_evict = 0;
+    end
+`endif
 
 `ifdef DBG_PRINT_CACHE_BANK
     wire incoming_fill_dfp_st3 = drsq_push && (addr_st3 == dram_rsp_addr);

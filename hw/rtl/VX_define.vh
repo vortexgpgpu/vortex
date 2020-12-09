@@ -240,45 +240,10 @@
 `define DBG_CACHE_REQ_MDATAW    0
 `endif
 
-////////////////////////// Dcache Configurable Knobs //////////////////////////
-
-// Cache ID
-`define DCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0)
-
-// Block size in bytes
-`define DBANK_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
-
-// Word size in bytes
-`define DWORD_SIZE              4
-
-// TAG sharing enable       
-`define DCORE_TAG_ID_BITS       `LOG2UP(`LSUQ_SIZE)
-
-// Core request tag bits
-`define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
- 
-// DRAM request data bits
-`define DDRAM_LINE_WIDTH        (`DBANK_LINE_SIZE * 8)
-
-// DRAM request address bits
-`define DDRAM_ADDR_WIDTH        (32 - `CLOG2(`DBANK_LINE_SIZE))
-
-// DRAM byte enable bits
-`define DDRAM_BYTEEN_WIDTH      `DBANK_LINE_SIZE
-
-// DRAM request tag bits
-`define DDRAM_TAG_WIDTH         `DDRAM_ADDR_WIDTH
-
-// Core request size
-`define DNUM_REQUESTS           `NUM_THREADS
-
-// Snoop request tag bits
-`define DSNP_TAG_WIDTH          ((`NUM_CORES > 1) ? `LOG2UP(`L2SREQ_SIZE) : `L2SNP_TAG_WIDTH)
-
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // Cache ID
-`define ICACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1)
+`define ICACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0)
 
 // Block size in bytes
 `define IBANK_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
@@ -315,6 +280,41 @@
 
 // Core request size
 `define INUM_REQUESTS           1
+
+////////////////////////// Dcache Configurable Knobs //////////////////////////
+
+// Cache ID
+`define DCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1)
+
+// Block size in bytes
+`define DBANK_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
+
+// Word size in bytes
+`define DWORD_SIZE              4
+
+// TAG sharing enable       
+`define DCORE_TAG_ID_BITS       `LOG2UP(`LSUQ_SIZE)
+
+// Core request tag bits
+`define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
+ 
+// DRAM request data bits
+`define DDRAM_LINE_WIDTH        (`DBANK_LINE_SIZE * 8)
+
+// DRAM request address bits
+`define DDRAM_ADDR_WIDTH        (32 - `CLOG2(`DBANK_LINE_SIZE))
+
+// DRAM byte enable bits
+`define DDRAM_BYTEEN_WIDTH      `DBANK_LINE_SIZE
+
+// DRAM request tag bits
+`define DDRAM_TAG_WIDTH         `DDRAM_ADDR_WIDTH
+
+// Core request size
+`define DNUM_REQUESTS           `NUM_THREADS
+
+// Snoop request tag bits
+`define DSNP_TAG_WIDTH          ((`NUM_CORES > 1) ? `LOG2UP(`L2SREQ_SIZE) : `L2SNP_TAG_WIDTH)
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 

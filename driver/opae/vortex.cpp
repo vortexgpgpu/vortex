@@ -244,27 +244,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
 #endif
 
 #ifdef DUMP_PERF_STATS
-    // Dump perf stats
-    if (device->num_cores > 1) {
-        uint64_t total_instrs = 0, total_cycles = 0;
-        for (unsigned core_id = 0; core_id < device->num_cores; ++core_id) {           
-            uint64_t instrs, cycles;
-            int ret = vx_get_perf(hdevice, core_id, &instrs, &cycles);
-            assert(ret == 0);
-            float IPC = (float)(double(instrs) / double(cycles));
-            fprintf(stdout, "[VXDRV] PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs, cycles, IPC);            
-            total_instrs += instrs;
-            total_cycles = std::max<uint64_t>(total_cycles, cycles);
-        }
-        float IPC = (float)(double(total_instrs) / double(total_cycles));
-        fprintf(stdout, "[VXDRV] PERF: instrs=%ld, cycles=%ld, IPC=%f\n", total_instrs, total_cycles, IPC);    
-    } else {
-        uint64_t instrs, cycles;
-        int ret = vx_get_perf(hdevice, 0, &instrs, &cycles);
-        float IPC = (float)(double(instrs) / double(cycles));
-        assert(ret == 0);
-        fprintf(stdout, "[VXDRV] PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);        
-    }
+    vx_dump_perf(device, stdout);
 #endif
 
     fpgaClose(device->fpga);

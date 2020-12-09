@@ -6,6 +6,11 @@ module VX_csr_data #(
     input wire clk,
     input wire reset,
 
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if                perf_memsys_if,
+    VX_perf_pipeline_if             perf_pipeline_if,
+`endif
+
     VX_cmt_to_csr_if                cmt_to_csr_if,
     VX_fpu_to_csr_if                fpu_to_csr_if,  
 
@@ -114,6 +119,67 @@ module VX_csr_data #(
             `CSR_NW        : read_data_r = `NUM_WARPS;
             `CSR_NC        : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
             
+        `ifdef PERF_ENABLE
+            // PERF: pipeline
+            `CSR_MPM_ICACHE_ST    : read_data_r = perf_pipeline_if.icache_stalls[31:0];
+            `CSR_MPM_ICACHE_ST_H  : read_data_r = perf_pipeline_if.icache_stalls[63:32];
+            `CSR_MPM_IBUF_ST      : read_data_r = perf_pipeline_if.ibuffer_stalls[31:0];
+            `CSR_MPM_IBUF_ST_H    : read_data_r = perf_pipeline_if.ibuffer_stalls[63:32];
+            `CSR_MPM_SCRB_ST      : read_data_r = perf_pipeline_if.scoreboard_stalls[31:0];
+            `CSR_MPM_SCRB_ST_H    : read_data_r = perf_pipeline_if.scoreboard_stalls[63:32];
+            `CSR_MPM_ALU_ST       : read_data_r = perf_pipeline_if.alu_stalls[31:0];
+            `CSR_MPM_ALU_ST_H     : read_data_r = perf_pipeline_if.alu_stalls[63:32];
+            `CSR_MPM_LSU_ST       : read_data_r = perf_pipeline_if.lsu_stalls[31:0];
+            `CSR_MPM_LSU_ST_H     : read_data_r = perf_pipeline_if.lsu_stalls[63:32];
+            `CSR_MPM_CSR_ST       : read_data_r = perf_pipeline_if.csr_stalls[31:0];
+            `CSR_MPM_CSR_ST_H     : read_data_r = perf_pipeline_if.csr_stalls[63:32];
+            `CSR_MPM_MUL_ST       : read_data_r = perf_pipeline_if.mul_stalls[31:0];
+            `CSR_MPM_MUL_ST_H     : read_data_r = perf_pipeline_if.mul_stalls[63:32];
+            `CSR_MPM_FPU_ST       : read_data_r = perf_pipeline_if.fpu_stalls[31:0];
+            `CSR_MPM_FPU_ST_H     : read_data_r = perf_pipeline_if.fpu_stalls[63:32];
+            `CSR_MPM_GPU_ST       : read_data_r = perf_pipeline_if.gpu_stalls[31:0];
+            `CSR_MPM_GPU_ST_H     : read_data_r = perf_pipeline_if.gpu_stalls[63:32];
+            // PERF: icache
+            `CSR_MPM_ICACHE_MISS_R      : read_data_r = perf_memsys_if.icache_if.read_misses[31:0];
+            `CSR_MPM_ICACHE_MISS_R_H    : read_data_r = perf_memsys_if.icache_if.read_misses[63:32];
+            `CSR_MPM_ICACHE_DREQ_ST     : read_data_r = perf_memsys_if.icache_if.dreq_stalls[31:0];
+            `CSR_MPM_ICACHE_DREQ_ST_H   : read_data_r = perf_memsys_if.icache_if.dreq_stalls[63:32];
+            `CSR_MPM_ICACHE_CRSP_ST     : read_data_r = perf_memsys_if.icache_if.crsp_stalls[31:0];
+            `CSR_MPM_ICACHE_CRSP_ST_H   : read_data_r = perf_memsys_if.icache_if.crsp_stalls[63:32];
+            `CSR_MPM_ICACHE_MSHR_ST     : read_data_r = perf_memsys_if.icache_if.mshr_stalls[31:0];
+            `CSR_MPM_ICACHE_MSHR_ST_H   : read_data_r = perf_memsys_if.icache_if.mshr_stalls[63:32];
+            `CSR_MPM_ICACHE_PIPE_ST     : read_data_r = perf_memsys_if.icache_if.pipe_stalls[31:0];
+            `CSR_MPM_ICACHE_PIPE_ST_H   : read_data_r = perf_memsys_if.icache_if.pipe_stalls[63:32];
+            `CSR_MPM_ICACHE_READS       : read_data_r = perf_memsys_if.icache_if.reads[31:0];
+            `CSR_MPM_ICACHE_READS_H     : read_data_r = perf_memsys_if.icache_if.reads[63:32];
+            // PERF: dcache
+            `CSR_MPM_DCACHE_MISS_R      : read_data_r = perf_memsys_if.dcache_if.read_misses[31:0];
+            `CSR_MPM_DCACHE_MISS_R_H    : read_data_r = perf_memsys_if.dcache_if.read_misses[63:32];
+            `CSR_MPM_DCACHE_MISS_W      : read_data_r = perf_memsys_if.dcache_if.write_misses[31:0];
+            `CSR_MPM_DCACHE_MISS_W_H    : read_data_r = perf_memsys_if.dcache_if.write_misses[63:32];
+            `CSR_MPM_DCACHE_DREQ_ST     : read_data_r = perf_memsys_if.dcache_if.dreq_stalls[31:0];
+            `CSR_MPM_DCACHE_DREQ_ST_H   : read_data_r = perf_memsys_if.dcache_if.dreq_stalls[63:32];
+            `CSR_MPM_DCACHE_CRSP_ST     : read_data_r = perf_memsys_if.dcache_if.crsp_stalls[31:0];
+            `CSR_MPM_DCACHE_CRSP_ST_H   : read_data_r = perf_memsys_if.dcache_if.crsp_stalls[63:32];
+            `CSR_MPM_DCACHE_MSHR_ST     : read_data_r = perf_memsys_if.dcache_if.mshr_stalls[31:0];
+            `CSR_MPM_DCACHE_MSHR_ST_H   : read_data_r = perf_memsys_if.dcache_if.mshr_stalls[63:32];
+            `CSR_MPM_DCACHE_PIPE_ST     : read_data_r = perf_memsys_if.dcache_if.pipe_stalls[31:0];
+            `CSR_MPM_DCACHE_PIPE_ST_H   : read_data_r = perf_memsys_if.dcache_if.pipe_stalls[63:32];
+            `CSR_MPM_DCACHE_READS       : read_data_r = perf_memsys_if.dcache_if.reads[31:0];
+            `CSR_MPM_DCACHE_READS_H     : read_data_r = perf_memsys_if.dcache_if.reads[63:32];
+            `CSR_MPM_DCACHE_WRITES      : read_data_r = perf_memsys_if.dcache_if.writes[31:0];
+            `CSR_MPM_DCACHE_WRITES_H    : read_data_r = perf_memsys_if.dcache_if.writes[63:32];
+            `CSR_MPM_DCACHE_EVICTS      : read_data_r = perf_memsys_if.dcache_if.evictions[31:0];
+            `CSR_MPM_DCACHE_EVICTS_H    : read_data_r = perf_memsys_if.dcache_if.evictions[63:32];
+            // PERF: memory
+            `CSR_MPM_DRAM_LAT     : read_data_r = perf_memsys_if.dram_latency[31:0];
+            `CSR_MPM_DRAM_LAT_H   : read_data_r = perf_memsys_if.dram_latency[63:32];
+            `CSR_MPM_DRAM_REQ     : read_data_r = perf_memsys_if.dram_requests[31:0];
+            `CSR_MPM_DRAM_REQ_H   : read_data_r = perf_memsys_if.dram_requests[63:32];
+            `CSR_MPM_DRAM_RSP     : read_data_r = perf_memsys_if.dram_responses[31:0];
+            `CSR_MPM_DRAM_RSP_H   : read_data_r = perf_memsys_if.dram_responses[63:32];
+        `endif
+            
             `CSR_SATP      : read_data_r = 32'(csr_satp);
             
             `CSR_MSTATUS   : read_data_r = 32'(csr_mstatus);
@@ -128,10 +194,10 @@ module VX_csr_data #(
             `CSR_PMPCFG0   : read_data_r = 32'(csr_pmpcfg[0]);
             `CSR_PMPADDR0  : read_data_r = 32'(csr_pmpaddr[0]);
             
-            `CSR_CYCLE     : read_data_r = csr_cycle[31:0];
-            `CSR_CYCLE_H   : read_data_r = csr_cycle[63:32];
-            `CSR_INSTRET   : read_data_r = csr_instret[31:0];
-            `CSR_INSTRET_H : read_data_r = csr_instret[63:32];
+            `CSR_MCYCLE    : read_data_r = csr_cycle[31:0];
+            `CSR_MCYCLE_H  : read_data_r = csr_cycle[63:32];
+            `CSR_MINSTRET  : read_data_r = csr_instret[31:0];
+            `CSR_MINSTRET_H: read_data_r = csr_instret[63:32];
             
             `CSR_MVENDORID : read_data_r = `VENDOR_ID;
             `CSR_MARCHID   : read_data_r = `ARCHITECTURE_ID;

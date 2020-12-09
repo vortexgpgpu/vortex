@@ -51,6 +51,10 @@ module VX_pipeline #(
     output wire[31:0]                       csr_io_rsp_data,
     input wire                              csr_io_rsp_ready,      
 
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if                       perf_memsys_if,
+`endif
+
     // Status
     output wire                             busy, 
     output wire                             ebreak
@@ -171,6 +175,10 @@ module VX_pipeline #(
     VX_commit_if        fpu_commit_if();     
     VX_commit_if        gpu_commit_if();     
 
+`ifdef PERF_ENABLE
+    VX_perf_pipeline_if perf_pipeline_if();
+`endif
+
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
@@ -206,6 +214,10 @@ module VX_pipeline #(
         .clk            (clk),
         .reset          (reset),        
 
+    `ifdef PERF_ENABLE
+        .perf_pipeline_if (perf_pipeline_if),
+    `endif
+
         .decode_if      (decode_if),
         .writeback_if   (writeback_if),
 
@@ -224,7 +236,12 @@ module VX_pipeline #(
         
         .clk            (clk),
         .reset          (reset),    
-        
+
+    `ifdef PERF_ENABLE
+        .perf_memsys_if (perf_memsys_if),
+        .perf_pipeline_if (perf_pipeline_if),
+    `endif 
+
         .dcache_req_if  (core_dcache_req_if),
         .dcache_rsp_if  (core_dcache_rsp_if),
         
@@ -272,4 +289,78 @@ module VX_pipeline #(
         .cmt_to_csr_if  (cmt_to_csr_if)
     );
 
+`ifdef PERF_ENABLE
+    reg [63:0] perf_icache_stalls;
+    reg [63:0] perf_ibuffer_stalls;
+    reg [63:0] perf_alu_stalls;
+    reg [63:0] perf_lsu_stalls;
+    reg [63:0] perf_csr_stalls;
+    reg [63:0] perf_gpu_stalls;
+`ifdef EXT_M_ENABLE
+    reg [63:0] perf_mul_stalls;
+`endif
+`ifdef EXT_F_ENABLE
+    reg [63:0] perf_fpu_stalls;
+`endif
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_icache_stalls  <= 0;
+            perf_ibuffer_stalls <= 0;
+            perf_alu_stalls <= 0;
+            perf_lsu_stalls <= 0;
+            perf_csr_stalls <= 0;
+            perf_gpu_stalls <= 0;
+        `ifdef EXT_M_ENABLE
+            perf_mul_stalls <= 0;
+        `endif
+        `ifdef EXT_F_ENABLE
+            perf_fpu_stalls <= 0;
+        `endif
+        end else begin
+            if (core_icache_req_if.valid & !core_icache_req_if.ready) begin
+                perf_icache_stalls <= perf_icache_stalls + 64'd1;
+            end
+            if (decode_if.valid & !decode_if.ready) begin
+                perf_ibuffer_stalls <= perf_ibuffer_stalls + 64'd1;
+            end
+            if (alu_req_if.valid & !alu_req_if.ready) begin
+                perf_alu_stalls <= perf_alu_stalls + 64'd1;
+            end
+            if (lsu_req_if.valid & !lsu_req_if.ready) begin
+                perf_lsu_stalls <= perf_lsu_stalls + 64'd1;
+            end
+            if (csr_req_if.valid & !csr_req_if.ready) begin
+                perf_csr_stalls <= perf_csr_stalls + 64'd1;
+            end
+            if (gpu_req_if.valid & !gpu_req_if.ready) begin
+                perf_gpu_stalls <= perf_gpu_stalls + 64'd1;
+            end
+        `ifdef EXT_M_ENABLE
+            if (mul_req_if.valid & !mul_req_if.ready) begin
+                perf_mul_stalls <= perf_mul_stalls + 64'd1;
+            end
+        `endif
+        `ifdef EXT_F_ENABLE
+            if (fpu_req_if.valid & !fpu_req_if.ready) begin
+                perf_fpu_stalls <= perf_fpu_stalls + 64'd1;
+            end
+        `endif
+        end
+    end
+
+    assign perf_pipeline_if.icache_stalls = perf_icache_stalls; 
+    assign perf_pipeline_if.ibuffer_stalls = perf_ibuffer_stalls;
+    assign perf_pipeline_if.alu_stalls = perf_alu_stalls;
+    assign perf_pipeline_if.lsu_stalls = perf_lsu_stalls;
+    assign perf_pipeline_if.csr_stalls = perf_csr_stalls;
+    assign perf_pipeline_if.gpu_stalls = perf_gpu_stalls;
+`ifdef EXT_M_ENABLE
+    assign perf_pipeline_if.mul_stalls = perf_mul_stalls;
+`endif
+`ifdef EXT_F_ENABLE
+    assign perf_pipeline_if.fpu_stalls = perf_fpu_stalls;
+`endif
+`endif
+    
 endmodule

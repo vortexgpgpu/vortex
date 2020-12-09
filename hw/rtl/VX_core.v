@@ -66,6 +66,10 @@ module VX_core #(
     output wire                             busy, 
     output wire                             ebreak
 );
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if perf_memsys_if();
+`endif
+
     VX_cache_dram_req_if #(
         .DRAM_LINE_WIDTH(`DDRAM_LINE_WIDTH),
         .DRAM_ADDR_WIDTH(`DDRAM_ADDR_WIDTH),
@@ -174,6 +178,9 @@ module VX_core #(
         .CORE_ID(CORE_ID)
     ) pipeline (
         `SCOPE_BIND_VX_core_pipeline
+    `ifdef PERF_ENABLE
+        .perf_memsys_if      (perf_memsys_if),
+    `endif
 
         .clk(clk),
         .reset(reset),
@@ -231,6 +238,9 @@ module VX_core #(
         .CORE_ID(CORE_ID)
     ) mem_unit (
         `SCOPE_BIND_VX_core_mem_unit
+    `ifdef PERF_ENABLE
+        .perf_memsys_if      (perf_memsys_if),
+    `endif
 
         .clk                (clk),
         .reset              (reset),
@@ -238,7 +248,7 @@ module VX_core #(
         // Core <-> Dcache
         .core_dcache_req_if (core_dcache_req_if),
         .core_dcache_rsp_if (core_dcache_rsp_if),
-
+        
         // Core <-> Icache
         .core_icache_req_if (core_icache_req_if),
         .core_icache_rsp_if (core_icache_rsp_if),

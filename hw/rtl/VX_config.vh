@@ -126,10 +126,12 @@
 
 // CSR Addresses //////////////////////////////////////////////////////////////
 
+// User Floating-Point CSRs
 `define CSR_FFLAGS      12'h001
 `define CSR_FRM         12'h002
 `define CSR_FCSR        12'h003
 
+// SIMT CSRs
 `define CSR_LTID        12'h020
 `define CSR_LWID        12'h021
 `define CSR_GTID        12'h022
@@ -153,11 +155,73 @@
 
 `define CSR_MEPC        12'h341
 
-`define CSR_CYCLE       12'hC00
-`define CSR_CYCLE_H     12'hC80
-`define CSR_INSTRET     12'hC02
-`define CSR_INSTRET_H   12'hC82
+// Machine Counter/Timers
+`define CSR_MCYCLE      12'hB00
+`define CSR_MCYCLE_H    12'hB80
+`define CSR_MINSTRET    12'hB02
+`define CSR_MINSTRET_H  12'hB82
 
+// Machine Performance-monitoring counters
+// PERF: pipeline
+`define CSR_MPM_ICACHE_ST   12'hB03
+`define CSR_MPM_ICACHE_ST_H 12'hB83
+`define CSR_MPM_IBUF_ST     12'hB04
+`define CSR_MPM_IBUF_ST_H   12'hB84
+`define CSR_MPM_SCRB_ST     12'hB05
+`define CSR_MPM_SCRB_ST_H   12'hB85
+`define CSR_MPM_ALU_ST      12'hB06
+`define CSR_MPM_ALU_ST_H    12'hB86
+`define CSR_MPM_LSU_ST      12'hB07
+`define CSR_MPM_LSU_ST_H    12'hB87
+`define CSR_MPM_CSR_ST      12'hB08
+`define CSR_MPM_CSR_ST_H    12'hB88
+`define CSR_MPM_MUL_ST      12'hB09
+`define CSR_MPM_MUL_ST_H    12'hB89
+`define CSR_MPM_FPU_ST      12'hB0A
+`define CSR_MPM_FPU_ST_H    12'hB8A
+`define CSR_MPM_GPU_ST      12'hB0B
+`define CSR_MPM_GPU_ST_H    12'hB8B
+// PERF: icache
+`define CSR_MPM_ICACHE_MISS_R       12'hB0C     // read misses
+`define CSR_MPM_ICACHE_MISS_R_H     12'hB8C
+`define CSR_MPM_ICACHE_DREQ_ST      12'hB0D     // dram request stalls
+`define CSR_MPM_ICACHE_DREQ_ST_H    12'hB8D
+`define CSR_MPM_ICACHE_CRSP_ST      12'hB0E     // core response stalls
+`define CSR_MPM_ICACHE_CRSP_ST_H    12'hB8E
+`define CSR_MPM_ICACHE_MSHR_ST      12'hB0F     // MSHR stalls
+`define CSR_MPM_ICACHE_MSHR_ST_H    12'hB8F
+`define CSR_MPM_ICACHE_PIPE_ST      12'hB10     // pipeline stalls
+`define CSR_MPM_ICACHE_PIPE_ST_H    12'hB90
+`define CSR_MPM_ICACHE_READS        12'hB11     // total reads
+`define CSR_MPM_ICACHE_READS_H      12'hB91
+// PERF: dcache
+`define CSR_MPM_DCACHE_MISS_R       12'hB12     // read misses
+`define CSR_MPM_DCACHE_MISS_R_H     12'hB92
+`define CSR_MPM_DCACHE_MISS_W       12'hB13     // write misses
+`define CSR_MPM_DCACHE_MISS_W_H     12'hB93
+`define CSR_MPM_DCACHE_DREQ_ST      12'hB14     // dram request stalls
+`define CSR_MPM_DCACHE_DREQ_ST_H    12'hB94
+`define CSR_MPM_DCACHE_CRSP_ST      12'hB15     // core response stalls
+`define CSR_MPM_DCACHE_CRSP_ST_H    12'hB95
+`define CSR_MPM_DCACHE_MSHR_ST      12'hB16     // MSHR stalls
+`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB96
+`define CSR_MPM_DCACHE_PIPE_ST      12'hB17     // pipeline stalls
+`define CSR_MPM_DCACHE_PIPE_ST_H    12'hB97
+`define CSR_MPM_DCACHE_READS        12'hB18     // total reads
+`define CSR_MPM_DCACHE_READS_H      12'hB98
+`define CSR_MPM_DCACHE_WRITES       12'hB19     // total writes
+`define CSR_MPM_DCACHE_WRITES_H     12'hB99 
+`define CSR_MPM_DCACHE_EVICTS       12'hB1A     // total evictions
+`define CSR_MPM_DCACHE_EVICTS_H     12'hB9A 
+// PERF: memory
+`define CSR_MPM_DRAM_LAT    12'hB1B     // dram latency (total)
+`define CSR_MPM_DRAM_LAT_H  12'hB9B
+`define CSR_MPM_DRAM_REQ    12'hB1C     // dram requests
+`define CSR_MPM_DRAM_REQ_H  12'hB9C
+`define CSR_MPM_DRAM_RSP    12'hB1D     // dram responses
+`define CSR_MPM_DRAM_RSP_H  12'hB9D
+
+// Machine Information Registers
 `define CSR_MVENDORID   12'hF11
 `define CSR_MARCHID     12'hF12
 `define CSR_MIMPID      12'hF13
@@ -183,6 +247,38 @@
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
 `define FPUQ_SIZE 4
+`endif
+
+// Icache Configurable Knobs //////////////////////////////////////////////////
+
+// Size of cache in bytes
+`ifndef ICACHE_SIZE
+`define ICACHE_SIZE 4096
+`endif
+
+// Core Request Queue Size
+`ifndef ICREQ_SIZE
+`define ICREQ_SIZE 4
+`endif
+
+// Core Response Queue Size
+`ifndef ICRSQ_SIZE
+`define ICRSQ_SIZE 4
+`endif
+
+// Miss Handling Register Size
+`ifndef IMSHR_SIZE
+`define IMSHR_SIZE `NUM_WARPS
+`endif
+
+// DRAM Request Queue Size
+`ifndef IDREQ_SIZE
+`define IDREQ_SIZE 4
+`endif
+
+// DRAM Response Queue Size
+`ifndef IDRSQ_SIZE
+`define IDRSQ_SIZE 4
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -230,38 +326,6 @@
 // Snoop Response Queue Size
 `ifndef DSRSQ_SIZE
 `define DSRSQ_SIZE 4
-`endif
-
-// Icache Configurable Knobs //////////////////////////////////////////////////
-
-// Size of cache in bytes
-`ifndef ICACHE_SIZE
-`define ICACHE_SIZE 4096
-`endif
-
-// Core Request Queue Size
-`ifndef ICREQ_SIZE
-`define ICREQ_SIZE 4
-`endif
-
-// Core Response Queue Size
-`ifndef ICRSQ_SIZE
-`define ICRSQ_SIZE 4
-`endif
-
-// Miss Handling Register Size
-`ifndef IMSHR_SIZE
-`define IMSHR_SIZE `NUM_WARPS
-`endif
-
-// DRAM Request Queue Size
-`ifndef IDREQ_SIZE
-`define IDREQ_SIZE 4
-`endif
-
-// DRAM Response Queue Size
-`ifndef IDRSQ_SIZE
-`define IDRSQ_SIZE 4
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////

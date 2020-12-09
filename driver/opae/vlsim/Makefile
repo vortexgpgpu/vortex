@@ -43,8 +43,9 @@ RTL_DIR=../../../hw/rtl
 SRCS = fpga.cpp opae_sim.cpp
 SRCS += $(RTL_DIR)/fp_cores/svdpi/float_dpi.cpp
 
-FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/svdpi -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src 
+FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/svdpi -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE)
+RTL_INCLUDE += -I$(RTL_DIR)/afu -I$(RTL_DIR)/afu/ccip
 
 VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
 VL_FLAGS += -Wno-DECLFILENAME
@@ -70,14 +71,18 @@ ifdef SCOPE
 	CFLAGS += -DSCOPE
 endif
 
+# Enable perf counters
+ifdef PERF
+	VL_FLAGS += -DPERF_ENABLE
+	CFLAGS += -DPERF_ENABLE
+endif
+
 # use our OPAE shim
 VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
 # use DPI FPU
 VL_FLAGS += -DFPU_FAST
-
-RTL_INCLUDE += -I../../../hw/opae  -I../../../hw/opae/ccip
 
 PROJECT = libopae-c-vlsim.so
 
