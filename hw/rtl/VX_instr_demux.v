@@ -36,7 +36,7 @@ module VX_instr_demux (
 
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `ALU_BR_BITS + 1 + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
-        .REGISTER (1) // ALU has no back pressure, use a simple register
+        .NOBACKPRESSURE (1) // ALU has no back pressure
     ) alu_buffer (
         .clk       (clk),
         .reset     (reset),

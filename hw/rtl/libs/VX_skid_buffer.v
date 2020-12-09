@@ -1,9 +1,9 @@
 `include "VX_platform.vh"
 
 module VX_skid_buffer #(
-    parameter DATAW    = 1,
-    parameter PASSTHRU = 0,
-    parameter REGISTER = 0
+    parameter DATAW          = 1,
+    parameter PASSTHRU       = 0,
+    parameter NOBACKPRESSURE = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -26,7 +26,11 @@ module VX_skid_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
-    end if (REGISTER) begin
+    end else if (NOBACKPRESSURE) begin
+
+        always @(posedge clk) begin
+            assert(ready_out) else $error("ready_out should always be asserted");
+        end
 
         wire stall = valid_out && ~ready_out;
 
