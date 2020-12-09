@@ -83,11 +83,11 @@ vx_num_cores:
 .type vx_num_cycles, @function
 .global vx_num_cycles
 vx_num_cycles:
-    csrr a0, CSR_CYCLE
+    csrr a0, CSR_MCYCLE
     ret
     
 .type vx_num_instrs, @function
 .global vx_num_instrs
 vx_num_instrs:
-    csrr a0, CSR_INSTRET
+    csrr a0, CSR_MINSTRET
     ret
