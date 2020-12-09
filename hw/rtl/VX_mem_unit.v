@@ -363,26 +363,23 @@ module VX_mem_unit # (
 
 `ifdef PERF_ENABLE
     
-    assign perf_memsys_if.icache_if.read_misses = perf_icache_if.read_misses;
-    assign perf_memsys_if.icache_if.write_misses = perf_icache_if.write_misses;
-    assign perf_memsys_if.icache_if.mshr_stalls = perf_icache_if.mshr_stalls;
-    assign perf_memsys_if.icache_if.crsp_stalls = perf_icache_if.crsp_stalls;
-    assign perf_memsys_if.icache_if.dreq_stalls = perf_icache_if.dreq_stalls;
-    assign perf_memsys_if.icache_if.pipe_stalls = perf_icache_if.pipe_stalls;
-    assign perf_memsys_if.icache_if.reads = perf_icache_if.reads;
-    assign perf_memsys_if.icache_if.writes = perf_icache_if.writes;
-    assign perf_memsys_if.icache_if.evictions = perf_icache_if.evictions;
+    assign perf_memsys_if.icache_reads = perf_icache_if.reads;
+    assign perf_memsys_if.icache_read_misses = perf_icache_if.read_misses;
+    assign perf_memsys_if.icache_mshr_stalls = perf_icache_if.mshr_stalls;
+    assign perf_memsys_if.icache_crsp_stalls = perf_icache_if.crsp_stalls;
+    assign perf_memsys_if.icache_dreq_stalls = perf_icache_if.dreq_stalls;
+    assign perf_memsys_if.icache_pipe_stalls = perf_icache_if.pipe_stalls;
 
-    assign perf_memsys_if.dcache_if.read_misses = perf_dcache_if.read_misses;
-    assign perf_memsys_if.dcache_if.write_misses = perf_dcache_if.write_misses;
-    assign perf_memsys_if.dcache_if.mshr_stalls = perf_dcache_if.mshr_stalls;
-    assign perf_memsys_if.dcache_if.crsp_stalls = perf_dcache_if.crsp_stalls;
-    assign perf_memsys_if.dcache_if.dreq_stalls = perf_dcache_if.dreq_stalls;
-    assign perf_memsys_if.dcache_if.pipe_stalls = perf_dcache_if.pipe_stalls;
-    assign perf_memsys_if.dcache_if.reads = perf_dcache_if.reads;
-    assign perf_memsys_if.dcache_if.writes = perf_dcache_if.writes;
-    assign perf_memsys_if.dcache_if.evictions = perf_dcache_if.evictions;
-
+    assign perf_memsys_if.dcache_reads = perf_dcache_if.reads;
+    assign perf_memsys_if.dcache_writes = perf_dcache_if.writes;
+    assign perf_memsys_if.dcache_read_misses = perf_dcache_if.read_misses;
+    assign perf_memsys_if.dcache_write_misses = perf_dcache_if.write_misses;
+    assign perf_memsys_if.dcache_evictions = perf_dcache_if.evictions;
+    assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;
+    assign perf_memsys_if.dcache_crsp_stalls = perf_dcache_if.crsp_stalls;
+    assign perf_memsys_if.dcache_dreq_stalls = perf_dcache_if.dreq_stalls;
+    assign perf_memsys_if.dcache_pipe_stalls = perf_dcache_if.pipe_stalls;
+    
     reg [63:0] perf_dram_lat_per_cycle;
 
     always @(posedge clk) begin
