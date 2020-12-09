@@ -309,11 +309,16 @@ module VX_cluster #(
         wire [`NUM_CORES-1:0][`XDRAM_TAG_WIDTH-1:0]  per_core_dram_req_tag_qual;
         wire [`NUM_CORES-1:0]                        per_core_dram_req_ready_qual;
 
+        wire [`NUM_CORES-1:0]                        per_core_dram_rsp_valid_unqual;            
+        wire [`NUM_CORES-1:0][`DDRAM_LINE_WIDTH-1:0] per_core_dram_rsp_data_unqual;
+        wire [`NUM_CORES-1:0][`XDRAM_TAG_WIDTH-1:0]  per_core_dram_rsp_tag_unqual;
+        wire [`NUM_CORES-1:0]                        per_core_dram_rsp_ready_unqual;
+
         for (genvar i = 0; i < `NUM_CORES; i++) begin 
             VX_skid_buffer #(
                 .DATAW    (1 + `DDRAM_BYTEEN_WIDTH + `DDRAM_ADDR_WIDTH + `DDRAM_LINE_WIDTH + `XDRAM_TAG_WIDTH),
                 .PASSTHRU (`NUM_CORES < 4)
-            ) dram_req_buffer (
+            ) core_req_buffer (
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (per_core_dram_req_valid[i]),        
@@ -322,6 +327,20 @@ module VX_cluster #(
                 .valid_out (per_core_dram_req_valid_qual[i]),
                 .data_out  ({per_core_dram_req_rw_qual[i], per_core_dram_req_byteen_qual[i], per_core_dram_req_addr_qual[i], per_core_dram_req_data_qual[i], per_core_dram_req_tag_qual[i]}),
                 .ready_out (per_core_dram_req_ready_qual[i])
+            );
+
+            VX_skid_buffer #(
+                .DATAW    (`DDRAM_LINE_WIDTH + `XDRAM_TAG_WIDTH),
+                .PASSTHRU (1)
+            ) core_rsp_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (per_core_dram_rsp_valid_unqual[i]),        
+                .data_in   ({per_core_dram_rsp_data_unqual[i], per_core_dram_rsp_tag_unqual[i]}),
+                .ready_in  (per_core_dram_rsp_ready_unqual[i]),        
+                .valid_out (per_core_dram_rsp_valid[i]),
+                .data_out  ({per_core_dram_rsp_data[i], per_core_dram_rsp_tag[i]}),
+                .ready_out (per_core_dram_rsp_ready[i])
             );
         end
 
@@ -366,10 +385,10 @@ module VX_cluster #(
             .core_req_ready     (per_core_dram_req_ready_qual),
 
             // Core response
-            .core_rsp_valid     (per_core_dram_rsp_valid),
-            .core_rsp_data      (per_core_dram_rsp_data),
-            .core_rsp_tag       (per_core_dram_rsp_tag),
-            .core_rsp_ready     (per_core_dram_rsp_ready),
+            .core_rsp_valid     (per_core_dram_rsp_valid_unqual),
+            .core_rsp_data      (per_core_dram_rsp_data_unqual),
+            .core_rsp_tag       (per_core_dram_rsp_tag_unqual),
+            .core_rsp_ready     (per_core_dram_rsp_ready_unqual),
 
             // DRAM request
             .dram_req_valid     (dram_req_valid),
