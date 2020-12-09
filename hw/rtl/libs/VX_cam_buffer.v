@@ -65,7 +65,7 @@ module VX_cam_buffer #(
         .SIZE(SIZE),
         .BUFFERED(0),
         .RWCHECK(0)
-    ) req_metadata (
+    ) data_table (
         .clk(clk),
         .waddr(write_addr),                                
         .raddr(read_addr),

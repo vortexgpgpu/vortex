@@ -71,8 +71,6 @@ module VX_miss_resrv #(
     output wire                         dequeue_snp_inv_st0,
     input wire                          dequeue_st3
 );
-    wire [`MSHR_DATA_WIDTH-1:0] data_table;
-
     reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
     
     reg [MSHR_SIZE-1:0]            valid_table;
@@ -95,15 +93,7 @@ module VX_miss_resrv #(
 
     assign dequeue_valid_st0 = dequeue_ready;
     assign dequeue_addr_st0 = addr_table[schedule_ptr];
-    assign {dequeue_data_st0, 
-            dequeue_tid_st0, 
-            dequeue_tag_st0, 
-            dequeue_rw_st0, 
-            dequeue_byteen_st0, 
-            dequeue_wsel_st0, 
-            dequeue_is_snp_st0, 
-            dequeue_snp_inv_st0} = data_table;
-
+    
     wire mshr_push = enqueue_st3 && !enqueue_is_mshr_st3;
 
     wire [`LOG2UP(MSHR_SIZE)-1:0] head_ptr_n = head_ptr + $bits(head_ptr)'(1);
@@ -164,15 +154,15 @@ module VX_miss_resrv #(
         .BYTEENW(1),
         .BUFFERED(0),
         .RWCHECK(1)
-    ) metadata (
+    ) datatable (
         .clk(clk),
         .waddr(tail_ptr),                                
         .raddr(schedule_ptr),                
         .wren(mshr_push),
         .byteen(1'b1),
         .rden(1'b1),
-        .din({enqueue_data_st3, enqueue_tid_st3, enqueue_tag_st3, enqueue_rw_st3, enqueue_byteen_st3, enqueue_wsel_st3, enqueue_is_snp_st3, enqueue_snp_inv_st3}),
-        .dout(data_table)
+        .din({enqueue_data_st3,  enqueue_tid_st3, enqueue_tag_st3, enqueue_rw_st3, enqueue_byteen_st3, enqueue_wsel_st3, enqueue_is_snp_st3, enqueue_snp_inv_st3}),
+        .dout({dequeue_data_st0, dequeue_tid_st0, dequeue_tag_st0, dequeue_rw_st0, dequeue_byteen_st0, dequeue_wsel_st0, dequeue_is_snp_st0, dequeue_snp_inv_st0})
     );
 
 `ifdef DBG_PRINT_CACHE_MSHR        
