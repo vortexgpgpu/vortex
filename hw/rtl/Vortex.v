@@ -308,8 +308,13 @@ module Vortex (
         wire [`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen_qual;    
         wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_dram_req_addr_qual;
         wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_req_data_qual;
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0]  per_cluster_dram_req_tag_qual;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0] per_cluster_dram_req_tag_qual;
         wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_ready_qual;
+
+        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_rsp_valid_unqual;            
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_rsp_data_unqual;
+        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0] per_cluster_dram_rsp_tag_unqual;
+        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_rsp_ready_unqual;
 
         for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin 
             VX_skid_buffer #(
@@ -324,6 +329,20 @@ module Vortex (
                 .valid_out (per_cluster_dram_req_valid_qual[i]),
                 .data_out  ({per_cluster_dram_req_rw_qual[i], per_cluster_dram_req_byteen_qual[i], per_cluster_dram_req_addr_qual[i], per_cluster_dram_req_data_qual[i], per_cluster_dram_req_tag_qual[i]}),
                 .ready_out (per_cluster_dram_req_ready_qual[i])
+            );
+
+            VX_skid_buffer #(
+                .DATAW    (`L2DRAM_LINE_WIDTH + `L2DRAM_TAG_WIDTH),
+                .PASSTHRU (1)
+            ) core_rsp_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (per_cluster_dram_rsp_valid_unqual[i]),        
+                .data_in   ({per_cluster_dram_rsp_data_unqual[i], per_cluster_dram_rsp_tag_unqual[i]}),
+                .ready_in  (per_cluster_dram_rsp_ready_unqual[i]),        
+                .valid_out (per_cluster_dram_rsp_valid[i]),
+                .data_out  ({per_cluster_dram_rsp_data[i], per_cluster_dram_rsp_tag[i]}),
+                .ready_out (per_cluster_dram_rsp_ready[i])
             );
         end
 
@@ -368,10 +387,10 @@ module Vortex (
             .core_req_ready     (per_cluster_dram_req_ready_qual),
 
             // Core response
-            .core_rsp_valid     (per_cluster_dram_rsp_valid),
-            .core_rsp_data      (per_cluster_dram_rsp_data),
-            .core_rsp_tag       (per_cluster_dram_rsp_tag),              
-            .core_rsp_ready     (per_cluster_dram_rsp_ready),
+            .core_rsp_valid     (per_cluster_dram_rsp_valid_unqual),
+            .core_rsp_data      (per_cluster_dram_rsp_data_unqual),
+            .core_rsp_tag       (per_cluster_dram_rsp_tag_unqual),              
+            .core_rsp_ready     (per_cluster_dram_rsp_ready_unqual),
 
             // DRAM request
             .dram_req_valid     (dram_req_valid),

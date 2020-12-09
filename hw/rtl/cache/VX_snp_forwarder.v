@@ -138,12 +138,22 @@ module VX_snp_forwarder #(
         end
 
         reg [NUM_REQS-1:0] snp_fwdout_ready_other;
+        wire [NUM_REQS-1:0] fwdout_ready_unqual;
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign snp_fwdout_valid[i] = fwdout_valid && snp_fwdout_ready_other[i];
-            assign snp_fwdout_addr[i]  = fwdout_addr;
-            assign snp_fwdout_inv[i]   = fwdout_inv;
-            assign snp_fwdout_tag[i]   = fwdout_tag;
+            VX_skid_buffer #(
+                .DATAW    (DST_ADDR_WIDTH  + 1 + TAG_OUT_WIDTH),
+                .PASSTHRU (NUM_REQS >= 4)
+            ) fwdout_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (fwdout_valid && snp_fwdout_ready_other[i]),        
+                .data_in   ({fwdout_addr, fwdout_inv, fwdout_tag}),
+                .ready_in  (fwdout_ready_unqual[i]),        
+                .valid_out (snp_fwdout_valid[i]),
+                .data_out  ({snp_fwdout_addr[i], snp_fwdout_inv[i], snp_fwdout_tag[i]}),
+                .ready_out (snp_fwdout_ready[i])
+            );
         end
 
         always @(*) begin
@@ -151,12 +161,12 @@ module VX_snp_forwarder #(
             for (integer i = 0; i < NUM_REQS; i++) begin
                 for (integer j = 0; j < NUM_REQS; j++) begin
                     if (i != j)
-                        snp_fwdout_ready_other[i] &= snp_fwdout_ready[j];
+                        snp_fwdout_ready_other[i] &= fwdout_ready_unqual[j];
                 end
             end
         end
 
-        assign fwdout_ready = (& snp_fwdout_ready);
+        assign fwdout_ready = (& fwdout_ready_unqual);
 
         assign snp_req_ready = fwdout_ready && !sfq_full && !dispatch_hold;
 
