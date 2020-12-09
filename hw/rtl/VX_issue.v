@@ -8,6 +8,10 @@ module VX_issue #(
     input wire      clk,
     input wire      reset,
 
+`ifdef PERF_ENABLE
+    VX_perf_pipeline_if perf_pipeline_if,
+`endif
+
     VX_decode_if    decode_if,
     VX_writeback_if writeback_if,   
     
@@ -119,6 +123,21 @@ module VX_issue #(
     `SCOPE_ASSIGN (writeback_pc,      writeback_if.PC);  
     `SCOPE_ASSIGN (writeback_rd,      writeback_if.rd);
     `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
+
+`ifdef PERF_ENABLE
+    reg [63:0] perf_scoreboard_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_scoreboard_stalls <= 0;
+        end else begin
+            // scoreboard_stall
+            if (ibuf_deq_if.valid & scoreboard_delay) begin 
+                perf_scoreboard_stalls <= perf_scoreboard_stalls + 64'd1;
+            end
+        end
+    end
+    assign perf_pipeline_if.scoreboard_stalls = perf_scoreboard_stalls;
+`endif
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin

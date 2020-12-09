@@ -4,6 +4,7 @@
 +define+QUARTUS
 +define+FPU_FAST
 #+define+SCOPE
+#+define+PERF_ENABLE
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE

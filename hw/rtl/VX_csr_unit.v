@@ -6,6 +6,11 @@ module VX_csr_unit #(
     input wire          clk,
     input wire          reset,
 
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if    perf_memsys_if,
+    VX_perf_pipeline_if perf_pipeline_if,
+`endif
+
     VX_cmt_to_csr_if    cmt_to_csr_if, 
     VX_fpu_to_csr_if    fpu_to_csr_if,  
     
@@ -51,6 +56,10 @@ module VX_csr_unit #(
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
+    `ifdef PERF_ENABLE
+        .perf_memsys_if  (perf_memsys_if),
+        .perf_pipeline_if (perf_pipeline_if),
+    `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .read_enable    (csr_pipe_req_if.valid),

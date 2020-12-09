@@ -159,7 +159,7 @@ module VX_fpnew
                 .tag_o          ({fpu_tag_out, fpu_has_fflags_out}),
                 .out_valid_o    (fpu_valid_out),
                 .out_ready_i    (fpu_ready_out),
-                `UNUSED_PIN     (busy_o)
+                `UNUSED_PIN (busy_o)
             );
         end else begin
             fpnew_top #( 
@@ -179,14 +179,14 @@ module VX_fpnew
                 .vectorial_op_i (1'b0),
                 .tag_i          (1'b0),
                 .in_valid_i     (fpu_valid_in),
-                `UNUSED_PIN     (in_ready_o),
+                `UNUSED_PIN (in_ready_o),
                 .flush_i        (reset),
                 .result_o       (fpu_result[i]),
                 .status_o       (fpu_status[i]),
-                `UNUSED_PIN     (tag_o),
-                `UNUSED_PIN     (out_valid_o),
+                `UNUSED_PIN (tag_o),
+                `UNUSED_PIN (out_valid_o),
                 .out_ready_i    (fpu_ready_out),
-                `UNUSED_PIN     (busy_o)
+                `UNUSED_PIN (busy_o)
             );
         end
     end

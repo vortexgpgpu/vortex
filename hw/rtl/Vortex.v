@@ -299,6 +299,9 @@ module Vortex (
     );
 
     if (`L3_ENABLE) begin
+    `ifdef PERF_ENABLE
+        VX_perf_cache_if perf_l3cache_if();
+    `endif
 
         wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_valid_qual;
         wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_rw_qual;    
@@ -347,9 +350,13 @@ module Vortex (
             .SNP_TAG_WIDTH      (`L3SNP_TAG_WIDTH)
         ) l3cache (
             `SCOPE_BIND_Vortex_l3cache
-
+ 
             .clk                (clk),
             .reset              (reset),
+
+        `ifdef PERF_ENABLE
+            .perf_cache_if      (perf_l3cache_if),
+        `endif
 
             // Core request    
             .core_req_valid     (per_cluster_dram_req_valid_qual),

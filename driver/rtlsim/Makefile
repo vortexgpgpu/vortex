@@ -64,6 +64,12 @@ else
 	CFLAGS   += -DNDEBUG
 endif
 
+# Enable perf counters
+ifdef PERF
+	VL_FLAGS += -DPERF_ENABLE
+	CFLAGS += -DPERF_ENABLE
+endif
+
 # use DPI FPU
 VL_FLAGS += -DFPU_FAST
 

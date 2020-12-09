@@ -2,6 +2,7 @@
 #define __VX_DRIVER_H__
 
 #include <stddef.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,8 +72,8 @@ int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_t size)
 // upload kernel file to device
 int vx_upload_kernel_file(vx_device_h device, const char* filename);
 
-// get performance counters
-int vx_get_perf(vx_device_h device, int core_id, size_t* instrs, size_t* cycles);
+// dump performance counters
+int vx_dump_perf(vx_device_h device, FILE* stream);
 
 #ifdef __cplusplus
 }

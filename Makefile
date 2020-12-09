@@ -6,6 +6,11 @@ all:
 	$(MAKE) -C simX	
 	$(MAKE) -C benchmarks/opencl
 
+perf-demo:
+	$(MAKE) -C hw
+	$(MAKE) -C driver rtlsim
+	$(MAKE) -C driver/tests/demo/ run-rtlsim
+	
 clean:
 	$(MAKE) -C hw clean
 	$(MAKE) -C driver clean

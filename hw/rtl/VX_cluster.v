@@ -297,6 +297,9 @@ module VX_cluster #(
     );
 
     if (`L2_ENABLE) begin
+    `ifdef PERF_ENABLE
+        VX_perf_cache_if perf_l2cache_if();
+    `endif
 
         wire [`NUM_CORES-1:0]                        per_core_dram_req_valid_qual;
         wire [`NUM_CORES-1:0]                        per_core_dram_req_rw_qual;
@@ -345,9 +348,13 @@ module VX_cluster #(
             .SNP_TAG_WIDTH      (`L2SNP_TAG_WIDTH)
         ) l2cache (
             `SCOPE_BIND_VX_cluster_l2cache
-            
+              
             .clk                (clk),
             .reset              (reset),
+
+        `ifdef PERF_ENABLE
+            .perf_cache_if      (perf_l2cache_if),
+        `endif
 
             // Core request
             .core_req_valid     (per_core_dram_req_valid_qual),
