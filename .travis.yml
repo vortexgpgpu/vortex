@@ -25,6 +25,7 @@ script:
   - ./ci/test_riscv_isa.sh  
   - ./ci/test_opencl.sh
   - ./ci/test_driver.sh  
+  - ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --perf
   - ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --debug 
   - ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=demo --args="-n1"
   - ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2
