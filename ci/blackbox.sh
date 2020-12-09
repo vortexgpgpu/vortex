@@ -62,7 +62,6 @@ case $i in
         ;;
     --scope)
         SCOPE=1
-        SCOPE_FLAG=-DSCOPE
         shift
         ;;
     --perf)
@@ -130,7 +129,7 @@ case $APP in
         ;;
 esac
 
-CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3 $PERF_FLAG $SCOPE_FLAG"
+CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3 $PERF_FLAG"
 
 echo "CONFIGS=$CONFIGS"
 
@@ -138,7 +137,12 @@ make -C $DRIVER_PATH clean
 
 if [ $DEBUG -eq 1 ]
 then    
-    DEBUG=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+    if [ $SCOPE -eq 1 ]
+    then
+        DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+    else
+        DEBUG=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+    fi    
     
     if [ $HAS_ARGS -eq 1 ]
     then
@@ -147,7 +151,12 @@ then
         make -C $APP_PATH run-$DRIVER > run.log 2>&1
     fi
 else
-    CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+    if [ $SCOPE -eq 1 ]
+    then
+        SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+    else
+        CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+    fi
     
     if [ $HAS_ARGS -eq 1 ]
     then

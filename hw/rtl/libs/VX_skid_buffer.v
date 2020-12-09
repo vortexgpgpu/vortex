@@ -2,7 +2,8 @@
 
 module VX_skid_buffer #(
     parameter DATAW    = 1,
-    parameter PASSTHRU = 0
+    parameter PASSTHRU = 0,
+    parameter REGISTER = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -25,6 +26,24 @@ module VX_skid_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
+    end if (REGISTER) begin
+
+        wire stall = valid_out && ~ready_out;
+
+        VX_generic_register #(
+            .N (1 + DATAW),
+            .R (1)
+        ) pipe_reg (
+            .clk      (clk),
+            .reset    (reset),
+            .stall    (stall),
+            .flush    (1'b0),
+            .data_in  ({valid_in, data_in}),
+            .data_out ({valid_out, data_out})
+        );
+
+        assign ready_in = ~stall;
+    
     end else begin
 
         reg [DATAW-1:0] data_out_r;

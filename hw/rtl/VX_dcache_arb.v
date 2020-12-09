@@ -24,68 +24,43 @@ module VX_dcache_arb (
     localparam RSP_DATAW = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
 
     //
-    // input request buffer
-    // 
-  
-    VX_cache_core_req_if #(
-        .NUM_REQS(`DNUM_REQUESTS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_req_qual_if();
-    wire core_req_valid;
-
-    VX_skid_buffer #(
-        .DATAW (REQ_DATAW)
-    ) req_buffer (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  ((| core_req_if.valid)),
-        .data_in   ({core_req_if.valid, core_req_if.rw, core_req_if.byteen, core_req_if.addr, core_req_if.data, core_req_if.tag}),
-        .ready_in  (core_req_if.ready),        
-        .valid_out (core_req_valid),
-        .data_out  ({core_req_qual_if.valid, core_req_qual_if.rw, core_req_qual_if.byteen, core_req_qual_if.addr, core_req_qual_if.data, core_req_qual_if.tag}),
-        .ready_out (core_req_qual_if.ready)
-    );
-
-    //
     // select request
     //
 
     // select shared memory bus
-    wire is_smem_addr = core_req_valid 
-                     && ({core_req_qual_if.addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) 
-                     && ({core_req_qual_if.addr[0], 2'b0} < (`SHARED_MEM_BASE_ADDR + `SMEM_SIZE));
+    wire is_smem_addr = (| core_req_if.valid)
+                     && ({core_req_if.addr[0], 2'b0} >= `SHARED_MEM_BASE_ADDR) 
+                     && ({core_req_if.addr[0], 2'b0} < (`SHARED_MEM_BASE_ADDR + `SMEM_SIZE));
 
     // select io bus
-    wire is_io_addr = core_req_valid 
-                   && ({core_req_qual_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
+    wire is_io_addr = (| core_req_if.valid) 
+                   && ({core_req_if.addr[0], 2'b0} >= `IO_BUS_BASE_ADDR);
 
     reg [2:0] req_select;
     reg req_ready;
 
-    assign cache_req_if.valid  = core_req_qual_if.valid & {`NUM_THREADS{req_select[0]}};        
-    assign cache_req_if.rw     = core_req_qual_if.rw;
-    assign cache_req_if.byteen = core_req_qual_if.byteen;
-    assign cache_req_if.addr   = core_req_qual_if.addr;
-    assign cache_req_if.data   = core_req_qual_if.data;
-    assign cache_req_if.tag    = core_req_qual_if.tag;    
+    assign cache_req_if.valid  = core_req_if.valid & {`NUM_THREADS{req_select[0]}};        
+    assign cache_req_if.rw     = core_req_if.rw;
+    assign cache_req_if.byteen = core_req_if.byteen;
+    assign cache_req_if.addr   = core_req_if.addr;
+    assign cache_req_if.data   = core_req_if.data;
+    assign cache_req_if.tag    = core_req_if.tag;    
 
-    assign smem_req_if.valid  = core_req_qual_if.valid & {`NUM_THREADS{req_select[1]}};       
-    assign smem_req_if.rw     = core_req_qual_if.rw;
-    assign smem_req_if.byteen = core_req_qual_if.byteen;
-    assign smem_req_if.addr   = core_req_qual_if.addr;
-    assign smem_req_if.data   = core_req_qual_if.data;
-    assign smem_req_if.tag    = core_req_qual_if.tag;
+    assign smem_req_if.valid  = core_req_if.valid & {`NUM_THREADS{req_select[1]}};       
+    assign smem_req_if.rw     = core_req_if.rw;
+    assign smem_req_if.byteen = core_req_if.byteen;
+    assign smem_req_if.addr   = core_req_if.addr;
+    assign smem_req_if.data   = core_req_if.data;
+    assign smem_req_if.tag    = core_req_if.tag;
 
-    assign io_req_if.valid  = core_req_qual_if.valid & {`NUM_THREADS{req_select[2]}};       
-    assign io_req_if.rw     = core_req_qual_if.rw;
-    assign io_req_if.byteen = core_req_qual_if.byteen;
-    assign io_req_if.addr   = core_req_qual_if.addr;
-    assign io_req_if.data   = core_req_qual_if.data;
-    assign io_req_if.tag    = core_req_qual_if.tag;    
+    assign io_req_if.valid  = core_req_if.valid & {`NUM_THREADS{req_select[2]}};       
+    assign io_req_if.rw     = core_req_if.rw;
+    assign io_req_if.byteen = core_req_if.byteen;
+    assign io_req_if.addr   = core_req_if.addr;
+    assign io_req_if.data   = core_req_if.data;
+    assign io_req_if.tag    = core_req_if.tag;    
 
-    assign core_req_qual_if.ready = req_ready;
+    assign core_req_if.ready = req_ready;
 
     always @(*) begin
         req_select = 0;
