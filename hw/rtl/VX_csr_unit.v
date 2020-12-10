@@ -102,7 +102,7 @@ module VX_csr_unit #(
         endcase
     end
 
-    wire stall_in = fpu_pending[csr_pipe_req_if.wid];
+    wire stall_in = !csr_pipe_req_if.is_io && fpu_pending[csr_pipe_req_if.wid];
 
     wire pipe_req_valid_qual = csr_pipe_req_if.valid && !stall_in;  
 

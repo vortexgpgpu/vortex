@@ -54,6 +54,6 @@ typedef struct packed {
     logic [`NW_BITS-1:0]    size_m1;
 } gpu_barrier_t;
 
-`define GPU_BARRIER_SIZE (1+`NB_BITS+`NB_BITS)
+`define GPU_BARRIER_SIZE (1+`NB_BITS+`NW_BITS)
 
 `endif
