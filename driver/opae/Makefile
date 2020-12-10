@@ -85,7 +85,7 @@ vlsim-hw: $(SCOPE_H)
 fpga: $(SRCS) $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -DUSE_FPGA $^ $(LDFLAGS) $(FPGA_LIBS) -o $(PROJECT)
 
-asesim: $(SRCS) $(ASE_DIR)
+asesim: $(SRCS) $(ASE_DIR) $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -DUSE_ASE $(SRCS) $(LDFLAGS) $(ASE_LIBS) -o $(PROJECT_ASE)
 
 vlsim: $(SRCS) vlsim-hw
