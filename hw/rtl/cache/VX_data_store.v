@@ -46,7 +46,6 @@ module VX_data_store #(
         .DATAW(BANK_LINE_SIZE * 8),
         .SIZE(`BANK_LINE_COUNT),
         .BYTEENW(BANK_LINE_SIZE),
-        .BUFFERED(0),
         .RWCHECK(1)
     ) data (
         .clk(clk),

@@ -1,9 +1,10 @@
 `include "VX_platform.vh"
 
 module VX_cam_buffer #(
-    parameter DATAW  = 1,
-    parameter SIZE   = 1,
-    parameter ADDRW  = `LOG2UP(SIZE)
+    parameter DATAW   = 1,
+    parameter SIZE    = 1,
+    parameter FASTRAM = 0,
+    parameter ADDRW   = `LOG2UP(SIZE)
 ) (
     input  wire clk,
     input  wire reset,
@@ -63,8 +64,8 @@ module VX_cam_buffer #(
     VX_dp_ram #(
         .DATAW(DATAW),
         .SIZE(SIZE),
-        .BUFFERED(0),
-        .RWCHECK(0)
+        .RWCHECK(1),
+        .FASTRAM(FASTRAM)
     ) data_table (
         .clk(clk),
         .waddr(write_addr),                                

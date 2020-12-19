@@ -77,7 +77,7 @@ module VX_lsu_unit #(
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32))),
         .R(1)
-    ) pipe_reg0 (
+    ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .stall    (stall_in),
@@ -111,8 +111,9 @@ module VX_lsu_unit #(
     wire lsuq_pop = lsuq_pop_part && (0 == mem_rsp_mask_n);
 
     VX_cam_buffer #(
-        .DATAW (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
-        .SIZE  (`LSUQ_SIZE)
+        .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
+        .SIZE    (`LSUQ_SIZE),
+        .FASTRAM (1)
     ) req_metadata_buf (
         .clk          (clk),
         .reset        (reset),
@@ -192,7 +193,7 @@ module VX_lsu_unit #(
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .R(1)
-    ) pipe_reg1 (
+    ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .stall    (load_rsp_stall),
@@ -213,7 +214,6 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN (dcache_req_byteen,dcache_req_if.byteen);
     `SCOPE_ASSIGN (dcache_req_data,  dcache_req_if.data);
     `SCOPE_ASSIGN (dcache_req_tag,   req_tag);
-
     `SCOPE_ASSIGN (dcache_rsp_fire,  dcache_rsp_if.valid & {`NUM_THREADS{dcache_rsp_if.ready}});
     `SCOPE_ASSIGN (dcache_rsp_data,  dcache_rsp_if.data);
     `SCOPE_ASSIGN (dcache_rsp_tag,   rsp_tag);
@@ -222,11 +222,11 @@ module VX_lsu_unit #(
    always @(posedge clk) begin
         if ((| dcache_req_if.valid) && dcache_req_if.ready) begin
             if (dcache_req_if.rw)
-                $display("%t: D$%0d Rw Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
+                $display("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
                      $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
             else
-                $display("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, rd=%0d, byteen=%0h", 
-                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, req_rd, dcache_req_if.byteen, dcache_req_if.data);
+                $display("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, rd=%0d", 
+                     $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, req_address, dcache_req_if.tag, dcache_req_if.byteen, req_rd);
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h", 

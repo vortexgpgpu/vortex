@@ -29,8 +29,8 @@ module VX_warp_sched #(
     // Lock warp until instruction decode to resolve branches
     reg [`NUM_WARPS-1:0] fetch_lock;
 
-    reg [`NUM_THREADS-1:0] thread_masks[`NUM_WARPS-1:0];
-    reg [31:0] warp_pcs[`NUM_WARPS-1:0];
+    reg [`NUM_THREADS-1:0] thread_masks [`NUM_WARPS-1:0];
+    reg [31:0] warp_pcs [`NUM_WARPS-1:0];
 
     // barriers
     reg [`NUM_WARPS-1:0] barrier_stall_mask[`NUM_BARRIERS-1:0]; // warps waiting on barrier
@@ -180,11 +180,11 @@ module VX_warp_sched #(
 
     // split/join stack management
 
-    wire [(1+32+`NUM_THREADS-1):0] ipdom[`NUM_WARPS-1:0];
+    wire [(1+32+`NUM_THREADS-1):0] ipdom [`NUM_WARPS-1:0];
     wire [(1+32+`NUM_THREADS-1):0] q1 = {1'b1, 32'b0,                thread_masks[warp_ctl_if.wid]};
     wire [(1+32+`NUM_THREADS-1):0] q2 = {1'b0, warp_ctl_if.split.pc, warp_ctl_if.split.else_mask};
 
-    assign {join_fall, join_pc, join_tm} = ipdom[join_if.wid];
+    assign {join_fall, join_pc, join_tm} = ipdom [join_if.wid];
 
     for (genvar i = 0; i < `NUM_WARPS; i++) begin
         wire push = warp_ctl_if.valid 
@@ -196,7 +196,7 @@ module VX_warp_sched #(
 
         VX_ipdom_stack #(
             .WIDTH(1+32+`NUM_THREADS), 
-            .DEPTH(`NT_BITS+1)
+            .DEPTH(2 ** (`NT_BITS+1))
         ) ipdom_stack (
             .clk  (clk),
             .reset(reset),

@@ -54,7 +54,7 @@ module VX_tag_access #(
 
     wire                        read_valid;
     wire                        read_dirty;
-    wire[`TAG_SELECT_BITS-1:0]  read_tag;
+    wire [`TAG_SELECT_BITS-1:0] read_tag;
 
     wire                        do_fill;
     wire                        do_write;

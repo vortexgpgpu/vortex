@@ -31,6 +31,7 @@ set_global_assignment -name FAMILY $opts(family)
 set_global_assignment -name DEVICE $opts(device)
 set_global_assignment -name TOP_LEVEL_ENTITY $opts(top)
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
+
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
 set_global_assignment -name ADD_PASS_THROUGH_LOGIC_TO_INFERRED_RAMS ON
@@ -39,7 +40,14 @@ set_global_assignment -name VERILOG_MACRO SYNTHESIS
 set_global_assignment -name VERILOG_MACRO NDEBUG
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name VERILOG_MACRO FPU_FAST
+set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
+set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
 
+set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
+set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
+set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
 set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
@@ -50,12 +58,6 @@ set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
 set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
 set_global_assignment -name POWER_USE_TA_VALUE 65
 set_global_assignment -name SEED 1
-set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
-set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
-set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
-set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
-set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
-set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
 
 set idx 0
 foreach arg $q_args_orig {

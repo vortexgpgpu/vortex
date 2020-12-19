@@ -40,19 +40,20 @@ module VX_fpu_unit #(
     wire fpuq_pop  = valid_out && ready_out;
 
     VX_cam_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
-        .SIZE  (`FPUQ_SIZE)
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .SIZE    (`FPUQ_SIZE),
+        .FASTRAM (1)
     ) req_metadata_buf  (
-        .clk            (clk),
-        .reset          (reset),
-        .acquire_slot   (fpuq_push),       
-        .write_addr     (tag_in),                
-        .read_addr      (tag_out),
-        .release_addr   (tag_out),        
-        .write_data     ({fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.rd, fpu_req_if.wb}),                    
-        .read_data      ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}),        
-        .release_slot   (fpuq_pop),     
-        .full           (fpuq_full)
+        .clk          (clk),
+        .reset        (reset),
+        .acquire_slot (fpuq_push),       
+        .write_addr   (tag_in),                
+        .read_addr    (tag_out),
+        .release_addr (tag_out),        
+        .write_data   ({fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.rd, fpu_req_if.wb}),                    
+        .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}), 
+        .release_slot (fpuq_pop),     
+        .full         (fpuq_full)
     );
     
     // can accept new request?

@@ -5,10 +5,8 @@
 
 interface VX_csr_io_rsp_if ();
 
-    wire        valid;
-    
+    wire        valid;    
     wire [31:0] data;
-
     wire        ready;
     
 endinterface

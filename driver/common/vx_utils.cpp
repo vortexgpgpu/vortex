@@ -172,32 +172,32 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     // alu_stall
     uint64_t alu_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_ALU_ST, CSR_MPM_ALU_ST_H, &alu_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: alu stalls=%ld\n", core_id, alu_stalls_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: alu unit stalls=%ld\n", core_id, alu_stalls_per_core);
     alu_stalls += alu_stalls_per_core;      
     // lsu_stall
     uint64_t lsu_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_LSU_ST, CSR_MPM_LSU_ST_H, &lsu_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: lsu stalls=%ld\n", core_id, lsu_stalls_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: lsu unit stalls=%ld\n", core_id, lsu_stalls_per_core);
     lsu_stalls += lsu_stalls_per_core;
     // csr_stall
     uint64_t csr_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_CSR_ST, CSR_MPM_CSR_ST_H, &csr_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: csr stalls=%ld\n", core_id, csr_stalls_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: csr unit stalls=%ld\n", core_id, csr_stalls_per_core);
     csr_stalls += csr_stalls_per_core;
     // mul_stall
     uint64_t mul_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_MUL_ST, CSR_MPM_MUL_ST_H, &mul_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: mul stalls=%ld\n", core_id, mul_stalls_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: mul unit stalls=%ld\n", core_id, mul_stalls_per_core);
     mul_stalls += mul_stalls_per_core;
     // fpu_stall
     uint64_t fpu_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_FPU_ST, CSR_MPM_FPU_ST_H, &fpu_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: fpu stalls=%ld\n", core_id, fpu_stalls_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: fpu unit stalls=%ld\n", core_id, fpu_stalls_per_core);
     fpu_stalls += fpu_stalls_per_core;      
     // gpu_stall
     uint64_t gpu_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_GPU_ST, CSR_MPM_GPU_ST_H, &gpu_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: gpu stalls=%ld\n", core_id, gpu_stalls_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: gpu unit stalls=%ld\n", core_id, gpu_stalls_per_core);
     gpu_stalls += gpu_stalls_per_core;  
 
     // PERF: Icache
@@ -300,12 +300,12 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: icache stalls=%ld\n", icache_stalls);
   fprintf(stream, "PERF: ibuffer stalls=%ld\n", ibuffer_stalls);
   fprintf(stream, "PERF: scoreboard stalls=%ld\n", scoreboard_stalls);
-  fprintf(stream, "PERF: alu stalls=%ld\n", alu_stalls);
-  fprintf(stream, "PERF: lsu stalls=%ld\n", lsu_stalls);
-  fprintf(stream, "PERF: csr stalls=%ld\n", csr_stalls);
-  fprintf(stream, "PERF: mul stalls=%ld\n", mul_stalls);
-  fprintf(stream, "PERF: fpu stalls=%ld\n", fpu_stalls);
-  fprintf(stream, "PERF: gpu stalls=%ld\n", gpu_stalls);
+  fprintf(stream, "PERF: alu unit stalls=%ld\n", alu_stalls);
+  fprintf(stream, "PERF: lsu unit stalls=%ld\n", lsu_stalls);
+  fprintf(stream, "PERF: csr unit stalls=%ld\n", csr_stalls);
+  fprintf(stream, "PERF: mul unit stalls=%ld\n", mul_stalls);
+  fprintf(stream, "PERF: fpu unit stalls=%ld\n", fpu_stalls);
+  fprintf(stream, "PERF: gpu unit stalls=%ld\n", gpu_stalls);
   fprintf(stream, "PERF: icache reads=%ld\n", icache_reads);
   fprintf(stream, "PERF: icache read misses=%ld\n", icache_read_misses);
   fprintf(stream, "PERF: icache reponse stalls=%ld\n", icache_rsp_stalls);

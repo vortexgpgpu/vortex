@@ -181,7 +181,9 @@ module VX_cluster #(
         .NUM_REQS      (`NUM_CORES),
         .WORD_SIZE     (4),
         .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
-        .TAG_OUT_WIDTH (`L2CORE_TAG_WIDTH)
+        .TAG_OUT_WIDTH (`L2CORE_TAG_WIDTH),
+        .BUFFERED_REQ  (`NUM_CORES >= 4),
+        .BUFFERED_RSP  (1)
     ) io_arb (
         .clk            (clk),
         .reset          (reset),
@@ -218,9 +220,11 @@ module VX_cluster #(
     );   
 
     VX_csr_io_arb #(
-        .NUM_REQS   (`NUM_CORES),
-        .DATA_WIDTH (32),
-        .ADDR_WIDTH (12)
+        .NUM_REQS     (`NUM_CORES),
+        .DATA_WIDTH   (32),
+        .ADDR_WIDTH   (12),
+        .BUFFERED_REQ (1), 
+        .BUFFERED_RSP (`NUM_CORES >= 4)
     ) csr_io_arb (
         .clk            (clk),
         .reset          (reset),
@@ -268,7 +272,8 @@ module VX_cluster #(
         .DST_ADDR_WIDTH     (`DDRAM_ADDR_WIDTH),
         .SREQ_SIZE          (`L2SREQ_SIZE),
         .TAG_IN_WIDTH       (`L2SNP_TAG_WIDTH),
-        .TAG_OUT_WIDTH      (`DSNP_TAG_WIDTH)
+        .TAG_OUT_WIDTH      (`DSNP_TAG_WIDTH),
+        .BUFFERED           (`NUM_CORES >= 4)
     ) snp_forwarder (
         .clk                (clk),
         .reset              (reset),
@@ -300,49 +305,6 @@ module VX_cluster #(
     `ifdef PERF_ENABLE
         VX_perf_cache_if perf_l2cache_if();
     `endif
-
-        wire [`NUM_CORES-1:0]                        per_core_dram_req_valid_qual;
-        wire [`NUM_CORES-1:0]                        per_core_dram_req_rw_qual;
-        wire [`NUM_CORES-1:0][`DDRAM_BYTEEN_WIDTH-1:0] per_core_dram_req_byteen_qual;    
-        wire [`NUM_CORES-1:0][`DDRAM_ADDR_WIDTH-1:0] per_core_dram_req_addr_qual;
-        wire [`NUM_CORES-1:0][`DDRAM_LINE_WIDTH-1:0] per_core_dram_req_data_qual;
-        wire [`NUM_CORES-1:0][`XDRAM_TAG_WIDTH-1:0]  per_core_dram_req_tag_qual;
-        wire [`NUM_CORES-1:0]                        per_core_dram_req_ready_qual;
-
-        wire [`NUM_CORES-1:0]                        per_core_dram_rsp_valid_unqual;            
-        wire [`NUM_CORES-1:0][`DDRAM_LINE_WIDTH-1:0] per_core_dram_rsp_data_unqual;
-        wire [`NUM_CORES-1:0][`XDRAM_TAG_WIDTH-1:0]  per_core_dram_rsp_tag_unqual;
-        wire [`NUM_CORES-1:0]                        per_core_dram_rsp_ready_unqual;
-
-        for (genvar i = 0; i < `NUM_CORES; i++) begin 
-            VX_skid_buffer #(
-                .DATAW    (1 + `DDRAM_BYTEEN_WIDTH + `DDRAM_ADDR_WIDTH + `DDRAM_LINE_WIDTH + `XDRAM_TAG_WIDTH),
-                .PASSTHRU (`NUM_CORES < 4)
-            ) core_req_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (per_core_dram_req_valid[i]),        
-                .data_in   ({per_core_dram_req_rw[i], per_core_dram_req_byteen[i], per_core_dram_req_addr[i], per_core_dram_req_data[i], per_core_dram_req_tag[i]}),
-                .ready_in  (per_core_dram_req_ready[i]),        
-                .valid_out (per_core_dram_req_valid_qual[i]),
-                .data_out  ({per_core_dram_req_rw_qual[i], per_core_dram_req_byteen_qual[i], per_core_dram_req_addr_qual[i], per_core_dram_req_data_qual[i], per_core_dram_req_tag_qual[i]}),
-                .ready_out (per_core_dram_req_ready_qual[i])
-            );
-
-            VX_skid_buffer #(
-                .DATAW    (`DDRAM_LINE_WIDTH + `XDRAM_TAG_WIDTH),
-                .PASSTHRU (1)
-            ) core_rsp_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (per_core_dram_rsp_valid_unqual[i]),        
-                .data_in   ({per_core_dram_rsp_data_unqual[i], per_core_dram_rsp_tag_unqual[i]}),
-                .ready_in  (per_core_dram_rsp_ready_unqual[i]),        
-                .valid_out (per_core_dram_rsp_valid[i]),
-                .data_out  ({per_core_dram_rsp_data[i], per_core_dram_rsp_tag[i]}),
-                .ready_out (per_core_dram_rsp_ready[i])
-            );
-        end
 
         VX_cache #(
             .CACHE_ID           (`L2CACHE_ID),
@@ -376,19 +338,19 @@ module VX_cluster #(
         `endif
 
             // Core request
-            .core_req_valid     (per_core_dram_req_valid_qual),
-            .core_req_rw        (per_core_dram_req_rw_qual),
-            .core_req_byteen    (per_core_dram_req_byteen_qual),
-            .core_req_addr      (per_core_dram_req_addr_qual),
-            .core_req_data      (per_core_dram_req_data_qual),  
-            .core_req_tag       (per_core_dram_req_tag_qual),  
-            .core_req_ready     (per_core_dram_req_ready_qual),
+            .core_req_valid     (per_core_dram_req_valid),
+            .core_req_rw        (per_core_dram_req_rw),
+            .core_req_byteen    (per_core_dram_req_byteen),
+            .core_req_addr      (per_core_dram_req_addr),
+            .core_req_data      (per_core_dram_req_data),  
+            .core_req_tag       (per_core_dram_req_tag),  
+            .core_req_ready     (per_core_dram_req_ready),
 
             // Core response
-            .core_rsp_valid     (per_core_dram_rsp_valid_unqual),
-            .core_rsp_data      (per_core_dram_rsp_data_unqual),
-            .core_rsp_tag       (per_core_dram_rsp_tag_unqual),
-            .core_rsp_ready     (per_core_dram_rsp_ready_unqual),
+            .core_rsp_valid     (per_core_dram_rsp_valid),
+            .core_rsp_data      (per_core_dram_rsp_data),
+            .core_rsp_tag       (per_core_dram_rsp_tag),
+            .core_rsp_ready     (per_core_dram_rsp_ready),
 
             // DRAM request
             .dram_req_valid     (dram_req_valid),
@@ -427,7 +389,9 @@ module VX_cluster #(
             .NUM_REQS      (`NUM_CORES),
             .DATA_WIDTH    (`L2DRAM_LINE_WIDTH),            
             .TAG_IN_WIDTH  (`XDRAM_TAG_WIDTH),
-            .TAG_OUT_WIDTH (`L2DRAM_TAG_WIDTH)
+            .TAG_OUT_WIDTH (`L2DRAM_TAG_WIDTH),
+            .BUFFERED_REQ  (`NUM_CORES >= 4),
+            .BUFFERED_RSP  (1)
         ) dram_arb (
             .clk            (clk),
             .reset          (reset),

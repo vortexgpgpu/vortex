@@ -110,15 +110,13 @@ module VX_issue #(
     `SCOPE_ASSIGN (issue_imm,         ibuf_deq_if.imm);
     `SCOPE_ASSIGN (issue_rs1_is_pc,   ibuf_deq_if.rs1_is_PC);
     `SCOPE_ASSIGN (issue_rs2_is_imm,  ibuf_deq_if.rs2_is_imm);
-    
     `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
-    `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);     
- 
+    `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);    
     `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);
     `SCOPE_ASSIGN (gpr_rsp_b,         gpr_rsp_if.rs2_data);
     `SCOPE_ASSIGN (gpr_rsp_c,         gpr_rsp_if.rs3_data);
-            
     `SCOPE_ASSIGN (writeback_valid,   writeback_if.valid);    
+    `SCOPE_ASSIGN (writeback_tmask,   writeback_if.tmask);
     `SCOPE_ASSIGN (writeback_wid,     writeback_if.wid);
     `SCOPE_ASSIGN (writeback_pc,      writeback_if.PC);  
     `SCOPE_ASSIGN (writeback_rd,      writeback_if.rd);

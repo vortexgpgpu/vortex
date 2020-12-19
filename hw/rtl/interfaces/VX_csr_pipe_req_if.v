@@ -6,7 +6,6 @@
 interface VX_csr_pipe_req_if ();
 
     wire                    valid;
-
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
     wire [31:0]             PC;
@@ -15,8 +14,7 @@ interface VX_csr_pipe_req_if ();
     wire [31:0]             csr_mask;
     wire [`NR_BITS-1:0]     rd;
     wire                    wb;
-    wire                    is_io;  
-    
+    wire                    is_io;      
     wire                    ready;
     
 endinterface

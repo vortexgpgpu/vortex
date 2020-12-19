@@ -42,9 +42,9 @@ module VX_ibuffer #(
         wire pop = reading && (size_r[i] != 1);
 
         VX_generic_queue #(
-            .DATAW(DATAW),
-            .SIZE(SIZE),
-            .BUFFERED(1)
+            .DATAW   (DATAW),
+            .SIZE    (SIZE),
+            .FASTRAM (1)
         ) queue (
             .clk      (clk),
             .reset    (reset),
@@ -101,7 +101,7 @@ module VX_ibuffer #(
     end 
 
     // schedule the next instruction to issue
-    // does round-robin scheduling when multiple warps are present
+    // do round-robin when multiple warps are active
     always @(*) begin    
         deq_valid_n  = 0;     
         deq_wid_n    = 'x;        

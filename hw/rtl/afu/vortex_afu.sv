@@ -700,8 +700,8 @@ always @(posedge clk) begin
     end
 
     cci_rd_req_enable <= (STATE_WRITE == state)                       
-                      && (cci_rd_req_ctr_next < cmd_data_size)
-                      && (cci_pending_reads_next < CCI_RD_QUEUE_SIZE)
+                      && (cci_rd_req_ctr_next != cmd_data_size)
+                      && (cci_pending_reads_next != CCI_RD_QUEUE_SIZE)
                       && !cp2af_sRxPort.c0TxAlmFull;    
 
     if (cci_rd_req_fire) begin  
@@ -741,8 +741,9 @@ always @(posedge clk) begin
 end
 
 VX_generic_queue #(
-  .DATAW(CCI_RD_RQ_DATAW),
-  .SIZE(CCI_RD_QUEUE_SIZE)
+  .DATAW   (CCI_RD_RQ_DATAW),
+  .SIZE    (CCI_RD_QUEUE_SIZE),
+  .FASTRAM (1)  
 ) cci_rd_req_queue (
   .clk      (clk),
   .reset    (reset),
@@ -898,7 +899,7 @@ always @(posedge clk) begin
     end
 
     if ((STATE_CLFLUSH == state) 
-     && (snp_req_ctr_next >= snp_req_size)) begin
+     && (snp_req_ctr_next == snp_req_size)) begin
        vx_snp_req_valid <= 0;
     end
 

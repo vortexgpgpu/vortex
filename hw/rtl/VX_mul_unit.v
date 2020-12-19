@@ -32,19 +32,20 @@ module VX_mul_unit #(
     wire mulq_pop  = valid_out && ready_out;
 
     VX_cam_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
-        .SIZE  (`MULQ_SIZE)
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .SIZE    (`MULQ_SIZE),
+        .FASTRAM (1)
     ) req_metadata_buf  (
-        .clk            (clk),
-        .reset          (reset),
-        .acquire_slot   (mulq_push),       
-        .write_addr     (tag_in),                
-        .read_addr      (tag_out),
-        .release_addr   (tag_out),        
-        .write_data     ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb}),                    
-        .read_data      ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}),        
-        .release_slot   (mulq_pop),     
-        .full           (mulq_full)
+        .clk          (clk),
+        .reset        (reset),
+        .acquire_slot (mulq_push),       
+        .write_addr   (tag_in),                
+        .read_addr    (tag_out),
+        .release_addr (tag_out),        
+        .write_data   ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb}),                    
+        .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}), 
+        .release_slot (mulq_pop),     
+        .full         (mulq_full)
     );
 
     wire valid_in = mul_req_if.valid && ~mulq_full;

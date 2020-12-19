@@ -3,10 +3,10 @@
 module VX_generic_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
-    parameter BUFFERED = 0,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1),
-    parameter FASTRAM  = 0
+    parameter BUFFERED = 0,
+    parameter FASTRAM  = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -78,25 +78,22 @@ module VX_generic_queue #(
                         end;                           
                     end
                 end
-                used_r <= used_r + ADDRW'(push) - ADDRW'(pop);
+                used_r <= used_r + (ADDRW'(push) - ADDRW'(pop));
             end                   
         end
 
         if (0 == BUFFERED) begin          
 
-            reg [ADDRW:0] rd_ptr_r;
-            reg [ADDRW:0] wr_ptr_r;
-        
-            wire [ADDRW-1:0] rd_ptr_a = rd_ptr_r[ADDRW-1:0];
-            wire [ADDRW-1:0] wr_ptr_a = wr_ptr_r[ADDRW-1:0];
+            reg [ADDRW-1:0] rd_ptr_r;
+            reg [ADDRW-1:0] wr_ptr_r;
             
             always @(posedge clk) begin
                 if (reset) begin
                     rd_ptr_r <= 0;
                     wr_ptr_r <= 0;
                 end else begin
-                    wr_ptr_r <= wr_ptr_r + (ADDRW+1)'(push);
-                    rd_ptr_r <= rd_ptr_r + (ADDRW+1)'(pop);
+                    wr_ptr_r <= wr_ptr_r + ADDRW'(push);
+                    rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
                 end                   
             end
 
@@ -108,8 +105,8 @@ module VX_generic_queue #(
                 .FASTRAM(FASTRAM)
             ) dp_ram (
                 .clk(clk),
-                .waddr(wr_ptr_a),                                
-                .raddr(rd_ptr_a),
+                .waddr(wr_ptr_r),                                
+                .raddr(rd_ptr_r),
                 .wren(push),
                 .byteen(1'b1),
                 .rden(1'b1),
@@ -149,7 +146,7 @@ module VX_generic_queue #(
                 .DATAW(DATAW),
                 .SIZE(SIZE),
                 .BUFFERED(0),
-                .RWCHECK(0),
+                .RWCHECK(1),
                 .FASTRAM(FASTRAM)
             ) dp_ram (
                 .clk(clk),
@@ -166,7 +163,7 @@ module VX_generic_queue #(
                 if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
                     dout_r <= data_in;
                 end else if (pop) begin
-                    dout_r <= dout;                
+                    dout_r <= dout;     // BRAM R/W collision
                 end
             end
 

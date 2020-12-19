@@ -39,36 +39,22 @@ module VX_miss_resrv #(
 
     // enqueue
     input wire                          enqueue_st3,    
-    input wire[`LINE_ADDR_WIDTH-1:0]    enqueue_addr_st3,
-    input wire[`UP(`WORD_SELECT_WIDTH)-1:0] enqueue_wsel_st3,
-    input wire[`WORD_WIDTH-1:0]         enqueue_data_st3,
-    input wire[`REQS_BITS-1:0]          enqueue_tid_st3,
-    input wire[`REQ_TAG_WIDTH-1:0]      enqueue_tag_st3,
-    input wire                          enqueue_rw_st3,
-    input wire[WORD_SIZE-1:0]           enqueue_byteen_st3,    
-    input wire                          enqueue_is_snp_st3,
-    input wire                          enqueue_snp_inv_st3,
+    input wire [`LINE_ADDR_WIDTH-1:0]   enqueue_addr_st3,
+    input wire [`MSHR_DATA_WIDTH-1:0]   enqueue_data_st3,
     input wire                          enqueue_is_mshr_st3,
     input wire                          enqueue_ready_st3,
     output wire                         enqueue_full,
 
     // fill
     input wire                          update_ready_st0,    
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr_st0,
+    input wire [`LINE_ADDR_WIDTH-1:0]   addr_st0,
     output wire                         pending_hazard_st0,
 
     // dequeue
     input wire                          schedule_st0,
     output wire                         dequeue_valid_st0,
-    output wire[`LINE_ADDR_WIDTH-1:0]   dequeue_addr_st0,
-    output wire[`UP(`WORD_SELECT_WIDTH)-1:0] dequeue_wsel_st0,
-    output wire[`WORD_WIDTH-1:0]        dequeue_data_st0,
-    output wire[`REQS_BITS-1:0]         dequeue_tid_st0,
-    output wire[`REQ_TAG_WIDTH-1:0]     dequeue_tag_st0,
-    output wire                         dequeue_rw_st0,
-    output wire[WORD_SIZE-1:0]          dequeue_byteen_st0,
-    output wire                         dequeue_is_snp_st0,   
-    output wire                         dequeue_snp_inv_st0,
+    output wire [`LINE_ADDR_WIDTH-1:0]  dequeue_addr_st0,
+    output wire [`MSHR_DATA_WIDTH-1:0]  dequeue_data_st0,
     input wire                          dequeue_st3
 );
     reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
@@ -76,8 +62,7 @@ module VX_miss_resrv #(
     reg [MSHR_SIZE-1:0]            valid_table;
     reg [MSHR_SIZE-1:0]            ready_table;
     reg [`LOG2UP(MSHR_SIZE)-1:0]   schedule_ptr, restore_ptr;
-    reg [`LOG2UP(MSHR_SIZE)-1:0]   head_ptr;
-    reg [`LOG2UP(MSHR_SIZE)-1:0]   tail_ptr;
+    reg [`LOG2UP(MSHR_SIZE)-1:0]   head_ptr, tail_ptr;
     reg [`LOG2UP(MSHR_SIZE+1)-1:0] size;
 
     assign enqueue_full = (size == $bits(size)'(MSHR_SIZE));
@@ -151,8 +136,6 @@ module VX_miss_resrv #(
     VX_dp_ram #(
         .DATAW(`MSHR_DATA_WIDTH),
         .SIZE(MSHR_SIZE),
-        .BYTEENW(1),
-        .BUFFERED(0),
         .RWCHECK(1)
     ) datatable (
         .clk(clk),
@@ -161,8 +144,8 @@ module VX_miss_resrv #(
         .wren(mshr_push),
         .byteen(1'b1),
         .rden(1'b1),
-        .din({enqueue_data_st3,  enqueue_tid_st3, enqueue_tag_st3, enqueue_rw_st3, enqueue_byteen_st3, enqueue_wsel_st3, enqueue_is_snp_st3, enqueue_snp_inv_st3}),
-        .dout({dequeue_data_st0, dequeue_tid_st0, dequeue_tag_st0, dequeue_rw_st0, dequeue_byteen_st0, dequeue_wsel_st0, dequeue_is_snp_st0, dequeue_snp_inv_st0})
+        .din(enqueue_data_st3),
+        .dout(dequeue_data_st0)
     );
 
 `ifdef DBG_PRINT_CACHE_MSHR        

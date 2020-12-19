@@ -6,7 +6,6 @@
 interface VX_decode_if ();
 
     wire                    valid;    
-
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
     wire [31:0]             PC;
@@ -21,8 +20,7 @@ interface VX_decode_if ();
     wire [31:0]             imm; 
     wire                    rs1_is_PC;
     wire                    rs2_is_imm;
-    wire [`NUM_REGS-1:0]    used_regs;       
-
+    wire [`NUM_REGS-1:0]    used_regs;      
     wire                    ready;
 
 endinterface
