@@ -43,8 +43,19 @@ module VX_csr_arb (
     assign csr_io_req_if.ready   = csr_pipe_req_if.ready && !csr_core_req_if.valid;   
     
     // responses
-    assign csr_io_rsp_if.valid  = csr_pipe_rsp_if.valid & select_io_rsp;
-    assign csr_io_rsp_if.data   = csr_pipe_rsp_if.data[0];  
+    wire csr_io_rsp_ready;
+    VX_skid_buffer #(
+        .DATAW    (32)
+    ) csr_io_out_buffer (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (csr_pipe_rsp_if.valid & select_io_rsp),        
+        .data_in   (csr_pipe_rsp_if.data[0]),
+        .ready_in  (csr_io_rsp_ready),      
+        .valid_out (csr_io_rsp_if.valid),
+        .data_out  (csr_io_rsp_if.data),
+        .ready_out (csr_io_rsp_if.ready)
+    );
 
     assign csr_commit_if.valid  = csr_pipe_rsp_if.valid & ~select_io_rsp;
     assign csr_commit_if.wid    = csr_pipe_rsp_if.wid;    
@@ -54,6 +65,6 @@ module VX_csr_arb (
     assign csr_commit_if.wb     = csr_pipe_rsp_if.wb;
     assign csr_commit_if.data   = csr_pipe_rsp_if.data;
 
-    assign csr_pipe_rsp_if.ready = select_io_rsp ? csr_io_rsp_if.ready : csr_commit_if.ready;
+    assign csr_pipe_rsp_if.ready = select_io_rsp ? csr_io_rsp_ready : csr_commit_if.ready;
 
 endmodule

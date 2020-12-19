@@ -378,9 +378,9 @@ module VX_cache #(
         end
 
         VX_stream_arbiter #(
-            .NUM_REQS   (NUM_BANKS),
-            .DATAW      (`DRAM_ADDR_WIDTH + 1 + BANK_LINE_SIZE + `BANK_LINE_WIDTH),
-            .OUT_BUFFER (NUM_BANKS >= 4)
+            .NUM_REQS (NUM_BANKS),
+            .DATAW    (`DRAM_ADDR_WIDTH + 1 + BANK_LINE_SIZE + `BANK_LINE_WIDTH),
+            .BUFFERED (1)
         ) dram_req_arb (
             .clk       (clk),
             .reset     (reset),
@@ -408,9 +408,9 @@ module VX_cache #(
 
     if (FLUSH_ENABLE) begin
         VX_stream_arbiter #(
-            .NUM_REQS   (NUM_BANKS),
-            .DATAW      (SNP_TAG_WIDTH),
-            .OUT_BUFFER (NUM_BANKS >= 4)
+            .NUM_REQS (NUM_BANKS),
+            .DATAW    (SNP_TAG_WIDTH),
+            .BUFFERED (1)
         ) snp_rsp_arb (
             .clk       (clk),
             .reset     (reset),

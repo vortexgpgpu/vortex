@@ -24,11 +24,15 @@
 `endif
 
 `ifndef L2_ENABLE
-`define L2_ENABLE (`NUM_CORES >= 4)
+`define L2_ENABLE 0
 `endif
 
 `ifndef L3_ENABLE
-`define L3_ENABLE (`NUM_CLUSTERS >= 4)
+`define L3_ENABLE 0
+`endif
+
+`ifndef SM_ENABLE
+`define SM_ENABLE 0
 `endif
 
 `ifndef GLOBAL_BLOCK_SIZE
@@ -253,7 +257,7 @@
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
-`define ICACHE_SIZE 4096
+`define ICACHE_SIZE 2048
 `endif
 
 // Core Request Queue Size
@@ -285,7 +289,7 @@
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
-`define DCACHE_SIZE 8192
+`define DCACHE_SIZE 4096
 `endif
 
 // Number of banks
@@ -332,7 +336,7 @@
 
 // Size of cache in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE 4096
+`define SMEM_SIZE 2048
 `endif
 
 // Number of banks

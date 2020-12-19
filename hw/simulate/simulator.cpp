@@ -4,7 +4,7 @@
 #include <iomanip>
 
 #define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 100
+#define DRAM_LATENCY 24
 #define DRAM_RQ_SIZE 16
 #define DRAM_STALLS_MODULO 16
 

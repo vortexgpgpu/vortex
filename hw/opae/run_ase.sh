@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_DIR=$PWD
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 BUILD_DIR=$1
 

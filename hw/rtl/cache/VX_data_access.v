@@ -40,25 +40,25 @@ module VX_data_access #(
 `IGNORE_WARNINGS_END    
     input wire                          writeen_in,
     input wire                          is_fill_in,
-    input wire[`WORD_WIDTH-1:0]         writeword_in,
-    input wire[`BANK_LINE_WIDTH-1:0]    writedata_in,
-    input wire[WORD_SIZE-1:0]           byteen_in, 
-    input wire[`UP(`WORD_SELECT_WIDTH)-1:0] wordsel_in,
+    input wire [`WORD_WIDTH-1:0]        writeword_in,
+    input wire [`BANK_LINE_WIDTH-1:0]   writedata_in,
+    input wire [WORD_SIZE-1:0]          byteen_in, 
+    input wire [`UP(`WORD_SELECT_WIDTH)-1:0] wordsel_in,
 
     // Outputs
     output wire[`WORD_WIDTH-1:0]        readword_out,
-    output wire[`BANK_LINE_WIDTH-1:0]   readdata_out,
-    output wire[BANK_LINE_SIZE-1:0]     dirtyb_out
+    output wire [`BANK_LINE_WIDTH-1:0]  readdata_out,
+    output wire [BANK_LINE_SIZE-1:0]    dirtyb_out
 );
 
-    wire[BANK_LINE_SIZE-1:0]    read_dirtyb_out;
-    wire[`BANK_LINE_WIDTH-1:0]  read_data;
+    wire [BANK_LINE_SIZE-1:0]   read_dirtyb_out;
+    wire [`BANK_LINE_WIDTH-1:0] read_data;
 
-    wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable;    
+    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable;    
     wire                        write_enable;
-    wire[`BANK_LINE_WIDTH-1:0]  write_data;
+    wire [`BANK_LINE_WIDTH-1:0] write_data;
 
-    wire[`LINE_SELECT_BITS-1:0] addrline = addr_in[`LINE_SELECT_BITS-1:0];
+    wire [`LINE_SELECT_BITS-1:0] addrline = addr_in[`LINE_SELECT_BITS-1:0];
 
     VX_data_store #(
         .CACHE_SIZE     (CACHE_SIZE),
@@ -68,7 +68,6 @@ module VX_data_access #(
         .WRITE_ENABLE   (WRITE_ENABLE)
     ) data_store (
         .clk         (clk),
-
         .reset       (reset),
 
         .read_addr   (addrline),
@@ -81,7 +80,7 @@ module VX_data_access #(
         .write_addr  (addrline),        
         .write_data  (write_data)
     );
-    
+
     if (`WORD_SELECT_WIDTH != 0) begin
         wire [`WORD_WIDTH-1:0] readword = read_data[wordsel_in * `WORD_WIDTH +: `WORD_WIDTH];
         for (genvar i = 0; i < WORD_SIZE; i++) begin
@@ -97,16 +96,12 @@ module VX_data_access #(
         wire word_sel = (`WORD_SELECT_WIDTH == 0) || (wordsel_in == `UP(`WORD_SELECT_WIDTH)'(i));
         
         assign byte_enable[i] = is_fill_in ? {WORD_SIZE{1'b1}} : 
-                                        word_sel ? byteen_in :
-                                            {WORD_SIZE{1'b0}};
+                                    word_sel ? byteen_in : {WORD_SIZE{1'b0}};
 
         assign write_data[i * `WORD_WIDTH +: `WORD_WIDTH] = is_fill_in ? writedata_in[i * `WORD_WIDTH +: `WORD_WIDTH] : writeword_in;
     end
 
-    assign write_enable = valid_in 
-                       && writeen_in 
-                       && !stall;
-
+    assign write_enable = valid_in && writeen_in && !stall;
     assign dirtyb_out   = read_dirtyb_out;
     assign readdata_out = read_data;
 

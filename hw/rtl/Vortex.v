@@ -183,7 +183,9 @@ module Vortex (
         .NUM_REQS      (`NUM_CLUSTERS),
         .WORD_SIZE     (4),
         .TAG_IN_WIDTH  (`L2CORE_TAG_WIDTH),
-        .TAG_OUT_WIDTH (`L3CORE_TAG_WIDTH)
+        .TAG_OUT_WIDTH (`L3CORE_TAG_WIDTH),
+        .BUFFERED_REQ  (1),
+        .BUFFERED_RSP  (`NUM_CLUSTERS >= 4)
     ) io_arb (
         .clk            (clk),
         .reset          (reset),
@@ -220,9 +222,11 @@ module Vortex (
     );
 
     VX_csr_io_arb #(
-        .NUM_REQS   (`NUM_CLUSTERS),
-        .DATA_WIDTH (32),
-        .ADDR_WIDTH (12)
+        .NUM_REQS     (`NUM_CLUSTERS),
+        .DATA_WIDTH   (32),
+        .ADDR_WIDTH   (12),
+        .BUFFERED_REQ (`NUM_CLUSTERS >= 4),
+        .BUFFERED_RSP (1)
     ) csr_io_arb (
         .clk            (clk),
         .reset          (reset),
@@ -270,7 +274,8 @@ module Vortex (
         .DST_ADDR_WIDTH     (`L2DRAM_ADDR_WIDTH),             
         .TAG_IN_WIDTH       (`L3SNP_TAG_WIDTH),
         .TAG_OUT_WIDTH      (`L2SNP_TAG_WIDTH),
-        .SREQ_SIZE          (`L3SREQ_SIZE)
+        .SREQ_SIZE          (`L3SREQ_SIZE),
+        .BUFFERED           (`NUM_CLUSTERS >= 4)
     ) snp_forwarder (
         .clk                (clk),
         .reset              (reset),
@@ -302,49 +307,6 @@ module Vortex (
     `ifdef PERF_ENABLE
         VX_perf_cache_if perf_l3cache_if();
     `endif
-
-        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_valid_qual;
-        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_rw_qual;    
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen_qual;    
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_ADDR_WIDTH-1:0] per_cluster_dram_req_addr_qual;
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_req_data_qual;
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0] per_cluster_dram_req_tag_qual;
-        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_req_ready_qual;
-
-        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_rsp_valid_unqual;            
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_LINE_WIDTH-1:0] per_cluster_dram_rsp_data_unqual;
-        wire [`NUM_CLUSTERS-1:0][`L2DRAM_TAG_WIDTH-1:0] per_cluster_dram_rsp_tag_unqual;
-        wire [`NUM_CLUSTERS-1:0]                        per_cluster_dram_rsp_ready_unqual;
-
-        for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin 
-            VX_skid_buffer #(
-                .DATAW    (1 + `L2DRAM_BYTEEN_WIDTH + `L2DRAM_ADDR_WIDTH + `L2DRAM_LINE_WIDTH + `L2DRAM_TAG_WIDTH),
-                .PASSTHRU (`NUM_CLUSTERS < 4)
-            ) dram_req_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (per_cluster_dram_req_valid[i]),        
-                .data_in   ({per_cluster_dram_req_rw[i], per_cluster_dram_req_byteen[i], per_cluster_dram_req_addr[i], per_cluster_dram_req_data[i], per_cluster_dram_req_tag[i]}),
-                .ready_in  (per_cluster_dram_req_ready[i]),        
-                .valid_out (per_cluster_dram_req_valid_qual[i]),
-                .data_out  ({per_cluster_dram_req_rw_qual[i], per_cluster_dram_req_byteen_qual[i], per_cluster_dram_req_addr_qual[i], per_cluster_dram_req_data_qual[i], per_cluster_dram_req_tag_qual[i]}),
-                .ready_out (per_cluster_dram_req_ready_qual[i])
-            );
-
-            VX_skid_buffer #(
-                .DATAW    (`L2DRAM_LINE_WIDTH + `L2DRAM_TAG_WIDTH),
-                .PASSTHRU (1)
-            ) core_rsp_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (per_cluster_dram_rsp_valid_unqual[i]),        
-                .data_in   ({per_cluster_dram_rsp_data_unqual[i], per_cluster_dram_rsp_tag_unqual[i]}),
-                .ready_in  (per_cluster_dram_rsp_ready_unqual[i]),        
-                .valid_out (per_cluster_dram_rsp_valid[i]),
-                .data_out  ({per_cluster_dram_rsp_data[i], per_cluster_dram_rsp_tag[i]}),
-                .ready_out (per_cluster_dram_rsp_ready[i])
-            );
-        end
 
         VX_cache #(
             .CACHE_ID           (`L3CACHE_ID),
@@ -378,19 +340,19 @@ module Vortex (
         `endif
 
             // Core request    
-            .core_req_valid     (per_cluster_dram_req_valid_qual),
-            .core_req_rw        (per_cluster_dram_req_rw_qual),
-            .core_req_byteen    (per_cluster_dram_req_byteen_qual),
-            .core_req_addr      (per_cluster_dram_req_addr_qual),
-            .core_req_data      (per_cluster_dram_req_data_qual),
-            .core_req_tag       (per_cluster_dram_req_tag_qual),
-            .core_req_ready     (per_cluster_dram_req_ready_qual),
+            .core_req_valid     (per_cluster_dram_req_valid),
+            .core_req_rw        (per_cluster_dram_req_rw),
+            .core_req_byteen    (per_cluster_dram_req_byteen),
+            .core_req_addr      (per_cluster_dram_req_addr),
+            .core_req_data      (per_cluster_dram_req_data),
+            .core_req_tag       (per_cluster_dram_req_tag),
+            .core_req_ready     (per_cluster_dram_req_ready),
 
             // Core response
-            .core_rsp_valid     (per_cluster_dram_rsp_valid_unqual),
-            .core_rsp_data      (per_cluster_dram_rsp_data_unqual),
-            .core_rsp_tag       (per_cluster_dram_rsp_tag_unqual),              
-            .core_rsp_ready     (per_cluster_dram_rsp_ready_unqual),
+            .core_rsp_valid     (per_cluster_dram_rsp_valid),
+            .core_rsp_data      (per_cluster_dram_rsp_data),
+            .core_rsp_tag       (per_cluster_dram_rsp_tag),              
+            .core_rsp_ready     (per_cluster_dram_rsp_ready),
 
             // DRAM request
             .dram_req_valid     (dram_req_valid),
@@ -429,7 +391,9 @@ module Vortex (
             .NUM_REQS      (`NUM_CLUSTERS),
             .DATA_WIDTH    (`L3DRAM_LINE_WIDTH),            
             .TAG_IN_WIDTH  (`L2DRAM_TAG_WIDTH),
-            .TAG_OUT_WIDTH (`L3DRAM_TAG_WIDTH)
+            .TAG_OUT_WIDTH (`L3DRAM_TAG_WIDTH),
+            .BUFFERED_REQ  (1),
+            .BUFFERED_RSP  (`NUM_CLUSTERS >= 4)
         ) dram_arb (
             .clk            (clk),
             .reset          (reset),
@@ -476,28 +440,23 @@ module Vortex (
 
     `SCOPE_ASSIGN (reset, reset);
 
-    `SCOPE_ASSIGN (dram_req_fire,  dram_req_valid && dram_req_ready);
-    `SCOPE_ASSIGN (dram_req_addr,  `TO_FULL_ADDR(dram_req_addr));
-    `SCOPE_ASSIGN (dram_req_rw,    dram_req_rw);
-    `SCOPE_ASSIGN (dram_req_byteen,dram_req_byteen);
-    `SCOPE_ASSIGN (dram_req_data,  dram_req_data);
-    `SCOPE_ASSIGN (dram_req_tag,   dram_req_tag);
-
-    `SCOPE_ASSIGN (dram_rsp_fire,  dram_rsp_valid && dram_rsp_ready);
-    `SCOPE_ASSIGN (dram_rsp_data,  dram_rsp_data);
-    `SCOPE_ASSIGN (dram_rsp_tag,   dram_rsp_tag);
-
+    `SCOPE_ASSIGN (dram_req_fire, dram_req_valid && dram_req_ready);
+    `SCOPE_ASSIGN (dram_req_addr, `TO_FULL_ADDR(dram_req_addr));
+    `SCOPE_ASSIGN (dram_req_rw,   dram_req_rw);
+    `SCOPE_ASSIGN (dram_req_byteen, dram_req_byteen);
+    `SCOPE_ASSIGN (dram_req_data, dram_req_data);
+    `SCOPE_ASSIGN (dram_req_tag,  dram_req_tag);
+    `SCOPE_ASSIGN (dram_rsp_fire, dram_rsp_valid && dram_rsp_ready);
+    `SCOPE_ASSIGN (dram_rsp_data, dram_rsp_data);
+    `SCOPE_ASSIGN (dram_rsp_tag,  dram_rsp_tag);
     `SCOPE_ASSIGN (snp_req_fire,  snp_req_valid && snp_req_ready);
     `SCOPE_ASSIGN (snp_req_addr,  `TO_FULL_ADDR(snp_req_addr));
     `SCOPE_ASSIGN (snp_req_inv,   snp_req_inv);
     `SCOPE_ASSIGN (snp_req_tag,   snp_req_tag);
-
     `SCOPE_ASSIGN (snp_rsp_fire,  snp_rsp_valid && snp_rsp_ready);
     `SCOPE_ASSIGN (snp_rsp_tag,   snp_rsp_tag);
-
     `SCOPE_ASSIGN (snp_rsp_fire,  snp_rsp_valid && snp_rsp_ready);
     `SCOPE_ASSIGN (snp_rsp_tag,   snp_rsp_tag);
-
     `SCOPE_ASSIGN (busy, busy);
 
 `ifdef DBG_PRINT_DRAM

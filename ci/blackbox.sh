@@ -9,6 +9,9 @@ show_usage()
     echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--perf] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
 }
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+VORTEX_HOME=$SCRIPT_DIR/..
+
 DRIVER=vlsim
 APP=sgemm
 CLUSTERS=1
@@ -62,6 +65,7 @@ case $i in
         ;;
     --scope)
         SCOPE=1
+        CORES=1        
         shift
         ;;
     --perf)
@@ -86,19 +90,19 @@ done
 
 case $DRIVER in
     rtlsim)
-        DRIVER_PATH=driver/rtlsim
+        DRIVER_PATH=$VORTEX_HOME/driver/rtlsim
         DRIVER_EXTRA=
         ;;
     vlsim)
-        DRIVER_PATH=driver/opae
+        DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=vlsim
         ;;
     asesim)
-        DRIVER_PATH=driver/opae
+        DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=asesim
         ;;
     fpga)
-        DRIVER_PATH=driver/opae
+        DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=fpga
         ;;
     *)
@@ -109,19 +113,19 @@ esac
 
 case $APP in
     sgemm)
-        APP_PATH=benchmarks/opencl/sgemm
+        APP_PATH=$VORTEX_HOME/benchmarks/opencl/sgemm
         ;;
     vecadd)
-        APP_PATH=benchmarks/opencl/vacadd
+        APP_PATH=$VORTEX_HOME/benchmarks/opencl/vacadd
         ;;
     basic)
-        APP_PATH=driver/tests/basic
+        APP_PATH=$VORTEX_HOME/driver/tests/basic
         ;;
     demo)
-        APP_PATH=driver/tests/demo
+        APP_PATH=$VORTEX_HOME/driver/tests/demo
         ;;
     dogfood)
-        APP_PATH=driver/tests/dogfood
+        APP_PATH=$VORTEX_HOME/driver/tests/dogfood
         ;;
     *)
         echo "invalid app: $APP"

@@ -6,7 +6,6 @@
 interface VX_csr_req_if ();
 
     wire                    valid;
-
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
     wire [31:0]             PC;
@@ -16,8 +15,7 @@ interface VX_csr_req_if ();
     wire                    rs2_is_imm;
     wire [`NR_BITS-1:0]     rs1;
     wire [`NR_BITS-1:0]     rd;
-    wire                    wb;
-    
+    wire                    wb;    
     wire                    ready;
     
 endinterface

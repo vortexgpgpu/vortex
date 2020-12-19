@@ -9,7 +9,7 @@
     "modules": {
         "afu": {            
             "submodules": {
-                "vortex": {"type":"Vortex", "enabled":false}
+                "vortex": {"type":"Vortex", "enabled":true}
             }
         },
         "Vortex": {
@@ -190,6 +190,7 @@
             "?writeback_valid": 1,
             "writeback_wid":"`NW_BITS",
             "writeback_pc": 32,
+            "writeback_tmask":"`NUM_THREADS",
             "writeback_rd":"`NR_BITS",
             "writeback_data":"`NUM_THREADS * 32",
             "!scoreboard_delay": 1,        
@@ -204,11 +205,14 @@
             "addr_st1": 32,
             "addr_st2": 32,
             "addr_st3": 32,
+            "is_fill_st0": 1,
+            "is_snp_st0": 1,
             "is_mshr_st0": 1,
             "miss_st1": 1,
+            "force_miss_st1": 1,  
             "dirty_st1": 1,
-            "!force_miss_st1": 1,  
-            "!pipeline_stall": 1
+            "mshr_push": 1,
+            "?pipeline_stall": 1
         }
     }
  }

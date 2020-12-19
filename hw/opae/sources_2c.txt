@@ -1,5 +1,5 @@
 +define+NUM_CORES=2
-+define+L2_ENABLE=0
+
 +define+SYNTHESIS
 +define+QUARTUS
 +define+FPU_FAST

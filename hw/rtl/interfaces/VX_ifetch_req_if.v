@@ -5,12 +5,10 @@
 
 interface VX_ifetch_req_if ();
 
-    wire                    valid;
-    
+    wire                    valid;    
     wire [`NUM_THREADS-1:0] tmask;    
     wire [`NW_BITS-1:0]     wid;
     wire [31:0]             PC;
-
     wire                    ready;
 
 endinterface

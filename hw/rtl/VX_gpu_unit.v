@@ -99,7 +99,6 @@ module VX_gpu_unit #(
     `SCOPE_ASSIGN (gpu_req_op_type, gpu_req_if.op_type);
     `SCOPE_ASSIGN (gpu_req_rs1, gpu_req_if.rs1_data[0]); 
     `SCOPE_ASSIGN (gpu_req_rs2, gpu_req_if.rs2_data);
-
     `SCOPE_ASSIGN (gpu_rsp_valid, warp_ctl_if.valid);
     `SCOPE_ASSIGN (gpu_rsp_wid, warp_ctl_if.wid);
     `SCOPE_ASSIGN (gpu_rsp_tmc, warp_ctl_if.tmc);

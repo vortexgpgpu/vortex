@@ -59,20 +59,25 @@ module VX_avs_wrapper #(
                                + RD_QUEUE_ADDRW'((avs_reqq_push && !avs_rspq_pop) ? 1 :
                                                  (avs_rspq_pop && !avs_reqq_push) ? -1 : 0);
 
+    reg rsp_queue_ready;
+
     always @(posedge clk) begin
         if (reset) begin                
             avs_burstcount_r  <= 1;
             avs_bankselect_r  <= 0;
             avs_pending_reads <= 0;
+            rsp_queue_ready   <= 1;
         end else begin
             avs_pending_reads <= avs_pending_reads_n; 
+            rsp_queue_ready   <= (avs_pending_reads_n != RD_QUEUE_SIZE);
         end
     end
     
     VX_generic_queue #(
-        .DATAW (REQ_TAGW),
-        .SIZE  (RD_QUEUE_SIZE),
-        .BUFFERED (1)
+        .DATAW   (REQ_TAGW),
+        .SIZE    (RD_QUEUE_SIZE),
+        .BUFFERED(1),
+        .FASTRAM (1)
     ) rd_req_queue (
         .clk      (clk),
         .reset    (reset),
@@ -86,9 +91,10 @@ module VX_avs_wrapper #(
     );
 
     VX_generic_queue #(
-        .DATAW (AVS_DATAW),
-        .SIZE  (RD_QUEUE_SIZE),
-        .BUFFERED (1)
+        .DATAW   (AVS_DATAW),
+        .SIZE    (RD_QUEUE_SIZE),
+        .BUFFERED(1),
+        .FASTRAM (1)
     ) rd_rsp_queue (
         .clk      (clk),
         .reset    (reset),
@@ -100,8 +106,6 @@ module VX_avs_wrapper #(
         `UNUSED_PIN (full),
         `UNUSED_PIN (size)
     );
-
-    wire rsp_queue_ready = (avs_pending_reads != RD_QUEUE_SIZE);
 
     assign avs_read       = dram_req_valid && !dram_req_rw && rsp_queue_ready;
     assign avs_write      = dram_req_valid && dram_req_rw && rsp_queue_ready;

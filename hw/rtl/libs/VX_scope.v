@@ -143,7 +143,7 @@ module VX_scope #(
                 end
 
                 if (stop
-                 || (waddr >= waddr_end)) begin
+                 || (waddr == waddr_end)) begin
                     waddr      <= waddr;  // keep last address
                     recording  <= 0;
                     data_valid <= 1;

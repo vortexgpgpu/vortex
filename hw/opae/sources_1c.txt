@@ -4,21 +4,21 @@
 +define+QUARTUS
 +define+FPU_FAST
 #+define+SCOPE
-+define+PERF_ENABLE
+#+define+PERF_ENABLE
 
-+define+DBG_PRINT_CORE_ICACHE
-+define+DBG_PRINT_CORE_DCACHE
-+define+DBG_PRINT_CACHE_BANK
-+define+DBG_PRINT_CACHE_SNP
-+define+DBG_PRINT_CACHE_MSRQ
-+define+DBG_PRINT_CACHE_TAG
-+define+DBG_PRINT_CACHE_DATA
-+define+DBG_PRINT_DRAM
-+define+DBG_PRINT_PIPELINE
-+define+DBG_PRINT_OPAE
-+define+DBG_PRINT_AVS
-+define+DBG_PRINT_SCOPE
-+define+DBG_CACHE_REQ_INFO
+#+define+DBG_PRINT_CORE_ICACHE
+#+define+DBG_PRINT_CORE_DCACHE
+#+define+DBG_PRINT_CACHE_BANK
+#+define+DBG_PRINT_CACHE_SNP
+#+define+DBG_PRINT_CACHE_MSRQ
+#+define+DBG_PRINT_CACHE_TAG
+#+define+DBG_PRINT_CACHE_DATA
+#+define+DBG_PRINT_DRAM
+#+define+DBG_PRINT_PIPELINE
+#+define+DBG_PRINT_OPAE
+#+define+DBG_PRINT_AVS
+#+define+DBG_PRINT_SCOPE
+#+define+DBG_CACHE_REQ_INFO
 
 vortex_afu.json
 QI:vortex_afu.qsf

@@ -242,90 +242,96 @@ module VX_mem_unit # (
 
         // Miss status
         `UNUSED_PIN (miss_vec)
-    );    
+    ); 
 
-    VX_cache #(
-        .CACHE_ID           (`SCACHE_ID),
-        .CACHE_SIZE         (`SMEM_SIZE),
-        .BANK_LINE_SIZE     (`SBANK_LINE_SIZE),
-        .NUM_BANKS          (`SNUM_BANKS),
-        .WORD_SIZE          (`SWORD_SIZE),
-        .NUM_REQS           (`SNUM_REQUESTS),
-        .CREQ_SIZE          (`SCREQ_SIZE),
-        .MSHR_SIZE          (8),
-        .DRSQ_SIZE          (1),
-        .SREQ_SIZE          (1),
-        .CRSQ_SIZE          (`SCRSQ_SIZE),
-        .DREQ_SIZE          (1),
-        .SRSQ_SIZE          (1),        
-        .DRAM_ENABLE        (0),
-        .FLUSH_ENABLE       (0),
-        .WRITE_ENABLE       (1),
-        .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`SDRAM_TAG_WIDTH)
-    ) smem (
-        `SCOPE_BIND_VX_mem_unit_smem
-        
-        .clk                (clk),
-        .reset              (reset),
+    if (`SM_ENABLE) begin
 
-        // Core request
-        .core_req_valid     (smem_req_if.valid),
-        .core_req_rw        (smem_req_if.rw),
-        .core_req_byteen    (smem_req_if.byteen),
-        .core_req_addr      (smem_req_if.addr),
-        .core_req_data      (smem_req_if.data),        
-        .core_req_tag       (smem_req_if.tag),
-        .core_req_ready     (smem_req_if.ready),
+        VX_cache #(
+            .CACHE_ID           (`SCACHE_ID),
+            .CACHE_SIZE         (`SMEM_SIZE),
+            .BANK_LINE_SIZE     (`SBANK_LINE_SIZE),
+            .NUM_BANKS          (`SNUM_BANKS),
+            .WORD_SIZE          (`SWORD_SIZE),
+            .NUM_REQS           (`SNUM_REQUESTS),
+            .CREQ_SIZE          (`SCREQ_SIZE),
+            .MSHR_SIZE          (8),
+            .DRSQ_SIZE          (1),
+            .SREQ_SIZE          (1),
+            .CRSQ_SIZE          (`SCRSQ_SIZE),
+            .DREQ_SIZE          (1),
+            .SRSQ_SIZE          (1),        
+            .DRAM_ENABLE        (0),
+            .FLUSH_ENABLE       (0),
+            .WRITE_ENABLE       (1),
+            .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
+            .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
+            .DRAM_TAG_WIDTH     (`SDRAM_TAG_WIDTH)
+        ) smem (
+            `SCOPE_BIND_VX_mem_unit_smem
+            
+            .clk                (clk),
+            .reset              (reset),
 
-        // Core response
-        .core_rsp_valid     (smem_rsp_if.valid),
-        .core_rsp_data      (smem_rsp_if.data),
-        .core_rsp_tag       (smem_rsp_if.tag),
-        .core_rsp_ready     (smem_rsp_if.ready),
+            // Core request
+            .core_req_valid     (smem_req_if.valid),
+            .core_req_rw        (smem_req_if.rw),
+            .core_req_byteen    (smem_req_if.byteen),
+            .core_req_addr      (smem_req_if.addr),
+            .core_req_data      (smem_req_if.data),        
+            .core_req_tag       (smem_req_if.tag),
+            .core_req_ready     (smem_req_if.ready),
 
-    `ifdef PERF_ENABLE
-        .perf_cache_if      (perf_smem_if),
-    `endif
+            // Core response
+            .core_rsp_valid     (smem_rsp_if.valid),
+            .core_rsp_data      (smem_rsp_if.data),
+            .core_rsp_tag       (smem_rsp_if.tag),
+            .core_rsp_ready     (smem_rsp_if.ready),
 
-        // DRAM request
-        `UNUSED_PIN (dram_req_valid),
-        `UNUSED_PIN (dram_req_rw),        
-        `UNUSED_PIN (dram_req_byteen),        
-        `UNUSED_PIN (dram_req_addr),
-        `UNUSED_PIN (dram_req_data),
-        `UNUSED_PIN (dram_req_tag),
-        .dram_req_ready     (1'b0),       
+        `ifdef PERF_ENABLE
+            .perf_cache_if      (perf_smem_if),
+        `endif
 
-        // DRAM response
-        .dram_rsp_valid     (0),
-        .dram_rsp_data      (0),
-        .dram_rsp_tag       (0),
-        `UNUSED_PIN (dram_rsp_ready),
+            // DRAM request
+            `UNUSED_PIN (dram_req_valid),
+            `UNUSED_PIN (dram_req_rw),        
+            `UNUSED_PIN (dram_req_byteen),        
+            `UNUSED_PIN (dram_req_addr),
+            `UNUSED_PIN (dram_req_data),
+            `UNUSED_PIN (dram_req_tag),
+            .dram_req_ready     (1'b0),       
 
-        // Snoop request
-        .snp_req_valid      (1'b0),
-        .snp_req_addr       (0),
-        .snp_req_inv        (0),
-        .snp_req_tag        (0),
-        `UNUSED_PIN (snp_req_ready),
+            // DRAM response
+            .dram_rsp_valid     (0),
+            .dram_rsp_data      (0),
+            .dram_rsp_tag       (0),
+            `UNUSED_PIN (dram_rsp_ready),
 
-        // Snoop response
-        `UNUSED_PIN (snp_rsp_valid),
-        `UNUSED_PIN (snp_rsp_tag),
-        .snp_rsp_ready      (1'b0),
+            // Snoop request
+            .snp_req_valid      (1'b0),
+            .snp_req_addr       (0),
+            .snp_req_inv        (0),
+            .snp_req_tag        (0),
+            `UNUSED_PIN (snp_req_ready),
 
-        // Miss status
-        `UNUSED_PIN (miss_vec)
-    );
+            // Snoop response
+            `UNUSED_PIN (snp_rsp_valid),
+            `UNUSED_PIN (snp_rsp_tag),
+            .snp_rsp_ready      (1'b0),
+
+            // Miss status
+            `UNUSED_PIN (miss_vec)
+        );
+    
+    end
 
     VX_mem_arb #(
         .NUM_REQS      (2),
         .DATA_WIDTH    (`DDRAM_LINE_WIDTH),
         .ADDR_WIDTH    (`DDRAM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`DDRAM_TAG_WIDTH),
-        .TAG_OUT_WIDTH (`XDRAM_TAG_WIDTH)
+        .TAG_OUT_WIDTH (`XDRAM_TAG_WIDTH),
+        .BUFFERED_REQ  (1),
+        .BUFFERED_RSP  (0)
     ) dram_arb (
         .clk            (clk),
         .reset          (reset),

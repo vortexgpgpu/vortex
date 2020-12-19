@@ -7,10 +7,8 @@ interface VX_cache_snp_rsp_if #(
     parameter SNP_TAG_WIDTH = 0
 ) ();
 
-    wire                     valid;
-    
+    wire                     valid;    
     wire [SNP_TAG_WIDTH-1:0] tag;    
-
     wire                     ready;
 
 endinterface
