@@ -999,21 +999,6 @@ Vortex #() vortex (
   .snp_rsp_tag      (vx_snp_rsp_tag),
   .snp_rsp_ready    (vx_snp_rsp_ready),
 
-  // I/O request
-  `UNUSED_PIN       (io_req_valid),
-  `UNUSED_PIN       (io_req_rw),
-  `UNUSED_PIN       (io_req_byteen),   
-  `UNUSED_PIN       (io_req_addr),
-  `UNUSED_PIN       (io_req_data),
-  `UNUSED_PIN       (io_req_tag),    
-  .io_req_ready     (1'b1),
-
-  // I/O response
-  .io_rsp_valid     (1'b0),
-  .io_rsp_data      (0),
-  .io_rsp_tag       (0),
-  `UNUSED_PIN       (io_rsp_ready),
-
   // CSR I/O Request
   .csr_io_req_valid (vx_csr_io_req_valid),
   .csr_io_req_coreid(vx_csr_io_req_coreid),

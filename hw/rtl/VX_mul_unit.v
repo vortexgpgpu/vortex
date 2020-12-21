@@ -31,7 +31,7 @@ module VX_mul_unit #(
     wire mulq_push = mul_req_if.valid && mul_req_if.ready;
     wire mulq_pop  = valid_out && ready_out;
 
-    VX_cam_buffer #(
+    VX_index_buffer #(
         .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE    (`MULQ_SIZE),
         .FASTRAM (1)

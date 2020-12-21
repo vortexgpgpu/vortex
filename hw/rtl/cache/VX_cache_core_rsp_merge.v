@@ -106,7 +106,6 @@ module VX_cache_core_rsp_merge #(
             end
 
             for (genvar i = 0; i < NUM_REQS; i++) begin 
-
                 assign stall[i] = ~core_rsp_ready[i] && core_rsp_valid[i];
 
                 VX_generic_register #(

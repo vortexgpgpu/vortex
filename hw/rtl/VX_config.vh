@@ -289,7 +289,7 @@
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
-`define DCACHE_SIZE 4096
+`define DCACHE_SIZE 8192
 `endif
 
 // Number of banks
@@ -336,7 +336,7 @@
 
 // Size of cache in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE 2048
+`define SMEM_SIZE 4096
 `endif
 
 // Number of banks

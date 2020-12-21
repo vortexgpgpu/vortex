@@ -68,7 +68,7 @@ module VX_snp_forwarder #(
         wire sfq_acquire = snp_req_valid && snp_req_ready;
         wire sfq_release = snp_rsp_valid_unqual && snp_rsp_ready_unqual;
 
-        VX_cam_buffer #(
+        VX_index_buffer #(
             .DATAW   (SRC_ADDR_WIDTH + 1 + TAG_IN_WIDTH),
             .SIZE    (SREQ_SIZE),
             .FASTRAM (1)

@@ -26,11 +26,7 @@ module VX_mem_unit # (
 
     // DRAM
     VX_cache_dram_req_if    dram_req_if,
-    VX_cache_dram_rsp_if    dram_rsp_if,    
-
-    // I/O
-    VX_cache_core_req_if    io_req_if,
-    VX_cache_core_rsp_if    io_rsp_if
+    VX_cache_dram_rsp_if    dram_rsp_if
 );
     
 `ifdef PERF_ENABLE
@@ -76,19 +72,17 @@ module VX_mem_unit # (
         .CORE_TAG_ID_BITS (`DCORE_TAG_ID_BITS)
     ) smem_rsp_if();
 
-    VX_dcache_arb dcache_arb (   
-        .clk            (clk),
-        .reset          (reset),
+    VX_databus_arb databus_arb (   
+        .clk          (clk),
+        .reset        (reset),
 
-        .core_req_if    (core_dcache_req_if),
-        .cache_req_if   (dcache_req_if),
-        .smem_req_if    (smem_req_if),  
-        .io_req_if      (io_req_if),  
+        .core_req_if  (core_dcache_req_if),
+        .cache_req_if (dcache_req_if),
+        .smem_req_if  (smem_req_if),
 
-        .cache_rsp_if   (dcache_rsp_if),
-        .smem_rsp_if    (smem_rsp_if),  
-        .io_rsp_if      (io_rsp_if),          
-        .core_rsp_if    (core_dcache_rsp_if)
+        .cache_rsp_if (dcache_rsp_if),
+        .smem_rsp_if  (smem_rsp_if),
+        .core_rsp_if  (core_dcache_rsp_if)
     );    
 
     VX_cache #(
