@@ -55,13 +55,14 @@ module VX_bank #(
     input wire reset,
 
     // Core Request    
-    input wire [NUM_REQS-1:0]                               core_req_valid,        
-    input wire [`CORE_REQ_TAG_COUNT-1:0]                    core_req_rw,  
-    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]                core_req_byteen,
-    input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]         core_req_addr,
-    input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]              core_req_data,
-    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
-    output wire                                             core_req_ready,
+    input wire                          core_req_valid,   
+    input wire [`REQS_BITS-1:0]         core_req_tid,
+    input wire                          core_req_rw,  
+    input wire [WORD_SIZE-1:0]          core_req_byteen,
+    input wire [`WORD_ADDR_WIDTH-1:0]   core_req_addr,
+    input wire [`WORD_WIDTH-1:0]        core_req_data,
+    input wire [CORE_TAG_WIDTH-1:0]     core_req_tag,
+    output wire                         core_req_ready,
     
     // Core Response    
     output wire                         core_rsp_valid,
@@ -229,37 +230,21 @@ module VX_bank #(
     wire creq_push = (| core_req_valid) && core_req_ready;
     assign core_req_ready = !creq_full;
 
-    VX_bank_core_req_queue #(
-        .WORD_SIZE        (WORD_SIZE),
-        .NUM_REQS         (NUM_REQS),
-        .CREQ_SIZE        (CREQ_SIZE),
-        .CORE_TAG_WIDTH   (CORE_TAG_WIDTH),        
-        .CORE_TAG_ID_BITS (CORE_TAG_ID_BITS)
+    VX_generic_queue #(
+        .DATAW    (CORE_TAG_WIDTH + `REQS_BITS + 1 + WORD_SIZE + `WORD_ADDR_WIDTH + `WORD_WIDTH), 
+        .SIZE     (CREQ_SIZE),
+        .BUFFERED (1),
+        .FASTRAM  (1)
     ) core_req_queue (
-        .clk        (clk),
-        .reset      (reset),
-
-        // Enqueue
-        .push       (creq_push),
-        .tag_in     (core_req_tag),      
-        .valids_in  (core_req_valid),
-        .rw_in      (core_req_rw),
-        .byteen_in  (core_req_byteen),
-        .addr_in    (core_req_addr),
-        .wdata_in   (core_req_data),  
-
-        // Dequeue
-        .pop        (creq_pop),
-        .tag_out    (creq_tag_st0),
-        .tid_out    (creq_tid_st0),
-        .rw_out     (creq_rw_st0),
-        .byteen_out (creq_byteen_st0),
-        .addr_out   (creq_addr_st0),
-        .wdata_out  (creq_writeword_st0),
-        
-        // States
-        .empty      (creq_empty),
-        .full       (creq_full)
+        .clk     (clk),
+        .reset   (reset),
+        .push    (creq_push),
+        .pop     (creq_pop),
+        .data_in ({core_req_tag, core_req_tid, core_req_rw, core_req_byteen, core_req_addr, core_req_data}),        
+        .data_out({creq_tag_st0, creq_tid_st0, creq_rw_st0, creq_byteen_st0, creq_addr_st0, creq_writeword_st0}),
+        .empty   (creq_empty),
+        .full    (creq_full),
+        `UNUSED_PIN (size)
     );   
 
     reg [$clog2(MSHR_SIZE+1)-1:0]   mshr_pending_size;   

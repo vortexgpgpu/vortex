@@ -5,15 +5,15 @@ Generation context:
     HardFP is enabled enabling set to true 
     Faithful rounding constraint detected 
         Will not generate valid and channel signals 
-    The new component name is acl_fdiv
+    The new component name is acl_s10_fdiv
     Frequency 250MHz 
-    Deployment FPGA Arria10 
-Estimated resources LUTs 539, DSPs 5, RAMBits 32768, RAMBlocks 3 
-The pipeline depth of the block is 15 cycle(s)
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 681, DSPs 5, RAMBits 32768, RAMBlocks 3 
+The pipeline depth of the block is 25 cycle(s)
 @@start
 @name FPDiv@
-@latency 15@
-@LUT 539@
+@latency 25@
+@LUT 681@
 @DSP 5@
 @RAMBits 32768@
 @RAMBlockUsage 3@
@@ -34,15 +34,15 @@ Generation context:
     HardFP is enabled enabling set to true 
     Faithful rounding constraint detected 
         Will not generate valid and channel signals 
-    The new component name is acl_fsqrt
+    The new component name is acl_s10_fsqrt
     Frequency 250MHz 
-    Deployment FPGA Arria10 
-Estimated resources LUTs 271, DSPs 3, RAMBits 15872, RAMBlocks 3 
-The pipeline depth of the block is 10 cycle(s)
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 349, DSPs 3, RAMBits 15872, RAMBlocks 3 
+The pipeline depth of the block is 17 cycle(s)
 @@start
 @name FPSqrt@
-@latency 10@
-@LUT 271@
+@latency 17@
+@LUT 349@
 @DSP 3@
 @RAMBits 15872@
 @RAMBlockUsage 3@
@@ -62,15 +62,15 @@ Generation context:
     HardFP is enabled enabling set to true 
     Faithful rounding constraint detected 
         Will not generate valid and channel signals 
-    The new component name is acl_ftoi
+    The new component name is acl_s10_ftoi
     Frequency 250MHz 
-    Deployment FPGA Arria10 
-Estimated resources LUTs 327, DSPs 0, RAMBits 0, RAMBlocks 0 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 344, DSPs 0, RAMBits 0, RAMBlocks 0 
 The pipeline depth of the block is 3 cycle(s)
 @@start
 @name FPToFXP@
 @latency 3@
-@LUT 327@
+@LUT 344@
 @DSP 0@
 @RAMBits 0@
 @RAMBlockUsage 0@
@@ -90,15 +90,15 @@ Generation context:
     HardFP is enabled enabling set to true 
     Faithful rounding constraint detected 
         Will not generate valid and channel signals 
-    The new component name is acl_ftou
+    The new component name is acl_s10_ftou
     Frequency 250MHz 
-    Deployment FPGA Arria10 
-Estimated resources LUTs 287, DSPs 0, RAMBits 0, RAMBlocks 0 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 272, DSPs 0, RAMBits 0, RAMBlocks 0 
 The pipeline depth of the block is 3 cycle(s)
 @@start
 @name FPToFXP@
 @latency 3@
-@LUT 287@
+@LUT 272@
 @DSP 0@
 @RAMBits 0@
 @RAMBlockUsage 0@
@@ -118,15 +118,15 @@ Generation context:
     HardFP is enabled enabling set to true 
     Faithful rounding constraint detected 
         Will not generate valid and channel signals 
-    The new component name is acl_itof
+    The new component name is acl_s10_itof
     Frequency 250MHz 
-    Deployment FPGA Arria10 
-Estimated resources LUTs 397, DSPs 0, RAMBits 0, RAMBlocks 0 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 362, DSPs 0, RAMBits 0, RAMBlocks 0 
 The pipeline depth of the block is 7 cycle(s)
 @@start
 @name FXPToFP@
 @latency 7@
-@LUT 397@
+@LUT 362@
 @DSP 0@
 @RAMBits 0@
 @RAMBlockUsage 0@
@@ -146,15 +146,15 @@ Generation context:
     HardFP is enabled enabling set to true 
     Faithful rounding constraint detected 
         Will not generate valid and channel signals 
-    The new component name is acl_utof
+    The new component name is acl_s10_utof
     Frequency 300MHz 
-    Deployment FPGA Arria10 
-Estimated resources LUTs 363, DSPs 0, RAMBits 0, RAMBlocks 0 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 310, DSPs 0, RAMBits 0, RAMBlocks 0 
 The pipeline depth of the block is 7 cycle(s)
 @@start
 @name FXPToFP@
 @latency 7@
-@LUT 363@
+@LUT 310@
 @DSP 0@
 @RAMBits 0@
 @RAMBlockUsage 0@

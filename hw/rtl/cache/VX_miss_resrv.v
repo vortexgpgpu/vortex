@@ -57,7 +57,7 @@ module VX_miss_resrv #(
     output wire [`MSHR_DATA_WIDTH-1:0]  dequeue_data_st0,
     input wire                          dequeue_st3
 );
-    reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
+    `USE_FAST_BRAM reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
     
     reg [MSHR_SIZE-1:0]            valid_table;
     reg [MSHR_SIZE-1:0]            ready_table;

@@ -39,7 +39,7 @@ module VX_fpu_unit #(
     wire fpuq_push = fpu_req_if.valid && fpu_req_if.ready;
     wire fpuq_pop  = valid_out && ready_out;
 
-    VX_cam_buffer #(
+    VX_index_buffer #(
         .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE    (`FPUQ_SIZE),
         .FASTRAM (1)

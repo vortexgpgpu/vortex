@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_cam_buffer #(
+module VX_index_buffer #(
     parameter DATAW   = 1,
     parameter SIZE    = 1,
     parameter FASTRAM = 0,
@@ -48,16 +48,18 @@ module VX_cam_buffer #(
 
     always @(posedge clk) begin
         if (reset) begin
-            free_slots   <= {SIZE{1'b1}};
-            full_r       <= 1'b0;
             write_addr_r <= ADDRW'(1'b0);
+            free_slots   <= {SIZE{1'b1}};
+            full_r       <= 1'b0;            
         end else begin
             if (release_slot) begin
                 assert(0 == free_slots[release_addr]) else $error("%t: releasing invalid slot at port %d", $time, release_addr);
             end
-            free_slots   <= free_slots_n;
-            write_addr_r <= free_index;
-            full_r       <= ~free_valid;
+            if (acquire_slot || full_r) begin
+                 write_addr_r <= free_index;
+            end
+            free_slots <= free_slots_n;           
+            full_r     <= ~free_valid;
         end        
     end
 

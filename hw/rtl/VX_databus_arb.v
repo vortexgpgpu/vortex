@@ -1,125 +1,107 @@
 `include "VX_define.vh"
 
-module VX_databus_arb #(    
-    parameter NUM_REQS      = 1, 
-    parameter WORD_SIZE     = 1, 
-    parameter TAG_IN_WIDTH  = 1,
-    parameter TAG_OUT_WIDTH = 1,
-    parameter BUFFERED_REQ  = 0,
-    parameter BUFFERED_RSP  = 0,
+module VX_databus_arb (
+    input wire              clk,
+    input wire              reset,
 
-    parameter WORD_WIDTH   = WORD_SIZE * 8,
-    parameter ADDR_WIDTH   = 32 - `CLOG2(WORD_SIZE),
-    parameter LOG_NUM_REQS = `CLOG2(NUM_REQS)
-) (
-    input wire clk,
-    input wire reset,
+    // input request
+    VX_cache_core_req_if    core_req_if,
 
-    // input requests    
-    input wire [NUM_REQS-1:0][`NUM_THREADS-1:0]                 req_valid_in,  
-    input wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0]                 req_tag_in,   
-    input wire [NUM_REQS-1:0][`NUM_THREADS-1:0][ADDR_WIDTH-1:0] req_addr_in, 
-    input wire [NUM_REQS-1:0]                                   req_rw_in,  
-    input wire [NUM_REQS-1:0][`NUM_THREADS-1:0][WORD_SIZE-1:0]  req_byteen_in,  
-    input wire [NUM_REQS-1:0][`NUM_THREADS-1:0][WORD_WIDTH-1:0] req_data_in,  
-    output wire [NUM_REQS-1:0]                                  req_ready_in,
+    // output requests
+    VX_cache_core_req_if    cache_req_if,
+    VX_cache_core_req_if    smem_req_if,
 
-    // output request
-    output wire [`NUM_THREADS-1:0]                  req_valid_out,  
-    output wire [TAG_OUT_WIDTH-1:0]                 req_tag_out,     
-    output wire [`NUM_THREADS-1:0][ADDR_WIDTH-1:0]  req_addr_out, 
-    output wire                                     req_rw_out,  
-    output wire [`NUM_THREADS-1:0][WORD_SIZE-1:0]   req_byteen_out,
-    output wire [`NUM_THREADS-1:0][WORD_WIDTH-1:0]  req_data_out,  
-    input wire                                      req_ready_out,
+    // input responses
+    VX_cache_core_rsp_if    cache_rsp_if,
+    VX_cache_core_rsp_if    smem_rsp_if,
 
-    // input response
-    input wire                                      rsp_valid_in,
-    input wire [TAG_OUT_WIDTH-1:0]                  rsp_tag_in,
-    input wire [WORD_WIDTH-1:0]                     rsp_data_in,
-    output wire                                     rsp_ready_in,
-
-    // output responses
-    output wire [NUM_REQS-1:0]                      rsp_valid_out,
-    output wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0]    rsp_tag_out,
-    output wire [NUM_REQS-1:0][WORD_WIDTH-1:0]      rsp_data_out,
-    input wire  [NUM_REQS-1:0]                      rsp_ready_out
+    // output response
+    VX_cache_core_rsp_if    core_rsp_if
 );
-    localparam REQ_DATAW = `NUM_THREADS + TAG_OUT_WIDTH + (`NUM_THREADS * ADDR_WIDTH) + 1 + (`NUM_THREADS * WORD_SIZE) + (`NUM_THREADS * WORD_WIDTH);
-    localparam RSP_DATAW = TAG_IN_WIDTH + WORD_WIDTH;
+    localparam REQ_ADDRW = 32 - `CLOG2(`DWORD_SIZE);
+    localparam REQ_DATAW = REQ_ADDRW + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
+    localparam RSP_DATAW = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
 
-    if (NUM_REQS > 1) begin
+    //
+    // handle requests
+    //
 
-        wire [NUM_REQS-1:0] valids;
-        wire [NUM_REQS-1:0][REQ_DATAW-1:0] data_in;
-        wire [`NUM_THREADS-1:0] req_tmask_out;
-        wire req_valid_out_unqual;
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
 
-        for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign valids[i]  = (| req_valid_in[i]);
-            assign data_in[i] = {req_valid_in[i], {req_tag_in[i], LOG_NUM_REQS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
-        end
+        wire cache_req_ready_in;
+        wire smem_req_ready_in;
 
-        VX_stream_arbiter #(
-            .NUM_REQS (NUM_REQS),
-            .DATAW    (REQ_DATAW),
-            .BUFFERED (BUFFERED_REQ)
-        ) req_arb (
+        // select shared memory bus
+        wire is_smem_addr = core_req_if.valid[i] && `SM_ENABLE
+                         && (core_req_if.addr[i] >= REQ_ADDRW'((`SHARED_MEM_BASE_ADDR - `SMEM_SIZE) >> 2))
+                         && (core_req_if.addr[i] < REQ_ADDRW'(`SHARED_MEM_BASE_ADDR >> 2));
+
+        VX_skid_buffer #(
+            .DATAW (REQ_DATAW),
+            .PASSTHRU (1)
+        ) cache_out_buffer (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (valids), 
-            .data_in   (data_in),
-            .ready_in  (req_ready_in),
-            .valid_out (req_valid_out_unqual),
-            .data_out  ({req_tmask_out, req_tag_out, req_addr_out, req_rw_out, req_byteen_out, req_data_out}),
-            .ready_out (req_ready_out)
+            .valid_in  (core_req_if.valid[i] && !is_smem_addr),        
+            .data_in   ({core_req_if.addr[i], core_req_if.rw[i], core_req_if.byteen[i], core_req_if.data[i], core_req_if.tag[i]}),
+            .ready_in  (cache_req_ready_in),      
+            .valid_out (cache_req_if.valid[i]),
+            .data_out  ({cache_req_if.addr[i], cache_req_if.rw[i], cache_req_if.byteen[i], cache_req_if.data[i], cache_req_if.tag[i]}),
+            .ready_out (cache_req_if.ready[i])
         );
 
-        assign req_valid_out = {`NUM_THREADS{req_valid_out_unqual}} & req_tmask_out;
-
-        ///////////////////////////////////////////////////////////////////////
-
-        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_tag_in[LOG_NUM_REQS-1:0];        
-  
-        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_merged_data_out;
-        for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign {rsp_tag_out[i], rsp_data_out[i]} = rsp_merged_data_out[i];
-        end
-
-        VX_stream_demux #(
-            .NUM_REQS (NUM_REQS),
-            .DATAW    (RSP_DATAW),
-            .BUFFERED (BUFFERED_RSP)
-        ) rsp_demux (
+        VX_skid_buffer #(
+            .DATAW (REQ_DATAW),
+            .PASSTHRU (1)
+        ) smem_out_buffer (
             .clk       (clk),
             .reset     (reset),
-            .sel       (rsp_sel),
-            .valid_in  (rsp_valid_in),
-            .data_in   ({rsp_tag_in[LOG_NUM_REQS +: TAG_IN_WIDTH], rsp_data_in}),
-            .ready_in  (rsp_ready_in),
-            .valid_out (rsp_valid_out),
-            .data_out  (rsp_merged_data_out),
-            .ready_out (rsp_ready_out)
+            .valid_in  (core_req_if.valid[i] && is_smem_addr),        
+            .data_in   ({core_req_if.addr[i], core_req_if.rw[i], core_req_if.byteen[i], core_req_if.data[i], core_req_if.tag[i]}),
+            .ready_in  (smem_req_ready_in),      
+            .valid_out (smem_req_if.valid[i]),
+            .data_out  ({smem_req_if.addr[i], smem_req_if.rw[i], smem_req_if.byteen[i], smem_req_if.data[i], smem_req_if.tag[i]}),
+            .ready_out (smem_req_if.ready[i])
         );
-        
-    end else begin
 
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
-
-        assign req_valid_out  = req_valid_in;
-        assign req_tag_out    = req_tag_in;
-        assign req_addr_out   = req_addr_in;
-        assign req_rw_out     = req_rw_in;
-        assign req_byteen_out = req_byteen_in;
-        assign req_data_out   = req_data_in;
-        assign req_ready_in   = req_ready_out;
-
-        assign rsp_valid_out = rsp_valid_in;
-        assign rsp_tag_out   = rsp_tag_in;
-        assign rsp_data_out  = rsp_data_in;
-        assign rsp_ready_in  = rsp_ready_out;
-
+        assign core_req_if.ready[i] = is_smem_addr ? smem_req_ready_in : cache_req_ready_in;
     end
+
+    //
+    // handle responses
+    //
+
+    wire [1:0][RSP_DATAW-1:0] rsp_data_in;
+    wire [1:0] rsp_valid_in;
+    wire [1:0] rsp_ready_in;
+    
+    wire core_rsp_valid;
+    wire [`NUM_THREADS-1:0] core_rsp_tmask;
+
+    assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, cache_rsp_if.tag};
+    assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  smem_rsp_if.tag};
+
+    assign rsp_valid_in[0] = (| cache_rsp_if.valid);
+    assign rsp_valid_in[1] = (| smem_rsp_if.valid) & `SM_ENABLE;
+
+    VX_stream_arbiter #(
+        .NUM_REQS (2),
+        .DATAW    (RSP_DATAW),        
+        .BUFFERED (0)
+    ) rsp_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (rsp_valid_in),
+        .data_in    (rsp_data_in),
+        .ready_in   (rsp_ready_in),
+        .valid_out  (core_rsp_valid),
+        .data_out   ({core_rsp_tmask, core_rsp_if.data, core_rsp_if.tag}),
+        .ready_out  (core_rsp_if.ready)
+    );
+
+    assign cache_rsp_if.ready = rsp_ready_in[0];
+    assign smem_rsp_if.ready  = rsp_ready_in[1];
+
+    assign core_rsp_if.valid  = core_rsp_tmask & {`NUM_THREADS{core_rsp_valid}};
 
 endmodule

@@ -58,12 +58,12 @@ module VX_cache #(
 
     // Core request    
     input wire [NUM_REQS-1:0]                           core_req_valid,
-    input wire [`CORE_REQ_TAG_COUNT-1:0]                core_req_rw,
+    input wire [NUM_REQS-1:0]                           core_req_rw,
     input wire [NUM_REQS-1:0][WORD_SIZE-1:0]            core_req_byteen,
     input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]     core_req_addr,
     input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]          core_req_data,
-    input wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
-    output wire [`CORE_REQ_TAG_COUNT-1:0]               core_req_ready,
+    input wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0]       core_req_tag,
+    output wire [NUM_REQS-1:0]                          core_req_ready,
 
     // Core response
     output wire [NUM_REQS-1:0]                          core_rsp_valid,    
@@ -108,8 +108,8 @@ module VX_cache #(
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
 
-    wire [NUM_BANKS-1:0][NUM_REQS-1:0]          per_bank_valid;
-
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_valid; 
+    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_req_tid;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
     
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
@@ -155,14 +155,14 @@ module VX_cache #(
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
-        .NUM_REQS       (NUM_REQS),
-        .CORE_TAG_ID_BITS (CORE_TAG_ID_BITS)
+        .NUM_REQS       (NUM_REQS)
     ) cache_core_req_bank_sel (
-        .core_req_valid  (core_req_valid),
-        .core_req_addr   (core_req_addr),
-        .core_req_ready  (core_req_ready),
-        .per_bank_valid  (per_bank_valid),
-        .per_bank_ready  (per_bank_core_req_ready)        
+        .core_req_valid (core_req_valid),
+        .core_req_addr  (core_req_addr),
+        .core_req_ready (core_req_ready),
+        .per_bank_valid (per_bank_core_req_valid),
+        .per_bank_tid   (per_bank_core_req_tid),
+        .per_bank_ready (per_bank_core_req_ready) 
     );
 
     assign dram_req_tag = dram_req_addr;
@@ -173,51 +173,53 @@ module VX_cache #(
     end
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-        wire [NUM_REQS-1:0]                             curr_bank_core_req_valid;            
-        wire [`CORE_REQ_TAG_COUNT-1:0]                  curr_bank_core_req_rw;  
-        wire [NUM_REQS-1:0][WORD_SIZE-1:0]              curr_bank_core_req_byteen;
-        wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0]       curr_bank_core_req_addr;
-        wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
-        wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]            curr_bank_core_req_data;
-        wire                                            curr_bank_core_req_ready;
+        wire                        curr_bank_core_req_valid;     
+        wire [`REQS_BITS-1:0]       curr_bank_core_req_tid;       
+        wire                        curr_bank_core_req_rw;  
+        wire [WORD_SIZE-1:0]        curr_bank_core_req_byteen;
+        wire [`WORD_ADDR_WIDTH-1:0] curr_bank_core_req_addr;
+        wire [CORE_TAG_WIDTH-1:0]   curr_bank_core_req_tag;
+        wire [`WORD_WIDTH-1:0]      curr_bank_core_req_data;
+        wire                        curr_bank_core_req_ready;
 
-        wire                            curr_bank_core_rsp_valid;
-        wire [`REQS_BITS-1:0]           curr_bank_core_rsp_tid;
-        wire [`WORD_WIDTH-1:0]          curr_bank_core_rsp_data;
-        wire [CORE_TAG_WIDTH-1:0]       curr_bank_core_rsp_tag;
-        wire                            curr_bank_core_rsp_ready;
+        wire                        curr_bank_core_rsp_valid;
+        wire [`REQS_BITS-1:0]       curr_bank_core_rsp_tid;
+        wire [`WORD_WIDTH-1:0]      curr_bank_core_rsp_data;
+        wire [CORE_TAG_WIDTH-1:0]   curr_bank_core_rsp_tag;
+        wire                        curr_bank_core_rsp_ready;
 
-        wire                            curr_bank_dram_req_valid;
-        wire                            curr_bank_dram_req_rw;
-        wire [BANK_LINE_SIZE-1:0]       curr_bank_dram_req_byteen;
-        wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_dram_req_addr;
-        wire[`BANK_LINE_WIDTH-1:0]      curr_bank_dram_req_data;
-        wire                            curr_bank_dram_req_ready;
+        wire                        curr_bank_dram_req_valid;
+        wire                        curr_bank_dram_req_rw;
+        wire [BANK_LINE_SIZE-1:0]   curr_bank_dram_req_byteen;
+        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_req_addr;
+        wire[`BANK_LINE_WIDTH-1:0]  curr_bank_dram_req_data;
+        wire                        curr_bank_dram_req_ready;
 
-        wire                            curr_bank_dram_rsp_valid;            
-        wire [`BANK_LINE_WIDTH-1:0]     curr_bank_dram_rsp_data;
-        wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_dram_rsp_addr;
-        wire                            curr_bank_dram_rsp_ready;
+        wire                        curr_bank_dram_rsp_valid;            
+        wire [`BANK_LINE_WIDTH-1:0] curr_bank_dram_rsp_data;
+        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_rsp_addr;
+        wire                        curr_bank_dram_rsp_ready;
 
-        wire                            curr_bank_snp_req_valid;
-        wire [`LINE_ADDR_WIDTH-1:0]     curr_bank_snp_req_addr;
-        wire                            curr_bank_snp_req_inv;
-        wire [SNP_TAG_WIDTH-1:0]        curr_bank_snp_req_tag;
-        wire                            curr_bank_snp_req_ready;    
+        wire                        curr_bank_snp_req_valid;
+        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_snp_req_addr;
+        wire                        curr_bank_snp_req_inv;
+        wire [SNP_TAG_WIDTH-1:0]    curr_bank_snp_req_tag;
+        wire                        curr_bank_snp_req_ready;    
 
-        wire                            curr_bank_snp_rsp_valid;
-        wire [SNP_TAG_WIDTH-1:0]        curr_bank_snp_rsp_tag;
-        wire                            curr_bank_snp_rsp_ready;                    
+        wire                        curr_bank_snp_rsp_valid;
+        wire [SNP_TAG_WIDTH-1:0]    curr_bank_snp_rsp_tag;
+        wire                        curr_bank_snp_rsp_ready;                    
 
-        wire                            curr_bank_miss; 
+        wire                        curr_bank_miss; 
 
         // Core Req
-        assign curr_bank_core_req_valid   = per_bank_valid[i];
-        assign curr_bank_core_req_addr    = core_req_addr;
-        assign curr_bank_core_req_rw      = core_req_rw;
-        assign curr_bank_core_req_byteen  = core_req_byteen;
-        assign curr_bank_core_req_data    = core_req_data;
-        assign curr_bank_core_req_tag     = core_req_tag;
+        assign curr_bank_core_req_valid   = per_bank_core_req_valid[i];
+        assign curr_bank_core_req_tid     = per_bank_core_req_tid[i];
+        assign curr_bank_core_req_addr    = core_req_addr[per_bank_core_req_tid[i]];
+        assign curr_bank_core_req_rw      = core_req_rw[per_bank_core_req_tid[i]];
+        assign curr_bank_core_req_byteen  = core_req_byteen[per_bank_core_req_tid[i]];
+        assign curr_bank_core_req_data    = core_req_data[per_bank_core_req_tid[i]];
+        assign curr_bank_core_req_tag     = core_req_tag[per_bank_core_req_tid[i]];
         assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
 
         // Core WB
@@ -298,6 +300,7 @@ module VX_cache #(
             .reset              (reset),                
             // Core request
             .core_req_valid     (curr_bank_core_req_valid),                  
+            .core_req_tid       (curr_bank_core_req_tid),
             .core_req_rw        (curr_bank_core_req_rw),
             .core_req_byteen    (curr_bank_core_req_byteen),              
             .core_req_addr      (curr_bank_core_req_addr),

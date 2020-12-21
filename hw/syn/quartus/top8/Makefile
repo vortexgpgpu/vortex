@@ -6,10 +6,12 @@ RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfa
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
-FAMILY = "Arria 10"
 
-#DEVICE = 1SX280HN2F43E2VG   
-DEVICE = 10AX115N3F40E2SG
+FAMILY = "Stratix 10"
+DEVICE = 1SX280HN2F43E2VG
+
+#FAMILY = "Arria 10"
+#DEVICE = 10AX115N3F40E2SG
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on --set=VERILOG_MACRO=NOPAE=1
