@@ -108,37 +108,39 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 
   uint64_t instrs = 0;
   uint64_t cycles = 0;
+
 #ifdef PERF_ENABLE    
   // PERF: pipeline stalls
+  uint64_t ibuffer_stalls = 0;
+  uint64_t scoreboard_stalls = 0;
   uint64_t lsu_stalls = 0;
   uint64_t fpu_stalls = 0;
   uint64_t mul_stalls = 0;
   uint64_t csr_stalls = 0;
   uint64_t alu_stalls = 0;
   uint64_t gpu_stalls = 0;
-  uint64_t ibuffer_stalls = 0;
-  uint64_t scoreboard_stalls = 0;
-  uint64_t icache_stalls = 0;
   // PERF: Icache 
   uint64_t icache_reads = 0;
   uint64_t icache_read_misses = 0;
   uint64_t icache_pipe_stalls = 0;
-  uint64_t icache_dram_stalls = 0;
-  uint64_t icache_mshr_stalls = 0;
   uint64_t icache_rsp_stalls = 0;
   // PERF: Dcache 
   uint64_t dcache_reads = 0;
   uint64_t dcache_writes = 0;
   uint64_t dcache_read_misses = 0;
   uint64_t dcache_write_misses = 0;
-  uint64_t dcache_pipe_stalls = 0;
-  uint64_t dcache_dram_stalls = 0;
+  uint64_t dcache_bank_stalls = 0;  
   uint64_t dcache_mshr_stalls = 0;
-  uint64_t dcache_rsp_stalls = 0;
-  uint64_t dcache_evictions = 0;
+  uint64_t dcache_pipe_stalls = 0;
+  uint64_t dcache_rsp_stalls = 0;  
+  // PERF: SMEM
+  uint64_t smem_reads = 0;
+  uint64_t smem_writes = 0;
+  uint64_t smem_bank_stalls = 0;
   // PERF: memory
-  uint64_t dram_req = 0;
-  uint64_t dram_rsp = 0;
+  uint64_t dram_reads = 0;
+  uint64_t dram_writes = 0;
+  uint64_t dram_stalls = 0;
   uint64_t dram_lat = 0;
 #endif     
       
@@ -154,11 +156,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 
   #ifdef PERF_ENABLE
     // PERF: pipeline    
-    // icache_stall
-    uint64_t icache_stalls_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_ICACHE_ST, CSR_MPM_ICACHE_ST_H, &icache_stalls_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache stalls=%ld\n", core_id, icache_stalls_per_core);
-    icache_stalls += icache_stalls_per_core;
     // ibuffer_stall
     uint64_t ibuffer_stalls_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_IBUF_ST, CSR_MPM_IBUF_ST_H, &ibuffer_stalls_per_core);
@@ -209,7 +206,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     // read misses
     uint64_t icache_miss_r_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_ICACHE_MISS_R, CSR_MPM_ICACHE_MISS_R_H, &icache_miss_r_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache read misses=%ld\n", core_id, icache_miss_r_per_core);
+    int icache_read_hit_ratio = (int)((1.0 - (double(icache_miss_r_per_core) / double(icache_reads_per_core))) * 100);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache read misses=%ld (hit ratio=%d%%)\n", core_id, icache_miss_r_per_core, icache_read_hit_ratio);
     icache_read_misses += icache_miss_r_per_core;
     // pipeline stalls
     uint64_t icache_pipe_st_per_core;
@@ -221,16 +219,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_ICACHE_CRSP_ST, CSR_MPM_ICACHE_CRSP_ST_H, &icache_crsp_st_per_core);
     if (num_cores > 1) fprintf(stream, "PERF: core%d: icache reponse stalls=%ld\n", core_id, icache_crsp_st_per_core);
     icache_rsp_stalls += icache_crsp_st_per_core;
-    // dram_stalls
-    uint64_t icache_dram_st_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_ICACHE_DREQ_ST, CSR_MPM_ICACHE_DREQ_ST_H, &icache_dram_st_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache dram stalls=%ld\n", core_id, icache_dram_st_per_core);
-    icache_dram_stalls += icache_dram_st_per_core;
-    // mshr_stalls
-    uint64_t icache_mshr_st_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_ICACHE_MSHR_ST, CSR_MPM_ICACHE_MSHR_ST_H, &icache_mshr_st_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache mshr stalls=%ld\n", core_id, icache_mshr_st_per_core);
-    icache_mshr_stalls += icache_mshr_st_per_core;
 
     // PERF: Dcache
     // total reads
@@ -246,50 +234,70 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     // read misses
     uint64_t dcache_miss_r_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_MISS_R, CSR_MPM_DCACHE_MISS_R_H, &dcache_miss_r_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache read misses=%ld\n", core_id, dcache_miss_r_per_core);
+    int dcache_read_hit_ratio = (int)((1.0 - (double(dcache_miss_r_per_core) / double(dcache_reads_per_core))) * 100);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache read misses=%ld (hit ratio=%d%%)\n", core_id, dcache_miss_r_per_core, dcache_read_hit_ratio);
     dcache_read_misses += dcache_miss_r_per_core;
     // read misses
     uint64_t dcache_miss_w_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_MISS_W, CSR_MPM_DCACHE_MISS_W_H, &dcache_miss_w_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache wrire misses=%ld\n", core_id, dcache_miss_w_per_core);
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_MISS_W, CSR_MPM_DCACHE_MISS_W_H, &dcache_miss_w_per_core);    
+    int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_miss_w_per_core) / double(dcache_writes_per_core))) * 100);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache wrire misses=%ld (hit ratio=%d%%)\n", core_id, dcache_miss_w_per_core, dcache_write_hit_ratio);
     dcache_write_misses += dcache_miss_w_per_core;
-    // total_evictions
-    uint64_t dcache_evictions_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_EVICTS, CSR_MPM_DCACHE_EVICTS_H, &dcache_evictions_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache evictions_per_core=%ld\n", core_id, dcache_evictions_per_core);
-    dcache_evictions += dcache_evictions_per_core;    
-    // pipeline stalls
-    uint64_t dcache_pipe_st_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_PIPE_ST, CSR_MPM_DCACHE_PIPE_ST_H, &dcache_pipe_st_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache pipeline stalls=%ld\n", core_id, dcache_pipe_st_per_core);
-    dcache_pipe_stalls += dcache_pipe_st_per_core;
-    // response stalls
-    uint64_t dcache_crsp_st_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_CRSP_ST, CSR_MPM_DCACHE_CRSP_ST_H, &dcache_crsp_st_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache reponse stalls=%ld\n", core_id, dcache_crsp_st_per_core);
-    dcache_rsp_stalls += dcache_crsp_st_per_core;
-    // dram_stalls
-    uint64_t dcache_dram_st_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_DREQ_ST, CSR_MPM_DCACHE_DREQ_ST_H, &dcache_dram_st_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache dram stalls=%ld\n", core_id, dcache_dram_st_per_core);
-    dcache_dram_stalls += dcache_dram_st_per_core;
+    // bank_stalls
+    uint64_t dcache_bank_st_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_BANK_ST, CSR_MPM_DCACHE_BANK_ST_H, &dcache_bank_st_per_core);
+    int dcache_bank_utilization = (int)((1.0 - (double(dcache_reads_per_core + dcache_writes_per_core) / double(dcache_reads_per_core + dcache_writes_per_core + dcache_bank_st_per_core))) * 100);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache bank stalls=%ld (utilization=%d%%)\n", core_id, dcache_bank_st_per_core, dcache_bank_utilization);
+    dcache_bank_stalls += dcache_bank_st_per_core;
     // mshr_stalls
     uint64_t dcache_mshr_st_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_MSHR_ST, CSR_MPM_DCACHE_MSHR_ST_H, &dcache_mshr_st_per_core);
     if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache mshr stalls=%ld\n", core_id, dcache_mshr_st_per_core);
     dcache_mshr_stalls += dcache_mshr_st_per_core; 
+     // pipeline stalls
+    uint64_t dcache_pipe_st_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_PIPE_ST, CSR_MPM_DCACHE_PIPE_ST_H, &dcache_pipe_st_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache pipeline stalls=%ld\n", core_id, dcache_pipe_st_per_core);
+    dcache_pipe_stalls += dcache_pipe_st_per_core;
+   // response stalls
+    uint64_t dcache_crsp_st_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_CRSP_ST, CSR_MPM_DCACHE_CRSP_ST_H, &dcache_crsp_st_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache reponse stalls=%ld\n", core_id, dcache_crsp_st_per_core);
+    dcache_rsp_stalls += dcache_crsp_st_per_core;
 
-    // PERF: dram_latency
-    uint64_t dram_req_per_core, dram_rsp_per_core, dram_lat_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_REQ, CSR_MPM_DRAM_REQ_H, &dram_req_per_core);                
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_RSP, CSR_MPM_DRAM_RSP_H, &dram_rsp_per_core);                
+    // PERF: SMEM
+    // total reads
+    uint64_t smem_reads_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_SMEM_READS, CSR_MPM_SMEM_READS_H, &smem_reads_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: smem reads=%ld\n", core_id, smem_reads_per_core);
+    smem_reads += smem_reads_per_core;
+    // total write
+    uint64_t smem_writes_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_SMEM_WRITES, CSR_MPM_SMEM_WRITES_H, &smem_writes_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: smem writes=%ld\n", core_id, smem_writes_per_core);
+    smem_writes += smem_writes_per_core;
+    // bank_stalls
+    uint64_t smem_bank_st_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_SMEM_BANK_ST, CSR_MPM_SMEM_BANK_ST_H, &smem_bank_st_per_core);
+    int smem_bank_utilization = (int)((1.0 - (double(smem_reads_per_core + smem_writes_per_core) / double(smem_reads_per_core + smem_writes_per_core + smem_bank_st_per_core))) * 100);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: smem bank stalls=%ld (utilization=%d%%)\n", core_id, smem_bank_st_per_core, smem_bank_utilization);
+    smem_bank_stalls += smem_bank_st_per_core;
+
+    // PERF: DRAM
+    uint64_t dram_reads_per_core, dram_writes_per_core, dram_stalls_per_core, dram_lat_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_READS, CSR_MPM_DRAM_READS_H, &dram_reads_per_core);                
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_WRITES, CSR_MPM_DRAM_WRITES_H, &dram_writes_per_core);                
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_ST, CSR_MPM_DRAM_ST_H, &dram_stalls_per_core);    
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_LAT, CSR_MPM_DRAM_LAT_H, &dram_lat_per_core);    
-    int avg_dram_lat_per_core = (int)(double(dram_lat_per_core) / double(dram_rsp_per_core));    
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram requests=%ld (reads=%ld, writes=%ld)\n", core_id, dram_req_per_core, dram_rsp_per_core, dram_req_per_core - dram_rsp_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: average dram latency=%d cycles\n", core_id, avg_dram_lat_per_core);     
-    dram_req += dram_req_per_core;
-    dram_rsp += dram_rsp_per_core;
-    dram_lat += dram_lat_per_core;    
+    int avg_dram_lat = (int)(double(dram_lat_per_core) / double(dram_reads_per_core));    
+    int dram_utilization = (int)((1.0 - (double(dram_reads_per_core + dram_writes_per_core) / double(dram_reads_per_core + dram_writes_per_core + dram_stalls_per_core))) * 100);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram requests=%ld (reads=%ld, writes=%ld)\n", core_id, (dram_reads_per_core + dram_writes_per_core), dram_reads_per_core, dram_writes_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram stalls=%d (utilization=%d%%)\n", core_id, dram_stalls_per_core, dram_utilization);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: average dram latency=%d cycles\n", core_id, avg_dram_lat);
+    dram_reads  += dram_reads_per_core;
+    dram_writes += dram_writes_per_core;
+    dram_stalls += dram_stalls_per_core;
+    dram_lat    += dram_lat_per_core;    
   #endif
   }      
   
@@ -297,7 +305,13 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);    
       
 #ifdef PERF_ENABLE
-  fprintf(stream, "PERF: icache stalls=%ld\n", icache_stalls);
+  int icache_read_hit_ratio = (int)((1.0 - (double(icache_read_misses) / double(icache_reads))) * 100);
+  int dcache_read_hit_ratio = (int)((1.0 - (double(dcache_read_misses) / double(dcache_reads))) * 100);
+  int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_write_misses) / double(dcache_writes))) * 100);
+  int dcache_bank_utilization = (int)((1.0 - (double(dcache_reads + dcache_writes) / double(dcache_reads + dcache_writes + dcache_bank_stalls))) * 100);
+  int smem_bank_utilization = (int)((1.0 - (double(smem_reads + smem_writes) / double(smem_reads + smem_writes + smem_bank_stalls))) * 100);
+  int dram_utilization = (int)((1.0 - (double(dram_reads + dram_writes) / double(dram_reads + dram_writes + dram_stalls))) * 100);
+  int avg_dram_lat = (int)(double(dram_lat) / double(dram_reads));
   fprintf(stream, "PERF: ibuffer stalls=%ld\n", ibuffer_stalls);
   fprintf(stream, "PERF: scoreboard stalls=%ld\n", scoreboard_stalls);
   fprintf(stream, "PERF: alu unit stalls=%ld\n", alu_stalls);
@@ -307,22 +321,22 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: fpu unit stalls=%ld\n", fpu_stalls);
   fprintf(stream, "PERF: gpu unit stalls=%ld\n", gpu_stalls);
   fprintf(stream, "PERF: icache reads=%ld\n", icache_reads);
-  fprintf(stream, "PERF: icache read misses=%ld\n", icache_read_misses);
+  fprintf(stream, "PERF: icache read misses=%ld (hit ratio=%d%%)\n", icache_read_misses, icache_read_hit_ratio);
+  fprintf(stream, "PERF: icache pipeline stalls=%ld\n", icache_pipe_stalls);  
   fprintf(stream, "PERF: icache reponse stalls=%ld\n", icache_rsp_stalls);
-  fprintf(stream, "PERF: icache pipeline stalls=%ld\n", icache_pipe_stalls);
-  fprintf(stream, "PERF: icache dram stalls=%ld\n", icache_dram_stalls);
-  fprintf(stream, "PERF: icache mshr stalls=%ld\n", icache_mshr_stalls);
   fprintf(stream, "PERF: dcache reads=%ld\n", dcache_reads);
   fprintf(stream, "PERF: dcache writes=%ld\n", dcache_writes);
-  fprintf(stream, "PERF: dcache read misses=%ld\n", dcache_read_misses);
-  fprintf(stream, "PERF: dcache wrire misses=%ld\n", dcache_write_misses);
-  fprintf(stream, "PERF: dcache evictions=%ld\n", dcache_evictions);
+  fprintf(stream, "PERF: dcache read misses=%ld (hit ratio=%d%%)\n", dcache_read_misses, dcache_read_hit_ratio);
+  fprintf(stream, "PERF: dcache write misses=%ld (hit ratio=%d%%)\n", dcache_write_misses, dcache_write_hit_ratio);  
+  fprintf(stream, "PERF: dcache bank stalls=%ld (utilization=%d%%)\n", dcache_bank_stalls, dcache_bank_utilization);
+  fprintf(stream, "PERF: dcache mshr stalls=%ld\n", dcache_mshr_stalls);
   fprintf(stream, "PERF: dcache pipeline stalls=%ld\n", dcache_pipe_stalls);
   fprintf(stream, "PERF: dcache reponse stalls=%ld\n", dcache_rsp_stalls);
-  fprintf(stream, "PERF: dcache dram stalls=%ld\n", dcache_dram_stalls);
-  fprintf(stream, "PERF: dcache mshr stalls=%ld\n", dcache_mshr_stalls);
-  fprintf(stream, "PERF: dram requests=%ld (reads=%ld, writes=%ld)\n", dram_req, dram_rsp, dram_req - dram_rsp);
-  int avg_dram_lat = (int)(double(dram_lat) / double(dram_rsp));
+  fprintf(stream, "PERF: smem reads=%ld\n", smem_reads);
+  fprintf(stream, "PERF: smem writes=%ld\n", smem_writes); 
+  fprintf(stream, "PERF: smem bank stalls=%ld (utilization=%d%%)\n", smem_bank_stalls, smem_bank_utilization);
+  fprintf(stream, "PERF: dram requests=%ld (reads=%ld, writes=%ld)\n", (dram_reads + dram_writes), dram_reads, dram_writes);
+  fprintf(stream, "PERF: dram stalls=%ld (utilization=%d%%)\n", dram_stalls, dram_utilization);
   fprintf(stream, "PERF: average dram latency=%d cycles\n", avg_dram_lat);
 #endif
 

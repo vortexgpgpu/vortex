@@ -134,15 +134,13 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_miss; 
-    assign miss_vec = per_bank_miss;  
-
+    assign miss_vec = per_bank_miss;
 
 `ifdef PERF_ENABLE
-    wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
-    wire [NUM_BANKS-1:0] perf_pipe_stall_per_bank;
-    wire [NUM_BANKS-1:0] perf_evict_per_bank;
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
+    wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
+    wire [NUM_BANKS-1:0] perf_pipe_stall_per_bank;
 `endif
 
     if (NUM_BANKS == 1) begin
@@ -156,13 +154,20 @@ module VX_cache #(
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
         .NUM_REQS       (NUM_REQS)
-    ) cache_core_req_bank_sel (
+    ) cache_core_req_bank_sel (        
+        .clk            (clk),
+        .reset          (reset),
+    `ifdef PERF_ENABLE        
+        .bank_stalls    (perf_cache_if.bank_stalls),
+    `else
+        `UNUSED_PIN (bank_stalls),
+    `endif     
         .core_req_valid (core_req_valid),
         .core_req_addr  (core_req_addr),
         .core_req_ready (core_req_ready),
         .per_bank_valid (per_bank_core_req_valid),
         .per_bank_tid   (per_bank_core_req_tid),
-        .per_bank_ready (per_bank_core_req_ready) 
+        .per_bank_ready (per_bank_core_req_ready)
     );
 
     assign dram_req_tag = dram_req_addr;
@@ -297,7 +302,8 @@ module VX_cache #(
             `SCOPE_BIND_VX_cache_bank(i)
             
             .clk                (clk),
-            .reset              (reset),                
+            .reset              (reset),     
+                       
             // Core request
             .core_req_valid     (curr_bank_core_req_valid),                  
             .core_req_tid       (curr_bank_core_req_tid),
@@ -330,11 +336,10 @@ module VX_cache #(
             .dram_rsp_ready     (curr_bank_dram_rsp_ready),
 
         `ifdef PERF_ENABLE
-            .perf_mshr_stall    (perf_mshr_stall_per_bank[i]),
-            .perf_pipe_stall    (perf_pipe_stall_per_bank[i]),
-            .perf_evict         (perf_evict_per_bank[i]),
-            .perf_read_miss     (perf_read_miss_per_bank[i]),
-            .perf_write_miss    (perf_write_miss_per_bank[i]),
+            .perf_read_misses   (perf_read_miss_per_bank[i]),
+            .perf_write_misses  (perf_write_miss_per_bank[i]),
+            .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
+            .perf_pipe_stalls   (perf_pipe_stall_per_bank[i]),
         `endif
 
             // Snoop request
@@ -434,47 +439,33 @@ module VX_cache #(
     end
     
 `ifdef PERF_ENABLE
-    // per cycle: core_req_r, core_req_w
-    reg [($clog2(NUM_REQS+1)-1):0] perf_core_req_r_per_cycle, perf_core_req_w_per_cycle;
+    // per cycle: core_reads, core_writes
+    reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle, perf_core_writes_per_cycle;
     reg [($clog2(NUM_REQS+1)-1):0] perf_crsp_stall_per_cycle;
 
+    VX_countones #(
+        .N(NUM_REQS) 
+    ) perf_countones_core_reads_count (
+        .valids (core_req_valid & core_req_ready & ~core_req_rw),
+        .count  (perf_core_reads_per_cycle)
+    );
+    
+    VX_countones #(
+        .N(NUM_REQS) 
+    ) perf_countones_core_writes_count (
+        .valids (core_req_valid & core_req_ready & core_req_rw),
+        .count  (perf_core_writes_per_cycle)
+    );
+
     if (CORE_TAG_ID_BITS != 0) begin
-        VX_countones #( // core_req_r
-            .N(NUM_REQS) 
-        ) perf_countones_core_req_r_count (
-            .valids (core_req_valid & {NUM_REQS{core_req_ready & ~core_req_rw}}),
-            .count  (perf_core_req_r_per_cycle)
-        );
-
-        VX_countones #( // core_req_w
-            .N(NUM_REQS) 
-        ) perf_countones_core_req_w_count (
-            .valids (core_req_valid & {NUM_REQS{core_req_ready & core_req_rw}}),
-            .count  (perf_core_req_w_per_cycle)
-        );
-
-        VX_countones #( // core_rsp
+        VX_countones #(
             .N(NUM_REQS) 
         ) perf_countones_core_rsp_count (
             .valids (core_rsp_valid & {NUM_REQS{!core_rsp_ready}}),
             .count  (perf_crsp_stall_per_cycle)
         );
     end else begin
-        VX_countones #( // core_req_r
-            .N(NUM_REQS) 
-        ) perf_countones_core_req_r_count (
-            .valids (core_req_valid & core_req_ready & ~core_req_rw),
-            .count  (perf_core_req_r_per_cycle)
-        );
-        
-        VX_countones #( // core_req_w
-            .N(NUM_REQS) 
-        ) perf_countones_core_req_w_count (
-            .valids (core_req_valid & core_req_ready & core_req_rw),
-            .count  (perf_core_req_w_per_cycle)
-        );
-
-        VX_countones #( // core_rsp
+        VX_countones #(
             .N(NUM_REQS) 
         ) perf_countones_core_rsp_count (
             .valids (core_rsp_valid & ~core_rsp_ready),
@@ -482,33 +473,11 @@ module VX_cache #(
         );
     end
 
-    // per cycle: msrq stalls, pipeline stalls, evictions, read misses, write misses
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_mshr_stall_per_cycle;
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_pipe_stall_per_cycle;
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_evictions_per_cycle;
+    // per cycle: read misses, write misses, msrq stalls, pipeline stalls
     reg [($clog2(NUM_BANKS+1)-1):0] perf_read_miss_per_cycle;
     reg [($clog2(NUM_BANKS+1)-1):0] perf_write_miss_per_cycle;
-
-    VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_mshr_stall_count (
-        .valids (perf_mshr_stall_per_bank),
-        .count  (perf_mshr_stall_per_cycle)
-    );
-
-    VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_total_stall_count (
-        .valids (perf_pipe_stall_per_bank),
-        .count  (perf_pipe_stall_per_cycle)
-    );
-
-    VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_EVICTSict_count (
-        .valids (perf_evict_per_bank),
-        .count  (perf_evictions_per_cycle)
-    );
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_mshr_stall_per_cycle;
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_pipe_stall_per_cycle;
 
     VX_countones #(
         .N(NUM_BANKS) 
@@ -524,59 +493,55 @@ module VX_cache #(
         .count  (perf_write_miss_per_cycle)
     );
 
-    reg [63:0] perf_core_req_r;
-    reg [63:0] perf_core_req_w;
-    reg [63:0] perf_mshr_stall;
-    reg [63:0] perf_pipe_stall;
-    reg [63:0] perf_evictions;
-    reg [63:0] perf_read_miss;
-    reg [63:0] perf_write_miss;
-    reg [63:0] perf_crsp_stall;
-    reg [63:0] perf_dreq_stall;
+     VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_mshr_stall_count (
+        .valids (perf_mshr_stall_per_bank),
+        .count  (perf_mshr_stall_per_cycle)
+    );
+
+    VX_countones #(
+        .N(NUM_BANKS) 
+    ) perf_countones_total_stall_count (
+        .valids (perf_pipe_stall_per_bank),
+        .count  (perf_pipe_stall_per_cycle)
+    );
+
+    reg [63:0] perf_core_reads;
+    reg [63:0] perf_core_writes;
+    reg [63:0] perf_read_misses;
+    reg [63:0] perf_write_misses;
+    reg [63:0] perf_mshr_stalls;
+    reg [63:0] perf_pipe_stalls;
+    reg [63:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_core_req_r <= 0;
-            perf_core_req_w <= 0;
-            perf_crsp_stall <= 0;
-            perf_mshr_stall <= 0;
-            perf_pipe_stall <= 0;
-            perf_evictions  <= 0;
-            perf_read_miss  <= 0;
-            perf_write_miss <= 0;
-            perf_dreq_stall <= 0;
+            perf_core_reads   <= 0;
+            perf_core_writes  <= 0;
+            perf_read_misses  <= 0;
+            perf_write_misses <= 0;
+            perf_mshr_stalls  <= 0;
+            perf_pipe_stalls  <= 0;
+            perf_crsp_stalls  <= 0;
         end else begin
-            // core requests
-            perf_core_req_r <= perf_core_req_r + $bits(perf_core_req_r)'(perf_core_req_r_per_cycle);
-            perf_core_req_w <= perf_core_req_w + $bits(perf_core_req_w)'(perf_core_req_w_per_cycle);
-            // core response stalls
-            perf_crsp_stall <= perf_crsp_stall + $bits(perf_crsp_stall)'(perf_crsp_stall_per_cycle);
-            // miss reserve queue stalls
-            perf_mshr_stall <= perf_mshr_stall + $bits(perf_mshr_stall)'(perf_mshr_stall_per_cycle);
-            // pipeline stalls
-            perf_pipe_stall <= perf_pipe_stall + $bits(perf_pipe_stall)'(perf_pipe_stall_per_cycle);
-            // total evictions
-            perf_evictions <= perf_evictions + $bits(perf_evictions)'(perf_evictions_per_cycle);
-            // read misses
-            perf_read_miss <= perf_read_miss + $bits(perf_read_miss)'(perf_read_miss_per_cycle);
-            // write misses
-            perf_write_miss <= perf_write_miss + $bits(perf_write_miss)'(perf_write_miss_per_cycle);
-            // dram request stalls
-            if (dram_req_valid & !dram_req_ready) begin
-                perf_dreq_stall <= perf_dreq_stall + 64'd1;
-            end
+            perf_core_reads   <= perf_core_reads + 64'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes + 64'(perf_core_writes_per_cycle);
+            perf_read_misses  <= perf_read_misses + 64'(perf_read_miss_per_cycle);
+            perf_write_misses <= perf_write_misses + 64'(perf_write_miss_per_cycle);
+            perf_mshr_stalls  <= perf_mshr_stalls + 64'(perf_mshr_stall_per_cycle);
+            perf_pipe_stalls  <= perf_pipe_stalls + 64'(perf_pipe_stall_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls + 64'(perf_crsp_stall_per_cycle);
         end
     end
 
-    assign perf_cache_if.reads = perf_core_req_r;
-    assign perf_cache_if.writes = perf_core_req_w;
-    assign perf_cache_if.read_misses = perf_read_miss;
-    assign perf_cache_if.write_misses = perf_write_miss;
-    assign perf_cache_if.evictions = perf_evictions;
-    assign perf_cache_if.mshr_stalls = perf_mshr_stall;
-    assign perf_cache_if.pipe_stalls = perf_pipe_stall;
-    assign perf_cache_if.crsp_stalls = perf_crsp_stall;
-    assign perf_cache_if.dreq_stalls = perf_dreq_stall;
+    assign perf_cache_if.reads        = perf_core_reads;
+    assign perf_cache_if.writes       = perf_core_writes;
+    assign perf_cache_if.read_misses  = perf_read_misses;
+    assign perf_cache_if.write_misses = perf_write_misses;
+    assign perf_cache_if.mshr_stalls  = perf_mshr_stalls;
+    assign perf_cache_if.pipe_stalls  = perf_pipe_stalls;
+    assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 
 endmodule
