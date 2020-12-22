@@ -123,18 +123,77 @@ module VX_issue #(
     `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
 
 `ifdef PERF_ENABLE
-    reg [63:0] perf_scoreboard_stalls;
+    reg [63:0] perf_ibf_stalls ;
+    reg [63:0] perf_scb_stalls ;
+    reg [63:0] perf_alu_stalls;
+    reg [63:0] perf_lsu_stalls;
+    reg [63:0] perf_csr_stalls;
+    reg [63:0] perf_gpu_stalls;
+`ifdef EXT_M_ENABLE
+    reg [63:0] perf_mul_stalls;
+`endif
+`ifdef EXT_F_ENABLE
+    reg [63:0] perf_fpu_stalls;
+`endif
+
     always @(posedge clk) begin
         if (reset) begin
-            perf_scoreboard_stalls <= 0;
+            perf_ibf_stalls <= 0;
+            perf_scb_stalls <= 0;
+            perf_alu_stalls <= 0;
+            perf_lsu_stalls <= 0;
+            perf_csr_stalls <= 0;
+            perf_gpu_stalls <= 0;
+        `ifdef EXT_M_ENABLE
+            perf_mul_stalls <= 0;
+        `endif
+        `ifdef EXT_F_ENABLE
+            perf_fpu_stalls <= 0;
+        `endif
         end else begin
-            // scoreboard_stall
-            if (ibuf_deq_if.valid & scoreboard_delay) begin 
-                perf_scoreboard_stalls <= perf_scoreboard_stalls + 64'd1;
+            if (decode_if.valid & !decode_if.ready) begin
+                perf_ibf_stalls  <= perf_ibf_stalls  + 64'd1;
             end
+            if (ibuf_deq_if.valid & scoreboard_delay) begin 
+                perf_scb_stalls  <= perf_scb_stalls  + 64'd1;
+            end
+            if (alu_req_if.valid & !alu_req_if.ready) begin
+                perf_alu_stalls <= perf_alu_stalls + 64'd1;
+            end
+            if (lsu_req_if.valid & !lsu_req_if.ready) begin
+                perf_lsu_stalls <= perf_lsu_stalls + 64'd1;
+            end
+            if (csr_req_if.valid & !csr_req_if.ready) begin
+                perf_csr_stalls <= perf_csr_stalls + 64'd1;
+            end
+            if (gpu_req_if.valid & !gpu_req_if.ready) begin
+                perf_gpu_stalls <= perf_gpu_stalls + 64'd1;
+            end
+        `ifdef EXT_M_ENABLE
+            if (mul_req_if.valid & !mul_req_if.ready) begin
+                perf_mul_stalls <= perf_mul_stalls + 64'd1;
+            end
+        `endif
+        `ifdef EXT_F_ENABLE
+            if (fpu_req_if.valid & !fpu_req_if.ready) begin
+                perf_fpu_stalls <= perf_fpu_stalls + 64'd1;
+            end
+        `endif
         end
     end
-    assign perf_pipeline_if.scoreboard_stalls = perf_scoreboard_stalls;
+    
+    assign perf_pipeline_if.ibf_stalls = perf_ibf_stalls;
+    assign perf_pipeline_if.scb_stalls = perf_scb_stalls; 
+    assign perf_pipeline_if.alu_stalls = perf_alu_stalls;
+    assign perf_pipeline_if.lsu_stalls = perf_lsu_stalls;
+    assign perf_pipeline_if.csr_stalls = perf_csr_stalls;
+    assign perf_pipeline_if.gpu_stalls = perf_gpu_stalls;
+`ifdef EXT_M_ENABLE
+    assign perf_pipeline_if.mul_stalls = perf_mul_stalls;
+`endif
+`ifdef EXT_F_ENABLE
+    assign perf_pipeline_if.fpu_stalls = perf_fpu_stalls;
+`endif
 `endif
 
 `ifdef DBG_PRINT_PIPELINE

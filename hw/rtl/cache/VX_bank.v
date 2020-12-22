@@ -98,11 +98,10 @@ module VX_bank #(
     input  wire                         snp_rsp_ready,
 
 `ifdef PERF_ENABLE
-    output wire perf_mshr_stall,
-    output wire perf_pipe_stall,
-    output wire perf_evict,
-    output wire perf_read_miss,
-    output wire perf_write_miss,
+    output wire perf_read_misses,
+    output wire perf_write_misses,
+    output wire perf_mshr_stalls,
+    output wire perf_pipe_stalls,
 `endif
 
     // Misses
@@ -335,7 +334,7 @@ module VX_bank #(
     wire dreq_push_stall;    
     wire srsq_push_stall;
     wire pipeline_stall;
-    
+
     wire is_mshr_miss_st2 = valid_st2 && is_mshr_st2 && (miss_st2 || force_miss_st2);
     wire is_mshr_miss_st3 = valid_st3 && is_mshr_st3 && (miss_st3 || force_miss_st3);
 
@@ -938,15 +937,10 @@ end
     `SCOPE_ASSIGN (addr_st3, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID));
 
 `ifdef PERF_ENABLE
-    assign perf_pipe_stall = pipeline_stall;
-    assign perf_mshr_stall = mshr_going_full;
-    assign perf_read_miss  = !pipeline_stall & miss_st2 & !is_mshr_st2 & !mem_rw_st2;
-    assign perf_write_miss = !pipeline_stall & miss_st2 & !is_mshr_st2 & mem_rw_st2;
-    if (DRAM_ENABLE) begin
-        assign perf_evict = dreq_push & do_writeback_st3 & !is_snp_st3;
-    end else begin
-        assign perf_evict = 0;
-    end
+    assign perf_read_misses  = !pipeline_stall && miss_st2 && !is_mshr_st2 && !mem_rw_st2;
+    assign perf_write_misses = !pipeline_stall && miss_st2 && !is_mshr_st2 && mem_rw_st2;
+    assign perf_mshr_stalls  = mshr_going_full;
+    assign perf_pipe_stalls  = pipeline_stall || mshr_going_full;
 `endif
 
 `ifdef DBG_PRINT_CACHE_BANK

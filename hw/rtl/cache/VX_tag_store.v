@@ -48,6 +48,7 @@ module VX_tag_store #(
     VX_dp_ram #(
         .DATAW(`TAG_SELECT_BITS),
         .SIZE(`BANK_LINE_COUNT),
+        .FASTRAM(1),
         .RWCHECK(1)
     ) tags (
         .clk(clk),                 

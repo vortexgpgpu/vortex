@@ -4,12 +4,8 @@
 `include "VX_define.vh"
 
 interface VX_perf_pipeline_if ();
-    // from pipeline
-    wire [63:0]     icache_stalls;
-    wire [63:0]     ibuffer_stalls;
-    // from issue
-    wire [63:0]     scoreboard_stalls;
-    // from execute
+    wire [63:0]     ibf_stalls;
+    wire [63:0]     scb_stalls;
     wire [63:0]     lsu_stalls;
     wire [63:0]     csr_stalls;
     wire [63:0]     alu_stalls;

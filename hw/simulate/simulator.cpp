@@ -71,8 +71,8 @@ void Simulator::reset() {
 
   vortex_->dram_rsp_valid = 0;
   vortex_->dram_req_ready = 0;
-  vortex_->io_req_ready = 0;
-  vortex_->io_rsp_valid = 0;
+  //vortex_->io_req_ready = 0;
+  //vortex_->io_rsp_valid = 0;
   vortex_->snp_req_valid = 0;
   vortex_->snp_rsp_ready = 0;  
   vortex_->csr_io_req_valid  = 0;
@@ -201,7 +201,7 @@ void Simulator::eval_dram_bus() {
 }
 
 void Simulator::eval_io_bus() {
-  for (int i = 0; i < NUM_THREADS; ++i) {
+  /*for (int i = 0; i < NUM_THREADS; ++i) {
     if (((vortex_->io_req_valid >> i) & 0x1) 
      && ((VL_WDATA_GETW(vortex_->io_req_addr, i, NUM_THREADS, 30) << 2) == IO_BUS_ADDR_COUT)) {
       assert(vortex_->io_req_rw);
@@ -217,7 +217,7 @@ void Simulator::eval_io_bus() {
     }
   }
   vortex_->io_req_ready = 1;
-  vortex_->io_rsp_valid = 0;
+  vortex_->io_rsp_valid = 0;*/
 }
 
 void Simulator::eval_snp_bus() {

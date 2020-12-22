@@ -363,60 +363,72 @@ module VX_mem_unit # (
 
 `ifdef PERF_ENABLE
     
-    assign perf_memsys_if.icache_reads = perf_icache_if.reads;
+    assign perf_memsys_if.icache_reads       = perf_icache_if.reads;
     assign perf_memsys_if.icache_read_misses = perf_icache_if.read_misses;
-    assign perf_memsys_if.icache_mshr_stalls = perf_icache_if.mshr_stalls;
-    assign perf_memsys_if.icache_crsp_stalls = perf_icache_if.crsp_stalls;
-    assign perf_memsys_if.icache_dreq_stalls = perf_icache_if.dreq_stalls;
     assign perf_memsys_if.icache_pipe_stalls = perf_icache_if.pipe_stalls;
+    assign perf_memsys_if.icache_crsp_stalls = perf_icache_if.crsp_stalls;
 
-    assign perf_memsys_if.dcache_reads = perf_dcache_if.reads;
-    assign perf_memsys_if.dcache_writes = perf_dcache_if.writes;
+    assign perf_memsys_if.dcache_reads       = perf_dcache_if.reads;
+    assign perf_memsys_if.dcache_writes      = perf_dcache_if.writes;
     assign perf_memsys_if.dcache_read_misses = perf_dcache_if.read_misses;
-    assign perf_memsys_if.dcache_write_misses = perf_dcache_if.write_misses;
-    assign perf_memsys_if.dcache_evictions = perf_dcache_if.evictions;
-    assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;
-    assign perf_memsys_if.dcache_crsp_stalls = perf_dcache_if.crsp_stalls;
-    assign perf_memsys_if.dcache_dreq_stalls = perf_dcache_if.dreq_stalls;
+    assign perf_memsys_if.dcache_write_misses= perf_dcache_if.write_misses;
+    assign perf_memsys_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
+    assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;    
     assign perf_memsys_if.dcache_pipe_stalls = perf_dcache_if.pipe_stalls;
+    assign perf_memsys_if.dcache_crsp_stalls = perf_dcache_if.crsp_stalls;
+
+if (`SM_ENABLE) begin
+    assign perf_memsys_if.smem_reads         = perf_smem_if.reads;
+    assign perf_memsys_if.smem_writes        = perf_smem_if.writes;
+    assign perf_memsys_if.smem_bank_stalls   = perf_smem_if.bank_stalls;    
+end else begin
+    assign perf_memsys_if.smem_reads         = 0;
+    assign perf_memsys_if.smem_writes        = 0;
+    assign perf_memsys_if.smem_bank_stalls   = 0;
+end
     
     reg [63:0] perf_dram_lat_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
             perf_dram_lat_per_cycle <= 0;
-        end else begin
-            if (dram_req_if.valid & (~dram_req_if.rw) & dram_req_if.ready & dram_rsp_if.valid & dram_rsp_if.ready) begin
+        end else begin 
+            if (dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready && dram_rsp_if.valid && dram_rsp_if.ready) begin
                 perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle;
-            end else if (dram_req_if.valid & (~dram_req_if.rw) & dram_req_if.ready) begin
+            end else if (dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready) begin
                 perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 64'd1;
-            end else if (dram_rsp_if.valid & dram_rsp_if.ready) begin
+            end else if (dram_rsp_if.valid && dram_rsp_if.ready) begin
                 perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle - 64'd1;
             end
         end
     end
     
-    reg [63:0] perf_dram_req, perf_dram_rsp, perf_dram_lat;
+    reg [63:0] perf_dram_reads, perf_dram_writes, perf_dram_lat, perf_dram_stalls;
 
     always @(posedge clk) begin
         if (reset) begin       
-            perf_dram_req <= 0;     
-            perf_dram_rsp <= 0;            
-            perf_dram_lat <= 0;
-        end else begin            
-            if (dram_req_if.valid & dram_req_if.ready) begin
-                perf_dram_req <= perf_dram_req + 64'd1;
+            perf_dram_reads  <= 0;     
+            perf_dram_writes <= 0;            
+            perf_dram_lat    <= 0;
+            perf_dram_stalls <= 0;
+        end else begin  
+            if (dram_req_if.valid && dram_req_if.ready && !dram_req_if.rw) begin
+                perf_dram_reads <= perf_dram_reads + 64'd1;
             end
-            if (dram_rsp_if.valid & dram_rsp_if.ready) begin
-                perf_dram_rsp <= perf_dram_rsp + 64'd1;
-            end
+            if (dram_req_if.valid && dram_req_if.ready && dram_req_if.rw) begin
+                perf_dram_writes <= perf_dram_writes + 64'd1;
+            end            
+            if (dram_req_if.valid && !dram_req_if.ready) begin
+                perf_dram_stalls <= perf_dram_stalls + 64'd1;
+            end       
             perf_dram_lat <= perf_dram_lat + perf_dram_lat_per_cycle;
         end
     end
 
-    assign perf_memsys_if.dram_requests  = perf_dram_req;       
-    assign perf_memsys_if.dram_responses = perf_dram_rsp;
-    assign perf_memsys_if.dram_latency   = perf_dram_lat; 
+    assign perf_memsys_if.dram_reads   = perf_dram_reads;       
+    assign perf_memsys_if.dram_writes  = perf_dram_writes;
+    assign perf_memsys_if.dram_latency = perf_dram_lat; 
+    assign perf_memsys_if.dram_stalls  = perf_dram_stalls;
 `endif
     
 endmodule
