@@ -20,10 +20,6 @@ module VX_mem_unit # (
     VX_cache_core_req_if    core_icache_req_if,  
     VX_cache_core_rsp_if    core_icache_rsp_if,
 
-    // Dcache Snoop
-    VX_cache_snp_req_if     dcache_snp_req_if,
-    VX_cache_snp_rsp_if     dcache_snp_rsp_if,
-
     // DRAM
     VX_cache_dram_req_if    dram_req_if,
     VX_cache_dram_rsp_if    dram_rsp_if
@@ -95,12 +91,9 @@ module VX_mem_unit # (
         .CREQ_SIZE          (`ICREQ_SIZE),
         .MSHR_SIZE          (`IMSHR_SIZE),
         .DRSQ_SIZE          (`IDRSQ_SIZE),
-        .SREQ_SIZE          (1),
         .CRSQ_SIZE          (`ICRSQ_SIZE),
         .DREQ_SIZE          (`IDREQ_SIZE),
-        .SRSQ_SIZE          (1),
         .DRAM_ENABLE        (1),
-        .FLUSH_ENABLE       (0),
         .WRITE_ENABLE       (0),
         .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
@@ -145,18 +138,6 @@ module VX_mem_unit # (
         .dram_rsp_tag       (icache_dram_rsp_if.tag),
         .dram_rsp_ready     (icache_dram_rsp_if.ready),
 
-        // Snoop request
-        .snp_req_valid      (1'b0),
-        .snp_req_addr       (0),
-        .snp_req_inv        (1'b0),
-        .snp_req_tag        (0),
-        `UNUSED_PIN (snp_req_ready),
-
-        // Snoop response
-        `UNUSED_PIN (snp_rsp_valid),
-        `UNUSED_PIN (snp_rsp_tag),
-        .snp_rsp_ready         (1'b0),
-
         // Miss status
         `UNUSED_PIN (miss_vec)
     );
@@ -171,17 +152,13 @@ module VX_mem_unit # (
         .CREQ_SIZE          (`DCREQ_SIZE),
         .MSHR_SIZE          (`DMSHR_SIZE),
         .DRSQ_SIZE          (`DDRSQ_SIZE),
-        .SREQ_SIZE          (`DSREQ_SIZE),
         .CRSQ_SIZE          (`DCRSQ_SIZE),
-        .DREQ_SIZE          (`DDREQ_SIZE),        
-        .SRSQ_SIZE          (`DSRSQ_SIZE),
+        .DREQ_SIZE          (`DDREQ_SIZE),    
         .DRAM_ENABLE        (1),
-        .FLUSH_ENABLE       (1),
         .WRITE_ENABLE       (1),
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
-        .SNP_TAG_WIDTH      (`DSNP_TAG_WIDTH)
+        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
         
@@ -222,18 +199,6 @@ module VX_mem_unit # (
         .dram_rsp_tag       (dcache_dram_rsp_if.tag),
         .dram_rsp_ready     (dcache_dram_rsp_if.ready),
 
-        // Snoop request
-        .snp_req_valid      (dcache_snp_req_if.valid),
-        .snp_req_addr       (dcache_snp_req_if.addr),
-        .snp_req_inv        (dcache_snp_req_if.invalidate),
-        .snp_req_tag        (dcache_snp_req_if.tag),
-        .snp_req_ready      (dcache_snp_req_if.ready),
-
-        // Snoop response
-        .snp_rsp_valid      (dcache_snp_rsp_if.valid),
-        .snp_rsp_tag        (dcache_snp_rsp_if.tag),
-        .snp_rsp_ready      (dcache_snp_rsp_if.ready),
-
         // Miss status
         `UNUSED_PIN (miss_vec)
     ); 
@@ -250,12 +215,9 @@ module VX_mem_unit # (
             .CREQ_SIZE          (`SCREQ_SIZE),
             .MSHR_SIZE          (8),
             .DRSQ_SIZE          (1),
-            .SREQ_SIZE          (1),
             .CRSQ_SIZE          (`SCRSQ_SIZE),
             .DREQ_SIZE          (1),
-            .SRSQ_SIZE          (1),        
             .DRAM_ENABLE        (0),
-            .FLUSH_ENABLE       (0),
             .WRITE_ENABLE       (1),
             .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
@@ -299,18 +261,6 @@ module VX_mem_unit # (
             .dram_rsp_data      (0),
             .dram_rsp_tag       (0),
             `UNUSED_PIN (dram_rsp_ready),
-
-            // Snoop request
-            .snp_req_valid      (1'b0),
-            .snp_req_addr       (0),
-            .snp_req_inv        (0),
-            .snp_req_tag        (0),
-            `UNUSED_PIN (snp_req_ready),
-
-            // Snoop response
-            `UNUSED_PIN (snp_rsp_valid),
-            `UNUSED_PIN (snp_rsp_tag),
-            .snp_rsp_ready      (1'b0),
 
             // Miss status
             `UNUSED_PIN (miss_vec)

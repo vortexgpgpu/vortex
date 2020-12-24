@@ -16,9 +16,6 @@ module VX_tag_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 0,
 
-    // Enable cache flush
-    parameter FLUSH_ENABLE      = 1,
-
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS  = 0
 ) (
@@ -41,8 +38,6 @@ module VX_tag_access #(
     input wire[`LINE_ADDR_WIDTH-1:0]    addr_in,   
     input wire                          is_write_in,
     input wire                          is_fill_in,
-    input wire                          is_snp_in,
-    input wire                          snp_inv_in,
     input wire                          force_miss_in,
 
     // Outputs
@@ -90,7 +85,6 @@ module VX_tag_access #(
     assign do_write = WRITE_ENABLE
                    && valid_in                        
                    && tags_match
-                   && !is_snp_in
                    && !is_fill_in
                    && is_write_in                       
                    && !force_miss_in
@@ -100,17 +94,10 @@ module VX_tag_access #(
                   && is_fill_in
                   && !stall;
 
-    assign do_invalidate = FLUSH_ENABLE
-                        && valid_in
-                        && tags_match
-                        && is_snp_in                         
-                        && (read_dirty || snp_inv_in)
-                        && !force_miss_in
-                        && !stall;
+    assign do_invalidate = 0;
 
     assign miss_out = valid_in 
                    && !tags_match
-                   && !is_snp_in 
                    && !is_fill_in;
 
     assign dirty_out = WRITE_ENABLE 

@@ -29,7 +29,7 @@ module VX_csr_unit #(
 
     wire select_io_rsp;
 
-    VX_csr_arb csr_arb (
+    VX_csr_io_arb csr_io_arb (
         .clk              (clk),
         .reset            (reset),
         

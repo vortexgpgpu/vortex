@@ -51,6 +51,9 @@ run-rtlsim: $(PROJECT) kernel.pocl
 clean:
 	rm -rf $(PROJECT) *.o .depend 
 
+clean-all: clean
+	rm *.pocl *.dump
+
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
 endif

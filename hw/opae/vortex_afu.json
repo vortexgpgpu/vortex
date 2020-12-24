@@ -8,9 +8,8 @@
       "cmd-mem-read":     1,
       "cmd-mem-write":    2,
       "cmd-run":          3,
-      "cmd-clflush":      4,
-      "cmd-csr-read":     5,
-      "cmd-csr-write":    6,
+      "cmd-csr-read":     4,
+      "cmd-csr-write":    5,
       
       "mmio-cmd-type":    10,     
       "mmio-io-addr":     12,

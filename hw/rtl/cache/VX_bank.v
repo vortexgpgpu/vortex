@@ -21,33 +21,26 @@ module VX_bank #(
     parameter MSHR_SIZE                     = 1, 
     // DRAM Response Queue Size
     parameter DRSQ_SIZE                     = 1, 
-    // Snoop Request Queue Size
-    parameter SREQ_SIZE                     = 1, 
 
     // Core Response Queue Size
     parameter CRSQ_SIZE                     = 1, 
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 1,
-    // Snoop Response Size
-    parameter SRSQ_SIZE                     = 1,
-
-    // Enable cache writeable
-     parameter WRITE_ENABLE                 = 0,
 
     // Enable dram update
-    parameter DRAM_ENABLE                   = 0,
-     
-    // Enable cache flush
-    parameter FLUSH_ENABLE                  = 0,
+    parameter DRAM_ENABLE                   = 1,
+
+    // Enable cache writeable
+    parameter WRITE_ENABLE                  = 1,
+
+    // Enable write-through
+    parameter WRITE_THROUGH                 = 1,
 
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
 
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 0,
-
-    // Snooping request tag width
-    parameter SNP_TAG_WIDTH                 = 1
+    parameter CORE_TAG_ID_BITS              = 0
 ) (
     `SCOPE_IO_VX_bank
 
@@ -85,18 +78,6 @@ module VX_bank #(
     input  wire [`BANK_LINE_WIDTH-1:0]  dram_rsp_data,
     output wire                         dram_rsp_ready,
 
-    // Snoop Request
-    input  wire                         snp_req_valid,
-    input  wire [`LINE_ADDR_WIDTH-1:0]  snp_req_addr,
-    input  wire                         snp_req_inv,
-    input  wire [SNP_TAG_WIDTH-1:0]     snp_req_tag,
-    output wire                         snp_req_ready,
-
-    // Snoop Response
-    output wire                         snp_rsp_valid,
-    output wire [SNP_TAG_WIDTH-1:0]     snp_rsp_tag,
-    input  wire                         snp_rsp_ready,
-
 `ifdef PERF_ENABLE
     output wire perf_read_misses,
     output wire perf_write_misses,
@@ -107,8 +88,6 @@ module VX_bank #(
     // Misses
     output wire                         misses
 );
-    `STATIC_ASSERT (!FLUSH_ENABLE || DRAM_ENABLE, ("invalid parameter"))
-
 `ifdef DBG_CACHE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire [31:0]         debug_pc_st0;
@@ -132,48 +111,6 @@ module VX_bank #(
     wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid_st3;
     /* verilator lint_on UNUSED */
 `endif
-
-    wire sreq_pop;
-    wire sreq_empty;
-        
-    wire [`LINE_ADDR_WIDTH-1:0] sreq_addr_st0;
-    wire                     sreq_inv_st0;
-    wire [SNP_TAG_WIDTH-1:0] sreq_tag_st0;   
-
-    if (FLUSH_ENABLE) begin
-
-        wire sreq_full;        
-        assign snp_req_ready = !sreq_full;
-        wire sreq_push = snp_req_valid && snp_req_ready;
-
-        VX_generic_queue #(
-            .DATAW    (`LINE_ADDR_WIDTH + 1 + SNP_TAG_WIDTH), 
-            .SIZE     (SREQ_SIZE),            
-            .BUFFERED (1),
-            .FASTRAM  (1)
-        ) snp_req_queue (
-            .clk     (clk),
-            .reset   (reset),
-            .push    (sreq_push),
-            .pop     (sreq_pop),
-            .data_in ({snp_req_addr,  snp_req_inv,  snp_req_tag}),        
-            .data_out({sreq_addr_st0, sreq_inv_st0, sreq_tag_st0}),
-            .empty   (sreq_empty),
-            .full    (sreq_full),
-            `UNUSED_PIN (size)
-        );
-
-    end else begin
-        `UNUSED_VAR (snp_req_valid)
-        `UNUSED_VAR (snp_req_addr)
-        `UNUSED_VAR (snp_req_inv)
-        `UNUSED_VAR (snp_req_tag)
-        assign sreq_empty = 1;
-        assign sreq_addr_st0 = 0;
-        assign sreq_inv_st0 = 0;
-        assign sreq_tag_st0 = 0;        
-        assign snp_req_ready = 0;
-    end
 
     wire drsq_pop;
     wire drsq_empty;
@@ -258,19 +195,15 @@ module VX_bank #(
     wire [`REQ_TAG_WIDTH-1:0]       mshr_tag_st0;
     wire                            mshr_rw_st0;  
     wire [WORD_SIZE-1:0]            mshr_byteen_st0;
-    wire                            mshr_is_snp_st0;
-    wire                            mshr_snp_inv_st0;    
     wire                            mshr_pending_hazard_unqual_st0;
     
     wire                            is_fill_st0;
     wire                            is_mshr_st0;
-    wire                            is_snp_st0;
     wire                            valid_st0;
     wire [`LINE_ADDR_WIDTH-1:0]     addr_st0;
     wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st0;
     wire [`WORD_WIDTH-1:0]          writeword_st0;
     wire [`BANK_LINE_WIDTH-1:0]     writedata_st0;
-    wire                            snp_inv_st0;
     wire [`REQ_TAG_WIDTH-1:0]       tag_st0;
     wire                            mem_rw_st0;
     wire [WORD_SIZE-1:0]            byteen_st0;
@@ -278,13 +211,11 @@ module VX_bank #(
     
     wire                            is_fill_st1;
     wire                            is_mshr_st1;
-    wire                            is_snp_st1;
     wire                            valid_st1;
     wire [`LINE_ADDR_WIDTH-1:0]     addr_st1;
     wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st1;
     wire [`WORD_WIDTH-1:0]          writeword_st1;
     wire [`BANK_LINE_WIDTH-1:0]     writedata_st1;
-    wire                            snp_inv_st1;    
     wire [`TAG_SELECT_BITS-1:0]     readtag_st1;    
     wire                            miss_st1;
     wire                            force_miss_st1;
@@ -305,8 +236,6 @@ module VX_bank #(
     wire [BANK_LINE_SIZE-1:0]       dirtyb_st2;
     wire [`TAG_SELECT_BITS-1:0]     readtag_st2;    
     wire                            is_fill_st2;
-    wire                            is_snp_st2;
-    wire                            snp_inv_st2;
     wire                            is_mshr_st2;      
     wire                            miss_st2;
     wire                            force_miss_st2; 
@@ -331,26 +260,25 @@ module VX_bank #(
     
     wire mshr_push_stall;
     wire crsq_push_stall;    
-    wire dreq_push_stall;    
-    wire srsq_push_stall;
+    wire dreq_push_stall;
     wire pipeline_stall;
 
     wire is_mshr_miss_st2 = valid_st2 && is_mshr_st2 && (miss_st2 || force_miss_st2);
     wire is_mshr_miss_st3 = valid_st3 && is_mshr_st3 && (miss_st3 || force_miss_st3);
 
-    wire creq_commit = valid_st2 && core_req_hit_st2 && !pipeline_stall;
+    wire creq_commit = valid_st2 
+                    && (core_req_hit_st2 || (WRITE_THROUGH && mem_rw_st2))
+                    && !pipeline_stall;
 
     // determine which queue to pop next in piority order
     wire mshr_pop_unqual = mshr_valid_st0;
     wire drsq_pop_unqual = !mshr_pop_unqual && !drsq_empty;
     wire creq_pop_unqual = !mshr_pop_unqual && !drsq_pop_unqual && !creq_empty && !mshr_going_full;
-    wire sreq_pop_unqual = !mshr_pop_unqual && !drsq_pop_unqual && !creq_pop_unqual && !sreq_empty && !mshr_going_full;
 
     assign mshr_pop = mshr_pop_unqual && !pipeline_stall 
                    && !(is_mshr_miss_st2 || is_mshr_miss_st3); // stop if previous request was a miss
     assign drsq_pop = drsq_pop_unqual && !pipeline_stall;
     assign creq_pop = creq_pop_unqual && !pipeline_stall;
-    assign sreq_pop = sreq_pop_unqual && !pipeline_stall;
 
     // MSHR pending size    
     assign mshr_pending_size_n = mshr_pending_size + 
@@ -368,12 +296,11 @@ module VX_bank #(
     assign is_mshr_st0 = mshr_pop_unqual;
     assign is_fill_st0 = drsq_pop_unqual;
 
-    assign valid_st0 = drsq_pop || mshr_pop || creq_pop || sreq_pop;
+    assign valid_st0 = drsq_pop || mshr_pop || creq_pop;
 
     assign addr_st0 = mshr_pop_unqual ? mshr_addr_st0 :
                       drsq_pop_unqual ? drsq_addr_st0 :
                       creq_pop_unqual ? creq_addr_st0[`LINE_SELECT_ADDR_RNG] :
-                      sreq_pop_unqual ? sreq_addr_st0 :
                                         0;
     
     if (`WORD_SELECT_WIDTH != 0) begin
@@ -389,31 +316,19 @@ module VX_bank #(
 
     assign tag_st0 = mshr_pop_unqual ? `REQ_TAG_WIDTH'(mshr_tag_st0) :
                         creq_pop_unqual ? `REQ_TAG_WIDTH'(creq_tag_st0) :
-                            sreq_pop_unqual ? `REQ_TAG_WIDTH'(sreq_tag_st0) :
                                                 0;
 
     assign mem_rw_st0 = mshr_pop_unqual ? mshr_rw_st0 :
                             creq_pop_unqual ? creq_rw_st0 :
-                                sreq_pop_unqual ? 1'b0 :
                                                     0;
 
     assign byteen_st0 = mshr_pop_unqual ? mshr_byteen_st0 :
                             creq_pop_unqual ? creq_byteen_st0 :
-                                sreq_pop_unqual ? WORD_SIZE'(0) :
                                                     0;
 
     assign req_tid_st0 = mshr_pop_unqual ? mshr_tid_st0 :
                             creq_pop_unqual ? creq_tid_st0 :
-                                sreq_pop_unqual ? `REQS_BITS'(0) :
                                                     0;
-
-    assign is_snp_st0 = mshr_pop_unqual ? mshr_is_snp_st0 :
-                            sreq_pop_unqual ? 1 :
-                                0;
-
-    assign snp_inv_st0 = mshr_pop_unqual ? mshr_snp_inv_st0 :
-                            sreq_pop_unqual ? sreq_inv_st0 :
-                                0;
 
     assign writeword_st0 = mshr_pop_unqual ? mshr_writeword_st0 :
                                 creq_pop_unqual ? creq_writeword_st0 :
@@ -436,15 +351,15 @@ if (DRAM_ENABLE) begin
                                 || (valid_st3 && (miss_st3 || force_miss_st3) && (addr_st3 == addr_st0));
 
     VX_generic_register #(
-        .N(1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
+        .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
         .R(1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .stall    (pipeline_stall),
         .flush    (1'b0),
-        .data_in  ({valid_st0, is_mshr_st0, is_snp_st0, snp_inv_st0, mshr_pending_hazard_st0, addr_st0, wsel_st0, writeword_st0, is_fill_st0, writedata_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_snp_st1, snp_inv_st1, mshr_pending_hazard_st1, addr_st1, wsel_st1, writeword_st1, is_fill_st1, writedata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
+        .data_in  ({valid_st0, is_mshr_st0, mshr_pending_hazard_st0, addr_st0, wsel_st0, writeword_st0, is_fill_st0, writedata_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
+        .data_out ({valid_st1, is_mshr_st1, mshr_pending_hazard_st1, addr_st1, wsel_st1, writeword_st1, is_fill_st1, writedata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
     );
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -471,8 +386,7 @@ if (DRAM_ENABLE) begin
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),        
-        .WRITE_ENABLE   (WRITE_ENABLE),
-        .FLUSH_ENABLE   (FLUSH_ENABLE)
+        .WRITE_ENABLE   (WRITE_ENABLE)
      ) tag_access (
         .clk            (clk),
         .reset          (reset),
@@ -491,8 +405,6 @@ if (DRAM_ENABLE) begin
         .addr_in        (addr_st1),
         .is_write_in    (mem_rw_st1),
         .is_fill_in     (is_fill_st1),
-        .is_snp_in      (is_snp_st1),
-        .snp_inv_in     (snp_inv_st1),
         .force_miss_in  (force_miss_st1),
 
         // Outputs
@@ -504,20 +416,20 @@ if (DRAM_ENABLE) begin
 
     assign misses = miss_st1;
 
-    wire core_req_hit_st1 = !is_fill_st1 && !is_snp_st1 && !miss_st1 && !force_miss_st1;
+    wire core_req_hit_st1 = !is_fill_st1 && !miss_st1 && !force_miss_st1;
 
     wire incoming_fill_st1 = !drsq_empty && (addr_st1 == drsq_addr_st0);
 
     VX_generic_register #(
-        .N(1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
+        .N(1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
         .R(1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .stall    (pipeline_stall),
         .flush    (1'b0),
-        .data_in  ({valid_st1, incoming_fill_st1, core_req_hit_st1, is_mshr_st1, writeen_st1, force_miss_st1, dirty_st1, is_snp_st1, snp_inv_st1, is_fill_st1, addr_st1, wsel_st1, writeword_st1, readtag_st1, miss_st1, writedata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1}),
-        .data_out ({valid_st2, incoming_fill_st2, core_req_hit_st2, is_mshr_st2, writeen_st2, force_miss_st2, dirty_st2, is_snp_st2, snp_inv_st2, is_fill_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, writedata_st2, mem_rw_st2, byteen_st2, req_tid_st2, tag_st2})
+        .data_in  ({valid_st1, incoming_fill_st1, core_req_hit_st1, is_mshr_st1, writeen_st1, force_miss_st1, dirty_st1, is_fill_st1, addr_st1, wsel_st1, writeword_st1, readtag_st1, miss_st1, writedata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1}),
+        .data_out ({valid_st2, incoming_fill_st2, core_req_hit_st2, is_mshr_st2, writeen_st2, force_miss_st2, dirty_st2, is_fill_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, writedata_st2, mem_rw_st2, byteen_st2, req_tid_st2, tag_st2})
     );
     
 end else begin
@@ -528,12 +440,10 @@ end else begin
     
     assign is_fill_st1  = is_fill_st0;
     assign is_mshr_st1  = is_mshr_st0;
-    assign is_snp_st1   = is_snp_st0;
     assign valid_st1    = valid_st0;    
     assign wsel_st1     = wsel_st0;
     assign writeword_st1= writeword_st0;
     assign writedata_st1= writedata_st0;
-    assign snp_inv_st1  = snp_inv_st0;
     assign addr_st1     = creq_addr_st0[`LINE_SELECT_ADDR_RNG];
     assign dirty_st1    = 0;
     assign readtag_st1  = 0;
@@ -547,12 +457,10 @@ end else begin
         
     assign is_fill_st2  = is_fill_st1;
     assign is_mshr_st2  = is_mshr_st1;
-    assign is_snp_st2   = is_snp_st1;
     assign valid_st2    = valid_st1;
     assign wsel_st2     = wsel_st1;
     assign writeword_st2= writeword_st1;
     assign writedata_st2= writedata_st1;
-    assign snp_inv_st2  = snp_inv_st1;
     assign addr_st2     = addr_st1;
     assign dirty_st2    = dirty_st1;
     assign readtag_st2  = readtag_st1;
@@ -586,7 +494,8 @@ end
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE)
+        .WRITE_ENABLE   (WRITE_ENABLE),
+        .WRITE_THROUGH  (WRITE_THROUGH)
      ) data_access (
         .clk            (clk),
         .reset          (reset),
@@ -597,7 +506,6 @@ end
         .debug_wid      (debug_wid_st2),
         .debug_tagid    (debug_tagid_st2),
     `endif
-
         .stall          (pipeline_stall),
 
         // Inputs
@@ -621,45 +529,41 @@ end
     wire [`WORD_WIDTH-1:0]          readword_st3;
     wire [`BANK_LINE_WIDTH-1:0]     readdata_st3;
     wire [BANK_LINE_SIZE-1:0]       dirtyb_st3;
-    wire [`TAG_SELECT_BITS-1:0]     readtag_st3;  
-    wire                            is_snp_st3;
-    wire                            snp_inv_st3;    
+    wire [`TAG_SELECT_BITS-1:0]     readtag_st3; 
     wire                            do_writeback_st3;
     wire                            incoming_fill_st3; 
     wire                            mshr_push_st3;
     wire                            crsq_push_st3;
     wire                            dreq_push_st3;
-    wire                            srsq_push_st3;
 
     wire incoming_fill_qual_st2 = (!drsq_empty && (addr_st2 == drsq_addr_st0)) || incoming_fill_st2;
     
     wire do_fill_req_st2 = miss_st2 
+                        && !(WRITE_THROUGH && mem_rw_st2)
                         && (!force_miss_st2 
                          || (is_mshr_st2 && addr_st2 != addr_st3))
                         && !incoming_fill_qual_st2;
 
-    wire do_writeback_st2 = dirty_st2 
-                         && (is_fill_st2 
-                          || (!force_miss_st2 && is_snp_st2));
-
-    wire mshr_push_st2 = miss_st2 || force_miss_st2;
-
-    wire crsq_push_st2 = core_req_hit_st2 && !mem_rw_st2;
+    wire do_writeback_st2 = (WRITE_THROUGH && mem_rw_st2) 
+                         || (!WRITE_THROUGH && dirty_st2 && is_fill_st2);
 
     wire dreq_push_st2 = do_fill_req_st2 || do_writeback_st2;
 
-    wire srsq_push_st2 = is_snp_st2 && !force_miss_st2;
+    wire mshr_push_st2 = (miss_st2 || force_miss_st2) 
+                      && !(WRITE_THROUGH && mem_rw_st2);
+
+    wire crsq_push_st2 = core_req_hit_st2 && !mem_rw_st2;
 
     VX_generic_register #(
-        .N(1 + 1+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + 1 + BANK_LINE_SIZE  + 1 + WORD_SIZE + `WORD_WIDTH + `BANK_LINE_WIDTH + `REQS_BITS + `REQ_TAG_WIDTH),
+        .N(1 + 1+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + BANK_LINE_SIZE  + 1 + WORD_SIZE + `WORD_WIDTH + `BANK_LINE_WIDTH + `REQS_BITS + `REQ_TAG_WIDTH),
         .R(1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .stall    (pipeline_stall),
         .flush    (1'b0),
-        .data_in  ({valid_st2, mshr_push_st2, crsq_push_st2, dreq_push_st2, srsq_push_st2, do_writeback_st2, incoming_fill_qual_st2, force_miss_st2, is_mshr_st2, is_snp_st2, snp_inv_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, dirtyb_st2, mem_rw_st2, byteen_st2, readword_st2, readdata_st2, req_tid_st2, tag_st2}),
-        .data_out ({valid_st3, mshr_push_st3, crsq_push_st3, dreq_push_st3, srsq_push_st3, do_writeback_st3, incoming_fill_st3,      force_miss_st3, is_mshr_st3, is_snp_st3, snp_inv_st3, addr_st3, wsel_st3, writeword_st3, readtag_st3, miss_st3, dirtyb_st3, mem_rw_st3, byteen_st3, readword_st3, readdata_st3, req_tid_st3, tag_st3})
+        .data_in  ({valid_st2, mshr_push_st2, crsq_push_st2, dreq_push_st2, do_writeback_st2, incoming_fill_qual_st2, force_miss_st2, is_mshr_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, dirtyb_st2, mem_rw_st2, byteen_st2, readword_st2, readdata_st2, req_tid_st2, tag_st2}),
+        .data_out ({valid_st3, mshr_push_st3, crsq_push_st3, dreq_push_st3, do_writeback_st3, incoming_fill_st3,      force_miss_st3, is_mshr_st3, addr_st3, wsel_st3, writeword_st3, readtag_st3, miss_st3, dirtyb_st3, mem_rw_st3, byteen_st3, readword_st3, readdata_st3, req_tid_st3, tag_st3})
     );    
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -677,8 +581,7 @@ end
 
     wire mshr_push = mshr_push_unqual
                   && !crsq_push_stall 
-                  && !dreq_push_stall
-                  && !srsq_push_stall;                    
+                  && !dreq_push_stall;                    
 
     wire mshr_full;
     always @(posedge clk) begin
@@ -707,8 +610,7 @@ end
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),
             .MSHR_SIZE          (MSHR_SIZE),
-            .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),
-            .SNP_TAG_WIDTH      (SNP_TAG_WIDTH)
+            .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
         ) miss_resrv (
             .clk                (clk),
             .reset              (reset),
@@ -727,7 +629,7 @@ end
             // enqueue
             .enqueue_st3        (mshr_push),        
             .enqueue_addr_st3   (addr_st3),
-            .enqueue_data_st3   ({writeword_st3, req_tid_st3, tag_st3, mem_rw_st3, byteen_st3, wsel_st3, is_snp_st3, snp_inv_st3}),
+            .enqueue_data_st3   ({writeword_st3, req_tid_st3, tag_st3, mem_rw_st3, byteen_st3, wsel_st3}),
             .enqueue_is_mshr_st3(is_mshr_st3),
             .enqueue_ready_st3  (mshr_init_ready_state_st3),
             .enqueue_full       (mshr_full),
@@ -741,7 +643,7 @@ end
             .schedule_st0       (mshr_pop),        
             .dequeue_valid_st0  (mshr_valid_st0),
             .dequeue_addr_st0   (mshr_addr_st0),
-            .dequeue_data_st0   ({mshr_writeword_st0, mshr_tid_st0, mshr_tag_st0, mshr_rw_st0, mshr_byteen_st0, mshr_wsel_st0, mshr_is_snp_st0, mshr_snp_inv_st0}),
+            .dequeue_data_st0   ({mshr_writeword_st0, mshr_tid_st0, mshr_tag_st0, mshr_rw_st0, mshr_byteen_st0, mshr_wsel_st0}),
             .dequeue_st3        (mshr_dequeue_st3)
         );
     end else begin
@@ -749,10 +651,8 @@ end
         `UNUSED_VAR (mshr_push)
         `UNUSED_VAR (wsel_st3)
         `UNUSED_VAR (writeword_st3)
-        `UNUSED_VAR (snp_inv_st3)
         `UNUSED_VAR (mem_rw_st3)
         `UNUSED_VAR (byteen_st3)
-        `UNUSED_VAR (is_snp_st3)
         `UNUSED_VAR (incoming_fill_st3)
         assign mshr_pending_hazard_unqual_st0 = 0;
         assign mshr_full = 0;
@@ -764,8 +664,6 @@ end
         assign mshr_tag_st0 = 0;
         assign mshr_rw_st0 = 0;
         assign mshr_byteen_st0 = 0;
-        assign mshr_is_snp_st0 = 0;
-        assign mshr_snp_inv_st0 = 0;
     end
 
     // Enqueue core response
@@ -778,8 +676,7 @@ end
     wire crsq_push = crsq_push_unqual
                   && !crsq_full
                   && !mshr_push_stall
-                  && !dreq_push_stall
-                  && !srsq_push_stall;
+                  && !dreq_push_stall;
 
     wire crsq_pop = core_rsp_valid && core_rsp_ready;
 
@@ -817,15 +714,14 @@ end
                   && (do_writeback_st3 || !incoming_fill_qual_st3)
                   && !dreq_full
                   && !mshr_push_stall
-                  && !crsq_push_stall
-                  && !srsq_push_stall;
+                  && !crsq_push_stall;
 
     wire dreq_pop = dram_req_valid && dram_req_ready;
 
     wire writeback = WRITE_ENABLE && do_writeback_st3;
 
-    wire [`LINE_ADDR_WIDTH-1:0] dreq_addr = writeback ? {readtag_st3, addr_st3[`LINE_SELECT_BITS-1:0]} : 
-                                                        addr_st3;
+    wire [`LINE_ADDR_WIDTH-1:0] dreq_addr = (WRITE_THROUGH || !writeback) ? addr_st3 :
+                                                {readtag_st3, addr_st3[`LINE_SELECT_BITS-1:0]};
 
     wire [BANK_LINE_SIZE-1:0] dreq_byteen = writeback ? dirtyb_st3 : {BANK_LINE_SIZE{1'b1}};
 
@@ -864,67 +760,18 @@ end
         assign dram_req_data = 0;
     end  
 
-    assign dram_req_valid = !dreq_empty;     
-
-    // Enqueue snoop response
-
-    wire srsq_empty, srsq_full;
-    
-    wire srsq_push_unqual = valid_st3 && srsq_push_st3;
-    assign srsq_push_stall = srsq_push_unqual && srsq_full;
-
-    wire srsq_push = srsq_push_unqual
-                  && !srsq_full
-                  && !mshr_push_stall
-                  && !crsq_push_stall
-                  && !dreq_push_stall;
-
-    wire srsq_pop = snp_rsp_valid && snp_rsp_ready;
-
-    wire [SNP_TAG_WIDTH-1:0] srsq_tag_st3 = SNP_TAG_WIDTH'(tag_st3);
-
-    if (FLUSH_ENABLE) begin
-        VX_generic_queue #(
-            .DATAW    (SNP_TAG_WIDTH), 
-            .SIZE     (SRSQ_SIZE),
-            .BUFFERED (1),
-            .FASTRAM  (1)
-        ) snp_rsp_queue (
-            .clk     (clk),
-            .reset   (reset),
-            .push    (srsq_push),
-            .pop     (srsq_pop),
-            .data_in (srsq_tag_st3),        
-            .data_out(snp_rsp_tag),
-            .empty   (srsq_empty),
-            .full    (srsq_full),
-            `UNUSED_PIN (size)
-        );
-    end else begin
-        `UNUSED_VAR (srsq_push) 
-        `UNUSED_VAR (srsq_pop) 
-        `UNUSED_VAR (srsq_tag_st3)        
-        `UNUSED_VAR (snp_rsp_ready)
-        assign srsq_empty  = 1;
-        assign srsq_full   = 0;
-        assign snp_rsp_tag = 0;        
-    end 
-
-    assign snp_rsp_valid = !srsq_empty
-                        && dreq_empty; // ensure all writebacks are sent
+    assign dram_req_valid = !dreq_empty;    
 
     // bank pipeline stall
     assign pipeline_stall = mshr_push_stall
                          || crsq_push_stall 
-                         || dreq_push_stall 
-                         || srsq_push_stall;
+                         || dreq_push_stall;
                          
     `SCOPE_ASSIGN (valid_st0, valid_st0);
     `SCOPE_ASSIGN (valid_st1, valid_st1);
     `SCOPE_ASSIGN (valid_st2, valid_st2);
     `SCOPE_ASSIGN (valid_st3, valid_st3);
     `SCOPE_ASSIGN (is_fill_st0, is_fill_st0);
-    `SCOPE_ASSIGN (is_snp_st0,  is_snp_st0);
     `SCOPE_ASSIGN (is_mshr_st0, is_mshr_st0);
     `SCOPE_ASSIGN (miss_st1,    miss_st1);
     `SCOPE_ASSIGN (dirty_st1,   dirty_st1);
@@ -951,7 +798,7 @@ end
             assert(!is_mshr_st3);
         end
         if (pipeline_stall) begin
-            $display("%t: cache%0d:%0d pipeline-stall: msrq=%b, cwbq=%b, dwbq=%b, snpq=%b", $time, CACHE_ID, BANK_ID, mshr_push_stall, crsq_push_stall, dreq_push_stall, srsq_push_stall);
+            $display("%t: cache%0d:%0d pipeline-stall: msrq=%b, cwbq=%b, dwbq=%b", $time, CACHE_ID, BANK_ID, mshr_push_stall, crsq_push_stall, dreq_push_stall);
         end
         if (drsq_pop) begin
             $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), drsq_filldata_st0);
@@ -962,9 +809,6 @@ end
             else
                 $display("%t: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag_st0, creq_tid_st0, creq_byteen_st0, debug_wid_st0, debug_pc_st0);
         end
-        if (sreq_pop) begin
-            $display("%t: cache%0d:%0d snp-req: addr=%0h, tag=%0h, invalidate=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), sreq_tag_st0, sreq_inv_st0);
-        end
         if (crsq_push) begin
             $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, tid=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), crsq_tag_st3, crsq_tid_st3, crsq_data_st3, debug_wid_st3, debug_pc_st3);
         end
@@ -973,9 +817,6 @@ end
                 $display("%t: cache%0d:%0d writeback: addr=%0h, data=%0h, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dreq_addr, BANK_ID), readdata_st3, dirtyb_st3, debug_wid_st3, debug_pc_st3);
             else
                 $display("%t: cache%0d:%0d fill-req: addr=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(dreq_addr, BANK_ID), debug_wid_st3, debug_pc_st3);
-        end
-        if (srsq_push) begin
-            $display("%t: cache%0d:%0d snp-rsp: addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st3, BANK_ID), srsq_tag_st3);
         end
     end    
 `endif

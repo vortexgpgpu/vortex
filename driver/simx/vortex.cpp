@@ -267,14 +267,6 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
     return device->alloc_local_mem(size, dev_maddr);
 }
 
-extern int vx_flush_caches(vx_device_h hdevice, size_t /*dev_maddr*/, size_t size) {
-    if (nullptr == hdevice 
-     || 0 >= size)
-        return -1;
-    // this functionality is not need by simX 
-    return 0;
-}
-
 extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hbuffer) {
     if (nullptr == hdevice 
      || 0 >= size

@@ -16,10 +16,6 @@ extern int vx_alloc_dev_mem(vx_device_h /*hdevice*/, size_t /*size*/, size_t* /*
     return -1;
 }
 
-extern int vx_flush_caches(vx_device_h /*hdevice*/, size_t /*dev_maddr*/, size_t /*size*/) {
-    return -1;
-}
-
 extern int vx_alloc_shared_mem(vx_device_h /*hdevice*/, size_t /*size*/, vx_buffer_h* /*hbuffer*/) {
     return -1;
 }

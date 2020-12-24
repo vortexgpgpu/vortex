@@ -171,17 +171,11 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   RT_CHECK(vx_ready_wait(device, -1));
   auto t3 = std::chrono::high_resolution_clock::now();
 
-  // flush the caches
-  std::cout << "flush the caches" << std::endl;
-  auto t4 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_flush_caches(device, kernel_arg.dst_ptr, buf_size));
-  auto t5 = std::chrono::high_resolution_clock::now();
-
   // read buffer from local memory
   std::cout << "read buffer from local memory" << std::endl;
-  auto t6 = std::chrono::high_resolution_clock::now();
+  auto t4 = std::chrono::high_resolution_clock::now();
   RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
-  auto t7 = std::chrono::high_resolution_clock::now();
+  auto t5 = std::chrono::high_resolution_clock::now();
 
   
   // verify result
@@ -210,8 +204,6 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();  
   printf("execute time: %lg ms\n", elapsed);
   elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t4).count();  
-  printf("flush time: %lg ms\n", elapsed);
-  elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t7 - t6).count();  
   printf("download time: %lg ms\n", elapsed);
   elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();  
   printf("Total elapsed time: %lg ms\n", elapsed);
