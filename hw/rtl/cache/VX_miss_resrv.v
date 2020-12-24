@@ -16,8 +16,6 @@ module VX_miss_resrv #(
     parameter MSHR_SIZE                     = 1, 
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
-    // Snooping request tag width
-    parameter SNP_TAG_WIDTH                 = 1,
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS              = 0    
 ) (

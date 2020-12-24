@@ -43,9 +43,6 @@ int vx_buf_release(vx_buffer_h hbuffer);
 // allocate device memory and return address
 int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr);
 
-// Copy bytes from device local memory to buffer
-int vx_flush_caches(vx_device_h hdevice, size_t dev_maddr, size_t size);
-
 // Copy bytes from buffer to device local memory
 int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t src_offset);
 

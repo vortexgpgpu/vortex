@@ -13,3 +13,8 @@ clean:
 	$(MAKE) -C demo clean
 	$(MAKE) -C dogfood clean
 
+clean-all:
+	$(MAKE) -C basic clean-all
+	$(MAKE) -C demo clean-all
+	$(MAKE) -C dogfood clean-all
+

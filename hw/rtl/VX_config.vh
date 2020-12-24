@@ -323,16 +323,6 @@
 `define DDRSQ_SIZE 4
 `endif
 
-// Snoop Request Queue Size
-`ifndef DSREQ_SIZE
-`define DSREQ_SIZE 4
-`endif
-
-// Snoop Response Queue Size
-`ifndef DSRSQ_SIZE
-`define DSRSQ_SIZE 4
-`endif
-
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
 // Size of cache in bytes
@@ -392,16 +382,6 @@
 `define L2DRSQ_SIZE 4
 `endif
 
-// Snoop Request Queue Size
-`ifndef L2SREQ_SIZE
-`define L2SREQ_SIZE 4
-`endif
-
-// Snoop Response Queue Size
-`ifndef L2SRSQ_SIZE
-`define L2SRSQ_SIZE 4
-`endif
-
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Size of cache in bytes
@@ -437,16 +417,6 @@
 // DRAM Response Queue Size
 `ifndef L3DRSQ_SIZE
 `define L3DRSQ_SIZE 4
-`endif
-
-// Snoop Request Queue Size
-`ifndef L3SREQ_SIZE
-`define L3SREQ_SIZE 4
-`endif
-
-// Snoop Response Queue Size
-`ifndef L3SRSQ_SIZE
-`define L3SRSQ_SIZE 4
 `endif
 
 `endif

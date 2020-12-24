@@ -19,25 +19,21 @@ module VX_cache #(
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 8, 
     // DRAM Response Queue Size
-    parameter DRSQ_SIZE                     = 4, 
-    // Snoop Request Queue Size
-    parameter SREQ_SIZE                     = 4, 
+    parameter DRSQ_SIZE                     = 4,
 
     // Core Response Queue Size
     parameter CRSQ_SIZE                     = 4, 
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 4, 
-    // Snoop Response Size
-    parameter SRSQ_SIZE                     = 4,
-
-    // Enable cache writeable
-    parameter WRITE_ENABLE                  = 1,
 
     // Enable dram update
     parameter DRAM_ENABLE                   = 1,
 
-    // Enable cache flush
-    parameter FLUSH_ENABLE                  = 1,
+    // Enable cache writeable
+    parameter WRITE_ENABLE                  = 1,
+
+    // Enable write-through
+    parameter WRITE_THROUGH                 = 1,
 
     // core request tag size
     parameter CORE_TAG_WIDTH                = $clog2(MSHR_SIZE),
@@ -46,10 +42,7 @@ module VX_cache #(
     parameter CORE_TAG_ID_BITS              = 0,
 
     // dram request tag size
-    parameter DRAM_TAG_WIDTH                = (32 - $clog2(BANK_LINE_SIZE)),
-
-    // Snooping request tag width
-    parameter SNP_TAG_WIDTH                 = 1
+    parameter DRAM_TAG_WIDTH                = (32 - $clog2(BANK_LINE_SIZE))
  ) (
     `SCOPE_IO_VX_cache
     
@@ -89,19 +82,7 @@ module VX_cache #(
     input  wire                             dram_rsp_valid,    
     input  wire [`BANK_LINE_WIDTH-1:0]      dram_rsp_data,
     input  wire [DRAM_TAG_WIDTH-1:0]        dram_rsp_tag,
-    output wire                             dram_rsp_ready,    
-
-    // Snoop request
-    input wire                              snp_req_valid,
-    input wire [`DRAM_ADDR_WIDTH-1:0]       snp_req_addr,
-    input wire                              snp_req_inv,
-    input wire [SNP_TAG_WIDTH-1:0]          snp_req_tag,
-    output wire                             snp_req_ready,
-
-    // Snoop response
-    output wire                             snp_rsp_valid,    
-    output wire [SNP_TAG_WIDTH-1:0]         snp_rsp_tag,
-    input  wire                             snp_rsp_ready,
+    output wire                             dram_rsp_ready,
 
     output wire [NUM_BANKS-1:0] miss_vec
 );
@@ -127,12 +108,6 @@ module VX_cache #(
 
     wire [NUM_BANKS-1:0]                        per_bank_dram_rsp_ready;
 
-    wire [NUM_BANKS-1:0]                        per_bank_snp_req_ready;
-
-    wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_valid;
-    wire [NUM_BANKS-1:0][SNP_TAG_WIDTH-1:0]     per_bank_snp_rsp_tag;
-    wire [NUM_BANKS-1:0]                        per_bank_snp_rsp_ready;
-
     wire [NUM_BANKS-1:0]                        per_bank_miss; 
     assign miss_vec = per_bank_miss;
 
@@ -141,13 +116,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
     wire [NUM_BANKS-1:0] perf_pipe_stall_per_bank;
-`endif
-
-    if (NUM_BANKS == 1) begin
-        assign snp_req_ready = per_bank_snp_req_ready;
-    end else begin
-        assign snp_req_ready = per_bank_snp_req_ready[`DRAM_ADDR_BANK(snp_req_addr)];
-    end    
+`endif   
 
     VX_cache_core_req_bank_sel #(
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
@@ -205,16 +174,6 @@ module VX_cache #(
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_rsp_addr;
         wire                        curr_bank_dram_rsp_ready;
 
-        wire                        curr_bank_snp_req_valid;
-        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_snp_req_addr;
-        wire                        curr_bank_snp_req_inv;
-        wire [SNP_TAG_WIDTH-1:0]    curr_bank_snp_req_tag;
-        wire                        curr_bank_snp_req_ready;    
-
-        wire                        curr_bank_snp_rsp_valid;
-        wire [SNP_TAG_WIDTH-1:0]    curr_bank_snp_rsp_tag;
-        wire                        curr_bank_snp_rsp_ready;                    
-
         wire                        curr_bank_miss; 
 
         // Core Req
@@ -257,23 +216,6 @@ module VX_cache #(
         assign curr_bank_dram_rsp_data    = dram_rsp_data;
         assign per_bank_dram_rsp_ready[i] = curr_bank_dram_rsp_ready;
 
-        // Snoop request
-        if (NUM_BANKS == 1) begin
-            assign curr_bank_snp_req_valid = snp_req_valid;
-            assign curr_bank_snp_req_addr  = snp_req_addr;
-        end else begin
-            assign curr_bank_snp_req_valid = snp_req_valid && (`DRAM_ADDR_BANK(snp_req_addr) == i);
-            assign curr_bank_snp_req_addr  = `DRAM_TO_LINE_ADDR(snp_req_addr);
-        end
-        assign curr_bank_snp_req_inv     = snp_req_inv;
-        assign curr_bank_snp_req_tag     = snp_req_tag;
-        assign per_bank_snp_req_ready[i] = curr_bank_snp_req_ready;
-
-        // Snoop response            
-        assign per_bank_snp_rsp_valid[i] = curr_bank_snp_rsp_valid;
-        assign per_bank_snp_rsp_tag[i]   = curr_bank_snp_rsp_tag;
-        assign curr_bank_snp_rsp_ready   = per_bank_snp_rsp_ready[i];
-
         //Misses
         assign per_bank_miss[i] = curr_bank_miss; 
         
@@ -288,16 +230,13 @@ module VX_cache #(
             .CREQ_SIZE          (CREQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
             .DRSQ_SIZE          (DRSQ_SIZE),
-            .SREQ_SIZE          (SREQ_SIZE),
             .CRSQ_SIZE          (CRSQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),
-            .SRSQ_SIZE          (SRSQ_SIZE),
             .DRAM_ENABLE        (DRAM_ENABLE),
-            .FLUSH_ENABLE       (FLUSH_ENABLE),
             .WRITE_ENABLE       (WRITE_ENABLE),
+            .WRITE_THROUGH      (WRITE_THROUGH),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                
-            .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
-            .SNP_TAG_WIDTH      (SNP_TAG_WIDTH)
+            .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
             
@@ -341,18 +280,6 @@ module VX_cache #(
             .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
             .perf_pipe_stalls   (perf_pipe_stall_per_bank[i]),
         `endif
-
-            // Snoop request
-            .snp_req_valid      (curr_bank_snp_req_valid),
-            .snp_req_addr       (curr_bank_snp_req_addr),
-            .snp_req_inv        (curr_bank_snp_req_inv),
-            .snp_req_tag        (curr_bank_snp_req_tag),
-            .snp_req_ready      (curr_bank_snp_req_ready),
-
-            // Snoop response
-            .snp_rsp_valid      (curr_bank_snp_rsp_valid),
-            .snp_rsp_tag        (curr_bank_snp_rsp_tag),
-            .snp_rsp_ready      (curr_bank_snp_rsp_ready),
 
             //Misses
             .misses             (curr_bank_miss)
@@ -414,30 +341,6 @@ module VX_cache #(
         `UNUSED_VAR (dram_req_ready)
     end
 
-    if (FLUSH_ENABLE) begin
-        VX_stream_arbiter #(
-            .NUM_REQS (NUM_BANKS),
-            .DATAW    (SNP_TAG_WIDTH),
-            .BUFFERED (1)
-        ) snp_rsp_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (per_bank_snp_rsp_valid),
-            .data_in   (per_bank_snp_rsp_tag),
-            .ready_in  (per_bank_snp_rsp_ready),
-            .valid_out (snp_rsp_valid),
-            .data_out  (snp_rsp_tag),         
-            .ready_out (snp_rsp_ready)
-        );
-    end else begin
-        `UNUSED_VAR (per_bank_snp_rsp_valid)
-        `UNUSED_VAR (per_bank_snp_rsp_tag)
-        assign per_bank_snp_rsp_ready = 0;
-        assign snp_rsp_valid = 0;
-        assign snp_rsp_tag   = 0;
-        `UNUSED_VAR (snp_rsp_ready)        
-    end
-    
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes
     reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle, perf_core_writes_per_cycle;

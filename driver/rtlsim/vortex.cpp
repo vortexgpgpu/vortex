@@ -140,19 +140,6 @@ public:
         return 0;
     }
 
-    int flush_caches(size_t dev_maddr, size_t size) {
-        if (future_.valid()) {
-            future_.wait(); // ensure prior run completed
-        }        
-        simulator_.attach_ram(&ram_);
-        simulator_.flush_caches(dev_maddr, size);        
-        while (simulator_.snp_req_active()) {
-            simulator_.step();
-        };
-        simulator_.attach_ram(NULL);
-        return 0;
-    }
-
     int set_csr(int core_id, int addr, unsigned value) {
         if (future_.valid()) {
             future_.wait(); // ensure prior run completed
@@ -255,16 +242,6 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
 
     vx_device *device = ((vx_device*)hdevice);
     return device->alloc_local_mem(size, dev_maddr);
-}
-
-extern int vx_flush_caches(vx_device_h hdevice, size_t dev_maddr, size_t size) {
-    if (nullptr == hdevice 
-     || 0 >= size)
-        return -1;
-
-    vx_device *device = ((vx_device*)hdevice);
-
-    return device->flush_caches(dev_maddr, size);
 }
 
 

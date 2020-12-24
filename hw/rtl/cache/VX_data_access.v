@@ -14,7 +14,10 @@ module VX_data_access #(
     parameter WORD_SIZE         = 1, 
 
     // Enable cache writeable
-    parameter WRITE_ENABLE      = 0,
+    parameter WRITE_ENABLE      = 1,
+
+    // Enable write-through
+    parameter WRITE_THROUGH     = 1,
 
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS  = 0
@@ -54,9 +57,9 @@ module VX_data_access #(
     wire [BANK_LINE_SIZE-1:0]   read_dirtyb_out;
     wire [`BANK_LINE_WIDTH-1:0] read_data;
 
-    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable;    
+    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable; 
+    wire [`BANK_LINE_WIDTH-1:0] write_data;   
     wire                        write_enable;
-    wire [`BANK_LINE_WIDTH-1:0] write_data;
 
     wire [`LINE_SELECT_BITS-1:0] addrline = addr_in[`LINE_SELECT_BITS-1:0];
 
@@ -92,18 +95,32 @@ module VX_data_access #(
         end
     end
 
-    for (genvar i = 0; i < `BANK_LINE_WORDS; i++) begin
-        wire word_sel = (`WORD_SELECT_WIDTH == 0) || (wordsel_in == `UP(`WORD_SELECT_WIDTH)'(i));
-        
-        assign byte_enable[i] = is_fill_in ? {WORD_SIZE{1'b1}} : 
-                                    word_sel ? byteen_in : {WORD_SIZE{1'b0}};
+    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable_w; 
+    wire [`BANK_LINE_WIDTH-1:0] write_data_w;   
 
-        assign write_data[i * `WORD_WIDTH +: `WORD_WIDTH] = is_fill_in ? writedata_in[i * `WORD_WIDTH +: `WORD_WIDTH] : writeword_in;
-    end
+    if (`WORD_SELECT_WIDTH != 0) begin
+        for (genvar i = 0; i < `BANK_LINE_WORDS; i++) begin
+            assign byte_enable_w[i] = (wordsel_in == `WORD_SELECT_WIDTH'(i)) ? byteen_in : {WORD_SIZE{1'b0}};
+            assign write_data_w[i * `WORD_WIDTH +: `WORD_WIDTH] = writeword_in;
+        end
+    end else begin
+        assign byte_enable_w = byteen_in;
+        assign write_data_w = writeword_in;
+    end    
+    
+    assign byte_enable = is_fill_in ? {BANK_LINE_SIZE{1'b1}} : byte_enable_w;
+    assign write_data  = is_fill_in ? writedata_in : write_data_w;
 
     assign write_enable = valid_in && writeen_in && !stall;
-    assign dirtyb_out   = read_dirtyb_out;
-    assign readdata_out = read_data;
+
+    if (WRITE_THROUGH) begin
+        `UNUSED_VAR (read_dirtyb_out)
+        assign dirtyb_out   = byte_enable_w;
+        assign readdata_out = write_data_w;
+    end else begin
+        assign dirtyb_out   = read_dirtyb_out;
+        assign readdata_out = read_data;
+    end
 
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin            

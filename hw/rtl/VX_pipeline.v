@@ -40,16 +40,16 @@ module VX_pipeline #(
     output wire                             icache_rsp_ready,
     
     // CSR I/O Request
-    input  wire                             csr_io_req_valid,
-    input  wire[11:0]                       csr_io_req_addr,
-    input  wire                             csr_io_req_rw,
-    input  wire[31:0]                       csr_io_req_data,
-    output wire                             csr_io_req_ready,
+    input  wire                             csr_req_valid,
+    input  wire[11:0]                       csr_req_addr,
+    input  wire                             csr_req_rw,
+    input  wire[31:0]                       csr_req_data,
+    output wire                             csr_req_ready,
 
     // CSR I/O Response
-    output wire                             csr_io_rsp_valid,
-    output wire[31:0]                       csr_io_rsp_data,
-    input wire                              csr_io_rsp_ready,      
+    output wire                             csr_rsp_valid,
+    output wire[31:0]                       csr_rsp_data,
+    input wire                              csr_rsp_ready,      
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if                       perf_memsys_if,
@@ -134,22 +134,20 @@ module VX_pipeline #(
     //
 
     VX_csr_io_req_if csr_io_req_if();
-
-    assign csr_io_req_if.valid = csr_io_req_valid;
-    assign csr_io_req_if.rw    = csr_io_req_rw;
-    assign csr_io_req_if.addr  = csr_io_req_addr;
-    assign csr_io_req_if.data  = csr_io_req_data;
-    assign csr_io_req_ready    = csr_io_req_if.ready;
+    assign csr_io_req_if.valid = csr_req_valid;
+    assign csr_io_req_if.rw    = csr_req_rw;
+    assign csr_io_req_if.addr  = csr_req_addr;
+    assign csr_io_req_if.data  = csr_req_data;
+    assign csr_req_ready = csr_io_req_if.ready;
 
     //
     // CSR IO response
     //
 
     VX_csr_io_rsp_if csr_io_rsp_if();
-
-    assign csr_io_rsp_valid    = csr_io_rsp_if.valid; 
-    assign csr_io_rsp_data     = csr_io_rsp_if.data; 
-    assign csr_io_rsp_if.ready = csr_io_rsp_ready;
+    assign csr_rsp_valid = csr_io_rsp_if.valid; 
+    assign csr_rsp_data  = csr_io_rsp_if.data; 
+    assign csr_io_rsp_if.ready = csr_rsp_ready;
 
     ///////////////////////////////////////////////////////////////////////////
 

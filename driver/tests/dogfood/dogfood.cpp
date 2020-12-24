@@ -245,10 +245,6 @@ int main(int argc, char *argv[]) {
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_ready_wait(device, -1));
 
-    // flush the destination buffer caches
-    std::cout << "flush the destination buffer caches" << std::endl;
-    RT_CHECK(vx_flush_caches(device, kernel_arg.dst_ptr, buf_size));
-
     // download destination buffer
     std::cout << "download destination buffer" << std::endl;
     RT_CHECK(vx_copy_from_dev(dst_buf, kernel_arg.dst_ptr, buf_size, 0));

@@ -21,3 +21,11 @@ clean:
 	$(MAKE) -C sfilter clean
 	$(MAKE) -C nearn clean
 	$(MAKE) -C guassian clean
+
+clean-all:
+	$(MAKE) -C vecadd clean-all
+	$(MAKE) -C sgemm clean-all
+	$(MAKE) -C saxpy clean-all
+	$(MAKE) -C sfilter clean-all
+	$(MAKE) -C nearn clean-all
+	$(MAKE) -C guassian clean-all

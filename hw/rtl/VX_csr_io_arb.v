@@ -1,81 +1,70 @@
 `include "VX_define.vh"
 
-module VX_csr_io_arb #(
-    parameter NUM_REQS     = 1,     
-    parameter DATA_WIDTH   = 1,
-    parameter BUFFERED_REQ = 0,
-    parameter BUFFERED_RSP = 0,
-    
-    parameter DATA_SIZE    = (DATA_WIDTH / 8), 
-    parameter ADDR_WIDTH   = 32 - `CLOG2(DATA_SIZE),
-    parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
-) (
-    input wire clk,
-    input wire reset,
-        
-    input wire [LOG_NUM_REQS-1:0]   request_id,
+module VX_csr_io_arb (    
+    input wire          clk,
+    input wire          reset,
 
-    // input requests    
-    input wire                      req_valid_in,
-    input wire [ADDR_WIDTH-1:0]     req_addr_in,
-    input wire                      req_rw_in,
-    input wire [DATA_WIDTH-1:0]     req_data_in,
-    output wire                     req_ready_in,
+    // bus select    
+    input wire          select_io_rsp,
+
+    // input requets
+    VX_csr_req_if       csr_core_req_if,
+    VX_csr_io_req_if    csr_io_req_if,
 
     // output request
-    output wire [NUM_REQS-1:0]                 req_valid_out,
-    output wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] req_addr_out,
-    output wire [NUM_REQS-1:0]                 req_rw_out,
-    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] req_data_out,
-    input wire [NUM_REQS-1:0]                  req_ready_out,
+    VX_csr_pipe_req_if  csr_pipe_req_if,
 
     // input response
-    input wire [NUM_REQS-1:0]                 rsp_valid_in,
-    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_in,
-    output wire [NUM_REQS-1:0]                rsp_ready_in,   
+    VX_commit_if        csr_pipe_rsp_if,     
 
-    // output response
-    output wire                     rsp_valid_out,
-    output wire [DATA_WIDTH-1:0]    rsp_data_out,
-    input wire                      rsp_ready_out
+    // outputs responses
+    VX_commit_if        csr_commit_if,
+    VX_csr_io_rsp_if    csr_io_rsp_if
 );
-    localparam REQ_DATAW = ADDR_WIDTH + 1 + DATA_WIDTH;
-    localparam RSP_DATAW = DATA_WIDTH;
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
-    wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_merged_data_out;
-    for (genvar i = 0; i < NUM_REQS; i++) begin
-        assign {req_addr_out[i], req_rw_out[i], req_data_out[i]} = req_merged_data_out[i];
-    end
+    wire [31:0] csr_core_req_mask = csr_core_req_if.rs2_is_imm ? 32'(csr_core_req_if.rs1) : csr_core_req_if.rs1_data;
 
-    VX_stream_demux #(
-        .NUM_REQS (NUM_REQS),
-        .DATAW    (REQ_DATAW),
-        .BUFFERED (BUFFERED_REQ)
-    ) req_demux (
+    // requests
+    assign csr_pipe_req_if.valid     = csr_core_req_if.valid || csr_io_req_if.valid;
+    assign csr_pipe_req_if.wid       = csr_core_req_if.wid; 
+    assign csr_pipe_req_if.tmask     = csr_core_req_if.tmask;
+    assign csr_pipe_req_if.PC        = csr_core_req_if.PC;
+    assign csr_pipe_req_if.op_type   = csr_core_req_if.valid ? csr_core_req_if.op_type  : (csr_io_req_if.rw ? `CSR_RW : `CSR_RS);
+    assign csr_pipe_req_if.csr_addr  = csr_core_req_if.valid ? csr_core_req_if.csr_addr : csr_io_req_if.addr;
+    assign csr_pipe_req_if.csr_mask  = csr_core_req_if.valid ? csr_core_req_mask        : (csr_io_req_if.rw ? csr_io_req_if.data : 32'b0);
+    assign csr_pipe_req_if.rd        = csr_core_req_if.rd;
+    assign csr_pipe_req_if.wb        = csr_core_req_if.wb;
+    assign csr_pipe_req_if.is_io     = !csr_core_req_if.valid;
+
+    // core always takes priority over IO bus
+    assign csr_core_req_if.ready = csr_pipe_req_if.ready;
+    assign csr_io_req_if.ready   = csr_pipe_req_if.ready && !csr_core_req_if.valid;   
+    
+    // responses
+    wire csr_io_rsp_ready;
+    VX_skid_buffer #(
+        .DATAW    (32)
+    ) csr_io_out_buffer (
         .clk       (clk),
         .reset     (reset),
-        .sel       (request_id),
-        .valid_in  (req_valid_in),
-        .data_in   ({req_addr_in, req_rw_in, req_data_in}),
-        .ready_in  (req_ready_in),
-        .valid_out (req_valid_out),
-        .data_out  (req_merged_data_out),
-        .ready_out (req_ready_out)
+        .valid_in  (csr_pipe_rsp_if.valid & select_io_rsp),        
+        .data_in   (csr_pipe_rsp_if.data[0]),
+        .ready_in  (csr_io_rsp_ready),      
+        .valid_out (csr_io_rsp_if.valid),
+        .data_out  (csr_io_rsp_if.data),
+        .ready_out (csr_io_rsp_if.ready)
     );
 
-    VX_stream_arbiter #(
-        .NUM_REQS (NUM_REQS),
-        .DATAW    (RSP_DATAW),
-        .BUFFERED (BUFFERED_RSP)
-    ) rsp_arb (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (rsp_valid_in),
-        .data_in   (rsp_data_in),
-        .ready_in  (rsp_ready_in),
-        .valid_out (rsp_valid_out),
-        .data_out  (rsp_data_out),
-        .ready_out (rsp_ready_out)
-    );
+    assign csr_commit_if.valid  = csr_pipe_rsp_if.valid & ~select_io_rsp;
+    assign csr_commit_if.wid    = csr_pipe_rsp_if.wid;    
+    assign csr_commit_if.tmask  = csr_pipe_rsp_if.tmask;
+    assign csr_commit_if.PC     = csr_pipe_rsp_if.PC;
+    assign csr_commit_if.rd     = csr_pipe_rsp_if.rd;
+    assign csr_commit_if.wb     = csr_pipe_rsp_if.wb;
+    assign csr_commit_if.data   = csr_pipe_rsp_if.data;
+
+    assign csr_pipe_rsp_if.ready = select_io_rsp ? csr_io_rsp_ready : csr_commit_if.ready;
 
 endmodule

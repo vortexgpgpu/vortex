@@ -7,15 +7,15 @@
 `include "VX_define.vh"
 `endif
 
-`define REQ_TAG_WIDTH           `MAX(CORE_TAG_WIDTH, SNP_TAG_WIDTH)
+`define REQ_TAG_WIDTH           CORE_TAG_WIDTH
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
 //                               tag              rw   byteen      tid
 `define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
-//                                data         metadata               word_sel                  is_snp  snp_inv 
-`define MSHR_DATA_WIDTH         (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH) + 1     + 1)
+//                                data         metadata               word_sel              
+`define MSHR_DATA_WIDTH         (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_WIDTH))
 
 `define BANK_BITS               `LOG2UP(NUM_BANKS)
 
