@@ -407,11 +407,11 @@ Disassembly of section .text:
 80000574:	00008067          	ret
 
 80000578 <vx_num_cycles>:
-80000578:	c0002573          	rdcycle	a0
+80000578:	b0002573          	csrr	a0,mcycle
 8000057c:	00008067          	ret
 
 80000580 <vx_num_instrs>:
-80000580:	c0202573          	rdinstret	a0
+80000580:	b0202573          	csrr	a0,minstret
 80000584:	00008067          	ret
 
 80000588 <vx_vprintf>:

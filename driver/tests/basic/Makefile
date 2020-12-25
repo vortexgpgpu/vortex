@@ -61,8 +61,8 @@ run-simx: $(PROJECT)
 clean:
 	rm -rf $(PROJECT) *.o .depend
 
-clean-all:
-	rm -rf $(PROJECT) *.o *.elf *.bin *.dump .depend
+clean-all: clean
+	rm -rf *.elf *.bin *.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
