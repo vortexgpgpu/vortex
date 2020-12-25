@@ -4,24 +4,37 @@
 .global _start
 .type   _start, @function
 _start:
+  
+  # execute stack initialization on all warps
   la a1, vx_set_sp
   csrr a0, CSR_NW  # get num warps
-  .word 0x00b5106b # wspawn a0(numWarps), a1(PC SPAWN)
+  .word 0x00b5106b # wspawn a0, a1
   jal vx_set_sp
+
+  # return back to single thread execution
   li a0, 1
-  .word 0x0005006b    # back to single thread
-  # Initialize global pointerp
-  # call __cxx_global_var_init
+  .word 0x0005006b # tmc a0
+  
   # Clear the bss segment
   la      a0, _edata
   la      a2, _end
   sub     a2, a2, a0
   li      a1, 0
   call    memset
-  la      a0, __libc_fini_array   # Register global termination functions
-  call    atexit                  # to be called upon exit
-  call    __libc_init_array       # Run global initialization functions
+
+  # Register global termination functions
+  la      a0, __libc_fini_array   
+
+  # to be called upon exit
+  call    atexit                  
+
+  # Run global initialization functions
+  call    __libc_init_array       
+
+  # call main program routine
   call    main
+
+  # call exit routine
   tail    exit
 .size  _start, .-_start
 
@@ -29,34 +42,39 @@ _start:
 .type _exit, @function
 .global _exit
 _exit:
+  # disable all threads in current warp
   li a0, 0
-  .word 0x0005006b    # disable all threads
+  .word 0x0005006b    # tmc a0
 
 .section .text
 .type vx_set_sp, @function
 .global vx_set_sp
 vx_set_sp:
+  # activate all threads
   csrr a0, CSR_NT     # get num threads
-  .word 0x0005006b    # activate all threads
+  .word 0x0005006b    # set thread mask
   
+  # set global pointer register
   .option push
   .option norelax
-  1:auipc gp, %pcrel_hi(__global_pointer$)
-    addi  gp, gp, %pcrel_lo(1b)
+  la gp, __global_pointer$
   .option pop
 
+  # allocate stack region for a threads on the processor 
+  # set stack pointer
   csrr a1, CSR_GTID    # get global thread id
   slli a1, a1, 10      # multiply by 1024
   csrr a2, CSR_LTID    # get local thread id  
   slli a2, a2, 2       # multiply by 4
-  lui  sp, (SHARED_MEM_BASE_ADDR>>12) # load base sp
+  la sp, __stack_top$  # load stack base address
   sub  sp, sp, a1      # sub thread block
   add  sp, sp, a2      # reduce addr collision for perf
 
-  csrr a3, CSR_LWID    # get wid
+  # disable active warps except warp0
+  csrr a3, CSR_LWID    # get local wid
   beqz a3, RETURN
   li a0, 0
-  .word 0x0005006b     # tmc 0
+  .word 0x0005006b     # tmc a0
 RETURN:
   ret
 
