@@ -76,7 +76,7 @@ module VX_databus_arb (
     wire [1:0] rsp_ready_in;
     
     wire core_rsp_valid;
-    wire [`NUM_THREADS-1:0] core_rsp_tmask;
+    wire [`NUM_THREADS-1:0] core_rsp_valid_tmask;
 
     assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, cache_rsp_if.tag};
     assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  smem_rsp_if.tag};
@@ -95,13 +95,13 @@ module VX_databus_arb (
         .data_in    (rsp_data_in),
         .ready_in   (rsp_ready_in),
         .valid_out  (core_rsp_valid),
-        .data_out   ({core_rsp_tmask, core_rsp_if.data, core_rsp_if.tag}),
+        .data_out   ({core_rsp_valid_tmask, core_rsp_if.data, core_rsp_if.tag}),
         .ready_out  (core_rsp_if.ready)
     );
 
     assign cache_rsp_if.ready = rsp_ready_in[0];
     assign smem_rsp_if.ready  = rsp_ready_in[1];
 
-    assign core_rsp_if.valid  = core_rsp_tmask & {`NUM_THREADS{core_rsp_valid}};
+    assign core_rsp_if.valid  = {`NUM_THREADS{core_rsp_valid}} & core_rsp_valid_tmask;
 
 endmodule

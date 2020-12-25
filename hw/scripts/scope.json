@@ -60,7 +60,7 @@
         "VX_gpu_unit": {},
         "VX_mem_unit": {
             "submodules": {                
-                "smem":   {"type":"VX_cache", "params":{"NUM_BANKS":"`SNUM_BANKS"}},
+                "smem":   {"type":"VX_cache", "enabled":"`SM_ENABLE", "params":{"NUM_BANKS":"`SNUM_BANKS"}},
                 "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DNUM_BANKS"}},
                 "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"`INUM_BANKS"}}
             }
@@ -101,9 +101,7 @@
             "ccip_dram_wr_req_ctr":26,
             "ccip_rd_req_ctr":26,
             "ccip_rd_rsp_ctr":3,
-            "ccip_wr_req_ctr":26,
-            "snp_req_ctr":"`VX_DRAM_ADDR_WIDTH",
-            "snp_rsp_ctr":"`VX_DRAM_ADDR_WIDTH"
+            "ccip_wr_req_ctr":26
         },
         "afu/vortex": {
             "!reset": 1,
@@ -116,12 +114,6 @@
             "?dram_rsp_fire": 1,
             "dram_rsp_data":"`VX_DRAM_LINE_WIDTH",
             "dram_rsp_tag":"`VX_DRAM_TAG_WIDTH",
-            "?snp_req_fire": 1,
-            "snp_req_addr": 32,
-            "snp_req_inv": 1,
-            "snp_req_tag":"`VX_SNP_TAG_WIDTH",
-            "?snp_rsp_fire": 1,
-            "snp_rsp_tag":"`VX_SNP_TAG_WIDTH",
             "busy": 1       
         },
         "afu/vortex/cluster/core/pipeline/fetch/icache_stage": {
@@ -206,7 +198,6 @@
             "addr_st2": 32,
             "addr_st3": 32,
             "is_fill_st0": 1,
-            "is_snp_st0": 1,
             "is_mshr_st0": 1,
             "miss_st1": 1,
             "force_miss_st1": 1,  
