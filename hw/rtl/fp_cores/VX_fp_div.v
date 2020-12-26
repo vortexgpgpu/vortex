@@ -56,8 +56,8 @@ module VX_fp_div #(
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in ({valid_in,  tag_in}),
-        .out({valid_out, tag_out})
+        .data_in ({valid_in,  tag_in}),
+        .data_out({valid_out, tag_out})
     );
 
     assign ready_in = enable;

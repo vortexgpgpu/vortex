@@ -119,7 +119,7 @@ module VX_lsu_unit #(
         .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2),
         .SIZE    (`LSUQ_SIZE),
         .FASTRAM (1)
-    ) req_metadata_buf (
+    ) req_metadata (
         .clk          (clk),
         .reset        (reset),
         .write_addr   (mbuf_waddr),  

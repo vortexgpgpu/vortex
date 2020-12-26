@@ -43,7 +43,7 @@ module VX_fpu_unit #(
         .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE    (`FPUQ_SIZE),
         .FASTRAM (1)
-    ) req_metadata_buf  (
+    ) req_metadata  (
         .clk          (clk),
         .reset        (reset),
         .acquire_slot (fpuq_push),       

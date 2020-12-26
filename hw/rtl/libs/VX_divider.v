@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_divide #(
+module VX_divider #(
     parameter WIDTHN  = 1,
     parameter WIDTHD  = 1,
     parameter WIDTHQ  = 1,

@@ -184,8 +184,8 @@ module VX_fp_addmul #(
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in({valid_in,   tag_in,  do_sub,   do_mul}),
-        .out({valid_out, tag_out, do_sub_r, do_mul_r})
+        .data_in({valid_in,   tag_in,  do_sub,   do_mul}),
+        .data_out({valid_out, tag_out, do_sub_r, do_mul_r})
     );
 
     assign ready_in = enable;

@@ -246,12 +246,12 @@
 
 // Size of MUL Request Queue
 `ifndef MULQ_SIZE
-`define MULQ_SIZE 4
+`define MULQ_SIZE 8
 `endif
 
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
-`define FPUQ_SIZE 4
+`define FPUQ_SIZE 8
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////

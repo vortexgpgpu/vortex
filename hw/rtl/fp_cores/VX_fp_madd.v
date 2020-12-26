@@ -144,8 +144,8 @@ module VX_fp_madd #(
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in({valid_in,   tag_in,  do_sub,   do_neg}),
-        .out({valid_out, tag_out, do_sub_r, do_neg_r})
+        .data_in({valid_in,   tag_in,  do_sub,   do_neg}),
+        .data_out({valid_out, tag_out, do_sub_r, do_neg_r})
     );
 
     assign ready_in = enable;
