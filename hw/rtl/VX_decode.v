@@ -307,21 +307,20 @@ module VX_decode  #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    assign decode_if.valid = ifetch_rsp_if.valid 
-                          && (decode_if.ex_type != `EX_NOP); // skip noop
+    assign decode_if.valid = ifetch_rsp_if.valid;
 
     assign decode_if.wid   = ifetch_rsp_if.wid;
     assign decode_if.tmask = ifetch_rsp_if.tmask;
     assign decode_if.PC    = ifetch_rsp_if.PC;
 
     assign decode_if.ex_type = is_lsu ? `EX_LSU :
-                                    is_csr ? `EX_CSR :
-                                        is_mul ? `EX_MUL :
-                                            is_fpu ? `EX_FPU :
-                                                is_gpu ? `EX_GPU :
-                                                    is_br ? `EX_ALU :                                                        
-                                                        (is_rtype || is_itype || is_lui || is_auipc) ? `EX_ALU :
-                                                            `EX_NOP;
+                                is_csr ? `EX_CSR :
+                                    is_mul ? `EX_MUL :
+                                        is_fpu ? `EX_FPU :
+                                            is_gpu ? `EX_GPU :
+                                                is_br ? `EX_ALU :
+                                                    (is_rtype || is_itype || is_lui || is_auipc) ? `EX_ALU :
+                                                        `EX_NOP;
 
     assign decode_if.op_type = is_lsu ? `OP_BITS'(lsu_op) :
                                 is_csr ? `OP_BITS'(csr_op) :
@@ -367,17 +366,17 @@ module VX_decode  #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire decode_fire = decode_if.valid && decode_if.ready;
+    wire decode_fire_unqual = ifetch_rsp_if.valid && decode_if.ready;
 
-    assign join_if.valid = decode_fire && is_gpu && (gpu_op == `GPU_JOIN);
+    assign join_if.valid = decode_fire_unqual && is_gpu && (gpu_op == `GPU_JOIN);
     assign join_if.wid = ifetch_rsp_if.wid;
 
-    assign wstall_if.valid = decode_fire && (is_btype
-                                          || is_jal 
-                                          || is_jalr 
-                                          || (is_gpu && (gpu_op == `GPU_TMC 
-                                                      || gpu_op == `GPU_SPLIT 
-                                                      || gpu_op == `GPU_BAR)));
+    assign wstall_if.valid = decode_fire_unqual && (is_btype
+                                                 || is_jal 
+                                                 || is_jalr 
+                                                 || (is_gpu && (gpu_op == `GPU_TMC 
+                                                             || gpu_op == `GPU_SPLIT 
+                                                             || gpu_op == `GPU_BAR)));
     assign wstall_if.wid = ifetch_rsp_if.wid;
 
     ///////////////////////////////////////////////////////////////////////////

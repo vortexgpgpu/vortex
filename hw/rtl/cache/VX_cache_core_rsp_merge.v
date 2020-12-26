@@ -37,7 +37,6 @@ module VX_cache_core_rsp_merge #(
         if (CORE_TAG_ID_BITS != 0) begin
 
             reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
-            reg [CORE_TAG_ID_BITS-1:0] sel_tag_id;
             reg core_rsp_valid_unaual_any;
             wire core_rsp_ready_unqual;
             
@@ -46,21 +45,18 @@ module VX_cache_core_rsp_merge #(
                 core_rsp_valid_unaual_any = 0;
                 core_rsp_tag_unqual   = 'x;
                 core_rsp_data_unqual  = 'x;                
-                core_rsp_bank_select  = 0; 
+                core_rsp_bank_select  = 0;
 
-                sel_tag_id = 'x;
-                
                 for (integer i = 0; i < NUM_BANKS; i++) begin
                     if (per_bank_core_rsp_valid[i]) begin
                         core_rsp_tag_unqual = per_bank_core_rsp_tag[i];
-                        sel_tag_id = per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0];
                         break;
                     end
                 end
                 
                 for (integer i = 0; i < NUM_BANKS; i++) begin 
                     if (per_bank_core_rsp_valid[i]                
-                     && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == sel_tag_id)) begin     
+                     && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == core_rsp_tag_unqual[CORE_TAG_ID_BITS-1:0])) begin     
                         core_rsp_valid_unaual_any = 1;       
                         core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
                         core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];

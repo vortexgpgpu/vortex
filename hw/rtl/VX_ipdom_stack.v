@@ -40,7 +40,8 @@ module VX_ipdom_stack #(
     VX_dp_ram #(
         .DATAW(WIDTH * 2),
         .SIZE(DEPTH),
-        .RWCHECK(0)
+        .RWCHECK(1),
+        .FASTRAM(1)
     ) store (
         .clk(clk),
         .waddr(wr_ptr),                                
