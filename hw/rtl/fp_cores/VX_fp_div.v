@@ -44,20 +44,21 @@ module VX_fp_div #(
             fdiv_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fdiv(fdiv_h, enable, dataa[i], datab[i], result[i]);
+           dpi_fdiv (fdiv_h, enable, dataa[i], datab[i], result[i]);
         end
     `endif
     end
 
     VX_shift_register #(
-        .DATAW(1 + TAGW),
-        .DEPTH(`LATENCY_FDIV)
+        .DATAW  (1 + TAGW),
+        .DEPTH  (`LATENCY_FDIV),
+        .RESETW (1)
     ) shift_reg (
-        .clk(clk),
-        .reset(reset),
-        .enable(enable),
-        .data_in ({valid_in,  tag_in}),
-        .data_out({valid_out, tag_out})
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({valid_in,  tag_in}),
+        .data_out ({valid_out, tag_out})
     );
 
     assign ready_in = enable;

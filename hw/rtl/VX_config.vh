@@ -244,11 +244,6 @@
 `define LSUQ_SIZE 8
 `endif
 
-// Size of MUL Request Queue
-`ifndef MULQ_SIZE
-`define MULQ_SIZE 8
-`endif
-
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
 `define FPUQ_SIZE 8

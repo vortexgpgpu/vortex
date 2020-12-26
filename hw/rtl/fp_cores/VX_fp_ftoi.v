@@ -59,8 +59,8 @@ module VX_fp_ftoi #(
             ftou_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_ftoi(ftoi_h, enable, dataa[i], result_s);
-           dpi_ftou(ftou_h, enable, dataa[i], result_u);
+           dpi_ftoi (ftoi_h, enable, dataa[i], result_s);
+           dpi_ftou (ftou_h, enable, dataa[i], result_u);
         end
     `endif
 
@@ -68,14 +68,15 @@ module VX_fp_ftoi #(
     end
 
     VX_shift_register #(
-        .DATAW(1 + TAGW + 1),
-        .DEPTH(`LATENCY_FTOI)
+        .DATAW  (1 + TAGW + 1),
+        .DEPTH  (`LATENCY_FTOI),
+        .RESETW (1)
     ) shift_reg (
-        .clk(clk),
-        .reset(reset),
-        .enable(enable),
-        .data_in ({valid_in,  tag_in,  is_signed}),
-        .data_out({valid_out, tag_out, is_signed_r})
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({valid_in,  tag_in,  is_signed}),
+        .data_out ({valid_out, tag_out, is_signed_r})
     );
 
     assign ready_in = enable;
