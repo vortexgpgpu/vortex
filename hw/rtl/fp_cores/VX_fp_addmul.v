@@ -168,9 +168,9 @@ module VX_fp_addmul #(
             fmul_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fadd(fadd_h, enable, dataa[i], datab[i], result_add);
-           dpi_fsub(fsub_h, enable, dataa[i], datab[i], result_sub);
-           dpi_fmul(fmul_h, enable, dataa[i], datab[i], result_mul);
+           dpi_fadd (fadd_h, enable, dataa[i], datab[i], result_add);
+           dpi_fsub (fsub_h, enable, dataa[i], datab[i], result_sub);
+           dpi_fmul (fmul_h, enable, dataa[i], datab[i], result_mul);
         end
     `endif
 
@@ -178,14 +178,15 @@ module VX_fp_addmul #(
     end
     
     VX_shift_register #(
-        .DATAW(1 + TAGW + 1 + 1),
-        .DEPTH(`LATENCY_FADDMUL)
+        .DATAW  (1 + TAGW + 1 + 1),
+        .DEPTH  (`LATENCY_FADDMUL),
+        .RESETW (1)
     ) shift_reg (
         .clk(clk),
-        .reset(reset),
-        .enable(enable),
-        .data_in({valid_in,   tag_in,  do_sub,   do_mul}),
-        .data_out({valid_out, tag_out, do_sub_r, do_mul_r})
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({valid_in,   tag_in,  do_sub,   do_mul}),
+        .data_out ({valid_out, tag_out, do_sub_r, do_mul_r})
     );
 
     assign ready_in = enable;

@@ -127,8 +127,8 @@ module VX_fp_madd #(
             fmsub_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fmadd(fmadd_h, enable, dataa[i], datab[i], datac[i], result_madd);
-           dpi_fmsub(fmsub_h, enable, dataa[i], datab[i], datac[i], result_msub);
+           dpi_fmadd (fmadd_h, enable, dataa[i], datab[i], datac[i], result_madd);
+           dpi_fmsub (fmsub_h, enable, dataa[i], datab[i], datac[i], result_msub);
         end
     `endif
 
@@ -138,14 +138,15 @@ module VX_fp_madd #(
     end
     
     VX_shift_register #(
-        .DATAW(1 + TAGW + 1 + 1),
-        .DEPTH(`LATENCY_FMADD)
+        .DATAW  (1 + TAGW + 1 + 1),
+        .DEPTH  (`LATENCY_FMADD),
+        .RESETW (1)
     ) shift_reg (
         .clk(clk),
-        .reset(reset),
-        .enable(enable),
-        .data_in({valid_in,   tag_in,  do_sub,   do_neg}),
-        .data_out({valid_out, tag_out, do_sub_r, do_neg_r})
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({valid_in,   tag_in,  do_sub,   do_neg}),
+        .data_out ({valid_out, tag_out, do_sub_r, do_neg_r})
     );
 
     assign ready_in = enable;

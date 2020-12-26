@@ -42,20 +42,21 @@ module VX_fp_sqrt #(
             fsqrt_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fsqrt(fsqrt_h, enable, dataa[i], result[i]);
+           dpi_fsqrt (fsqrt_h, enable, dataa[i], result[i]);
         end
     `endif
     end
 
     VX_shift_register #(
-        .DATAW(1 + TAGW),
-        .DEPTH(`LATENCY_FSQRT)
+        .DATAW  (1 + TAGW),
+        .DEPTH  (`LATENCY_FSQRT),
+        .RESETW (1)
     ) shift_reg (
-        .clk(clk),
-        .reset(reset),
-        .enable(enable),
-        .data_in ({valid_in,  tag_in}),
-        .data_out({valid_out, tag_out})
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({valid_in,  tag_in}),
+        .data_out ({valid_out, tag_out})
     );
 
     assign ready_in = enable;

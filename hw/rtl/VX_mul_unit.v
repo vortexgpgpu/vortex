@@ -12,7 +12,6 @@ module VX_mul_unit #(
     // Outputs
     VX_commit_if    mul_commit_if
 ); 
-    localparam MULQ_BITS = `LOG2UP(`MULQ_SIZE);
 
     wire [`MUL_BITS-1:0]          alu_op  = mul_req_if.op_type;
     wire                        is_div_op = `IS_DIV_OP(alu_op);
@@ -31,34 +30,13 @@ module VX_mul_unit #(
     wire mul_wb_out;
 
     wire mul_valid_out;
-    wire mul_valid_in = mul_req_if.valid && !is_div_op && ~mulq_full;    
+    wire mul_valid_in = mul_req_if.valid && !is_div_op;    
     wire mul_ready_in = ready_out || ~mul_valid_out;
         
-    wire mulq_push = mul_valid_in && mul_ready_in;
-    wire mulq_pop  = mul_valid_out && ready_out;
-    wire mulq_full;
-
     wire is_mulh_in = (alu_op != `MUL_MUL);
     wire is_mulh_out;
 
-    VX_generic_queue #(
-        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1),
-        .SIZE    (`MULQ_SIZE),
-        .FASTRAM (1)  
-    ) mul_metadata (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (mulq_push),
-        .pop      (mulq_pop),
-        .data_in  ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb, is_mulh_in}),        
-        .data_out ({mul_wid_out,    mul_tmask_out,    mul_PC_out,    mul_rd_out,    mul_wb_out,    is_mulh_out}),
-        .full     (mulq_full),
-        `UNUSED_PIN (empty),        
-        `UNUSED_PIN (size)
-    );
-
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
-
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [32:0] mul_in1 = {(alu_op != `MUL_MULHU)                          & alu_in1[i][31], alu_in1[i]};
         wire [32:0] mul_in2 = {(alu_op != `MUL_MULHU && alu_op != `MUL_MULHSU) & alu_in2[i][31], alu_in2[i]};
     `IGNORE_WARNINGS_BEGIN
@@ -66,31 +44,32 @@ module VX_mul_unit #(
     `IGNORE_WARNINGS_END
 
         VX_multiplier #(
-            .WIDTHA(33),
-            .WIDTHB(33),
-            .WIDTHP(66),
-            .SIGNED(1),
-            .LATENCY(`LATENCY_IMUL)
+            .WIDTHA  (33),
+            .WIDTHB  (33),
+            .WIDTHP  (66),
+            .SIGNED  (1),
+            .LATENCY (`LATENCY_IMUL)
         ) multiplier (
-            .clk(clk),
-            .enable(mul_ready_in),
-            .dataa(mul_in1),
-            .datab(mul_in2),
-            .result(mul_result_tmp)
+            .clk    (clk),
+            .enable (mul_ready_in),
+            .dataa  (mul_in1),
+            .datab  (mul_in2),
+            .result (mul_result_tmp)
         );
 
         assign mul_result[i] = is_mulh_out ? mul_result_tmp[63:32] : mul_result_tmp[31:0];
     end
 
     VX_shift_register #(
-        .DATAW(1),
-        .DEPTH(`LATENCY_IMUL)
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1),
+        .DEPTH  (`LATENCY_IMUL),
+        .RESETW (1)
     ) mul_shift_reg (
         .clk(clk),
-        .reset(reset),
-        .enable(mul_ready_in),
-        .data_in(mul_valid_in),
-        .data_out(mul_valid_out)
+        .reset    (reset),
+        .enable   (mul_ready_in),
+        .data_in  ({mul_valid_in,   mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb, is_mulh_in}),
+        .data_out ({mul_valid_out, mul_wid_out,    mul_tmask_out,    mul_PC_out,    mul_rd_out,    mul_wb_out,    is_mulh_out})
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -111,26 +90,26 @@ module VX_mul_unit #(
     wire is_rem_op_out;
     
     VX_serial_div #(
-        .WIDTHN(32),
-        .WIDTHD(32),
-        .WIDTHQ(32),
-        .WIDTHR(32),
-        .LANES(`NUM_THREADS),
-        .TAGW(`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
+        .WIDTHN (32),
+        .WIDTHD (32),
+        .WIDTHQ (32),
+        .WIDTHR (32),
+        .LANES  (`NUM_THREADS),
+        .TAGW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
     ) divide (
-        .clk(clk),
-        .reset(reset),        
-        .valid_in(div_valid_in),
-        .ready_in(div_ready_in),
+        .clk       (clk),
+        .reset     (reset),        
+        .valid_in  (div_valid_in),
+        .ready_in  (div_ready_in),
         .signed_mode(is_signed_div),
-        .tag_in({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb, is_rem_op_in}),
-        .numer(alu_in1),
-        .denom(alu_in2),
-        .quotient(div_result_tmp),
-        .remainder(rem_result_tmp),
-        .ready_out(div_ready_out),
-        .valid_out(div_valid_out),
-        .tag_out({div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
+        .tag_in    ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb, is_rem_op_in}),
+        .numer     (alu_in1),
+        .denom     (alu_in2),
+        .quotient  (div_result_tmp),
+        .remainder (rem_result_tmp),
+        .ready_out (div_ready_out),
+        .valid_out (div_valid_out),
+        .tag_out   ({div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
     );
 
     wire [`NUM_THREADS-1:0][31:0] div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
@@ -161,6 +140,6 @@ module VX_mul_unit #(
     );
 
     // can accept new request?
-    assign mul_req_if.ready = is_div_op ? div_ready_in : (mul_ready_in && ~mulq_full);
+    assign mul_req_if.ready = is_div_op ? div_ready_in : mul_ready_in;
     
 endmodule
