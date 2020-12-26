@@ -74,8 +74,8 @@ module VX_fp_itof #(
         .clk(clk),
         .reset(reset),
         .enable(enable),
-        .in ({valid_in,  tag_in,  is_signed}),
-        .out({valid_out, tag_out, is_signed_r})
+        .data_in ({valid_in,  tag_in,  is_signed}),
+        .data_out({valid_out, tag_out, is_signed_r})
     );
 
     assign ready_in = enable;

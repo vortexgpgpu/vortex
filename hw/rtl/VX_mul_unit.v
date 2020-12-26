@@ -19,47 +19,43 @@ module VX_mul_unit #(
     wire [`NUM_THREADS-1:0][31:0] alu_in1 = mul_req_if.rs1_data;
     wire [`NUM_THREADS-1:0][31:0] alu_in2 = mul_req_if.rs2_data;
 
-    wire [`NW_BITS-1:0] rsp_wid;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
-    wire [31:0] rsp_PC;
-    wire [`NR_BITS-1:0] rsp_rd;
-    wire rsp_wb;
-    wire [MULQ_BITS-1:0] tag_in, tag_out;
-    wire valid_out, ready_out;
-    wire mulq_full;
-
-    wire mulq_push = mul_req_if.valid && mul_req_if.ready;
-    wire mulq_pop  = valid_out && ready_out;
-
-    VX_index_buffer #(
-        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
-        .SIZE    (`MULQ_SIZE),
-        .FASTRAM (1)
-    ) req_metadata_buf  (
-        .clk          (clk),
-        .reset        (reset),
-        .acquire_slot (mulq_push),       
-        .write_addr   (tag_in),                
-        .read_addr    (tag_out),
-        .release_addr (tag_out),        
-        .write_data   ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb}),                    
-        .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}), 
-        .release_slot (mulq_pop),     
-        .full         (mulq_full)
-    );
-
-    wire valid_in = mul_req_if.valid && ~mulq_full;
-
+    wire ready_out;
+    
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
-    wire [MULQ_BITS-1:0] mul_tag;
-    wire is_mul_in = (alu_op == `MUL_MUL);    
-    wire is_mul_out;   
+    wire [`NW_BITS-1:0] mul_wid_out;
+    wire [`NUM_THREADS-1:0] mul_tmask_out;
+    wire [31:0] mul_PC_out;
+    wire [`NR_BITS-1:0] mul_rd_out;
+    wire mul_wb_out;
 
     wire mul_valid_out;
-    wire mul_valid_in = valid_in && !is_div_op;     
+    wire mul_valid_in = mul_req_if.valid && !is_div_op && ~mulq_full;    
     wire mul_ready_in = ready_out || ~mul_valid_out;
+        
+    wire mulq_push = mul_valid_in && mul_ready_in;
+    wire mulq_pop  = mul_valid_out && ready_out;
+    wire mulq_full;
+
+    wire is_mulh_in = (alu_op != `MUL_MUL);
+    wire is_mulh_out;
+
+    VX_generic_queue #(
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1),
+        .SIZE    (`MULQ_SIZE),
+        .FASTRAM (1)  
+    ) mul_metadata (
+        .clk      (clk),
+        .reset    (reset),
+        .push     (mulq_push),
+        .pop      (mulq_pop),
+        .data_in  ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb, is_mulh_in}),        
+        .data_out ({mul_wid_out,    mul_tmask_out,    mul_PC_out,    mul_rd_out,    mul_wb_out,    is_mulh_out}),
+        .full     (mulq_full),
+        `UNUSED_PIN (empty),        
+        `UNUSED_PIN (size)
+    );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin    
 
@@ -83,32 +79,36 @@ module VX_mul_unit #(
             .result(mul_result_tmp)
         );
 
-        assign mul_result[i] = is_mul_out ? mul_result_tmp[31:0] : mul_result_tmp[63:32];            
+        assign mul_result[i] = is_mulh_out ? mul_result_tmp[63:32] : mul_result_tmp[31:0];
     end
 
     VX_shift_register #(
-        .DATAW(1 + MULQ_BITS + 1),
+        .DATAW(1),
         .DEPTH(`LATENCY_IMUL)
     ) mul_shift_reg (
         .clk(clk),
         .reset(reset),
         .enable(mul_ready_in),
-        .in({mul_valid_in,   tag_in,  is_mul_in}),
-        .out({mul_valid_out, mul_tag, is_mul_out})
+        .data_in(mul_valid_in),
+        .data_out(mul_valid_out)
     );
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;
+    wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;    
+    wire [`NW_BITS-1:0] div_wid_out;
+    wire [`NUM_THREADS-1:0] div_tmask_out;
+    wire [31:0] div_PC_out;
+    wire [`NR_BITS-1:0] div_rd_out;
+    wire div_wb_out;
 
-    wire is_rem_op     = (alu_op == `MUL_REM) || (alu_op == `MUL_REMU);
+    wire is_rem_op_in  = (alu_op == `MUL_REM) || (alu_op == `MUL_REMU);
     wire is_signed_div = (alu_op == `MUL_DIV) || (alu_op == `MUL_REM);     
-    wire div_valid_in  = valid_in && is_div_op; 
+    wire div_valid_in  = mul_req_if.valid && is_div_op; 
     wire div_ready_out = ready_out && ~mul_valid_out; // arbitration prioritizes MUL  
     wire div_ready_in;
     wire div_valid_out;
     wire is_rem_op_out;
-    wire [MULQ_BITS-1:0] div_tag;
     
     VX_serial_div #(
         .WIDTHN(32),
@@ -116,21 +116,21 @@ module VX_mul_unit #(
         .WIDTHQ(32),
         .WIDTHR(32),
         .LANES(`NUM_THREADS),
-        .TAGW(MULQ_BITS + 1)
+        .TAGW(`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
     ) divide (
         .clk(clk),
-        .reset(reset),
-        .ready_in(div_ready_in),
+        .reset(reset),        
         .valid_in(div_valid_in),
+        .ready_in(div_ready_in),
         .signed_mode(is_signed_div),
-        .tag_in({tag_in, is_rem_op}),
+        .tag_in({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.rd, mul_req_if.wb, is_rem_op_in}),
         .numer(alu_in1),
         .denom(alu_in2),
         .quotient(div_result_tmp),
         .remainder(rem_result_tmp),
         .ready_out(div_ready_out),
         .valid_out(div_valid_out),
-        .tag_out({div_tag, is_rem_op_out})
+        .tag_out({div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
     );
 
     wire [`NUM_THREADS-1:0][31:0] div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
@@ -140,9 +140,13 @@ module VX_mul_unit #(
     wire stall_out = ~mul_commit_if.ready && mul_commit_if.valid;
     assign ready_out = ~stall_out;
 
-    assign valid_out = mul_valid_out || div_valid_out; 
-    assign tag_out = mul_valid_out ? mul_tag : div_tag;
-    wire [`NUM_THREADS-1:0][31:0] result = mul_valid_out ? mul_result : div_result;
+    wire                    rsp_valid = mul_valid_out || div_valid_out;  
+    wire [`NW_BITS-1:0]     rsp_wid   = mul_valid_out ? mul_wid_out : div_wid_out;
+    wire [`NUM_THREADS-1:0] rsp_tmask = mul_valid_out ? mul_tmask_out : div_tmask_out;
+    wire [31:0]             rsp_PC    = mul_valid_out ? mul_PC_out : div_PC_out;
+    wire [`NR_BITS-1:0]     rsp_rd    = mul_valid_out ? mul_rd_out : div_rd_out;
+    wire                    rsp_wb    = mul_valid_out ? mul_wb_out : div_wb_out;
+    wire [`NUM_THREADS-1:0][31:0] rsp_data = mul_valid_out ? mul_result : div_result;
 
     VX_generic_register #(
         .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -152,11 +156,11 @@ module VX_mul_unit #(
         .reset    (reset),
         .stall    (stall_out),
         .flush    (1'b0),
-        .data_in  ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result}),
+        .data_in  ({rsp_valid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           rsp_data}),
         .data_out ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.tmask, mul_commit_if.PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
     );
 
     // can accept new request?
-    assign mul_req_if.ready = (is_div_op ? div_ready_in : mul_ready_in) && ~mulq_full;
+    assign mul_req_if.ready = is_div_op ? div_ready_in : (mul_ready_in && ~mulq_full);
     
 endmodule
