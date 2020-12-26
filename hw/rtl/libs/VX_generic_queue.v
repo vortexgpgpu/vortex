@@ -56,29 +56,25 @@ module VX_generic_queue #(
 
         always @(posedge clk) begin
             if (reset) begin
-                empty_r <= 1;                   
-                full_r  <= 0;        
+                empty_r <= 1;
+                full_r  <= 0;
                 used_r  <= 0;
             end else begin
-                if (push) begin  
-                    assert(!full);          
-                    if (!pop) begin     
-                        empty_r <= 0; 
-                        if (used_r == ADDRW'(SIZE-1)) begin
-                            full_r <= 1;
-                        end                            
+                assert(!push || !full);
+                assert(!pop || !empty);
+                if (push && !pop) begin
+                    empty_r <= 0;
+                    if (used_r == ADDRW'(SIZE-1)) begin
+                        full_r <= 1;
                     end
                 end
-                if (pop) begin
-                    assert(!empty);
-                    if (!push) begin  
-                        full_r <= 0;                          
-                        if (used_r == ADDRW'(1)) begin
-                            empty_r <= 1;  
-                        end;                           
-                    end
+                if (pop && !push) begin
+                    full_r <= 0;
+                    if (used_r == ADDRW'(1)) begin
+                        empty_r <= 1;
+                    end;
                 end
-                used_r <= used_r + (ADDRW'(push) - ADDRW'(pop));
+                used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
             end                   
         end
 

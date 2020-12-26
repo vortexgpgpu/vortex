@@ -91,6 +91,11 @@ module VX_cache #(
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_valid; 
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_req_tid;
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
+    wire [NUM_BANKS-1:0][WORD_SIZE-1:0]         per_bank_core_req_byteen;
+    wire [NUM_BANKS-1:0][`WORD_ADDR_WIDTH-1:0]  per_bank_core_req_addr;
+    wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]    per_bank_core_req_tag;
+    wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]       per_bank_core_req_data;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
     
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
@@ -122,7 +127,8 @@ module VX_cache #(
         .BANK_LINE_SIZE (BANK_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
-        .NUM_REQS       (NUM_REQS)
+        .NUM_REQS       (NUM_REQS),
+        .CORE_TAG_WIDTH (CORE_TAG_WIDTH)
     ) cache_core_req_bank_sel (        
         .clk            (clk),
         .reset          (reset),
@@ -132,11 +138,20 @@ module VX_cache #(
         `UNUSED_PIN (bank_stalls),
     `endif     
         .core_req_valid (core_req_valid),
+        .core_req_rw    (core_req_rw), 
+        .core_req_byteen(core_req_byteen),
         .core_req_addr  (core_req_addr),
+        .core_req_data  (core_req_data),
+        .core_req_tag   (core_req_tag),
         .core_req_ready (core_req_ready),
-        .per_bank_valid (per_bank_core_req_valid),
-        .per_bank_tid   (per_bank_core_req_tid),
-        .per_bank_ready (per_bank_core_req_ready)
+        .per_bank_core_req_valid (per_bank_core_req_valid), 
+        .per_bank_core_req_tid   (per_bank_core_req_tid),
+        .per_bank_core_req_rw    (per_bank_core_req_rw),
+        .per_bank_core_req_byteen(per_bank_core_req_byteen),
+        .per_bank_core_req_addr  (per_bank_core_req_addr),
+        .per_bank_core_req_tag   (per_bank_core_req_tag),
+        .per_bank_core_req_data  (per_bank_core_req_data),
+        .per_bank_core_req_ready (per_bank_core_req_ready)
     );
 
     assign dram_req_tag = dram_req_addr;
@@ -179,11 +194,11 @@ module VX_cache #(
         // Core Req
         assign curr_bank_core_req_valid   = per_bank_core_req_valid[i];
         assign curr_bank_core_req_tid     = per_bank_core_req_tid[i];
-        assign curr_bank_core_req_addr    = core_req_addr[per_bank_core_req_tid[i]];
-        assign curr_bank_core_req_rw      = core_req_rw[per_bank_core_req_tid[i]];
-        assign curr_bank_core_req_byteen  = core_req_byteen[per_bank_core_req_tid[i]];
-        assign curr_bank_core_req_data    = core_req_data[per_bank_core_req_tid[i]];
-        assign curr_bank_core_req_tag     = core_req_tag[per_bank_core_req_tid[i]];
+        assign curr_bank_core_req_addr    = per_bank_core_req_addr[i];
+        assign curr_bank_core_req_rw      = per_bank_core_req_rw[i];
+        assign curr_bank_core_req_byteen  = per_bank_core_req_byteen[i];
+        assign curr_bank_core_req_data    = per_bank_core_req_data[i];
+        assign curr_bank_core_req_tag     = per_bank_core_req_tag[i];
         assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
 
         // Core WB

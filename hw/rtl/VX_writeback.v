@@ -17,7 +17,7 @@ module VX_writeback #(
     VX_writeback_if writeback_if
 );
     wire alu_valid = alu_commit_if.valid && alu_commit_if.wb;
-    wire ld_valid  = ld_commit_if.valid /*&& ld_commit_if.wb*/;
+    wire ld_valid  = ld_commit_if.valid && ld_commit_if.wb;
     wire csr_valid = csr_commit_if.valid && csr_commit_if.wb;
     wire mul_valid = mul_commit_if.valid && mul_commit_if.wb;
     wire fpu_valid = fpu_commit_if.valid && fpu_commit_if.wb;

@@ -28,7 +28,6 @@ module VX_issue #(
     VX_gpr_rsp_if gpr_rsp_if();
 
     wire scoreboard_delay;
-    wire [`NW_BITS-1:0] deq_wid_next;
 
     VX_ibuffer #(
         .CORE_ID(CORE_ID)
@@ -37,7 +36,6 @@ module VX_issue #(
         .reset        (reset), 
         .freeze       (1'b0),
         .ibuf_enq_if  (decode_if),
-        .deq_wid_next (deq_wid_next),
         .ibuf_deq_if  (ibuf_deq_if)      
     );
 
@@ -48,8 +46,6 @@ module VX_issue #(
         .reset        (reset), 
         .ibuf_deq_if  (ibuf_deq_if),
         .writeback_if (writeback_if),
-        .deq_wid_next (deq_wid_next),
-        .exe_delay    (~execute_if.ready),
         .delay        (scoreboard_delay)
     );
         
@@ -93,7 +89,10 @@ module VX_issue #(
         .mul_req_if (mul_req_if),
         .fpu_req_if (fpu_req_if),
         .gpu_req_if (gpu_req_if)
-    );      
+    );     
+
+    // issue the instruction
+    assign ibuf_deq_if.ready = !scoreboard_delay && execute_if.ready;     
 
     `SCOPE_ASSIGN (issue_fire,        ibuf_deq_if.valid && ibuf_deq_if.ready);
     `SCOPE_ASSIGN (issue_wid,         ibuf_deq_if.wid);
@@ -123,8 +122,8 @@ module VX_issue #(
     `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
 
 `ifdef PERF_ENABLE
-    reg [63:0] perf_ibf_stalls ;
-    reg [63:0] perf_scb_stalls ;
+    reg [63:0] perf_ibf_stalls;
+    reg [63:0] perf_scb_stalls;
     reg [63:0] perf_alu_stalls;
     reg [63:0] perf_lsu_stalls;
     reg [63:0] perf_csr_stalls;
