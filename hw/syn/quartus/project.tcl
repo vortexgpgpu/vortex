@@ -59,6 +59,19 @@ set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
 set_global_assignment -name POWER_USE_TA_VALUE 65
 set_global_assignment -name SEED 1
 
+switch $opts(family) {
+    "Arria 10" {
+        set_global_assignment -name VERILOG_MACRO ALTERA_A10    
+    }
+    "Stratix 10" {
+        set_global_assignment -name VERILOG_MACRO ALTERA_S10    
+    }
+    default {
+        puts stderr "Invalid device family"
+        exit 1
+    }
+}
+
 set idx 0
 foreach arg $q_args_orig {
     incr idx

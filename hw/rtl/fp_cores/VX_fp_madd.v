@@ -41,85 +41,25 @@ module VX_fp_madd #(
         wire [31:0] result_msub;
 
     `ifdef QUARTUS
-        twentynm_fp_mac mac_fp_madd (
-            // inputs
-            .accumulate(),
-            .chainin_overflow(),
-            .chainin_invalid(),
-            .chainin_underflow(),
-            .chainin_inexact(),
-            .ax(datac[i]),
-            .ay(datab[i]),
-            .az(dataa[i]),
-            .clk({2'b00, clk}),
-            .ena({2'b00, enable}),
-            .aclr({reset, reset}),
-            .chainin(),
-            // outputs
-            .overflow(),
-            .invalid(),
-            .underflow(),
-            .inexact(),
-            .chainout_overflow(),
-            .chainout_invalid(),
-            .chainout_underflow(),
-            .chainout_inexact(),
-            .resulta(result_madd),
-            .chainout()
+        acl_fmadd fmadd (
+            .clk    (clk),
+            .areset (reset),
+            .en     (enable),
+            .a      (dataa[i]),
+            .b      (datab[i]),
+            .c      (datac[i]),
+            .q      (result_madd)
         );
-        defparam mac_fp_madd.operation_mode = "sp_mult_add"; 
-        defparam mac_fp_madd.use_chainin = "false"; 
-        defparam mac_fp_madd.adder_subtract = "false"; 
-        defparam mac_fp_madd.ax_clock = "0"; 
-        defparam mac_fp_madd.ay_clock = "0"; 
-        defparam mac_fp_madd.az_clock = "0"; 
-        defparam mac_fp_madd.output_clock = "0"; 
-        defparam mac_fp_madd.accumulate_clock = "none"; 
-        defparam mac_fp_madd.ax_chainin_pl_clock = "0"; 
-        defparam mac_fp_madd.accum_pipeline_clock = "none"; 
-        defparam mac_fp_madd.mult_pipeline_clock = "0"; 
-        defparam mac_fp_madd.adder_input_clock = "0"; 
-        defparam mac_fp_madd.accum_adder_clock = "none"; 
 
-        twentynm_fp_mac mac_fp_msub (
-            // inputs
-            .accumulate(),
-            .chainin_overflow(),
-            .chainin_invalid(),
-            .chainin_underflow(),
-            .chainin_inexact(),
-            .ax(datac[i]),
-            .ay(datab[i]),
-            .az(dataa[i]),
-            .clk({2'b00, clk}),
-            .ena({2'b00, enable}),
-            .aclr({reset, reset}),
-            .chainin(),
-            // outputs
-            .overflow(),
-            .invalid(),
-            .underflow(),
-            .inexact(),
-            .chainout_overflow(),
-            .chainout_invalid(),
-            .chainout_underflow(),
-            .chainout_inexact(),
-            .resulta(result_msub),
-            .chainout()
+         acl_fmsub fmsub (
+            .clk    (clk),
+            .areset (reset),
+            .en     (enable),
+            .a      (dataa[i]),
+            .b      (datab[i]),
+            .c      (datac[i]),
+            .q      (result_msub)
         );
-        defparam mac_fp_msub.operation_mode = "sp_mult_add"; 
-        defparam mac_fp_msub.use_chainin = "false"; 
-        defparam mac_fp_msub.adder_subtract = "true"; 
-        defparam mac_fp_msub.ax_clock = "0"; 
-        defparam mac_fp_msub.ay_clock = "0"; 
-        defparam mac_fp_msub.az_clock = "0"; 
-        defparam mac_fp_msub.output_clock = "0"; 
-        defparam mac_fp_msub.accumulate_clock = "none"; 
-        defparam mac_fp_msub.ax_chainin_pl_clock = "0"; 
-        defparam mac_fp_msub.accum_pipeline_clock = "none"; 
-        defparam mac_fp_msub.mult_pipeline_clock = "0"; 
-        defparam mac_fp_msub.adder_input_clock = "0"; 
-        defparam mac_fp_msub.accum_adder_clock = "none";
     `else
         integer fmadd_h, fmsub_h;
         initial begin
@@ -145,7 +85,7 @@ module VX_fp_madd #(
         .clk(clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({valid_in,   tag_in,  do_sub,   do_neg}),
+        .data_in  ({valid_in,  tag_in,  do_sub,   do_neg}),
         .data_out ({valid_out, tag_out, do_sub_r, do_neg_r})
     );
 
