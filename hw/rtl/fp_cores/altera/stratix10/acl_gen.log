@@ -1,0 +1,296 @@
+starting execution ... 
+build model options ... 
+argc=22
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_fadd
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 0, DSPs 2, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 3 cycle(s)
+@@start
+@name FPAdd@
+@latency 3@
+@LUT 0@
+@DSP 2@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method single path@
+@inPort 0 fpieee 8 23@
+@inPort 1 fpieee 8 23@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=22
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_fsub
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 0, DSPs 2, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 3 cycle(s)
+@@start
+@name FPSub@
+@latency 3@
+@LUT 0@
+@DSP 2@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method single path@
+@inPort 0 fpieee 8 23@
+@inPort 1 fpieee 8 23@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=22
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_fmul
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 0, DSPs 2, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 3 cycle(s)
+@@start
+@name FPMul@
+@latency 3@
+@LUT 0@
+@DSP 2@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method default@
+@inPort 0 fpieee 8 23@
+@inPort 1 fpieee 8 23@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=22
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_fmadd
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 0, DSPs 2, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 4 cycle(s)
+@@start
+@name FPMultAdd@
+@latency 4@
+@LUT 0@
+@DSP 2@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method multadd@
+@inPort 0 fpieee 8 23@
+@inPort 1 fpieee 8 23@
+@inPort 2 fpieee 8 23@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=23
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_fdiv
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 1232, DSPs 7, RAMBits 34304, RAMBlocks 3 
+The pipeline depth of the block is 34 cycle(s)
+@@start
+@name FPDiv@
+@latency 34@
+@LUT 1232@
+@DSP 7@
+@RAMBits 34304@
+@RAMBlockUsage 3@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method polynomial approximation@
+@inPort 0 fpieee 8 23@
+@inPort 1 fpieee 8 23@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=22
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_fsqrt
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 609, DSPs 5, RAMBits 15872, RAMBlocks 3 
+The pipeline depth of the block is 25 cycle(s)
+@@start
+@name FPSqrt@
+@latency 25@
+@LUT 609@
+@DSP 5@
+@RAMBits 15872@
+@RAMBlockUsage 3@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method polynomial approximation@
+@inPort 0 fpieee 8 23@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=25
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_ftoi
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 344, DSPs 0, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 3 cycle(s)
+@@start
+@name FPToFXP@
+@latency 3@
+@LUT 344@
+@DSP 0@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method default@
+@inPort 0 fpieee 8 23@
+@outPort 0 fxp 32 0 1@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=25
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_ftou
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 272, DSPs 0, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 3 cycle(s)
+@@start
+@name FPToFXP@
+@latency 3@
+@LUT 272@
+@DSP 0@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method default@
+@inPort 0 fpieee 8 23@
+@outPort 0 fxp 32 0 0@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=25
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_itof
+    Frequency 250MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 362, DSPs 0, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 7 cycle(s)
+@@start
+@name FXPToFP@
+@latency 7@
+@LUT 362@
+@DSP 0@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method default@
+@inPort 0 fxp 32 0 1@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end
+starting execution ... 
+build model options ... 
+argc=25
+Generation context:
+        Will not generate valid and channel signals 
+    HardFP is enabled enabling set to true 
+    Correct rounding constraint detected 
+        Will not generate valid and channel signals 
+    The new component name is acl_utof
+    Frequency 300MHz 
+    Deployment FPGA Stratix10 
+Estimated resources LUTs 310, DSPs 0, RAMBits 0, RAMBlocks 0 
+The pipeline depth of the block is 7 cycle(s)
+@@start
+@name FXPToFP@
+@latency 7@
+@LUT 310@
+@DSP 0@
+@RAMBits 0@
+@RAMBlockUsage 0@
+@enable 1@
+@subnormals 0@
+@error 0.50@
+@rounding RNE@
+@method default@
+@inPort 0 fxp 32 0 0@
+@outPort 0 fpieee 8 23@
+@nochanvalid 1@
+@@end

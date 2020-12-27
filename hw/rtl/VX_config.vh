@@ -105,11 +105,19 @@
 `endif
 
 `ifndef LATENCY_FDIV
-`define LATENCY_FDIV 15
+`ifdef ALTERA_S10
+`define LATENCY_FDIV 34
+`else
+`define LATENCY_FDIV 20
+`endif
 `endif
 
 `ifndef LATENCY_FSQRT
-`define LATENCY_FSQRT 10
+`ifdef ALTERA_S10
+`define LATENCY_FSQRT 25
+`else
+`define LATENCY_FSQRT 15
+`endif
 `endif
 
 `ifndef LATENCY_ITOF
