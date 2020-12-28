@@ -18,9 +18,6 @@ FBITS="f$(($EXP_BITS + $MAN_BITS + 1))"
 
 echo Generating IP cores for $FBITS
 {
-    $CMD -name "$PREFIX"_fadd  -frequency 250 FPAdd   $EXP_BITS $MAN_BITS
-    $CMD -name "$PREFIX"_fsub  -frequency 250 FPSub   $EXP_BITS $MAN_BITS
-    $CMD -name "$PREFIX"_fmul  -frequency 250 FPMul   $EXP_BITS $MAN_BITS
     $CMD -name "$PREFIX"_fmadd -frequency 250 FPMultAdd $EXP_BITS $MAN_BITS
     $CMD -name "$PREFIX"_fdiv  -frequency 250 FPDiv   $EXP_BITS $MAN_BITS 0
     $CMD -name "$PREFIX"_fsqrt -frequency 250 FPSqrt  $EXP_BITS $MAN_BITS
