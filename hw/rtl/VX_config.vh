@@ -96,10 +96,6 @@
 `define LATENCY_FNONCOMP 1
 `endif
 
-`ifndef LATENCY_FADDMUL
-`define LATENCY_FADDMUL 3
-`endif
-
 `ifndef LATENCY_FMADD
 `define LATENCY_FMADD 4
 `endif

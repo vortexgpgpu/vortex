@@ -10,11 +10,7 @@
 
 extern "C" {
   int dpi_register();
-  void dpi_fadd(int inst, bool enable, int a, int b, int* result);
-  void dpi_fsub(int inst, bool enable, int a, int b, int* result);
-  void dpi_fmul(int inst, bool enable, int a, int b, int* result);
   void dpi_fmadd(int inst, bool enable, int a, int b, int c, int* result);
-  void dpi_fmsub(int inst, bool enable, int a, int b, int c, int* result);
   void dpi_fdiv(int inst, bool enable, int a, int b, int* result);
   void dpi_fsqrt(int inst, bool enable, int a, int* result);
   void dpi_ftoi(int inst, bool enable, int a, int* result);
@@ -91,48 +87,6 @@ int dpi_register() {
   return instances.allocate();
 }
 
-void dpi_fadd(int inst, bool enable, int a, int b, int* result) {
-  ShiftRegister& sr = instances.get(inst);
-
-  Float_t fa, fb, fr;
-
-  fa.i = a;
-  fb.i = b;
-  fr.f = fa.f + fb.f;
-
-  sr.ensure_init(LATENCY_FADDMUL);
-  sr.push(fr.i, enable);
-  *result = sr.top();
-}
-
-void dpi_fsub(int inst, bool enable, int a, int b, int* result) {
-  ShiftRegister& sr = instances.get(inst);
-
-  Float_t fa, fb, fr;
-
-  fa.i = a;
-  fb.i = b;
-  fr.f = fa.f - fb.f;
-
-  sr.ensure_init(LATENCY_FADDMUL);
-  sr.push(fr.i, enable);
-  *result = sr.top();
-}
-
-void dpi_fmul(int inst, bool enable, int a, int b, int* result) {
-  ShiftRegister& sr = instances.get(inst);
-
-  Float_t fa, fb, fr;
-
-  fa.i = a;
-  fb.i = b;
-  fr.f = fa.f * fb.f;
-
-  sr.ensure_init(LATENCY_FADDMUL);
-  sr.push(fr.i, enable);
-  *result = sr.top();
-}
-
 void dpi_fmadd(int inst, bool enable, int a, int b, int c, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
@@ -142,21 +96,6 @@ void dpi_fmadd(int inst, bool enable, int a, int b, int c, int* result) {
   fb.i = b;
   fc.i = c;
   fr.f = fa.f * fb.f + fc.f;
-
-  sr.ensure_init(LATENCY_FMADD);
-  sr.push(fr.i, enable);
-  *result = sr.top();
-}
-
-void dpi_fmsub(int inst, bool enable, int a, int b, int c, int* result) {
-  ShiftRegister& sr = instances.get(inst);
-
-  Float_t fa, fb, fc, fr;
-
-  fa.i = a;
-  fb.i = b;
-  fc.i = c;
-  fr.f = fa.f * fb.f - fc.f;
 
   sr.ensure_init(LATENCY_FMADD);
   sr.push(fr.i, enable);
