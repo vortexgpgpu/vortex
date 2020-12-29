@@ -18,7 +18,7 @@ module VX_instr_demux (
 );
     wire [`NT_BITS-1:0] tid;
     VX_priority_encoder #(
-        .N(`NUM_THREADS)
+        .DATAW (`NUM_THREADS)
     ) tid_select (
         .data_in  (execute_if.tmask),
         .data_out (tid),

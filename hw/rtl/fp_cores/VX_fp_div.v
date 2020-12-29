@@ -16,9 +16,14 @@ module VX_fp_div #(
 
     input wire [TAGW-1:0] tag_in,
 
+    input wire [`FRM_BITS-1:0] frm,
+    
     input wire [LANES-1:0][31:0]  dataa,
     input wire [LANES-1:0][31:0]  datab,
-    output wire [LANES-1:0][31:0] result, 
+    output wire [LANES-1:0][31:0] result,  
+
+    output wire has_fflags,
+    output fflags_t [LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -44,7 +49,7 @@ module VX_fp_div #(
             fdiv_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fdiv (fdiv_h, enable, dataa[i], datab[i], result[i]);
+           dpi_fdiv (fdiv_h, enable, dataa[i], datab[i], `LATENCY_FDIV, result[i]);
         end
     `endif
     end
@@ -62,5 +67,9 @@ module VX_fp_div #(
     );
 
     assign ready_in = enable;
+
+    `UNUSED_VAR (frm)
+    assign has_fflags = 0;
+    assign fflags = 0;
 
 endmodule

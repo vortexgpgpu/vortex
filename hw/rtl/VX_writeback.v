@@ -73,14 +73,13 @@ module VX_writeback #(
 
     wire stall = ~writeback_if.ready && writeback_if.valid;
     
-    VX_generic_register #(
-        .N(1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32)),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32)),
+        .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .stall    (stall),
-        .flush    (1'b0),
+        .enable   (!stall),
         .data_in  ({wb_valid,           wb_wid,           wb_PC,           wb_tmask,           wb_rd,           wb_data}),
         .data_out ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data})
     );

@@ -40,7 +40,7 @@ module VX_ibuffer #(
         wire push = writing && !is_slot0;
         wire pop = reading && sizeMany_r[i];
 
-        VX_generic_queue #(
+        VX_fifo_queue #(
             .DATAW    (DATAW),
             .SIZE     (SIZE),
             .BUFFERED (1),

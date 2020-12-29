@@ -34,14 +34,13 @@ module VX_skid_buffer #(
 
         wire stall = valid_out && ~ready_out;
 
-        VX_generic_register #(
-            .N (1 + DATAW),
-            .R (1)
+        VX_pipe_register #(
+            .DATAW  (1 + DATAW),
+            .RESETW (1)
         ) pipe_reg (
             .clk      (clk),
             .reset    (reset),
-            .stall    (stall),
-            .flush    (1'b0),
+            .enable   (!stall),
             .data_in  ({valid_in, data_in}),
             .data_out ({valid_out, data_out})
         );

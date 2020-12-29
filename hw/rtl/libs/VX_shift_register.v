@@ -76,7 +76,7 @@ endmodule
 
 module VX_shift_register #( 
     parameter DATAW  = 1, 
-    parameter RESETW = DATAW,
+    parameter RESETW = 0,
     parameter DEPTH  = 1,
     parameter NTAPS  = 1,
     parameter DEPTHW = $clog2(DEPTH),

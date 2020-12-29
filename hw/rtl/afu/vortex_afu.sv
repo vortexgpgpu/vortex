@@ -710,7 +710,7 @@ always @(posedge clk) begin
   end
 end
 
-VX_generic_queue #(
+VX_fifo_queue #(
   .DATAW   (CCI_RD_RQ_DATAW),
   .SIZE    (CCI_RD_QUEUE_SIZE),
   .FASTRAM (1)  

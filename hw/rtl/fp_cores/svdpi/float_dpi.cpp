@@ -10,14 +10,17 @@
 
 extern "C" {
   int dpi_register();
-  void dpi_fmadd(int inst, bool enable, int a, int b, int c, int* result);
-  void dpi_fdiv(int inst, bool enable, int a, int b, int* result);
-  void dpi_fsqrt(int inst, bool enable, int a, int* result);
-  void dpi_ftoi(int inst, bool enable, int a, int* result);
-  void dpi_ftou(int inst, bool enable, int a, int* result);
-  void dpi_itof(int inst, bool enable, int a, int* result);
-  void dpi_utof(int inst, bool enable, int a, int* result);
-  void dpi_delayed_assert(int inst, bool cond);
+  void dpi_fadd(int inst, bool enable, int a, int b, int delay, int* result);
+  void dpi_fsub(int inst, bool enable, int a, int b, int delay, int* result);
+  void dpi_fmul(int inst, bool enable, int a, int b, int delay, int* result);
+  void dpi_fmadd(int inst, bool enable, int a, int b, int c, int delay, int* result);
+  void dpi_fdiv(int inst, bool enable, int a, int b, int delay, int* result);
+  void dpi_fsqrt(int inst, bool enable, int a, int delay, int* result);
+  void dpi_ftoi(int inst, bool enable, int a, int delay, int* result);
+  void dpi_ftou(int inst, bool enable, int a, int delay, int* result);
+  void dpi_itof(int inst, bool enable, int a, int delay, int* result);
+  void dpi_utof(int inst, bool enable, int a, int delay, int* result);
+  void dpi_assert(int inst, bool cond, int delay);
 }
 
 class ShiftRegister {
@@ -87,7 +90,49 @@ int dpi_register() {
   return instances.allocate();
 }
 
-void dpi_fmadd(int inst, bool enable, int a, int b, int c, int* result) {
+void dpi_fadd(int inst, bool enable, int a, int b, int delay, int* result) {
+  ShiftRegister& sr = instances.get(inst);
+
+  Float_t fa, fb, fr;
+
+  fa.i = a;
+  fb.i = b;
+  fr.f = fa.f + fb.f;
+
+  sr.ensure_init(delay);
+  sr.push(fr.i, enable);
+  *result = sr.top();
+}
+
+void dpi_fsub(int inst, bool enable, int a, int b, int delay, int* result) {
+  ShiftRegister& sr = instances.get(inst);
+
+  Float_t fa, fb, fr;
+
+  fa.i = a;
+  fb.i = b;
+  fr.f = fa.f - fb.f;
+
+  sr.ensure_init(delay);
+  sr.push(fr.i, enable);
+  *result = sr.top();
+}
+
+void dpi_fmul(int inst, bool enable, int a, int b, int delay, int* result) {
+  ShiftRegister& sr = instances.get(inst);
+
+  Float_t fa, fb, fr;
+
+  fa.i = a;
+  fb.i = b;
+  fr.f = fa.f * fb.f;
+
+  sr.ensure_init(delay);
+  sr.push(fr.i, enable);
+  *result = sr.top();
+}
+
+void dpi_fmadd(int inst, bool enable, int a, int b, int c, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fb, fc, fr;
@@ -97,12 +142,12 @@ void dpi_fmadd(int inst, bool enable, int a, int b, int c, int* result) {
   fc.i = c;
   fr.f = fa.f * fb.f + fc.f;
 
-  sr.ensure_init(LATENCY_FMADD);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_fdiv(int inst, bool enable, int a, int b, int* result) {
+void dpi_fdiv(int inst, bool enable, int a, int b, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fb, fr;
@@ -111,12 +156,12 @@ void dpi_fdiv(int inst, bool enable, int a, int b, int* result) {
   fb.i = b;
   fr.f = fa.f / fb.f;
 
-  sr.ensure_init(LATENCY_FDIV);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_fsqrt(int inst, bool enable, int a, int* result) {
+void dpi_fsqrt(int inst, bool enable, int a, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fr;
@@ -124,12 +169,12 @@ void dpi_fsqrt(int inst, bool enable, int a, int* result) {
   fa.i = a;
   fr.f = sqrtf(fa.f);
 
-  sr.ensure_init(LATENCY_FSQRT);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_ftoi(int inst, bool enable, int a, int* result) {
+void dpi_ftoi(int inst, bool enable, int a, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fr;
@@ -137,12 +182,12 @@ void dpi_ftoi(int inst, bool enable, int a, int* result) {
   fa.i = a;
   fr.i = int(fa.f);   
 
-  sr.ensure_init(LATENCY_FTOI);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_ftou(int inst, bool enable, int a, int* result) {
+void dpi_ftou(int inst, bool enable, int a, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fr;
@@ -150,24 +195,24 @@ void dpi_ftou(int inst, bool enable, int a, int* result) {
   fa.i = a;
   fr.i = unsigned(fa.f);   
 
-  sr.ensure_init(LATENCY_FTOI);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_itof(int inst, bool enable, int a, int* result) {
+void dpi_itof(int inst, bool enable, int a, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fr;
 
   fr.f = (float)a;   
 
-  sr.ensure_init(LATENCY_ITOF);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_utof(int inst, bool enable, int a, int* result) {
+void dpi_utof(int inst, bool enable, int a, int delay, int* result) {
   ShiftRegister& sr = instances.get(inst);
 
   Float_t fa, fr;
@@ -175,15 +220,15 @@ void dpi_utof(int inst, bool enable, int a, int* result) {
   unsigned ua = a;
   fr.f = (float)ua;   
 
-  sr.ensure_init(LATENCY_ITOF);
+  sr.ensure_init(delay);
   sr.push(fr.i, enable);
   *result = sr.top();
 }
 
-void dpi_delayed_assert(int inst, bool cond) {
+void dpi_assert(int inst, bool cond, int delay) {
   ShiftRegister& sr = instances.get(inst);
 
-  sr.ensure_init(2);
+  sr.ensure_init(delay);
   sr.push(!cond, 1);
 
   auto status = sr.top();

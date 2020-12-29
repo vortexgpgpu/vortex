@@ -9,16 +9,16 @@ typedef struct packed {
     logic is_subnormal;
     logic is_inf;
     logic is_nan;
-    logic is_signaling;
     logic is_quiet;
+    logic is_signaling;    
 } fp_type_t;
 
 typedef struct packed {
-    logic NV; // Invalid
-    logic DZ; // Divide by zero
-    logic OF; // Overflow
-    logic UF; // Underflow
-    logic NX; // Inexact
+    logic NV; // 4-Invalid
+    logic DZ; // 3-Divide by zero
+    logic OF; // 2-Overflow
+    logic UF; // 1-Underflow
+    logic NX; // 0-Inexact
 } fflags_t;
 
 `define FFG_BITS  $bits(fflags_t)
