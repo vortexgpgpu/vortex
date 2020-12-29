@@ -34,7 +34,7 @@ module VX_elastic_buffer #(
         wire push = valid_in && ready_in;
         wire pop  = valid_out && ready_out;
 
-        VX_generic_queue #(
+        VX_fifo_queue #(
             .DATAW    (DATAW),
             .SIZE     (SIZE),
             .BUFFERED (BUFFERED),

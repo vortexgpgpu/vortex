@@ -28,7 +28,7 @@ module VX_index_buffer #(
     wire [ADDRW-1:0] free_index;
 
     VX_priority_encoder #(
-        .N(SIZE)
+        .DATAW (SIZE)
     ) free_slots_encoder (
         .data_in   (free_slots_n),
         .data_out  (free_index),

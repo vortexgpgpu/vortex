@@ -65,8 +65,11 @@ sta.chg:
 asm.chg:
 	$(STAMP) asm.chg
 
+timing: $(PROJECT_FILES)
+	quartus_sh -t ../timing-html.tcl -project $(PROJECT)
+
 program: $(PROJECT).sof
 	quartus_pgm --no_banner --mode=jtag -o "$(PROJECT).sof"
-	
+
 clean:
 	rm -rf bin *.rpt *.chg *.qsf *.qpf *.qws *.log *.htm *.eqn *.pin *.sof *.pof qdb incremental_db tmp-clearbox

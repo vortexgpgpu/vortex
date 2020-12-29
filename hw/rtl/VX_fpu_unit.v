@@ -150,14 +150,13 @@ module VX_fpu_unit #(
 
     wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;
 
-    VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFG_BITS),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFG_BITS),
+        .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .stall    (stall_out),
-        .flush    (1'b0),
+        .enable   (!stall_out),
         .data_in  ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,   rsp_fflags}),
         .data_out ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, has_fflags_r, fflags_r})
     );

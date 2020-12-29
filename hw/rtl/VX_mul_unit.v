@@ -127,14 +127,13 @@ module VX_mul_unit #(
     wire                    rsp_wb    = mul_valid_out ? mul_wb_out : div_wb_out;
     wire [`NUM_THREADS-1:0][31:0] rsp_data = mul_valid_out ? mul_result : div_result;
 
-    VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .stall    (stall_out),
-        .flush    (1'b0),
+        .enable   (!stall_out),
         .data_in  ({rsp_valid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           rsp_data}),
         .data_out ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.tmask, mul_commit_if.PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
     );

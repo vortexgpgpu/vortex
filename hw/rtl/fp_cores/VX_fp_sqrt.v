@@ -15,9 +15,14 @@ module VX_fp_sqrt #(
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
+    
+    input wire [`FRM_BITS-1:0] frm,
 
     input wire [LANES-1:0][31:0]  dataa,
-    output wire [LANES-1:0][31:0] result, 
+    output wire [LANES-1:0][31:0] result,  
+
+    output wire has_fflags,
+    output fflags_t [LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -42,7 +47,7 @@ module VX_fp_sqrt #(
             fsqrt_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fsqrt (fsqrt_h, enable, dataa[i], result[i]);
+           dpi_fsqrt (fsqrt_h, enable, dataa[i], `LATENCY_FSQRT, result[i]);
         end
     `endif
     end
@@ -60,5 +65,9 @@ module VX_fp_sqrt #(
     );
 
     assign ready_in = enable;
+
+    `UNUSED_VAR (frm)
+    assign has_fflags = 0;
+    assign fflags = 0;
 
 endmodule

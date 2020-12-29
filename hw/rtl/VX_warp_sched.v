@@ -195,16 +195,16 @@ module VX_warp_sched #(
         wire pop = join_if.valid && (i == join_if.wid);
 
         VX_ipdom_stack #(
-            .WIDTH(1+32+`NUM_THREADS), 
-            .DEPTH(2 ** (`NT_BITS+1))
+            .WIDTH (1+32+`NUM_THREADS), 
+            .DEPTH (2 ** (`NT_BITS+1))
         ) ipdom_stack (
-            .clk  (clk),
-            .reset(reset),
-            .push (push),
-            .pop  (pop),
-            .q1   (q1),
-            .q2   (q2),
-            .d    (ipdom[i]),
+            .clk   (clk),
+            .reset (reset),
+            .push  (push),
+            .pop   (pop),
+            .q1    (q1),
+            .q2    (q2),
+            .d     (ipdom[i]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (full)
         );
@@ -237,14 +237,13 @@ module VX_warp_sched #(
 
     assign scheduled_warp = schedule_valid && ~stall_out;
 
-    VX_generic_register #( 
-        .N(1 + `NUM_THREADS + 32 + `NW_BITS),
-        .R(1)
+    VX_pipe_register #( 
+        .DATAW  (1 + `NUM_THREADS + 32 + `NW_BITS),
+        .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .stall    (stall_out),
-        .flush    (1'b0),
+        .enable   (!stall_out),
         .data_in  ({scheduled_warp,      thread_mask,         warp_pc,          warp_to_schedule}),
         .data_out ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );

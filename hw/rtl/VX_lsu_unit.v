@@ -75,14 +75,13 @@ module VX_lsu_unit #(
     wire ready_in;
     wire stall_in = ~ready_in & req_valid; 
 
-    VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32))),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32))),
+        .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .stall    (stall_in),
-        .flush    (1'b0),
+        .enable   (!stall_in),
         .data_in  ({lsu_req_if.valid, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
         .data_out ({req_valid,        req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
     );
@@ -210,14 +209,13 @@ module VX_lsu_unit #(
 
     wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
     
-    VX_generic_register #(
-        .N(1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .stall    (load_rsp_stall),
-        .flush    (1'b0),
+        .enable   (!load_rsp_stall),
         .data_in  ({is_load_rsp,        rsp_wid,          dcache_rsp_if.valid, rsp_pc,          rsp_rd,          rsp_wb,          rsp_data}),
         .data_out ({ld_commit_if.valid, ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data})
     );

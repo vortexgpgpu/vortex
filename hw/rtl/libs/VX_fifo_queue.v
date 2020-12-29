@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_generic_queue #(
+module VX_fifo_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
     parameter ADDRW    = $clog2(SIZE),

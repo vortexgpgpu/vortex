@@ -490,8 +490,8 @@ public:
     auto a = (float*)src1;
     auto b = (float*)src2;
     for (int i = 0; i < n; ++i) {
-      a[i] = fround((n/2 - i) * (1.0f/n));
-      b[i] = fround((n/2 - i) * (1.0f/n));
+      a[i] = fround((n/2 - i) + (float(i)/n));
+      b[i] = fround((n/2 - i) + (float(i)/n));
     }
   }
   
@@ -519,8 +519,8 @@ public:
     auto a = (float*)src1;
     auto b = (float*)src2;
     for (int i = 0; i < n; ++i) {
-      a[i] = fround(i * (1.0f/n));
-      b[i] = fround(i * (1.0f/n));
+      a[i] = fround(i + (float(i)/n));
+      b[i] = fround(i + (float(i)/n));
     }
   }
   

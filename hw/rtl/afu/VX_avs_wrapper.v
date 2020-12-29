@@ -73,7 +73,7 @@ module VX_avs_wrapper #(
         end
     end
     
-    VX_generic_queue #(
+    VX_fifo_queue #(
         .DATAW   (REQ_TAGW),
         .SIZE    (RD_QUEUE_SIZE),
         .BUFFERED(1),
@@ -90,7 +90,7 @@ module VX_avs_wrapper #(
         `UNUSED_PIN (size)
     );
 
-    VX_generic_queue #(
+    VX_fifo_queue #(
         .DATAW   (AVS_DATAW),
         .SIZE    (RD_QUEUE_SIZE),
         .BUFFERED(1),

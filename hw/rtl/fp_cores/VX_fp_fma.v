@@ -4,7 +4,7 @@
 `include "float_dpi.vh"
 `endif
 
-module VX_fp_madd #( 
+module VX_fp_fma #( 
     parameter TAGW = 1,
     parameter LANES = 1
 ) (
@@ -15,6 +15,8 @@ module VX_fp_madd #(
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
+    
+    input wire [`FRM_BITS-1:0] frm,
 
     input wire  do_madd,
     input wire  do_sub,
@@ -23,7 +25,10 @@ module VX_fp_madd #(
     input wire [LANES-1:0][31:0]  dataa,
     input wire [LANES-1:0][31:0]  datab,
     input wire [LANES-1:0][31:0]  datac,
-    output wire [LANES-1:0][31:0] result, 
+    output wire [LANES-1:0][31:0] result,  
+
+    output wire has_fflags,
+    output fflags_t [LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -75,14 +80,14 @@ module VX_fp_madd #(
             fmadd_h = dpi_register();
         end
         always @(posedge clk) begin
-           dpi_fmadd (fmadd_h, enable, a, b, c, result[i]);
+           dpi_fmadd (fmadd_h, enable, a, b, c, `LATENCY_FMA, result[i]);
         end
     `endif
     end
     
     VX_shift_register #(
         .DATAW  (1 + TAGW),
-        .DEPTH  (`LATENCY_FMADD),
+        .DEPTH  (`LATENCY_FMA),
         .RESETW (1)
     ) shift_reg (
         .clk(clk),
@@ -93,5 +98,9 @@ module VX_fp_madd #(
     );
 
     assign ready_in = enable;
+
+    `UNUSED_VAR (frm)
+    assign has_fflags = 0;
+    assign fflags = 0;
 
 endmodule

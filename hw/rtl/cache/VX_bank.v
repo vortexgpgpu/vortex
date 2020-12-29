@@ -125,7 +125,7 @@ module VX_bank #(
         wire drsq_full;
         assign dram_rsp_ready = !drsq_full;
 
-        VX_generic_queue #(
+        VX_fifo_queue #(
             .DATAW    (`LINE_ADDR_WIDTH + $bits(dram_rsp_data)), 
             .SIZE     (DRSQ_SIZE),
             .BUFFERED (1),
@@ -166,7 +166,7 @@ module VX_bank #(
     wire creq_push = (| core_req_valid) && core_req_ready;
     assign core_req_ready = !creq_full;
 
-    VX_generic_queue #(
+    VX_fifo_queue #(
         .DATAW    (CORE_TAG_WIDTH + `REQS_BITS + 1 + WORD_SIZE + `WORD_ADDR_WIDTH + `WORD_WIDTH), 
         .SIZE     (CREQ_SIZE),
         .BUFFERED (1),
@@ -350,14 +350,13 @@ if (DRAM_ENABLE) begin
     wire mshr_pending_hazard_st0 = mshr_pending_hazard_unqual_st0 
                                 || (valid_st3 && (miss_st3 || force_miss_st3) && (addr_st3 == addr_st0));
 
-    VX_generic_register #(
-        .N(1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
+        .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
-        .stall    (pipeline_stall),
-        .flush    (1'b0),
+        .enable   (!pipeline_stall),
         .data_in  ({valid_st0, is_mshr_st0, mshr_pending_hazard_st0, addr_st0, wsel_st0, writeword_st0, is_fill_st0, writedata_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
         .data_out ({valid_st1, is_mshr_st1, mshr_pending_hazard_st1, addr_st1, wsel_st1, writeword_st1, is_fill_st1, writedata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
     );
@@ -420,14 +419,13 @@ if (DRAM_ENABLE) begin
 
     wire incoming_fill_st1 = !drsq_empty && (addr_st1 == drsq_addr_st0);
 
-    VX_generic_register #(
-        .N(1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
+        .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
-        .stall    (pipeline_stall),
-        .flush    (1'b0),
+        .enable   (!pipeline_stall),
         .data_in  ({valid_st1, incoming_fill_st1, core_req_hit_st1, is_mshr_st1, writeen_st1, force_miss_st1, dirty_st1, is_fill_st1, addr_st1, wsel_st1, writeword_st1, readtag_st1, miss_st1, writedata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1}),
         .data_out ({valid_st2, incoming_fill_st2, core_req_hit_st2, is_mshr_st2, writeen_st2, force_miss_st2, dirty_st2, is_fill_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, writedata_st2, mem_rw_st2, byteen_st2, req_tid_st2, tag_st2})
     );
@@ -554,14 +552,13 @@ end
 
     wire crsq_push_st2 = core_req_hit_st2 && !mem_rw_st2;
 
-    VX_generic_register #(
-        .N(1 + 1+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + BANK_LINE_SIZE  + 1 + WORD_SIZE + `WORD_WIDTH + `BANK_LINE_WIDTH + `REQS_BITS + `REQ_TAG_WIDTH),
-        .R(1)
+    VX_pipe_register #(
+        .DATAW  (1 + 1+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `TAG_SELECT_BITS + BANK_LINE_SIZE  + 1 + WORD_SIZE + `WORD_WIDTH + `BANK_LINE_WIDTH + `REQS_BITS + `REQ_TAG_WIDTH),
+        .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
-        .stall    (pipeline_stall),
-        .flush    (1'b0),
+        .enable   (!pipeline_stall),
         .data_in  ({valid_st2, mshr_push_st2, crsq_push_st2, dreq_push_st2, do_writeback_st2, incoming_fill_qual_st2, force_miss_st2, is_mshr_st2, addr_st2, wsel_st2, writeword_st2, readtag_st2, miss_st2, dirtyb_st2, mem_rw_st2, byteen_st2, readword_st2, readdata_st2, req_tid_st2, tag_st2}),
         .data_out ({valid_st3, mshr_push_st3, crsq_push_st3, dreq_push_st3, do_writeback_st3, incoming_fill_st3,      force_miss_st3, is_mshr_st3, addr_st3, wsel_st3, writeword_st3, readtag_st3, miss_st3, dirtyb_st3, mem_rw_st3, byteen_st3, readword_st3, readdata_st3, req_tid_st3, tag_st3})
     );    
@@ -581,12 +578,7 @@ end
 
     wire mshr_push = mshr_push_unqual
                   && !crsq_push_stall 
-                  && !dreq_push_stall;                    
-
-    wire mshr_full;
-    always @(posedge clk) begin
-        assert(!mshr_push || !mshr_full); // mmshr stall is detected before issuing new requests
-    end
+                  && !dreq_push_stall;
 
     wire incoming_fill_qual_st3 = (!drsq_empty && (addr_st3 == drsq_addr_st0)) || incoming_fill_st3;
 
@@ -632,7 +624,7 @@ end
             .enqueue_data_st3   ({writeword_st3, req_tid_st3, tag_st3, mem_rw_st3, byteen_st3, wsel_st3}),
             .enqueue_is_mshr_st3(is_mshr_st3),
             .enqueue_ready_st3  (mshr_init_ready_state_st3),
-            .enqueue_full       (mshr_full),
+            `UNUSED_PIN (enqueue_full),
 
             // fill
             .update_ready_st0   (update_ready_st0),
@@ -655,7 +647,6 @@ end
         `UNUSED_VAR (byteen_st3)
         `UNUSED_VAR (incoming_fill_st3)
         assign mshr_pending_hazard_unqual_st0 = 0;
-        assign mshr_full = 0;
         assign mshr_valid_st0 = 0;
         assign mshr_addr_st0 = 0;
         assign mshr_wsel_st0 = 0;
@@ -684,7 +675,7 @@ end
     wire [CORE_TAG_WIDTH-1:0] crsq_tag_st3  = CORE_TAG_WIDTH'(tag_st3);
     wire [`WORD_WIDTH-1:0]    crsq_data_st3 = readword_st3;
   
-    VX_generic_queue #(
+    VX_fifo_queue #(
         .DATAW    (`REQS_BITS + CORE_TAG_WIDTH + `WORD_WIDTH), 
         .SIZE     (CRSQ_SIZE),
         .BUFFERED (1),    
@@ -726,7 +717,7 @@ end
     wire [BANK_LINE_SIZE-1:0] dreq_byteen = writeback ? dirtyb_st3 : {BANK_LINE_SIZE{1'b1}};
 
     if (DRAM_ENABLE) begin       
-        VX_generic_queue #(
+        VX_fifo_queue #(
             .DATAW    (1 + BANK_LINE_SIZE + `LINE_ADDR_WIDTH + `BANK_LINE_WIDTH), 
             .SIZE     (DREQ_SIZE),
             .BUFFERED (1),
