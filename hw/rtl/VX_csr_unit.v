@@ -125,6 +125,8 @@ module VX_csr_unit #(
                                                                       csr_read_data_s1;
     end         
 
+    assign csr_pipe_rsp_if.eop = 1'b1;
+
     // can accept new request?
     assign csr_pipe_req_if.ready = ~(stall_out || stall_in);
 

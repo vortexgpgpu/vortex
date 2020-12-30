@@ -106,6 +106,8 @@ module VX_alu_unit #(
         .data_in  ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.tmask,    alu_req_if.PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_op,   br_dest,            cmp_result}),
         .data_out ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, br_op_r, branch_ctl_if.dest, cmp_result_r})
     );
+
+    assign alu_commit_if.eop = 1'b1;
     
     wire is_less  = cmp_result_r[32];
     wire is_equal = ~(| cmp_result_r[31:0]);        

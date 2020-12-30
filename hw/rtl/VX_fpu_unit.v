@@ -161,6 +161,8 @@ module VX_fpu_unit #(
         .data_out ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, has_fflags_r, fflags_r})
     );
 
+    assign fpu_commit_if.eop = 1'b1;
+
     assign ready_out = ~stall_out;
 
     // CSR fflags Update    

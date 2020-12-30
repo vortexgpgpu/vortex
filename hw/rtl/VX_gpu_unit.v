@@ -86,6 +86,8 @@ module VX_gpu_unit #(
         .data_out ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier})
     );  
 
+    assign gpu_commit_if.eop = 1'b1;
+
     assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready;
     assign warp_ctl_if.wid   = gpu_commit_if.wid;
 

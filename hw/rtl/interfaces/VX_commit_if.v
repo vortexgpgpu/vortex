@@ -12,6 +12,7 @@ interface VX_commit_if ();
     wire [`NUM_THREADS-1:0][31:0] data;
     wire [`NR_BITS-1:0]     rd;
     wire                    wb;
+    wire                    eop;
     wire                    ready;  
 
 endinterface

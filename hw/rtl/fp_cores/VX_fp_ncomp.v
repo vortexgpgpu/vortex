@@ -44,12 +44,6 @@ module VX_fp_ncomp #(
     fp_type_t [LANES-1:0]   tmp_a_type, tmp_b_type;
     wire [LANES-1:0]        tmp_a_smaller, tmp_ab_equal;
 
-    wire [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
-    wire [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
-    wire [LANES-1:0][31:0] fsgnj_res;    // result of sign injection
-    wire [LANES-1:0][31:0] fcmp_res;     // result of comparison
-    fflags_t [LANES-1:0]   fcmp_fflags;  // comparison fflags
-
     // Setup
     for (genvar i = 0; i < LANES; i++) begin
         assign     tmp_a_sign[i] = dataa[i][31]; 
@@ -103,6 +97,7 @@ module VX_fp_ncomp #(
     ); 
 
     // FCLASS
+    reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin 
             if (a_type_s0[i].is_normal) begin
@@ -126,7 +121,8 @@ module VX_fp_ncomp #(
         end
     end
 
-    // Min/Max
+    // Min/Max    
+    reg [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             if (a_type_s0[i].is_nan && b_type_s0[i].is_nan)
@@ -145,7 +141,8 @@ module VX_fp_ncomp #(
         end
     end
 
-    // Sign injection
+    // Sign injection    
+    reg [LANES-1:0][31:0] fsgnj_res;    // result of sign injection
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm_s0)
@@ -158,6 +155,8 @@ module VX_fp_ncomp #(
     end
 
     // Comparison    
+    reg [LANES-1:0][31:0] fcmp_res;     // result of comparison
+    fflags_t [LANES-1:0]   fcmp_fflags;  // comparison fflags
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm_s0)
