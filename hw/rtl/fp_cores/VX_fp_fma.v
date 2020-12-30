@@ -34,13 +34,12 @@ module VX_fp_fma #(
 
     input wire  ready_out,
     output wire valid_out
-);    
-    
+);
+
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin
-
+    for (genvar i = 0; i < LANES; i++) begin       
         reg [31:0] a, b, c;
 
         always @(*) begin

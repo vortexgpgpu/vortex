@@ -32,7 +32,7 @@ module VX_fp_cvt #(
     input wire  ready_out,
     output wire valid_out
 );   
-    //! Constants
+    // Constants
  
     localparam MAN_BITS = 23;
     localparam EXP_BITS = 8;
@@ -58,8 +58,7 @@ module VX_fp_cvt #(
     localparam NUM_FP_STICKY  = 2 * INT_MAN_WIDTH - MAN_BITS - 1;   // removed mantissa, 1. and R
     localparam NUM_INT_STICKY = 2 * INT_MAN_WIDTH - MAX_INT_WIDTH;  // removed int and R
     
-    //*------------------------------------------------
-    //! Input processing
+    // Input processing
     
     fp_type_t [LANES-1:0] in_a_type;
       
@@ -104,8 +103,7 @@ module VX_fp_cvt #(
         assign mant_is_zero[i] = ~mant_is_nonzero;
     end
 
-    //*------------------------------------------------
-    //! Stage0 pipeline
+    // Pipeline stage0
     
     wire                    valid_in_s0;
     wire [TAGW-1:0]         tag_in_s0;
@@ -133,8 +131,7 @@ module VX_fp_cvt #(
         .data_out ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0, renorm_shamt_s0, mant_is_zero_s0})
     );
     
-    //*------------------------------------------------
-    //! Normalization
+    // Normalization
 
     wire        [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant;      // normalized input mantissa    
     wire signed [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp;       // unbiased true exponent
@@ -169,8 +166,7 @@ module VX_fp_cvt #(
     `IGNORE_WARNINGS_END
     end
 
-    //*------------------------------------------------
-    //! Stage1 pipeline
+    // Pipeline stage1
     
     wire                    valid_in_s1;
     wire [TAGW-1:0]         tag_in_s1;
@@ -196,8 +192,7 @@ module VX_fp_cvt #(
         .data_out ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, in_a_type_s1, mant_is_zero_s1, input_sign_s1, input_mant_s1, input_exp_s1, destination_exp_s1})
     );
 
-    //*------------------------------------------------
-    //! Casting
+    // Casting
     reg  [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp;          // after eventual adjustments
 
     reg  [LANES-1:0][2*INT_MAN_WIDTH:0]  preshift_mant;     // mantissa before final shift
@@ -271,8 +266,7 @@ module VX_fp_cvt #(
     `IGNORE_WARNINGS_END
     end
 
-    //*------------------------------------------------
-    //! Rouding and classification
+    // Rouding and classification
 
     wire [LANES-1:0]        rounded_sign;
     wire [LANES-1:0][31:0]  rounded_abs;     // absolute value of result after rounding    
@@ -302,8 +296,7 @@ module VX_fp_cvt #(
         );
     end
 
-    //*------------------------------------------------
-    //! Stage2 pipeline
+    // Pipeline stage2
 
     wire                    valid_in_s2;
     wire [TAGW-1:0]         tag_in_s2;
@@ -348,8 +341,7 @@ module VX_fp_cvt #(
         assign rounded_int_res_zero[i] = (rounded_int_res[i] == 0);
     end
 
-    //*------------------------------------------------
-    //! FP Special case handling
+    // FP Special case handling
 
     wire [LANES-1:0][31:0]  fp_special_result;
     fflags_t [LANES-1:0]    fp_special_status;
@@ -370,8 +362,7 @@ module VX_fp_cvt #(
                                                               : {1'b0, QNAN_EXPONENT, QNAN_MANTISSA}; // qNaN
     end
 
-    //*------------------------------------------------
-    //! INT Special case handling
+    // INT Special case handling
 
     reg [LANES-1:0][31:0]   int_special_result;
     fflags_t [LANES-1:0]    int_special_status;
@@ -399,8 +390,7 @@ module VX_fp_cvt #(
         assign int_special_status[i] = {1'b1, 4'h0};
     end
 
-    //*------------------------------------------------
-    //! Result selection and Output handshake
+    // Result selection and Output handshake
 
     fflags_t [LANES-1:0] tmp_fflags;    
     wire [LANES-1:0][31:0] tmp_result;

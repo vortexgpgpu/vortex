@@ -38,27 +38,17 @@ module VX_fp_ncomp #(
                 SIG_NAN     = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
-    reg valid_in_r;
-    reg [TAGW-1:0] tag_in_r;
-    reg [`FPU_BITS-1:0] op_type_r;
-    reg [`FRM_BITS-1:0] frm_r;
+    wire [LANES-1:0]        tmp_a_sign, tmp_b_sign;
+    wire [LANES-1:0][7:0]   tmp_a_exponent, tmp_b_exponent;
+    wire [LANES-1:0][22:0]  tmp_a_mantissa, tmp_b_mantissa;
+    fp_type_t [LANES-1:0]   tmp_a_type, tmp_b_type;
+    wire [LANES-1:0]        tmp_a_smaller, tmp_ab_equal;
 
-    reg [LANES-1:0][31:0]  dataa_r;
-    reg [LANES-1:0][31:0]  datab_r;
-
-    reg [LANES-1:0]       a_sign, b_sign, tmp_a_sign, tmp_b_sign;
-    reg [LANES-1:0][7:0]  a_exponent, tmp_a_exponent, tmp_b_exponent;
-    reg [LANES-1:0][22:0] a_mantissa, tmp_a_mantissa, tmp_b_mantissa;
-    fp_type_t [LANES-1:0] a_type, b_type, tmp_a_type, tmp_b_type;
-    reg [LANES-1:0] a_smaller, ab_equal, tmp_a_smaller, tmp_ab_equal;
-
-    reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
-    reg [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
-    reg [LANES-1:0][31:0] fsgnj_res;    // result of sign injection
-    reg [LANES-1:0][31:0] fcmp_res;     // result of comparison
-    fflags_t [LANES-1:0]  fcmp_fflags;  // comparison fflags
-
-    wire stall = ~ready_out && valid_out;
+    wire [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
+    wire [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
+    wire [LANES-1:0][31:0] fsgnj_res;    // result of sign injection
+    wire [LANES-1:0][31:0] fcmp_res;     // result of comparison
+    fflags_t [LANES-1:0]   fcmp_fflags;  // comparison fflags
 
     // Setup
     for (genvar i = 0; i < LANES; i++) begin
@@ -86,6 +76,21 @@ module VX_fp_ncomp #(
         assign tmp_ab_equal[i]  = (dataa[i] == datab[i]) | (tmp_a_type[i].is_zero & tmp_b_type[i].is_zero);
     end  
 
+    // Pipeline stage0
+
+    wire                    valid_in_s0;
+    wire [TAGW-1:0]         tag_in_s0;
+    wire [`FPU_BITS-1:0]    op_type_s0;
+    wire [`FRM_BITS-1:0]    frm_s0;
+    wire [LANES-1:0][31:0]  dataa_s0, datab_s0;
+    wire [LANES-1:0]        a_sign_s0, b_sign_s0;
+    wire [LANES-1:0][7:0]   a_exponent_s0;
+    wire [LANES-1:0][22:0]  a_mantissa_s0;
+    fp_type_t [LANES-1:0]   a_type_s0, b_type_s0;
+    wire [LANES-1:0]        a_smaller_s0, ab_equal_s0;
+
+    wire stall;
+
     VX_pipe_register #(
         .DATAW  (1 + TAGW + `FPU_BITS + `FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_type_t) + 1 + 1)),
         .RESETW (1)
@@ -93,27 +98,27 @@ module VX_fp_ncomp #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in,   tag_in,   op_type,   frm,   dataa,   datab,   tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
-        .data_out ({valid_in_r, tag_in_r, op_type_r, frm_r, dataa_r, datab_r, a_sign,     b_sign,     a_exponent,     a_mantissa,     a_type,     b_type,     a_smaller,     ab_equal})
+        .data_in  ({valid_in,    tag_in,    op_type,    frm,    dataa,    datab,    tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
+        .data_out ({valid_in_s0, tag_in_s0, op_type_s0, frm_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_exponent_s0,  a_mantissa_s0,  a_type_s0,  b_type_s0,  a_smaller_s0,  ab_equal_s0})
     ); 
 
     // FCLASS
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin 
-            if (a_type[i].is_normal) begin
-                fclass_mask[i] = a_sign[i] ? NEG_NORM : POS_NORM;
+            if (a_type_s0[i].is_normal) begin
+                fclass_mask[i] = a_sign_s0[i] ? NEG_NORM : POS_NORM;
             end 
-            else if (a_type[i].is_inf) begin
-                fclass_mask[i] = a_sign[i] ? NEG_INF : POS_INF;
+            else if (a_type_s0[i].is_inf) begin
+                fclass_mask[i] = a_sign_s0[i] ? NEG_INF : POS_INF;
             end 
-            else if (a_type[i].is_zero) begin
-                fclass_mask[i] = a_sign[i] ? NEG_ZERO : POS_ZERO;
+            else if (a_type_s0[i].is_zero) begin
+                fclass_mask[i] = a_sign_s0[i] ? NEG_ZERO : POS_ZERO;
             end 
-            else if (a_type[i].is_subnormal) begin
-                fclass_mask[i] = a_sign[i] ? NEG_SUBNORM : POS_SUBNORM;
+            else if (a_type_s0[i].is_subnormal) begin
+                fclass_mask[i] = a_sign_s0[i] ? NEG_SUBNORM : POS_SUBNORM;
             end 
-            else if (a_type[i].is_nan) begin
-                fclass_mask[i] = {22'h0, a_type[i].is_quiet, a_type[i].is_signaling, 8'h0};
+            else if (a_type_s0[i].is_nan) begin
+                fclass_mask[i] = {22'h0, a_type_s0[i].is_quiet, a_type_s0[i].is_signaling, 8'h0};
             end 
             else begin                     
                 fclass_mask[i] = QUT_NAN;
@@ -124,16 +129,16 @@ module VX_fp_ncomp #(
     // Min/Max
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            if (a_type[i].is_nan && b_type[i].is_nan)
+            if (a_type_s0[i].is_nan && b_type_s0[i].is_nan)
                 fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
-            else if (a_type[i].is_nan) 
-                fminmax_res[i] = datab_r[i];
-            else if (b_type[i].is_nan) 
-                fminmax_res[i] = dataa_r[i];
+            else if (a_type_s0[i].is_nan) 
+                fminmax_res[i] = datab_s0[i];
+            else if (b_type_s0[i].is_nan) 
+                fminmax_res[i] = dataa_s0[i];
             else begin 
-                case (frm_r) // use LSB to distinguish MIN and MAX
-                    3: fminmax_res[i] = a_smaller[i] ? dataa_r[i] : datab_r[i];
-                    4: fminmax_res[i] = a_smaller[i] ? datab_r[i] : dataa_r[i];
+                case (frm_s0) // use LSB to distinguish MIN and MAX
+                    3: fminmax_res[i] = a_smaller_s0[i] ? dataa_s0[i] : datab_s0[i];
+                    4: fminmax_res[i] = a_smaller_s0[i] ? datab_s0[i] : dataa_s0[i];
               default: fminmax_res[i] = 'x;  // don't care value
                 endcase
             end
@@ -143,10 +148,10 @@ module VX_fp_ncomp #(
     // Sign injection
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            case (frm_r)
-                0: fsgnj_res[i] = { b_sign[i], a_exponent[i], a_mantissa[i]};
-                1: fsgnj_res[i] = {~b_sign[i], a_exponent[i], a_mantissa[i]};
-                2: fsgnj_res[i] = { a_sign[i] ^ b_sign[i], a_exponent[i], a_mantissa[i]};
+            case (frm_s0)
+                0: fsgnj_res[i] = { b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
+                1: fsgnj_res[i] = {~b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
+                2: fsgnj_res[i] = { a_sign_s0[i] ^ b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
           default: fsgnj_res[i] = 'x;  // don't care value
             endcase
         end
@@ -155,32 +160,32 @@ module VX_fp_ncomp #(
     // Comparison    
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            case (frm_r)
+            case (frm_s0)
                 `FRM_RNE: begin
                     fcmp_fflags[i] = 5'h0;
-                    if (a_type[i].is_nan || b_type[i].is_nan) begin
+                    if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
                         fcmp_fflags[i].NV = 1'b1;
                     end else begin
-                        fcmp_res[i] = {31'h0, (a_smaller[i] | ab_equal[i])};
+                        fcmp_res[i] = {31'h0, (a_smaller_s0[i] | ab_equal_s0[i])};
                     end
                 end
                 `FRM_RTZ: begin
                     fcmp_fflags[i] = 5'h0;
-                    if (a_type[i].is_nan || b_type[i].is_nan) begin
+                    if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
                         fcmp_fflags[i].NV = 1'b1;
                     end else begin
-                        fcmp_res[i] = {31'h0, (a_smaller[i] & ~ab_equal[i])};
+                        fcmp_res[i] = {31'h0, (a_smaller_s0[i] & ~ab_equal_s0[i])};
                     end                    
                 end
                 `FRM_RDN: begin
                     fcmp_fflags[i] = 5'h0;
-                    if (a_type[i].is_nan || b_type[i].is_nan) begin
+                    if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
-                        fcmp_fflags[i].NV = a_type[i].is_signaling | b_type[i].is_signaling; 
+                        fcmp_fflags[i].NV = a_type_s0[i].is_signaling | b_type_s0[i].is_signaling; 
                     end else begin
-                        fcmp_res[i] = {31'h0, ab_equal[i]};
+                        fcmp_res[i] = {31'h0, ab_equal_s0[i]};
                     end
                 end
                 default: begin
@@ -198,7 +203,7 @@ module VX_fp_ncomp #(
 
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            case (op_type_r)
+            case (op_type_s0)
                 `FPU_CLASS: begin
                     tmp_result[i] = fclass_mask[i];
                     tmp_fflags[i] = 'x;
@@ -209,7 +214,7 @@ module VX_fp_ncomp #(
                 end      
                 //`FPU_MISC:
                 default: begin
-                    case (frm_r)
+                    case (frm_s0)
                         0,1,2: begin
                             tmp_result[i] = fsgnj_res[i];
                             tmp_fflags[i] = 'x;
@@ -217,7 +222,7 @@ module VX_fp_ncomp #(
                         3,4: begin
                             tmp_result[i] = fminmax_res[i];
                             tmp_fflags[i] = 0;
-                            tmp_fflags[i].NV = a_type[i].is_signaling | b_type[i].is_signaling;
+                            tmp_fflags[i].NV = a_type_s0[i].is_signaling | b_type_s0[i].is_signaling;
                         end
                         //5,6,7: 
                         default: begin
@@ -230,8 +235,10 @@ module VX_fp_ncomp #(
         end
     end
 
-    wire tmp_has_fflags = ((op_type_r == `FPU_MISC) && (frm == 3 || frm == 4)) // MIN/MAX 
-                       || (op_type_r == `FPU_CMP); // CMP
+    wire tmp_has_fflags = ((op_type_s0 == `FPU_MISC) && (frm == 3 || frm == 4)) // MIN/MAX 
+                       || (op_type_s0 == `FPU_CMP); // CMP
+
+    assign stall = ~ready_out && valid_out;
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS)),
@@ -240,8 +247,8 @@ module VX_fp_ncomp #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in_r, tag_in_r, tmp_result, tmp_has_fflags, tmp_fflags}),
-        .data_out ({valid_out,  tag_out,  result,     has_fflags,     fflags})
+        .data_in  ({valid_in_s0, tag_in_s0, tmp_result, tmp_has_fflags, tmp_fflags}),
+        .data_out ({valid_out,   tag_out,   result,     has_fflags,     fflags})
     );
 
     assign ready_in = ~stall;
