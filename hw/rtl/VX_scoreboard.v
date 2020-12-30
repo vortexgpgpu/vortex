@@ -8,44 +8,41 @@ module VX_scoreboard  #(
 
     VX_decode_if    ibuf_deq_if,
     VX_writeback_if writeback_if,  
+    input wire [`NW_BITS-1:0] deq_wid_next,
     output wire     delay
 );
-    reg [`NUM_THREADS-1:0] inuse_registers [(`NUM_WARPS * `NUM_REGS)-1:0];  
-    reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_reg_mask;
-    wire [`NUM_REGS-1:0] inuse_regs;
-    wire [`NUM_THREADS-1:0] inuse_registers_n;
+    reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
+    reg [`NUM_REGS-1:0] deq_inuse_regs;
+    wire [`NUM_REGS-1:0] deq_real_inuse_regs;
     
-    assign inuse_regs = inuse_reg_mask[ibuf_deq_if.wid] & ibuf_deq_if.used_regs;
+    assign deq_real_inuse_regs = deq_inuse_regs & ibuf_deq_if.used_regs;
 
-    assign delay = (| inuse_regs);
+    assign delay = (| deq_real_inuse_regs);
     
     wire reserve_reg = ibuf_deq_if.valid && ibuf_deq_if.ready && (ibuf_deq_if.wb != 0);
 
-    wire release_reg = writeback_if.valid && writeback_if.ready;
+    wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
 
-    assign inuse_registers_n = inuse_registers[{writeback_if.wid, writeback_if.rd}] & ~writeback_if.tmask;
+    always @(*) begin
+        inuse_regs_n = inuse_regs;
+        if (reserve_reg) begin
+            inuse_regs_n[ibuf_deq_if.wid][ibuf_deq_if.rd] = 1;                
+        end       
+        if (release_reg) begin
+            inuse_regs_n[writeback_if.wid][writeback_if.rd] = 0;
+            assert(inuse_regs[writeback_if.wid][writeback_if.rd] != 0) 
+                else $error("*** %t: core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
+                            $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd);
+        end
+    end
 
     always @(posedge clk) begin
         if (reset) begin
-            for (integer w = 0; w < `NUM_WARPS; w++) begin
-                for (integer i = 0; i < `NUM_REGS; i++) begin
-                    inuse_registers[w * `NUM_REGS + i] <= 0;                    
-                end
-                inuse_reg_mask[w] <= `NUM_REGS'(0);
-            end            
+            inuse_regs <= (`NUM_WARPS*`NUM_REGS)'(0);
         end else begin
-            if (reserve_reg) begin
-                inuse_registers[{ibuf_deq_if.wid, ibuf_deq_if.rd}] <= ibuf_deq_if.tmask;
-                inuse_reg_mask[ibuf_deq_if.wid][ibuf_deq_if.rd] <= 1;
-            end       
-            if (release_reg) begin
-                assert(inuse_reg_mask[writeback_if.wid][writeback_if.rd] != 0) 
-                    else $error("*** %t: core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
-                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd);            
-                inuse_registers[{writeback_if.wid, writeback_if.rd}] <= inuse_registers_n;
-                inuse_reg_mask[writeback_if.wid][writeback_if.rd] <= (| inuse_registers_n);
-            end
-        end       
+            inuse_regs <= inuse_regs_n;
+        end
+        deq_inuse_regs <= inuse_regs_n[deq_wid_next];     
     end
 
 `ifdef DBG_PRINT_PIPELINE
@@ -53,7 +50,7 @@ module VX_scoreboard  #(
         if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
             $display("%t: core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
-                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3]);            
+                    deq_real_inuse_regs[ibuf_deq_if.rd], deq_real_inuse_regs[ibuf_deq_if.rs1], deq_real_inuse_regs[ibuf_deq_if.rs2], deq_real_inuse_regs[ibuf_deq_if.rs3]);            
         end
     end    
 `endif
@@ -66,7 +63,7 @@ module VX_scoreboard  #(
             stall_ctr <= stall_ctr + 1;
             assert(stall_ctr < 100000) else $error("*** %t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
-                    inuse_regs[ibuf_deq_if.rd], inuse_regs[ibuf_deq_if.rs1], inuse_regs[ibuf_deq_if.rs2], inuse_regs[ibuf_deq_if.rs3]);            
+                    deq_real_inuse_regs[ibuf_deq_if.rd], deq_real_inuse_regs[ibuf_deq_if.rs1], deq_real_inuse_regs[ibuf_deq_if.rs2], deq_real_inuse_regs[ibuf_deq_if.rs3]);            
         end else if (ibuf_deq_if.valid && ibuf_deq_if.ready) begin
             stall_ctr <= 0;
         end

@@ -138,6 +138,8 @@ module VX_mul_unit #(
         .data_out ({mul_commit_if.valid, mul_commit_if.wid, mul_commit_if.tmask, mul_commit_if.PC, mul_commit_if.rd, mul_commit_if.wb, mul_commit_if.data})
     );
 
+    assign mul_commit_if.eop = 1'b1;
+
     // can accept new request?
     assign mul_req_if.ready = is_div_op ? div_ready_in : mul_ready_in;
     

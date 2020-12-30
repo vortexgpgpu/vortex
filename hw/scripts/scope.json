@@ -185,6 +185,7 @@
             "writeback_tmask":"`NUM_THREADS",
             "writeback_rd":"`NR_BITS",
             "writeback_data":"`NUM_THREADS * 32",
+            "writeback_eop": 1,
             "!scoreboard_delay": 1,        
             "!execute_delay": 1
         },   

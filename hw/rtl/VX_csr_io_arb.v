@@ -63,6 +63,7 @@ module VX_csr_io_arb (
     assign csr_commit_if.PC     = csr_pipe_rsp_if.PC;
     assign csr_commit_if.rd     = csr_pipe_rsp_if.rd;
     assign csr_commit_if.wb     = csr_pipe_rsp_if.wb;
+    assign csr_commit_if.eop    = csr_pipe_rsp_if.eop;
     assign csr_commit_if.data   = csr_pipe_rsp_if.data;
 
     assign csr_pipe_rsp_if.ready = select_io_rsp ? csr_io_rsp_ready : csr_commit_if.ready;
