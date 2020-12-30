@@ -34,7 +34,7 @@ module VX_fp_rounding #(
             `FRM_RNE: // Decide accoring to round/sticky bits
                 case (round_sticky_bits_i)
                       2'b00, 
-                      2'b01: round_up = 1'b0;     // < ulp/2 away, round down
+                      2'b01: round_up = 1'b0;            // < ulp/2 away, round down
                       2'b10: round_up = abs_value_i[0];  // = ulp/2 away, round towards even result
                       2'b11: round_up = 1'b1;            // > ulp/2 away, round up
                     default: round_up = 1'bx;
