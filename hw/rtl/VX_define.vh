@@ -234,8 +234,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CACHE_REQ_INFO     // pc,  rd,        wid       
-`define DBG_CACHE_REQ_MDATAW    (32 + `NR_BITS + `NW_BITS)
+`ifdef DBG_CACHE_REQ_INFO     //  wid       PC 
+`define DBG_CACHE_REQ_MDATAW    (`NW_BITS + 32)
 `else
 `define DBG_CACHE_REQ_MDATAW    0
 `endif

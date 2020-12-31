@@ -25,9 +25,7 @@ module VX_tag_access #(
 `ifdef DBG_CACHE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
     input wire[31:0]                    debug_pc,
-    input wire[`NR_BITS-1:0]            debug_rd,
     input wire[`NW_BITS-1:0]            debug_wid,
-    input wire[`UP(CORE_TAG_ID_BITS)-1:0] debug_tagid,
 `IGNORE_WARNINGS_END
 `endif
 

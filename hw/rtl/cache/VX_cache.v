@@ -82,9 +82,7 @@ module VX_cache #(
     input  wire                             dram_rsp_valid,    
     input  wire [`BANK_LINE_WIDTH-1:0]      dram_rsp_data,
     input  wire [DRAM_TAG_WIDTH-1:0]        dram_rsp_tag,
-    output wire                             dram_rsp_ready,
-
-    output wire [NUM_BANKS-1:0] miss_vec
+    output wire                             dram_rsp_ready
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
@@ -112,9 +110,6 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_dram_req_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_dram_rsp_ready;
-
-    wire [NUM_BANKS-1:0]                        per_bank_miss; 
-    assign miss_vec = per_bank_miss;
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -189,8 +184,6 @@ module VX_cache #(
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_rsp_addr;
         wire                        curr_bank_dram_rsp_ready;
 
-        wire                        curr_bank_miss; 
-
         // Core Req
         assign curr_bank_core_req_valid   = per_bank_core_req_valid[i];
         assign curr_bank_core_req_tid     = per_bank_core_req_tid[i];
@@ -230,9 +223,6 @@ module VX_cache #(
         end
         assign curr_bank_dram_rsp_data    = dram_rsp_data;
         assign per_bank_dram_rsp_ready[i] = curr_bank_dram_rsp_ready;
-
-        //Misses
-        assign per_bank_miss[i] = curr_bank_miss; 
         
         VX_bank #(                
             .BANK_ID            (i),
@@ -257,6 +247,13 @@ module VX_cache #(
             
             .clk                (clk),
             .reset              (reset),     
+
+        `ifdef PERF_ENABLE
+            .perf_read_misses   (perf_read_miss_per_bank[i]),
+            .perf_write_misses  (perf_write_miss_per_bank[i]),
+            .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
+            .perf_pipe_stalls   (perf_pipe_stall_per_bank[i]),
+        `endif
                        
             // Core request
             .core_req_valid     (curr_bank_core_req_valid),                  
@@ -287,17 +284,7 @@ module VX_cache #(
             .dram_rsp_valid     (curr_bank_dram_rsp_valid),                
             .dram_rsp_data      (curr_bank_dram_rsp_data),
             .dram_rsp_addr      (curr_bank_dram_rsp_addr),
-            .dram_rsp_ready     (curr_bank_dram_rsp_ready),
-
-        `ifdef PERF_ENABLE
-            .perf_read_misses   (perf_read_miss_per_bank[i]),
-            .perf_write_misses  (perf_write_miss_per_bank[i]),
-            .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
-            .perf_pipe_stalls   (perf_pipe_stall_per_bank[i]),
-        `endif
-
-            //Misses
-            .misses             (curr_bank_miss)
+            .dram_rsp_ready     (curr_bank_dram_rsp_ready)
         );
     end   
 
