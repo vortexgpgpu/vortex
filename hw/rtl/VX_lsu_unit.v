@@ -172,7 +172,7 @@ module VX_lsu_unit #(
     assign dcache_req_if.data   = req_data;  
 
 `ifdef DBG_CACHE_REQ_INFO
-    assign dcache_req_if.tag = {`NUM_THREADS{{req_pc, req_rd, req_wid, req_tag}}};
+    assign dcache_req_if.tag = {`NUM_THREADS{{req_pc, req_wid, req_tag}}};
 `else
     assign dcache_req_if.tag = {`NUM_THREADS{req_tag}};
 `endif

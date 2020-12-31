@@ -204,10 +204,7 @@ module VX_cluster #(
             .dram_rsp_valid     (dram_rsp_valid),
             .dram_rsp_tag       (dram_rsp_tag),
             .dram_rsp_data      (dram_rsp_data),
-            .dram_rsp_ready     (dram_rsp_ready),   
-
-            // Miss status
-            `UNUSED_PIN (miss_vec)
+            .dram_rsp_ready     (dram_rsp_ready)
         );
 
     end else begin
