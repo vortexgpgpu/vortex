@@ -32,7 +32,7 @@
 `endif
 
 `ifndef SM_ENABLE
-`define SM_ENABLE 0
+`define SM_ENABLE 1
 `endif
 
 `ifndef GLOBAL_BLOCK_SIZE
@@ -326,7 +326,7 @@
 
 // Size of cache in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE 8192
+`define SMEM_SIZE (1024*4*4)
 `endif
 
 // Number of banks
