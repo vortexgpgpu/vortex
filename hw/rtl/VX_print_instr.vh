@@ -136,7 +136,7 @@ task print_ex_op;
                 default:    $write("?");
             endcase
         end    
-        default:;    
+        default: $write("?");
     endcase        
   end
 endtask

@@ -136,10 +136,7 @@ module VX_mem_unit # (
         .dram_rsp_valid     (icache_dram_rsp_if.valid),        
         .dram_rsp_data      (icache_dram_rsp_if.data),
         .dram_rsp_tag       (icache_dram_rsp_if.tag),
-        .dram_rsp_ready     (icache_dram_rsp_if.ready),
-
-        // Miss status
-        `UNUSED_PIN (miss_vec)
+        .dram_rsp_ready     (icache_dram_rsp_if.ready)
     );
 
     VX_cache #(
@@ -197,10 +194,7 @@ module VX_mem_unit # (
         .dram_rsp_valid     (dcache_dram_rsp_if.valid),        
         .dram_rsp_data      (dcache_dram_rsp_if.data),
         .dram_rsp_tag       (dcache_dram_rsp_if.tag),
-        .dram_rsp_ready     (dcache_dram_rsp_if.ready),
-
-        // Miss status
-        `UNUSED_PIN (miss_vec)
+        .dram_rsp_ready     (dcache_dram_rsp_if.ready)
     ); 
 
     if (`SM_ENABLE) begin
@@ -260,10 +254,7 @@ module VX_mem_unit # (
             .dram_rsp_valid     (0),
             .dram_rsp_data      (0),
             .dram_rsp_tag       (0),
-            `UNUSED_PIN (dram_rsp_ready),
-
-            // Miss status
-            `UNUSED_PIN (miss_vec)
+            `UNUSED_PIN (dram_rsp_ready)
         );
     
     end

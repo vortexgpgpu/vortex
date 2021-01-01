@@ -18,7 +18,7 @@ module VX_data_store #(
 
     input  wire                             write_enable,
     input  wire                             write_fill,
-    input  wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] byte_enable,
+    input  wire[BANK_LINE_SIZE-1:0]         byte_enable,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
     input  wire[`BANK_LINE_WIDTH-1:0]       write_data,
 
