@@ -93,6 +93,9 @@ module VX_bank #(
     wire [31:0]         debug_pc_st1;
     wire [`NW_BITS-1:0] debug_wid_st1;
 
+    wire [31:0]         debug_pc_st12;
+    wire [`NW_BITS-1:0] debug_wid_st12;
+
     wire [31:0]         debug_pc_st2;
     wire [`NW_BITS-1:0] debug_wid_st2;
     /* verilator lint_on UNUSED */
@@ -213,7 +216,21 @@ module VX_bank #(
     wire [`REQ_TAG_WIDTH-1:0]       tag_st1;
     wire                            mem_rw_st1;
     wire [WORD_SIZE-1:0]            byteen_st1;
-    wire [`REQS_BITS-1:0]           req_tid_st1;
+    wire [`REQS_BITS-1:0]           req_tid_st1;    
+    wire                            core_req_hit_st1;
+    wire                            incoming_fill_st1;
+    wire                            do_writeback_st1;
+    wire                            mshr_push_st1;
+    wire                            crsq_push_st1;
+    wire                            dreq_push_st1;
+
+    wire                            valid_st12;
+    wire                            writeen_st12;
+    wire [`LINE_ADDR_WIDTH-1:0]     addr_st12;
+    wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st12;
+    wire [WORD_SIZE-1:0]            byteen_st12;
+    wire [`WORD_WIDTH-1:0]          writeword_st12;
+    wire [`REQ_TAG_WIDTH-1:0]       tag_st12;
     
     wire                            valid_st2;    
     wire [`UP(`WORD_SELECT_WIDTH)-1:0] wsel_st2;
@@ -228,14 +245,13 @@ module VX_bank #(
     wire                            miss_st2;
     wire                            force_miss_st2; 
     wire[`LINE_ADDR_WIDTH-1:0]      addr_st2;
-    wire                            writeen_st2;    
-    wire                            core_req_hit_st2;
-    wire                            incoming_fill_st2;
+    wire                            writeen_st2;       
     wire [`REQ_TAG_WIDTH-1:0]       tag_st2;
     wire                            mem_rw_st2;
     wire [WORD_SIZE-1:0]            byteen_st2;
-    wire [`REQS_BITS-1:0]           req_tid_st2;
-     
+    wire [`REQS_BITS-1:0]           req_tid_st2;    
+    wire                            core_req_hit_st2;
+    wire                            incoming_fill_st2; 
     wire                            do_writeback_st2;
     wire                            mshr_push_st2;
     wire                            crsq_push_st2;
@@ -392,9 +408,17 @@ if (DRAM_ENABLE) begin
         .writeen_out    (writeen_st1)
     );
 
-    wire core_req_hit_st1 = !is_fill_st1 && !miss_st1 && !force_miss_st1;
+    assign valid_st12       = valid_st2;
+    assign writeen_st12     = writeen_st2;
+    assign addr_st12        = addr_st2;
+    assign wsel_st12        = wsel_st2;
+    assign byteen_st12      = byteen_st2;
+    assign writeword_st12   = writeword_st2;
+    assign tag_st12         = tag_st2;
 
-    wire incoming_fill_st1 = !drsq_empty && (addr_st1 == drsq_addr_st0);
+    assign core_req_hit_st1 = !is_fill_st1 && !miss_st1 && !force_miss_st1;
+
+    assign incoming_fill_st1 = !drsq_empty && (addr_st1 == drsq_addr_st0);
 
     wire do_fill_req_st1 = miss_st1 
                         && !(WRITE_THROUGH && mem_rw_st1)
@@ -402,15 +426,60 @@ if (DRAM_ENABLE) begin
                          || (is_mshr_st1 && addr_st1 != addr_st2))
                         && !incoming_fill_st1;
 
-    wire do_writeback_st1 = (WRITE_THROUGH && mem_rw_st1) 
-                         || (!WRITE_THROUGH && dirty_st1 && is_fill_st1);
+    assign do_writeback_st1 = (WRITE_THROUGH && mem_rw_st1) 
+                           || (!WRITE_THROUGH && dirty_st1 && is_fill_st1);
 
-    wire dreq_push_st1 = do_fill_req_st1 || do_writeback_st1;
+    assign dreq_push_st1 = do_fill_req_st1 || do_writeback_st1;
 
-    wire mshr_push_st1 = (miss_st1 || force_miss_st1) 
-                      && !(WRITE_THROUGH && mem_rw_st1);
+    assign mshr_push_st1 = (miss_st1 || force_miss_st1) 
+                        && !(WRITE_THROUGH && mem_rw_st1);
 
-    wire crsq_push_st1 = core_req_hit_st1 && !mem_rw_st1;
+    assign crsq_push_st1 = core_req_hit_st1 && !mem_rw_st1;
+    
+end else begin
+
+    `UNUSED_VAR (mshr_pending_hazard_unqual_st0)
+    `UNUSED_VAR (drsq_push)
+    `UNUSED_VAR (dirty_st1)
+    `UNUSED_VAR (writeen_st2)
+
+`ifdef DBG_CACHE_REQ_INFO
+    assign debug_pc_st1  = debug_pc_st0;
+    assign debug_wid_st1 = debug_wid_st0;
+`endif
+    
+    assign is_fill_st1      = is_fill_st0;
+    assign is_mshr_st1      = is_mshr_st0;
+    assign valid_st1        = valid_st0;    
+    assign wsel_st1         = wsel_st0;
+    assign writeword_st1    = writeword_st0;
+    assign writedata_st1    = writedata_st0;
+    assign addr_st1         = creq_addr_st0[`LINE_SELECT_ADDR_RNG];    
+    assign tag_st1          = tag_st0;
+    assign mem_rw_st1       = mem_rw_st0;
+    assign byteen_st1       = byteen_st0;
+    assign req_tid_st1      = req_tid_st0;
+    assign dirty_st1        = 0;
+    assign readtag_st1      = 0;
+    assign miss_st1         = 0;
+    assign writeen_st1      = mem_rw_st0;    
+    assign force_miss_st1   = 0;
+
+    assign valid_st12       = valid_st0;
+    assign writeen_st12     = mem_rw_st0;
+    assign addr_st12        = addr_st0;
+    assign wsel_st12        = wsel_st0;
+    assign byteen_st12      = byteen_st0;
+    assign writeword_st12   = writeword_st0;
+    assign tag_st12         = tag_st0;
+    
+    assign incoming_fill_st1= 0;    
+    assign core_req_hit_st1 = 1; 
+    assign do_writeback_st1 = 0;
+    assign mshr_push_st1    = 0;
+    assign crsq_push_st1    = !mem_rw_st0;
+    assign dreq_push_st1    = 0;
+end 
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_WIDTH) + `WORD_WIDTH + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `BANK_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
@@ -442,60 +511,15 @@ if (DRAM_ENABLE) begin
         );
 
     end
-    
-end else begin
-
-    `UNUSED_VAR (mshr_pending_hazard_unqual_st0)
-    `UNUSED_VAR (drsq_push)
-    `UNUSED_VAR (addr_st0)
-    
-    assign is_fill_st1  = is_fill_st0;
-    assign is_mshr_st1  = is_mshr_st0;
-    assign valid_st1    = valid_st0;    
-    assign wsel_st1     = wsel_st0;
-    assign writeword_st1= writeword_st0;
-    assign writedata_st1= writedata_st0;
-    assign addr_st1     = creq_addr_st0[`LINE_SELECT_ADDR_RNG];
-    assign dirty_st1    = 0;
-    assign readtag_st1  = 0;
-    assign miss_st1     = 0;
-    assign writeen_st1  = mem_rw_st1;    
-    assign force_miss_st1 = 0;
-    assign tag_st1      = tag_st0;
-    assign mem_rw_st1   = mem_rw_st0;
-    assign byteen_st1   = byteen_st0;
-    assign req_tid_st1  = req_tid_st0;
-        
-    assign is_fill_st2  = is_fill_st1;
-    assign is_mshr_st2  = is_mshr_st1;
-    assign valid_st2    = valid_st1;
-    assign wsel_st2     = wsel_st1;
-    assign writeword_st2= writeword_st1;
-    assign writedata_st2= writedata_st1;
-    assign addr_st2     = addr_st1;
-    assign readtag_st2  = readtag_st1;
-    assign miss_st2     = miss_st1;
-    assign writeen_st2  = writeen_st1;
-    assign force_miss_st2 = force_miss_st1;
-    assign tag_st2      = tag_st1;
-    assign mem_rw_st2   = mem_rw_st1;
-    assign byteen_st2   = byteen_st1;
-    assign req_tid_st2  = req_tid_st1;
-    
-    assign incoming_fill_st2 = 0;     
-    assign do_writeback_st2  = 0;
-    assign mshr_push_st2     = 0;
-    assign crsq_push_st2     = 1;
-    assign dreq_push_st2     = 0;
-end
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_st2, debug_wid_st2} = tag_st2[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
-    end else begin
-        assign {debug_pc_st2, debug_wid_st2} = 0;
+        assign {debug_pc_st12, debug_wid_st12} = tag_st12[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+    end else begin        
+        assign {debug_pc_st12, debug_wid_st12} = 0;
     end
 `endif
+    `UNUSED_VAR (tag_st12)
 
     VX_data_access #(
         .BANK_ID        (BANK_ID),
@@ -515,8 +539,8 @@ end
     `ifdef DBG_CACHE_REQ_INFO
         .rdebug_pc      (debug_pc_st1),
         .rdebug_wid     (debug_wid_st1),
-        .wdebug_pc      (debug_pc_st2),
-        .wdebug_wid     (debug_wid_st2),
+        .wdebug_pc      (debug_pc_st12),
+        .wdebug_wid     (debug_wid_st12),
     `endif
         .stall          (pipeline_stall),
 
@@ -530,14 +554,22 @@ end
         .dirtyb_out     (dirtyb_st1),
 
         // writing
-        .writeen_in     (writeen_st2 && valid_st2),
-        .waddr_in       (addr_st2),        
+        .writeen_in     (writeen_st12 && valid_st12),
+        .waddr_in       (addr_st12),        
         .wfill_in       (is_fill_st2),
-        .wwsel_in       (wsel_st2),
-        .wbyteen_in     (byteen_st2),
-        .writeword_in   (writeword_st2),
+        .wwsel_in       (wsel_st12),
+        .wbyteen_in     (byteen_st12),
+        .writeword_in   (writeword_st12),
         .writedata_in   (writedata_st2)
     ); 
+
+`ifdef DBG_CACHE_REQ_INFO
+    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
+        assign {debug_pc_st2, debug_wid_st2} = tag_st2[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+    end else begin        
+        assign {debug_pc_st2, debug_wid_st2} = 0;
+    end
+`endif
 
     wire mshr_push_unqual = valid_st2 && mshr_push_st2;
     assign mshr_push_stall = 0;

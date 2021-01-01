@@ -104,6 +104,7 @@ module VX_data_access #(
             assign writeword_qual[i * `WORD_WIDTH +: `WORD_WIDTH] = writeword_in;
         end
     end else begin
+        `UNUSED_VAR (wwsel_in)
         assign wbyteen_qual   = wbyteen_in;
         assign writeword_qual = writeword_in;
     end    
@@ -134,6 +135,7 @@ module VX_data_access #(
             assign readword_out[i * 8 +: 8] = readword[i * 8 +: 8] & {8{rbyteen_in[i]}};
         end
     end else begin
+        `UNUSED_VAR (rwsel_in)
         for (genvar i = 0; i < WORD_SIZE; i++) begin
             assign readword_out[i * 8 +: 8] = readdata_qual[i * 8 +: 8] & {8{rbyteen_in[i]}};
         end
