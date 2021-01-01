@@ -28,21 +28,9 @@ unsigned z[] = {0, 0, 0, 0,
                 0, 0, 0, 0,
                 0, 0, 0, 0};
 
-void mat_add_kernel(void * void_arguments) {
+void mat_add_kernel(int task_id, void * void_arguments) {
 	mat_add_args_t * arguments = (mat_add_args_t *) void_arguments;
-
-	unsigned wid = vx_warp_id();
-	unsigned tid = vx_thread_id();
-
-	bool valid = (wid < arguments->numRows) && (tid < arguments->numColums);
-
-	// __if (valid)
-	// {
-		unsigned index = (wid * arguments->numColums) + tid;
-		unsigned val = arguments->x[index] + arguments->y[index];
-		arguments->z[index] = val;
-	// }
-	// __endif
+  arguments->z[task_id] = arguments->x[task_id] + arguments->y[task_id];
 }
 
 int main() {
@@ -98,7 +86,7 @@ int main() {
 		ptr++;
 	}
 
-	vx_printf("vx_spawn_warps mat_add_kernel\n");
+	vx_printf("vx_spawn_tasks mat_add_kernel\n");
 
 	mat_add_args_t arguments;
 	arguments.x         = x;
@@ -107,16 +95,13 @@ int main() {
 	arguments.numColums = 4;
 	arguments.numRows   = 4;
 
-	int numWarps   = 4;
-	int numThreads = 4;
-
-	vx_spawn_warps(numWarps, numThreads, mat_add_kernel, &arguments);
+	vx_spawn_tasks(arguments.numRows * arguments.numColums, mat_add_kernel, &arguments);
 
 	vx_printf("Waiting to ensure other warps are done... (Takes a while)\n");
 	for (int i = 0; i < 5000; i++) {}
 
-	for (int i = 0; i < numWarps; i++) {
-		for (int j = 0; j < numThreads; j++) {
+	for (int i = 0; i < arguments.numRows; i++) {
+		for (int j = 0; j < arguments.numColums; j++) {
 			unsigned index = (i * arguments.numColums) + j;
 			vx_printf("0x%x ", z[index]);
 		}
