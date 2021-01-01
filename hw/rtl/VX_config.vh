@@ -327,14 +327,9 @@
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
-// Size of cache block in bytes
-`ifndef SM_BLOCK_SIZE
-`define SM_BLOCK_SIZE 1024
-`endif
-
 // Size of cache in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE (`NUM_WARPS * `NUM_THREADS * `SM_BLOCK_SIZE)
+`define SMEM_SIZE (1024 * `NUM_WARPS * `NUM_THREADS)
 `endif
 
 // Number of banks

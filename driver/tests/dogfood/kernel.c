@@ -4,15 +4,15 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-typedef void (*PFN_Kernel)(void* arg);
+typedef void (*PFN_Kernel)(int task_id, void* arg);
 
-void kernel_iadd(void* arg) {
+void kernel_iadd(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count    = _arg->count;
+	uint32_t count    = _arg->task_size;
 	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
 	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
@@ -22,13 +22,13 @@ void kernel_iadd(void* arg) {
 	}
 }
 
-void kernel_imul(void* arg) {
+void kernel_imul(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count    = _arg->count;
+	uint32_t count    = _arg->task_size;
 	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
 	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
@@ -38,13 +38,13 @@ void kernel_imul(void* arg) {
 	}
 }
 
-void kernel_idiv(void* arg) {
+void kernel_idiv(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count    = _arg->count;
+	uint32_t count    = _arg->task_size;
 	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
 	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
@@ -54,13 +54,13 @@ void kernel_idiv(void* arg) {
 	}
 }
 
-void kernel_idiv_mul(void* arg) {
+void kernel_idiv_mul(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count    = _arg->count;
+	uint32_t count    = _arg->task_size;
 	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
 	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
@@ -72,13 +72,13 @@ void kernel_idiv_mul(void* arg) {
 	}
 }
 
-void kernel_fadd(void* arg) {
+void kernel_fadd(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -88,13 +88,13 @@ void kernel_fadd(void* arg) {
 	}
 }
 
-void kernel_fsub(void* arg) {
+void kernel_fsub(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -104,13 +104,13 @@ void kernel_fsub(void* arg) {
 	}
 }
 
-void kernel_fmul(void* arg) {
+void kernel_fmul(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -120,13 +120,13 @@ void kernel_fmul(void* arg) {
 	}
 }
 
-void kernel_fmadd(void* arg) {
+void kernel_fmadd(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -136,13 +136,13 @@ void kernel_fmadd(void* arg) {
 	}
 }
 
-void kernel_fmsub(void* arg) {
+void kernel_fmsub(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -152,13 +152,13 @@ void kernel_fmsub(void* arg) {
 	}
 }
 
-void kernel_fnmadd(void* arg) {
+void kernel_fnmadd(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -168,13 +168,13 @@ void kernel_fnmadd(void* arg) {
 	}
 }
 
-void kernel_fnmsub(void* arg) {
+void kernel_fnmsub(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -184,13 +184,13 @@ void kernel_fnmsub(void* arg) {
 	}
 }
 
-void kernel_fnmadd_madd(void* arg) {
+void kernel_fnmadd_madd(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -202,13 +202,13 @@ void kernel_fnmadd_madd(void* arg) {
 	}
 }
 
-void kernel_fdiv(void* arg) {
+void kernel_fdiv(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -218,13 +218,13 @@ void kernel_fdiv(void* arg) {
 	}
 }
 
-void kernel_fdiv2(void* arg) {
+void kernel_fdiv2(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -236,13 +236,13 @@ void kernel_fdiv2(void* arg) {
 	}
 }
 
-void kernel_fsqrt(void* arg) {
+void kernel_fsqrt(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -252,13 +252,13 @@ void kernel_fsqrt(void* arg) {
 	}
 }
 
-void kernel_ftoi(void* arg) {
+void kernel_ftoi(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -269,13 +269,13 @@ void kernel_ftoi(void* arg) {
 	}
 }
 
-void kernel_ftou(void* arg) {
+void kernel_ftou(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	float* src0_ptr = (float*)_arg->src0_ptr;
 	float* src1_ptr = (float*)_arg->src1_ptr;
 	uint32_t* dst_ptr  = (uint32_t*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
@@ -286,13 +286,13 @@ void kernel_ftou(void* arg) {
 	}
 }
 
-void kernel_itof(void* arg) {
+void kernel_itof(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
 	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
@@ -303,13 +303,13 @@ void kernel_itof(void* arg) {
 	}
 }
 
-void kernel_utof(void* arg) {
+void kernel_utof(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count  = _arg->count;
+	uint32_t count  = _arg->task_size;
 	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
 	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
 	float* dst_ptr  = (float*)_arg->dst_ptr;	
-	uint32_t offset = vx_thread_gid() * count;
+	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
 		int32_t a = src0_ptr[offset+i];
@@ -344,7 +344,5 @@ static const PFN_Kernel sc_tests[] = {
 
 void main() {
 	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-	int num_warps = vx_num_warps();
-	int num_threads = vx_num_threads();
-	vx_spawn_warps(num_warps, num_threads, sc_tests[arg->testid], arg);
+	vx_spawn_tasks(arg->num_tasks, sc_tests[arg->testid], arg);
 }

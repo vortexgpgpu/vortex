@@ -8,9 +8,9 @@
 extern "C" {
 #endif
 
-typedef void (*func_t)(void *);
+typedef void (*pfn_callback)(int task_id, void *arg);
 
-void vx_spawn_warps(int num_warps, int num_threads, func_t func_ptr , void * args);
+void vx_spawn_tasks(int num_tasks, pfn_callback callback , void * args);
 
 #ifdef __cplusplus
 }
