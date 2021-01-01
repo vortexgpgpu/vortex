@@ -18,24 +18,43 @@ module VX_pipe_register #(
         `UNUSED_VAR (enable)
         assign data_out = data_in;  
     end else if (DEPTH == 1) begin   
-        reg [DATAW-1:0] value;
-        if (RESETW != 0) begin
-            always @(posedge clk) begin
-                if (reset) begin
-                    value[DATAW-1:DATAW-RESETW] <= RESETW'(0);
-                end else if (enable) begin
-                    value <= data_in;
-                end
-            end
-        end else begin
+        if (RESETW == 0) begin
             `UNUSED_VAR (reset)
+            reg [DATAW-1:0] value;
+
             always @(posedge clk) begin
                 if (enable) begin
                     value <= data_in;
                 end
             end
+            assign data_out = value;
+        end else if (RESETW == DATAW) begin
+            reg [DATAW-1:0] value;
+
+            always @(posedge clk) begin
+                if (reset) begin
+                    value <= RESETW'(0);
+                end else if (enable) begin
+                    value <= data_in;
+                end
+            end
+            assign data_out = value;
+        end else begin            
+            reg [DATAW-RESETW-1:0] value_d;
+            reg [RESETW-1:0]       value_r;
+
+            always @(posedge clk) begin
+                if (reset) begin
+                    value_r <= RESETW'(0);
+                end else if (enable) begin
+                    value_r <= data_in[DATAW-1:DATAW-RESETW];
+                end
+                if (enable) begin
+                    value_d <= data_in[DATAW-RESETW-1:0];
+                end
+            end        
+            assign data_out = {value_r, value_d};
         end
-        assign data_out = value;
     end else begin
         VX_shift_register #(
             .DATAW  (DATAW),
