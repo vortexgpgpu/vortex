@@ -1,16 +1,5 @@
-
 #include <vx_intrinsics.h>
-
-// #include <utlist.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
-
-
-// Newlib
-#include <stdio.h>
+#include <vx_print.h>
 
 int main()
 {

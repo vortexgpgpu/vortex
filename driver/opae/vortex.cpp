@@ -22,10 +22,6 @@
 #include "vx_scope.h"
 #endif
 
-#define CACHE_BLOCK_SIZE 64
-#define ALLOC_BASE_ADDR  0x10000000
-#define LOCAL_MEM_SIZE   0xffffffff
-
 #define CHECK_RES(_expr)                                \
    do {                                                 \
      fpga_result res = _expr;                           \
@@ -104,7 +100,7 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
     case VX_CAPS_MAX_THREADS:
         *value = device->num_threads;
         break;
-    case VX_CAPS_CACHE_LINESIZE:
+    case VX_CAPS_CACHE_LINE_SIZE:
         *value = CACHE_BLOCK_SIZE;
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:

@@ -47,6 +47,12 @@ vx_warp_gid:
 .type vx_thread_id, @function
 .global vx_thread_id
 vx_thread_id:
+	csrr a0, CSR_WTID
+	ret
+
+.type vx_thread_lid, @function
+.global vx_thread_lid
+vx_thread_lid:
 	csrr a0, CSR_LTID
 	ret
 

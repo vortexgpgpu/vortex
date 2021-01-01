@@ -1,13 +1,12 @@
-
-#include <vx_intrinsics.h>
-
-
-// #include <utlist.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+
+#include <vx_intrinsics.h>
+#include <vx_print.h>
+#include <vx_spawn.h>
 
 typedef struct
 {

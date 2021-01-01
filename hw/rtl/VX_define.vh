@@ -319,7 +319,7 @@
 `define SCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 2)
 
 // Block size in bytes
-`define SBANK_LINE_SIZE         4 
+`define SBANK_LINE_SIZE         `SM_BLOCK_SIZE 
 
 // Word size in bytes
 `define SWORD_SIZE              4

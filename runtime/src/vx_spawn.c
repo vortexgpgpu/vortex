@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define NUM_CORES_MAX 8
+#define NUM_CORES_MAX 16
 
 typedef struct {
 	func_t function;
