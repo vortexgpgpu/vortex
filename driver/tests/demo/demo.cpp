@@ -117,7 +117,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
-  uint32_t num_points = count * max_cores * max_warps * max_threads;
+  uint32_t num_tasks  = max_cores * max_warps * max_threads;
+  uint32_t num_points = count * num_tasks;
   uint32_t buf_size = num_points * sizeof(uint32_t);
 
   std::cout << "number of points: " << num_points << std::endl;
@@ -137,7 +138,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
   kernel_arg.dst_ptr = value;
 
-  kernel_arg.count = count;
+  kernel_arg.num_tasks = num_tasks;
+  kernel_arg.task_size = count;
 
   std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::endl;
   std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::endl;
