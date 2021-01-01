@@ -123,7 +123,7 @@ module VX_issue #(
     `SCOPE_ASSIGN (writeback_pc,      writeback_if.PC);  
     `SCOPE_ASSIGN (writeback_rd,      writeback_if.rd);
     `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
-    `SCOPE_ASSIGN (writeback_eop,     writeback_if.eof);
+    `SCOPE_ASSIGN (writeback_eop,     writeback_if.eop);
 
 `ifdef PERF_ENABLE
     reg [63:0] perf_ibf_stalls;

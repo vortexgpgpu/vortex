@@ -116,7 +116,7 @@ case $APP in
         APP_PATH=$VORTEX_HOME/benchmarks/opencl/sgemm
         ;;
     vecadd)
-        APP_PATH=$VORTEX_HOME/benchmarks/opencl/vacadd
+        APP_PATH=$VORTEX_HOME/benchmarks/opencl/vecadd
         ;;
     basic)
         APP_PATH=$VORTEX_HOME/driver/tests/basic

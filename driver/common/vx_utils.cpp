@@ -292,7 +292,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int avg_dram_lat = (int)(double(dram_lat_per_core) / double(dram_reads_per_core));    
     int dram_utilization = (int)((1.0 - (double(dram_reads_per_core + dram_writes_per_core) / double(dram_reads_per_core + dram_writes_per_core + dram_stalls_per_core))) * 100);
     if (num_cores > 1) fprintf(stream, "PERF: core%d: dram requests=%ld (reads=%ld, writes=%ld)\n", core_id, (dram_reads_per_core + dram_writes_per_core), dram_reads_per_core, dram_writes_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram stalls=%d (utilization=%d%%)\n", core_id, dram_stalls_per_core, dram_utilization);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram stalls=%ld (utilization=%d%%)\n", core_id, dram_stalls_per_core, dram_utilization);
     if (num_cores > 1) fprintf(stream, "PERF: core%d: average dram latency=%d cycles\n", core_id, avg_dram_lat);
     dram_reads  += dram_reads_per_core;
     dram_writes += dram_writes_per_core;
