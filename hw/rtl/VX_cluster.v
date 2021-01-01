@@ -67,20 +67,14 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                        per_core_busy;
     wire [`NUM_CORES-1:0]                        per_core_ebreak;
 
-    for (genvar i = 0; i < `NUM_CORES; i++) begin    
-    
-        reg core_reset;
-        always @(posedge clk) begin
-            core_reset <= reset;
-        end
-
+    for (genvar i = 0; i < `NUM_CORES; i++) begin
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) core (
             `SCOPE_BIND_VX_cluster_core(i)
 
             .clk            (clk),
-            .reset          (core_reset),
+            .reset          (reset),
 
             .dram_req_valid (per_core_dram_req_valid[i]),
             .dram_req_rw    (per_core_dram_req_rw   [i]),                

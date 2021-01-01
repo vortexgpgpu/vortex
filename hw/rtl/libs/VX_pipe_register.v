@@ -17,7 +17,7 @@ module VX_pipe_register #(
         `UNUSED_VAR (reset)
         `UNUSED_VAR (enable)
         assign data_out = data_in;  
-    end else if (DEPTH == 1) begin   
+    end else if (DEPTH == 1) begin        
         if (RESETW == 0) begin
             `UNUSED_VAR (reset)
             reg [DATAW-1:0] value;
@@ -39,7 +39,7 @@ module VX_pipe_register #(
                 end
             end
             assign data_out = value;
-        end else begin            
+        end else begin
             reg [DATAW-RESETW-1:0] value_d;
             reg [RESETW-1:0]       value_r;
 
@@ -49,6 +49,9 @@ module VX_pipe_register #(
                 end else if (enable) begin
                     value_r <= data_in[DATAW-1:DATAW-RESETW];
                 end
+            end
+
+            always @(posedge clk) begin
                 if (enable) begin
                     value_d <= data_in[DATAW-RESETW-1:0];
                 end
