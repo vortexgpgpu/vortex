@@ -32,7 +32,7 @@
 `endif
 
 `ifndef SM_ENABLE
-`define SM_ENABLE 0
+`define SM_ENABLE 1
 `endif
 
 `ifndef GLOBAL_BLOCK_SIZE
@@ -47,12 +47,12 @@
 `define STARTUP_ADDR 32'h80000000
 `endif
 
-`ifndef SHARED_MEM_BASE_ADDR
-`define SHARED_MEM_BASE_ADDR 32'h6FFFF000
-`endif
-
 `ifndef IO_BUS_BASE_ADDR
 `define IO_BUS_BASE_ADDR 32'hFF000000
+`endif
+
+`ifndef SHARED_MEM_BASE_ADDR
+`define SHARED_MEM_BASE_ADDR `IO_BUS_BASE_ADDR
 `endif
 
 `ifndef IO_BUS_ADDR_COUT
@@ -138,16 +138,6 @@
 `define CSR_FFLAGS      12'h001
 `define CSR_FRM         12'h002
 `define CSR_FCSR        12'h003
-
-// SIMT CSRs
-`define CSR_LTID        12'h020
-`define CSR_LWID        12'h021
-`define CSR_GTID        12'h022
-`define CSR_GWID        12'h023
-`define CSR_GCID        12'h024
-`define CSR_NT          12'h025
-`define CSR_NW          12'h026
-`define CSR_NC          12'h027
 
 `define CSR_SATP        12'h180
 
@@ -235,6 +225,19 @@
 `define CSR_MARCHID     12'hF12
 `define CSR_MIMPID      12'hF13
 `define CSR_MHARTID     12'hF14
+
+// User SIMT CSRs
+`define CSR_WTID        12'hCC0
+`define CSR_LTID        12'hCC1
+`define CSR_GTID        12'hCC2
+`define CSR_LWID        12'hCC3
+`define CSR_GWID        `CSR_MHARTID
+`define CSR_GCID        12'hCC5
+
+// Machine SIMT CSRs
+`define CSR_NT          12'hFC0
+`define CSR_NW          12'hFC1
+`define CSR_NC          12'hFC2
 
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
@@ -324,9 +327,14 @@
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
+// Size of cache block in bytes
+`ifndef SM_BLOCK_SIZE
+`define SM_BLOCK_SIZE 1024
+`endif
+
 // Size of cache in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE 8192
+`define SMEM_SIZE (`NUM_WARPS * `NUM_THREADS * `SM_BLOCK_SIZE)
 `endif
 
 // Number of banks

@@ -110,9 +110,10 @@ module VX_csr_data #(
             `CSR_FCSR      : read_data_r = 32'(csr_fcsr[read_wid]);
 
             `CSR_LWID      : read_data_r = 32'(read_wid);
+            `CSR_WTID      ,
             `CSR_LTID      ,
             `CSR_GTID      ,
-            `CSR_MHARTID   ,
+            /*`CSR_MHARTID ,*/
             `CSR_GWID      : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
             `CSR_GCID      : read_data_r = CORE_ID;
             `CSR_NT        : read_data_r = `NUM_THREADS;

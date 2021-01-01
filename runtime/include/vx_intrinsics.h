@@ -20,20 +20,23 @@ void vx_split(int predicate);
 // Join
 void vx_join();
 
-// Return the warp's unique thread id 
+// Return active warp's thread id 
 int vx_thread_id();
 
-// Return the core's unique warp id
-int vx_warp_id();
-
-// Return processsor unique core id
-int vx_core_id();
+// Return active core's local thread id
+int vx_thread_lid();
 
 // Return processsor global thread id
 int vx_thread_gid();
 
-// Return processsor global warp id
+// Return active core's local warp id
+int vx_warp_id();
+
+// Return processsor's global warp id
 int vx_warp_gid();
+
+// Return processsor core id
+int vx_core_id();
 
 // Return the number of threads in a warp
 int vx_num_threads();

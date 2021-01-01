@@ -40,13 +40,13 @@ private:
 
   typedef struct {
     int cycles_left;  
-    std::array<uint8_t, CACHE_BLOCK_SIZE> block;
+    std::array<uint8_t, CACHE_BLOCK_SIZE> data;
     uint32_t addr;
   } dram_rd_req_t;
 
   typedef struct {
     int cycles_left;  
-    std::array<uint8_t, CACHE_BLOCK_SIZE> block;
+    std::array<uint8_t, CACHE_BLOCK_SIZE> data;
     uint64_t addr;
     uint32_t mdata;
   } cci_rd_req_t;

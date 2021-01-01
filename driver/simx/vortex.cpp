@@ -11,10 +11,7 @@
 #include <core.h>
 #include <VX_config.h>
 
-#define CACHE_LINESIZE  64
 #define PAGE_SIZE       4096
-#define ALLOC_BASE_ADDR 0x10000000
-#define LOCAL_MEM_SIZE  0xffffffff
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -32,7 +29,7 @@ public:
     vx_buffer(size_t size, vx_device* device) 
         : size_(size)
         , device_(device) {
-        auto aligned_asize = align_size(size, CACHE_LINESIZE);
+        auto aligned_asize = align_size(size, CACHE_BLOCK_SIZE);
         data_ = malloc(aligned_asize);
     }
 
@@ -81,7 +78,7 @@ public:
 
     int alloc_local_mem(size_t size, size_t* dev_maddr) {
         auto dev_mem_size = LOCAL_MEM_SIZE;
-        auto asize = align_size(size, CACHE_LINESIZE);        
+        auto asize = align_size(size, CACHE_BLOCK_SIZE);        
         if (mem_allocation_ + asize > dev_mem_size)
             return -1;
         *dev_maddr = mem_allocation_;
@@ -90,7 +87,7 @@ public:
     }
 
     int upload(void* src, size_t dest_addr, size_t size, size_t src_offset) {
-        auto asize = align_size(size, CACHE_LINESIZE);
+        auto asize = align_size(size, CACHE_BLOCK_SIZE);
         if (dest_addr + asize > ram_.size())
             return -1;
 
@@ -104,7 +101,7 @@ public:
     }
 
     int download(const void* dest, size_t src_addr, size_t size, size_t dest_offset) {
-        size_t asize = align_size(size, CACHE_LINESIZE);
+        size_t asize = align_size(size, CACHE_BLOCK_SIZE);
         if (src_addr + asize > ram_.size())
             return -1;
 
@@ -236,8 +233,8 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
     case VX_CAPS_MAX_THREADS:
         *value = NUM_THREADS;
         break;
-    case VX_CAPS_CACHE_LINESIZE:
-        *value = CACHE_LINESIZE;
+    case VX_CAPS_CACHE_LINE_SIZE:
+        *value = CACHE_BLOCK_SIZE;
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:
         *value = LOCAL_MEM_SIZE;

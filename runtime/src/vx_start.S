@@ -57,18 +57,20 @@ vx_set_sp:
   # set global pointer register
   .option push
   .option norelax
-  la gp, __global_pointer$
+  la gp, __global_pointer
   .option pop
 
   # allocate stack region for a threads on the processor 
   # set stack pointer
-  csrr a1, CSR_GTID    # get global thread id
-  slli a1, a1, 10      # multiply by 1024
-  csrr a2, CSR_LTID    # get local thread id  
-  slli a2, a2, 2       # multiply by 4
-  la sp, __stack_top$  # load stack base address
+  la sp, __stack_top   # load stack base address
+  la a1, __stack_size  # stack size
+  #if SM_ENABLE
+  csrr a2, CSR_LTID    # get lobal thread id
+  #else
+  csrr a2, CSR_GTID    # get global thread id
+  #endif
+  mul  a1, a1, a2
   sub  sp, sp, a1      # sub thread block
-  add  sp, sp, a2      # reduce addr collision for perf
 
   # disable active warps except warp0
   csrr a3, CSR_LWID    # get local wid
