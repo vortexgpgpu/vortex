@@ -4,7 +4,7 @@ module VX_data_store #(
     // Size of cache in bytes
     parameter CACHE_SIZE                    = 1, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 1, 
+    parameter CACHE_LINE_SIZE               = 1, 
     // Number of banks
     parameter NUM_BANKS                     = 1,
     // Size of a word in bytes
@@ -18,18 +18,18 @@ module VX_data_store #(
 
     input  wire                             write_enable,
     input  wire                             write_fill,
-    input  wire[BANK_LINE_SIZE-1:0]         byte_enable,
+    input  wire[CACHE_LINE_SIZE-1:0]         byte_enable,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
-    input  wire[`BANK_LINE_WIDTH-1:0]       write_data,
+    input  wire[`CACHE_LINE_WIDTH-1:0]       write_data,
 
     input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
-    output wire[`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] read_dirtyb,
-    output wire[`BANK_LINE_WIDTH-1:0]       read_data
+    output wire[`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] read_dirtyb,
+    output wire[`CACHE_LINE_WIDTH-1:0]       read_data
 );
     `UNUSED_VAR (reset)
 
     if (WRITE_ENABLE) begin
-        reg [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] dirtyb[`BANK_LINE_COUNT-1:0];
+        reg [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] dirtyb[`LINES_PER_BANK-1:0];
         always @(posedge clk) begin
             if (write_enable) begin
                 dirtyb[write_addr] <= write_fill ? 0 : (dirtyb[write_addr] | byte_enable);
@@ -43,9 +43,9 @@ module VX_data_store #(
     end
 
     VX_dp_ram #(
-        .DATAW(BANK_LINE_SIZE * 8),
-        .SIZE(`BANK_LINE_COUNT),
-        .BYTEENW(BANK_LINE_SIZE),
+        .DATAW(CACHE_LINE_SIZE * 8),
+        .SIZE(`LINES_PER_BANK),
+        .BYTEENW(CACHE_LINE_SIZE),
         .RWCHECK(1)
     ) data (
         .clk(clk),

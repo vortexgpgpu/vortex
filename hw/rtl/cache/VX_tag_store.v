@@ -2,13 +2,15 @@
 
 module VX_tag_store #(
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1, 
+    parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 1, 
+    parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
-    parameter NUM_BANKS                     = 1,
+    parameter NUM_BANKS         = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 1
+    parameter WORD_SIZE         = 1,
+    // bank offset from beginning of index range
+    parameter BANK_ADDR_OFFSET  = 0
 ) (
     input  wire                             clk,
     input  wire                             reset,  
@@ -24,12 +26,12 @@ module VX_tag_store #(
     output wire                             read_valid,
     output wire                             read_dirty    
 );
-    reg [`BANK_LINE_COUNT-1:0] dirty;   
-    reg [`BANK_LINE_COUNT-1:0] valid;  
+    reg [`LINES_PER_BANK-1:0] dirty;   
+    reg [`LINES_PER_BANK-1:0] valid;  
 
     always @(posedge clk) begin
         if (reset) begin
-            for (integer i = 0; i < `BANK_LINE_COUNT; i++) begin
+            for (integer i = 0; i < `LINES_PER_BANK; i++) begin
                 valid[i] <= 0;
                 dirty[i] <= 0;
             end
@@ -47,7 +49,7 @@ module VX_tag_store #(
 
     VX_dp_ram #(
         .DATAW(`TAG_SELECT_BITS),
-        .SIZE(`BANK_LINE_COUNT),
+        .SIZE(`LINES_PER_BANK),
         .FASTRAM(1),
         .RWCHECK(1)
     ) tags (

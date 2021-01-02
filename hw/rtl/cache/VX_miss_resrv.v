@@ -5,7 +5,7 @@ module VX_miss_resrv #(
     parameter BANK_ID                       = 0, 
     
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE                = 1, 
+    parameter CACHE_LINE_SIZE               = 1, 
     // Number of banks
     parameter NUM_BANKS                     = 1, 
     // Size of a word in bytes
