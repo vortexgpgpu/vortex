@@ -248,7 +248,7 @@
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE 8
+`define LSUQ_SIZE (`NUM_WARPS * `NUM_THREADS)
 `endif
 
 // Size of FPU Request Queue
