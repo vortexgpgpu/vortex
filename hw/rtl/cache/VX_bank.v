@@ -85,6 +85,9 @@ module VX_bank #(
     input  wire [`BANK_LINE_WIDTH-1:0]  dram_rsp_data,
     output wire                         dram_rsp_ready
 );
+
+    localparam MSHR_SIZE_BITS = $clog2(MSHR_SIZE+1);
+
 `ifdef DBG_CACHE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire [31:0]         debug_pc_st0;
@@ -172,8 +175,8 @@ module VX_bank #(
     );   
 
     wire                            mshr_pop;
-    reg [$clog2(MSHR_SIZE+1)-1:0]   mshr_pending_size;   
-    wire [$clog2(MSHR_SIZE+1)-1:0]  mshr_pending_size_n;   
+    reg [MSHR_SIZE_BITS-1:0]        mshr_pending_size;   
+    wire [MSHR_SIZE_BITS-1:0]       mshr_pending_size_n;   
     reg                             mshr_going_full;     
 
     wire                            mshr_valid_st0;
@@ -264,7 +267,7 @@ module VX_bank #(
 
     wire is_mshr_miss_st2 = valid_st2 && is_mshr_st2 && (miss_st2 || force_miss_st2);
 
-    wire creq_commit = valid_st2 
+    wire creq_commit = valid_st2 && !is_fill_st2
                     && (core_req_hit_st2 || (WRITE_THROUGH && mem_rw_st2))
                     && !pipeline_stall;
 
@@ -287,7 +290,7 @@ module VX_bank #(
             mshr_going_full   <= 0;
         end else begin
             mshr_pending_size <= mshr_pending_size_n;
-            mshr_going_full   <= (mshr_pending_size_n == MSHR_SIZE);
+            mshr_going_full   <= (mshr_pending_size_n == MSHR_SIZE_BITS'(MSHR_SIZE));
         end        
     end
 
@@ -298,13 +301,10 @@ module VX_bank #(
 
     assign addr_st0 = mshr_pop_unqual ? mshr_addr_st0 :
                       drsq_pop_unqual ? drsq_addr_st0 :
-                      creq_pop_unqual ? creq_addr_st0[`LINE_SELECT_ADDR_RNG] :
-                                        0;
+                                        creq_addr_st0[`LINE_SELECT_ADDR_RNG];
     
     if (`WORD_SELECT_WIDTH != 0) begin
-        assign wsel_st0 = creq_pop_unqual ? creq_addr_st0[`WORD_SELECT_WIDTH-1:0] :
-                            mshr_pop_unqual ? mshr_wsel_st0 :
-                                0; 
+        assign wsel_st0 = creq_pop_unqual ? creq_addr_st0[`WORD_SELECT_WIDTH-1:0] : mshr_wsel_st0; 
     end else begin 
         `UNUSED_VAR (mshr_wsel_st0)
         assign wsel_st0 = 0;
@@ -312,25 +312,15 @@ module VX_bank #(
 
     assign writedata_st0 = drsq_filldata_st0;
 
-    assign tag_st0 = mshr_pop_unqual ? `REQ_TAG_WIDTH'(mshr_tag_st0) :
-                        creq_pop_unqual ? `REQ_TAG_WIDTH'(creq_tag_st0) :
-                                                0;
+    assign tag_st0 = mshr_pop_unqual ? `REQ_TAG_WIDTH'(mshr_tag_st0) : `REQ_TAG_WIDTH'(creq_tag_st0);
 
-    assign mem_rw_st0 = mshr_pop_unqual ? mshr_rw_st0 :
-                            creq_pop_unqual ? creq_rw_st0 :
-                                                    0;
+    assign mem_rw_st0 = mshr_pop_unqual ? mshr_rw_st0 : creq_rw_st0;
 
-    assign byteen_st0 = mshr_pop_unqual ? mshr_byteen_st0 :
-                            creq_pop_unqual ? creq_byteen_st0 :
-                                                    0;
+    assign byteen_st0 = mshr_pop_unqual ? mshr_byteen_st0 : creq_byteen_st0;
 
-    assign req_tid_st0 = mshr_pop_unqual ? mshr_tid_st0 :
-                            creq_pop_unqual ? creq_tid_st0 :
-                                                    0;
+    assign req_tid_st0 = mshr_pop_unqual ? mshr_tid_st0 : creq_tid_st0;
 
-    assign writeword_st0 = mshr_pop_unqual ? mshr_writeword_st0 :
-                                creq_pop_unqual ? creq_writeword_st0 :
-                                    0;    
+    assign writeword_st0 = mshr_pop_unqual ? mshr_writeword_st0 : creq_writeword_st0;    
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
@@ -426,13 +416,13 @@ if (DRAM_ENABLE) begin
                          || (is_mshr_st1 && addr_st1 != addr_st2))
                         && !incoming_fill_st1;
 
-    assign do_writeback_st1 = (WRITE_THROUGH && mem_rw_st1) 
-                           || (!WRITE_THROUGH && dirty_st1 && is_fill_st1);
+    assign do_writeback_st1 = (WRITE_THROUGH && !is_fill_st1 && mem_rw_st1) 
+                           || (!WRITE_THROUGH && is_fill_st1 && dirty_st1);
 
     assign dreq_push_st1 = do_fill_req_st1 || do_writeback_st1;
 
     assign mshr_push_st1 = (miss_st1 || force_miss_st1) 
-                        && !(WRITE_THROUGH && mem_rw_st1);
+                        && !(WRITE_THROUGH && !is_fill_st1 && mem_rw_st1);
 
     assign crsq_push_st1 = core_req_hit_st1 && !mem_rw_st1;
     
@@ -591,6 +581,9 @@ end
         // or the fill request is comming for this block
         wire mshr_init_ready_state_st2 = valid_st2 && (!miss_st2 || incoming_fill_qual_st2); 
 
+        // use dram rsp or core req address to lookup the mshr
+        wire [`LINE_ADDR_WIDTH-1:0] lookup_addr = drsq_pop_unqual ? drsq_addr_st0 : creq_addr_st0[`LINE_SELECT_ADDR_RNG];
+
         VX_miss_resrv #(
             .BANK_ID            (BANK_ID),
             .CACHE_ID           (CACHE_ID),      
@@ -622,7 +615,7 @@ end
 
             // lookup
             .lookup_ready       (update_ready_st0),
-            .lookup_addr        (addr_st0),
+            .lookup_addr        (lookup_addr),
             .lookup_match       (mshr_pending_hazard_unqual_st0),
             
             // schedule
