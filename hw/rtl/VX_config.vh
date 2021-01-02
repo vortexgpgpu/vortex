@@ -248,7 +248,7 @@
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE 8
+`define LSUQ_SIZE (`NUM_WARPS * `NUM_THREADS)
 `endif
 
 // Size of FPU Request Queue
@@ -327,9 +327,14 @@
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
+// per thread stack size
+`ifndef STACK_SIZE
+`define STACK_SIZE 1024
+`endif
+
 // Size of cache in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE (1024 * `NUM_WARPS * `NUM_THREADS)
+`define SMEM_SIZE (`STACK_SIZE * `NUM_WARPS * `NUM_THREADS)
 `endif
 
 // Number of banks

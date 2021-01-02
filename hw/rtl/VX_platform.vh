@@ -66,4 +66,10 @@
 
 `define UP(x)       (((x) > 0) ? x : 1)
 
+`define SAFE_RNG(h,l) `MAX(h,l) : l
+
+`define RTRIM(x,s)  x[$bits(x)-1:($bits(x)-s)]
+
+`define LTRIM(x,s)  x[s-1:0]
+
 `endif

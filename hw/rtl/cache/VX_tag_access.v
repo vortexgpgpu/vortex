@@ -2,22 +2,21 @@
 
 module VX_tag_access #(
     parameter CACHE_ID          = 0,
-    parameter BANK_ID           = 0,   
-
+    parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE    = 1, 
+    parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE         = 1, 
-
+    parameter WORD_SIZE         = 1,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 0,
-
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS  = 0
+    parameter CORE_TAG_ID_BITS  = 0,
+    // bank offset from beginning of index range
+    parameter BANK_ADDR_OFFSET  = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -53,14 +52,15 @@ module VX_tag_access #(
     wire                        do_write;
     wire                        do_invalidate;  
     
-    wire [`TAG_SELECT_BITS-1:0] addrtag = addr_in [`TAG_LINE_ADDR_RNG];
+    wire [`TAG_SELECT_BITS-1:0] addrtag   = `LINE_TAG_ADDR(addr_in);
     wire [`LINE_SELECT_BITS-1:0] addrline = addr_in [`LINE_SELECT_BITS-1:0];
 
     VX_tag_store #(
         .CACHE_SIZE (CACHE_SIZE),
-        .BANK_LINE_SIZE (BANK_LINE_SIZE),
+        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),
-        .WORD_SIZE  (WORD_SIZE)
+        .WORD_SIZE  (WORD_SIZE),
+        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET)
     ) tag_store (
         .clk         (clk),
         .reset       (reset),

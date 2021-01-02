@@ -246,7 +246,7 @@
 `define ICACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0)
 
 // Block size in bytes
-`define IBANK_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
+`define ICACHE_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
 
 // Word size in bytes
 `define IWORD_SIZE              4
@@ -267,13 +267,13 @@
 `define ICORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `ICORE_TAG_ID_BITS)
 
 // DRAM request data bits
-`define IDRAM_LINE_WIDTH        (`IBANK_LINE_SIZE * 8)
+`define IDRAM_LINE_WIDTH        (`ICACHE_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define IDRAM_ADDR_WIDTH        (32 - `CLOG2(`IBANK_LINE_SIZE))
+`define IDRAM_ADDR_WIDTH        (32 - `CLOG2(`ICACHE_LINE_SIZE))
 
 // DRAM byte enable bits
-`define IDRAM_BYTEEN_WIDTH      `IBANK_LINE_SIZE
+`define IDRAM_BYTEEN_WIDTH      `ICACHE_LINE_SIZE
 
 // DRAM request tag bits
 `define IDRAM_TAG_WIDTH         `IDRAM_ADDR_WIDTH
@@ -287,7 +287,7 @@
 `define DCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1)
 
 // Block size in bytes
-`define DBANK_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
+`define DCACHE_LINE_SIZE         (`L2_ENABLE ? `L1_BLOCK_SIZE : `GLOBAL_BLOCK_SIZE)
 
 // Word size in bytes
 `define DWORD_SIZE              4
@@ -299,13 +299,13 @@
 `define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
  
 // DRAM request data bits
-`define DDRAM_LINE_WIDTH        (`DBANK_LINE_SIZE * 8)
+`define DDRAM_LINE_WIDTH        (`DCACHE_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define DDRAM_ADDR_WIDTH        (32 - `CLOG2(`DBANK_LINE_SIZE))
+`define DDRAM_ADDR_WIDTH        (32 - `CLOG2(`DCACHE_LINE_SIZE))
 
 // DRAM byte enable bits
-`define DDRAM_BYTEEN_WIDTH      `DBANK_LINE_SIZE
+`define DDRAM_BYTEEN_WIDTH      `DCACHE_LINE_SIZE
 
 // DRAM request tag bits
 `define DDRAM_TAG_WIDTH         `DDRAM_ADDR_WIDTH
@@ -319,16 +319,18 @@
 `define SCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 2)
 
 // Block size in bytes
-`define SBANK_LINE_SIZE         4 
+`define SCACHE_LINE_SIZE        4 
 
 // Word size in bytes
 `define SWORD_SIZE              4
+
+`define SBANK_ADDR_OFFSET       `CLOG2(`STACK_SIZE / `SCACHE_LINE_SIZE)
 
 // Core request size
 `define SNUM_REQUESTS           `NUM_THREADS
 
 // DRAM request address bits
-`define SDRAM_ADDR_WIDTH        (32 - `CLOG2(`SBANK_LINE_SIZE))
+`define SDRAM_ADDR_WIDTH        (32 - `CLOG2(`SCACHE_LINE_SIZE))
 
 // DRAM request tag bits    
 `define SDRAM_TAG_WIDTH         `SDRAM_ADDR_WIDTH
@@ -342,22 +344,22 @@
 `define L2CACHE_ID              (32'(`L3_ENABLE) + CLUSTER_ID)
 
 // Block size in bytes
-`define L2BANK_LINE_SIZE        `GLOBAL_BLOCK_SIZE
+`define L2CACHE_LINE_SIZE        `GLOBAL_BLOCK_SIZE
 
 // Word size in bytes
-`define L2WORD_SIZE             `DBANK_LINE_SIZE
+`define L2WORD_SIZE             `DCACHE_LINE_SIZE
 
 // Core request tag bits
 `define L2CORE_TAG_WIDTH        (`DCORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // DRAM request data bits
-`define L2DRAM_LINE_WIDTH       (`L2BANK_LINE_SIZE * 8)
+`define L2DRAM_LINE_WIDTH       (`L2CACHE_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define L2DRAM_ADDR_WIDTH       (32 - `CLOG2(`L2BANK_LINE_SIZE))
+`define L2DRAM_ADDR_WIDTH       (32 - `CLOG2(`L2CACHE_LINE_SIZE))
 
 // DRAM byte enable bits
-`define L2DRAM_BYTEEN_WIDTH     `L2BANK_LINE_SIZE
+`define L2DRAM_BYTEEN_WIDTH     `L2CACHE_LINE_SIZE
 
 // DRAM request tag bits
 `define L2DRAM_TAG_WIDTH        (`L2_ENABLE ? `L2DRAM_ADDR_WIDTH : (`XDRAM_TAG_WIDTH+`CLOG2(`NUM_CORES)))
@@ -368,22 +370,22 @@
 `define L3CACHE_ID              0
 
 // Block size in bytes
-`define L3BANK_LINE_SIZE        `GLOBAL_BLOCK_SIZE
+`define L3CACHE_LINE_SIZE        `GLOBAL_BLOCK_SIZE
 
 // Word size in bytes
-`define L3WORD_SIZE             `L2BANK_LINE_SIZE
+`define L3WORD_SIZE             `L2CACHE_LINE_SIZE
 
 // Core request tag bits
 `define L3CORE_TAG_WIDTH        (`L2CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // DRAM request data bits
-`define L3DRAM_LINE_WIDTH       (`L3BANK_LINE_SIZE * 8)
+`define L3DRAM_LINE_WIDTH       (`L3CACHE_LINE_SIZE * 8)
 
 // DRAM request address bits
-`define L3DRAM_ADDR_WIDTH       (32 - `CLOG2(`L3BANK_LINE_SIZE))
+`define L3DRAM_ADDR_WIDTH       (32 - `CLOG2(`L3CACHE_LINE_SIZE))
 
 // DRAM byte enable bits
-`define L3DRAM_BYTEEN_WIDTH     `L3BANK_LINE_SIZE
+`define L3DRAM_BYTEEN_WIDTH     `L3CACHE_LINE_SIZE
 
 // DRAM request tag bits
 `define L3DRAM_TAG_WIDTH        (`L3_ENABLE ? `L3DRAM_ADDR_WIDTH : (`L2DRAM_TAG_WIDTH+`CLOG2(`NUM_CLUSTERS)))

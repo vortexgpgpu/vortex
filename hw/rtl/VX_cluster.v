@@ -152,7 +152,7 @@ module VX_cluster #(
         VX_cache #(
             .CACHE_ID           (`L2CACHE_ID),
             .CACHE_SIZE         (`L2CACHE_SIZE),
-            .BANK_LINE_SIZE     (`L2BANK_LINE_SIZE),
+            .CACHE_LINE_SIZE     (`L2CACHE_LINE_SIZE),
             .NUM_BANKS          (`L2NUM_BANKS),
             .WORD_SIZE          (`L2WORD_SIZE),
             .NUM_REQS           (`NUM_CORES),

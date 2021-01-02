@@ -7,7 +7,7 @@ module VX_data_access #(
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE    = 1, 
+    parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1, 
     // Size of a word in bytes
@@ -44,29 +44,29 @@ module VX_data_access #(
 `IGNORE_WARNINGS_BEGIN
     input wire[`LINE_ADDR_WIDTH-1:0]    raddr_in,    
 `IGNORE_WARNINGS_END
-    input wire [`UP(`WORD_SELECT_WIDTH)-1:0] rwsel_in,
+    input wire [`UP(`WORD_SELECT_BITS)-1:0] rwsel_in,
     input wire [WORD_SIZE-1:0]          rbyteen_in,
     output wire[`WORD_WIDTH-1:0]        readword_out,
-    output wire [`BANK_LINE_WIDTH-1:0]  readdata_out,
-    output wire [BANK_LINE_SIZE-1:0]    dirtyb_out,
+    output wire [`CACHE_LINE_WIDTH-1:0]  readdata_out,
+    output wire [CACHE_LINE_SIZE-1:0]    dirtyb_out,
 
     // writing
     input wire                          writeen_in,
 `IGNORE_WARNINGS_BEGIN
     input wire[`LINE_ADDR_WIDTH-1:0]    waddr_in,    
 `IGNORE_WARNINGS_END
-    input wire [`UP(`WORD_SELECT_WIDTH)-1:0] wwsel_in,
+    input wire [`UP(`WORD_SELECT_BITS)-1:0] wwsel_in,
     input wire [WORD_SIZE-1:0]          wbyteen_in,    
     input wire                          wfill_in,
     input wire [`WORD_WIDTH-1:0]        writeword_in,
-    input wire [`BANK_LINE_WIDTH-1:0]   writedata_in
+    input wire [`CACHE_LINE_WIDTH-1:0]   writedata_in
 );
 
-    wire [BANK_LINE_SIZE-1:0]   read_dirtyb, dirtyb_qual;
-    wire [`BANK_LINE_WIDTH-1:0] read_data, readdata_qual;
+    wire [CACHE_LINE_SIZE-1:0]   read_dirtyb, dirtyb_qual;
+    wire [`CACHE_LINE_WIDTH-1:0] read_data, readdata_qual;
 
-    wire [BANK_LINE_SIZE-1:0]   byte_enable; 
-    wire [`BANK_LINE_WIDTH-1:0] write_data;   
+    wire [CACHE_LINE_SIZE-1:0]   byte_enable; 
+    wire [`CACHE_LINE_WIDTH-1:0] write_data;   
     wire                        write_enable;
 
     wire [`LINE_SELECT_BITS-1:0] raddr = raddr_in[`LINE_SELECT_BITS-1:0];
@@ -76,7 +76,7 @@ module VX_data_access #(
 
     VX_data_store #(
         .CACHE_SIZE     (CACHE_SIZE),
-        .BANK_LINE_SIZE (BANK_LINE_SIZE),
+        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
         .WRITE_ENABLE   (WRITE_ENABLE)
@@ -95,12 +95,12 @@ module VX_data_access #(
         .write_data  (write_data)
     );
 
-    wire [`BANK_LINE_WORDS-1:0][WORD_SIZE-1:0] wbyteen_qual; 
-    wire [`BANK_LINE_WIDTH-1:0] writeword_qual;   
+    wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wbyteen_qual; 
+    wire [`CACHE_LINE_WIDTH-1:0] writeword_qual;   
 
-    if (`WORD_SELECT_WIDTH != 0) begin
-        for (genvar i = 0; i < `BANK_LINE_WORDS; i++) begin
-            assign wbyteen_qual[i] = (wwsel_in == `WORD_SELECT_WIDTH'(i)) ? wbyteen_in : {WORD_SIZE{1'b0}};
+    if (`WORD_SELECT_BITS != 0) begin
+        for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
+            assign wbyteen_qual[i] = (wwsel_in == `WORD_SELECT_BITS'(i)) ? wbyteen_in : {WORD_SIZE{1'b0}};
             assign writeword_qual[i * `WORD_WIDTH +: `WORD_WIDTH] = writeword_in;
         end
     end else begin
@@ -109,13 +109,13 @@ module VX_data_access #(
         assign writeword_qual = writeword_in;
     end    
     
-    assign byte_enable = wfill_in ? {BANK_LINE_SIZE{1'b1}} : wbyteen_qual;
+    assign byte_enable = wfill_in ? {CACHE_LINE_SIZE{1'b1}} : wbyteen_qual;
     assign write_data  = wfill_in ? writedata_in : writeword_qual;
 
     assign write_enable = writeen_in && !stall;
 
     wire rw_hazard = DRAM_ENABLE && (raddr == waddr) && writeen_in;
-    for (genvar i = 0; i < BANK_LINE_SIZE; i++) begin
+    for (genvar i = 0; i < CACHE_LINE_SIZE; i++) begin
         assign dirtyb_qual[i]            = rw_hazard ? byte_enable[i] : read_dirtyb[i];
         assign readdata_qual[i * 8 +: 8] = (rw_hazard && byte_enable[i]) ? write_data[i * 8 +: 8] : read_data[i * 8 +: 8];
     end
@@ -129,7 +129,7 @@ module VX_data_access #(
         assign readdata_out = readdata_qual;
     end
 
-     if (`WORD_SELECT_WIDTH != 0) begin
+     if (`WORD_SELECT_BITS != 0) begin
         wire [`WORD_WIDTH-1:0] readword = readdata_qual[rwsel_in * `WORD_WIDTH +: `WORD_WIDTH];
         for (genvar i = 0; i < WORD_SIZE; i++) begin
             assign readword_out[i * 8 +: 8] = readword[i * 8 +: 8] & {8{rbyteen_in[i]}};

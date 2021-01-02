@@ -1,8 +1,8 @@
 `include "VX_cache_config.vh"
 
-module VX_cache_core_req_bank_sel #(
+module VX_cache_core_req_bank_sel #(  
     // Size of line inside a bank in bytes
-    parameter BANK_LINE_SIZE = 1, 
+    parameter CACHE_LINE_SIZE= 1, 
     // Size of a word in bytes
     parameter WORD_SIZE      = 1, 
     // Number of banks
@@ -10,7 +10,10 @@ module VX_cache_core_req_bank_sel #(
     // Number of Word requests per cycle
     parameter NUM_REQS       = 1,
     // core request tag size
-    parameter CORE_TAG_WIDTH = 1
+    parameter CORE_TAG_WIDTH = 1,
+
+    // bank offset from beginning of index range
+    parameter BANK_ADDR_OFFSET = 0
 ) (
     input wire                                      clk,
     input wire                                      reset,
@@ -33,22 +36,22 @@ module VX_cache_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag,
     output wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]    per_bank_core_req_data,
     input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
-);     
+);
     if (NUM_BANKS > 1) begin
 
-        reg [NUM_BANKS-1:0]                     per_bank_core_req_valid_r;
-        reg [NUM_BANKS-1:0][`REQS_BITS-1:0]     per_bank_core_req_tid_r;
-        reg [NUM_BANKS-1:0]                     per_bank_core_req_rw_r;
-        reg [NUM_BANKS-1:0][WORD_SIZE-1:0]      per_bank_core_req_byteen_r;
-        reg [NUM_BANKS-1:0][`WORD_ADDR_WIDTH-1:0] per_bank_core_req_addr_r;
-        reg [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag_r;
-        reg [NUM_BANKS-1:0][`WORD_WIDTH-1:0]    per_bank_core_req_data_r;
-        reg [NUM_REQS-1:0]                      core_req_ready_r;
-        reg [NUM_BANKS-1:0]                     core_req_sel_r;
-        wire [NUM_REQS-1:0][`BANK_BITS-1:0]     core_req_bid;
+        reg [NUM_BANKS-1:0]                         per_bank_core_req_valid_r;
+        reg [NUM_BANKS-1:0][`REQS_BITS-1:0]         per_bank_core_req_tid_r;
+        reg [NUM_BANKS-1:0]                         per_bank_core_req_rw_r;
+        reg [NUM_BANKS-1:0][WORD_SIZE-1:0]          per_bank_core_req_byteen_r;
+        reg [NUM_BANKS-1:0][`WORD_ADDR_WIDTH-1:0]   per_bank_core_req_addr_r;
+        reg [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]     per_bank_core_req_tag_r;
+        reg [NUM_BANKS-1:0][`WORD_WIDTH-1:0]        per_bank_core_req_data_r;
+        reg [NUM_REQS-1:0]                          core_req_ready_r;
+        reg [NUM_BANKS-1:0]                         core_req_sel_r;
+        wire [NUM_REQS-1:0][`BANK_SELECT_BITS-1:0]  core_req_bid;
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_req_bid[i] = core_req_addr[i][`BANK_SELECT_ADDR_RNG];
+            assign core_req_bid[i] = `BANK_SELECT_ADDR(core_req_addr[i]);
         end
 
         always @(*) begin
@@ -79,7 +82,7 @@ module VX_cache_core_req_bank_sel #(
             
             for (integer j = 0; j < NUM_BANKS; ++j) begin
                 for (integer i = 0; i < NUM_REQS; ++i) begin
-                    if (core_req_valid[i] && (core_req_bid[i] == `BANK_BITS'(j))) begin
+                    if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
                         core_req_ready_r[i] = per_bank_core_req_ready[j];                        
                         core_req_sel_r[i]   = 1;
                         break;
