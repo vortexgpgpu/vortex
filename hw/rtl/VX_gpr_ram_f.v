@@ -20,6 +20,8 @@ module VX_gpr_ram_f #(
 ); 
     reg [DATAW-1:0] mem [DEPTH-1:0];
 
+    initial mem = '{default: 0};
+
     always @(posedge clk) begin
         if (wren) begin
             mem [waddr] <= wdata;

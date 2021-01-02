@@ -67,7 +67,7 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                        per_core_busy;
     wire [`NUM_CORES-1:0]                        per_core_ebreak;
 
-    for (genvar i = 0; i < `NUM_CORES; i++) begin    
+    for (genvar i = 0; i < `NUM_CORES; i++) begin
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))
         ) core (
