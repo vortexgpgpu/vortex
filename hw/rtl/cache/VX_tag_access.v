@@ -50,7 +50,6 @@ module VX_tag_access #(
 
     wire                        do_fill;
     wire                        do_write;
-    wire                        do_invalidate;  
     
     wire [`TAG_SELECT_BITS-1:0] addrtag   = `LINE_TAG_ADDR(addr_in);
     wire [`LINE_SELECT_BITS-1:0] addrline = addr_in [`LINE_SELECT_BITS-1:0];
@@ -73,7 +72,6 @@ module VX_tag_access #(
 
         .do_fill     (do_fill),
         .do_write    (do_write),
-        .invalidate  (do_invalidate),
         .write_tag   (addrtag)
     );
 
@@ -91,8 +89,6 @@ module VX_tag_access #(
     assign do_fill = valid_in 
                   && is_fill_in
                   && !stall;
-
-    assign do_invalidate = 0;
 
     assign miss_out = valid_in 
                    && !tags_match

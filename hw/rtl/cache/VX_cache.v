@@ -42,7 +42,7 @@ module VX_cache #(
     parameter CORE_TAG_ID_BITS              = 0,
 
     // dram request tag size
-    parameter DRAM_TAG_WIDTH                = (32 - $clog2(CACHE_LINE_SIZE)),
+    parameter DRAM_TAG_WIDTH                = `LOG2UP(NUM_BANKS),
 
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0
@@ -89,7 +89,6 @@ module VX_cache #(
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
-    `UNUSED_VAR (dram_rsp_tag)
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_valid; 
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_req_tid;
@@ -108,9 +107,9 @@ module VX_cache #(
 
     wire [NUM_BANKS-1:0]                        per_bank_dram_req_valid;    
     wire [NUM_BANKS-1:0]                        per_bank_dram_req_rw;
-    wire [NUM_BANKS-1:0][CACHE_LINE_SIZE-1:0]    per_bank_dram_req_byteen;    
+    wire [NUM_BANKS-1:0][CACHE_LINE_SIZE-1:0]   per_bank_dram_req_byteen;    
     wire [NUM_BANKS-1:0][`DRAM_ADDR_WIDTH-1:0]  per_bank_dram_req_addr;
-    wire [NUM_BANKS-1:0][`CACHE_LINE_WIDTH-1:0]  per_bank_dram_req_data;
+    wire [NUM_BANKS-1:0][`CACHE_LINE_WIDTH-1:0] per_bank_dram_req_data;
     wire [NUM_BANKS-1:0]                        per_bank_dram_req_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_dram_rsp_ready;
@@ -154,11 +153,11 @@ module VX_cache #(
         .per_bank_core_req_ready (per_bank_core_req_ready)
     );
 
-    assign dram_req_tag = dram_req_addr;
     if (NUM_BANKS == 1) begin
+        `UNUSED_VAR (dram_rsp_tag)
         assign dram_rsp_ready = per_bank_dram_rsp_ready;
     end else begin
-        assign dram_rsp_ready = per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag)];
+        assign dram_rsp_ready = per_bank_dram_rsp_ready[dram_rsp_tag];
     end
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
@@ -186,7 +185,6 @@ module VX_cache #(
 
         wire                        curr_bank_dram_rsp_valid;            
         wire [`CACHE_LINE_WIDTH-1:0] curr_bank_dram_rsp_data;
-        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_rsp_addr;
         wire                        curr_bank_dram_rsp_ready;
 
         // Core Req
@@ -221,10 +219,8 @@ module VX_cache #(
         // DRAM response
         if (NUM_BANKS == 1) begin
             assign curr_bank_dram_rsp_valid = dram_rsp_valid;
-            assign curr_bank_dram_rsp_addr  = dram_rsp_tag;
         end else begin
-            assign curr_bank_dram_rsp_valid = dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i);
-            assign curr_bank_dram_rsp_addr  = `DRAM_TO_LINE_ADDR(dram_rsp_tag); 
+            assign curr_bank_dram_rsp_valid = dram_rsp_valid && (dram_rsp_tag == i);
         end
         assign curr_bank_dram_rsp_data    = dram_rsp_data;
         assign per_bank_dram_rsp_ready[i] = curr_bank_dram_rsp_ready;
@@ -289,7 +285,6 @@ module VX_cache #(
             // DRAM response
             .dram_rsp_valid     (curr_bank_dram_rsp_valid),                
             .dram_rsp_data      (curr_bank_dram_rsp_data),
-            .dram_rsp_addr      (curr_bank_dram_rsp_addr),
             .dram_rsp_ready     (curr_bank_dram_rsp_ready)
         );
     end   
@@ -315,14 +310,14 @@ module VX_cache #(
     ); 
 
     if (DRAM_ENABLE) begin
-        wire [NUM_BANKS-1:0][(`DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;
+        wire [NUM_BANKS-1:0][(DRAM_TAG_WIDTH + `DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;
         for (genvar i = 0; i < NUM_BANKS; i++) begin
-            assign data_in[i] = {per_bank_dram_req_addr[i], per_bank_dram_req_rw[i], per_bank_dram_req_byteen[i], per_bank_dram_req_data[i]};
+            assign data_in[i] = {DRAM_TAG_WIDTH'(i), per_bank_dram_req_addr[i], per_bank_dram_req_rw[i], per_bank_dram_req_byteen[i], per_bank_dram_req_data[i]};
         end
 
         VX_stream_arbiter #(
             .NUM_REQS (NUM_BANKS),
-            .DATAW    (`DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
+            .DATAW    (DRAM_TAG_WIDTH + `DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
             .BUFFERED (1)
         ) dram_req_arb (
             .clk       (clk),
@@ -331,7 +326,7 @@ module VX_cache #(
             .data_in   (data_in),
             .ready_in  (per_bank_dram_req_ready),   
             .valid_out (dram_req_valid),   
-            .data_out  ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),
+            .data_out  ({dram_req_tag, dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),
             .ready_out (dram_req_ready)
         );
     end else begin
@@ -346,6 +341,7 @@ module VX_cache #(
         assign dram_req_byteen = 0;
         assign dram_req_addr   = 0;
         assign dram_req_data   = 0;
+        assign dram_req_tag    = 0;
         `UNUSED_VAR (dram_req_ready)
     end
 

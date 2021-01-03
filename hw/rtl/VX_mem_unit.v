@@ -84,7 +84,7 @@ module VX_mem_unit # (
     VX_cache #(
         .CACHE_ID           (`ICACHE_ID),
         .CACHE_SIZE         (`ICACHE_SIZE),
-        .CACHE_LINE_SIZE     (`ICACHE_LINE_SIZE),
+        .CACHE_LINE_SIZE    (`ICACHE_LINE_SIZE),
         .NUM_BANKS          (`INUM_BANKS),
         .WORD_SIZE          (`IWORD_SIZE),
         .NUM_REQS           (`INUM_REQUESTS),
@@ -97,7 +97,7 @@ module VX_mem_unit # (
         .WRITE_ENABLE       (0),
         .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`IDRAM_TAG_WIDTH)
+        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH)
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
 
@@ -142,7 +142,7 @@ module VX_mem_unit # (
     VX_cache #(
         .CACHE_ID           (`DCACHE_ID),
         .CACHE_SIZE         (`DCACHE_SIZE),
-        .CACHE_LINE_SIZE     (`DCACHE_LINE_SIZE),
+        .CACHE_LINE_SIZE    (`DCACHE_LINE_SIZE),
         .NUM_BANKS          (`DNUM_BANKS),
         .WORD_SIZE          (`DWORD_SIZE),
         .NUM_REQS           (`DNUM_REQUESTS),
@@ -215,7 +215,6 @@ module VX_mem_unit # (
             .WRITE_ENABLE       (1),
             .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-            .DRAM_TAG_WIDTH     (`SDRAM_TAG_WIDTH),
             .BANK_ADDR_OFFSET   (`SBANK_ADDR_OFFSET)
         ) smem (
             `SCOPE_BIND_VX_mem_unit_smem

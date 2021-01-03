@@ -19,7 +19,6 @@ module VX_tag_store #(
     
     input  wire                             do_fill,
     input  wire                             do_write,
-    input  wire                             invalidate,
     input  wire[`TAG_SELECT_BITS-1:0]       write_tag,   
     
     output wire[`TAG_SELECT_BITS-1:0]       read_tag,
@@ -41,8 +40,6 @@ module VX_tag_store #(
                 dirty[addr] <= 0;
             end else if (do_write) begin
                 dirty[addr] <= 1;
-            end else if (invalidate) begin
-                valid[addr] <= 0;
             end
         end
     end

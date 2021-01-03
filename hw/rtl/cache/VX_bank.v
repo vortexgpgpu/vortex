@@ -83,8 +83,7 @@ module VX_bank #(
     input  wire                         dram_req_ready,
     
     // DRAM response
-    input  wire                         dram_rsp_valid,    
-    input  wire [`LINE_ADDR_WIDTH-1:0]  dram_rsp_addr,
+    input  wire                         dram_rsp_valid,  
     input  wire [`CACHE_LINE_WIDTH-1:0] dram_rsp_data,
     output wire                         dram_rsp_ready
 );
@@ -110,7 +109,6 @@ module VX_bank #(
     wire drsq_pop;
     wire drsq_empty;
     
-    wire [`LINE_ADDR_WIDTH-1:0] drsq_addr_st0;
     wire [`CACHE_LINE_WIDTH-1:0] drsq_filldata_st0;    
 
     wire drsq_push = dram_rsp_valid && dram_rsp_ready;
@@ -120,7 +118,7 @@ module VX_bank #(
         assign dram_rsp_ready = !drsq_full;
 
         VX_fifo_queue #(
-            .DATAW    (`LINE_ADDR_WIDTH + $bits(dram_rsp_data)), 
+            .DATAW    ($bits(dram_rsp_data)), 
             .SIZE     (DRSQ_SIZE),
             .BUFFERED (1),
             .FASTRAM  (1)
@@ -129,18 +127,16 @@ module VX_bank #(
             .reset   (reset),
             .push    (drsq_push),
             .pop     (drsq_pop),
-            .data_in ({dram_rsp_addr, dram_rsp_data}),        
-            .data_out({drsq_addr_st0, drsq_filldata_st0}),
+            .data_in (dram_rsp_data),        
+            .data_out(drsq_filldata_st0),
             .empty   (drsq_empty),
             .full    (drsq_full),
             `UNUSED_PIN (size)
         );
     end else begin
         `UNUSED_VAR (dram_rsp_valid)
-        `UNUSED_VAR (dram_rsp_addr)
         `UNUSED_VAR (dram_rsp_data)
         assign drsq_empty        = 1;
-        assign drsq_addr_st0     = 0;
         assign drsq_filldata_st0 = 0;
         assign dram_rsp_ready    = 0;        
     end
@@ -312,9 +308,7 @@ module VX_bank #(
 
     assign valid_st0 = drsq_pop || mshr_pop || creq_pop;
 
-    assign addr_st0 = mshr_pop_unqual ? mshr_addr_st0 :
-                      drsq_pop_unqual ? drsq_addr_st0 :
-                                        creq_addr_st0;
+    assign addr_st0 = creq_pop_unqual ? creq_addr_st0 : mshr_addr_st0;
     
     if (`WORD_SELECT_BITS != 0) begin
         assign wsel_st0 = creq_pop_unqual ? creq_wsel_st0 : mshr_wsel_st0; 
@@ -423,7 +417,7 @@ if (DRAM_ENABLE) begin
 
     assign core_req_hit_st1 = !is_fill_st1 && !miss_st1 && !force_miss_st1;
 
-    assign incoming_fill_st1 = !drsq_empty && (addr_st1 == drsq_addr_st0);
+    assign incoming_fill_st1 = !drsq_empty && (addr_st1 == mshr_addr_st0);
 
     wire do_fill_req_st1 = miss_st1 
                         && !(WRITE_THROUGH && mem_rw_st1)
@@ -583,7 +577,7 @@ end
                   && !crsq_push_stall 
                   && !dreq_push_stall;
 
-    wire incoming_fill_qual_st2 = (!drsq_empty && (addr_st2 == drsq_addr_st0)) || incoming_fill_st2;
+    wire incoming_fill_qual_st2 = (!drsq_empty && (addr_st2 == mshr_addr_st0)) || incoming_fill_st2;
 
     if (DRAM_ENABLE) begin
 
@@ -594,10 +588,7 @@ end
 
         // push missed requests as 'ready' if it was a forced miss but actually had a hit 
         // or the fill request is comming for this block
-        wire mshr_init_ready_state_st2 = valid_st2 && (!miss_st2 || incoming_fill_qual_st2); 
-
-        // use dram rsp or core req address to lookup the mshr
-        wire [`LINE_ADDR_WIDTH-1:0] lookup_addr = drsq_pop_unqual ? drsq_addr_st0 : creq_addr_st0;
+        wire mshr_init_ready_state_st2 = valid_st2 && (!miss_st2 || incoming_fill_qual_st2);
 
         VX_miss_resrv #(
             .BANK_ID            (BANK_ID),
@@ -630,7 +621,7 @@ end
 
             // lookup
             .lookup_ready       (update_ready_st0),
-            .lookup_addr        (lookup_addr),
+            .lookup_addr        (addr_st0),
             .lookup_match       (mshr_pending_hazard_unqual_st0),
             
             // schedule
