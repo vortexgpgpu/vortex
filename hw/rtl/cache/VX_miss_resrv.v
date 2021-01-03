@@ -132,8 +132,9 @@ module VX_miss_resrv #(
     VX_dp_ram #(
         .DATAW(`MSHR_DATA_WIDTH),
         .SIZE(MSHR_SIZE),
-        .RWCHECK(1)
-    ) datatable (
+        .RWCHECK(1),
+        .FASTRAM(1)
+    ) entries (
         .clk(clk),
         .waddr(tail_ptr),                                
         .raddr(schedule_ptr),                
