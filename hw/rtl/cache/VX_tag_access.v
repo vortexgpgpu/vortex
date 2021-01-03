@@ -65,7 +65,8 @@ module VX_tag_access #(
         .clk         (clk),
         .reset       (reset),
 
-        .read_addr   (addrline),
+        .addr        (addrline),
+
         .read_valid  (read_valid),        
         .read_dirty  (read_dirty),
         .read_tag    (read_tag),
@@ -73,7 +74,6 @@ module VX_tag_access #(
         .do_fill     (do_fill),
         .do_write    (do_write),
         .invalidate  (do_invalidate),
-        .write_addr  (addrline),
         .write_tag   (addrtag)
     );
 

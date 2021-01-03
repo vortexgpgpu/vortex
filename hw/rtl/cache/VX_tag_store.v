@@ -15,13 +15,13 @@ module VX_tag_store #(
     input  wire                             clk,
     input  wire                             reset,  
 
+    input  wire[`LINE_SELECT_BITS-1:0]      addr,
+    
     input  wire                             do_fill,
     input  wire                             do_write,
-    input  wire                             invalidate, 
-    input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
+    input  wire                             invalidate,
     input  wire[`TAG_SELECT_BITS-1:0]       write_tag,   
     
-    input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
     output wire[`TAG_SELECT_BITS-1:0]       read_tag,
     output wire                             read_valid,
     output wire                             read_dirty    
@@ -37,25 +37,23 @@ module VX_tag_store #(
             end
         end else begin
             if (do_fill) begin
-                valid[write_addr] <= 1;
-                dirty[write_addr] <= 0;
+                valid[addr] <= 1;
+                dirty[addr] <= 0;
             end else if (do_write) begin
-                dirty[write_addr] <= 1;
+                dirty[addr] <= 1;
             end else if (invalidate) begin
-                valid[write_addr] <= 0;
+                valid[addr] <= 0;
             end
         end
     end
 
-    VX_dp_ram #(
+    VX_sp_ram #(
         .DATAW(`TAG_SELECT_BITS),
         .SIZE(`LINES_PER_BANK),
-        .FASTRAM(1),
         .RWCHECK(1)
     ) tags (
         .clk(clk),                 
-        .waddr(write_addr),                                
-        .raddr(read_addr),                
+        .addr(addr),   
         .wren(do_fill),
         .byteen(1'b1),
         .rden(1'b1),
@@ -63,7 +61,7 @@ module VX_tag_store #(
         .dout(read_tag)
     );  
     
-    assign read_valid = valid[read_addr];
-    assign read_dirty = dirty[read_addr];
+    assign read_valid = valid[addr];
+    assign read_dirty = dirty[addr];
 
 endmodule

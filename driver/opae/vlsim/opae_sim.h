@@ -85,6 +85,8 @@ private:
 
   std::mutex mutex_;
 
+  uint64_t reset_time_;
+
   RAM ram_;
   Vvortex_afu_shim *vortex_afu_;
 #ifdef VCD_OUTPUT
