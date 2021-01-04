@@ -39,6 +39,7 @@ module Vortex (
     output wire                             busy, 
     output wire                             ebreak
 );
+
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_valid;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_dram_req_rw;
     wire [`NUM_CLUSTERS-1:0][`L2DRAM_BYTEEN_WIDTH-1:0] per_cluster_dram_req_byteen;
@@ -69,13 +70,25 @@ module Vortex (
     wire [`NC_BITS-1:0] csr_core_id = `NC_BITS'(csr_req_coreid);
 
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
+
+        wire cluster_reset;
+        if (`NUM_CLUSTERS > 1) begin
+            reg cluster_reset_r;
+            always @(posedge clk) begin
+                cluster_reset_r <= reset;
+            end
+            assign cluster_reset = cluster_reset_r;
+        end else begin
+            assign cluster_reset = reset;
+        end
+
         VX_cluster #(
             .CLUSTER_ID(i)
         ) cluster (
             `SCOPE_BIND_Vortex_cluster(i)
 
             .clk            (clk),
-            .reset          (reset),
+            .reset          (cluster_reset),
 
             .dram_req_valid (per_cluster_dram_req_valid [i]),
             .dram_req_rw    (per_cluster_dram_req_rw    [i]),

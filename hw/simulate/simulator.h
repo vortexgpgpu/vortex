@@ -69,8 +69,6 @@ private:
   bool csr_req_active_;
   uint32_t* csr_rsp_value_;
 
-  uint64_t reset_time_;
-
   RAM *ram_;
   VVortex *vortex_;
 #ifdef VCD_OUTPUT
