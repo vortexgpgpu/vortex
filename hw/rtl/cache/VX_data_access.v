@@ -47,8 +47,8 @@ module VX_data_access #(
     input wire [`UP(`WORD_SELECT_BITS)-1:0] rwsel_in,
     input wire [WORD_SIZE-1:0]          rbyteen_in,
     output wire[`WORD_WIDTH-1:0]        readword_out,
-    output wire [`CACHE_LINE_WIDTH-1:0]  readdata_out,
-    output wire [CACHE_LINE_SIZE-1:0]    dirtyb_out,
+    output wire [`CACHE_LINE_WIDTH-1:0] readdata_out,
+    output wire [CACHE_LINE_SIZE-1:0]   dirtyb_out,
 
     // writing
     input wire                          writeen_in,
@@ -59,7 +59,7 @@ module VX_data_access #(
     input wire [WORD_SIZE-1:0]          wbyteen_in,    
     input wire                          wfill_in,
     input wire [`WORD_WIDTH-1:0]        writeword_in,
-    input wire [`CACHE_LINE_WIDTH-1:0]   writedata_in
+    input wire [`CACHE_LINE_WIDTH-1:0]  writedata_in
 );
 
     wire [CACHE_LINE_SIZE-1:0]   read_dirtyb, dirtyb_qual;
@@ -67,7 +67,7 @@ module VX_data_access #(
 
     wire [CACHE_LINE_SIZE-1:0]   byte_enable; 
     wire [`CACHE_LINE_WIDTH-1:0] write_data;   
-    wire                        write_enable;
+    wire                         write_enable;
 
     wire [`LINE_SELECT_BITS-1:0] raddr = raddr_in[`LINE_SELECT_BITS-1:0];
     wire [`LINE_SELECT_BITS-1:0] waddr = waddr_in[`LINE_SELECT_BITS-1:0];
