@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iomanip>
 
-#define RESET_DELAY 1
+#define RESET_DELAY 2
 
 #define ENABLE_DRAM_STALLS
 #define DRAM_LATENCY 24
@@ -83,7 +83,15 @@ void Simulator::reset() {
 
   vortex_->reset = 0;
 
-  reset_time_ = timestamp;
+  for (int i = 0; i < RESET_DELAY; ++i) {
+    vortex_->clk = 0;
+    this->eval();
+    vortex_->clk = 1;
+    this->eval();
+  }  
+  
+  // Turn on assertion after reset
+  Verilated::assertOn(true);
 }
 
 void Simulator::step() {
@@ -91,7 +99,7 @@ void Simulator::step() {
   vortex_->clk = 0;
   this->eval();
 
-  dram_rsp_ready_   = vortex_->dram_rsp_ready;
+  dram_rsp_ready_ = vortex_->dram_rsp_ready;
   csr_req_ready_ = vortex_->csr_req_ready;
   
   vortex_->clk = 1;
@@ -100,11 +108,6 @@ void Simulator::step() {
   this->eval_dram_bus();
   this->eval_io_bus();
   this->eval_csr_bus();
-  
-  if ((timestamp - reset_time_) == (RESET_DELAY*2)) {
-    // Turn on assertion after reset
-    Verilated::assertOn(true);
-  }
 
 #ifndef NDEBUG
   fflush(stdout);
