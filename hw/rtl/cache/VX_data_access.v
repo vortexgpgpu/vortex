@@ -44,9 +44,6 @@ module VX_data_access #(
 `IGNORE_WARNINGS_BEGIN
     input wire[`LINE_ADDR_WIDTH-1:0]    raddr_in,    
 `IGNORE_WARNINGS_END
-    input wire [`UP(`WORD_SELECT_BITS)-1:0] rwsel_in,
-    input wire [WORD_SIZE-1:0]          rbyteen_in,
-    output wire[`WORD_WIDTH-1:0]        readword_out,
     output wire [`CACHE_LINE_WIDTH-1:0] readdata_out,
     output wire [CACHE_LINE_SIZE-1:0]   dirtyb_out,
 
@@ -59,11 +56,12 @@ module VX_data_access #(
     input wire [WORD_SIZE-1:0]          wbyteen_in,    
     input wire                          wfill_in,
     input wire [`WORD_WIDTH-1:0]        writeword_in,
-    input wire [`CACHE_LINE_WIDTH-1:0]  writedata_in
+    input wire [`CACHE_LINE_WIDTH-1:0]  readdata_in,
+    input wire [`CACHE_LINE_WIDTH-1:0]  filldata_in
 );
 
-    wire [CACHE_LINE_SIZE-1:0]   read_dirtyb, dirtyb_qual;
-    wire [`CACHE_LINE_WIDTH-1:0] read_data, readdata_qual;
+    wire [CACHE_LINE_SIZE-1:0]   read_dirtyb;
+    wire [`CACHE_LINE_WIDTH-1:0] read_data;
 
     wire [CACHE_LINE_SIZE-1:0]   byte_enable; 
     wire [`CACHE_LINE_WIDTH-1:0] write_data;   
@@ -96,49 +94,29 @@ module VX_data_access #(
     );
 
     wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wbyteen_qual; 
-    wire [`CACHE_LINE_WIDTH-1:0] writeword_qual;   
+    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] writedata_qual;   
 
     if (`WORD_SELECT_BITS != 0) begin
         for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
-            assign wbyteen_qual[i] = (wwsel_in == `WORD_SELECT_BITS'(i)) ? wbyteen_in : {WORD_SIZE{1'b0}};
-            assign writeword_qual[i * `WORD_WIDTH +: `WORD_WIDTH] = writeword_in;
+            assign wbyteen_qual[i]   = (wwsel_in == `WORD_SELECT_BITS'(i)) ? wbyteen_in : {WORD_SIZE{1'b0}};
+            assign writedata_qual[i] = (wwsel_in == `WORD_SELECT_BITS'(i)) ? writeword_in : readdata_in[i * `WORD_WIDTH +: `WORD_WIDTH];
         end
     end else begin
         `UNUSED_VAR (wwsel_in)
+        `UNUSED_VAR (readdata_in)
         assign wbyteen_qual   = wbyteen_in;
-        assign writeword_qual = writeword_in;
+        assign writedata_qual = writeword_in;
     end    
     
     assign byte_enable = wfill_in ? {CACHE_LINE_SIZE{1'b1}} : wbyteen_qual;
-    assign write_data  = wfill_in ? writedata_in : writeword_qual;
+    assign write_data  = wfill_in ? filldata_in : writedata_qual;
 
-    assign write_enable = writeen_in && !stall;
+    assign write_enable = writeen_in && !stall;   
 
     wire rw_hazard = DRAM_ENABLE && (raddr == waddr) && writeen_in;
     for (genvar i = 0; i < CACHE_LINE_SIZE; i++) begin
-        assign dirtyb_qual[i]            = rw_hazard ? byte_enable[i] : read_dirtyb[i];
-        assign readdata_qual[i * 8 +: 8] = (rw_hazard && byte_enable[i]) ? write_data[i * 8 +: 8] : read_data[i * 8 +: 8];
-    end
-
-    if (WRITE_THROUGH) begin
-        `UNUSED_VAR (dirtyb_qual)
-        assign dirtyb_out   = wbyteen_qual;
-        assign readdata_out = writeword_qual;
-    end else begin
-        assign dirtyb_out   = dirtyb_qual;
-        assign readdata_out = readdata_qual;
-    end
-
-     if (`WORD_SELECT_BITS != 0) begin
-        wire [`WORD_WIDTH-1:0] readword = readdata_qual[rwsel_in * `WORD_WIDTH +: `WORD_WIDTH];
-        for (genvar i = 0; i < WORD_SIZE; i++) begin
-            assign readword_out[i * 8 +: 8] = readword[i * 8 +: 8] & {8{rbyteen_in[i]}};
-        end
-    end else begin
-        `UNUSED_VAR (rwsel_in)
-        for (genvar i = 0; i < WORD_SIZE; i++) begin
-            assign readword_out[i * 8 +: 8] = readdata_qual[i * 8 +: 8] & {8{rbyteen_in[i]}};
-        end
+        assign dirtyb_out[i] = rw_hazard ? byte_enable[i] : read_dirtyb[i];
+        assign readdata_out[i * 8 +: 8] = (rw_hazard && byte_enable[i]) ? write_data[i * 8 +: 8] : read_data[i * 8 +: 8];
     end
 
 `ifdef DBG_PRINT_CACHE_DATA
@@ -152,7 +130,7 @@ module VX_data_access #(
                 end
             end 
             if (readen_in) begin
-                $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(raddr_in, BANK_ID), rdebug_wid, rdebug_pc, dirtyb_out, raddr, rwsel_in, read_data);
+                $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, dirty=%b, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(raddr_in, BANK_ID), rdebug_wid, rdebug_pc, dirtyb_out, raddr, read_data);
             end            
         end
     end    

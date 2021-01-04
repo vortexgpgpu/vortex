@@ -37,6 +37,8 @@ module vortex_afu #(
   output logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select
 );
 
+localparam RESET_DELAY        = 2;  
+
 localparam DRAM_ADDR_WIDTH    = $bits(t_local_mem_addr);
 localparam DRAM_LINE_WIDTH    = $bits(t_local_mem_data);
 localparam DRAM_LINE_LW       = $clog2(DRAM_LINE_WIDTH);
@@ -324,6 +326,15 @@ wire cmd_write_done;
 wire cmd_csr_done;
 wire cmd_run_done;
 
+reg [$clog2(RESET_DELAY+1)-1:0] vx_reset_ctr;
+always @(posedge clk) begin
+  if (state == STATE_IDLE) begin
+    vx_reset_ctr <= 0;
+  end else if (state == STATE_START) begin
+    vx_reset_ctr <= vx_reset_ctr + 1;
+  end
+end
+
 always @(posedge clk) begin
   if (reset) begin
     state      <= STATE_IDLE;    
@@ -392,8 +403,10 @@ always @(posedge clk) begin
         end
       end
 
-      STATE_START: begin // vortex reset cycle
-        state <= STATE_RUN;
+      STATE_START: begin 
+        // vortex reset cycles
+        if (vx_reset_ctr == $bits(vx_reset_ctr)'(RESET_DELAY))
+          state <= STATE_RUN;
       end
 
       STATE_RUN: begin
