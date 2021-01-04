@@ -68,10 +68,16 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                        per_core_ebreak;
 
     for (genvar i = 0; i < `NUM_CORES; i++) begin
-
-        reg core_reset;
-        always @(posedge clk) begin
-            core_reset <= reset;
+        
+        wire core_reset;
+        if (`NUM_CORES > 1) begin
+            reg core_reset_r;
+            always @(posedge clk) begin
+                core_reset_r <= reset;
+            end
+            assign core_reset = core_reset_r;
+        end else begin
+            assign core_reset = reset;
         end
 
         VX_core #(
@@ -158,7 +164,7 @@ module VX_cluster #(
         VX_cache #(
             .CACHE_ID           (`L2CACHE_ID),
             .CACHE_SIZE         (`L2CACHE_SIZE),
-            .CACHE_LINE_SIZE     (`L2CACHE_LINE_SIZE),
+            .CACHE_LINE_SIZE    (`L2CACHE_LINE_SIZE),
             .NUM_BANKS          (`L2NUM_BANKS),
             .WORD_SIZE          (`L2WORD_SIZE),
             .NUM_REQS           (`NUM_CORES),

@@ -8,7 +8,7 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -nostartfiles -Wl,--gc-sections
+VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -nostartfiles -Wl,--gc-sections,-Map,kernel.map
 VX_CFLAGS += -I$(VORTEX_RT_PATH)/include
 
 VX_LDFLAGS += $(VORTEX_RT_PATH)/libvortexrt.a
@@ -28,7 +28,7 @@ SRCS = dogfood.cpp
 all: $(PROJECT) kernel.bin kernel.dump
  
 kernel.dump: kernel.elf
-	$(VX_DP) -D kernel.elf > kernel.dump
+	$(VX_DP) -d -r -t kernel.elf > kernel.dump
 
 kernel.bin: kernel.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
