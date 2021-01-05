@@ -37,8 +37,7 @@ module VX_databus_arb (
                          && (core_req_if.addr[i] < REQ_ADDRW'(`SHARED_MEM_BASE_ADDR >> 2));
 
         VX_skid_buffer #(
-            .DATAW (REQ_DATAW),
-            .PASSTHRU (1)
+            .DATAW (REQ_DATAW)
         ) cache_out_buffer (
             .clk       (clk),
             .reset     (reset),
@@ -51,8 +50,7 @@ module VX_databus_arb (
         );
 
         VX_skid_buffer #(
-            .DATAW (REQ_DATAW),
-            .PASSTHRU (1)
+            .DATAW (REQ_DATAW)
         ) smem_out_buffer (
             .clk       (clk),
             .reset     (reset),
@@ -85,7 +83,7 @@ module VX_databus_arb (
     assign rsp_valid_in[1] = (| smem_rsp_if.valid) & `SM_ENABLE;
 
     VX_stream_arbiter #(
-        .NUM_REQS (2),
+        .NUM_REQS ((`SM_ENABLE ? 2 : 1)),
         .DATAW    (RSP_DATAW),        
         .BUFFERED (0)
     ) rsp_arb (

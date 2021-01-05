@@ -4,9 +4,9 @@ module VX_cache #(
     parameter CACHE_ID                      = 0,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 8092, 
+    parameter CACHE_SIZE                    = 16384, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE               = 16, 
+    parameter CACHE_LINE_SIZE               = 64, 
     // Number of banks
     parameter NUM_BANKS                     = 4, 
     // Size of a word in bytes
@@ -17,7 +17,7 @@ module VX_cache #(
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 4, 
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE                     = 8, 
+    parameter MSHR_SIZE                     = 16, 
     // DRAM Response Queue Size
     parameter DRSQ_SIZE                     = 4,
 
@@ -39,7 +39,7 @@ module VX_cache #(
     parameter CORE_TAG_WIDTH                = $clog2(MSHR_SIZE),
     
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 0,
+    parameter CORE_TAG_ID_BITS              = CORE_TAG_WIDTH,
 
     // dram request tag size
     parameter DRAM_TAG_WIDTH                = `LOG2UP(NUM_BANKS),

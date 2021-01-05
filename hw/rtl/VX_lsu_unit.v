@@ -77,7 +77,8 @@ module VX_lsu_unit #(
 
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32))),
-        .RESETW (1)
+        .RESETW (1),
+        .DEPTH  (0)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
