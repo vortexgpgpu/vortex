@@ -226,16 +226,16 @@ module VX_bank #(
     wire                            force_miss_st0, force_miss_st1;
     wire                            dirty_st0;
     wire [CACHE_LINE_SIZE-1:0]      dirtyb_st0, dirtyb_st1;
-    wire                            writeen_st0, writeen_st1;
     wire [`REQ_TAG_WIDTH-1:0]       tag_st0, tag_st1;
     wire                            mem_rw_st0, mem_rw_st1;
     wire [WORD_SIZE-1:0]            byteen_st0, byteen_st1;
     wire [`REQS_BITS-1:0]           req_tid_st0, req_tid_st1;    
-    wire                            core_req_hit_st0, core_req_hit_st1;
     wire                            do_writeback_st0, do_writeback_st1;
-    wire                            mshr_push_st0, mshr_push_st1;
-    wire                            crsq_push_st0, crsq_push_st1;
-    wire                            dreq_push_st0, dreq_push_st1;
+    wire                            writeen_unqual_st0, writeen_unqual_st1;
+    wire                            mshr_push_unqual_st0, mshr_push_unqual_st1;
+    wire                            dreq_push_unqual_st0, dreq_push_unqual_st1;
+    wire                            writeen_st1;
+    wire                            core_req_hit_st1;
 
     wire                            valid_st01;
     wire                            writeen_st01;
@@ -351,24 +351,19 @@ if (DRAM_ENABLE) begin
 
     // force miss to ensure commit order when a new request has pending previous requests to same block
     assign force_miss_st0 = !is_mshr_st0 && !is_fill_st0 && mshr_pending_hazard_st0;
-
-    assign core_req_hit_st0 = !is_fill_st0 && !miss_st0 && !force_miss_st0;
     
-    assign writeen_st0 = (core_req_hit_st0 && mem_rw_st0) 
-                      || (is_fill_st0 && !is_redundant_fill);
+    assign writeen_unqual_st0 = (!is_fill_st0 && !miss_st0 && mem_rw_st0) 
+                             || (is_fill_st0 && !is_redundant_fill);
 
-    wire send_fill_req_st0 = !is_fill_st0 && miss_st0 && !force_miss_st0
+    wire send_fill_req_st0 = !is_fill_st0 && miss_st0
                           && !(WRITE_THROUGH && mem_rw_st0);
 
     assign do_writeback_st0 = (WRITE_THROUGH && !is_fill_st0 && mem_rw_st0) 
                            || (!WRITE_THROUGH && is_fill_st0 && dirty_st0 && !is_redundant_fill);
 
-    assign dreq_push_st0 = send_fill_req_st0 || do_writeback_st0;
+    assign dreq_push_unqual_st0 = send_fill_req_st0 || do_writeback_st0;
 
-    assign mshr_push_st0 = !is_fill_st0 && (miss_st0 || force_miss_st0)
-                        && !(WRITE_THROUGH && mem_rw_st0);
-
-    assign crsq_push_st0 = core_req_hit_st0 && !mem_rw_st0;
+    assign mshr_push_unqual_st0 = !is_fill_st0 && !(WRITE_THROUGH && mem_rw_st0);
     
 end else begin
 
@@ -390,28 +385,36 @@ end else begin
     assign writeword_st01   = writeword_st0;
     assign tag_st01         = tag_st0;
     
-    assign writeen_st0      = mem_rw_st0;    
-    assign miss_st0         = 0;
-    assign dirty_st0        = 0;    
-    assign force_miss_st0   = 0;
-    assign readtag_st0      = 0;   
-    assign core_req_hit_st0 = 1; 
-    assign do_writeback_st0 = 0;
-    assign dreq_push_st0    = 0;
-    assign mshr_push_st0    = 0;
-    assign crsq_push_st0    = !mem_rw_st0;
+    assign miss_st0             = 0;
+    assign dirty_st0            = 0;    
+    assign force_miss_st0       = 0;
+    assign readtag_st0          = 0;   
+    assign do_writeback_st0     = 0;
+    assign writeen_unqual_st0   = mem_rw_st0;
+    assign dreq_push_unqual_st0 = 0;
+    assign mshr_push_unqual_st0 = 0;
 end 
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH + `WORD_WIDTH + `TAG_SELECT_BITS + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!pipeline_stall),
-        .data_in  ({valid_st0, mshr_push_st0, crsq_push_st0, dreq_push_st0, do_writeback_st0, core_req_hit_st0, is_mshr_st0, writeen_st0, force_miss_st0, is_fill_st0, addr_st0, wsel_st0, dirtyb_st0, readdata_st0, writeword_st0, readtag_st0, miss_st0, filldata_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
-        .data_out ({valid_st1, mshr_push_st1, crsq_push_st1, dreq_push_st1, do_writeback_st1, core_req_hit_st1, is_mshr_st1, writeen_st1, force_miss_st1, is_fill_st1, addr_st1, wsel_st1, dirtyb_st1, readdata_st1, writeword_st1, readtag_st1, miss_st1, filldata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, mshr_push_unqual_st0, dreq_push_unqual_st0, do_writeback_st0, miss_st0, force_miss_st0, addr_st0, wsel_st0, dirtyb_st0, readdata_st0, writeword_st0, readtag_st0, filldata_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, mshr_push_unqual_st1, dreq_push_unqual_st1, do_writeback_st1, miss_st1, force_miss_st1, addr_st1, wsel_st1, dirtyb_st1, readdata_st1, writeword_st1, readtag_st1, filldata_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
     );
+
+    assign core_req_hit_st1 = !is_fill_st1 && !miss_st1 && !force_miss_st1;
+    
+    assign writeen_st1 = writeen_unqual_st1 && (is_fill_st1 || !force_miss_st1);
+
+    wire dreq_push_st1 = dreq_push_unqual_st1 && (do_writeback_st1 || !force_miss_st1);
+
+    wire mshr_push_st1 = mshr_push_unqual_st1 && (miss_st1 || force_miss_st1);
+
+    wire crsq_push_st1 = core_req_hit_st1 && !mem_rw_st1;
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
