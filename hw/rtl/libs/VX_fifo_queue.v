@@ -159,7 +159,7 @@ module VX_fifo_queue #(
                 if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
                     dout_r <= data_in;
                 end else if (pop) begin
-                    dout_r <= dout;     // BRAM R/W collision
+                    dout_r <= dout;
                 end
             end
 

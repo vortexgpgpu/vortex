@@ -98,7 +98,7 @@ module VX_bank #(
 `endif
 
     wire drsq_pop;
-    wire drsq_empty;
+    wire drsq_empty, drsp_empty_next;
 
     wire [`CACHE_LINE_WIDTH-1:0] drsq_filldata;    
 
@@ -108,11 +108,9 @@ module VX_bank #(
         wire drsq_full;
         assign dram_rsp_ready = !drsq_full;
 
-        VX_fifo_queue #(
+        VX_input_queue #(
             .DATAW    ($bits(dram_rsp_data)), 
-            .SIZE     (DRSQ_SIZE),
-            .BUFFERED (1),
-            .FASTRAM  (1)
+            .SIZE     (DRSQ_SIZE)
         ) dram_rsp_queue (
             .clk     (clk),
             .reset   (reset),
@@ -121,72 +119,98 @@ module VX_bank #(
             .data_in (dram_rsp_data),        
             .data_out(drsq_filldata),
             .empty   (drsq_empty),
+            `UNUSED_PIN (data_out_next),
+            .empty_next(drsp_empty_next),
             .full    (drsq_full),
             `UNUSED_PIN (size)
         );
     end else begin
         `UNUSED_VAR (dram_rsp_valid)
         `UNUSED_VAR (dram_rsp_data)
-        assign drsq_empty     = 1;
-        assign drsq_filldata  = 0;
-        assign dram_rsp_ready = 0;        
+        assign drsq_empty      = 1;
+        assign drsp_empty_next = 1;
+        assign drsq_filldata   = 0;
+        assign dram_rsp_ready  = 0;        
     end
 
-    wire                        creq_pop;
-    wire                        creq_empty;
+    wire                        creq_pop;    
     wire                        creq_full;
-    wire [`REQS_BITS-1:0]       creq_tid_st0;
-    wire                        creq_rw_st0;  
-    wire [WORD_SIZE-1:0]        creq_byteen_st0;
+    wire                        creq_empty;
+    wire [`REQS_BITS-1:0]       creq_tid_next;
+    wire                        creq_rw_next;  
+    wire [WORD_SIZE-1:0]        creq_byteen_next;
 `IGNORE_WARNINGS_BEGIN
-    wire [`WORD_ADDR_WIDTH-1:0] creq_addr_unqual;
+    wire [`WORD_ADDR_WIDTH-1:0] creq_addr_next_unqual;
 `IGNORE_WARNINGS_END
-    wire [`LINE_ADDR_WIDTH-1:0] creq_addr_st0;
-    wire [`UP(`WORD_SELECT_BITS)-1:0] creq_wsel_st0;
-    wire [`WORD_WIDTH-1:0]      creq_writeword_st0;
-    wire [CORE_TAG_WIDTH-1:0]   creq_tag_st0;
+    wire [`LINE_ADDR_WIDTH-1:0] creq_addr_next;
+    wire [`UP(`WORD_SELECT_BITS)-1:0] creq_wsel_next;
+    wire [`WORD_WIDTH-1:0]      creq_writeword_next;
+    wire [CORE_TAG_WIDTH-1:0]   creq_tag_next;
 
     wire creq_push = (| core_req_valid) && core_req_ready;
     assign core_req_ready = !creq_full;
 
     if (BANK_ADDR_OFFSET == 0) begin
-        assign creq_addr_st0 = `LINE_SELECT_ADDR0(creq_addr_unqual);
+        assign creq_addr_next = `LINE_SELECT_ADDR0(creq_addr_next_unqual);
     end else begin
-        assign creq_addr_st0 = `LINE_SELECT_ADDRX(creq_addr_unqual);
-    end
+        assign creq_addr_next = `LINE_SELECT_ADDRX(creq_addr_next_unqual);
+    end    
 
-    assign creq_wsel_st0 = creq_addr_unqual[`UP(`WORD_SELECT_BITS)-1:0];
+    if (`WORD_SELECT_BITS != 0) begin
+        assign creq_wsel_next = creq_addr_next_unqual[`WORD_SELECT_BITS-1:0];
+    end else begin
+        assign creq_wsel_next = 0;
+    end  
 
-    VX_fifo_queue #(
+    VX_input_queue #(
         .DATAW    (CORE_TAG_WIDTH + `REQS_BITS + 1 + WORD_SIZE + `WORD_ADDR_WIDTH + `WORD_WIDTH), 
-        .SIZE     (CREQ_SIZE),
-        .BUFFERED (1),
-        .FASTRAM  (1)
+        .SIZE     (CREQ_SIZE)
     ) core_req_queue (
         .clk     (clk),
         .reset   (reset),
         .push    (creq_push),
         .pop     (creq_pop),
         .data_in ({core_req_tag, core_req_tid, core_req_rw, core_req_byteen, core_req_addr, core_req_data}),        
-        .data_out({creq_tag_st0, creq_tid_st0, creq_rw_st0, creq_byteen_st0, creq_addr_unqual, creq_writeword_st0}),
-        .empty   (creq_empty),
+        .data_out_next({creq_tag_next, creq_tid_next, creq_rw_next, creq_byteen_next, creq_addr_next_unqual, creq_writeword_next}),
+        `UNUSED_PIN (empty_next),
+        `UNUSED_PIN (data_out),
+        .empty   (creq_empty),        
         .full    (creq_full),
         `UNUSED_PIN (size)
-    );   
+    );      
+
+    wire                            mshr_valid;
+    wire                            mshr_valid_next;
+    wire [`REQS_BITS-1:0]           mshr_tid_next;
+    wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr_next;
+    wire [`UP(`WORD_SELECT_BITS)-1:0] mshr_wsel_next;
+    wire [`WORD_WIDTH-1:0]          mshr_writeword_next;
+    wire [`REQ_TAG_WIDTH-1:0]       mshr_tag_next;
+    wire                            mshr_rw_next;  
+    wire [WORD_SIZE-1:0]            mshr_byteen_next;
+    
+    reg [`LINE_ADDR_WIDTH-1:0]     creq_addr;
+    reg [`UP(`WORD_SELECT_BITS)-1:0] creq_wsel;    
+    reg [`REQ_TAG_WIDTH-1:0]       creq_tag;
+    reg                            creq_mem_rw;
+    reg [WORD_SIZE-1:0]            creq_byteen;
+    reg [`WORD_WIDTH-1:0]          creq_writeword;
+    reg [`REQS_BITS-1:0]           creq_tid;
+
+    always @(posedge clk) begin   
+        creq_addr      <= (mshr_valid_next || !drsp_empty_next) ? mshr_addr_next : creq_addr_next;
+        creq_wsel      <= mshr_valid_next ? mshr_wsel_next : creq_wsel_next;           
+        creq_mem_rw    <= mshr_valid_next ? mshr_rw_next : creq_rw_next;
+        creq_byteen    <= mshr_valid_next ? mshr_byteen_next : creq_byteen_next;              
+        creq_writeword <= mshr_valid_next ? mshr_writeword_next : creq_writeword_next;
+        creq_tid       <= mshr_valid_next ? mshr_tid_next : creq_tid_next;
+        creq_tag       <= mshr_valid_next ? `REQ_TAG_WIDTH'(mshr_tag_next) : `REQ_TAG_WIDTH'(creq_tag_next);
+    end
 
     wire                            mshr_pop;
     reg [MSHR_SIZE_BITS-1:0]        mshr_pending_size;   
     wire [MSHR_SIZE_BITS-1:0]       mshr_pending_size_n;   
-    reg                             mshr_going_full;     
-
-    wire                            mshr_valid_st0;
-    wire [`REQS_BITS-1:0]           mshr_tid_st0;
-    wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr_st0;
-    wire [`UP(`WORD_SELECT_BITS)-1:0] mshr_wsel_st0;
-    wire [`WORD_WIDTH-1:0]          mshr_writeword_st0;
-    wire [`REQ_TAG_WIDTH-1:0]       mshr_tag_st0;
-    wire                            mshr_rw_st0;  
-    wire [WORD_SIZE-1:0]            mshr_byteen_st0;
+    reg                             mshr_going_full;
     wire                            mshr_pending_hazard_unqual_st0;
     
     wire                            valid_st0, valid_st1;    
@@ -233,7 +257,7 @@ module VX_bank #(
                     && !pipeline_stall;
 
     // determine which queue to pop next in piority order
-    wire mshr_pop_unqual = mshr_valid_st0;
+    wire mshr_pop_unqual = mshr_valid;
     wire drsq_pop_unqual = !mshr_pop_unqual && !drsq_empty;
     wire creq_pop_unqual = !mshr_pop_unqual && !drsq_pop_unqual && !creq_empty && !mshr_going_full;
 
@@ -255,25 +279,17 @@ module VX_bank #(
         end        
     end
 
-    assign is_mshr_st0 = mshr_pop_unqual;
-    assign is_fill_st0 = drsq_pop_unqual;
-
     assign valid_st0     = mshr_pop || drsq_pop || creq_pop;
-    assign addr_st0      = creq_pop_unqual ? creq_addr_st0 : mshr_addr_st0;
-    assign tag_st0       = creq_pop_unqual ? `REQ_TAG_WIDTH'(creq_tag_st0) : `REQ_TAG_WIDTH'(mshr_tag_st0);
-    assign mem_rw_st0    = creq_pop_unqual ? creq_rw_st0 : mshr_rw_st0;
-    assign byteen_st0    = creq_pop_unqual ? creq_byteen_st0 : mshr_byteen_st0;
-    assign req_tid_st0   = creq_pop_unqual ? creq_tid_st0 : mshr_tid_st0;
-    assign writeword_st0 = creq_pop_unqual ? creq_writeword_st0 : mshr_writeword_st0;
+    assign is_mshr_st0   = mshr_pop_unqual;
+    assign is_fill_st0   = drsq_pop_unqual;
+    assign addr_st0      = creq_addr;
+    assign wsel_st0      = creq_wsel;
+    assign mem_rw_st0    = creq_mem_rw;
+    assign byteen_st0    = creq_byteen;
+    assign writeword_st0 = creq_writeword;
+    assign req_tid_st0   = creq_tid;
+    assign tag_st0       = creq_tag;
     assign filldata_st0  = drsq_filldata;
-
-    if (`WORD_SELECT_BITS != 0) begin
-        assign wsel_st0 = creq_pop_unqual ? creq_wsel_st0 : mshr_wsel_st0; 
-    end else begin 
-        `UNUSED_VAR (creq_wsel_st0)
-        `UNUSED_VAR (mshr_wsel_st0)
-        assign wsel_st0 = 0;
-    end
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
@@ -331,7 +347,7 @@ if (DRAM_ENABLE) begin
 
     // we have a miss in mshr for the current address
     wire mshr_pending_hazard_st0 = mshr_pending_hazard_unqual_st0 
-                                || (valid_st1 && (miss_st1 || force_miss_st1) && (creq_addr_st0 == addr_st1));
+                                || (valid_st1 && (miss_st1 || force_miss_st1) && (addr_st0 == addr_st1));
 
     // force miss to ensure commit order when a new request has pending previous requests to same block
     assign force_miss_st0 = !is_mshr_st0 && !is_fill_st0 && mshr_pending_hazard_st0;
@@ -461,7 +477,7 @@ end
                   && !crsq_push_stall 
                   && !dreq_push_stall;
 
-    wire incoming_fill_st1 = (!drsq_empty && (addr_st1 == mshr_addr_st0));
+    wire incoming_fill_st1 = (!drsq_empty && (addr_st1 == addr_st0));
 
     if (DRAM_ENABLE) begin
 
@@ -506,9 +522,12 @@ end
             
             // schedule
             .schedule           (mshr_pop),        
-            .schedule_valid     (mshr_valid_st0),
-            .schedule_addr      (mshr_addr_st0),
-            .schedule_data      ({mshr_writeword_st0, mshr_tid_st0, mshr_tag_st0, mshr_rw_st0, mshr_byteen_st0, mshr_wsel_st0}),
+            .schedule_valid     (mshr_valid),
+            .schedule_valid_next(mshr_valid_next),
+            .schedule_addr_next (mshr_addr_next),
+            .schedule_data_next ({mshr_writeword_next, mshr_tid_next, mshr_tag_next, mshr_rw_next, mshr_byteen_next, mshr_wsel_next}),            
+            `UNUSED_PIN (schedule_addr),
+            `UNUSED_PIN (schedule_data),
 
             // dequeue
             .dequeue            (mshr_dequeue_st1)
@@ -522,14 +541,15 @@ end
         `UNUSED_VAR (byteen_st1)
         `UNUSED_VAR (incoming_fill_st1)
         assign mshr_pending_hazard_unqual_st0 = 0;
-        assign mshr_valid_st0 = 0;
-        assign mshr_addr_st0 = 0;
-        assign mshr_wsel_st0 = 0;
-        assign mshr_writeword_st0 = 0;
-        assign mshr_tid_st0 = 0;
-        assign mshr_tag_st0 = 0;
-        assign mshr_rw_st0 = 0;
-        assign mshr_byteen_st0 = 0;
+        assign mshr_valid      = 0;
+        assign mshr_valid_next = 0;
+        assign mshr_addr_next = 0;
+        assign mshr_wsel_next = 0;
+        assign mshr_writeword_next = 0;
+        assign mshr_tid_next = 0;
+        assign mshr_tag_next = 0;
+        assign mshr_rw_next = 0;
+        assign mshr_byteen_next = 0;
     end
 
     // Enqueue core response
