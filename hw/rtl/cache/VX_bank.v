@@ -189,13 +189,13 @@ module VX_bank #(
     wire                            mshr_rw_next;  
     wire [WORD_SIZE-1:0]            mshr_byteen_next;
     
-    reg [`LINE_ADDR_WIDTH-1:0]     creq_addr;
+    reg [`LINE_ADDR_WIDTH-1:0]      creq_addr;
     reg [`UP(`WORD_SELECT_BITS)-1:0] creq_wsel;    
-    reg [`REQ_TAG_WIDTH-1:0]       creq_tag;
-    reg                            creq_mem_rw;
-    reg [WORD_SIZE-1:0]            creq_byteen;
-    reg [`WORD_WIDTH-1:0]          creq_writeword;
-    reg [`REQS_BITS-1:0]           creq_tid;
+    reg [`REQ_TAG_WIDTH-1:0]        creq_tag;
+    reg                             creq_mem_rw;
+    reg [WORD_SIZE-1:0]             creq_byteen;
+    reg [`WORD_WIDTH-1:0]           creq_writeword;
+    reg [`REQS_BITS-1:0]            creq_tid;
 
     always @(posedge clk) begin   
         creq_addr      <= (mshr_valid_next || !drsp_empty_next) ? mshr_addr_next : creq_addr_next;
@@ -405,7 +405,7 @@ end
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH + `WORD_WIDTH + `TAG_SELECT_BITS + 1 + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
         .RESETW (1)
-    ) pipe_reg2 (
+    ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!pipeline_stall),
@@ -715,11 +715,11 @@ end
         if (drsq_pop) begin
             $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), drsq_filldata);
         end
-        if (creq_pop) begin
-            if (creq_rw_st0)
-                $display("%t: cache%0d:%0d core-wr-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag_st0, creq_tid_st0, creq_byteen_st0, creq_writeword_st0, debug_wid_st0, debug_pc_st0);
+        if (creq_pop || mshr_pop) begin
+            if (creq_mem_rw)
+                $display("%t: cache%0d:%0d core-wr-req: addr=%0h, is_mshr=%b, tag=%0h, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), is_mshr_st0, creq_tag, creq_tid, creq_byteen, creq_writeword, debug_wid_st0, debug_pc_st0);
             else
-                $display("%t: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag_st0, creq_tid_st0, creq_byteen_st0, debug_wid_st0, debug_pc_st0);
+                $display("%t: cache%0d:%0d core-rd-req: addr=%0h, is_mshr=%b, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), is_mshr_st0, creq_tag, creq_tid, creq_byteen, debug_wid_st0, debug_pc_st0);
         end
         if (crsq_push) begin
             $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, tid=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag_st1, crsq_tid_st1, crsq_data_st1, debug_wid_st1, debug_pc_st1);
