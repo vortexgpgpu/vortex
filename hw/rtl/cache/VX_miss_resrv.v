@@ -206,7 +206,7 @@ module VX_miss_resrv #(
     assign schedule_addr_next  = schedule_addr_n_r;
     assign schedule_data_next  = dout_n_r;
 
-/*`ifdef DBG_PRINT_CACHE_MSHR        
+`ifdef DBG_PRINT_CACHE_MSHR        
     always @(posedge clk) begin        
         if (lookup_ready || schedule || enqueue || dequeue) begin
             if (schedule)
@@ -231,6 +231,6 @@ module VX_miss_resrv #(
             $write("\n");
         end        
     end
-`endif*/
+`endif
 
 endmodule
