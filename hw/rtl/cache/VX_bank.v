@@ -110,7 +110,8 @@ module VX_bank #(
 
         VX_input_queue #(
             .DATAW    ($bits(dram_rsp_data)), 
-            .SIZE     (DRSQ_SIZE)
+            .SIZE     (DRSQ_SIZE),
+            .FASTRAM  (1)
         ) dram_rsp_queue (
             .clk     (clk),
             .reset   (reset),
@@ -164,7 +165,8 @@ module VX_bank #(
 
     VX_input_queue #(
         .DATAW    (CORE_TAG_WIDTH + `REQS_BITS + 1 + WORD_SIZE + `WORD_ADDR_WIDTH + `WORD_WIDTH), 
-        .SIZE     (CREQ_SIZE)
+        .SIZE     (CREQ_SIZE),
+        .FASTRAM  (1)
     ) core_req_queue (
         .clk     (clk),
         .reset   (reset),

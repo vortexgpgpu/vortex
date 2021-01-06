@@ -101,6 +101,7 @@ kill -9 <pid>
 lsof +D build_ase_1c
 
 # quick off synthesis
+make -C unittest clean && make -C unittest > unittest/build.log 2>&1 &
 make -C pipeline clean && make -C pipeline > pipeline/build.log 2>&1 &
 make -C cache clean && make -C cache > cache/build.log 2>&1 &
 make -C core clean && make -C core > core/build.log 2>&1 &
@@ -110,6 +111,7 @@ make -C top clean && make -C top > top/build.log 2>&1 &
 make -C top1 clean && make -C top1 > top1/build.log 2>&1 &
 make -C top8 clean && make -C top8 > top8/build.log 2>&1 &
 make -C top16 clean && make -C top16 > top16/build.log 2>&1 &
+make -C top32 clean && make -C top32 > top32/build.log 2>&1 &
 
 # How to calculate the maximum operating frequency?
 200  Mhz -> period = 1/200x10^6 = 5ns 

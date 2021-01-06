@@ -69,37 +69,48 @@ module VX_databus_arb (
     // handle responses
     //
 
-    wire [1:0][RSP_DATAW-1:0] rsp_data_in;
-    wire [1:0] rsp_valid_in;
-    wire [1:0] rsp_ready_in;
-    
-    wire core_rsp_valid;
-    wire [`NUM_THREADS-1:0] core_rsp_valid_tmask;
+    if (`SM_ENABLE ) begin
 
-    assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, cache_rsp_if.tag};
-    assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  smem_rsp_if.tag};
+        wire [1:0][RSP_DATAW-1:0] rsp_data_in;
+        wire [1:0] rsp_valid_in;
+        wire [1:0] rsp_ready_in;
+        
+        wire core_rsp_valid;
+        wire [`NUM_THREADS-1:0] core_rsp_valid_tmask;
 
-    assign rsp_valid_in[0] = (| cache_rsp_if.valid);
-    assign rsp_valid_in[1] = (| smem_rsp_if.valid) & `SM_ENABLE;
+        assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, cache_rsp_if.tag};
+        assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  smem_rsp_if.tag};
 
-    VX_stream_arbiter #(
-        .NUM_REQS ((`SM_ENABLE ? 2 : 1)),
-        .DATAW    (RSP_DATAW),        
-        .BUFFERED (0)
-    ) rsp_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (rsp_valid_in),
-        .data_in    (rsp_data_in),
-        .ready_in   (rsp_ready_in),
-        .valid_out  (core_rsp_valid),
-        .data_out   ({core_rsp_valid_tmask, core_rsp_if.data, core_rsp_if.tag}),
-        .ready_out  (core_rsp_if.ready)
-    );
+        assign rsp_valid_in[0] = (| cache_rsp_if.valid);
+        assign rsp_valid_in[1] = (| smem_rsp_if.valid) & `SM_ENABLE;
 
-    assign cache_rsp_if.ready = rsp_ready_in[0];
-    assign smem_rsp_if.ready  = rsp_ready_in[1];
+        VX_stream_arbiter #(
+            .NUM_REQS (2),
+            .DATAW    (RSP_DATAW),    
+            .BUFFERED (0)
+        ) rsp_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (rsp_valid_in),
+            .data_in    (rsp_data_in),
+            .ready_in   (rsp_ready_in),
+            .valid_out  (core_rsp_valid),
+            .data_out   ({core_rsp_valid_tmask, core_rsp_if.data, core_rsp_if.tag}),
+            .ready_out  (core_rsp_if.ready)
+        );
 
-    assign core_rsp_if.valid  = {`NUM_THREADS{core_rsp_valid}} & core_rsp_valid_tmask;
+        assign cache_rsp_if.ready = rsp_ready_in[0];
+        assign smem_rsp_if.ready  = rsp_ready_in[1];
+
+        assign core_rsp_if.valid  = {`NUM_THREADS{core_rsp_valid}} & core_rsp_valid_tmask;
+
+    end else begin
+
+        assign core_rsp_if.valid  = cache_rsp_if.valid;
+        assign core_rsp_if.tag    = cache_rsp_if.tag;
+        assign core_rsp_if.data   = cache_rsp_if.data;
+        assign cache_rsp_if.ready = core_rsp_if.ready;
+
+    end
 
 endmodule

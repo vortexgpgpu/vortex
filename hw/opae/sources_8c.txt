@@ -1,0 +1,10 @@
++define+NUM_CORES=8
+
++define+SYNTHESIS
++define+QUARTUS
++define+FPU_FAST
+
+vortex_afu.json
+QI:vortex_afu.qsf
+
+C:sources.txt
