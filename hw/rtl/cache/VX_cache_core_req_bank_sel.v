@@ -2,18 +2,18 @@
 
 module VX_cache_core_req_bank_sel #(  
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE= 1, 
+    parameter CACHE_LINE_SIZE   = 64, 
     // Size of a word in bytes
-    parameter WORD_SIZE      = 1, 
+    parameter WORD_SIZE         = 4, 
     // Number of banks
-    parameter NUM_BANKS      = 1, 
+    parameter NUM_BANKS         = 4, 
     // Number of Word requests per cycle
-    parameter NUM_REQS       = 1,
+    parameter NUM_REQS          = 4,
     // core request tag size
-    parameter CORE_TAG_WIDTH = 1,
+    parameter CORE_TAG_WIDTH    = 3,
 
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET = 0
+    parameter BANK_ADDR_OFFSET  = 0
 ) (
     input wire                                      clk,
     input wire                                      reset,
@@ -62,7 +62,7 @@ module VX_cache_core_req_bank_sel #(
             per_bank_core_req_addr_r  = 'x;
             per_bank_core_req_tag_r   = 'x;
             per_bank_core_req_data_r  = 'x;
-            
+
             for (integer i = NUM_REQS-1; i >= 0; --i) begin                                                
                 if (core_req_valid[i]) begin                    
                     per_bank_core_req_valid_r[core_req_bid[i]] = 1;

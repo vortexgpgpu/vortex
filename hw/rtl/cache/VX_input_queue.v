@@ -4,7 +4,8 @@ module VX_input_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
     parameter ADDRW    = $clog2(SIZE),
-    parameter SIZEW    = $clog2(SIZE+1)
+    parameter SIZEW    = $clog2(SIZE+1),
+    parameter FASTRAM  = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -97,7 +98,7 @@ module VX_input_queue #(
         .SIZE(SIZE),
         .BUFFERED(0),
         .RWCHECK(1),
-        .FASTRAM(1)
+        .FASTRAM(FASTRAM)
     ) dp_ram (
         .clk(clk),
         .waddr(wr_ptr_r),                                

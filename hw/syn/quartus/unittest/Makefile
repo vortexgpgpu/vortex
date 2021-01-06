@@ -1,20 +1,16 @@
-#FAMILY = "Arria 10"
-#DEVICE = 10AX115N3F40E2SG
-#FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
-
-FAMILY = "Stratix 10"
-DEVICE = 1SX280HN2F43E2VG
-FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
-
-PROJECT = vortex_afu
-TOP_LEVEL_ENTITY = vortex_afu
-SRC_FILE = vortex_afu.sv
-FPU_INCLUDE = ../../../rtl/fp_cores;$(FPU_CORE_PATH);../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache;../../../rtl/afu;../../../rtl/afu/ccip
+PROJECT = Unittest
+TOP_LEVEL_ENTITY = VX_cache_core_req_bank_sel
+SRC_FILE = VX_cache_core_req_bank_sel.v
+FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera/arria10;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
+# Part, Family
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG   
+
 # Executable Configuration
-SYN_ARGS = --parallel --read_settings_files=on --set=VERILOG_MACRO=NOPAE=1
+SYN_ARGS = --parallel --read_settings_files=on
 FIT_ARGS = --parallel --part=$(DEVICE) --read_settings_files=on
 ASM_ARGS =
 STA_ARGS = --parallel --do_report_timing
@@ -55,7 +51,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=4" -set "NUM_CLUSTERS=4"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg

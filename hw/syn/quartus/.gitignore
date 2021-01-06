@@ -1,3 +1,6 @@
+/unittest/*
+!/unittest/Makefile
+
 /cache/*
 !/cache/Makefile
 
@@ -24,3 +27,9 @@
 
 /top8/*
 !/top8/Makefile
+
+/top16/*
+!/top16/Makefile
+
+/top32/*
+!/top32/Makefile

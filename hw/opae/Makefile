@@ -44,12 +44,22 @@ fpga-2c: gen_sources setup-fpga-2c
 
 fpga-4c: gen_sources setup-fpga-4c
 	cd $(FPGA_BUILD_DIR)_4c && qsub-synth
+
+fpga-8c: gen_sources setup-fpga-8c
+	cd $(FPGA_BUILD_DIR)_8c && qsub-synth
+
+fpga-16c: gen_sources setup-fpga-16c
+	cd $(FPGA_BUILD_DIR)_16c && qsub-synth
 	
 setup-fpga-1c: $(FPGA_BUILD_DIR)_1c/build/dcp.qpf
 
 setup-fpga-2c: $(FPGA_BUILD_DIR)_2c/build/dcp.qpf
 
 setup-fpga-4c: $(FPGA_BUILD_DIR)_4c/build/dcp.qpf
+
+setup-fpga-8c: $(FPGA_BUILD_DIR)_8c/build/dcp.qpf
+
+setup-fpga-16c: $(FPGA_BUILD_DIR)_16c/build/dcp.qpf
 
 $(FPGA_BUILD_DIR)_1c/build/dcp.qpf:
 	afu_synth_setup -s sources_1c.txt $(FPGA_BUILD_DIR)_1c
@@ -59,6 +69,12 @@ $(FPGA_BUILD_DIR)_2c/build/dcp.qpf:
 
 $(FPGA_BUILD_DIR)_4c/build/dcp.qpf:
 	afu_synth_setup -s sources_4c.txt $(FPGA_BUILD_DIR)_4c
+
+$(FPGA_BUILD_DIR)_8c/build/dcp.qpf:
+	afu_synth_setup -s sources_8c.txt $(FPGA_BUILD_DIR)_8c
+
+$(FPGA_BUILD_DIR)_16c/build/dcp.qpf:
+	afu_synth_setup -s sources_16c.txt $(FPGA_BUILD_DIR)_16c
 
 run-ase-1c:
 	cd $(ASE_BUILD_DIR)_1c && make sim
@@ -87,5 +103,11 @@ clean-fpga-2c:
 clean-fpga-4c:
 	rm -rf $(FPGA_BUILD_DIR)_4c sources.txt
 
-clean: clean-ase-1c	clean-ase-2c clean-ase-4c clean-fpga-1c clean-fpga-2c clean-fpga-4c
+clean-fpga-8c:
+	rm -rf $(FPGA_BUILD_DIR)_8c sources.txt
+
+clean-fpga-16c:
+	rm -rf $(FPGA_BUILD_DIR)_16c sources.txt
+
+clean: clean-ase-1c	clean-ase-2c clean-ase-4c clean-fpga-1c clean-fpga-2c clean-fpga-4c clean-fpga-8c clean-fpga-16c
 	rm sources.txt
