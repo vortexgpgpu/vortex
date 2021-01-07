@@ -18,9 +18,11 @@ module VX_databus_arb (
     // output response
     VX_cache_core_rsp_if    core_rsp_if
 );
-    localparam REQ_ADDRW = 32 - `CLOG2(`DWORD_SIZE);
-    localparam REQ_DATAW = REQ_ADDRW + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
-    localparam RSP_DATAW = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
+    localparam SMEM_ASHIFT = `CLOG2(`SHARED_MEM_BASE_ADDR_ALIGN);    
+    localparam REQ_ASHIFT  = `CLOG2(`DWORD_SIZE);
+    localparam REQ_ADDRW   = 32 - REQ_ASHIFT;
+    localparam REQ_DATAW   = REQ_ADDRW + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
+    localparam RSP_DATAW   = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
 
     //
     // handle requests
@@ -33,8 +35,8 @@ module VX_databus_arb (
 
         // select shared memory bus
         wire is_smem_addr = core_req_if.valid[i] && `SM_ENABLE
-                         && (core_req_if.addr[i] >= REQ_ADDRW'((`SHARED_MEM_BASE_ADDR - `SMEM_SIZE) >> 2))
-                         && (core_req_if.addr[i] < REQ_ADDRW'(`SHARED_MEM_BASE_ADDR >> 2));
+                         && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] >= (32-SMEM_ASHIFT)'((`SHARED_MEM_BASE_ADDR - `SMEM_SIZE) >> SMEM_ASHIFT))
+                         && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] < (32-SMEM_ASHIFT)'(`SHARED_MEM_BASE_ADDR >> SMEM_ASHIFT));
 
         VX_skid_buffer #(
             .DATAW (REQ_DATAW)
