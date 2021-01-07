@@ -8,7 +8,7 @@
 #define CCI_RQ_SIZE 16
 #define CCI_WQ_SIZE 16
 
-#define RESET_DELAY 2
+#define RESET_DELAY 4
 
 #define ENABLE_DRAM_STALLS
 #define DRAM_LATENCY 24
@@ -135,19 +135,14 @@ void opae_sim::reset() {
 
   vortex_afu_->reset = 1;
 
-  vortex_afu_->clk = 0;
-  this->eval();
-  vortex_afu_->clk = 1;
-  this->eval();
-
-  vortex_afu_->reset = 0;
-
   for (int i = 0; i < RESET_DELAY; ++i) {
     vortex_afu_->clk = 0;
     this->eval();
     vortex_afu_->clk = 1;
     this->eval();
   }  
+
+  vortex_afu_->reset = 0;
   
   // Turn on assertion after reset
   Verilated::assertOn(true);

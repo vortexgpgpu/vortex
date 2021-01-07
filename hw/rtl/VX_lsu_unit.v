@@ -64,7 +64,7 @@ module VX_lsu_unit #(
         assign mem_req_addr[i]   = full_address[i][31:2];        
         assign mem_req_offset[i] = full_address[i][1:0];
         assign mem_req_byteen[i] = wmask << full_address[i][1:0];
-        assign mem_req_data[i]   = lsu_req_if.store_data[i] << {mem_req_offset[i], 3'b0};
+        assign mem_req_data[i]   = lsu_req_if.store_data[i] << {full_address[i][1:0], 3'b0};
     end
 
 `IGNORE_WARNINGS_BEGIN

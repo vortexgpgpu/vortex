@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iomanip>
 
-#define RESET_DELAY 2
+#define RESET_DELAY 4
 
 #define ENABLE_DRAM_STALLS
 #define DRAM_LATENCY 24
@@ -75,13 +75,6 @@ void Simulator::reset() {
   vortex_->csr_rsp_ready  = 0;
 
   vortex_->reset = 1;
-  
-  vortex_->clk = 0;
-  this->eval();
-  vortex_->clk = 1;
-  this->eval();
-
-  vortex_->reset = 0;
 
   for (int i = 0; i < RESET_DELAY; ++i) {
     vortex_->clk = 0;
@@ -89,8 +82,11 @@ void Simulator::reset() {
     vortex_->clk = 1;
     this->eval();
   }  
+
+  vortex_->reset = 0;
   
   // Turn on assertion after reset
+  printf("*** enabling assertion at tick: %ld", timestamp);
   Verilated::assertOn(true);
 }
 

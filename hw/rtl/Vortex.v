@@ -72,15 +72,13 @@ module Vortex (
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
 
         wire cluster_reset;
-        if (`NUM_CLUSTERS > 1) begin
-            reg cluster_reset_r;
-            always @(posedge clk) begin
-                cluster_reset_r <= reset;
-            end
-            assign cluster_reset = cluster_reset_r;
-        end else begin
-            assign cluster_reset = reset;
-        end
+        VX_reset_relay #(
+            .PASSTHRU (`NUM_CLUSTERS == 1)
+        ) reset_relay (
+            .clk       (clk),
+            .reset     (reset),
+            .reset_out (cluster_reset)
+        );
 
         VX_cluster #(
             .CLUSTER_ID(i)

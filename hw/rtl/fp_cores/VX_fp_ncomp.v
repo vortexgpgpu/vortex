@@ -160,7 +160,7 @@ module VX_fp_ncomp #(
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm_s0)
-                `FRM_RNE: begin
+                `FRM_RNE: begin // LE
                     fcmp_fflags[i] = 5'h0;
                     if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
@@ -169,7 +169,7 @@ module VX_fp_ncomp #(
                         fcmp_res[i] = {31'h0, (a_smaller_s0[i] | ab_equal_s0[i])};
                     end
                 end
-                `FRM_RTZ: begin
+                `FRM_RTZ: begin // LS
                     fcmp_fflags[i] = 5'h0;
                     if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
@@ -178,7 +178,7 @@ module VX_fp_ncomp #(
                         fcmp_res[i] = {31'h0, (a_smaller_s0[i] & ~ab_equal_s0[i])};
                     end                    
                 end
-                `FRM_RDN: begin
+                `FRM_RDN: begin // EQ
                     fcmp_fflags[i] = 5'h0;
                     if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
@@ -223,7 +223,7 @@ module VX_fp_ncomp #(
                             tmp_fflags[i] = 0;
                             tmp_fflags[i].NV = a_type_s0[i].is_signaling | b_type_s0[i].is_signaling;
                         end
-                        //5,6,7: 
+                        //5,6,7: MOVE
                         default: begin
                             tmp_result[i] = dataa[i];
                             tmp_fflags[i] = 'x;

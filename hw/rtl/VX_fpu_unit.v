@@ -63,12 +63,46 @@ module VX_fpu_unit #(
 
     // resolve dynamic FRM from CSR   
     assign fpu_to_csr_if.read_wid = fpu_req_if.wid;
-    wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_req_if.op_mod;   
+    wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_req_if.op_mod;
 
 `ifdef FPU_FAST
 
-    VX_fp_fpga #(
+    VX_fp_dpi #(
         .TAGW (FPUQ_BITS)
+    ) fp_core (
+        .clk        (clk),
+        .reset      (reset),   
+
+        .valid_in   (valid_in),
+        .ready_in   (ready_in),        
+
+        .tag_in     (tag_in),
+        
+        .op_type    (fpu_req_if.op_type),
+        .frm        (fpu_frm),
+
+        .dataa      (fpu_req_if.rs1_data),
+        .datab      (fpu_req_if.rs2_data),
+        .datac      (fpu_req_if.rs3_data),
+        .result     (result), 
+
+        .has_fflags (has_fflags),
+        .fflags     (fflags),
+
+        .tag_out    (tag_out),
+
+        .ready_out  (ready_out),
+        .valid_out  (valid_out)
+    );
+
+`elsif FPU_FPNEW
+
+    VX_fpnew #(
+        .FMULADD  (1),
+        .FDIVSQRT (1),
+        .FNONCOMP (1),
+        .FCONV    (1),
+        .TAGW     (FPUQ_BITS)
     ) fp_core (
         .clk        (clk),
         .reset      (reset),   
@@ -97,15 +131,11 @@ module VX_fpu_unit #(
 
 `else
 
-    VX_fpnew #(
-        .FMULADD  (1),
-        .FDIVSQRT (1),
-        .FNONCOMP (1),
-        .FCONV    (1),
-        .TAGW     (FPUQ_BITS)
+    VX_fp_fpga #(
+        .TAGW (FPUQ_BITS)
     ) fp_core (
         .clk        (clk),
-        .reset      (reset),   
+        .reset      (fpu_reset),   
 
         .valid_in   (valid_in),
         .ready_in   (ready_in),        

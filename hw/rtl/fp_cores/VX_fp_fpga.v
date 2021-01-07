@@ -27,6 +27,11 @@ module VX_fp_fpga #(
     input wire  ready_out,
     output wire valid_out
 );
+    localparam FPU_FMA  = 0;
+    localparam FPU_DIV  = 1;
+    localparam FPU_SQRT = 2;
+    localparam FPU_CVT  = 3;
+    localparam FPU_NCP  = 4;
     localparam NUM_FPC  = 5;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
     
@@ -49,20 +54,20 @@ module VX_fp_fpga #(
         is_itof   = 'x;
         is_signed = 'x;
         case (op_type)
-            `FPU_ADD:    begin core_select = 0; do_madd = 0; do_sub = 0; do_neg = 0; end
-            `FPU_SUB:    begin core_select = 0; do_madd = 0; do_sub = 1; do_neg = 0; end
-            `FPU_MUL:    begin core_select = 0; do_madd = 0; do_sub = 0; do_neg = 1; end
-            `FPU_MADD:   begin core_select = 0; do_madd = 1; do_sub = 0; do_neg = 0; end
-            `FPU_MSUB:   begin core_select = 0; do_madd = 1; do_sub = 1; do_neg = 0; end
-            `FPU_NMADD:  begin core_select = 0; do_madd = 1; do_sub = 0; do_neg = 1; end
-            `FPU_NMSUB:  begin core_select = 0; do_madd = 1; do_sub = 1; do_neg = 1; end
-            `FPU_DIV:    begin core_select = 1; end
-            `FPU_SQRT:   begin core_select = 2; end
-            `FPU_CVTWS:  begin core_select = 3; is_itof = 0; is_signed = 1; end
-            `FPU_CVTWUS: begin core_select = 3; is_itof = 0; is_signed = 0; end
-            `FPU_CVTSW:  begin core_select = 3; is_itof = 1; is_signed = 1; end
-            `FPU_CVTSWU: begin core_select = 3; is_itof = 1; is_signed = 0; end
-            default:     begin core_select = 4; end
+            `FPU_ADD:    begin core_select = FPU_FMA; do_madd = 0; do_sub = 0; do_neg = 0; end
+            `FPU_SUB:    begin core_select = FPU_FMA; do_madd = 0; do_sub = 1; do_neg = 0; end
+            `FPU_MUL:    begin core_select = FPU_FMA; do_madd = 0; do_sub = 0; do_neg = 1; end
+            `FPU_MADD:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 0; do_neg = 0; end
+            `FPU_MSUB:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 0; end
+            `FPU_NMADD:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 0; do_neg = 1; end
+            `FPU_NMSUB:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 1; end
+            `FPU_DIV:    begin core_select = FPU_DIV; end
+            `FPU_SQRT:   begin core_select = FPU_SQRT; end
+            `FPU_CVTWS:  begin core_select = FPU_CVT; is_itof = 0; is_signed = 1; end
+            `FPU_CVTWUS: begin core_select = FPU_CVT; is_itof = 0; is_signed = 0; end
+            `FPU_CVTSW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
+            `FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; is_signed = 0; end
+            default:     begin core_select = FPU_NCP; end
         endcase
     end
 
@@ -72,8 +77,8 @@ module VX_fp_fpga #(
     ) fp_fma (
         .clk        (clk), 
         .reset      (reset),   
-        .valid_in   (valid_in && (core_select == 0)),
-        .ready_in   (per_core_ready_in[0]),    
+        .valid_in   (valid_in && (core_select == FPU_FMA)),
+        .ready_in   (per_core_ready_in[FPU_FMA]),    
         .tag_in     (tag_in),  
         .frm        (frm),
         .do_madd    (do_madd),
@@ -82,12 +87,12 @@ module VX_fp_fpga #(
         .dataa      (dataa), 
         .datab      (datab),    
         .datac      (datac),   
-        .has_fflags (per_core_has_fflags[0]),
-        .fflags     (per_core_fflags[0]),
-        .result     (per_core_result[0]),
-        .tag_out    (per_core_tag_out[0]),
-        .ready_out  (per_core_ready_out[0]),
-        .valid_out  (per_core_valid_out[0])
+        .has_fflags (per_core_has_fflags[FPU_FMA]),
+        .fflags     (per_core_fflags[FPU_FMA]),
+        .result     (per_core_result[FPU_FMA]),
+        .tag_out    (per_core_tag_out[FPU_FMA]),
+        .ready_out  (per_core_ready_out[FPU_FMA]),
+        .valid_out  (per_core_valid_out[FPU_FMA])
     );
 
     VX_fp_div #(
@@ -96,18 +101,18 @@ module VX_fp_fpga #(
     ) fp_div (
         .clk        (clk), 
         .reset      (reset),   
-        .valid_in   (valid_in && (core_select == 1)),
-        .ready_in   (per_core_ready_in[1]),    
+        .valid_in   (valid_in && (core_select == FPU_DIV)),
+        .ready_in   (per_core_ready_in[FPU_DIV]),    
         .tag_in     (tag_in),
         .frm        (frm),  
         .dataa      (dataa), 
         .datab      (datab),   
-        .has_fflags (per_core_has_fflags[1]),
-        .fflags     (per_core_fflags[1]),   
-        .result     (per_core_result[1]),
-        .tag_out    (per_core_tag_out[1]),
-        .ready_out  (per_core_ready_out[1]),
-        .valid_out  (per_core_valid_out[1])
+        .has_fflags (per_core_has_fflags[FPU_DIV]),
+        .fflags     (per_core_fflags[FPU_DIV]),   
+        .result     (per_core_result[FPU_DIV]),
+        .tag_out    (per_core_tag_out[FPU_DIV]),
+        .ready_out  (per_core_ready_out[FPU_DIV]),
+        .valid_out  (per_core_valid_out[FPU_DIV])
     );
 
     VX_fp_sqrt #(
@@ -116,17 +121,17 @@ module VX_fp_fpga #(
     ) fp_sqrt (
         .clk        (clk), 
         .reset      (reset),   
-        .valid_in   (valid_in && (core_select == 2)),
-        .ready_in   (per_core_ready_in[2]),    
+        .valid_in   (valid_in && (core_select == FPU_SQRT)),
+        .ready_in   (per_core_ready_in[FPU_SQRT]),    
         .tag_in     (tag_in),
         .frm        (frm),    
         .dataa      (dataa), 
-        .has_fflags (per_core_has_fflags[2]),
-        .fflags     (per_core_fflags[2]),
-        .result     (per_core_result[2]),
-        .tag_out    (per_core_tag_out[2]),
-        .ready_out  (per_core_ready_out[2]),
-        .valid_out  (per_core_valid_out[2])
+        .has_fflags (per_core_has_fflags[FPU_SQRT]),
+        .fflags     (per_core_fflags[FPU_SQRT]),
+        .result     (per_core_result[FPU_SQRT]),
+        .tag_out    (per_core_tag_out[FPU_SQRT]),
+        .ready_out  (per_core_ready_out[FPU_SQRT]),
+        .valid_out  (per_core_valid_out[FPU_SQRT])
     );
 
     VX_fp_cvt #(
@@ -135,19 +140,19 @@ module VX_fp_fpga #(
     ) fp_cvt (
         .clk        (clk), 
         .reset      (reset),   
-        .valid_in   (valid_in && (core_select == 3)),
-        .ready_in   (per_core_ready_in[3]),    
+        .valid_in   (valid_in && (core_select == FPU_CVT)),
+        .ready_in   (per_core_ready_in[FPU_CVT]),    
         .tag_in     (tag_in), 
         .frm        (frm),
         .is_itof    (is_itof),   
         .is_signed  (is_signed),        
         .dataa      (dataa),  
-        .has_fflags (per_core_has_fflags[3]),
-        .fflags     (per_core_fflags[3]),
-        .result     (per_core_result[3]),
-        .tag_out    (per_core_tag_out[3]),
-        .ready_out  (per_core_ready_out[3]),
-        .valid_out  (per_core_valid_out[3])
+        .has_fflags (per_core_has_fflags[FPU_CVT]),
+        .fflags     (per_core_fflags[FPU_CVT]),
+        .result     (per_core_result[FPU_CVT]),
+        .tag_out    (per_core_tag_out[FPU_CVT]),
+        .ready_out  (per_core_ready_out[FPU_CVT]),
+        .valid_out  (per_core_valid_out[FPU_CVT])
     );
 
     VX_fp_ncomp #(
@@ -156,19 +161,19 @@ module VX_fp_fpga #(
     ) fp_ncomp (
         .clk        (clk),
         .reset      (reset),   
-        .valid_in   (valid_in && (core_select == 4)),
-        .ready_in   (per_core_ready_in[4]),        
+        .valid_in   (valid_in && (core_select == FPU_NCP)),
+        .ready_in   (per_core_ready_in[FPU_NCP]),        
         .tag_in     (tag_in),        
         .op_type    (op_type),
         .frm        (frm),
         .dataa      (dataa),
         .datab      (datab),        
-        .result     (per_core_result[4]), 
-        .has_fflags (per_core_has_fflags[4]),
-        .fflags     (per_core_fflags[4]),
-        .tag_out    (per_core_tag_out[4]),
-        .ready_out  (per_core_ready_out[4]),
-        .valid_out  (per_core_valid_out[4])
+        .result     (per_core_result[FPU_NCP]), 
+        .has_fflags (per_core_has_fflags[FPU_NCP]),
+        .fflags     (per_core_fflags[FPU_NCP]),
+        .tag_out    (per_core_tag_out[FPU_NCP]),
+        .ready_out  (per_core_ready_out[FPU_NCP]),
+        .valid_out  (per_core_valid_out[FPU_NCP])
     );
 
     reg has_fflags_n;
