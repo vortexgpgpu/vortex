@@ -1,9 +1,5 @@
 `include "VX_define.vh"
 
-`ifndef SYNTHESIS
-`include "float_dpi.vh"
-`endif
-
 module VX_fp_fma #( 
     parameter TAGW = 1,
     parameter LANES = 1
@@ -63,7 +59,6 @@ module VX_fp_fma #(
             end    
         end
 
-    `ifdef QUARTUS
         acl_fmadd fmadd (
             .clk    (clk),
             .areset (reset),
@@ -73,15 +68,6 @@ module VX_fp_fma #(
             .c      (c),
             .q      (result[i])
         );
-    `else
-        integer fmadd_h;
-        initial begin
-            fmadd_h = dpi_register();
-        end
-        always @(posedge clk) begin
-           dpi_fmadd (fmadd_h, enable, a, b, c, `LATENCY_FMA, result[i]);
-        end
-    `endif
     end
     
     VX_shift_register #(

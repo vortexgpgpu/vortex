@@ -40,7 +40,8 @@ module VX_cluster #(
     // Status
     output wire                             busy, 
     output wire                             ebreak
-);    
+); 
+
     wire [`NUM_CORES-1:0]                        per_core_dram_req_valid;
     wire [`NUM_CORES-1:0]                        per_core_dram_req_rw;    
     wire [`NUM_CORES-1:0][`DDRAM_BYTEEN_WIDTH-1:0] per_core_dram_req_byteen;    
@@ -70,15 +71,13 @@ module VX_cluster #(
     for (genvar i = 0; i < `NUM_CORES; i++) begin
         
         wire core_reset;
-        if (`NUM_CORES > 1) begin
-            reg core_reset_r;
-            always @(posedge clk) begin
-                core_reset_r <= reset;
-            end
-            assign core_reset = core_reset_r;
-        end else begin
-            assign core_reset = reset;
-        end
+        VX_reset_relay #(
+            .PASSTHRU (`NUM_CORES == 1)
+        ) reset_relay (
+            .clk       (clk),
+            .reset     (reset),
+            .reset_out (core_reset)
+        );
 
         VX_core #(
             .CORE_ID(i + (CLUSTER_ID * `NUM_CORES))

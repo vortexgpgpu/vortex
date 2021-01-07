@@ -1,9 +1,5 @@
 `include "VX_define.vh"
 
-`ifndef SYNTHESIS
-`include "float_dpi.vh"
-`endif
-
 module VX_fp_sqrt #( 
     parameter TAGW = 1,
     parameter LANES = 1
@@ -30,26 +26,24 @@ module VX_fp_sqrt #(
     output wire valid_out
 );    
     wire stall = ~ready_out && valid_out;
-    wire enable = ~stall;
+    wire enable = ~stall;     
+
+    wire _reset;   
+
+    VX_reset_relay reset_relay (
+        .clk       (clk),
+        .reset     (reset),
+        .reset_out (_reset)
+    );  
     
     for (genvar i = 0; i < LANES; i++) begin
-    `ifdef QUARTUS
         acl_fsqrt fsqrt (
             .clk    (clk),
-            .areset (reset),
+            .areset (_reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result[i])
         );
-    `else
-        integer fsqrt_h;
-        initial begin
-            fsqrt_h = dpi_register();
-        end
-        always @(posedge clk) begin
-           dpi_fsqrt (fsqrt_h, enable, dataa[i], `LATENCY_FSQRT, result[i]);
-        end
-    `endif
     end
 
     VX_shift_register #(

@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
 module VX_lzc #(
-    parameter DATAW  = 1,
+    parameter DATAW  = 32,
     parameter LDATAW = `LOG2UP(DATAW)
 ) (
     input wire  [DATAW-1:0]  data_in,

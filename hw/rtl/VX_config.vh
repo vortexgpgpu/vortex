@@ -92,8 +92,8 @@
 `define LATENCY_IMUL 3
 `endif
 
-`ifndef LATENCY_FNCOMP
-`define LATENCY_FNCOMP 2
+`ifndef LATENCY_FNCP
+`define LATENCY_FNCP 2
 `endif
 
 `ifndef LATENCY_FMA
@@ -128,8 +128,8 @@
 `define LATENCY_FDIVSQRT 32
 `endif
 
-`ifndef LATENCY_FCONV
-`define LATENCY_FCONV 4
+`ifndef LATENCY_FCVT
+`define LATENCY_FCVT 4
 `endif
 
 // CSR Addresses //////////////////////////////////////////////////////////////

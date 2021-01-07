@@ -79,7 +79,17 @@ module VX_mem_unit # (
         .cache_rsp_if (dcache_rsp_if),
         .smem_rsp_if  (smem_rsp_if),
         .core_rsp_if  (core_dcache_rsp_if)
-    );    
+    ); 
+
+    wire icache_reset, dcache_reset;   
+
+    VX_reset_relay #(
+        .NUM_NODES (2)
+    ) reset_relay (
+        .clk       (clk),
+        .reset     (reset),
+        .reset_out ({dcache_reset, icache_reset})
+    );
 
     VX_cache #(
         .CACHE_ID           (`ICACHE_ID),
@@ -102,7 +112,7 @@ module VX_mem_unit # (
         `SCOPE_BIND_VX_mem_unit_icache
 
         .clk                (clk),
-        .reset              (reset),
+        .reset              (icache_reset),
 
         // Core request
         .core_req_valid     (core_icache_req_if.valid),
@@ -160,7 +170,7 @@ module VX_mem_unit # (
         `SCOPE_BIND_VX_mem_unit_dcache
         
         .clk                (clk),
-        .reset              (reset),
+        .reset              (dcache_reset),
 
         // Core req
         .core_req_valid     (dcache_req_if.valid),
@@ -199,6 +209,14 @@ module VX_mem_unit # (
 
     if (`SM_ENABLE) begin
 
+        wire scache_reset;   
+
+        VX_reset_relay reset_relay (
+            .clk       (clk),
+            .reset     (reset),
+            .reset_out (scache_reset)
+        );
+
         VX_cache #(
             .CACHE_ID           (`SCACHE_ID),
             .CACHE_SIZE         (`SMEM_SIZE),
@@ -220,7 +238,7 @@ module VX_mem_unit # (
             `SCOPE_BIND_VX_mem_unit_smem
             
             .clk                (clk),
-            .reset              (reset),
+            .reset              (scache_reset),
 
             // Core request
             .core_req_valid     (smem_req_if.valid),

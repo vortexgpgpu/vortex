@@ -37,7 +37,7 @@ module vortex_afu #(
   output logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select
 );
 
-localparam RESET_DELAY        = 2;  
+localparam RESET_DELAY        = 3;  
 
 localparam DRAM_ADDR_WIDTH    = $bits(t_local_mem_addr);
 localparam DRAM_LINE_WIDTH    = $bits(t_local_mem_data);
