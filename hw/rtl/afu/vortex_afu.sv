@@ -185,24 +185,34 @@ wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hd
 reg scope_start;
 `endif
 
-// disable assertions until reset
+// disable assertions until full reset
 `ifndef VERILATOR
+reg [$clog2(RESET_DELAY+1)-1:0] reset_ctr;
 initial begin
   $assertoff;  
+end
+always @(posedge clk) begin
+  if (reset) begin
+    reset_ctr <= 0;
+  end else begin
+    reset_ctr <= reset_ctr + 1;
+    if (reset_ctr == RESET_DELAY) begin
+      $asserton; // enable assertions
+    end
+  end
 end
 `endif
 
 always @(posedge clk) begin
   if (reset) begin
-  `ifndef VERILATOR
-    $asserton; // enable assertions
-  `endif
     mmio_tx.mmioRdValid <= 0;
     mmio_tx.hdr         <= 0;
   `ifdef SCOPE
     scope_start         <= 0;
   `endif
   end else begin
+
+
     mmio_tx.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid; 
     mmio_tx.hdr.tid     <= mmio_hdr.tid;
   `ifdef SCOPE
