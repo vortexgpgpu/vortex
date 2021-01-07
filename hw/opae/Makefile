@@ -2,6 +2,12 @@ ASE_BUILD_DIR=build_ase
 FPGA_BUILD_DIR=build_fpga
 RTL_DIR=../rtl
 
+ifeq (, $(shell which qsub-synth))
+	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
+else
+	RUN_SYNTH=qsub-synth
+endif
+
 all: ase-1c
 
 sources.txt:	
@@ -37,19 +43,19 @@ $(ASE_BUILD_DIR)_4c/Makefile: sources.txt
 	afu_sim_setup -s sources_4c.txt $(ASE_BUILD_DIR)_4c
 
 fpga-1c: gen_sources setup-fpga-1c
-	cd $(FPGA_BUILD_DIR)_1c && qsub-synth
+	cd $(FPGA_BUILD_DIR)_1c && $(RUN_SYNTH)
 
 fpga-2c: gen_sources setup-fpga-2c
-	cd $(FPGA_BUILD_DIR)_2c && qsub-synth
+	cd $(FPGA_BUILD_DIR)_2c && $(RUN_SYNTH)
 
 fpga-4c: gen_sources setup-fpga-4c
-	cd $(FPGA_BUILD_DIR)_4c && qsub-synth
+	cd $(FPGA_BUILD_DIR)_4c && $(RUN_SYNTH)
 
 fpga-8c: gen_sources setup-fpga-8c
-	cd $(FPGA_BUILD_DIR)_8c && qsub-synth
+	cd $(FPGA_BUILD_DIR)_8c && $(RUN_SYNTH)
 
 fpga-16c: gen_sources setup-fpga-16c
-	cd $(FPGA_BUILD_DIR)_16c && qsub-synth
+	cd $(FPGA_BUILD_DIR)_16c && $(RUN_SYNTH)
 	
 setup-fpga-1c: $(FPGA_BUILD_DIR)_1c/build/dcp.qpf
 
