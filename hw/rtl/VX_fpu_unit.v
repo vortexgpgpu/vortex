@@ -135,7 +135,7 @@ module VX_fpu_unit #(
         .TAGW (FPUQ_BITS)
     ) fpu_fpga (
         .clk        (clk),
-        .reset      (fpu_reset),   
+        .reset      (reset),   
 
         .valid_in   (valid_in),
         .ready_in   (ready_in),        
