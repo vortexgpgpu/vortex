@@ -47,6 +47,9 @@ VL_FLAGS += verilator.vlt
 VL_FLAGS += --exe $(SRCS) $(RTL_INCLUDE)
 VL_FLAGS += --cc Vortex.v --top-module $(TOP)
 
+// Use FPNEW PFU core
+VL_FLAGS += -DFPU_FPNEW
+
 DBG_FLAGS += -DVCD_OUTPUT $(DBG_FLAGS)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')

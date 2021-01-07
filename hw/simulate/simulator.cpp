@@ -86,7 +86,6 @@ void Simulator::reset() {
   vortex_->reset = 0;
   
   // Turn on assertion after reset
-  printf("*** enabling assertion at tick: %ld", timestamp);
   Verilated::assertOn(true);
 }
 

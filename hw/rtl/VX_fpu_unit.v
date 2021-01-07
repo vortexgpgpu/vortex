@@ -65,11 +65,11 @@ module VX_fpu_unit #(
     assign fpu_to_csr_if.read_wid = fpu_req_if.wid;
     wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_req_if.op_mod;
 
-`ifdef FPU_FAST
+`ifdef FPU_DPI
 
-    VX_fp_dpi #(
+    VX_fpu_dpi #(
         .TAGW (FPUQ_BITS)
-    ) fp_core (
+    ) fpu_dpi (
         .clk        (clk),
         .reset      (reset),   
 
@@ -97,13 +97,13 @@ module VX_fpu_unit #(
 
 `elsif FPU_FPNEW
 
-    VX_fpnew #(
+    VX_fpu_fpnew #(
         .FMULADD  (1),
         .FDIVSQRT (1),
         .FNONCOMP (1),
         .FCONV    (1),
         .TAGW     (FPUQ_BITS)
-    ) fp_core (
+    ) fpu_fpnew (
         .clk        (clk),
         .reset      (reset),   
 
@@ -131,9 +131,9 @@ module VX_fpu_unit #(
 
 `else
 
-    VX_fp_fpga #(
+    VX_fpu_fpga #(
         .TAGW (FPUQ_BITS)
-    ) fp_core (
+    ) fpu_fpga (
         .clk        (clk),
         .reset      (fpu_reset),   
 

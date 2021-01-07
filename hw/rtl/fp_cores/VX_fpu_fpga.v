@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_fp_fpga #( 
+module VX_fpu_fpga #( 
     parameter TAGW = 1
 ) (
     input wire clk,
