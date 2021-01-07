@@ -11,9 +11,10 @@ module VX_cache_core_req_bank_sel #(
     parameter NUM_REQS          = 4,
     // core request tag size
     parameter CORE_TAG_WIDTH    = 3,
-
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET  = 0
+    parameter BANK_ADDR_OFFSET  = 0,
+    // buffer the output
+    parameter BUFFERED          = 0
 ) (
     input wire                                      clk,
     input wire                                      reset,
@@ -46,6 +47,8 @@ module VX_cache_core_req_bank_sel #(
         reg [NUM_BANKS-1:0][`WORD_ADDR_WIDTH-1:0]   per_bank_core_req_addr_r;
         reg [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]     per_bank_core_req_tag_r;
         reg [NUM_BANKS-1:0][`WORD_WIDTH-1:0]        per_bank_core_req_data_r;
+        reg [NUM_BANKS-1:0]                         per_bank_core_req_stall;
+
         reg [NUM_REQS-1:0]                          core_req_ready_r;
         reg [NUM_BANKS-1:0]                         core_req_sel_r;
         wire [NUM_REQS-1:0][`BANK_SELECT_BITS-1:0]  core_req_bid;
@@ -83,7 +86,7 @@ module VX_cache_core_req_bank_sel #(
             for (integer j = 0; j < NUM_BANKS; ++j) begin
                 for (integer i = 0; i < NUM_REQS; ++i) begin
                     if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                        core_req_ready_r[i] = per_bank_core_req_ready[j];                        
+                        core_req_ready_r[i] = ~per_bank_core_req_stall[j];                        
                         core_req_sel_r[i]   = 1;
                         break;
                     end
@@ -100,15 +103,23 @@ module VX_cache_core_req_bank_sel #(
             end
         end
 
-        assign bank_stalls              = bank_stalls_r;
-        assign per_bank_core_req_valid  = per_bank_core_req_valid_r;
-        assign per_bank_core_req_tid    = per_bank_core_req_tid_r;
-        assign per_bank_core_req_rw     = per_bank_core_req_rw_r;
-        assign per_bank_core_req_byteen = per_bank_core_req_byteen_r;
-        assign per_bank_core_req_addr   = per_bank_core_req_addr_r;
-        assign per_bank_core_req_tag    = per_bank_core_req_tag_r;
-        assign per_bank_core_req_data   = per_bank_core_req_data_r;
-        assign core_req_ready           = core_req_ready_r;
+        for (genvar i = 0; i < NUM_BANKS; ++i) begin
+            assign per_bank_core_req_stall[i] = ~per_bank_core_req_ready[i] & per_bank_core_req_valid[i];
+            VX_pipe_register #(
+                .DATAW  (1 + `REQS_BITS + 1 + WORD_SIZE + `WORD_ADDR_WIDTH + CORE_TAG_WIDTH + `WORD_WIDTH),
+                .RESETW (1),
+                .DEPTH  (BUFFERED)
+            ) pipe_reg (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (~per_bank_core_req_stall[i]),
+                .data_in  ({per_bank_core_req_valid_r[i], per_bank_core_req_tid_r[i], per_bank_core_req_rw_r[i], per_bank_core_req_byteen_r[i], per_bank_core_req_addr_r[i], per_bank_core_req_tag_r[i], per_bank_core_req_data_r[i]}),
+                .data_out ({per_bank_core_req_valid[i],   per_bank_core_req_tid[i],   per_bank_core_req_rw[i],   per_bank_core_req_byteen[i],  per_bank_core_req_addr[i],    per_bank_core_req_tag[i],   per_bank_core_req_data[i]})
+            );
+        end
+
+        assign core_req_ready = core_req_ready_r;
+        assign bank_stalls    = bank_stalls_r;
         
     end else begin
 

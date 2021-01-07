@@ -3,7 +3,7 @@
 `include "defs_div_sqrt_mvp.sv"
 
 `TRACING_OFF
-module VX_fpnew 
+module VX_fpu_fpnew 
 #(      
     parameter TAGW     = 1,
     parameter FMULADD  = 1,

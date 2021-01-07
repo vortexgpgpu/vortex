@@ -127,7 +127,8 @@ module VX_cache #(
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),
-        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
+        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET),
+        .BUFFERED        ((NUM_BANKS > 1) && DRAM_ENABLE)
     ) cache_core_req_bank_sel (        
         .clk            (clk),
         .reset          (reset),

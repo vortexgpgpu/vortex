@@ -3,7 +3,7 @@
 `include "VX_define.vh"
 `include "float_dpi.vh"
 
-module VX_fp_dpi #( 
+module VX_fpu_dpi #( 
     parameter TAGW = 1
 ) (
     input wire clk,
