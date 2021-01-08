@@ -84,10 +84,14 @@ public:
         if (dest_addr + asize > ram_.size())
             return -1;
 
-        /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
-        for (int i = 0; i < size; i += 4) {
-            printf("mem-write: 0x%x <- 0x%x\n", uint32_t(dest_addr + i), *(uint32_t*)((uint8_t*)src + src_offset + i));
-        }*/
+        /*printf("VXDRV: upload %d bytes from 0x%lx to 0x%lx", size, (uint8_t*)src + src_offset, dest_addr);
+        if (size <= 1024) {
+            printf(": ");
+            for (int i = asize-1; i >= 0; --i) {
+                printf("%x", *((uint8_t*)src + src_offset + i));
+            }
+        }
+        printf("\n");*/
         
         ram_.write(dest_addr, asize, (uint8_t*)src + src_offset);
         return 0;
@@ -100,10 +104,14 @@ public:
 
         ram_.read(src_addr, asize, (uint8_t*)dest + dest_offset);
         
-        /*printf("VXDRV: download %d bytes from 0x%x\n", size, src_addr);
-        for (int i = 0; i < size; i += 4) {
-            printf("mem-read: 0x%x -> 0x%x\n", uint32_t(src_addr + i), *(uint32_t*)((uint8_t*)dest + dest_offset + i));
-        }*/
+        /*printf("VXDRV: download %d bytes from 0x%lx to 0x%lx", size, src_addr, (uint8_t*)dest + dest_offset);
+        if (size <= 1024) {
+            printf(": ");
+            for (int i = asize-1; i >= 0; --i) {
+                printf("%x", *((uint8_t*)dest + dest_offset + i));
+            }
+        }
+        printf("\n");*/
         
         return 0;
     }
