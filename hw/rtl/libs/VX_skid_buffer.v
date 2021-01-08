@@ -72,11 +72,12 @@ module VX_skid_buffer #(
                     valid_out_r <= valid_in || use_buffer;
                 end
             end
+        end
 
+        always @(posedge clk) begin
             if (push) begin
                 buffer <= data_in;
             end
-            
             if (!valid_out_r || ready_out) begin
                 data_out_r <= use_buffer ? buffer : data_in;
             end
