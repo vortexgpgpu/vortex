@@ -2,33 +2,36 @@
 
 module VX_data_store #(
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1, 
+    parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE               = 1, 
+    parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
-    parameter NUM_BANKS                     = 1,
+    parameter NUM_BANKS         = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 1,
+    parameter WORD_SIZE         = 1,
 
     // Enable cache writeable
-    parameter WRITE_ENABLE                  = 0
+    parameter WRITE_ENABLE      = 1,
+
+    // Enable write-through
+    parameter WRITE_THROUGH     = 1
 ) (
     input  wire                             clk,
     input  wire                             reset,
 
     input  wire                             write_enable,
     input  wire                             write_fill,
-    input  wire[CACHE_LINE_SIZE-1:0]         byte_enable,
+    input  wire[CACHE_LINE_SIZE-1:0]        byte_enable,
     input  wire[`LINE_SELECT_BITS-1:0]      write_addr,
-    input  wire[`CACHE_LINE_WIDTH-1:0]       write_data,
+    input  wire[`CACHE_LINE_WIDTH-1:0]      write_data,
 
     input  wire[`LINE_SELECT_BITS-1:0]      read_addr,
     output wire[`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] read_dirtyb,
-    output wire[`CACHE_LINE_WIDTH-1:0]       read_data
+    output wire[`CACHE_LINE_WIDTH-1:0]      read_data
 );
     `UNUSED_VAR (reset)
 
-    if (WRITE_ENABLE) begin
+    if (WRITE_ENABLE && !WRITE_THROUGH) begin
         reg [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] dirtyb[`LINES_PER_BANK-1:0];
         always @(posedge clk) begin
             if (write_enable) begin

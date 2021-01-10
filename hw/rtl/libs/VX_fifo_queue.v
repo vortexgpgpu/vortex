@@ -30,11 +30,13 @@ module VX_fifo_queue #(
                 head_r <= 0;
                 size_r <= 0;                    
             end else begin
-                if (push && !pop) begin
-                    assert(!full);
-                    size_r <= 1;
-                end else if (pop && !push) begin
-                    assert(!empty);
+                assert(!push || !full);
+                assert(!pop || !empty);
+                if (push) begin
+                    if (!pop) begin
+                        size_r <= 1;
+                    end
+                end else if (pop) begin
                     size_r <= 0;
                 end
                 if (push) begin 
@@ -62,13 +64,14 @@ module VX_fifo_queue #(
             end else begin
                 assert(!push || !full);
                 assert(!pop || !empty);
-                if (push && !pop) begin
-                    empty_r <= 0;
-                    if (used_r == ADDRW'(SIZE-1)) begin
-                        full_r <= 1;
+                if (push) begin
+                    if (!pop) begin
+                        empty_r <= 0;
+                        if (used_r == ADDRW'(SIZE-1)) begin
+                            full_r <= 1;
+                        end
                     end
-                end
-                if (pop && !push) begin
+                end else if (pop) begin
                     full_r <= 0;
                     if (used_r == ADDRW'(1)) begin
                         empty_r <= 1;

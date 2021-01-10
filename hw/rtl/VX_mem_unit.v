@@ -269,9 +269,9 @@ module VX_mem_unit # (
             .dram_req_ready     (1'b0),       
 
             // DRAM response
-            .dram_rsp_valid     (1'b0),
-            .dram_rsp_data      ((`SCACHE_LINE_SIZE*8)'(0)),
-            .dram_rsp_tag       (`LOG2UP(`SNUM_BANKS)'(0)),
+            .dram_rsp_valid     (0),
+            .dram_rsp_data      (0),
+            .dram_rsp_tag       (0),
             `UNUSED_PIN (dram_rsp_ready)
         );
     
