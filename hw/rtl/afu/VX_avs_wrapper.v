@@ -52,25 +52,20 @@ module VX_avs_wrapper #(
     wire avs_rspq_pop  = avs_reqq_pop;
     wire avs_rspq_empty;
 
-    reg [RD_QUEUE_ADDRW-1:0]  avs_pending_reads;
-    wire [RD_QUEUE_ADDRW-1:0] avs_pending_reads_n;    
-
-    assign avs_pending_reads_n = avs_pending_reads 
-                               + RD_QUEUE_ADDRW'((avs_reqq_push && !avs_rspq_pop) ? 1 :
-                                                 (avs_rspq_pop && !avs_reqq_push) ? -1 : 0);
-
-    reg rsp_queue_ready;
+    wire rsp_queue_going_full;
+    VX_pending_size #( 
+        .SIZE (RD_QUEUE_SIZE)
+    ) pending_size (
+        .clk   (clk),
+        .reset (reset),
+        .push  (avs_reqq_push),
+        .pop   (avs_rspq_pop),
+        .full  (rsp_queue_going_full)
+    ); 
 
     always @(posedge clk) begin
-        if (reset) begin                
-            avs_burstcount_r  <= 1;
-            avs_bankselect_r  <= 0;
-            avs_pending_reads <= 0;
-            rsp_queue_ready   <= 1;
-        end else begin
-            avs_pending_reads <= avs_pending_reads_n; 
-            rsp_queue_ready   <= (avs_pending_reads_n != RD_QUEUE_SIZE);
-        end
+        avs_burstcount_r <= 1;
+        avs_bankselect_r <= 0;
     end
     
     VX_fifo_queue #(
@@ -107,12 +102,12 @@ module VX_avs_wrapper #(
         `UNUSED_PIN (size)
     );
 
-    assign avs_read       = dram_req_valid && !dram_req_rw && rsp_queue_ready;
-    assign avs_write      = dram_req_valid && dram_req_rw && rsp_queue_ready;
+    assign avs_read       = dram_req_valid && !dram_req_rw && !rsp_queue_going_full;
+    assign avs_write      = dram_req_valid && dram_req_rw && !rsp_queue_going_full;
     assign avs_address    = dram_req_addr;
     assign avs_byteenable = dram_req_byteen;
     assign avs_writedata  = dram_req_data;
-    assign dram_req_ready = !avs_waitrequest && rsp_queue_ready;
+    assign dram_req_ready = !avs_waitrequest && !rsp_queue_going_full;
     assign avs_burstcount = avs_burstcount_r;
     assign avs_bankselect = avs_bankselect_r;
 
@@ -124,10 +119,10 @@ module VX_avs_wrapper #(
             if (dram_req_rw) 
                 $display("%t: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, dram_req_data);                
             else    
-                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, avs_pending_reads_n);
+                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag);
         end   
         if (dram_rsp_valid && dram_rsp_ready) begin
-            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d", $time, dram_rsp_tag, dram_rsp_data, avs_pending_reads_n);
+            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
         end
     end
 `endif

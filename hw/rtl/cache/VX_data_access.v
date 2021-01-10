@@ -77,7 +77,8 @@ module VX_data_access #(
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE)
+        .WRITE_ENABLE   (WRITE_ENABLE),
+        .WRITE_THROUGH  (WRITE_THROUGH)
     ) data_store (
         .clk         (clk),
         .reset       (reset),
@@ -97,26 +98,51 @@ module VX_data_access #(
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] writedata_qual;   
 
     if (`WORD_SELECT_BITS != 0) begin
-        for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
-            assign wbyteen_qual[i]   = (wwsel_in == `WORD_SELECT_BITS'(i)) ? wbyteen_in : {WORD_SIZE{1'b0}};
-            assign writedata_qual[i] = (wwsel_in == `WORD_SELECT_BITS'(i)) ? writeword_in : readdata_in[i * `WORD_WIDTH +: `WORD_WIDTH];
+        for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin            
+            wire [`WORD_WIDTH-1:0] readdata_sel = readdata_in[i * `WORD_WIDTH +: `WORD_WIDTH];
+            wire [`WORD_WIDTH-1:0] writeword_qual;            
+            for (genvar j = 0; j < WORD_SIZE; j++) begin
+                assign writeword_qual[j * 8 +: 8] = wbyteen_in[j] ? writeword_in[j * 8 +: 8] : readdata_sel[j * 8 +: 8];
+            end
+            wire wenable = (wwsel_in == `WORD_SELECT_BITS'(i));
+            assign wbyteen_qual[i]   = wenable ? wbyteen_in : {WORD_SIZE{1'b0}};
+            assign writedata_qual[i] = wenable ? writeword_qual : readdata_sel;            
         end
     end else begin
         `UNUSED_VAR (wwsel_in)
-        `UNUSED_VAR (readdata_in)
+        wire [`WORD_WIDTH-1:0] writeword_qual;            
+        for (genvar i = 0; i < WORD_SIZE; i++) begin
+            assign writeword_qual[i * 8 +: 8] = wbyteen_in[i] ? writeword_in[i * 8 +: 8] : readdata_in[i * 8 +: 8];
+        end
         assign wbyteen_qual   = wbyteen_in;
-        assign writedata_qual = writeword_in;
+        assign writedata_qual = writeword_qual;
     end    
     
-    assign byte_enable = wfill_in ? {CACHE_LINE_SIZE{1'b1}} : wbyteen_qual;
-    assign write_data  = wfill_in ? filldata_in : writedata_qual;
-
     assign write_enable = writeen_in && !stall;   
+    assign byte_enable  = wfill_in ? {CACHE_LINE_SIZE{1'b1}} : wbyteen_qual;
+    assign write_data   = wfill_in ? filldata_in : writedata_qual;    
 
     wire rw_hazard = DRAM_ENABLE && (raddr == waddr) && writeen_in;
-    for (genvar i = 0; i < CACHE_LINE_SIZE; i++) begin
-        assign dirtyb_out[i] = rw_hazard ? byte_enable[i] : read_dirtyb[i];
-        assign readdata_out[i * 8 +: 8] = (rw_hazard && byte_enable[i]) ? write_data[i * 8 +: 8] : read_data[i * 8 +: 8];
+
+    if (`WORD_SELECT_BITS != 0) begin
+        for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
+            wire [`WORD_WIDTH-1:0] readdata_sel = read_data[i * `WORD_WIDTH +: `WORD_WIDTH]; 
+            wire [`WORD_WIDTH-1:0] writeword_qual;            
+            for (genvar j = 0; j < WORD_SIZE; j++) begin
+                assign writeword_qual[j * 8 +: 8] = wbyteen_in[j] ? writeword_in[j * 8 +: 8] : readdata_sel[j * 8 +: 8];
+            end
+            wire wenable = (wwsel_in == `WORD_SELECT_BITS'(i));            
+            assign dirtyb_out[i * WORD_SIZE +: WORD_SIZE] = read_dirtyb[i * WORD_SIZE +: WORD_SIZE] | ({WORD_SIZE{rw_hazard && wenable}} & wbyteen_in); 
+            assign readdata_out[i * `WORD_WIDTH +: `WORD_WIDTH] = (rw_hazard && wfill_in) ? filldata_in[i * `WORD_WIDTH +: `WORD_WIDTH] : 
+                                                                    (rw_hazard && wenable) ? writeword_qual : readdata_sel;
+        end
+    end else begin
+        wire [`WORD_WIDTH-1:0] writeword_qual;            
+        for (genvar i = 0; i < WORD_SIZE; i++) begin
+            assign writeword_qual[i * 8 +: 8] = wbyteen_in[i] ? writeword_in[i * 8 +: 8] : read_data[i * 8 +: 8];
+        end
+        assign dirtyb_out   = read_dirtyb | ({WORD_SIZE{rw_hazard}} & wbyteen_in);
+        assign readdata_out = rw_hazard ? (wfill_in ? filldata_in : writeword_qual) : read_data;
     end
 
 `ifdef DBG_PRINT_CACHE_DATA

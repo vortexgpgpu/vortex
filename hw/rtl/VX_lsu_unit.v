@@ -239,7 +239,7 @@ module VX_lsu_unit #(
     
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin
-        if ((| dcache_req_if.valid) && (|dcache_req_if.ready)) begin
+        if (| (dcache_req_if.valid & dcache_req_if.ready)) begin
             if (dcache_req_if.rw[0])
                 $display("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
                      $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_address, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
