@@ -112,12 +112,6 @@ case $DRIVER in
 esac
 
 case $APP in
-    sgemm)
-        APP_PATH=$VORTEX_HOME/benchmarks/opencl/sgemm
-        ;;
-    vecadd)
-        APP_PATH=$VORTEX_HOME/benchmarks/opencl/vecadd
-        ;;
     basic)
         APP_PATH=$VORTEX_HOME/driver/tests/basic
         ;;
@@ -128,8 +122,7 @@ case $APP in
         APP_PATH=$VORTEX_HOME/driver/tests/dogfood
         ;;
     *)
-        echo "invalid app: $APP"
-        exit -1
+        APP_PATH=$VORTEX_HOME/benchmarks/opencl/$APP
         ;;
 esac
 

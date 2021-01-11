@@ -74,6 +74,7 @@ module VX_lsu_unit #(
             addr_matches[i-1] = (mem_req_addr[0] == mem_req_addr[i]) || ~lsu_req_if.tmask[i];
         end
     end
+    wire is_dup_load = (0 == lsu_req_if.rw) && (& addr_matches);
     
 `IGNORE_WARNINGS_BEGIN
     wire [`NUM_THREADS-1:0][31:0] req_address;
@@ -90,8 +91,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, (& addr_matches), lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
-        .data_out ({req_valid,        req_is_dup,       req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
+        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
+        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
     );
 
     // Can accept new request?
@@ -114,7 +115,7 @@ module VX_lsu_unit #(
     wire [`DCORE_TAG_ID_BITS-1:0] mbuf_waddr, mbuf_raddr;
     wire mbuf_full;
 
-    wire mbuf_push = (| dcache_req_if.valid) && (| dcache_req_if.ready) 
+    wire mbuf_push = (| (dcache_req_if.valid & dcache_req_if.ready))
                   && (0 == req_sent_mask)  // first submission only
                   && (0 == req_rw);        // loads only
 
@@ -141,8 +142,8 @@ module VX_lsu_unit #(
         .full         (mbuf_full)
     );
 
-    assign req_sent_all = (((dcache_req_if.ready | req_sent_mask) & req_tmask) == req_tmask) 
-                       || req_is_dup;
+    assign req_sent_all = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
+                       || (req_is_dup && dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -260,7 +261,7 @@ module VX_lsu_unit #(
     
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin        
-        if (| (dcache_req_if.valid & dcache_req_if.ready)) begin
+        if ((| (dcache_req_if.valid & dcache_req_if.ready))) begin
             if (dcache_req_if.rw[0])
                 $display("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
                      $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_address, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
