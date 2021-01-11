@@ -1,5 +1,8 @@
 `include "VX_define.vh"
 
+/// Modified port of noncomp module from fpnew Libray 
+/// reference: https://github.com/pulp-platform/fpnew
+
 module VX_fp_ncomp #( 
     parameter TAGW = 1,
     parameter LANES = 1
@@ -87,7 +90,8 @@ module VX_fp_ncomp #(
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + `FPU_BITS + `FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_type_t) + 1 + 1)),
-        .RESETW (1)
+        .RESETW (1),
+        .DEPTH  (0)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),

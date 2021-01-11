@@ -38,6 +38,27 @@ module VX_fp_div #(
     );
     
     for (genvar i = 0; i < LANES; i++) begin
+    `ifdef VERILATOR
+        reg [31:0] r;
+        fflags_t f;
+
+        always @(*) begin        
+            dpi_fdiv (dataa[i], datab[i], frm, r, f);
+        end
+        `UNUSED_VAR (f)
+
+        VX_shift_register #(
+            .DATAW  (32),
+            .DEPTH  (`LATENCY_FDIV),
+            .RESETW (1)
+        ) shift_req_dpi (
+            .clk      (clk),
+            .reset    (_reset),
+            .enable   (enable),
+            .data_in  (r),
+            .data_out (result[i])
+        );
+    `else
         acl_fdiv fdiv (
             .clk    (clk),
             .areset (_reset),
@@ -46,6 +67,7 @@ module VX_fp_div #(
             .b      (datab[i]),
             .q      (result[i])
         );
+    `endif
     end
 
     VX_shift_register #(

@@ -1,5 +1,8 @@
 `include "VX_define.vh"
 
+/// Modified port of cast module from fpnew Libray 
+/// reference: https://github.com/pulp-platform/fpnew
+
 `ifndef SYNTHESIS
 `include "float_dpi.vh"
 `endif
@@ -91,14 +94,14 @@ module VX_fp_cvt #(
     wire [LANES-1:0] mant_is_zero;                       // for integer zeroes
 
     for (genvar i = 0; i < LANES; ++i) begin
-        // Leading zero counter for cancellations
         wire mant_is_nonzero;
         VX_lzc #(
-            .DATAW (INT_MAN_WIDTH)
+            .WIDTH (INT_MAN_WIDTH),
+            .MODE  (1)
         ) lzc (
-            .data_in   (encoded_mant[i]),
-            .data_out  (renorm_shamt[i]),
-            .valid_out (mant_is_nonzero)
+            .in_i    (encoded_mant[i]),
+            .cnt_o   (renorm_shamt[i]),
+            .valid_o (mant_is_nonzero)
         );
         assign mant_is_zero[i] = ~mant_is_nonzero;
     end

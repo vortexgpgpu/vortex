@@ -59,6 +59,27 @@ module VX_fp_fma #(
             end    
         end
 
+    `ifdef VERILATOR
+        reg [31:0] r;
+        fflags_t f;
+
+        always @(*) begin        
+            dpi_fmadd (a, b, c, frm, r, f);
+        end
+        `UNUSED_VAR (f)
+
+        VX_shift_register #(
+            .DATAW  (32),
+            .DEPTH  (`LATENCY_FMA),
+            .RESETW (1)
+        ) shift_req_dpi (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  (r),
+            .data_out (result[i])
+        );
+    `else
         acl_fmadd fmadd (
             .clk    (clk),
             .areset (reset),
@@ -68,6 +89,7 @@ module VX_fp_fma #(
             .c      (c),
             .q      (result[i])
         );
+    `endif
     end
     
     VX_shift_register #(
