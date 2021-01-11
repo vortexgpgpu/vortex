@@ -1,6 +1,9 @@
 
 `include "VX_define.vh"
 
+/// Modified port of rouding module from fpnew Libray
+/// reference: https://github.com/pulp-platform/fpnew
+
 module VX_fp_rounding #(
     parameter DAT_WIDTH = 2 // Width of the abolute value, without sign bit
 ) (
@@ -17,17 +20,17 @@ module VX_fp_rounding #(
     output wire                 exact_zero_o             // output is an exact zero
 );
 
-  reg round_up; // Rounding decision
+    reg round_up; // Rounding decision
 
-  // Take the rounding decision according to RISC-V spec
-  // RoundMode | Mnemonic | Meaning
-  // :--------:|:--------:|:-------
-  //    000    |   RNE    | Round to Nearest, ties to Even
-  //    001    |   RTZ    | Round towards Zero
-  //    010    |   RDN    | Round Down (towards -\infty)
-  //    011    |   RUP    | Round Up (towards \infty)
-  //    100    |   RMM    | Round to Nearest, ties to Max Magnitude
-  //  others   |          | *invalid*
+    // Take the rounding decision according to RISC-V spec
+    // RoundMode | Mnemonic | Meaning
+    // :--------:|:--------:|:-------
+    //    000    |   RNE    | Round to Nearest, ties to Even
+    //    001    |   RTZ    | Round towards Zero
+    //    010    |   RDN    | Round Down (towards -\infty)
+    //    011    |   RUP    | Round Up (towards \infty)
+    //    100    |   RMM    | Round to Nearest, ties to Max Magnitude
+    //  others   |          | *invalid*
 
     always @(*) begin
         case (rnd_mode_i)
@@ -47,15 +50,15 @@ module VX_fp_rounding #(
         endcase
     end
 
-  // Perform the rounding, exponent change and overflow to inf happens automagically
-  assign abs_rounded_o = abs_value_i + DAT_WIDTH'(round_up);
+    // Perform the rounding, exponent change and overflow to inf happens automagically
+    assign abs_rounded_o = abs_value_i + DAT_WIDTH'(round_up);
 
-  // True zero result is a zero result without dirty round/sticky bits
-  assign exact_zero_o = (abs_value_i == 0) && (round_sticky_bits_i == 0);
+    // True zero result is a zero result without dirty round/sticky bits
+    assign exact_zero_o = (abs_value_i == 0) && (round_sticky_bits_i == 0);
 
-  // In case of effective subtraction (thus signs of addition operands must have differed) and a
-  // true zero result, the result sign is '-' in case of RDN and '+' for other modes.
-  assign sign_o = (exact_zero_o && effective_subtraction_i) ? (rnd_mode_i == `FRM_RDN)
-                                                            : sign_i;
+    // In case of effective subtraction (thus signs of addition operands must have differed) and a
+    // true zero result, the result sign is '-' in case of RDN and '+' for other modes.
+    assign sign_o = (exact_zero_o && effective_subtraction_i) ? (rnd_mode_i == `FRM_RDN)
+                                                              : sign_i;
 
 endmodule

@@ -37,6 +37,27 @@ module VX_fp_sqrt #(
     );  
     
     for (genvar i = 0; i < LANES; i++) begin
+    `ifdef VERILATOR
+        reg [31:0] r;
+        fflags_t f;
+
+        always @(*) begin        
+            dpi_fsqrt  (dataa[i], frm, r, f);
+        end
+        `UNUSED_VAR (f)
+
+        VX_shift_register #(
+            .DATAW  (32),
+            .DEPTH  (`LATENCY_FSQRT),
+            .RESETW (1)
+        ) shift_req_dpi (
+            .clk      (clk),
+            .reset    (_reset),
+            .enable   (enable),
+            .data_in  (r),
+            .data_out (result[i])
+        );
+    `else
         acl_fsqrt fsqrt (
             .clk    (clk),
             .areset (_reset),
@@ -44,6 +65,7 @@ module VX_fp_sqrt #(
             .a      (dataa[i]),
             .q      (result[i])
         );
+    `endif
     end
 
     VX_shift_register #(
