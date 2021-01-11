@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <math.h>
 #include <CL/opencl.h>
+#include <unistd.h> 
 #include <string.h>
 #include <chrono>
 
-#define SIZE 256
 #define KERNEL_NAME "vecadd"
 
 #define CL_CHECK(_expr)                                                \
@@ -89,7 +89,35 @@ static void cleanup() {
   if (h_c) free(h_c);
 }
 
+int size = 64;
+
+static void show_usage() {
+  printf("Usage: [-n size] [-h: help]\n");
+}
+
+static void parse_args(int argc, char **argv) {
+  int c;
+  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+    switch (c) {
+    case 'n':
+      size = atoi(optarg);
+      break;
+    case 'h':
+    case '?': {
+      show_usage();
+      exit(0);
+    } break;
+    default:
+      show_usage();
+      exit(-1);
+    }
+  }
+}
+
 int main (int argc, char **argv) {
+  // parse command arguments
+  parse_args(argc, argv);
+  
   cl_platform_id platform_id;
   size_t kernel_size;
   cl_int binary_status;
@@ -106,7 +134,7 @@ int main (int argc, char **argv) {
   context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
 
   printf("Allocate device buffers\n");
-  size_t nbytes = SIZE * sizeof(float);
+  size_t nbytes = size * sizeof(float);
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
@@ -136,7 +164,7 @@ int main (int argc, char **argv) {
   h_c = (float*)malloc(nbytes);	
 	
   // Initialize values for array members.  
-  for (int i = 0; i < SIZE; ++i) {
+  for (int i = 0; i < size; ++i) {
     h_a[i] = sinf(i)*sinf(i);
     h_b[i] = cosf(i)*cosf(i);
     h_c[i] = 0xdeadbeef;
@@ -151,7 +179,7 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b, 0, NULL, NULL));
 
   printf("Execute the kernel\n");
-  size_t global_work_size[1] = {SIZE};
+  size_t global_work_size[1] = {size};
   size_t local_work_size[1] = {1};
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, local_work_size, 0, NULL, NULL));
@@ -165,7 +193,7 @@ int main (int argc, char **argv) {
 
   printf("Verify result\n");
   int errors = 0;
-  for (int i = 0; i < SIZE; ++i) {
+  for (int i = 0; i < size; ++i) {
     float ref = h_a[i] + h_b[i];
     if (!almost_equal(h_c[i], ref)) {
       printf("*** error: [%d] expected=%f, actual=%f, a=%f, b=%f\n", i, ref, h_c[i], h_a[i], h_b[i]);

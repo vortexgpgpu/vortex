@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <CL/opencl.h>
 #include <string.h>
-#include <time.h> 
+#include <time.h>
+#include <unistd.h> 
 #include <chrono>
 
-#define SIZE 32
 #define KERNEL_NAME "sgemm"
 
 #define CL_CHECK(_expr)                                                \
@@ -101,7 +101,40 @@ static void cleanup() {
   if (h_c) free(h_c);
 }
 
+int size = 64;
+
+static void show_usage() {
+  printf("Usage: [-n size] [-h: help]\n");
+}
+
+static void parse_args(int argc, char **argv) {
+  int c;
+  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+    switch (c) {
+    case 'n':
+      size = atoi(optarg);
+      break;
+    case 'h':
+    case '?': {
+      show_usage();
+      exit(0);
+    } break;
+    default:
+      show_usage();
+      exit(-1);
+    }
+  }
+
+  if (size < 2) {
+    printf("Error: invalid size!\n");
+    exit(-1);
+  }
+}
+
 int main (int argc, char **argv) {
+  // parse command arguments
+  parse_args(argc, argv);
+
   cl_platform_id platform_id;
   size_t kernel_size;
   cl_int binary_status;
@@ -120,7 +153,7 @@ int main (int argc, char **argv) {
   context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
 
   // Allocate device buffers
-  size_t nbytes = SIZE * SIZE * sizeof(float);
+  size_t nbytes = size * size * sizeof(float);
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   b_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
@@ -140,7 +173,7 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   // Set kernel arguments
-  int width = SIZE;
+  int width = size;
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));	
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
@@ -152,7 +185,7 @@ int main (int argc, char **argv) {
   h_c = (float*)malloc(nbytes);	
 	
   // Initialize values for array members.  
-  for (int i = 0; i < (SIZE * SIZE); ++i) {
+  for (int i = 0; i < (size * size); ++i) {
     h_a[i] = (float)rand() / (float)RAND_MAX;
     h_b[i] = (float)rand() / (float)RAND_MAX;
     h_c[i] = 0xdeadbeef;
@@ -167,7 +200,7 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b, 0, NULL, NULL));
 
   printf("Execute the kernel\n");
-  size_t global_work_size[2] = {SIZE, SIZE};
+  size_t global_work_size[2] = {size, size};
   size_t local_work_size[2] = {1, 1};
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL));
@@ -182,8 +215,8 @@ int main (int argc, char **argv) {
   printf("Verify result\n");
   int errors = 0;
   float* h_ref = (float*)malloc(nbytes);
-  matmul(h_ref, h_a, h_b, SIZE, SIZE, SIZE);
-  for (int i = 0; i < (SIZE * SIZE); i++) {
+  matmul(h_ref, h_a, h_b, size, size, size);
+  for (int i = 0; i < (size * size); i++) {
     if (!almost_equal(h_c[i], h_ref[i])) {
       printf("*** error: [%d] expected=%f, actual=%f\n", i, h_ref[i], h_c[i]);
       ++errors;
