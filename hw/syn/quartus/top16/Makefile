@@ -1,10 +1,10 @@
-#FAMILY = "Arria 10"
-#DEVICE = 10AX115N3F40E2SG
-#FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG
+FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
 
-FAMILY = "Stratix 10"
-DEVICE = 1SX280HN2F43E2VG
-FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
+#FAMILY = "Stratix 10"
+#DEVICE = 1SX280HN2F43E2VG
+#FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
 
 PROJECT = vortex_afu
 TOP_LEVEL_ENTITY = vortex_afu

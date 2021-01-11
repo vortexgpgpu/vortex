@@ -441,7 +441,6 @@ end
         .wwsel_in       (wsel_st01),
         .wbyteen_in     (byteen_st01),
         .writeword_in   (writeword_st01),
-        .readdata_in    (readdata_st1),
         .filldata_in    (filldata_st1)
     ); 
 
@@ -683,9 +682,9 @@ end
     `SCOPE_ASSIGN (addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
 
 `ifdef PERF_ENABLE
-    assign perf_read_misses  = !pipeline_stall && miss_st1 && !is_mshr_st1 && !mem_rw_st1;
-    assign perf_write_misses = !pipeline_stall && miss_st1 && !is_mshr_st1 && mem_rw_st1;
-    assign perf_pipe_stalls  = pipeline_stall || mshr_almost_full || dreq_going_full;
+    assign perf_read_misses  = valid_st1 && !pipeline_stall && !is_fill_st1 && !is_mshr_st1 && miss_st1 && !mem_rw_st1;
+    assign perf_write_misses = valid_st1 && !pipeline_stall && !is_fill_st1 && !is_mshr_st1 && miss_st1 && mem_rw_st1;
+    assign perf_pipe_stalls  = pipeline_stall || mshr_almost_full || dreq_almost_full;
     assign perf_mshr_stalls  = mshr_almost_full;
 `endif
 

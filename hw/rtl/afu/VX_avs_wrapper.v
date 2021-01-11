@@ -53,6 +53,7 @@ module VX_avs_wrapper #(
     wire avs_rspq_empty;
 
     wire rsp_queue_going_full;
+    wire [RD_QUEUE_ADDRW-1:0] rsp_queue_size;
     VX_pending_size #( 
         .SIZE (RD_QUEUE_SIZE)
     ) pending_size (
@@ -60,8 +61,11 @@ module VX_avs_wrapper #(
         .reset (reset),
         .push  (avs_reqq_push),
         .pop   (avs_rspq_pop),
-        .full  (rsp_queue_going_full)
+        `UNUSED_PIN (empty),
+        .full  (rsp_queue_going_full),
+        .size  (rsp_queue_size)
     ); 
+    `UNUSED_VAR (rsp_queue_size)
 
     always @(posedge clk) begin
         avs_burstcount_r <= 1;
@@ -71,7 +75,6 @@ module VX_avs_wrapper #(
     VX_fifo_queue #(
         .DATAW   (REQ_TAGW),
         .SIZE    (RD_QUEUE_SIZE),
-        .BUFFERED(1),
         .FASTRAM (1)
     ) rd_req_queue (
         .clk      (clk),
@@ -88,7 +91,6 @@ module VX_avs_wrapper #(
     VX_fifo_queue #(
         .DATAW   (AVS_DATAW),
         .SIZE    (RD_QUEUE_SIZE),
-        .BUFFERED(1),
         .FASTRAM (1)
     ) rd_rsp_queue (
         .clk      (clk),
@@ -119,10 +121,10 @@ module VX_avs_wrapper #(
             if (dram_req_rw) 
                 $display("%t: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, dram_req_data);                
             else    
-                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag);
+                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `TO_FULL_ADDR(dram_req_addr), dram_req_byteen, dram_req_tag, rsp_queue_size);
         end   
         if (dram_rsp_valid && dram_rsp_ready) begin
-            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h", $time, dram_rsp_tag, dram_rsp_data);
+            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d", $time, dram_rsp_tag, dram_rsp_data, rsp_queue_size);
         end
     end
 `endif

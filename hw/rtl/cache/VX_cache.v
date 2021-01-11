@@ -438,10 +438,10 @@ module VX_cache #(
             perf_pipe_stalls  <= 0;
             perf_crsp_stalls  <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads + 64'(perf_core_reads_per_cycle);
+            perf_core_reads   <= perf_core_reads  + 64'(perf_core_reads_per_cycle);
             perf_core_writes  <= perf_core_writes + 64'(perf_core_writes_per_cycle);
             perf_read_misses  <= perf_read_misses + 64'(perf_read_miss_per_cycle);
-            perf_write_misses <= perf_write_misses + 64'(perf_write_miss_per_cycle);
+            perf_write_misses <= perf_write_misses+ 64'(perf_write_miss_per_cycle);
             perf_mshr_stalls  <= perf_mshr_stalls + 64'(perf_mshr_stall_per_cycle);
             perf_pipe_stalls  <= perf_pipe_stalls + 64'(perf_pipe_stall_per_cycle);
             perf_crsp_stalls  <= perf_crsp_stalls + 64'(perf_crsp_stall_per_cycle);

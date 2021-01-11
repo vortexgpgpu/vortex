@@ -121,8 +121,7 @@ module VX_fp_cvt #(
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 +INT_EXP_WIDTH + INT_MAN_WIDTH + LZC_RESULT_WIDTH + 1)),
-        .RESETW (1),
-        .DEPTH  (1)
+        .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
@@ -182,8 +181,7 @@ module VX_fp_cvt #(
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + INT_MAN_WIDTH + 2*INT_EXP_WIDTH)),
-        .RESETW (1),
-        .DEPTH  (1)
+        .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
@@ -310,8 +308,7 @@ module VX_fp_cvt #(
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + 1 + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + 32 + 1)),
-        .RESETW (1),
-        .DEPTH  (1)
+        .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),

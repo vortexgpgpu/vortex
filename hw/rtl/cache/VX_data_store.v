@@ -48,13 +48,14 @@ module VX_data_store #(
     VX_dp_ram #(
         .DATAW(CACHE_LINE_SIZE * 8),
         .SIZE(`LINES_PER_BANK),
+        .BYTEENW(CACHE_LINE_SIZE),
         .RWCHECK(1)
     ) data (
         .clk(clk),
         .waddr(write_addr),                                
         .raddr(read_addr),                
         .wren(write_enable),  
-        .byteen(1'b1),
+        .byteen(byte_enable),
         .rden(1'b1),
         .din(write_data),
         .dout(read_data)

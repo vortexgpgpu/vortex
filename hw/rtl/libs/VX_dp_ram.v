@@ -23,23 +23,18 @@ module VX_dp_ram #(
 
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
-    localparam DATA32W   = DATAW / 32;
-    localparam BYTEEN32W = BYTEENW / 4;
-
     if (FASTRAM) begin
         if (BUFFERED) begin        
             reg [DATAW-1:0] dout_r;
 
             if (BYTEENW > 1) begin
-                `USE_FAST_BRAM reg [DATA32W-1:0][3:0][7:0] mem [SIZE-1:0];
+                `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
                 always @(posedge clk) begin
                     if (wren) begin
-                        for (integer j = 0; j < BYTEEN32W; j++) begin
-                            for (integer i = 0; i < 4; i++) begin
-                                if (byteen[j * 4 + i])
-                                    mem[waddr][j][i] <= din[j * 32 + i * 8 +: 8];
-                            end
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (byteen[i])
+                                mem[waddr][i] <= din[i * 8 +: 8];
                         end
                     end
                     if (rden)
@@ -60,15 +55,13 @@ module VX_dp_ram #(
             `UNUSED_VAR (rden)
 
             if (BYTEENW > 1) begin
-                `USE_FAST_BRAM reg [DATA32W-1:0][3:0][7:0] mem [SIZE-1:0];
+                `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
                 always @(posedge clk) begin
                     if (wren) begin
-                        for (integer j = 0; j < BYTEEN32W; j++) begin
-                            for (integer i = 0; i < 4; i++) begin
-                                if (byteen[j * 4 + i])
-                                    mem[waddr][j][i] <= din[j * 32 + i * 8 +: 8];
-                            end
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (byteen[i])
+                                mem[waddr][i] <= din[i * 8 +: 8];
                         end
                     end
                 end
@@ -88,15 +81,13 @@ module VX_dp_ram #(
             reg [DATAW-1:0] dout_r;
 
             if (BYTEENW > 1) begin
-                reg [DATA32W-1:0][3:0][7:0] mem [SIZE-1:0];
+                reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
                 always @(posedge clk) begin
                     if (wren) begin
-                        for (integer j = 0; j < BYTEEN32W; j++) begin
-                            for (integer i = 0; i < 4; i++) begin
-                                if (byteen[j * 4 + i])
-                                    mem[waddr][j][i] <= din[j * 32 + i * 8 +: 8];
-                            end
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (byteen[i])
+                                mem[waddr][i] <= din[i * 8 +: 8];
                         end
                     end
                     if (rden)
@@ -118,15 +109,13 @@ module VX_dp_ram #(
 
             if (RWCHECK) begin
                 if (BYTEENW > 1) begin
-                    reg [DATA32W-1:0][3:0][7:0] mem [SIZE-1:0];
+                    reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
                     always @(posedge clk) begin
                         if (wren) begin
-                            for (integer j = 0; j < BYTEEN32W; j++) begin
-                                for (integer i = 0; i < 4; i++) begin
-                                    if (byteen[j * 4 + i])
-                                        mem[waddr][j][i] <= din[j * 32 + i * 8 +: 8];
-                                end
+                            for (integer i = 0; i < BYTEENW; i++) begin
+                                if (byteen[i])
+                                    mem[waddr][i] <= din[i * 8 +: 8];
                             end
                         end
                     end
@@ -142,15 +131,13 @@ module VX_dp_ram #(
                 end
             end else begin
                 if (BYTEENW > 1) begin
-                    `NO_RW_RAM_CHECK reg [DATA32W-1:0][3:0][7:0] mem [SIZE-1:0];
+                    `NO_RW_RAM_CHECK reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
                     always @(posedge clk) begin
                         if (wren) begin
-                            for (integer j = 0; j < BYTEEN32W; j++) begin
-                                for (integer i = 0; i < 4; i++) begin
-                                    if (byteen[j * 4 + i])
-                                        mem[waddr][j][i] <= din[j * 32 + i * 8 +: 8];
-                                end
+                            for (integer i = 0; i < BYTEENW; i++) begin
+                                if (byteen[i])
+                                    mem[waddr][i] <= din[i * 8 +: 8];
                             end
                         end
                     end
