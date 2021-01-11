@@ -497,17 +497,12 @@ wire [CCI_RD_RQ_DATAW-1:0] cci_rdq_dout;
 
 //--
 
-assign cci_dram_req_valid = (CMD_MEM_WRITE == state) ? cci_dram_wr_req_valid : cci_dram_rd_req_valid;
-
-assign cci_dram_req_addr = (CMD_MEM_WRITE == state) ? cci_dram_wr_req_addr : cci_dram_rd_req_addr;
-
-assign cci_dram_req_rw = (CMD_MEM_WRITE == state);
-
+assign cci_dram_req_valid  = (CMD_MEM_WRITE == state) ? cci_dram_wr_req_valid : cci_dram_rd_req_valid;
+assign cci_dram_req_addr   = (CMD_MEM_WRITE == state) ? cci_dram_wr_req_addr : cci_dram_rd_req_addr;
+assign cci_dram_req_rw     = (CMD_MEM_WRITE == state);
 assign cci_dram_req_byteen = {64{1'b1}};
-
-assign cci_dram_req_data = cci_rdq_dout[CCI_RD_RQ_DATAW-1:CCI_RD_RQ_TAGW];
-
-assign cci_dram_req_tag = AVS_REQ_TAGW'(0);
+assign cci_dram_req_data   = cci_rdq_dout[CCI_RD_RQ_DATAW-1:CCI_RD_RQ_TAGW];
+assign cci_dram_req_tag    = AVS_REQ_TAGW'(0);
 
 `UNUSED_VAR (cci_dram_rsp_tag)
 
@@ -619,8 +614,6 @@ VX_avs_wrapper #(
 
 // CCI-P Read Request ///////////////////////////////////////////////////////////
 
-reg [$clog2(CCI_RD_QUEUE_SIZE+1)-1:0] cci_pending_reads;
-wire [$clog2(CCI_RD_QUEUE_SIZE+1)-1:0] cci_pending_reads_next;
 reg [DRAM_ADDR_WIDTH-1:0] cci_dram_wr_req_ctr;
 reg [DRAM_ADDR_WIDTH-1:0] cci_rd_req_ctr;
 wire [DRAM_ADDR_WIDTH-1:0] cci_rd_req_ctr_next;
@@ -653,11 +646,22 @@ assign cci_rd_req_ctr_next = cci_rd_req_ctr + DRAM_ADDR_WIDTH'(cci_rd_req_fire ?
 
 assign cci_rdq_pop  = cci_dram_wr_req_fire;
 assign cci_rdq_push = cci_rd_rsp_fire;
-assign cci_rdq_din  = {cp2af_sRxPort.c0.data, cci_rd_rsp_tag};  
+assign cci_rdq_din  = {cp2af_sRxPort.c0.data, cci_rd_rsp_tag};
 
-assign cci_pending_reads_next = cci_pending_reads 
-                              + $bits(cci_pending_reads)'((cci_rd_req_fire && !cci_rdq_pop) ? 1 : 
-                                                          (!cci_rd_req_fire && cci_rdq_pop) ? -1 : 0);
+wire [$clog2(CCI_RD_QUEUE_SIZE+1)-1:0] cci_pending_reads;
+wire cci_pending_reads_full;
+VX_pending_size #( 
+    .SIZE (CCI_RD_QUEUE_SIZE)
+) cci_rd_pending_size (
+    .clk   (clk),
+    .reset (reset),
+    .push  (cci_rd_req_fire),
+    .pop   (cci_rdq_pop),
+    `UNUSED_PIN (empty),
+    .full  (cci_pending_reads_full),
+    .size  (cci_pending_reads)
+);
+`UNUSED_VAR (cci_pending_reads)
 
 assign cci_dram_wr_req_valid = !cci_rdq_empty;
 
@@ -673,7 +677,6 @@ always @(posedge clk) begin
     cci_rd_req_addr     <= 0;
     cci_rd_req_ctr      <= 0;
     cci_rd_rsp_ctr      <= 0;
-    cci_pending_reads   <= 0;
     cci_rd_req_enable   <= 0;
     cci_rd_req_wait     <= 0;
     cci_dram_wr_req_ctr <= 0;
@@ -685,7 +688,6 @@ always @(posedge clk) begin
       cci_rd_req_addr      <= cmd_io_addr;
       cci_rd_req_ctr       <= 0;
       cci_rd_rsp_ctr       <= 0;
-      cci_pending_reads    <= 0;
       cci_rd_req_enable    <= (cmd_data_size != 0);
       cci_rd_req_wait      <= 0;      
       cci_dram_wr_req_ctr  <= 0;
@@ -694,7 +696,7 @@ always @(posedge clk) begin
 
     cci_rd_req_enable <= (STATE_WRITE == state)                       
                       && (cci_rd_req_ctr_next != cmd_data_size)
-                      && (cci_pending_reads_next != CCI_RD_QUEUE_SIZE)
+                      && !cci_pending_reads_full
                       && !cp2af_sRxPort.c0TxAlmFull;    
 
     if (cci_rd_req_fire) begin  
@@ -704,7 +706,7 @@ always @(posedge clk) begin
         cci_rd_req_wait <= 1; // end current request batch
       end 
     `ifdef DBG_PRINT_OPAE
-      $display("%t: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr_next), cci_pending_reads_next);
+      $display("%t: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr_next), cci_pending_reads);
     `endif
     end
 
@@ -720,7 +722,7 @@ always @(posedge clk) begin
 
     /*if (cci_rdq_pop) begin
     `ifdef DBG_PRINT_OPAE
-      $display("%t: CCI Rd Queue Pop: pending=%0d", $time, cci_pending_reads_next);
+      $display("%t: CCI Rd Queue Pop: pending=%0d", $time, cci_pending_reads);
     `endif
     end*/
 
@@ -728,8 +730,6 @@ always @(posedge clk) begin
       cci_dram_wr_req_addr_unqual <= cci_dram_wr_req_addr_unqual + ((CCI_RD_RQ_TAGW'(cci_dram_wr_req_ctr) == CCI_RD_RQ_TAGW'(CCI_RD_WINDOW_SIZE-1)) ? DRAM_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE) : DRAM_ADDR_WIDTH'(0));
       cci_dram_wr_req_ctr  <= cci_dram_wr_req_ctr + DRAM_ADDR_WIDTH'(1);
     end
-
-    cci_pending_reads <= cci_pending_reads_next;
   end
 end
 
@@ -771,11 +771,9 @@ VX_fifo_queue #(
 
 // CCI-P Write Request //////////////////////////////////////////////////////////
 
-reg [$clog2(CCI_RW_QUEUE_SIZE+1)-1:0] cci_pending_writes;
-wire [$clog2(CCI_RW_QUEUE_SIZE+1)-1:0] cci_pending_writes_next;
 reg [DRAM_ADDR_WIDTH-1:0] cci_dram_rd_req_ctr;
 reg [DRAM_ADDR_WIDTH-1:0] cci_wr_req_ctr;
-reg [DRAM_ADDR_WIDTH-1:0] cci_dram_rd_req_addr_unqual;
+reg [DRAM_ADDR_WIDTH-1:0] cci_dram_rd_req_addr_r;
 t_ccip_clAddr cci_wr_req_addr;
 
 always @(*) begin
@@ -785,23 +783,34 @@ always @(*) begin
   af2cp_sTxPort.c1.data        = t_ccip_clData'(cci_dram_rsp_data);  
 end 
 
-wire cci_wr_req_fire = af2cp_sTxPort.c1.valid;
+wire cci_dram_rd_req_fire = cci_dram_rd_req_valid && cci_dram_req_ready;
+wire cci_dram_rd_rsp_fire = cci_dram_rsp_valid && cci_dram_rsp_ready;
+
+wire cci_wr_req_fire = cci_dram_rd_rsp_fire;
 wire cci_wr_rsp_fire = (STATE_READ == state) && cp2af_sRxPort.c1.rspValid;
 
-wire cci_dram_rd_req_fire = cci_dram_rd_req_valid && cci_dram_req_ready;
-
-assign cci_pending_writes_next = cci_pending_writes 
-                               + $bits(cci_pending_writes)'((cci_wr_req_fire && !cci_wr_rsp_fire) ? 1 :
-                                                            (!cci_wr_req_fire && cci_wr_rsp_fire) ? -1 : 0);
+wire [$clog2(CCI_RW_QUEUE_SIZE+1)-1:0] cci_pending_writes;
+wire cci_pending_writes_empty;
+VX_pending_size #( 
+    .SIZE (CCI_RW_QUEUE_SIZE)
+) cci_wr_pending_size (
+    .clk   (clk),
+    .reset (reset),
+    .push  (cci_wr_req_fire),
+    .pop   (cci_wr_rsp_fire),
+    .empty (cci_pending_writes_empty),
+    `UNUSED_PIN (full),
+    .size  (cci_pending_writes)
+);
+`UNUSED_VAR (cci_pending_writes)
 
 assign cci_dram_rd_req_valid = (cci_dram_rd_req_ctr != 0);
-
-assign cci_dram_rd_req_addr = cci_dram_rd_req_addr_unqual;
+assign cci_dram_rd_req_addr = cci_dram_rd_req_addr_r;
 
 assign af2cp_sTxPort.c1.valid = cci_dram_rsp_valid;
 assign cci_dram_rsp_ready = !cp2af_sRxPort.c1TxAlmFull;
 
-assign cmd_read_done = (0 == cci_wr_req_ctr) && (0 == cci_pending_writes);
+assign cmd_read_done = (0 == cci_wr_req_ctr) && cci_pending_writes_empty;
 
 // Send write requests to CCI
 always @(posedge clk) 
@@ -809,18 +818,16 @@ begin
   if (reset) begin
     cci_wr_req_addr     <= 0;
     cci_wr_req_ctr      <= 0;
-    cci_pending_writes  <= 0;
     cci_dram_rd_req_ctr <= 0;
-    cci_dram_rd_req_addr_unqual <= 0;
+    cci_dram_rd_req_addr_r <= 0;
   end
   else begin    
     if ((STATE_IDLE == state) 
     &&  (CMD_MEM_READ == cmd_type)) begin
-      cci_wr_req_addr      <= cmd_io_addr;
-      cci_wr_req_ctr       <= cmd_data_size;
-      cci_pending_writes   <= 0;      
-      cci_dram_rd_req_ctr  <= cmd_data_size;
-      cci_dram_rd_req_addr_unqual <= cmd_mem_addr;
+      cci_wr_req_addr        <= cmd_io_addr;
+      cci_wr_req_ctr         <= cmd_data_size;
+      cci_dram_rd_req_ctr    <= cmd_data_size;
+      cci_dram_rd_req_addr_r <= cmd_mem_addr;
     end 
 
     if (cci_wr_req_fire) begin
@@ -828,22 +835,20 @@ begin
       cci_wr_req_addr <= cci_wr_req_addr + t_ccip_clAddr'(1);        
       cci_wr_req_ctr  <= cci_wr_req_ctr - DRAM_ADDR_WIDTH'(1);
     `ifdef DBG_PRINT_OPAE
-      $display("%t: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d, data=%0h", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes_next, af2cp_sTxPort.c1.data);
+      $display("%t: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d, data=%0h", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data);
     `endif
     end
 
   /*`ifdef DBG_PRINT_OPAE
     if (cci_wr_rsp_fire) begin      
-      $display("%t: CCI Wr Rsp: pending=%0d", $time, cci_pending_writes_next);      
+      $display("%t: CCI Wr Rsp: pending=%0d", $time, cci_pending_writes);      
     end
   `endif*/
 
     if (cci_dram_rd_req_fire) begin
-      cci_dram_rd_req_addr_unqual <= cci_dram_rd_req_addr_unqual + DRAM_ADDR_WIDTH'(1);       
+      cci_dram_rd_req_addr_r <= cci_dram_rd_req_addr_r + DRAM_ADDR_WIDTH'(1);       
       cci_dram_rd_req_ctr  <= cci_dram_rd_req_ctr - DRAM_ADDR_WIDTH'(1);
     end
-
-    cci_pending_writes <= cci_pending_writes_next;
   end
 end
 

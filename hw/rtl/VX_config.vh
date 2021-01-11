@@ -264,7 +264,7 @@
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
-`define ICACHE_SIZE 2048
+`define ICACHE_SIZE 8192
 `endif
 
 // Core Request Queue Size
