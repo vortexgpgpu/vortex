@@ -27,7 +27,6 @@ module VX_issue #(
     VX_gpr_req_if gpr_req_if();
     VX_gpr_rsp_if gpr_rsp_if();
 
-    wire [`NW_BITS-1:0] deq_wid_next;
     wire scoreboard_delay;
 
     VX_ibuffer #(
@@ -37,8 +36,7 @@ module VX_issue #(
         .reset        (reset), 
         .freeze       (1'b0),
         .ibuf_enq_if  (decode_if),
-        .ibuf_deq_if  (ibuf_deq_if),
-        .deq_wid_next (deq_wid_next)    
+        .ibuf_deq_if  (ibuf_deq_if) 
     );
 
     VX_scoreboard #(
@@ -48,7 +46,6 @@ module VX_issue #(
         .reset        (reset), 
         .ibuf_deq_if  (ibuf_deq_if),
         .writeback_if (writeback_if),
-        .deq_wid_next (deq_wid_next),
         .delay        (scoreboard_delay)
     );
         

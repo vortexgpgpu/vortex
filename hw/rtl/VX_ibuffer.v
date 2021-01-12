@@ -11,7 +11,6 @@ module VX_ibuffer #(
     VX_decode_if  ibuf_enq_if,  
 
     // outputs
-    output wire [`NW_BITS-1:0] deq_wid_next,
     VX_decode_if  ibuf_deq_if
 );
     localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + `NUM_REGS;
@@ -194,8 +193,6 @@ module VX_ibuffer #(
         `endif
         end
     end
-
-    assign deq_wid_next = deq_wid_n;
 
     assign ibuf_enq_if.ready = ~q_full[ibuf_enq_if.wid];
     assign q_data_in = {ibuf_enq_if.tmask, 
