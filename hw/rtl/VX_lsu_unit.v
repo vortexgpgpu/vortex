@@ -231,7 +231,7 @@ module VX_lsu_unit #(
         end        
     end   
 
-    wire [`NUM_THREADS-1:0] rsp_tmask = rsp_is_dup ? rsp_rem_mask[mbuf_raddr] : dcache_rsp_if.valid;
+    assign rsp_tmask = rsp_is_dup ? rsp_rem_mask[mbuf_raddr] : dcache_rsp_if.valid;
 
     // send load commit
 
