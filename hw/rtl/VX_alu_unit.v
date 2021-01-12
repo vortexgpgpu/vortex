@@ -86,40 +86,35 @@ module VX_alu_unit #(
     wire [31:0] br_dest    = add_result[alu_req_if.tid]; 
     wire [32:0] cmp_result = sub_result[alu_req_if.tid];   
     
-    wire [32:0] cmp_result_r;
-    wire is_br_op_r;
-`IGNORE_WARNINGS_BEGIN
-    wire [`BR_BITS-1:0] br_op_r;
-`IGNORE_WARNINGS_END
+    wire is_less  = cmp_result[32];
+    wire is_equal = ~(| cmp_result[31:0]);        
+
+    wire br_neg    = `BR_NEG(br_op);    
+    wire br_less   = `BR_LESS(br_op);
+    wire br_static = `BR_STATIC(br_op);
+    wire br_taken  = ((br_less ? is_less : is_equal) ^ br_neg) | br_static;   
 
     // output
+
+    wire is_br_op_r;
 
     wire stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `BR_BITS + 32 + 33),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + 1 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.tmask,    alu_req_if.PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_op,   br_dest,            cmp_result}),
-        .data_out ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, br_op_r, branch_ctl_if.dest, cmp_result_r})
+        .data_in  ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.tmask,    alu_req_if.PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_taken,            br_dest}),
+        .data_out ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
     assign alu_commit_if.eop = 1'b1;
-    
-    wire is_less  = cmp_result_r[32];
-    wire is_equal = ~(| cmp_result_r[31:0]);        
-
-    wire br_neg    = `BR_NEG(br_op_r);    
-    wire br_less   = `BR_LESS(br_op_r);
-    wire br_static = `BR_STATIC(br_op_r);
-    wire br_taken  = ((br_less ? is_less : is_equal) ^ br_neg) | br_static;   
 
     assign branch_ctl_if.valid = alu_commit_if.valid && alu_commit_if.ready && is_br_op_r;
-    assign branch_ctl_if.wid   = alu_commit_if.wid; 
-    assign branch_ctl_if.taken = br_taken;
+    assign branch_ctl_if.wid   = alu_commit_if.wid;
 
     // can accept new request?
     assign alu_req_if.ready = ~stall_out;
