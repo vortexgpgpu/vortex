@@ -351,14 +351,10 @@ end
     always @(posedge clk) begin
         if (reset) begin
             perf_dram_lat_per_cycle <= 0;
-        end else begin 
-            if (dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready && dram_rsp_if.valid && dram_rsp_if.ready) begin
-                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle;
-            end else if (dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready) begin
-                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 64'd1;
-            end else if (dram_rsp_if.valid && dram_rsp_if.ready) begin
-                perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle - 64'd1;
-            end
+        end else begin
+            perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 
+                64'($signed(2'((dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready) && !(dram_rsp_if.valid && dram_rsp_if.ready)) - 
+                            2'((dram_rsp_if.valid && dram_rsp_if.ready)                    && !(dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready))));
         end
     end
     

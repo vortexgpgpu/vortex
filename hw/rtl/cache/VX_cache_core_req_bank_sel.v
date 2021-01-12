@@ -50,7 +50,7 @@ module VX_cache_core_req_bank_sel #(
         reg [NUM_BANKS-1:0]                         per_bank_core_req_stall;
 
         reg [NUM_REQS-1:0]                          core_req_ready_r;
-        reg [NUM_BANKS-1:0]                         core_req_sel_r;
+        reg [NUM_REQS-1:0]                          core_req_sel_r;
         wire [NUM_REQS-1:0][`BANK_SELECT_BITS-1:0]  core_req_bid;
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -80,15 +80,23 @@ module VX_cache_core_req_bank_sel #(
         end
 
         always @(*) begin
-            core_req_ready_r = 0;
-            core_req_sel_r   = 0;
-            
+            core_req_ready_r = 0;            
             for (integer j = 0; j < NUM_BANKS; ++j) begin
                 for (integer i = 0; i < NUM_REQS; ++i) begin
                     if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                        core_req_ready_r[i] = ~per_bank_core_req_stall[j];                        
-                        core_req_sel_r[i]   = 1;
+                        core_req_ready_r[i] = ~per_bank_core_req_stall[j];
                         break;
+                    end
+                end
+            end
+        end
+
+        always @(*) begin
+            core_req_sel_r = 0;            
+            for (integer j = 0; j < NUM_BANKS; ++j) begin
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
+                        core_req_sel_r[i] = ~per_bank_core_req_stall[j];
                     end
                 end
             end
@@ -99,7 +107,7 @@ module VX_cache_core_req_bank_sel #(
             if (reset) begin
                 bank_stalls_r <= 0;
             end else begin
-                bank_stalls_r <= bank_stalls_r + 64'($countones(core_req_valid & ~core_req_sel_r));
+                bank_stalls_r <= bank_stalls_r + 64'($countones(core_req_sel_r & ~core_req_ready_r));
             end
         end
 

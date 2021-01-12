@@ -152,10 +152,10 @@ module VX_issue #(
         `endif
         end else begin
             if (decode_if.valid & !decode_if.ready) begin
-                perf_ibf_stalls  <= perf_ibf_stalls  + 64'd1;
+                perf_ibf_stalls <= perf_ibf_stalls  + 64'd1;
             end
             if (ibuf_deq_if.valid & scoreboard_delay) begin 
-                perf_scb_stalls  <= perf_scb_stalls  + 64'd1;
+                perf_scb_stalls <= perf_scb_stalls  + 64'd1;
             end
             if (alu_req_if.valid & !alu_req_if.ready) begin
                 perf_alu_stalls <= perf_alu_stalls + 64'd1;
