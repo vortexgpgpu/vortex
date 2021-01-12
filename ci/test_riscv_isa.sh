@@ -3,4 +3,4 @@
 # exit when any command fails
 set -e
 
-make -C hw/simulate run
+make -C benchmarks/riscv_tests/isa run

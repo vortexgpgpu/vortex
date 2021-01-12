@@ -19,14 +19,12 @@ module VX_lsu_unit #(
     VX_commit_if    ld_commit_if,
     VX_commit_if    st_commit_if
 );
+
     wire                          req_valid;
     wire [`NUM_THREADS-1:0]       req_tmask;
-    wire                          req_rw;
-    wire [`NUM_THREADS-1:0][29:0] req_addr;    
-    wire [`NUM_THREADS-1:0][1:0]  req_offset;    
-    wire [`NUM_THREADS-1:0][3:0]  req_byteen;
-    wire [`NUM_THREADS-1:0][31:0] req_data;    
-    wire [1:0]                    req_sext; 
+    wire [`NUM_THREADS-1:0][31:0] req_addr;       
+    wire [`LSU_BITS-1:0]          req_type;
+    wire [`NUM_THREADS-1:0][31:0] req_data;   
     wire [`NR_BITS-1:0]           req_rd;
     wire                          req_wb;
     wire [`NW_BITS-1:0]           req_wid;
@@ -38,46 +36,13 @@ module VX_lsu_unit #(
         assign full_address[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
     end
 
-    reg [1:0] mem_req_sext;
-    always @(*) begin
-        case (lsu_req_if.byteen)
-            `BYTEEN_SB: mem_req_sext = 2'h1;   
-            `BYTEEN_SH: mem_req_sext = 2'h2;
-            default:    mem_req_sext = 2'h0;
-        endcase
-    end
-
-    wire [`NUM_THREADS-1:0][29:0] mem_req_addr;    
-    wire [`NUM_THREADS-1:0][1:0]  mem_req_offset;    
-    wire [`NUM_THREADS-1:0][3:0]  mem_req_byteen;    
-    wire [`NUM_THREADS-1:0][31:0] mem_req_data;
-
-    reg [3:0] wmask;
-    always @(*) begin
-        case (`BYTEEN_TYPE(lsu_req_if.byteen))
-            0:       wmask = 4'b0001;   
-            1:       wmask = 4'b0011;
-            default: wmask = 4'b1111;
-        endcase
-    end
-
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin  
-        assign mem_req_addr[i]   = full_address[i][31:2];        
-        assign mem_req_offset[i] = full_address[i][1:0];
-        assign mem_req_byteen[i] = wmask << full_address[i][1:0];
-        assign mem_req_data[i]   = lsu_req_if.store_data[i] << {full_address[i][1:0], 3'b0};
-    end
-
-    reg [`NUM_THREADS-2:0] addr_matches;
-    always @(*) begin
-        for (integer i = 1; i < `NUM_THREADS; i++) begin
-            addr_matches[i-1] = (mem_req_addr[0] == mem_req_addr[i]) || ~lsu_req_if.tmask[i];
-        end
-    end
-    wire is_dup_load = (0 == lsu_req_if.rw) && (& addr_matches);
+    wire [`NUM_THREADS-2:0] addr_matches;
+    for (genvar i = 1; i < `NUM_THREADS; i++) begin
+        assign addr_matches[i-1] = (full_address[0][31:2] == full_address[i][31:2]) || ~lsu_req_if.tmask[i];
+    end    
+    wire is_dup_load = lsu_req_if.wb && (& addr_matches);
     
 `IGNORE_WARNINGS_BEGIN
-    wire [`NUM_THREADS-1:0][31:0] req_address;
     reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH-1:0] pending_tags;
 `IGNORE_WARNINGS_END
 
@@ -85,14 +50,14 @@ module VX_lsu_unit #(
     wire stall_in = ~ready_in & req_valid; 
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + 1 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 2 + (`NUM_THREADS * (30 + 2 + 4 + 32))),
+        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rw, lsu_req_if.rd, lsu_req_if.wb, full_address, mem_req_sext, mem_req_addr, mem_req_offset, mem_req_byteen, mem_req_data}),
-        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_rw,        req_rd,        req_wb,        req_address,  req_sext,     req_addr,     req_offset,     req_byteen,     req_data})
+        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
@@ -102,8 +67,7 @@ module VX_lsu_unit #(
     wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
     wire rsp_wb;
-    wire [`NUM_THREADS-1:0][1:0] rsp_offset;
-    wire [1:0] rsp_sext;
+    wire [`LSU_BITS-1:0] rsp_type;
     wire rsp_is_dup;
     
     reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] rsp_rem_mask;         
@@ -115,9 +79,14 @@ module VX_lsu_unit #(
     wire [`DCORE_TAG_ID_BITS-1:0] mbuf_waddr, mbuf_raddr;
     wire mbuf_full;
 
+    wire [`NUM_THREADS-1:0][1:0] req_offset, rsp_offset;
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin  
+        assign req_offset[i] = req_addr[i][1:0];
+    end
+
     wire mbuf_push = (| (dcache_req_if.valid & dcache_req_if.ready))
                   && (0 == req_sent_mask)  // first submission only
-                  && (0 == req_rw);        // loads only
+                  && req_wb;               // loads only
 
     wire mbuf_pop_part = (| dcache_rsp_if.valid) && dcache_rsp_if.ready;
 
@@ -126,7 +95,7 @@ module VX_lsu_unit #(
     assign mbuf_raddr = dcache_rsp_if.tag[0][`DCORE_TAG_ID_BITS-1:0];    
 
     VX_index_buffer #(
-        .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 2) + 2 + 1),
+        .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
         .SIZE    (`LSUQ_SIZE),
         .FASTRAM (1)
     ) req_metadata (
@@ -135,8 +104,8 @@ module VX_lsu_unit #(
         .write_addr   (mbuf_waddr),  
         .acquire_slot (mbuf_push),       
         .read_addr    (mbuf_raddr),
-        .write_data   ({req_wid, req_pc, req_rd, req_wb, req_offset, req_sext, req_is_dup}),                    
-        .read_data    ({rsp_wid, rsp_pc, rsp_rd, rsp_wb, rsp_offset, rsp_sext, rsp_is_dup}),
+        .write_data   ({req_wid, req_pc, req_rd, req_wb, req_type, req_offset, req_is_dup}),                    
+        .read_data    ({rsp_wid, rsp_pc, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
         .full         (mbuf_full)
@@ -175,16 +144,45 @@ module VX_lsu_unit #(
         end
     end
 
-    wire req_ready_dep = (!req_rw && !mbuf_full) || (req_rw && st_commit_if.ready);
+    wire req_ready_dep = (req_wb && ~mbuf_full) || (~req_wb && st_commit_if.ready);
 
     wire [`NUM_THREADS-1:0] dup_mask = {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
 
-    // Core Request
+    // DCache Request
+
+    reg [`NUM_THREADS-1:0][29:0] mem_req_addr;    
+    reg [`NUM_THREADS-1:0][3:0]  mem_req_byteen;    
+    reg [`NUM_THREADS-1:0][31:0] mem_req_data;
+
+    always @(*) begin
+        for (integer i = 0; i < `NUM_THREADS; i++) begin
+            mem_req_byteen[i] = {4{req_wb}};
+            case (`LSU_WSIZE(req_type))
+                0: mem_req_byteen[i][req_offset[i]] = 1;
+                1: begin
+                    mem_req_byteen[i][req_offset[i]] = 1;
+                    mem_req_byteen[i][{req_addr[i][1], 1'b1}] = 1;
+                end
+                default : mem_req_byteen[i] = {4{1'b1}};
+            endcase
+
+            mem_req_data[i] = 'x;
+            case (req_offset[i])
+                1:       mem_req_data[i][31:8]  = req_data[i][23:0];
+                2:       mem_req_data[i][31:16] = req_data[i][15:0];
+                3:       mem_req_data[i][31:24] = req_data[i][7:0];
+                default: mem_req_data[i] = req_data[i];
+            endcase
+
+            mem_req_addr[i] = req_addr[i][31:2];
+        end
+    end
+
     assign dcache_req_if.valid  = {`NUM_THREADS{req_valid && req_ready_dep}} & req_tmask & dup_mask & ~req_sent_mask;
-    assign dcache_req_if.rw     = {`NUM_THREADS{req_rw}};
-    assign dcache_req_if.byteen = req_byteen;
-    assign dcache_req_if.addr   = req_addr;
-    assign dcache_req_if.data   = req_data;  
+    assign dcache_req_if.rw     = {`NUM_THREADS{~req_wb}};
+    assign dcache_req_if.addr   = mem_req_addr;
+    assign dcache_req_if.byteen = mem_req_byteen;
+    assign dcache_req_if.data   = mem_req_data;
 
 `ifdef DBG_CACHE_REQ_INFO
     assign dcache_req_if.tag = {`NUM_THREADS{{req_pc, req_wid, req_tag}}};
@@ -194,28 +192,9 @@ module VX_lsu_unit #(
     
     assign ready_in = req_ready_dep && req_sent_all;
 
-    // load response formatting
-
-    reg [`NUM_THREADS-1:0][31:0] rsp_data;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
-
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin     
-        wire [31:0] src_data = (i == 0 || rsp_is_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
-        wire [31:0] rsp_data_shifted = src_data >> {rsp_offset[i], 3'b0};        
-        always @(*) begin
-            case (rsp_sext)
-                  1: rsp_data[i] = {{24{rsp_data_shifted[7]}}, rsp_data_shifted[7:0]};  
-                  2: rsp_data[i] = {{16{rsp_data_shifted[15]}}, rsp_data_shifted[15:0]};
-            default: rsp_data[i] = rsp_data_shifted;     
-            endcase
-        end        
-    end   
-
-    wire [`NUM_THREADS-1:0] rsp_tmask = rsp_is_dup ? rsp_rem_mask[mbuf_raddr] : dcache_rsp_if.valid;
-
     // send store commit
 
-    wire is_store_rsp = req_valid && req_rw && req_sent_all;
+    wire is_store_rsp = req_valid && ~req_wb && req_sent_all;
 
     assign st_commit_if.valid = is_store_rsp;
     assign st_commit_if.wid   = req_wid;
@@ -225,6 +204,34 @@ module VX_lsu_unit #(
     assign st_commit_if.wb    = 0;
     assign st_commit_if.eop   = 1'b1;
     assign st_commit_if.data  = 0;
+
+    // load response formatting
+
+    reg [`NUM_THREADS-1:0][31:0] rsp_data;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin     
+        wire [31:0] src_data = (i == 0 || rsp_is_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
+
+        reg [31:0] rsp_data_shifted;
+        always @(*) begin
+            rsp_data_shifted[31:16] = src_data[31:16];
+            rsp_data_shifted[15:0]  = rsp_offset[i][1] ? src_data[31:16] : src_data[15:0];
+            rsp_data_shifted[7:0]   = rsp_offset[i][0] ? rsp_data_shifted[15:8] : rsp_data_shifted[7:0];
+        end
+
+        always @(*) begin
+            case (rsp_type)
+            `LSU_SB: rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
+            `LSU_SH: rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
+            `LSU_UB: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
+            `LSU_UH: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
+            default: rsp_data[i] = rsp_data_shifted;     
+            endcase
+        end        
+    end   
+
+    wire [`NUM_THREADS-1:0] rsp_tmask = rsp_is_dup ? rsp_rem_mask[mbuf_raddr] : dcache_rsp_if.valid;
 
     // send load commit
 
@@ -250,8 +257,8 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_if.valid & dcache_req_if.ready);
     `SCOPE_ASSIGN (dcache_req_wid,   req_wid);
     `SCOPE_ASSIGN (dcache_req_pc,    req_pc);
-    `SCOPE_ASSIGN (dcache_req_addr,  req_address);    
-    `SCOPE_ASSIGN (dcache_req_rw,    req_rw);
+    `SCOPE_ASSIGN (dcache_req_addr,  req_addr);    
+    `SCOPE_ASSIGN (dcache_req_rw,    ~req_wb);
     `SCOPE_ASSIGN (dcache_req_byteen,dcache_req_if.byteen);
     `SCOPE_ASSIGN (dcache_req_data,  dcache_req_if.data);
     `SCOPE_ASSIGN (dcache_req_tag,   req_tag);
@@ -264,10 +271,10 @@ module VX_lsu_unit #(
         if ((| (dcache_req_if.valid & dcache_req_if.ready))) begin
             if (dcache_req_if.rw[0])
                 $display("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
-                     $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_address, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
+                     $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_addr, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
             else
                 $display("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, rd=%0d, is_dup=%b", 
-                     $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_address, dcache_req_if.tag, dcache_req_if.byteen, req_rd, req_is_dup);
+                     $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_addr, dcache_req_if.tag, dcache_req_if.byteen, req_rd, req_is_dup);
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h, is_dup=%b", 

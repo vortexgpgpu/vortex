@@ -196,10 +196,10 @@ module VX_csr_data #(
             `CSR_PMPCFG0   : read_data_r = 32'(csr_pmpcfg[0]);
             `CSR_PMPADDR0  : read_data_r = 32'(csr_pmpaddr[0]);
             
-            `CSR_MCYCLE    : read_data_r = csr_cycle[31:0];
-            `CSR_MCYCLE_H  : read_data_r = csr_cycle[63:32];
-            `CSR_MINSTRET  : read_data_r = csr_instret[31:0];
-            `CSR_MINSTRET_H: read_data_r = csr_instret[63:32];
+            `CSR_CYCLE     : read_data_r = csr_cycle[31:0];
+            `CSR_CYCLE_H   : read_data_r = csr_cycle[63:32];
+            `CSR_INSTRET   : read_data_r = csr_instret[31:0];
+            `CSR_INSTRET_H : read_data_r = csr_instret[63:32];
             
             `CSR_MVENDORID : read_data_r = `VENDOR_ID;
             `CSR_MARCHID   : read_data_r = `ARCHITECTURE_ID;

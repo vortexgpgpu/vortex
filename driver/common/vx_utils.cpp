@@ -147,8 +147,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {     
 
     uint64_t instrs_per_core, cycles_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MINSTRET, CSR_MINSTRET_H, &instrs_per_core);
-    ret |= vx_csr_get_l(device, core_id, CSR_MCYCLE, CSR_MCYCLE_H, &cycles_per_core);
+    ret |= vx_csr_get_l(device, core_id, CSR_INSTRET, CSR_INSTRET_H, &instrs_per_core);
+    ret |= vx_csr_get_l(device, core_id, CSR_CYCLE, CSR_CYCLE_H, &cycles_per_core);
     float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
     if (num_cores > 1) fprintf(stream, "PERF: core%d: instrs=%ld, cycles=%ld, IPC=%f\n", core_id, instrs_per_core, cycles_per_core, IPC);            
     instrs += instrs_per_core;

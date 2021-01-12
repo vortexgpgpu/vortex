@@ -269,9 +269,7 @@ module VX_decode  #(
 
     wire is_lsu = (is_ltype || is_stype || is_fl || is_fs);
     always @(*) begin
-        lsu_op = {is_stype, func3};    
-        if (is_fl) lsu_op = `LSU_LW;
-        if (is_fs) lsu_op = `LSU_SW;
+        lsu_op = (is_fl || is_fs) ? `LSU_SW : func3;
     end
 
     // GPU
@@ -307,7 +305,8 @@ module VX_decode  #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    assign decode_if.valid = ifetch_rsp_if.valid;
+    assign decode_if.valid = ifetch_rsp_if.valid 
+                          && (decode_if.ex_type != `EX_NOP); // skip noop
 
     assign decode_if.wid   = ifetch_rsp_if.wid;
     assign decode_if.tmask = ifetch_rsp_if.tmask;
