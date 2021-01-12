@@ -52,13 +52,7 @@ module VX_commit #(
     assign commit_tmask3 = gpu_commit_fire ? gpu_commit_if.tmask : 0;
 
     wire [CMTW-1:0] commit_size;
-
-    VX_countones #(
-        .N(3*`NUM_THREADS)
-    ) commit_ctr1 (
-        .valids({commit_tmask3, commit_tmask2, commit_tmask1}),
-        .count (commit_size)
-    );
+    assign commit_size = $countones({commit_tmask3, commit_tmask2, commit_tmask1});
 
     VX_pipe_register #(
         .DATAW  (1 + CMTW),

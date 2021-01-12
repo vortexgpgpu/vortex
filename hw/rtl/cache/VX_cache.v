@@ -356,69 +356,25 @@ module VX_cache #(
     reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle, perf_core_writes_per_cycle;
     reg [($clog2(NUM_REQS+1)-1):0] perf_crsp_stall_per_cycle;
 
-    VX_countones #(
-        .N(NUM_REQS) 
-    ) perf_countones_core_reads_count (
-        .valids (core_req_valid & core_req_ready & ~core_req_rw),
-        .count  (perf_core_reads_per_cycle)
-    );
+    assign perf_core_reads_per_cycle  = $countones(core_req_valid & core_req_ready & ~core_req_rw);
+    assign perf_core_writes_per_cycle = $countones(core_req_valid & core_req_ready & core_req_rw);
     
-    VX_countones #(
-        .N(NUM_REQS) 
-    ) perf_countones_core_writes_count (
-        .valids (core_req_valid & core_req_ready & core_req_rw),
-        .count  (perf_core_writes_per_cycle)
-    );
-
     if (CORE_TAG_ID_BITS != 0) begin
-        VX_countones #(
-            .N(NUM_REQS) 
-        ) perf_countones_core_rsp_count (
-            .valids (core_rsp_valid & {NUM_REQS{!core_rsp_ready}}),
-            .count  (perf_crsp_stall_per_cycle)
-        );
+        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & {NUM_REQS{!core_rsp_ready}});
     end else begin
-        VX_countones #(
-            .N(NUM_REQS) 
-        ) perf_countones_core_rsp_count (
-            .valids (core_rsp_valid & ~core_rsp_ready),
-            .count  (perf_crsp_stall_per_cycle)
-        );
+        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
     end
 
     // per cycle: read misses, write misses, msrq stalls, pipeline stalls
     reg [($clog2(NUM_BANKS+1)-1):0] perf_read_miss_per_cycle;
     reg [($clog2(NUM_BANKS+1)-1):0] perf_write_miss_per_cycle;
     reg [($clog2(NUM_BANKS+1)-1):0] perf_mshr_stall_per_cycle;
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_pipe_stall_per_cycle;
-
-    VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_read_miss_count (
-        .valids (perf_read_miss_per_bank),
-        .count  (perf_read_miss_per_cycle)
-    );
-
-    VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_write_miss_count (
-        .valids (perf_write_miss_per_bank),
-        .count  (perf_write_miss_per_cycle)
-    );
-
-     VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_mshr_stall_count (
-        .valids (perf_mshr_stall_per_bank),
-        .count  (perf_mshr_stall_per_cycle)
-    );
-
-    VX_countones #(
-        .N(NUM_BANKS) 
-    ) perf_countones_total_stall_count (
-        .valids (perf_pipe_stall_per_bank),
-        .count  (perf_pipe_stall_per_cycle)
-    );
+    reg [($clog2(NUM_BANKS+1)-1):0] perf_pipe_stall_per_cycle; 
+    
+    assign perf_read_miss_per_cycle  = $countones(perf_read_miss_per_bank);
+    assign perf_write_miss_per_cycle = $countones(perf_write_miss_per_bank);    
+    assign perf_mshr_stall_per_cycle = $countones(perf_mshr_stall_per_bank);
+    assign perf_pipe_stall_per_cycle = $countones(perf_pipe_stall_per_bank);
 
     reg [63:0] perf_core_reads;
     reg [63:0] perf_core_writes;
