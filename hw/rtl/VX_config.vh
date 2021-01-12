@@ -158,10 +158,10 @@
 `define CSR_MEPC        12'h341
 
 // Machine Counter/Timers
-`define CSR_MCYCLE      12'hB00
-`define CSR_MCYCLE_H    12'hB80
-`define CSR_MINSTRET    12'hB02
-`define CSR_MINSTRET_H  12'hB82
+`define CSR_CYCLE       12'hC00
+`define CSR_CYCLE_H     12'hC80
+`define CSR_INSTRET     12'hC02
+`define CSR_INSTRET_H   12'hC82
 
 // Machine Performance-monitoring counters
 // PERF: pipeline

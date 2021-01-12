@@ -14,6 +14,9 @@ module VX_gpr_stage #(
     VX_gpr_rsp_if   gpr_rsp_if
 );
     `UNUSED_VAR (reset)    
+
+    // ensure r0 never gets written, which can happen before the reset
+    wire write_enable = writeback_if.valid && (writeback_if.rd != 0);
     
 `ifdef EXT_F_ENABLE
     localparam RAM_DEPTH = `NUM_WARPS * `NUM_REGS;
@@ -31,7 +34,7 @@ module VX_gpr_stage #(
             .DEPTH (RAM_DEPTH)
         ) gpr_ram_f (
             .clk    (clk),
-            .wren   (writeback_if.valid && writeback_if.tmask[i]),
+            .wren   (write_enable && writeback_if.tmask[i]),
             .waddr  (waddr),
             .wdata  (writeback_if.data[i]),
             .raddr1 (raddr1),
@@ -62,7 +65,7 @@ module VX_gpr_stage #(
             .DEPTH (RAM_DEPTH)
         ) gpr_ram_i (
             .clk    (clk),
-            .wren   (writeback_if.valid && writeback_if.tmask[i]),
+            .wren   (write_enable && writeback_if.tmask[i]),
             .waddr  (waddr),
             .wdata  (writeback_if.data[i]),
             .raddr1 (raddr1),

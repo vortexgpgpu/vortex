@@ -54,14 +54,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define BYTEEN_SB       3'h0 
-`define BYTEEN_SH       3'h1
-`define BYTEEN_SW       3'h2
-`define BYTEEN_UB       3'h4
-`define BYTEEN_UH       3'h5
-`define BYTEEN_BITS     3
-`define BYTEEN_TYPE(x)  x[1:0]
-
 `define FRM_RNE         3'b000  // round to nearest even
 `define FRM_RTZ         3'b001  // round to zero
 `define FRM_RDN         3'b010  // round to -inf
@@ -130,19 +122,14 @@
 `define ALU_BR_OP(x)    x[`ALU_BR_BITS-1:0]
 `define IS_BR_MOD(x)    x[0]
 
-`define LSU_LB          {1'b0, `BYTEEN_SB}
-`define LSU_LH          {1'b0, `BYTEEN_SH}
-`define LSU_LW          {1'b0, `BYTEEN_SW}
-`define LSU_LBU         {1'b0, `BYTEEN_UB}
-`define LSU_LHU         {1'b0, `BYTEEN_UH}
-`define LSU_SB          {1'b1, `BYTEEN_SB}
-`define LSU_SH          {1'b1, `BYTEEN_SH}
-`define LSU_SW          {1'b1, `BYTEEN_SW}
-`define LSU_SBU         {1'b1, `BYTEEN_UB}
-`define LSU_SHU         {1'b1, `BYTEEN_UH}
-`define LSU_BITS        4
-`define LSU_RW(x)       x[3]
-`define LSU_BE(x)       x[2:0]
+`define LSU_SB          3'h0 
+`define LSU_SH          3'h1
+`define LSU_SW          3'h2
+`define LSU_UB          3'h4
+`define LSU_UH          3'h5
+`define LSU_BITS        3
+`define LSU_WSIZE(x)    x[1:0]
+`define LSU_OP(x)       x[`LSU_BITS-1:0]
 
 `define CSR_RW          2'h0
 `define CSR_RS          2'h1
