@@ -934,6 +934,8 @@ Vortex #() vortex (
 
 `ifdef SCOPE
 
+`SCOPE_ASSIGN (cmd_type, cmd_type);
+`SCOPE_ASSIGN (state, state);
 `SCOPE_ASSIGN (ccip_sRxPort_c0_mmioRdValid, cp2af_sRxPort.c0.mmioRdValid);
 `SCOPE_ASSIGN (ccip_sRxPort_c0_mmioWrValid, cp2af_sRxPort.c0.mmioWrValid);
 `SCOPE_ASSIGN (mmio_hdr_address, mmio_hdr.address);
@@ -966,10 +968,10 @@ Vortex #() vortex (
 wire scope_changed = `SCOPE_TRIGGER;
 
 VX_scope #(
-  .DATAW    ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),
-  .BUSW     (64),
-  .SIZE     (`SCOPE_SIZE),
-  .UPDW     ($bits({`SCOPE_UPDATE_LIST}))
+  .DATAW ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),
+  .BUSW  (64),
+  .SIZE  (`SCOPE_SIZE),
+  .UPDW  ($bits({`SCOPE_UPDATE_LIST}))
 ) scope (
   .clk      (clk),
   .reset    (reset),
