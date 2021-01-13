@@ -477,7 +477,7 @@ end
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),
             .MSHR_SIZE          (MSHR_SIZE),
-            .ALM_FULL           (MSHR_SIZE-1),
+            .ALM_FULL           (MSHR_SIZE-2),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
         ) miss_resrv (
             .clk                (clk),
@@ -628,7 +628,7 @@ end
         VX_fifo_queue_xt #(
             .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
             .SIZE     (DREQ_SIZE),
-            .ALM_FULL (DREQ_SIZE-1),
+            .ALM_FULL (DREQ_SIZE-2),
             .FASTRAM  (1)
         ) dram_req_queue (
             .clk     (clk),
@@ -693,8 +693,8 @@ end
             $display("%t: miss with incoming fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
             assert(!is_mshr_st1);
         end
-        if (pipeline_stall) begin
-            $display("%t: cache%0d:%0d pipeline-stall: mshr=%b, cwbq=%b, dwbq=%b", $time, CACHE_ID, BANK_ID, mshr_push_stall, crsq_push_stall, dreq_push_stall);
+        if (crsq_push_stall || mshr_almost_full || dreq_almost_full) begin
+            $display("%t: cache%0d:%0d pipeline-stall: mshr=%b, cwbq=%b, dwbq=%b", $time, CACHE_ID, BANK_ID, mshr_almost_full, crsq_push_stall, dreq_almost_full);
         end
         if (drsq_pop) begin
             $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), filldata_st0);

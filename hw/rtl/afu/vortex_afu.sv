@@ -212,8 +212,6 @@ always @(posedge clk) begin
     scope_start         <= 0;
   `endif
   end else begin
-
-
     mmio_tx.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid; 
     mmio_tx.hdr.tid     <= mmio_hdr.tid;
   `ifdef SCOPE
@@ -881,8 +879,8 @@ always @(posedge clk) begin
   end
 
   if ((STATE_CSR_READ == state)
-    && vx_csr_io_rsp_ready
-    && vx_csr_io_rsp_valid) begin
+   && vx_csr_io_rsp_ready
+   && vx_csr_io_rsp_valid) begin
     cmd_csr_rdata <= vx_csr_io_rsp_data;
   end
 end

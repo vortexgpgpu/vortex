@@ -53,7 +53,7 @@ module VX_scoreboard  #(
             stall_ctr <= 0;
         end else if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
             stall_ctr <= stall_ctr + 1;
-            assert(stall_ctr < 10000) else $error("*** %t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
+            assert(stall_ctr < 1000) else $error("*** %t: core%0d-stalled: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
                     deq_inuse_regs[ibuf_deq_if.rd], deq_inuse_regs[ibuf_deq_if.rs1], deq_inuse_regs[ibuf_deq_if.rs2], deq_inuse_regs[ibuf_deq_if.rs3]);            
         end else if (ibuf_deq_if.valid && ibuf_deq_if.ready) begin
