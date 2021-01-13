@@ -238,11 +238,12 @@ module VX_bank #(
     wire is_mshr_miss_st1 = valid_st1 && is_mshr_st1 && (miss_st1 || force_miss_st1);
 
     // determine which queue to pop next in piority order    
-    wire mshr_pop_unqual = mshr_valid && !is_mshr_miss_st1;
+    wire mshr_pop_unqual = mshr_valid; 
     wire drsq_pop_unqual = !mshr_pop_unqual && !drsq_empty;
     wire creq_pop_unqual = !mshr_pop_unqual && !drsq_pop_unqual && !creq_empty && !mshr_almost_full && !dreq_almost_full;
 
-    assign mshr_pop = mshr_pop_unqual && !pipeline_stall;
+    assign mshr_pop = mshr_pop_unqual && !pipeline_stall
+                   && !is_mshr_miss_st1; // do not schedule another mshr request when the previous one missed
     assign drsq_pop = drsq_pop_unqual && !pipeline_stall;
     assign creq_pop = creq_pop_unqual && !pipeline_stall;
 
@@ -269,6 +270,12 @@ module VX_bank #(
         }),
         .data_out ({addr_st0, wsel_st0, mem_rw_st0, byteen_st0, writeword_st0, req_tid_st0, tag_st0, filldata_st0})
     );
+
+    always @(posedge clk) begin
+        /*if (valid_st0) begin
+            if (mshr_pop)
+        end*/
+    end
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
@@ -477,7 +484,7 @@ end
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),
             .MSHR_SIZE          (MSHR_SIZE),
-            .ALM_FULL           (MSHR_SIZE-2),
+            .ALM_FULL           (MSHR_SIZE-1),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
         ) miss_resrv (
             .clk                (clk),
@@ -628,7 +635,7 @@ end
         VX_fifo_queue_xt #(
             .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
             .SIZE     (DREQ_SIZE),
-            .ALM_FULL (DREQ_SIZE-2),
+            .ALM_FULL (DREQ_SIZE-1),
             .FASTRAM  (1)
         ) dram_req_queue (
             .clk     (clk),
