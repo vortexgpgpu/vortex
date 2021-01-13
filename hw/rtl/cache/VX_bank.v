@@ -271,12 +271,6 @@ module VX_bank #(
         .data_out ({addr_st0, wsel_st0, mem_rw_st0, byteen_st0, writeword_st0, req_tid_st0, tag_st0, filldata_st0})
     );
 
-    always @(posedge clk) begin
-        /*if (valid_st0) begin
-            if (mshr_pop)
-        end*/
-    end
-
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
         assign {debug_pc_st0, debug_wid_st0} = tag_st0[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
