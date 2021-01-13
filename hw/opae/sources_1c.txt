@@ -2,7 +2,6 @@
 
 +define+SYNTHESIS
 +define+QUARTUS
-+define+FPU_FAST
 #+define+SCOPE
 #+define+PERF_ENABLE
 

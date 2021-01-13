@@ -237,13 +237,12 @@ module VX_bank #(
 
     wire is_mshr_miss_st1 = valid_st1 && is_mshr_st1 && (miss_st1 || force_miss_st1);
 
-    // determine which queue to pop next in piority order
-    wire mshr_pop_unqual = mshr_valid;
+    // determine which queue to pop next in piority order    
+    wire mshr_pop_unqual = mshr_valid && !is_mshr_miss_st1;
     wire drsq_pop_unqual = !mshr_pop_unqual && !drsq_empty;
     wire creq_pop_unqual = !mshr_pop_unqual && !drsq_pop_unqual && !creq_empty && !mshr_almost_full && !dreq_almost_full;
 
-    assign mshr_pop = mshr_pop_unqual && !pipeline_stall 
-                   && !is_mshr_miss_st1; // stop if previous request was a miss
+    assign mshr_pop = mshr_pop_unqual && !pipeline_stall;
     assign drsq_pop = drsq_pop_unqual && !pipeline_stall;
     assign creq_pop = creq_pop_unqual && !pipeline_stall;
 

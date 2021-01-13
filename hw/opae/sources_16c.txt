@@ -3,7 +3,7 @@
 
 +define+SYNTHESIS
 +define+QUARTUS
-+define+FPU_FAST
+#+define+PERF_ENABLE
 
 vortex_afu.json
 QI:vortex_afu.qsf
