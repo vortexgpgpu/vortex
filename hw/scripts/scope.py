@@ -147,6 +147,7 @@ def remove_comments(text):
 def add_macro(name, args, value):
     macro = (name, args, value)
     macros.append(macro)
+    '''
     if not args is None:
         print("*** token: " + name + "(", end='')        
         for i in range(len(args)):
@@ -156,6 +157,7 @@ def add_macro(name, args, value):
         print(")=" + value)
     else:
         print("*** token: " + name + "=" + value)
+    '''
 
 def find_macro(name):
     for macro in macros:
@@ -273,7 +275,7 @@ def expand_text(text, params):
 def parse_include(filename, nesting):    
     if nesting > 99:
         raise Exception("include recursion!")    
-    print("*** parsing '" + filename + "'...")    
+    #print("*** parsing '" + filename + "'...")    
     content = None
     with open(filename, "r") as f:        
         content = f.read()
@@ -306,7 +308,7 @@ def parse_include(filename, nesting):
             elif key == '"elsif':
                 br_stack.pop()
             br_stack.append(taken)
-            print("*** " + key + "(" + cond + ") => " + str(taken))
+            #print("*** " + key + "(" + cond + ") => " + str(taken))
             continue  
         # parse endif
         m = re.match(vl_endif_re, line)
@@ -315,7 +317,7 @@ def parse_include(filename, nesting):
             top = br_stack.pop()
             if key == 'else':                
                 br_stack.append(not top)
-            print("*** " + key)
+            #print("*** " + key)
             continue
         # skip disabled blocks
         if not all(br_stack):
@@ -360,7 +362,7 @@ def parse_includes(includes):
 
 def load_include_dirs(dirs):
     for dir in dirs:
-        print("*** include dir: " + dir)
+        #print("*** include dir: " + dir)
         include_dirs.append(dir)
 
 def load_defines(defines):
@@ -573,7 +575,7 @@ def gen_vl_header(file, modules, taps):
             skey_list = key.split(',')
             _taps = taps[key]
             for skey in skey_list:
-                print('processing node: ' + skey + ' ...')
+                #print('*** processing node: ' + skey + ' ...')
                 paths = skey.strip().split('/')
                 ntype = paths.pop(0)
                 curtaps = visit_path(alltaps, ports, ntype, paths, modules, _taps)
