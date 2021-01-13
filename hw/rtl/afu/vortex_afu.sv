@@ -126,7 +126,7 @@ wire        vx_csr_io_rsp_ready;
 wire        vx_busy;
 
 reg vx_reset;
-reg vx_enabled;
+reg vx_dram_en;
 
 // CMD variables //////////////////////////////////////////////////////////////
 
@@ -179,7 +179,8 @@ wire[$bits(cp2af_sRxPort.c0.hdr.mdata)-1:0] cp2af_sRxPort_c0_hdr_mdata = cp2af_s
 `DEBUG_END
 */
 
-wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
+wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid 
+                    && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
 
 `ifdef SCOPE
 reg scope_start;
@@ -187,16 +188,16 @@ reg scope_start;
 
 // disable assertions until full reset
 `ifndef VERILATOR
-reg [$clog2(RESET_DELAY+1)-1:0] reset_ctr;
+reg [$clog2(RESET_DELAY+1)-1:0] assert_delay_ctr;
 initial begin
   $assertoff;  
 end
 always @(posedge clk) begin
   if (reset) begin
-    reset_ctr <= 0;
+    assert_delay_ctr <= 0;
   end else begin
-    reset_ctr <= reset_ctr + 1;
-    if (reset_ctr == RESET_DELAY) begin
+    assert_delay_ctr <= assert_delay_ctr + 1;
+    if (assert_delay_ctr == RESET_DELAY) begin
       $asserton; // enable assertions
     end
   end
@@ -349,11 +350,8 @@ always @(posedge clk) begin
   if (reset) begin
     state      <= STATE_IDLE;    
     vx_reset   <= 0;    
-    vx_enabled <= 0;
+    vx_dram_en <= 0;
   end else begin
-    
-    vx_reset <= 0;
-
     case (state)
       STATE_IDLE: begin             
         case (cmd_type)
@@ -373,8 +371,7 @@ always @(posedge clk) begin
           `ifdef DBG_PRINT_OPAE
             $display("%t: STATE START", $time);
           `endif
-            vx_reset   <= 1;
-            vx_enabled <= 1;
+            vx_reset <= 1;            
             state <= STATE_START;                    
           end
           CMD_CSR_READ: begin
@@ -415,12 +412,16 @@ always @(posedge clk) begin
 
       STATE_START: begin 
         // vortex reset cycles
-        if (vx_reset_ctr == $bits(vx_reset_ctr)'(RESET_DELAY))
+        if (vx_reset_ctr == $bits(vx_reset_ctr)'(RESET_DELAY)) begin
+          vx_reset   <= 0;  
+          vx_dram_en <= 1;
           state <= STATE_RUN;
+        end
       end
 
       STATE_RUN: begin
         if (cmd_run_done) begin
+          vx_dram_en <= 0;
           state <= STATE_IDLE;
         `ifdef DBG_PRINT_OPAE
           $display("%t: STATE IDLE", $time);
@@ -508,7 +509,7 @@ assign cci_dram_req_tag    = AVS_REQ_TAGW'(0);
 
 //--
 
-assign vx_dram_req_valid_qual = vx_dram_req_valid && vx_enabled;
+assign vx_dram_req_valid_qual = vx_dram_req_valid && vx_dram_en;
 
 assign vx_dram_req_addr_qual = vx_dram_req_addr[`VX_DRAM_ADDR_WIDTH-1:`VX_DRAM_ADDR_WIDTH-DRAM_ADDR_WIDTH];
 
@@ -816,9 +817,9 @@ assign cmd_read_done = (0 == cci_wr_req_ctr) && cci_pending_writes_empty;
 always @(posedge clk) 
 begin
   if (reset) begin
-    cci_wr_req_addr     <= 0;
-    cci_wr_req_ctr      <= 0;
-    cci_dram_rd_req_ctr <= 0;
+    cci_wr_req_addr        <= 0;
+    cci_wr_req_ctr         <= 0;
+    cci_dram_rd_req_ctr    <= 0;
     cci_dram_rd_req_addr_r <= 0;
   end
   else begin    

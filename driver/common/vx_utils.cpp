@@ -338,7 +338,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: dram requests=%ld (reads=%ld, writes=%ld)\n", (dram_reads + dram_writes), dram_reads, dram_writes);
   fprintf(stream, "PERF: dram stalls=%ld (utilization=%d%%)\n", dram_stalls, dram_utilization);
   fprintf(stream, "PERF: dram average latency=%d cycles\n", dram_avg_lat);
-  fprintf(stream, "PERF: dram bandwith=%d cycles\n", dram_avg_lat);
 #endif
 
   return ret;
