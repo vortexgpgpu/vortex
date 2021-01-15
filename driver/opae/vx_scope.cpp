@@ -38,7 +38,7 @@
 #define CMD_GET_DATA    1 
 #define CMD_GET_WIDTH   2
 #define CMD_GET_COUNT   3 
-#define CMD_SET_DELAY   4
+#define CMD_SET_START   4
 #define CMD_SET_STOP    5
 #define CMD_GET_OFFSET  6
 
@@ -58,7 +58,7 @@ static std::mutex g_timeout_mutex;
 
 static void timeout_callback(fpga_handle fpga) {
     std::this_thread::sleep_for(std::chrono::seconds{HANG_TIMEOUT});
-    vx_scope_stop(fpga, HANG_TIMEOUT);
+    vx_scope_stop(fpga);
     fpgaClose(fpga);
     exit(0);
 }
@@ -101,16 +101,21 @@ void dump_module(std::ofstream& ofs, int parent) {
     }
 }
 
-int vx_scope_start(fpga_handle hfpga, uint64_t delay) {    
+int vx_scope_start(fpga_handle hfpga, uint64_t start_time, uint64_t stop_time) {    
     if (nullptr == hfpga)
         return -1;  
     
-    if (delay != uint64_t(-1)) {
-        // set start delay
-        uint64_t cmd_delay = ((delay << 3) | CMD_SET_DELAY);
-        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_delay));    
-        std::cout << "scope start delay: " << std::dec << delay << "s" << std::endl;
+    if (stop_time != uint64_t(-1)) {
+        // set stop time
+        uint64_t cmd_stop = ((stop_time << 3) | CMD_SET_STOP);
+        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
+        std::cout << "scope stop time: " << std::dec << stop_time << "s" << std::endl;
     }
+    
+    // start recording
+    uint64_t cmd_delay = ((start_time << 3) | CMD_SET_START);
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_delay));
+    std::cout << "scope start time: " << std::dec << start_time << "s" << std::endl;
 
 #ifdef HANG_TIMEOUT
     g_timeout_thread = std::thread(timeout_callback, hfpga);
@@ -120,7 +125,7 @@ int vx_scope_start(fpga_handle hfpga, uint64_t delay) {
     return 0;
 }
 
-int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {    
+int vx_scope_stop(fpga_handle hfpga) {    
 #ifdef HANG_TIMEOUT
     if (!g_timeout_mutex.try_lock())
         return 0;
@@ -128,13 +133,10 @@ int vx_scope_stop(fpga_handle hfpga, uint64_t delay) {
 
     if (nullptr == hfpga)
         return -1;
-    
-    if (delay != uint64_t(-1)) {
-        // stop recording
-        uint64_t cmd_stop = ((delay << 3) | CMD_SET_STOP);
-        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
-        std::cout << "scope stop delay: " << std::dec << delay << "s" << std::endl;
-    }
+
+    // forced stop
+    uint64_t cmd_stop = ((0 << 3) | CMD_SET_STOP);
+    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
 
     std::cout << "scope trace dump begin..." << std::endl;
 

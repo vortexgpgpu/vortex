@@ -215,7 +215,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     
 #ifdef SCOPE
     {
-        int ret = vx_scope_start(accel_handle, 0);
+        int ret = vx_scope_start(accel_handle, 0, -1);
         if (ret != 0) {
             fpgaClose(accel_handle);
             return ret;
@@ -235,7 +235,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
     vx_device_t *device = ((vx_device_t*)hdevice);
 
 #ifdef SCOPE
-    vx_scope_stop(device->fpga, 0);
+    vx_scope_stop(device->fpga);
 #endif
 
 #ifdef DUMP_PERF_STATS
