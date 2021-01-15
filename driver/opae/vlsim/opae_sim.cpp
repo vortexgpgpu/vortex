@@ -201,6 +201,7 @@ void opae_sim::sRxPort_bus() {
   vortex_afu_->vcp2af_sRxPort_c1_rspValid = 0;  
   if (cci_wr_it != cci_writes_.end()) {
     vortex_afu_->vcp2af_sRxPort_c1_rspValid = 1;
+    vortex_afu_->vcp2af_sRxPort_c1_hdr_resp_type = 0;
     vortex_afu_->vcp2af_sRxPort_c1_hdr_mdata = cci_wr_it->mdata;
     cci_writes_.erase(cci_wr_it);
   }
@@ -210,6 +211,7 @@ void opae_sim::sRxPort_bus() {
   if (!mmio_req_enabled 
    && (cci_rd_it != cci_reads_.end())) {
     vortex_afu_->vcp2af_sRxPort_c0_rspValid = 1;
+    vortex_afu_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
     memcpy(vortex_afu_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
     vortex_afu_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;    
     /*printf("%0ld: [sim] CCI Rd Rsp: addr=%ld, mdata=%d, data=", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
