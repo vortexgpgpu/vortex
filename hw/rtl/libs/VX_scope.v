@@ -25,7 +25,7 @@ module VX_scope #(
     localparam CMD_GET_DATA  = 3'd1;
     localparam CMD_GET_WIDTH = 3'd2;
     localparam CMD_GET_COUNT = 3'd3;
-    localparam CMD_SET_DELAY = 3'd4;
+    localparam CMD_SET_START = 3'd4;
     localparam CMD_SET_STOP  = 3'd5;
     localparam CMD_GET_OFFSET= 3'd6;
     localparam CMD_RESERVED2 = 3'd7;
@@ -48,7 +48,7 @@ module VX_scope #(
 
     reg [`LOG2UP(DATAW)-1:0] read_offset;
 
-    reg start_wait, recording, data_valid, read_delta, started, delta_flush;
+    reg cmd_start, started, start_wait, recording, data_valid, read_delta, delta_flush;
 
     reg [BUSW-3:0] delay_val, delay_cntr;
 
@@ -62,18 +62,19 @@ module VX_scope #(
     always @(posedge clk) begin
         if (reset) begin
             get_cmd         <= $bits(get_cmd)'(CMD_GET_VALID);
-            raddr              <= 0;
-            waddr              <= 0;
+            raddr           <= 0;
+            waddr           <= 0;
             waddr_end       <= $bits(waddr)'(SIZE-1);
+            cmd_start       <= 0;
             started         <= 0;
-            start_wait         <= 0;
+            start_wait      <= 0;
             recording       <= 0;
             delay_val       <= 0;
-            delay_cntr         <= 0;
+            delay_cntr      <= 0;
             delta           <= 0;
             delta_flush     <= 0;
             prev_trigger_id <= 0;
-            read_offset        <= 0;
+            read_offset     <= 0;
             read_delta      <= 0;
             data_valid      <= 0;
             timestamp       <= 0;
@@ -88,14 +89,25 @@ module VX_scope #(
                     CMD_GET_DATA,
                     CMD_GET_WIDTH,
                     CMD_GET_OFFSET,
-                    CMD_GET_COUNT:   get_cmd <= $bits(get_cmd)'(cmd_type);
-                    CMD_SET_DELAY: delay_val <= $bits(delay_val)'(cmd_data);
-                    CMD_SET_STOP:  waddr_end <= $bits(waddr)'(cmd_data);
+                    CMD_GET_COUNT: get_cmd <= $bits(get_cmd)'(cmd_type);
+                    CMD_SET_START: begin 
+                        delay_val <= $bits(delay_val)'(cmd_data); 
+                        cmd_start <= 1;
+                    `ifdef DBG_PRINT_SCOPE
+                        $display("*** scope:CMD_SET_START: delay_val=%0d", $bits(delay_val)'(cmd_data));
+                    `endif
+                    end
+                    CMD_SET_STOP: begin
+                        waddr_end <= $bits(waddr)'(cmd_data);
+                    `ifdef DBG_PRINT_SCOPE
+                        $display("*** scope:CMD_SET_STOP: waddr_end=%0d", $bits(waddr)'(cmd_data));
+                    `endif
+                    end
                     default:;
                 endcase
             end
 
-            if (start && !started) begin
+            if (!started && (start || cmd_start)) begin
                 started     <= 1;
                 delta_flush <= 1;
                 if (0 == delay_val) begin
@@ -104,9 +116,11 @@ module VX_scope #(
                     delta       <= 0;
                     delay_cntr  <= 0;
                     start_time  <= timestamp;
+                `ifdef DBG_PRINT_SCOPE
+                    $display("*** scope: recording start - start_time=%0d", timestamp);
+                `endif
                 end else begin
                     start_wait <= 1;
-                    recording  <= 0;
                     delay_cntr <= delay_val;
                 end
             end
@@ -118,6 +132,9 @@ module VX_scope #(
                     recording  <= 1;
                     delta      <= 0;
                     start_time <= timestamp;
+                `ifdef DBG_PRINT_SCOPE
+                    $display("*** scope: recording start - start_time=%0d", timestamp);
+                `endif
                 end 
             end
 
@@ -143,7 +160,10 @@ module VX_scope #(
                 end
 
                 if (stop
-                 || (waddr == waddr_end)) begin
+                 || (waddr >= waddr_end)) begin
+                `ifdef DBG_PRINT_SCOPE
+                    $display("*** scope: recording stop - waddr=(%0d, %0d)", waddr, waddr_end);
+                `endif
                     waddr      <= waddr;  // keep last address
                     recording  <= 0;
                     data_valid <= 1;

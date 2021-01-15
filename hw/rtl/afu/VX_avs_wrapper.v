@@ -109,9 +109,10 @@ module VX_avs_wrapper #(
     assign avs_address    = dram_req_addr;
     assign avs_byteenable = dram_req_byteen;
     assign avs_writedata  = dram_req_data;
-    assign dram_req_ready = !avs_waitrequest && !rsp_queue_going_full;
     assign avs_burstcount = avs_burstcount_r;
     assign avs_bankselect = avs_bankselect_r;
+
+    assign dram_req_ready = !avs_waitrequest && !rsp_queue_going_full;
 
     assign dram_rsp_valid = !avs_rspq_empty;   
 

@@ -7,7 +7,7 @@
 
 `define SCOPE_ASSIGN(d,s) assign scope_``d = s
 
-`define SCOPE_SIZE 4096 
+`define SCOPE_SIZE 16384 
 
 `else
 

@@ -51,7 +51,7 @@ localparam AVS_REQ_TAGW       = `VX_DRAM_TAG_WIDTH + VX_DRAM_LINE_IDX;
 
 localparam CCI_RD_WINDOW_SIZE = 8;
 localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
-localparam CCI_RW_QUEUE_SIZE  = 1024;
+localparam CCI_RW_PENDING_SIZE= 256;
 
 localparam AFU_ID_L           = 16'h0002;      // AFU ID Lower
 localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher 
@@ -182,10 +182,6 @@ wire[$bits(cp2af_sRxPort.c0.hdr.mdata)-1:0] cp2af_sRxPort_c0_hdr_mdata = cp2af_s
 wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid 
                     && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
 
-`ifdef SCOPE
-reg scope_start;
-`endif
-
 // disable assertions until full reset
 `ifndef VERILATOR
 reg [$clog2(RESET_DELAY+1)-1:0] assert_delay_ctr;
@@ -208,15 +204,9 @@ always @(posedge clk) begin
   if (reset) begin
     mmio_tx.mmioRdValid <= 0;
     mmio_tx.hdr         <= 0;
-  `ifdef SCOPE
-    scope_start         <= 0;
-  `endif
   end else begin
     mmio_tx.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid; 
     mmio_tx.hdr.tid     <= mmio_hdr.tid;
-  `ifdef SCOPE
-    scope_start <= cp2af_sRxPort.c0.mmioWrValid;
-  `endif
   end
 
   // serve MMIO write request
@@ -636,7 +626,10 @@ end
 wire cci_dram_wr_req_fire = cci_dram_wr_req_valid && cci_dram_req_ready;
 
 wire cci_rd_req_fire = af2cp_sTxPort.c0.valid;
-wire cci_rd_rsp_fire = (STATE_WRITE == state) && cp2af_sRxPort.c0.rspValid;
+
+wire cci_rd_rsp_fire = (STATE_WRITE == state) 
+                    && cp2af_sRxPort.c0.rspValid 
+                    && (cp2af_sRxPort.c0.hdr.resp_type == eRSP_RDLINE);
 
 assign cci_rd_req_tag = CCI_RD_RQ_TAGW'(cci_rd_req_ctr);
 assign cci_rd_rsp_tag = CCI_RD_RQ_TAGW'(cp2af_sRxPort.c0.hdr.mdata);
@@ -786,19 +779,23 @@ wire cci_dram_rd_req_fire = cci_dram_rd_req_valid && cci_dram_req_ready;
 wire cci_dram_rd_rsp_fire = cci_dram_rsp_valid && cci_dram_rsp_ready;
 
 wire cci_wr_req_fire = cci_dram_rd_rsp_fire;
-wire cci_wr_rsp_fire = (STATE_READ == state) && cp2af_sRxPort.c1.rspValid;
 
-wire [$clog2(CCI_RW_QUEUE_SIZE+1)-1:0] cci_pending_writes;
+wire cci_wr_rsp_fire = (STATE_READ == state) 
+                    && cp2af_sRxPort.c1.rspValid 
+                    && (cp2af_sRxPort.c1.hdr.resp_type == eRSP_WRLINE);
+
+wire [$clog2(CCI_RW_PENDING_SIZE+1)-1:0] cci_pending_writes;
 wire cci_pending_writes_empty;
+wire cci_pending_writes_full;
 VX_pending_size #( 
-    .SIZE (CCI_RW_QUEUE_SIZE)
+    .SIZE (CCI_RW_PENDING_SIZE)
 ) cci_wr_pending_size (
     .clk   (clk),
     .reset (reset),
     .push  (cci_wr_req_fire),
     .pop   (cci_wr_rsp_fire),
     .empty (cci_pending_writes_empty),
-    `UNUSED_PIN (full),
+    .full  (cci_pending_writes_full),
     .size  (cci_pending_writes)
 );
 `UNUSED_VAR (cci_pending_writes)
@@ -806,8 +803,8 @@ VX_pending_size #(
 assign cci_dram_rd_req_valid = (cci_dram_rd_req_ctr != 0);
 assign cci_dram_rd_req_addr = cci_dram_rd_req_addr_r;
 
-assign af2cp_sTxPort.c1.valid = cci_dram_rsp_valid;
-assign cci_dram_rsp_ready = !cp2af_sRxPort.c1TxAlmFull;
+assign af2cp_sTxPort.c1.valid = cci_dram_rd_rsp_fire;
+assign cci_dram_rsp_ready = !cp2af_sRxPort.c1TxAlmFull && !cci_pending_writes_full;
 
 assign cmd_read_done = (0 == cci_wr_req_ctr) && cci_pending_writes_empty;
 
@@ -934,21 +931,21 @@ Vortex #() vortex (
 
 `SCOPE_ASSIGN (cmd_type, cmd_type);
 `SCOPE_ASSIGN (state, state);
-`SCOPE_ASSIGN (ccip_sRxPort_c0_mmioRdValid, cp2af_sRxPort.c0.mmioRdValid);
-`SCOPE_ASSIGN (ccip_sRxPort_c0_mmioWrValid, cp2af_sRxPort.c0.mmioWrValid);
+`SCOPE_ASSIGN (cci_sRxPort_c0_mmioRdValid, cp2af_sRxPort.c0.mmioRdValid);
+`SCOPE_ASSIGN (cci_sRxPort_c0_mmioWrValid, cp2af_sRxPort.c0.mmioWrValid);
 `SCOPE_ASSIGN (mmio_hdr_address, mmio_hdr.address);
 `SCOPE_ASSIGN (mmio_hdr_length, mmio_hdr.length);
-`SCOPE_ASSIGN (ccip_sRxPort_c0_hdr_mdata, cp2af_sRxPort.c0.hdr.mdata);
-`SCOPE_ASSIGN (ccip_sRxPort_c0_rspValid, cp2af_sRxPort.c0.rspValid);
-`SCOPE_ASSIGN (ccip_sRxPort_c1_rspValid, cp2af_sRxPort.c1.rspValid);            
-`SCOPE_ASSIGN (ccip_sTxPort_c0_valid, af2cp_sTxPort.c0.valid);
-`SCOPE_ASSIGN (ccip_sTxPort_c0_hdr_address, af2cp_sTxPort.c0.hdr.address);
-`SCOPE_ASSIGN (ccip_sTxPort_c0_hdr_mdata, af2cp_sTxPort.c0.hdr.mdata);
-`SCOPE_ASSIGN (ccip_sTxPort_c1_valid, af2cp_sTxPort.c1.valid);
-`SCOPE_ASSIGN (ccip_sTxPort_c1_hdr_address, af2cp_sTxPort.c1.hdr.address);
-`SCOPE_ASSIGN (ccip_sTxPort_c2_mmioRdValid, af2cp_sTxPort.c2.mmioRdValid);
-`SCOPE_ASSIGN (ccip_sRxPort_c0TxAlmFull, cp2af_sRxPort.c0TxAlmFull);
-`SCOPE_ASSIGN (ccip_sRxPort_c1TxAlmFull, cp2af_sRxPort.c1TxAlmFull);
+`SCOPE_ASSIGN (cci_sRxPort_c0_hdr_mdata, cp2af_sRxPort.c0.hdr.mdata);
+`SCOPE_ASSIGN (cci_sRxPort_c0_rspValid, cp2af_sRxPort.c0.rspValid);
+`SCOPE_ASSIGN (cci_sRxPort_c1_rspValid, cp2af_sRxPort.c1.rspValid);            
+`SCOPE_ASSIGN (cci_sTxPort_c0_valid, af2cp_sTxPort.c0.valid);
+`SCOPE_ASSIGN (cci_sTxPort_c0_hdr_address, af2cp_sTxPort.c0.hdr.address);
+`SCOPE_ASSIGN (cci_sTxPort_c0_hdr_mdata, af2cp_sTxPort.c0.hdr.mdata);
+`SCOPE_ASSIGN (cci_sTxPort_c1_valid, af2cp_sTxPort.c1.valid);
+`SCOPE_ASSIGN (cci_sTxPort_c1_hdr_address, af2cp_sTxPort.c1.hdr.address);
+`SCOPE_ASSIGN (cci_sTxPort_c2_mmioRdValid, af2cp_sTxPort.c2.mmioRdValid);
+`SCOPE_ASSIGN (cci_sRxPort_c0TxAlmFull, cp2af_sRxPort.c0TxAlmFull);
+`SCOPE_ASSIGN (cci_sRxPort_c1TxAlmFull, cp2af_sRxPort.c1TxAlmFull);
 `SCOPE_ASSIGN (avs_address, avs_address);
 `SCOPE_ASSIGN (avs_waitrequest, avs_waitrequest);
 `SCOPE_ASSIGN (avs_write_fire, avs_write && !avs_waitrequest);
@@ -957,11 +954,23 @@ Vortex #() vortex (
 `SCOPE_ASSIGN (avs_burstcount, avs_burstcount);
 `SCOPE_ASSIGN (avs_readdatavalid, avs_readdatavalid);
 `SCOPE_ASSIGN (mem_bank_select, mem_bank_select);          
-`SCOPE_ASSIGN (ccip_dram_rd_req_ctr, cci_dram_rd_req_ctr);
-`SCOPE_ASSIGN (ccip_dram_wr_req_ctr, cci_dram_wr_req_ctr);
-`SCOPE_ASSIGN (ccip_rd_req_ctr, cci_rd_req_ctr);
-`SCOPE_ASSIGN (ccip_rd_rsp_ctr, cci_rd_rsp_ctr);
-`SCOPE_ASSIGN (ccip_wr_req_ctr, cci_wr_req_ctr);
+`SCOPE_ASSIGN (cci_dram_rd_req_ctr, cci_dram_rd_req_ctr);
+`SCOPE_ASSIGN (cci_dram_wr_req_ctr, cci_dram_wr_req_ctr);
+`SCOPE_ASSIGN (cci_rd_req_ctr, cci_rd_req_ctr);
+`SCOPE_ASSIGN (cci_rd_rsp_ctr, cci_rd_rsp_ctr);
+`SCOPE_ASSIGN (cci_wr_req_ctr, cci_wr_req_ctr);
+`SCOPE_ASSIGN (cci_wr_req_fire, cci_wr_req_fire);
+`SCOPE_ASSIGN (cci_wr_rsp_fire, cci_wr_rsp_fire);
+`SCOPE_ASSIGN (cci_rd_req_fire, cci_rd_req_fire);
+`SCOPE_ASSIGN (cci_rd_rsp_fire, cci_rd_rsp_fire);
+`SCOPE_ASSIGN (cci_pending_reads_full, cci_pending_reads_full);
+`SCOPE_ASSIGN (cci_pending_writes_empty, cci_pending_writes_empty);
+`SCOPE_ASSIGN (cci_pending_writes_full, cci_pending_writes_full);
+`SCOPE_ASSIGN (afu_dram_req_fire, (dram_req_valid && dram_req_ready));
+`SCOPE_ASSIGN (afu_dram_req_addr, dram_req_addr);
+`SCOPE_ASSIGN (afu_dram_req_tag, dram_req_tag);
+`SCOPE_ASSIGN (afu_dram_rsp_fire, (dram_rsp_valid && dram_rsp_ready));
+`SCOPE_ASSIGN (afu_dram_rsp_tag, dram_rsp_tag);
 
 wire scope_changed = `SCOPE_TRIGGER;
 
@@ -973,7 +982,7 @@ VX_scope #(
 ) scope (
   .clk      (clk),
   .reset    (reset),
-  .start    (scope_start),
+  .start    (1'b0),
   .stop     (1'b0),
   .changed  (scope_changed),
   .data_in  ({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST}),
