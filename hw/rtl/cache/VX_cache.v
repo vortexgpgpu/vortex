@@ -199,11 +199,11 @@ module VX_cache #(
         assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
 
         // Core WB
-        assign curr_bank_core_rsp_ready    = per_bank_core_rsp_ready[i];
-        assign per_bank_core_rsp_valid [i] = curr_bank_core_rsp_valid;
-        assign per_bank_core_rsp_tid   [i] = curr_bank_core_rsp_tid;
-        assign per_bank_core_rsp_tag   [i] = curr_bank_core_rsp_tag;
-        assign per_bank_core_rsp_data  [i] = curr_bank_core_rsp_data;
+        assign curr_bank_core_rsp_ready   = per_bank_core_rsp_ready[i];
+        assign per_bank_core_rsp_valid[i] = curr_bank_core_rsp_valid;
+        assign per_bank_core_rsp_tid  [i] = curr_bank_core_rsp_tid;
+        assign per_bank_core_rsp_tag  [i] = curr_bank_core_rsp_tag;
+        assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
 
         // DRAM request            
         assign per_bank_dram_req_valid[i] = curr_bank_dram_req_valid;          
@@ -232,7 +232,7 @@ module VX_cache #(
             .BANK_ID            (i),
             .CACHE_ID           (CACHE_ID),
             .CACHE_SIZE         (CACHE_SIZE),
-            .CACHE_LINE_SIZE     (CACHE_LINE_SIZE),
+            .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
             .NUM_BANKS          (NUM_BANKS),
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),

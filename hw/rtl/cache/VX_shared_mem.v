@@ -136,6 +136,7 @@ module VX_shared_mem #(
     VX_fifo_queue #(
         .DATAW    (NUM_BANKS * (1 + `REQS_BITS + 1 + WORD_SIZE + `LINE_SELECT_BITS + `WORD_WIDTH + CORE_TAG_WIDTH)), 
         .SIZE     (CREQ_SIZE),
+        .BUFFERED (1),
         .FASTRAM  (1)
     ) core_req_queue (
         .clk     (clk),
