@@ -88,8 +88,8 @@ module VX_bank #(
 
 `ifdef DBG_CACHE_REQ_INFO
     /* verilator lint_off UNUSED */
-    wire [31:0]         debug_pc_st0,  debug_pc_st1,  debug_pc_st01;
-    wire [`NW_BITS-1:0] debug_wid_st0, debug_wid_st1, debug_wid_st01;
+    wire [31:0]         debug_pc_st0,  debug_pc_st1;
+    wire [`NW_BITS-1:0] debug_wid_st0, debug_wid_st1;
     /* verilator lint_on UNUSED */
 `endif
 
@@ -335,14 +335,6 @@ module VX_bank #(
 
     wire crsq_push_st1 = core_req_hit_st1 && !mem_rw_st1;
 
-`ifdef DBG_CACHE_REQ_INFO
-    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_st01, debug_wid_st01} = tag_st01[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
-    end else begin        
-        assign {debug_pc_st01, debug_wid_st01} = 0;
-    end
-`endif
-
     VX_data_access #(
         .BANK_ID        (BANK_ID),
         .CACHE_ID       (CACHE_ID),
@@ -360,8 +352,8 @@ module VX_bank #(
     `ifdef DBG_CACHE_REQ_INFO
         .rdebug_pc      (debug_pc_st0),
         .rdebug_wid     (debug_wid_st0),
-        .wdebug_pc      (debug_pc_st01),
-        .wdebug_wid     (debug_wid_st01),
+        .wdebug_pc      (debug_pc_st1),
+        .wdebug_wid     (debug_wid_st1),
     `endif
         .stall          (pipeline_stall),
 
