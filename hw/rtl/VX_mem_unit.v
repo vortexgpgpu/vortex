@@ -226,9 +226,7 @@ module VX_mem_unit # (
             .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
             .BANK_ADDR_OFFSET   (`SBANK_ADDR_OFFSET)
-        ) smem (
-            `SCOPE_BIND_VX_mem_unit_smem
-            
+        ) smem (            
             .clk                (clk),
             .reset              (scache_reset),
 
