@@ -4,7 +4,7 @@ SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
 POCL_CC_PATH ?= /opt/pocl/compiler
 POCL_RT_PATH ?= /opt/pocl/runtime
 
-OPTS ?= -n64
+OPTS ?= -n32
 
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)

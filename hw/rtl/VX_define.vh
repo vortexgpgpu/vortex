@@ -299,14 +299,11 @@
 // Cache ID
 `define SCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 2)
 
-// Block size in bytes
-`define SCACHE_LINE_SIZE        4 
-
 // Word size in bytes
 `define SWORD_SIZE              4
 
 // bank address offset
-`define SBANK_ADDR_OFFSET       `CLOG2(`STACK_SIZE / `SCACHE_LINE_SIZE)
+`define SBANK_ADDR_OFFSET       `CLOG2(`STACK_SIZE / `SWORD_SIZE)
 
 // Core request size
 `define SNUM_REQUESTS           `NUM_THREADS

@@ -112,7 +112,7 @@ module VX_cache_core_req_bank_sel #(
         end
 
         for (genvar i = 0; i < NUM_BANKS; ++i) begin
-            assign per_bank_core_req_stall[i] = ~per_bank_core_req_ready[i] & per_bank_core_req_valid[i];
+            assign per_bank_core_req_stall[i] = ~per_bank_core_req_ready[i] && (!BUFFERED || per_bank_core_req_valid[i]);
             VX_pipe_register #(
                 .DATAW  (1 + `REQS_BITS + 1 + WORD_SIZE + `WORD_ADDR_WIDTH + CORE_TAG_WIDTH + `WORD_WIDTH),
                 .RESETW (1),

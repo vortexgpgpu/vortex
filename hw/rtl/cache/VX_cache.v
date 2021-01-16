@@ -24,10 +24,7 @@ module VX_cache #(
     // Core Response Queue Size
     parameter CRSQ_SIZE                     = 4, 
     // DRAM Request Queue Size
-    parameter DREQ_SIZE                     = 4, 
-
-    // Enable dram update
-    parameter DRAM_ENABLE                   = 1,
+    parameter DREQ_SIZE                     = 4,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
@@ -129,8 +126,8 @@ module VX_cache #(
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),
         .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET),
-        .BUFFERED        ((NUM_BANKS > 1) && DRAM_ENABLE)
-    ) cache_core_req_bank_sel (        
+        .BUFFERED        (NUM_BANKS > 1)
+    ) core_req_bank_sel (        
         .clk        (clk),
         .reset      (reset),
     `ifdef PERF_ENABLE        
@@ -244,7 +241,6 @@ module VX_cache #(
             .DRSQ_SIZE          (DRSQ_SIZE),
             .CRSQ_SIZE          (CRSQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),
-            .DRAM_ENABLE        (DRAM_ENABLE),
             .WRITE_ENABLE       (WRITE_ENABLE),
             .WRITE_THROUGH      (WRITE_THROUGH),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                
@@ -302,7 +298,7 @@ module VX_cache #(
         .NUM_REQS           (NUM_REQS),
         .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),        
         .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS)
-    ) cache_core_rsp_merge (
+    ) core_rsp_merge (
         .clk                     (clk),
         .reset                   (reset),                    
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
@@ -316,40 +312,25 @@ module VX_cache #(
         .core_rsp_ready          (core_rsp_ready)
     ); 
 
-    if (DRAM_ENABLE) begin
-        wire [NUM_BANKS-1:0][(`DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;
-        for (genvar i = 0; i < NUM_BANKS; i++) begin
-            assign data_in[i] = {per_bank_dram_req_addr[i], per_bank_dram_req_rw[i], per_bank_dram_req_byteen[i], per_bank_dram_req_data[i]};
-        end
-
-        VX_stream_arbiter #(
-            .NUM_REQS (NUM_BANKS),
-            .DATAW    (`DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
-            .BUFFERED (1)
-        ) dram_req_arb (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (per_bank_dram_req_valid),
-            .data_in   (data_in),
-            .ready_in  (per_bank_dram_req_ready),   
-            .valid_out (dram_req_valid),   
-            .data_out  ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),
-            .ready_out (dram_req_ready)
-        );
-    end else begin
-        `UNUSED_VAR (per_bank_dram_req_valid)
-        `UNUSED_VAR (per_bank_dram_req_rw)
-        `UNUSED_VAR (per_bank_dram_req_byteen)
-        `UNUSED_VAR (per_bank_dram_req_addr)
-        `UNUSED_VAR (per_bank_dram_req_data)
-        assign per_bank_dram_req_ready = 0;
-        assign dram_req_valid  = 0;
-        assign dram_req_rw     = 0;
-        assign dram_req_byteen = 0;
-        assign dram_req_addr   = 0;
-        assign dram_req_data   = 0;
-        `UNUSED_VAR (dram_req_ready)
+    wire [NUM_BANKS-1:0][(`DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
+        assign data_in[i] = {per_bank_dram_req_addr[i], per_bank_dram_req_rw[i], per_bank_dram_req_byteen[i], per_bank_dram_req_data[i]};
     end
+
+    VX_stream_arbiter #(
+        .NUM_REQS (NUM_BANKS),
+        .DATAW    (`DRAM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
+        .BUFFERED (1)
+    ) dram_req_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (per_bank_dram_req_valid),
+        .data_in   (data_in),
+        .ready_in  (per_bank_dram_req_ready),   
+        .valid_out (dram_req_valid),   
+        .data_out  ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),
+        .ready_out (dram_req_ready)
+    );
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes
