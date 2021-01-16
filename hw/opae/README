@@ -96,6 +96,7 @@ gtkwave ./build_ase_1c/work/vortex.vcd &
 # kill process by Users
 ps -u tinebp
 kill -9 <pid>
+ps -u tinebp | grep "blackbox" | awk '{print $1}' | xargs kill -9
 
 # fixing device resource busy issue when deleting /build_ase_1c/
 lsof +D build_ase_1c
