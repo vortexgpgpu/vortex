@@ -2,8 +2,7 @@
 
 module VX_data_access #(
     parameter CACHE_ID          = 0,
-    parameter BANK_ID           = 0,   
-
+    parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
@@ -11,17 +10,11 @@ module VX_data_access #(
     // Number of banks
     parameter NUM_BANKS         = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE         = 1, 
-    
-    // Enable dram update
-    parameter DRAM_ENABLE       = 1,
-
+    parameter WORD_SIZE         = 1,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
-
     // Enable write-through
     parameter WRITE_THROUGH     = 1,
-
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS  = 0
 ) (
@@ -111,7 +104,7 @@ module VX_data_access #(
     assign byte_enable  = wfill_in ? {CACHE_LINE_SIZE{1'b1}} : wbyteen_qual;
     assign write_data   = wfill_in ? filldata_in : writedata_qual;    
 
-    wire rw_hazard = DRAM_ENABLE && (raddr == waddr) && writeen_in;
+    wire rw_hazard = (raddr == waddr) && writeen_in;
 
     if (`WORD_SELECT_BITS != 0) begin
         for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin

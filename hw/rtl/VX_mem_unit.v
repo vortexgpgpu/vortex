@@ -103,7 +103,6 @@ module VX_mem_unit # (
         .DRSQ_SIZE          (`IDRSQ_SIZE),
         .CRSQ_SIZE          (`ICRSQ_SIZE),
         .DREQ_SIZE          (`IDREQ_SIZE),
-        .DRAM_ENABLE        (1),
         .WRITE_ENABLE       (0),
         .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
@@ -160,8 +159,7 @@ module VX_mem_unit # (
         .MSHR_SIZE          (`DMSHR_SIZE),
         .DRSQ_SIZE          (`DDRSQ_SIZE),
         .CRSQ_SIZE          (`DCRSQ_SIZE),
-        .DREQ_SIZE          (`DDREQ_SIZE),    
-        .DRAM_ENABLE        (1),
+        .DREQ_SIZE          (`DDREQ_SIZE),
         .WRITE_ENABLE       (1),
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
@@ -215,22 +213,16 @@ module VX_mem_unit # (
             .clk       (clk),
             .reset     (reset),
             .reset_out (scache_reset)
-        );
+        );        
 
-        VX_cache #(
+        VX_shared_mem #(
             .CACHE_ID           (`SCACHE_ID),
             .CACHE_SIZE         (`SMEM_SIZE),
-            .CACHE_LINE_SIZE    (`SCACHE_LINE_SIZE),
             .NUM_BANKS          (`SNUM_BANKS),
             .WORD_SIZE          (`SWORD_SIZE),
             .NUM_REQS           (`SNUM_REQUESTS),
             .CREQ_SIZE          (`SCREQ_SIZE),
-            .MSHR_SIZE          (8),
-            .DRSQ_SIZE          (1),
             .CRSQ_SIZE          (`SCRSQ_SIZE),
-            .DREQ_SIZE          (1),
-            .DRAM_ENABLE        (0),
-            .WRITE_ENABLE       (1),
             .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
             .BANK_ADDR_OFFSET   (`SBANK_ADDR_OFFSET)
@@ -239,6 +231,10 @@ module VX_mem_unit # (
             
             .clk                (clk),
             .reset              (scache_reset),
+
+        `ifdef PERF_ENABLE
+            .perf_cache_if      (perf_smem_if),
+        `endif
 
             // Core request
             .core_req_valid     (smem_req_if.valid),
@@ -253,26 +249,7 @@ module VX_mem_unit # (
             .core_rsp_valid     (smem_rsp_if.valid),
             .core_rsp_data      (smem_rsp_if.data),
             .core_rsp_tag       (smem_rsp_if.tag),
-            .core_rsp_ready     (smem_rsp_if.ready),
-
-        `ifdef PERF_ENABLE
-            .perf_cache_if      (perf_smem_if),
-        `endif
-
-            // DRAM request
-            `UNUSED_PIN (dram_req_valid),
-            `UNUSED_PIN (dram_req_rw),        
-            `UNUSED_PIN (dram_req_byteen),        
-            `UNUSED_PIN (dram_req_addr),
-            `UNUSED_PIN (dram_req_data),
-            `UNUSED_PIN (dram_req_tag),
-            .dram_req_ready     (1'b0),       
-
-            // DRAM response
-            .dram_rsp_valid     (0),
-            .dram_rsp_data      (0),
-            .dram_rsp_tag       (0),
-            `UNUSED_PIN (dram_rsp_ready)
+            .core_rsp_ready     (smem_rsp_if.ready)
         );
     
     end

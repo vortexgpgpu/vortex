@@ -101,7 +101,7 @@ static void cleanup() {
   if (h_c) free(h_c);
 }
 
-int size = 64;
+int size = 32;
 
 static void show_usage() {
   printf("Usage: [-n size] [-h: help]\n");

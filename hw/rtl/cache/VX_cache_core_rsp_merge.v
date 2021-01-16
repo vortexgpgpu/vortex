@@ -50,7 +50,6 @@ module VX_cache_core_rsp_merge #(
                 for (integer i = 0; i < NUM_BANKS; i++) begin
                     if (per_bank_core_rsp_valid[i]) begin
                         core_rsp_tag_unqual = per_bank_core_rsp_tag[i];
-                        break;
                     end
                 end
                 

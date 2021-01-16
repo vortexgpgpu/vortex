@@ -27,9 +27,6 @@ module VX_bank #(
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 1,
 
-    // Enable dram update
-    parameter DRAM_ENABLE                   = 1,
-
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
 
@@ -103,38 +100,27 @@ module VX_bank #(
 
     wire drsq_push = dram_rsp_valid && dram_rsp_ready;
     
-    if (DRAM_ENABLE) begin
-        wire drsq_full;
-        assign dram_rsp_ready = !drsq_full;
+    wire drsq_full;
+    assign dram_rsp_ready = !drsq_full;
 
-        VX_fifo_queue_xt #(
-            .DATAW    (`LINE_ADDR_WIDTH + $bits(dram_rsp_data)), 
-            .SIZE     (DRSQ_SIZE),
-            .FASTRAM  (1)
-        ) dram_rsp_queue (
-            .clk     (clk),
-            .reset   (reset),
-            .push    (drsq_push),
-            .pop     (drsq_pop),
-            .data_in ({dram_rsp_addr, dram_rsp_data}),        
-            `UNUSED_PIN (data_out),
-            .empty   (drsq_empty),
-            .data_out_next ({drsq_addr_next, drsq_filldata_next}),
-            .empty_next (drsq_empty_next),
-            .full    (drsq_full),
-            `UNUSED_PIN (almost_full),
-            `UNUSED_PIN (size)
-        );
-    end else begin
-        `UNUSED_VAR (dram_rsp_valid)
-        `UNUSED_VAR (dram_rsp_addr)
-        `UNUSED_VAR (dram_rsp_data)
-        assign drsq_empty         = 1;
-        assign drsq_empty_next    = 1;
-        assign drsq_addr_next     = 0;
-        assign drsq_filldata_next = 0;
-        assign dram_rsp_ready     = 0;        
-    end
+    VX_fifo_queue_xt #(
+        .DATAW    (`LINE_ADDR_WIDTH + $bits(dram_rsp_data)), 
+        .SIZE     (DRSQ_SIZE),
+        .FASTRAM  (1)
+    ) dram_rsp_queue (
+        .clk     (clk),
+        .reset   (reset),
+        .push    (drsq_push),
+        .pop     (drsq_pop),
+        .data_in ({dram_rsp_addr, dram_rsp_data}),        
+        `UNUSED_PIN (data_out),
+        .empty   (drsq_empty),
+        .data_out_next ({drsq_addr_next, drsq_filldata_next}),
+        .empty_next (drsq_empty_next),
+        .full    (drsq_full),
+        `UNUSED_PIN (almost_full),
+        `UNUSED_PIN (size)
+    );
 
     wire                        creq_pop;    
     wire                        creq_full, creq_empty;
@@ -221,14 +207,6 @@ module VX_bank #(
     wire                            dreq_push_unqual_st0, dreq_push_unqual_st1;
     wire                            writeen_st1;
     wire                            core_req_hit_st1;
-
-    wire                            valid_st01;
-    wire                            writeen_st01;
-    wire [`LINE_ADDR_WIDTH-1:0]     addr_st01;
-    wire [`UP(`WORD_SELECT_BITS)-1:0] wsel_st01;
-    wire [WORD_SIZE-1:0]            byteen_st01;
-    wire [`WORD_WIDTH-1:0]          writeword_st01;
-    wire [`REQ_TAG_WIDTH-1:0]       tag_st01;
     
     wire mshr_push_stall;
     wire crsq_push_stall;    
@@ -278,8 +256,7 @@ module VX_bank #(
         assign {debug_pc_st0, debug_wid_st0} = 0;
     end
 `endif
-
-if (DRAM_ENABLE) begin       
+        
     VX_tag_access #(
         .BANK_ID        (BANK_ID),
         .CACHE_ID       (CACHE_ID),
@@ -290,7 +267,7 @@ if (DRAM_ENABLE) begin
         .WORD_SIZE      (WORD_SIZE),        
         .WRITE_ENABLE   (WRITE_ENABLE),
         .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET)
-     ) tag_access (
+        ) tag_access (
         .clk            (clk),
         .reset          (reset),
 
@@ -314,66 +291,28 @@ if (DRAM_ENABLE) begin
         .writeen_in     (valid_st1 && writeen_st1)
     );
 
-    assign valid_st01     = valid_st1;
-    assign writeen_st01   = writeen_st1;
-    assign addr_st01      = addr_st1;
-    assign wsel_st01      = wsel_st1;
-    assign byteen_st01    = byteen_st1;
-    assign writeword_st01 = writeword_st1;
-    assign tag_st01       = tag_st1;
-
     // redundant fills
     wire is_redundant_fill = is_fill_st0 && !miss_st0;
 
     // we have a miss in mshr or going to it for the current address
     wire mshr_pending_st0 = mshr_pending_unqual_st0 
-                         || (valid_st1 && (miss_st1 || force_miss_st1) && (addr_st0 == addr_st1));
+                            || (valid_st1 && (miss_st1 || force_miss_st1) && (addr_st0 == addr_st1));
 
     // force miss to ensure commit order when a new request has pending previous requests to same block
     assign force_miss_st0 = !is_mshr_st0 && !is_fill_st0 && mshr_pending_st0;
-    
+
     assign writeen_unqual_st0 = (!is_fill_st0 && !miss_st0 && mem_rw_st0) 
-                             || (is_fill_st0 && !is_redundant_fill);
+                                || (is_fill_st0 && !is_redundant_fill);
 
     wire send_fill_req_st0 = !is_fill_st0 && miss_st0
-                          && !(WRITE_THROUGH && mem_rw_st0);
+                            && !(WRITE_THROUGH && mem_rw_st0);
 
     assign do_writeback_st0 = (WRITE_THROUGH && !is_fill_st0 && mem_rw_st0) 
-                           || (!WRITE_THROUGH && is_fill_st0 && dirty_st0 && !is_redundant_fill);
+                            || (!WRITE_THROUGH && is_fill_st0 && dirty_st0 && !is_redundant_fill);
 
     assign dreq_push_unqual_st0 = send_fill_req_st0 || do_writeback_st0;
 
-    assign mshr_push_unqual_st0 = !is_fill_st0 && !(WRITE_THROUGH && mem_rw_st0);
-    
-end else begin
-
-    `UNUSED_VAR (mshr_pending_unqual_st0)
-    `UNUSED_VAR (drsq_push)
-    `UNUSED_VAR (dirty_st0)
-    `UNUSED_VAR (writeen_st1)
-
-`ifdef DBG_CACHE_REQ_INFO
-    assign debug_pc_st1  = debug_pc_st0;
-    assign debug_wid_st1 = debug_wid_st0;
-`endif
-
-    assign valid_st01       = valid_st0;
-    assign writeen_st01     = mem_rw_st0;
-    assign addr_st01        = addr_st0;
-    assign wsel_st01        = wsel_st0;
-    assign byteen_st01      = byteen_st0;
-    assign writeword_st01   = writeword_st0;
-    assign tag_st01         = tag_st0;
-    
-    assign miss_st0             = 0;
-    assign dirty_st0            = 0;    
-    assign force_miss_st0       = 0;
-    assign readtag_st0          = 0;   
-    assign do_writeback_st0     = 0;
-    assign writeen_unqual_st0   = mem_rw_st0;
-    assign dreq_push_unqual_st0 = 0;
-    assign mshr_push_unqual_st0 = 0;
-end 
+    assign mshr_push_unqual_st0 = !is_fill_st0 && !(WRITE_THROUGH && mem_rw_st0); 
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH + `WORD_WIDTH + `TAG_SELECT_BITS + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
@@ -403,7 +342,6 @@ end
         assign {debug_pc_st01, debug_wid_st01} = 0;
     end
 `endif
-    `UNUSED_VAR (tag_st01)
 
     VX_data_access #(
         .BANK_ID        (BANK_ID),
@@ -412,7 +350,6 @@ end
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
-        .DRAM_ENABLE    (DRAM_ENABLE),
         .WORD_SIZE      (WORD_SIZE),
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITE_THROUGH  (WRITE_THROUGH)
@@ -435,12 +372,12 @@ end
         .dirtyb_out     (dirtyb_st0),
 
         // writing
-        .writeen_in     (valid_st01 && writeen_st01),
-        .waddr_in       (addr_st01),        
+        .writeen_in     (valid_st1 && writeen_st1),
+        .waddr_in       (addr_st1),        
         .wfill_in       (is_fill_st1),
-        .wwsel_in       (wsel_st01),
-        .wbyteen_in     (byteen_st01),
-        .writeword_in   (writeword_st01),
+        .wwsel_in       (wsel_st1),
+        .wbyteen_in     (byteen_st1),
+        .writeword_in   (writeword_st1),
         .filldata_in    (filldata_st1)
     ); 
 
@@ -461,81 +398,59 @@ end
 
     wire incoming_fill_st1 = valid_st0 && is_fill_st0 && (addr_st1 == addr_st0);
 
-    if (DRAM_ENABLE) begin
+    wire mshr_dequeue_st1 = valid_st1 && is_mshr_st1 && !mshr_push_unqual && !pipeline_stall;
 
-        wire mshr_dequeue_st1 = valid_st1 && is_mshr_st1 && !mshr_push_unqual && !pipeline_stall;
+    // push a missed request as 'ready' if it was a forced miss that actually had a hit 
+    // or the fill request for this block is comming
+    wire mshr_init_ready_state_st1 = !miss_st1 || incoming_fill_st1;
 
-        // push a missed request as 'ready' if it was a forced miss that actually had a hit 
-        // or the fill request for this block is comming
-        wire mshr_init_ready_state_st1 = !miss_st1 || incoming_fill_st1;
+    VX_miss_resrv #(
+        .BANK_ID            (BANK_ID),
+        .CACHE_ID           (CACHE_ID),      
+        .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
+        .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
+        .NUM_BANKS          (NUM_BANKS),
+        .WORD_SIZE          (WORD_SIZE),
+        .NUM_REQS           (NUM_REQS),
+        .MSHR_SIZE          (MSHR_SIZE),
+        .ALM_FULL           (MSHR_SIZE-1),
+        .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
+    ) miss_resrv (
+        .clk                (clk),
+        .reset              (reset),
 
-        VX_miss_resrv #(
-            .BANK_ID            (BANK_ID),
-            .CACHE_ID           (CACHE_ID),      
-            .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
-            .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
-            .NUM_BANKS          (NUM_BANKS),
-            .WORD_SIZE          (WORD_SIZE),
-            .NUM_REQS           (NUM_REQS),
-            .MSHR_SIZE          (MSHR_SIZE),
-            .ALM_FULL           (MSHR_SIZE-1),
-            .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
-        ) miss_resrv (
-            .clk                (clk),
-            .reset              (reset),
+    `ifdef DBG_CACHE_REQ_INFO
+        .deq_debug_pc       (debug_pc_st0),
+        .deq_debug_wid      (debug_wid_st0),
+        .enq_debug_pc       (debug_pc_st1),
+        .enq_debug_wid      (debug_wid_st1),
+    `endif
 
-        `ifdef DBG_CACHE_REQ_INFO
-            .deq_debug_pc       (debug_pc_st0),
-            .deq_debug_wid      (debug_wid_st0),
-            .enq_debug_pc       (debug_pc_st1),
-            .enq_debug_wid      (debug_wid_st1),
-        `endif
+        // enqueue
+        .enqueue            (mshr_push),        
+        .enqueue_addr       (addr_st1),
+        .enqueue_data       ({writeword_st1, req_tid_st1, tag_st1, mem_rw_st1, byteen_st1, wsel_st1}),
+        .enqueue_is_mshr    (is_mshr_st1),
+        .enqueue_as_ready   (mshr_init_ready_state_st1),
+        .enqueue_almfull    (mshr_almost_full),
 
-            // enqueue
-            .enqueue            (mshr_push),        
-            .enqueue_addr       (addr_st1),
-            .enqueue_data       ({writeword_st1, req_tid_st1, tag_st1, mem_rw_st1, byteen_st1, wsel_st1}),
-            .enqueue_is_mshr    (is_mshr_st1),
-            .enqueue_as_ready   (mshr_init_ready_state_st1),
-            .enqueue_almfull    (mshr_almost_full),
+        // lookup
+        .lookup_ready       (drsq_pop),
+        .lookup_addr        (addr_st0),
+        .lookup_match       (mshr_pending_unqual_st0),
+        
+        // schedule
+        .schedule           (mshr_pop),        
+        .schedule_valid     (mshr_valid),
+        `UNUSED_PIN (schedule_addr),
+        `UNUSED_PIN (schedule_data),
+        .schedule_valid_next(mshr_valid_next),
+        .schedule_addr_next (mshr_addr_next),
+        .schedule_data_next ({mshr_writeword_next, mshr_tid_next, mshr_tag_next, mshr_rw_next, mshr_byteen_next, mshr_wsel_next}),
 
-            // lookup
-            .lookup_ready       (drsq_pop),
-            .lookup_addr        (addr_st0),
-            .lookup_match       (mshr_pending_unqual_st0),
-            
-            // schedule
-            .schedule           (mshr_pop),        
-            .schedule_valid     (mshr_valid),
-            `UNUSED_PIN (schedule_addr),
-            `UNUSED_PIN (schedule_data),
-            .schedule_valid_next(mshr_valid_next),
-            .schedule_addr_next (mshr_addr_next),
-            .schedule_data_next ({mshr_writeword_next, mshr_tid_next, mshr_tag_next, mshr_rw_next, mshr_byteen_next, mshr_wsel_next}),
-
-            // dequeue
-            .dequeue            (mshr_dequeue_st1)
-        );
-    end else begin
-        `UNUSED_VAR (valid_st1)        
-        `UNUSED_VAR (mshr_push)
-        `UNUSED_VAR (wsel_st1)
-        `UNUSED_VAR (writeword_st1)
-        `UNUSED_VAR (mem_rw_st1)
-        `UNUSED_VAR (byteen_st1)
-        `UNUSED_VAR (incoming_fill_st1)
-        assign mshr_almost_full = 0;
-        assign mshr_pending_unqual_st0 = 0;
-        assign mshr_valid       = 0;
-        assign mshr_valid_next  = 0;
-        assign mshr_addr_next   = 0;
-        assign mshr_wsel_next   = 0;
-        assign mshr_writeword_next = 0;
-        assign mshr_tid_next    = 0;
-        assign mshr_tag_next    = 0;
-        assign mshr_rw_next     = 0;
-        assign mshr_byteen_next = 0;
-    end
+        // dequeue
+        .dequeue            (mshr_dequeue_st1)
+    );
 
     // Enqueue core response
      
@@ -625,44 +540,25 @@ end
 
     assign dreq_byteen = writeback ? dreq_byteen_unqual : {CACHE_LINE_SIZE{1'b1}};
 
-    if (DRAM_ENABLE) begin
-        VX_fifo_queue_xt #(
-            .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
-            .SIZE     (DREQ_SIZE),
-            .ALM_FULL (DREQ_SIZE-1),
-            .FASTRAM  (1)
-        ) dram_req_queue (
-            .clk     (clk),
-            .reset   (reset),
-            .push    (dreq_push),
-            .pop     (dreq_pop),
-            .data_in ({writeback,   dreq_byteen,     dreq_addr,     dreq_data}),        
-            .data_out({dram_req_rw, dram_req_byteen, dram_req_addr, dram_req_data}),
-            .empty   (dreq_empty),
-            .almost_full (dreq_almost_full),
-            `UNUSED_PIN (full),
-            `UNUSED_PIN (data_out_next),
-            `UNUSED_PIN (empty_next),
-            `UNUSED_PIN (size)
-        );
-    end else begin
-        `UNUSED_VAR (dreq_push)
-        `UNUSED_VAR (dreq_pop)
-        `UNUSED_VAR (dreq_addr)
-        `UNUSED_VAR (dreq_data)
-        `UNUSED_VAR (dreq_byteen)
-        `UNUSED_VAR (readtag_st1)
-        `UNUSED_VAR (dirtyb_st1)
-        `UNUSED_VAR (readdata_st1)         
-        `UNUSED_VAR (writeback)
-        `UNUSED_VAR (dram_req_ready)
-        assign dreq_empty    = 1;       
-        assign dreq_almost_full = 0;
-        assign dram_req_rw   = 0;
-        assign dram_req_byteen = 0;
-        assign dram_req_addr = 0;
-        assign dram_req_data = 0;
-    end  
+    VX_fifo_queue_xt #(
+        .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
+        .SIZE     (DREQ_SIZE),
+        .ALM_FULL (DREQ_SIZE-1),
+        .FASTRAM  (1)
+    ) dram_req_queue (
+        .clk     (clk),
+        .reset   (reset),
+        .push    (dreq_push),
+        .pop     (dreq_pop),
+        .data_in ({writeback,   dreq_byteen,     dreq_addr,     dreq_data}),        
+        .data_out({dram_req_rw, dram_req_byteen, dram_req_addr, dram_req_data}),
+        .empty   (dreq_empty),
+        .almost_full (dreq_almost_full),
+        `UNUSED_PIN (full),
+        `UNUSED_PIN (data_out_next),
+        `UNUSED_PIN (empty_next),
+        `UNUSED_PIN (size)
+    );
 
     assign dram_req_valid = !dreq_empty;    
 
