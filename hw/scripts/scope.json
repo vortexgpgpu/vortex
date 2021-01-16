@@ -60,7 +60,6 @@
         "VX_gpu_unit": {},
         "VX_mem_unit": {
             "submodules": {                
-                "smem":   {"type":"VX_cache", "enabled":"`SM_ENABLE", "params":{"NUM_BANKS":"`SNUM_BANKS"}},
                 "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DNUM_BANKS"}},
                 "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"`INUM_BANKS"}}
             }
@@ -203,7 +202,7 @@
             "!scoreboard_delay": 1,        
             "!execute_delay": 1
         },   
-        "afu/vortex/l3cache/bank, afu/vortex/cluster/l2cache/bank, afu/vortex/cluster/core/mem_unit/dcache/bank, afu/vortex/cluster/core/mem_unit/icache/bank, afu/vortex/cluster/core/mem_unit/smem/bank": {
+        "afu/vortex/l3cache/bank, afu/vortex/cluster/l2cache/bank, afu/vortex/cluster/core/mem_unit/dcache/bank, afu/vortex/cluster/core/mem_unit/icache/bank": {
             "?valid_st0": 1,
             "?valid_st1": 1,
             "addr_st0": 32,

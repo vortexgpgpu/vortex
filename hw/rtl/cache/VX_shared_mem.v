@@ -26,9 +26,7 @@ module VX_shared_mem #(
 
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0    
- ) (
-    `SCOPE_IO_VX_cache
-    
+ ) (    
     input wire clk,
     input wire reset,   
 
