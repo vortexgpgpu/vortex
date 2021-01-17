@@ -145,15 +145,18 @@ module VX_instr_demux (
     ); 
 
     // can take next request?
-    assign execute_if.ready = (alu_req_ready && (execute_if.ex_type == `EX_ALU))
-                           || (lsu_req_ready && (execute_if.ex_type == `EX_LSU))
-                           || (csr_req_ready && (execute_if.ex_type == `EX_CSR))
-                       `ifdef EXT_M_ENABLE
-                           || (mul_req_ready && (execute_if.ex_type == `EX_MUL))
-                       `endif
-                       `ifdef EXT_F_ENABLE
-                           || (fpu_req_ready && (execute_if.ex_type == `EX_FPU))
-                       `endif
-                           || (gpu_req_ready && (execute_if.ex_type == `EX_GPU));
+    reg ready_r;
+    always @(*) begin
+        case (execute_if.ex_type) 
+        `EX_ALU: ready_r = alu_req_ready;
+        `EX_LSU: ready_r = lsu_req_ready;
+        `EX_CSR: ready_r = csr_req_ready;
+        `EX_MUL: ready_r = mul_req_ready;
+        `EX_FPU: ready_r = fpu_req_ready;
+        `EX_GPU: ready_r = gpu_req_ready;
+        default: ready_r = 1'b1; // ignore NOPs
+        endcase
+    end
+    assign execute_if.ready = ready_r;
     
 endmodule
