@@ -459,7 +459,7 @@ module VX_bank #(
     VX_fifo_queue #(
         .DATAW    (`REQS_BITS + CORE_TAG_WIDTH + `WORD_WIDTH), 
         .SIZE     (CRSQ_SIZE),
-        .BUFFERED (1),    
+        .BUFFERED (NUM_BANKS == 1),
         .FASTRAM  (1)
     ) core_rsp_queue (
         .clk     (clk),
@@ -470,6 +470,8 @@ module VX_bank #(
         .data_out({core_rsp_tid, core_rsp_tag, core_rsp_data}),
         .empty   (crsq_empty),
         .full    (crsq_full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
 
@@ -508,10 +510,11 @@ module VX_bank #(
 
     assign dreq_byteen = writeback ? dreq_byteen_unqual : {CACHE_LINE_SIZE{1'b1}};
 
-    VX_fifo_queue_xt #(
+    VX_fifo_queue #(
         .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
         .SIZE     (DREQ_SIZE),
         .ALM_FULL (DREQ_SIZE-1),
+        .BUFFERED (NUM_BANKS == 1),
         .FASTRAM  (1)
     ) dram_req_queue (
         .clk     (clk),
@@ -521,10 +524,9 @@ module VX_bank #(
         .data_in ({writeback,   dreq_byteen,     dreq_addr,     dreq_data}),        
         .data_out({dram_req_rw, dram_req_byteen, dram_req_addr, dram_req_data}),
         .empty   (dreq_empty),
-        .almost_full (dreq_almost_full),
-        `UNUSED_PIN (full),
-        `UNUSED_PIN (data_out_next),
-        `UNUSED_PIN (empty_next),
+        .alm_full(dreq_almost_full),
+        `UNUSED_PIN (full),        
+        `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (size)
     );
 

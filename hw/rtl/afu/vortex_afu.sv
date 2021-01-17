@@ -738,6 +738,8 @@ VX_fifo_queue #(
   .data_out (cci_rdq_dout),
   .empty    (cci_rdq_empty),
   `UNUSED_PIN (full),
+  `UNUSED_PIN (alm_empty),
+  `UNUSED_PIN (alm_full),
   `UNUSED_PIN (size)
 );
 

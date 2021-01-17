@@ -48,6 +48,8 @@ module VX_elastic_buffer #(
             .data_out(data_out),    
             .empty  (empty),
             .full   (full),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
             `UNUSED_PIN (size)
         );
 

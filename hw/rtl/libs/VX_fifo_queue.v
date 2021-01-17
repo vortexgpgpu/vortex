@@ -3,6 +3,8 @@
 module VX_fifo_queue #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
+    parameter ALM_FULL = (SIZE - 1),
+    parameter ALM_EMPTY= 1,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1),
     parameter BUFFERED = 0,
@@ -14,8 +16,10 @@ module VX_fifo_queue #(
     input  wire             pop,        
     input  wire [DATAW-1:0] data_in,
     output wire [DATAW-1:0] data_out,
-    output wire             empty,
-    output wire             full,      
+    output wire             empty,      
+    output wire             alm_empty,
+    output wire             full,            
+    output wire             alm_full,
     output wire [SIZEW-1:0] size
 ); 
     `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
@@ -45,37 +49,47 @@ module VX_fifo_queue #(
             end
         end        
 
-        assign data_out = head_r;
-        assign empty    = (size_r == 0);
-        assign full     = (size_r != 0);
-        assign size     = size_r;
+        assign data_out  = head_r;
+        assign empty     = (size_r == 0);
+        assign alm_empty = 1'b1;
+        assign full      = (size_r != 0);
+        assign alm_full  = 1'b1;
+        assign size      = size_r;
 
     end else begin
         
-        reg empty_r;
-        reg full_r;
+        reg empty_r, alm_empty_r;
+        reg full_r, alm_full_r;
         reg [ADDRW-1:0] used_r;
 
         always @(posedge clk) begin
             if (reset) begin
-                empty_r <= 1;
-                full_r  <= 0;
-                used_r  <= 0;
+                empty_r     <= 1;
+                alm_empty_r <= 1;    
+                full_r      <= 0;        
+                alm_full_r  <= 0;
+                used_r      <= 0;
             end else begin
                 assert(!push || !full);
                 assert(!pop || !empty);
                 if (push) begin
                     if (!pop) begin
                         empty_r <= 0;
-                        if (used_r == ADDRW'(SIZE-1)) begin
+                        if (used_r == ADDRW'(ALM_EMPTY))
+                            alm_empty_r <= 0;
+                        if (used_r == ADDRW'(SIZE-1))
                             full_r <= 1;
-                        end
+                        if (used_r == ADDRW'(ALM_FULL-1))
+                            alm_full_r <= 1;
                     end
                 end else if (pop) begin
-                    full_r <= 0;
-                    if (used_r == ADDRW'(1)) begin
+                    full_r <= 0;        
+                    if (used_r == ADDRW'(ALM_FULL))
+                        alm_full_r <= 0;            
+                    if (used_r == ADDRW'(1))
                         empty_r <= 1;
-                    end;
+                    if (used_r == ADDRW'(ALM_EMPTY+1))
+                        alm_empty_r <= 1;
                 end
                 used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
             end                   
@@ -169,9 +183,11 @@ module VX_fifo_queue #(
             assign data_out = dout_r;
         end
         
-        assign empty = empty_r;
-        assign full  = full_r;
-        assign size  = {full_r, used_r};        
+        assign empty     = empty_r;        
+        assign alm_empty = alm_empty_r;
+        assign full      = full_r;
+        assign alm_full  = alm_full_r;
+        assign size      = {full_r, used_r};        
     end
 
 endmodule

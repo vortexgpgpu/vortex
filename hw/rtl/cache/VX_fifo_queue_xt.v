@@ -30,10 +30,10 @@ module VX_fifo_queue_xt #(
     reg [ADDRW-1:0] used_r;
 
     always @(posedge clk) begin
-        if (reset) begin            
-            used_r        <= 0;
+        if (reset) begin        
             full_r        <= 0;
-            almost_full_r <= 0;
+            almost_full_r <= 0;    
+            used_r        <= 0;
         end else begin
             assert(!push || !full);
             assert(!pop || !empty_r);
