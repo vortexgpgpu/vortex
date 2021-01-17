@@ -85,6 +85,8 @@ module VX_avs_wrapper #(
         .data_out (dram_rsp_tag),
         `UNUSED_PIN (empty),
         `UNUSED_PIN (full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
 
@@ -101,6 +103,8 @@ module VX_avs_wrapper #(
         .data_out (dram_rsp_data),
         .empty    (avs_rspq_empty),
         `UNUSED_PIN (full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
 

@@ -157,6 +157,8 @@ module VX_shared_mem #(
                    per_bank_core_req_tag}),
         .empty   (creq_empty),
         .full    (creq_full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
 
@@ -225,7 +227,9 @@ module VX_shared_mem #(
         .data_in ({core_rsp_valid_unqual, core_rsp_data_unqual, core_rsp_tag_unqual}),
         .data_out({core_rsp_valid_tmask,  core_rsp_data,        core_rsp_tag}),
         .empty   (crsq_empty),
-        .full    (crsq_full),
+        .full    (crsq_full),        
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
 

@@ -54,6 +54,8 @@ module VX_ibuffer #(
             .data_out (q_data_prev[i]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
             `UNUSED_PIN (size)
         );
 

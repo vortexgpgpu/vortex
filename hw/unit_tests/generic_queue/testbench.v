@@ -25,7 +25,10 @@ module testbench();
     .pop(pop), 
     .data_out(data_out), 
     .empty(empty), 
-    .full(full)
+    .full(full),
+    `UNUSED_PIN (alm_empty),    
+    `UNUSED_PIN (alm_full),
+    `UNUSED_VAR (size)
   );
 
   always begin
