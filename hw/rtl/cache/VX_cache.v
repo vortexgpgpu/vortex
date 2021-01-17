@@ -4,7 +4,7 @@ module VX_cache #(
     parameter CACHE_ID                      = 0,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 16384, 
+    parameter CACHE_SIZE                    = 1048576, 
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE               = 64, 
     // Number of banks
@@ -45,6 +45,8 @@ module VX_cache #(
     
     input wire clk,
     input wire reset,
+
+    input wire flush,
 
     // Core request    
     input wire [NUM_REQS-1:0]                           core_req_valid,
@@ -114,7 +116,26 @@ module VX_cache #(
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
     wire [NUM_BANKS-1:0] perf_pipe_stall_per_bank;
-`endif   
+`endif
+
+    reg flush_enable;
+    reg [`LINE_SELECT_BITS-1:0] flush_ctr;
+
+    always @(posedge clk) begin
+        if (reset || flush) begin
+            flush_enable <= 1;
+            flush_ctr    <= 0;
+        end else begin
+            if (flush_enable && (& per_bank_dram_rsp_ready)) begin
+                if (flush_addr == ((2 ** `LINE_SELECT_BITS)-1)) begin
+                    flush_enable <= 0;
+                end
+                flush_ctr <= flush_ctr + 1;            
+            end
+        end
+    end
+
+    wire [`LINE_ADDR_WIDTH-1:0] flush_addr = `LINE_ADDR_WIDTH'(flush_ctr);
 
     VX_cache_core_req_bank_sel #(
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
@@ -152,9 +173,9 @@ module VX_cache #(
     assign dram_req_tag = dram_req_addr;
     if (NUM_BANKS == 1) begin
         `UNUSED_VAR (dram_rsp_tag)
-        assign dram_rsp_ready = per_bank_dram_rsp_ready;
+        assign dram_rsp_ready = per_bank_dram_rsp_ready && !flush_enable;
     end else begin
-        assign dram_rsp_ready = per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag)];
+        assign dram_rsp_ready = per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag)] && !flush_enable;
     end
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
@@ -183,6 +204,7 @@ module VX_cache #(
         wire                        curr_bank_dram_rsp_valid;    
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_rsp_addr;        
         wire [`CACHE_LINE_WIDTH-1:0] curr_bank_dram_rsp_data;
+        wire                        curr_bank_dram_rsp_flush;
         wire                        curr_bank_dram_rsp_ready;
 
         // Core Req
@@ -216,13 +238,14 @@ module VX_cache #(
 
         // DRAM response
         if (NUM_BANKS == 1) begin
-            assign curr_bank_dram_rsp_valid = dram_rsp_valid;
-            assign curr_bank_dram_rsp_addr  = dram_rsp_tag;
+            assign curr_bank_dram_rsp_valid = dram_rsp_valid || flush_enable;
+            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : dram_rsp_tag;
         end else begin
-            assign curr_bank_dram_rsp_valid = dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i);
-            assign curr_bank_dram_rsp_addr  = `DRAM_TO_LINE_ADDR(dram_rsp_tag); 
+            assign curr_bank_dram_rsp_valid = (dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i)) || flush_enable;
+            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : `DRAM_TO_LINE_ADDR(dram_rsp_tag); 
         end
         assign curr_bank_dram_rsp_data    = dram_rsp_data;
+        assign curr_bank_dram_rsp_flush   = flush_enable;
         assign per_bank_dram_rsp_ready[i] = curr_bank_dram_rsp_ready;
         
         VX_bank #(                
@@ -246,7 +269,7 @@ module VX_cache #(
             `SCOPE_BIND_VX_cache_bank(i)
             
             .clk                (clk),
-            .reset              (reset),     
+            .reset              (reset),
 
         `ifdef PERF_ENABLE
             .perf_read_misses   (perf_read_miss_per_bank[i]),
@@ -284,6 +307,7 @@ module VX_cache #(
             .dram_rsp_valid     (curr_bank_dram_rsp_valid),    
             .dram_rsp_addr      (curr_bank_dram_rsp_addr),            
             .dram_rsp_data      (curr_bank_dram_rsp_data),
+            .dram_rsp_flush     (curr_bank_dram_rsp_flush),
             .dram_rsp_ready     (curr_bank_dram_rsp_ready)
         );
     end   
