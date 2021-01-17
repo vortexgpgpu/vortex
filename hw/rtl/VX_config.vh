@@ -264,7 +264,7 @@
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
-`define ICACHE_SIZE 8192
+`define ICACHE_SIZE 16384
 `endif
 
 // Core Request Queue Size
@@ -296,7 +296,7 @@
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
-`define DCACHE_SIZE 8192
+`define DCACHE_SIZE 16384
 `endif
 
 // Number of banks
@@ -360,7 +360,7 @@
 
 // Size of cache in bytes
 `ifndef L2CACHE_SIZE
-`define L2CACHE_SIZE 131072
+`define L2CACHE_SIZE 262144
 `endif
 
 // Number of banks
@@ -380,7 +380,7 @@
 
 // Miss Handling Register Size
 `ifndef L2MSHR_SIZE
-`define L2MSHR_SIZE 8
+`define L2MSHR_SIZE 16
 `endif
 
 // DRAM Request Queue Size
@@ -397,7 +397,7 @@
 
 // Size of cache in bytes
 `ifndef L3CACHE_SIZE
-`define L3CACHE_SIZE 262144
+`define L3CACHE_SIZE 1048576
 `endif
 
 // Number of banks
@@ -417,7 +417,7 @@
 
 // Miss Handling Register Size
 `ifndef L3MSHR_SIZE
-`define L3MSHR_SIZE 8
+`define L3MSHR_SIZE 16
 `endif
 
 // DRAM Request Queue Size
