@@ -305,8 +305,7 @@ module VX_decode  #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    assign decode_if.valid = ifetch_rsp_if.valid 
-                          && (decode_if.ex_type != `EX_NOP); // skip noop
+    assign decode_if.valid = ifetch_rsp_if.valid;
 
     assign decode_if.wid   = ifetch_rsp_if.wid;
     assign decode_if.tmask = ifetch_rsp_if.tmask;
@@ -348,10 +347,12 @@ module VX_decode  #(
         assign decode_if.rs3 = rs3;
     `endif
 
-    assign decode_if.used_regs = ((`NUM_REGS)'(use_rd)  << decode_if.rd) 
-                               | ((`NUM_REGS)'(use_rs1) << decode_if.rs1) 
-                               | ((`NUM_REGS)'(use_rs2) << decode_if.rs2)
-                               | ((`NUM_REGS)'(use_rs3) << decode_if.rs3);
+    wire is_nop = (decode_if.ex_type == `EX_NOP);
+
+    assign decode_if.used_regs = ((`NUM_REGS)'(use_rd  && !is_nop) << decode_if.rd) 
+                               | ((`NUM_REGS)'(use_rs1 && !is_nop) << decode_if.rs1) 
+                               | ((`NUM_REGS)'(use_rs2 && !is_nop) << decode_if.rs2)
+                               | ((`NUM_REGS)'(use_rs3 && !is_nop) << decode_if.rs3);
 
     assign decode_if.imm = (is_lui || is_auipc) ? {upper_imm, 12'(0)} : 
                                 (is_jal || is_jalr || is_jals) ? jalx_offset :
