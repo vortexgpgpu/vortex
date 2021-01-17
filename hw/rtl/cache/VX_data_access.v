@@ -28,32 +28,28 @@ module VX_data_access #(
 `IGNORE_WARNINGS_END
 `endif
 
-    input  wire                         stall,
-
 `IGNORE_WARNINGS_BEGIN
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr_in,    
+    input wire[`LINE_ADDR_WIDTH-1:0]    addr,    
 `IGNORE_WARNINGS_END
 
     // reading
-    input wire                          readen_in,
-    output wire [`CACHE_LINE_WIDTH-1:0] readdata_out,
+    input wire                          readen,
+    output wire [`CACHE_LINE_WIDTH-1:0] readdata,
 
     // writing
-    input wire                          writeen_in,
-    input wire [`UP(`WORD_SELECT_BITS)-1:0] wwsel_in,
-    input wire [WORD_SIZE-1:0]          wbyteen_in,    
-    input wire                          wfill_in,
-    input wire [`WORD_WIDTH-1:0]        writeword_in,
-    input wire [`CACHE_LINE_WIDTH-1:0]  filldata_in
+    input wire                          writeen,
+    input wire [`UP(`WORD_SELECT_BITS)-1:0] wsel,
+    input wire [WORD_SIZE-1:0]          byteen,    
+    input wire                          is_fill,
+    input wire [`WORD_WIDTH-1:0]        writeword,
+    input wire [`CACHE_LINE_WIDTH-1:0]  filldata
 );
     `UNUSED_VAR (reset)
 
-    wire [`CACHE_LINE_WIDTH-1:0] read_data;
     wire [CACHE_LINE_SIZE-1:0]   byte_enable; 
     wire [`CACHE_LINE_WIDTH-1:0] write_data;   
-    wire                         write_enable;
 
-    wire [`LINE_SELECT_BITS-1:0] line_addr = addr_in[`LINE_SELECT_BITS-1:0];
+    wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
 
     VX_sp_ram #(
         .DATAW(CACHE_LINE_SIZE * 8),
@@ -63,48 +59,41 @@ module VX_data_access #(
     ) data_store (
         .clk(clk),
         .addr(line_addr),             
-        .wren(write_enable),  
+        .wren(writeen),  
         .byteen(byte_enable),
         .rden(1'b1),
         .din(write_data),
-        .dout(read_data)
+        .dout(readdata)
     );
 
-    wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wbyteen_qual;
-    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] writedata_qual;
+    wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] byteen_qual;
 
     if (`WORD_SELECT_BITS != 0) begin
         for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
-            assign wbyteen_qual[i]   = (wwsel_in == `WORD_SELECT_BITS'(i)) ? wbyteen_in : {WORD_SIZE{1'b0}};
-            assign writedata_qual[i] = writeword_in;
+            assign byteen_qual[i] = (wsel == `WORD_SELECT_BITS'(i)) ? byteen : {WORD_SIZE{1'b0}};
         end
     end else begin
-        `UNUSED_VAR (wwsel_in)
-        assign wbyteen_qual   = wbyteen_in;
-        assign writedata_qual = writeword_in;
+        `UNUSED_VAR (wsel)
+        assign byteen_qual = byteen;
     end
     
-    assign write_enable = writeen_in && !stall;
-    assign byte_enable  = wfill_in ? {CACHE_LINE_SIZE{1'b1}} : wbyteen_qual;
-    assign write_data   = wfill_in ? filldata_in : writedata_qual;
-    assign readdata_out = read_data;
+    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen_qual;
+    assign write_data  = is_fill ? filldata : {`WORDS_PER_LINE{writeword}};
 
-    `UNUSED_VAR (readen_in)
+    `UNUSED_VAR (readen)
 
 `ifdef DBG_PRINT_CACHE_DATA
-    always @(posedge clk) begin            
-        if (!stall) begin
-            if (writeen_in) begin
-                if (wfill_in) begin
-                    $display("%t: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), line_addr, write_data);
-                end else begin
-                    $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, wwsel_in, writeword_in);
-                end
-            end 
-            if (readen_in) begin
-                $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_in, BANK_ID), debug_wid, debug_pc, line_addr, read_data);
-            end            
-        end
+    always @(posedge clk) begin 
+        if (writeen) begin
+            if (is_fill) begin
+                $display("%t: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, write_data);
+            end else begin
+                $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, wsel, writeword);
+            end
+        end 
+        if (readen) begin
+            $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, readdata);
+        end            
     end    
 `endif
 

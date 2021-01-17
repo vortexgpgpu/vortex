@@ -113,6 +113,8 @@ module VX_mem_unit # (
         .clk                (clk),
         .reset              (icache_reset),
 
+        .flush              (1'b0),
+
         // Core request
         .core_req_valid     (core_icache_req_if.valid),
         .core_req_rw        (core_icache_req_if.rw),
@@ -169,6 +171,8 @@ module VX_mem_unit # (
         
         .clk                (clk),
         .reset              (dcache_reset),
+
+        .flush              (1'b0),
 
         // Core req
         .core_req_valid     (dcache_req_if.valid),

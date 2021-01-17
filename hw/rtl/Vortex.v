@@ -184,6 +184,8 @@ module Vortex (
             .clk                (clk),
             .reset              (reset),
 
+            .flush              (1'b0),
+
         `ifdef PERF_ENABLE
             .perf_cache_if      (perf_l3cache_if),
         `endif
