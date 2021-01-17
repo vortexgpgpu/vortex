@@ -9,7 +9,8 @@ module VX_sp_ram #(
     parameter RWCHECK  = 1,
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1),
-    parameter FASTRAM  = 0
+    parameter FASTRAM  = 0,
+    parameter INITZERO = 0
 ) ( 
     input wire              clk,
     input wire [ADDRW-1:0]  addr,
@@ -29,6 +30,10 @@ module VX_sp_ram #(
             if (BYTEENW > 1) begin
                 `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
+                if (INITZERO) begin
+                    initial mem = '{default: 0};
+                end
+
                 always @(posedge clk) begin
                     if (wren) begin
                         for (integer i = 0; i < BYTEENW; i++) begin
@@ -41,6 +46,10 @@ module VX_sp_ram #(
                 end
             end else begin
                 `USE_FAST_BRAM reg [DATAW-1:0] mem [SIZE-1:0];
+
+                if (INITZERO) begin
+                    initial mem = '{default: 0};
+                end
 
                 always @(posedge clk) begin
                     if (wren && byteen)
@@ -55,6 +64,10 @@ module VX_sp_ram #(
             if (BYTEENW > 1) begin
                 `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
+                if (INITZERO) begin
+                    initial mem = '{default: 0};
+                end
+
                 always @(posedge clk) begin
                     if (wren) begin
                         for (integer i = 0; i < BYTEENW; i++) begin
@@ -66,6 +79,10 @@ module VX_sp_ram #(
                 assign dout = mem[addr];
             end else begin
                 `USE_FAST_BRAM reg [DATAW-1:0] mem [SIZE-1:0];
+
+                if (INITZERO) begin
+                    initial mem = '{default: 0};
+                end
 
                 always @(posedge clk) begin
                     if (wren && byteen)
@@ -81,6 +98,10 @@ module VX_sp_ram #(
             if (BYTEENW > 1) begin
                 reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
+                if (INITZERO) begin
+                    initial mem = '{default: 0};
+                end
+
                 always @(posedge clk) begin
                     if (wren) begin
                         for (integer i = 0; i < BYTEENW; i++) begin
@@ -93,6 +114,10 @@ module VX_sp_ram #(
                 end
             end else begin
                 reg [DATAW-1:0] mem [SIZE-1:0];
+
+                if (INITZERO) begin
+                    initial mem = '{default: 0};
+                end
 
                 always @(posedge clk) begin
                     if (wren && byteen)
@@ -108,6 +133,10 @@ module VX_sp_ram #(
                 if (BYTEENW > 1) begin
                     reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
+                    if (INITZERO) begin
+                        initial mem = '{default: 0};
+                    end
+
                     always @(posedge clk) begin
                         if (wren) begin
                             for (integer i = 0; i < BYTEENW; i++) begin
@@ -120,6 +149,10 @@ module VX_sp_ram #(
                 end else begin
                     reg [DATAW-1:0] mem [SIZE-1:0];
 
+                    if (INITZERO) begin
+                        initial mem = '{default: 0};
+                    end
+
                     always @(posedge clk) begin
                         if (wren && byteen)
                             mem[addr] <= din;
@@ -129,6 +162,10 @@ module VX_sp_ram #(
             end else begin
                 if (BYTEENW > 1) begin
                     `NO_RW_RAM_CHECK reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
+
+                    if (INITZERO) begin
+                        initial mem = '{default: 0};
+                    end
 
                     always @(posedge clk) begin
                         if (wren) begin
@@ -140,7 +177,11 @@ module VX_sp_ram #(
                     end
                     assign dout = mem[addr];
                 end else begin
-                    `NO_RW_RAM_CHECK reg [DATAW-1:0] mem [SIZE-1:0];  
+                    `NO_RW_RAM_CHECK reg [DATAW-1:0] mem [SIZE-1:0];
+
+                    if (INITZERO) begin
+                        initial mem = '{default: 0};
+                    end  
 
                     always @(posedge clk) begin
                         if (wren && byteen)

@@ -210,8 +210,7 @@
             "is_fill_st0": 1,
             "is_mshr_st0": 1,
             "miss_st0": 1,
-            "force_miss_st0": 1,  
-            "dirty_st0": 1,
+            "force_miss_st0": 1, 
             "mshr_push": 1,
             "?pipeline_stall": 1
         }
