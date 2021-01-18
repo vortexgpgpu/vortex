@@ -238,7 +238,7 @@ module VX_fp_cvt #(
                 // By default right shift mantissa to be an integer
                 denorm_shamt[i] = SHAMT_BITS'(MAX_INT_WIDTH-1) - SHAMT_BITS'(input_exp_s1[i]);
                 // overflow: when converting to unsigned the range is larger by one
-                if (input_exp_s1[i] >=  $signed(INT_EXP_WIDTH'(MAX_INT_WIDTH-1) + INT_EXP_WIDTH'(unsigned_s1))) begin
+                if (input_exp_s1[i] >= $signed(INT_EXP_WIDTH'(MAX_INT_WIDTH-1) + INT_EXP_WIDTH'(unsigned_s1))) begin
                     denorm_shamt[i]    = SHAMT_BITS'(1'b0); // prevent shifting
                     of_before_round[i] = 1'b1;
                 // underflow
