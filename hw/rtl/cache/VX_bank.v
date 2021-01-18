@@ -197,6 +197,7 @@ module VX_bank #(
     wire                            force_miss_st0, force_miss_st1;
     wire                            do_writeback_st0, do_writeback_st1;
     wire                            writeen_unqual_st0, writeen_unqual_st1;
+    wire                            mshr_push_unqual_st0, mshr_push_unqual_st1;
     wire                            dreq_push_unqual_st0, dreq_push_unqual_st1;
     wire                            writeen_st1;
     wire                            core_req_hit_st1;
@@ -297,15 +298,17 @@ module VX_bank #(
 
     assign dreq_push_unqual_st0 = send_fill_req_st0 || do_writeback_st0;
 
+    assign mshr_push_unqual_st0 = !is_fill_st0 && !mem_rw_st0;
+
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + `REQ_TAG_WIDTH),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, dreq_push_unqual_st0, do_writeback_st0, miss_st0, force_miss_st0, addr_st0, wsel_st0, data_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, dreq_push_unqual_st1, do_writeback_st1, miss_st1, force_miss_st1, addr_st1, wsel_st1, data_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, mshr_push_unqual_st0, dreq_push_unqual_st0, do_writeback_st0, miss_st0, force_miss_st0, addr_st0, wsel_st0, data_st0, mem_rw_st0, byteen_st0, req_tid_st0, tag_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, mshr_push_unqual_st1, dreq_push_unqual_st1, do_writeback_st1, miss_st1, force_miss_st1, addr_st1, wsel_st1, data_st1, mem_rw_st1, byteen_st1, req_tid_st1, tag_st1})
     );
 
     assign core_req_hit_st1 = !is_fill_st1 && !miss_st1 && !force_miss_st1;
@@ -314,7 +317,7 @@ module VX_bank #(
 
     wire dreq_push_st1 = dreq_push_unqual_st1 && (do_writeback_st1 || !force_miss_st1);
 
-    wire mshr_push_st1 = !is_fill_st1 && !mem_rw_st1 && (miss_st1 || force_miss_st1);
+    wire mshr_push_st1 = mshr_push_unqual_st1 && (miss_st1 || force_miss_st1);
 
     wire crsq_push_st1 = core_req_hit_st1 && !mem_rw_st1;
 
