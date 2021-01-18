@@ -140,7 +140,6 @@ module VX_fp_cvt #(
     wire signed [LANES-1:0][INT_EXP_WIDTH-1:0] destination_exp; // re-biased exponent for destination
 
     for (genvar i = 0; i < LANES; ++i) begin
-    `IGNORE_WARNINGS_BEGIN            
         // Input mantissa needs to be normalized
         wire signed [INT_EXP_WIDTH-1:0] fp_input_exp;
         wire signed [INT_EXP_WIDTH-1:0] int_input_exp;
@@ -154,18 +153,17 @@ module VX_fp_cvt #(
 
         // Unbias exponent and compensate for shift
         assign fp_input_exp = $signed(fmt_exponent_s0[i] + 
-                                      $signed({1'b0, in_a_type_s0[i].is_subnormal}) - 
-                                      $signed(EXP_BIAS) -
-                                      renorm_shamt_sgn + 
-                                      $signed(FMT_SHIFT_COMPENSATION));
+                                      INT_EXP_WIDTH'($signed({1'b0, in_a_type_s0[i].is_subnormal})) - 
+                                      INT_EXP_WIDTH'($signed(EXP_BIAS)) -
+                                      INT_EXP_WIDTH'(renorm_shamt_sgn) + 
+                                      INT_EXP_WIDTH'($signed(FMT_SHIFT_COMPENSATION)));
                                  
-        assign int_input_exp = $signed(INT_MAN_WIDTH - 1 - renorm_shamt_sgn);
+        assign int_input_exp = $signed(INT_EXP_WIDTH'(INT_MAN_WIDTH - 1) - INT_EXP_WIDTH'(renorm_shamt_sgn));
 
         assign input_exp[i]  = is_itof_s0 ? int_input_exp : fp_input_exp;
 
         // Rebias the exponent
-        assign destination_exp[i] = input_exp[i] + $signed(EXP_BIAS);
-    `IGNORE_WARNINGS_END
+        assign destination_exp[i] = input_exp[i] + INT_EXP_WIDTH'($signed(EXP_BIAS));
     end
 
     // Pipeline stage1
@@ -208,7 +206,6 @@ module VX_fp_cvt #(
 
     // Perform adjustments to mantissa and exponent
     for (genvar i = 0; i < LANES; ++i) begin
-    `IGNORE_WARNINGS_BEGIN
         always @(*) begin
             // Default assignment
             final_exp[i]       = $unsigned(destination_exp_s1[i]); // take exponent as is, only look at lower bits
@@ -224,25 +221,25 @@ module VX_fp_cvt #(
                 // Overflow or infinities (for proper rounding)
                 if ((destination_exp_s1[i] >= 2**EXP_BITS-1) 
                  || (~is_itof_s1 && in_a_type_s1[i].is_inf)) begin
-                    final_exp[i]       = $unsigned(2**EXP_BITS-2); // largest normal value
+                    final_exp[i]       = INT_EXP_WIDTH'(2**EXP_BITS-2); // largest normal value
                     preshift_mant[i]   = ~0;  // largest normal value and RS bits set
                     of_before_round[i] = 1'b1;
                 // Denormalize underflowing values
                 end else if ((destination_exp_s1[i] < 1) 
-                          && (destination_exp_s1[i] >= -$signed(MAN_BITS))) begin
+                          && (destination_exp_s1[i] >= INT_EXP_WIDTH'(-$signed(MAN_BITS)))) begin
                     final_exp[i]       = 0; // denormal result
-                    denorm_shamt[i]    = $unsigned(denorm_shamt[i] + 1 - destination_exp_s1[i]); // adjust right shifting
+                    denorm_shamt[i]    = $unsigned(denorm_shamt[i] + SHAMT_BITS'(INT_EXP_WIDTH'(1) - destination_exp_s1[i])); // adjust right shifting
                 // Limit the shift to retain sticky bits
-                end else if (destination_exp_s1[i] < -$signed(MAN_BITS)) begin
+                end else if (destination_exp_s1[i] < INT_EXP_WIDTH'(-$signed(MAN_BITS))) begin
                     final_exp[i]       = 0; // denormal result
-                    denorm_shamt[i]    = $unsigned(denorm_shamt[i] + 2 + MAN_BITS); // to sticky
+                    denorm_shamt[i]    = $unsigned(denorm_shamt[i] + SHAMT_BITS'(2 + MAN_BITS)); // to sticky
                 end
             end else begin
                 // By default right shift mantissa to be an integer
-                denorm_shamt[i] = $unsigned(MAX_INT_WIDTH - 1 - input_exp_s1[i]);
+                denorm_shamt[i] = SHAMT_BITS'(MAX_INT_WIDTH-1) - SHAMT_BITS'(input_exp_s1[i]);
                 // overflow: when converting to unsigned the range is larger by one
-                if (input_exp_s1[i] >=  $signed(MAX_INT_WIDTH -1 + unsigned_s1)) begin
-                    denorm_shamt[i]    = 1'b0; // prevent shifting
+                if (input_exp_s1[i] >=  $signed(INT_EXP_WIDTH'(MAX_INT_WIDTH-1) + INT_EXP_WIDTH'(unsigned_s1))) begin
+                    denorm_shamt[i]    = SHAMT_BITS'(1'b0); // prevent shifting
                     of_before_round[i] = 1'b1;
                 // underflow
                 end else if (input_exp_s1[i] < -1) begin
@@ -264,7 +261,6 @@ module VX_fp_cvt #(
 
         // select RS bits for destination operation
         assign round_sticky_bits[i] = is_itof_s1 ? fp_round_sticky_bits[i] : int_round_sticky_bits[i];
-    `IGNORE_WARNINGS_END
     end
 
     // Rouding and classification
