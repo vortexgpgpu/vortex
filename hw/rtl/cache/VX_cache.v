@@ -4,7 +4,7 @@ module VX_cache #(
     parameter CACHE_ID                      = 0,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1048576, 
+    parameter CACHE_SIZE                    = 16384, 
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE               = 64, 
     // Number of banks

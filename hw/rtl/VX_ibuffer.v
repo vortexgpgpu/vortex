@@ -43,7 +43,6 @@ module VX_ibuffer #(
         VX_fifo_queue #(
             .DATAW    (DATAW),
             .SIZE     (SIZE),
-            .BUFFERED (1),
             .FASTRAM  (1)
         ) queue (
             .clk      (clk),
