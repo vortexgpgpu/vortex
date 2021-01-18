@@ -427,14 +427,9 @@ module VX_bank #(
     wire [`WORD_WIDTH-1:0]    crsq_data_st1;  
 
      if (`WORD_SELECT_BITS != 0) begin
-        wire [`WORD_WIDTH-1:0] readword = readdata_st1[wsel_st1 * `WORD_WIDTH +: `WORD_WIDTH];
-        for (genvar i = 0; i < WORD_SIZE; i++) begin
-            assign crsq_data_st1[i * 8 +: 8] = readword[i * 8 +: 8] & {8{byteen_st1[i]}};
-        end
+        assign crsq_data_st1 = readdata_st1[wsel_st1 * `WORD_WIDTH +: `WORD_WIDTH];
     end else begin
-        for (genvar i = 0; i < WORD_SIZE; i++) begin
-            assign crsq_data_st1[i * 8 +: 8] = readdata_st1[i * 8 +: 8] & {8{byteen_st1[i]}};
-        end
+        assign crsq_data_st1 = readdata_st1;
     end
   
     VX_fifo_queue #(
@@ -482,7 +477,7 @@ module VX_bank #(
     end else begin
         assign dreq_byteen_unqual = byteen_st1;
     end
-    assign dreq_data = {`WORDS_PER_LINE{data_st1[`WORD_WIDTH-1:0]}};
+    assign dreq_data = data_st1;
 
     assign dreq_byteen = writeback ? dreq_byteen_unqual : {CACHE_LINE_SIZE{1'b1}};
 
