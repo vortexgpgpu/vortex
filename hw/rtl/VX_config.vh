@@ -108,7 +108,7 @@
 `ifdef ALTERA_S10
 `define LATENCY_FDIV 34
 `else
-`define LATENCY_FDIV 20
+`define LATENCY_FDIV 15
 `endif
 `endif
 
@@ -116,16 +116,8 @@
 `ifdef ALTERA_S10
 `define LATENCY_FSQRT 25
 `else
-`define LATENCY_FSQRT 15
+`define LATENCY_FSQRT 10
 `endif
-`endif
-
-`ifndef LATENCY_ITOF
-`define LATENCY_ITOF 7
-`endif
-
-`ifndef LATENCY_FTOI
-`define LATENCY_FTOI 3
 `endif
 
 `ifndef LATENCY_FDIVSQRT
