@@ -166,18 +166,18 @@ module VX_shared_mem #(
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         VX_sp_ram #(
-            .DATAW(`WORD_WIDTH),
-            .SIZE(`LINES_PER_BANK),
-            .BYTEENW(WORD_SIZE),
-            .RWCHECK(1)
+            .DATAW   (`WORD_WIDTH),
+            .SIZE    (`LINES_PER_BANK),
+            .BYTEENW (WORD_SIZE),
+            .RWCHECK (1)
         ) data (
-            .clk(clk),
-            .addr(per_bank_core_req_addr[i]),          
-            .wren(per_bank_core_req_valid[i] && per_bank_core_req_rw[i] && ~crsq_full),  
-            .byteen(per_bank_core_req_byteen[i]),
-            .rden(1'b1),
-            .din(per_bank_core_req_data[i]),
-            .dout(per_bank_core_rsp_data[i])
+            .clk    (clk),
+            .addr   (per_bank_core_req_addr[i]),          
+            .wren   (per_bank_core_req_valid[i] && per_bank_core_req_rw[i] && ~crsq_full),  
+            .byteen (per_bank_core_req_byteen[i]),
+            .rden   (1'b1),
+            .din    (per_bank_core_req_data[i]),
+            .dout   (per_bank_core_rsp_data[i])
         );
     end  
     
@@ -220,14 +220,14 @@ module VX_shared_mem #(
         .BUFFERED (1),
         .FASTRAM  (1)
     ) core_rsp_queue (
-        .clk     (clk),
-        .reset   (reset),
-        .push    (crsq_push),
-        .pop     (crsq_pop),
-        .data_in ({core_rsp_valid_unqual, core_rsp_data_unqual, core_rsp_tag_unqual}),
-        .data_out({core_rsp_valid_tmask,  core_rsp_data,        core_rsp_tag}),
-        .empty   (crsq_empty),
-        .full    (crsq_full),        
+        .clk      (clk),
+        .reset    (reset),
+        .push     (crsq_push),
+        .pop      (crsq_pop),
+        .data_in  ({core_rsp_valid_unqual, core_rsp_data_unqual, core_rsp_tag_unqual}),
+        .data_out ({core_rsp_valid_tmask,  core_rsp_data,        core_rsp_tag}),
+        .empty    (crsq_empty),
+        .full     (crsq_full),        
         `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)

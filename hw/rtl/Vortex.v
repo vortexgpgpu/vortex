@@ -165,7 +165,7 @@ module Vortex (
         VX_cache #(
             .CACHE_ID           (`L3CACHE_ID),
             .CACHE_SIZE         (`L3CACHE_SIZE),
-            .CACHE_LINE_SIZE     (`L3CACHE_LINE_SIZE),
+            .CACHE_LINE_SIZE    (`L3CACHE_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
             .WORD_SIZE          (`L3WORD_SIZE),
             .NUM_REQS           (`NUM_CLUSTERS),

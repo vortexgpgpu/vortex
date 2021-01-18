@@ -186,9 +186,7 @@ module VX_miss_resrv #(
         if (reset) begin
             schedule_valid_n_r = 0;
         end else begin
-            if (restore) begin
-                schedule_valid_n_r = enqueue_as_ready;
-            end else if (lookup_ready) begin
+            if (lookup_ready) begin
                 schedule_valid_n_r = schedule_valid_r || (schedule_addr_r == lookup_addr);
             end else if (schedule) begin
                 schedule_valid_n_r = ready_table[schedule_n_ptr];

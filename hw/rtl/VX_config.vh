@@ -264,7 +264,7 @@
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
-`define ICACHE_SIZE 8192
+`define ICACHE_SIZE 16384
 `endif
 
 // Core Request Queue Size
@@ -296,7 +296,7 @@
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
-`define DCACHE_SIZE 8192
+`define DCACHE_SIZE 16384
 `endif
 
 // Number of banks
@@ -360,7 +360,7 @@
 
 // Size of cache in bytes
 `ifndef L2CACHE_SIZE
-`define L2CACHE_SIZE 131072
+`define L2CACHE_SIZE 65536
 `endif
 
 // Number of banks

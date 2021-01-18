@@ -3,7 +3,6 @@
 module VX_fifo_queue_xt #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
-    parameter ALM_FULL = (SIZE - 1),
     parameter ADDRW    = $clog2(SIZE),
     parameter SIZEW    = $clog2(SIZE+1),
     parameter FASTRAM  = 0
@@ -18,22 +17,20 @@ module VX_fifo_queue_xt #(
     output wire [DATAW-1:0] data_out_next,
     output wire             empty_next,
     output wire             full,      
-    output wire             almost_full,
     output wire [SIZEW-1:0] size
 ); 
     wire [DATAW-1:0] dout;
     reg [DATAW-1:0] dout_r, dout_n_r;
     reg [ADDRW-1:0] wr_ptr_r;
     reg [ADDRW-1:0] rd_ptr_r, rd_ptr_n_r;
-    reg full_r, almost_full_r;
+    reg full_r;
     reg empty_r, empty_n_r;
     reg [ADDRW-1:0] used_r;
 
     always @(posedge clk) begin
         if (reset) begin        
-            full_r        <= 0;
-            almost_full_r <= 0;    
-            used_r        <= 0;
+            full_r <= 0; 
+            used_r <= 0;
         end else begin
             assert(!push || !full);
             assert(!pop || !empty_r);
@@ -41,12 +38,8 @@ module VX_fifo_queue_xt #(
                 if (!pop) begin
                     if (used_r == ADDRW'(SIZE-1))
                         full_r <= 1;
-                    if (used_r == ADDRW'(ALM_FULL-1))
-                        almost_full_r <= 1;
                 end
             end else if (pop) begin
-                if (used_r == ADDRW'(ALM_FULL))
-                    almost_full_r <= 0;
                 full_r <= 0;
             end
 
@@ -75,11 +68,11 @@ module VX_fifo_queue_xt #(
     end
 
     VX_dp_ram #(
-        .DATAW(DATAW),
-        .SIZE(SIZE),
-        .BUFFERED(0),
-        .RWCHECK(1),
-        .FASTRAM(FASTRAM)
+        .DATAW    (DATAW),
+        .SIZE     (SIZE),
+        .BUFFERED (0),
+        .RWCHECK  (1),
+        .FASTRAM  (FASTRAM)
     ) dp_ram (
         .clk(clk),
         .waddr(wr_ptr_r),                                
@@ -127,7 +120,6 @@ module VX_fifo_queue_xt #(
     assign empty         = empty_r;
     assign empty_next    = empty_n_r;
     assign full          = full_r;
-    assign almost_full   = almost_full_r;
     assign size          = {full_r, used_r};
 
 endmodule

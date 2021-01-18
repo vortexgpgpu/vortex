@@ -34,20 +34,18 @@ module VX_data_access #(
 
     // reading
     input wire                          readen,
-    output wire [`CACHE_LINE_WIDTH-1:0] readdata,
+    output wire [`CACHE_LINE_WIDTH-1:0] rddata,
 
     // writing
     input wire                          writeen,
-    input wire [`UP(`WORD_SELECT_BITS)-1:0] wsel,
-    input wire [WORD_SIZE-1:0]          byteen,    
     input wire                          is_fill,
-    input wire [`WORD_WIDTH-1:0]        writeword,
-    input wire [`CACHE_LINE_WIDTH-1:0]  filldata
+    input wire [`UP(`WORD_SELECT_BITS)-1:0] wsel,
+    input wire [WORD_SIZE-1:0]          byteen,        
+    input wire [`CACHE_LINE_WIDTH-1:0]  wrdata
 );
     `UNUSED_VAR (reset)
 
-    wire [CACHE_LINE_SIZE-1:0]   byte_enable; 
-    wire [`CACHE_LINE_WIDTH-1:0] write_data;   
+    wire [CACHE_LINE_SIZE-1:0] byte_enable;
 
     wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
 
@@ -62,8 +60,8 @@ module VX_data_access #(
         .wren(writeen),  
         .byteen(byte_enable),
         .rden(1'b1),
-        .din(write_data),
-        .dout(readdata)
+        .din(wrdata),
+        .dout(rddata)
     );
 
     wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] byteen_qual;
@@ -78,7 +76,6 @@ module VX_data_access #(
     end
     
     assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen_qual;
-    assign write_data  = is_fill ? filldata : {`WORDS_PER_LINE{writeword}};
 
     `UNUSED_VAR (readen)
 

@@ -1,14 +1,14 @@
 `include "VX_platform.vh"
 
 module VX_fifo_queue #(
-    parameter DATAW    = 1,
-    parameter SIZE     = 2,
-    parameter ALM_FULL = (SIZE - 1),
-    parameter ALM_EMPTY= 1,
-    parameter ADDRW    = $clog2(SIZE),
-    parameter SIZEW    = $clog2(SIZE+1),
-    parameter BUFFERED = 0,
-    parameter FASTRAM  = 1
+    parameter DATAW     = 1,
+    parameter SIZE      = 2,
+    parameter ALM_FULL  = (SIZE - 1),
+    parameter ALM_EMPTY = 1,
+    parameter ADDRW     = $clog2(SIZE),
+    parameter SIZEW     = $clog2(SIZE+1),
+    parameter BUFFERED  = 0,
+    parameter FASTRAM   = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -111,11 +111,11 @@ module VX_fifo_queue #(
             end
 
             VX_dp_ram #(
-                .DATAW(DATAW),
-                .SIZE(SIZE),
-                .BUFFERED(0),
-                .RWCHECK(1),
-                .FASTRAM(FASTRAM)
+                .DATAW    (DATAW),
+                .SIZE     (SIZE),
+                .BUFFERED (0),
+                .RWCHECK  (1),
+                .FASTRAM  (FASTRAM)
             ) dp_ram (
                 .clk(clk),
                 .waddr(wr_ptr_r),                                
@@ -156,11 +156,11 @@ module VX_fifo_queue #(
             end
 
             VX_dp_ram #(
-                .DATAW(DATAW),
-                .SIZE(SIZE),
-                .BUFFERED(0),
-                .RWCHECK(1),
-                .FASTRAM(FASTRAM)
+                .DATAW    (DATAW),
+                .SIZE     (SIZE),
+                .BUFFERED (0),
+                .RWCHECK  (1),
+                .FASTRAM  (FASTRAM)
             ) dp_ram (
                 .clk(clk),
                 .waddr(wr_ptr_r),                                
