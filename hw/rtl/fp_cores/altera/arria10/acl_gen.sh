@@ -5,7 +5,7 @@ PREFIX=acl
 
 CMD_POLY_EVAL_PATH=$QUARTUS_HOME/dspba/backend/linux64
 
-OPTIONS="-target $FAMILY -noChanValid -enable -enableHardFP 1 -printMachineReadable -lang verilog -correctRounding -noChanValid -enable -speedgrade 2"
+OPTIONS="-target $FAMILY -noChanValid -enable -enableHardFP 1 -printMachineReadable -lang verilog -faithfulRounding -noChanValid -enable -speedgrade 2"
 
 export LD_LIBRARY_PATH=$CMD_POLY_EVAL_PATH:$LD_LIBRARY_PATH
 
