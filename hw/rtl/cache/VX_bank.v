@@ -539,11 +539,11 @@ module VX_bank #(
             if (is_flush_st0)
                 $display("%t: cache%0d:%0d flush: addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID));
             else    
-                $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), filldata_st0);
+                $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), data_st0);
         end
         if (creq_pop || mshr_pop) begin
             if (mem_rw_st0)
-                $display("%t: cache%0d:%0d core-wr-req: addr=%0h, is_mshr=%b, tag=%0h, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), is_mshr_st0, tag_st0, req_tid_st0, byteen_st0, writeword_st0, debug_wid_st0, debug_pc_st0);
+                $display("%t: cache%0d:%0d core-wr-req: addr=%0h, is_mshr=%b, tag=%0h, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), is_mshr_st0, tag_st0, req_tid_st0, byteen_st0, data_st0[`WORD_WIDTH-1:0], debug_wid_st0, debug_pc_st0);
             else
                 $display("%t: cache%0d:%0d core-rd-req: addr=%0h, is_mshr=%b, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), is_mshr_st0, tag_st0, req_tid_st0, byteen_st0, debug_wid_st0, debug_pc_st0);
         end
