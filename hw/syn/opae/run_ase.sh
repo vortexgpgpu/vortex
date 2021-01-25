@@ -7,8 +7,8 @@ BUILD_DIR=$1
 PROGRAM=$(basename "$2")
 PROGRAM_DIR=`dirname $2`
 
-POCL_RT_PATH=$SCRIPT_DIR/../../benchmarks/opencl/runtime/lib
-VORTEX_DRV_PATH=$SCRIPT_DIR/../../driver/opae/ase
+POCL_RT_PATH=$SCRIPT_DIR/../../../benchmarks/opencl/runtime/lib
+VORTEX_DRV_PATH=$SCRIPT_DIR/../../../driver/opae/ase
 
 # Export ASE_WORKDIR variable
 export ASE_WORKDIR=$SCRIPT_DIR/$BUILD_DIR/work

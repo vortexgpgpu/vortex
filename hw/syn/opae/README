@@ -60,10 +60,10 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_1c ../../driver/tests/basic/basic -n16
-./run_ase.sh build_ase_1c ../../driver/tests/demo/demo -n16
-./run_ase.sh build_ase_1c ../../driver/tests/dogfood/dogfood -n16
-./run_ase.sh build_ase_1c ../../benchmarks/opencl/vecadd/vecadd
+./run_ase.sh build_ase_1c ../../../driver/tests/basic/basic -n16
+./run_ase.sh build_ase_1c ../../../driver/tests/demo/demo -n16
+./run_ase.sh build_ase_1c ../../../driver/tests/dogfood/dogfood -n16
+./run_ase.sh build_ase_1c ../../../benchmarks/opencl/vecadd/vecadd
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file trace.vcd

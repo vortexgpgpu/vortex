@@ -1,6 +1,6 @@
 ASE_BUILD_DIR=build_ase
 FPGA_BUILD_DIR=build_fpga
-RTL_DIR=../rtl
+RTL_DIR=../../rtl
 
 ifeq (, $(shell which qsub-synth))
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
