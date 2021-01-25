@@ -41,7 +41,7 @@ $(PROJECT): $(SRCS)
 run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-ase: $(PROJECT)
+run-asesim: $(PROJECT)
 	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-vlsim: $(PROJECT)

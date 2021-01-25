@@ -3,7 +3,7 @@
 module VX_index_buffer #(
     parameter DATAW   = 1,
     parameter SIZE    = 1,
-    parameter FASTRAM = 0,
+    parameter FASTRAM = 1,
     parameter ADDRW   = `LOG2UP(SIZE)
 ) (
     input  wire clk,

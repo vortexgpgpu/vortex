@@ -7,12 +7,10 @@
 `include "VX_define.vh"
 `endif
 
-`define REQ_TAG_WIDTH           CORE_TAG_WIDTH
-
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
 //                               tag              rw   byteen      tid
-`define REQ_INST_META_WIDTH     (`REQ_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
+`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
 //                                data         metadata               word_sel              
 `define MSHR_DATA_WIDTH         (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_BITS))
