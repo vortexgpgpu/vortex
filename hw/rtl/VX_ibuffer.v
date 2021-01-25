@@ -3,8 +3,8 @@
 module VX_ibuffer #(
     parameter CORE_ID = 0
 ) (
-    input  wire clk,
-    input  wire reset,
+    input wire clk,
+    input wire reset,
 
     // inputs
     input wire    freeze,       // keep current warp
@@ -43,7 +43,7 @@ module VX_ibuffer #(
         VX_fifo_queue #(
             .DATAW    (DATAW),
             .SIZE     (SIZE),
-            .FASTRAM  (1)
+            .BUFFERED (1)
         ) queue (
             .clk      (clk),
             .reset    (reset),
@@ -65,23 +65,20 @@ module VX_ibuffer #(
                 empty_r[i]    <= 1; 
                 sizeMany_r[i] <= 0;
             end else begin  
-                if (writing && !reading) begin
-                    empty_r[i] <= 0; 
-                    if (used_r[i] == ADDRW'(SIZE-1)) begin
-                        full_r[i] <= 1;
+                if (writing) begin
+                    if (!reading) begin
+                        empty_r[i] <= 0;
+                        if (used_r[i] == ADDRW'(SIZE-1))
+                            full_r[i] <= 1;
+                        if (used_r[i] == 1)
+                            sizeMany_r[i] <= 1;
                     end
-                    if (used_r[i] == 1) begin
-                        sizeMany_r[i] <= 1;
-                    end
-                end
-                if (reading && !writing) begin
+                end else if (reading) begin
                     full_r[i] <= 0; 
-                    if (used_r[i] == ADDRW'(1)) begin
+                    if (used_r[i] == ADDRW'(1))
                         empty_r[i] <= 1;
-                    end          
-                    if (used_r[i] == ADDRW'(2)) begin
+                    if (used_r[i] == ADDRW'(2))
                         sizeMany_r[i] <= 0;
-                    end
                 end
                 used_r[i] <= used_r[i] + ADDRW'($signed(2'(writing) - 2'(reading)));
             end 
@@ -139,8 +136,8 @@ module VX_ibuffer #(
             deq_valid_n = (| schedule_table_n);
             for (integer i = 0; i < `NUM_WARPS; i++) begin
                 if (schedule_table_n[i]) begin
-                    deq_wid_n    = `NW_BITS'(i);                
-                    deq_instr_n  = q_data_out[i];
+                    deq_wid_n   = `NW_BITS'(i);                
+                    deq_instr_n = q_data_out[i];
                     schedule_table_n[i] = 0;
                     break;
                 end
@@ -168,33 +165,18 @@ module VX_ibuffer #(
             end
 
             deq_valid <= deq_valid_n;
-            deq_wid   <= deq_wid_n;
-            deq_instr <= deq_instr_n;                 
 
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);
             end else if (warp_removed && !warp_added) begin
                 num_warps <= num_warps - NWARPSW'(1);                
-            end            
-
-        `ifdef VERILATOR            
-            /*if (enq_fire || deq_fire || deq_valid) begin   
-                $display("*** %t: cur=%b(%0d), nxt=%b(%0d), enq=%b(%0d), deq=%b(%0d), nw=%0d(%0d,%0d,%0d,%0d), sched=%b, sched_n=%b", 
-                $time, deq_valid, deq_wid, deq_valid_n, deq_wid_n, enq_fire, ibuf_enq_if.wid, deq_fire, ibuf_deq_if.wid, num_warps, used_r[0], used_r[1], used_r[2], used_r[3], schedule_table, schedule_table_n);
-            end*/
-            begin // verify 'num_warps'
-                integer nw = 0; 
-                for (integer i = 0; i < `NUM_WARPS; i++) begin
-                    nw += 32'(!q_empty[i]);
-                end
-                assert(nw == 32'(num_warps)) else $error("%t: error: invalid num_warps: nw=%0d, ref=%0d", $time, num_warps, nw);
-                assert(~deq_valid || !q_empty[deq_wid]) else $error("%t: error: invalid schedule: wid=%0d", $time, deq_wid);
-                assert(~deq_fire || !q_empty[deq_wid]) else $error("%t: error: invalid dequeu: wid=%0d", $time, deq_wid);
             end
-        `endif
         end
+            
+        deq_wid   <= deq_wid_n;
+        deq_instr <= deq_instr_n;     
     end
-
+    
     assign ibuf_enq_if.ready = ~q_full[ibuf_enq_if.wid];
     assign q_data_in = {ibuf_enq_if.tmask, 
                         ibuf_enq_if.PC, 

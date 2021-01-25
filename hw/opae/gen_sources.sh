@@ -29,8 +29,7 @@ add_files()
     done
 }
 
-add_dirs $rtl_dir/fp_cores/altera/arria10
-#add_dirs $rtl_dir/fp_cores/altera/stratix10
+add_dirs $rtl_dir/fp_cores/altera/$1
 
 add_dirs $rtl_dir/libs $rtl_dir/interfaces $rtl_dir/fp_cores $rtl_dir/cache $rtl_dir $rtl_dir/afu
 

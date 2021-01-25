@@ -72,11 +72,11 @@ module VX_matrix_arbiter #(
         end
 
         VX_onehot_encoder #(
-            .NUM_REQS(NUM_REQS)
+            .N (NUM_REQS)
         ) encoder (
-            .onehot (grant_unqual),
-            `UNUSED_PIN (valid),
-            .binary (grant_index)
+            .data_in    (grant_unqual),
+            .data_out   (grant_index),
+            `UNUSED_PIN (valid)
         );
 
         assign grant_valid = (| requests);

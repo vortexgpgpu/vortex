@@ -28,8 +28,7 @@ module VX_fp_sqrt #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;     
 
-    wire _reset;   
-
+    wire _reset;
     VX_reset_relay reset_relay (
         .clk       (clk),
         .reset     (reset),

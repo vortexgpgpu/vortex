@@ -72,7 +72,7 @@ module VX_cluster #(
         
         wire core_reset;
         VX_reset_relay #(
-            .PASSTHRU (`NUM_CORES <= 2)
+            .DEPTH (`NUM_CORES > 1)
         ) reset_relay (
             .clk       (clk),
             .reset     (reset),

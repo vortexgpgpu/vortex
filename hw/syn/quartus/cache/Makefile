@@ -1,11 +1,15 @@
+# Part, Family
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG
+
 PROJECT = VX_cache
 TOP_LEVEL_ENTITY = VX_cache
 SRC_FILE = VX_cache.v
-PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
-# Part, Family
-FAMILY = "Arria 10"
-DEVICE = 10AX115N3F40E2SG   
+RTL_DIR=../../../rtl
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache
+
+PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on
@@ -49,7 +53,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc ../project.sdc -inc "../../../rtl;../../../rtl/libs;../../../rtl/cache"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src $(SRC_FILE) -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg

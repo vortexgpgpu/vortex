@@ -318,7 +318,7 @@
 
 // DRAM Response Queue Size
 `ifndef DDRSQ_SIZE
-`define DDRSQ_SIZE 4
+`define DDRSQ_SIZE `MAX(4, (`DNUM_BANKS * 2))
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -382,7 +382,7 @@
 
 // DRAM Response Queue Size
 `ifndef L2DRSQ_SIZE
-`define L2DRSQ_SIZE 4
+`define L2DRSQ_SIZE `MAX(4, (`L2NUM_BANKS * 2))
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -419,7 +419,7 @@
 
 // DRAM Response Queue Size
 `ifndef L3DRSQ_SIZE
-`define L3DRSQ_SIZE 4
+`define L3DRSQ_SIZE `MAX(4, (`L3NUM_BANKS * 2))
 `endif
 
 `endif

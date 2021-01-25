@@ -16,9 +16,6 @@
 /core/*
 !/core/Makefile
 
-/core8/*
-!/core8/Makefile
-
 /top1/*
 !/top1/Makefile
 
@@ -33,3 +30,6 @@
 
 /top32/*
 !/top32/Makefile
+
+/top64/*
+!/top64/Makefile

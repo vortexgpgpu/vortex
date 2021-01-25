@@ -46,6 +46,10 @@
         if (!(cond)) $error msg; \
     endgenerate
 
+`define SASSERT(cond, msg)            \
+    always @(posedge clk)             \
+        assert(cond) else $error msg; \
+
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
 
@@ -53,6 +57,7 @@
 
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
+`define DISABLE_BRAM    (* ramstyle = "logic" *)
 
 ///////////////////////////////////////////////////////////////////////////////
 

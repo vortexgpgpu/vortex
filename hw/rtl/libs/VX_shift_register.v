@@ -12,7 +12,7 @@ module VX_shift_register_nr #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
-    reg [DATAW-1:0] entries [DEPTH-1:0];
+    `USE_FAST_BRAM reg [DATAW-1:0] entries [DEPTH-1:0];
 
     always @(posedge clk) begin
         if (enable) begin                    
@@ -23,7 +23,7 @@ module VX_shift_register_nr #(
     end
     
     for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out [i*DATAW+:DATAW] = entries [ TAPS[i*DEPTHW+:DEPTHW] ];
+        assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
     end
 
 endmodule
@@ -41,7 +41,7 @@ module VX_shift_register_wr #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
-    reg [DEPTH-1:0][DATAW-1:0] entries;
+    `USE_FAST_BRAM reg [DEPTH-1:0][DATAW-1:0] entries;
 
     if (1 == DEPTH) begin
 
@@ -69,7 +69,7 @@ module VX_shift_register_wr #(
     end
 
     for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out [i*DATAW+:DATAW] = entries [ TAPS[i*DEPTHW+:DEPTHW] ];
+        assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
     end
 
 endmodule

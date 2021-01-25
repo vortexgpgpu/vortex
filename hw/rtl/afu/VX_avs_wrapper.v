@@ -74,8 +74,7 @@ module VX_avs_wrapper #(
     
     VX_fifo_queue #(
         .DATAW   (REQ_TAGW),
-        .SIZE    (RD_QUEUE_SIZE),
-        .FASTRAM (1)
+        .SIZE    (RD_QUEUE_SIZE)
     ) rd_req_queue (
         .clk      (clk),
         .reset    (reset),
@@ -92,8 +91,7 @@ module VX_avs_wrapper #(
 
     VX_fifo_queue #(
         .DATAW   (AVS_DATAW),
-        .SIZE    (RD_QUEUE_SIZE),
-        .FASTRAM (1)
+        .SIZE    (RD_QUEUE_SIZE)
     ) rd_rsp_queue (
         .clk      (clk),
         .reset    (reset),

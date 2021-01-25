@@ -2,26 +2,45 @@
 
 module VX_reset_relay #(
     parameter NUM_NODES = 1,
-    parameter PASSTHRU  = 0
+    parameter DEPTH     = 1,
+    parameter ASYNC     = 0
 ) (
     input wire  clk,
     input wire  reset,
     output wire [NUM_NODES-1:0] reset_out
 ); 
     
-    if (PASSTHRU == 0) begin
-        reg [NUM_NODES-1:0] reset_r;    
-        always @(posedge clk) begin
-            for (integer i = 0; i < NUM_NODES; ++i) begin
-                reset_r[i] <= reset;
+    if (DEPTH > 1) begin
+        `DISABLE_BRAM reg [NUM_NODES-1:0] reset_r [DEPTH-1:0];
+        if (ASYNC) begin
+            always @(posedge clk or posedge reset) begin
+                for (integer i = DEPTH-1; i > 0; --i)
+                    reset_r[i] <= reset_r[i-1];
+                reset_r[0] <= {NUM_NODES{reset}};                
+            end
+        end else begin
+            always @(posedge clk) begin
+                for (integer i = DEPTH-1; i > 0; --i)
+                    reset_r[i] <= reset_r[i-1];
+                reset_r[0] <= {NUM_NODES{reset}};
             end
         end       
+        assign reset_out = reset_r[DEPTH-1];
+    end else if (DEPTH == 1) begin
+        reg [NUM_NODES-1:0] reset_r;
+        if (ASYNC) begin
+            always @(posedge clk or posedge reset) begin
+                reset_r <= {NUM_NODES{reset}};
+            end
+        end else begin
+            always @(posedge clk) begin
+                reset_r <= {NUM_NODES{reset}};
+            end
+        end
         assign reset_out = reset_r;
     end else begin
         `UNUSED_VAR (clk)
-        for (genvar i = 0; i < NUM_NODES; ++i) begin
-            assign reset_out[i] = reset;
-        end
+        assign reset_out = {NUM_NODES{reset}};
     end
   
 endmodule

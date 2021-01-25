@@ -91,96 +91,157 @@ module VX_fifo_queue #(
                     if (used_r == ADDRW'(ALM_EMPTY+1))
                         alm_empty_r <= 1;
                 end
-                used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
+                if (SIZE > 2) begin        
+                    used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
+                end else begin // (SIZE == 2);
+                `IGNORE_WARNINGS_BEGIN
+                    used_r <= used_r ^ (push ^ pop);   
+                `IGNORE_WARNINGS_END
+                end                
             end                   
         end
 
-        if (0 == BUFFERED) begin          
+        if (SIZE == 2) begin
 
-            reg [ADDRW-1:0] rd_ptr_r;
-            reg [ADDRW-1:0] wr_ptr_r;
-            
-            always @(posedge clk) begin
-                if (reset) begin
-                    rd_ptr_r <= 0;
-                    wr_ptr_r <= 0;
+            if (0 == BUFFERED) begin 
+
+                if (FASTRAM) begin
+                    
+                    `USE_FAST_BRAM reg [DATAW-1:0] shift_reg [SIZE];
+
+                    always @(posedge clk) begin
+                        if (push) begin
+                            shift_reg[1] <= shift_reg[0];
+                            shift_reg[0] <= data_in;
+                        end
+                    end
+
+                    assign data_out = shift_reg[~used_r[0]];    
+
                 end else begin
-                    wr_ptr_r <= wr_ptr_r + ADDRW'(push);
-                    rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
-                end                   
+                    
+                    reg [DATAW-1:0] shift_reg [SIZE];
+
+                    always @(posedge clk) begin
+                        if (push) begin
+                            shift_reg[1] <= shift_reg[0];
+                            shift_reg[0] <= data_in;
+                        end
+                    end
+
+                    assign data_out = shift_reg[~used_r[0]];
+
+                end
+                
+            end else begin
+
+                reg [DATAW-1:0] data_out_r;
+                reg [DATAW-1:0] buffer;
+
+                always @(posedge clk) begin
+                    if (push) begin
+                        buffer <= data_in;
+                    end
+                    if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
+                        data_out_r <= data_in;
+                    end else if (pop) begin
+                        data_out_r <= buffer;
+                    end
+                end
+
+                assign data_out = data_out_r;
+
             end
-
-            VX_dp_ram #(
-                .DATAW    (DATAW),
-                .SIZE     (SIZE),
-                .BUFFERED (0),
-                .RWCHECK  (1),
-                .FASTRAM  (FASTRAM)
-            ) dp_ram (
-                .clk(clk),
-                .waddr(wr_ptr_r),                                
-                .raddr(rd_ptr_r),
-                .wren(push),
-                .byteen(1'b1),
-                .rden(1'b1),
-                .din(data_in),
-                .dout(data_out)
-            );
-
+        
         end else begin
 
-            wire [DATAW-1:0] dout;
-            reg [DATAW-1:0] dout_r;
-            reg [ADDRW-1:0] wr_ptr_r;
-            reg [ADDRW-1:0] rd_ptr_r;
-            reg [ADDRW-1:0] rd_ptr_n_r;
+            if (0 == BUFFERED) begin          
 
-            always @(posedge clk) begin
-                if (reset) begin      
-                    wr_ptr_r   <= 0;
-                    rd_ptr_r   <= 0;
-                    rd_ptr_n_r <= 1;
-                end else begin
-                    if (push) begin                 
-                        wr_ptr_r <= wr_ptr_r + ADDRW'(1);
-                    end
-                    if (pop) begin
-                        rd_ptr_r <= rd_ptr_n_r;                           
-                        if (SIZE > 2) begin        
-                            rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
-                        end else begin // (SIZE == 2);
-                            rd_ptr_n_r <= ~rd_ptr_n_r;                                
+                reg [ADDRW-1:0] rd_ptr_r;
+                reg [ADDRW-1:0] wr_ptr_r;
+                
+                always @(posedge clk) begin
+                    if (reset) begin
+                        rd_ptr_r <= 0;
+                        wr_ptr_r <= 0;
+                    end else begin
+                        wr_ptr_r <= wr_ptr_r + ADDRW'(push);
+                        rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
+                    end               
+                end
+
+                VX_dp_ram #(
+                    .DATAW    (DATAW),
+                    .SIZE     (SIZE),
+                    .BUFFERED (0),
+                    .RWCHECK  (1),
+                    .FASTRAM  (FASTRAM)
+                ) dp_ram (
+                    .clk(clk),
+                    .waddr(wr_ptr_r),                            
+                    .raddr(rd_ptr_r),
+                    .wren(push),
+                    .byteen(1'b1),
+                    .rden(1'b1),
+                    .din(data_in),
+                    .dout(data_out)
+                );
+
+            end else begin
+
+                wire [DATAW-1:0] dout;
+                reg [DATAW-1:0] dout_r;
+                reg [ADDRW-1:0] wr_ptr_r;
+                reg [ADDRW-1:0] rd_ptr_r;
+                reg [ADDRW-1:0] rd_ptr_n_r;
+
+                always @(posedge clk) begin
+                    if (reset) begin  
+                        wr_ptr_r   <= 0;
+                        rd_ptr_r   <= 0;
+                        rd_ptr_n_r <= 1;
+                    end else begin
+                        if (push) begin             
+                            wr_ptr_r <= wr_ptr_r + ADDRW'(1);
+                        end
+                        if (pop) begin
+                            rd_ptr_r <= rd_ptr_n_r;                       
+                            if (SIZE > 2) begin    
+                                rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
+                            end else begin // (SIZE == 2);
+                                rd_ptr_n_r <= ~rd_ptr_n_r;                            
+                            end
                         end
                     end
                 end
-            end
 
-            VX_dp_ram #(
-                .DATAW    (DATAW),
-                .SIZE     (SIZE),
-                .BUFFERED (0),
-                .RWCHECK  (1),
-                .FASTRAM  (FASTRAM)
-            ) dp_ram (
-                .clk(clk),
-                .waddr(wr_ptr_r),                                
-                .raddr(rd_ptr_n_r),
-                .wren(push),
-                .byteen(1'b1),
-                .rden(1'b1),
-                .din(data_in),
-                .dout(dout)
-            ); 
+                VX_dp_ram #(
+                    .DATAW    (DATAW),
+                    .SIZE     (SIZE),
+                    .BUFFERED (0),
+                    .RWCHECK  (1),
+                    .FASTRAM  (FASTRAM)
+                ) dp_ram (
+                    .clk(clk),
+                    .waddr(wr_ptr_r),                            
+                    .raddr(rd_ptr_n_r),
+                    .wren(push),
+                    .byteen(1'b1),
+                    .rden(1'b1),
+                    .din(data_in),
+                    .dout(dout)
+                ); 
 
-            always @(posedge clk) begin
-                if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
-                    dout_r <= data_in;
-                end else if (pop) begin
-                    dout_r <= dout;
+                always @(posedge clk) begin
+                    if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
+                        dout_r <= data_in;
+                    end else if (pop) begin
+                        dout_r <= dout;
+                    end
                 end
-            end
 
-            assign data_out = dout_r;
+                assign data_out = dout_r;
+            end
         end
         
         assign empty     = empty_r;        

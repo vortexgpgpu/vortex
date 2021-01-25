@@ -92,7 +92,8 @@ module VX_stream_arbiter #(
 
         VX_skid_buffer #(
             .DATAW    (DATAW),
-            .PASSTHRU (!BUFFERED)
+            .PASSTHRU (!BUFFERED),
+            .BUFFERED (1)
         ) out_buffer (
             .clk       (clk),
             .reset     (reset),

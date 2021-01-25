@@ -85,7 +85,6 @@ module VX_cache #(
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
-    `UNUSED_VAR (dram_rsp_tag)
 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_valid; 
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_req_tid;
@@ -111,6 +110,11 @@ module VX_cache #(
 
     wire [NUM_BANKS-1:0]                        per_bank_dram_rsp_ready;
 
+    wire [`CACHE_LINE_WIDTH-1:0]                dram_rsp_data_qual;
+    wire [DRAM_TAG_WIDTH-1:0]                   dram_rsp_tag_qual;
+    wire [`LINE_ADDR_WIDTH-1:0]                 flush_addr;
+    wire                                        flush_enable;
+
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
@@ -118,24 +122,55 @@ module VX_cache #(
     wire [NUM_BANKS-1:0] perf_pipe_stall_per_bank;
 `endif
 
-    reg flush_enable;
-    reg [`LINE_SELECT_BITS-1:0] flush_ctr;
+    ///////////////////////////////////////////////////////////////////////////
 
-    always @(posedge clk) begin
-        if (reset || flush) begin
-            flush_enable <= 1;
-            flush_ctr    <= 0;
-        end else begin
-            if (flush_enable && (& per_bank_dram_rsp_ready)) begin
-                if (flush_addr == ((2 ** `LINE_SELECT_BITS)-1)) begin
-                    flush_enable <= 0;
-                end
-                flush_ctr <= flush_ctr + 1;            
-            end
-        end
+    wire drsq_full, drsq_empty;
+    wire drsq_push, drsq_pop;
+
+    assign drsq_push = dram_rsp_valid && dram_rsp_ready;
+    assign dram_rsp_ready = !drsq_full; 
+
+    VX_fifo_queue #(
+        .DATAW (DRAM_TAG_WIDTH + `CACHE_LINE_WIDTH), 
+        .SIZE  (DRSQ_SIZE)
+    ) dram_rsp_queue (
+        .clk        (clk),
+        .reset      (reset),
+        .push       (drsq_push),
+        .pop        (drsq_pop),
+        .data_in    ({dram_rsp_tag, dram_rsp_data}),                
+        .data_out   ({dram_rsp_tag_qual, dram_rsp_data_qual}),
+        .empty      (drsq_empty),
+        .full       (drsq_full),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (alm_empty),
+        `UNUSED_PIN (size)
+    );    
+    
+    if (NUM_BANKS == 1) begin
+        `UNUSED_VAR (dram_rsp_tag_qual)
+        assign drsq_pop = !drsq_empty && per_bank_dram_rsp_ready && !flush_enable;
+    end else begin
+        assign drsq_pop = !drsq_empty && per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag_qual)] && !flush_enable;
     end
 
-    wire [`LINE_ADDR_WIDTH-1:0] flush_addr = `LINE_ADDR_WIDTH'(flush_ctr);
+    ///////////////////////////////////////////////////////////////////////////
+
+    VX_flush_ctrl #( 
+        .CACHE_SIZE      (CACHE_SIZE),
+        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
+        .NUM_BANKS       (NUM_BANKS),
+        .WORD_SIZE       (WORD_SIZE)
+    ) flush_ctrl (
+        .clk       (clk),
+        .reset     (reset),
+        .flush     (flush),        
+        .addr      (flush_addr),
+        .ready_out ((& per_bank_dram_rsp_ready)),
+        .valid_out (flush_enable)
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
 
     VX_cache_core_req_bank_sel #(
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
@@ -143,8 +178,7 @@ module VX_cache #(
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),
-        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET),
-        .BUFFERED        (NUM_BANKS > 1)
+        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),
         .reset      (reset),
@@ -170,13 +204,7 @@ module VX_cache #(
         .per_bank_core_req_ready (per_bank_core_req_ready)
     );
 
-    assign dram_req_tag = dram_req_addr;
-    if (NUM_BANKS == 1) begin
-        `UNUSED_VAR (dram_rsp_tag)
-        assign dram_rsp_ready = per_bank_dram_rsp_ready && !flush_enable;
-    end else begin
-        assign dram_rsp_ready = per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag)] && !flush_enable;
-    end
+    ///////////////////////////////////////////////////////////////////////////
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         wire                        curr_bank_core_req_valid;     
@@ -238,13 +266,13 @@ module VX_cache #(
 
         // DRAM response
         if (NUM_BANKS == 1) begin
-            assign curr_bank_dram_rsp_valid = dram_rsp_valid || flush_enable;
-            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : dram_rsp_tag;
+            assign curr_bank_dram_rsp_valid = !drsq_empty || flush_enable;
+            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : dram_rsp_tag_qual;
         end else begin
-            assign curr_bank_dram_rsp_valid = (dram_rsp_valid && (`DRAM_ADDR_BANK(dram_rsp_tag) == i)) || flush_enable;
-            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : `DRAM_TO_LINE_ADDR(dram_rsp_tag); 
+            assign curr_bank_dram_rsp_valid = (!drsq_empty && (`DRAM_ADDR_BANK(dram_rsp_tag_qual) == i)) || flush_enable;
+            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : `DRAM_TO_LINE_ADDR(dram_rsp_tag_qual); 
         end
-        assign curr_bank_dram_rsp_data    = dram_rsp_data;
+        assign curr_bank_dram_rsp_data    = dram_rsp_data_qual;
         assign curr_bank_dram_rsp_flush   = flush_enable;
         assign per_bank_dram_rsp_ready[i] = curr_bank_dram_rsp_ready;
         
@@ -351,6 +379,8 @@ module VX_cache #(
         .data_out  ({dram_req_addr, dram_req_rw, dram_req_byteen, dram_req_data}),
         .ready_out (dram_req_ready)
     );
+
+    assign dram_req_tag = dram_req_addr;
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes

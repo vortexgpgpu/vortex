@@ -1,3 +1,6 @@
 [submodule "hw/rtl/fp_cores/fpnew"]
 	path = hw/rtl/fp_cores/fpnew
 	url = https://github.com/pulp-platform/fpnew.git
+[submodule "hw/rtl/libs/basejump_stl"]
+	path = hw/rtl/libs/basejump_stl
+	url = https://github.com/bespoke-silicon-group/basejump_stl.git
