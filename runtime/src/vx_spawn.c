@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-#define NUM_CORES_MAX 16
+#define NUM_CORES_MAX 32
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -71,7 +71,7 @@ void vx_spawn_tasks(int num_tasks, pfn_callback callback , void * args) {
   int nC = (num_tasks > WT) ? (num_tasks / WT) : 1;
   int nc = MIN(nC, NC);
   if (core_id >= nc)
-    return; // terminate unused cores
+    return; // terminate extra cores
 
   // number of tasks per core
   int tasks_per_core = num_tasks / nc;
@@ -94,7 +94,7 @@ void vx_spawn_tasks(int num_tasks, pfn_callback callback , void * args) {
   g_wspawn_args[core_id] = &wspawn_args;
 
   //--
-	if (nW > 1)	{ 
+	if (nW >= 1)	{ 
     int nw = MIN(nW, NW);    
 	  vx_wspawn(nw, (unsigned)&spawn_tasks_callback);
     spawn_tasks_callback();

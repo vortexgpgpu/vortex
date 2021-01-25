@@ -4,6 +4,7 @@
 #include <vortex.h>
 #include <chrono>
 #include "common.h"
+#include "kernel_scheduler.h"
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -212,6 +213,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
 }
 
 int main(int argc, char *argv[]) {
+
   size_t value; 
   kernel_arg_t kernel_arg;
 
@@ -221,6 +223,8 @@ int main(int argc, char *argv[]) {
   if (count == 0) {
     count = 1;
   }
+
+  //kernel_run(count, 1, 1, test, 4, 4);
 
   // open device connection
   std::cout << "open device connection" << std::endl;
