@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rtl_dir="../rtl"
+rtl_dir="../../rtl"
 exclude_list="VX_fpu_fpnew.v"
 file_list=""
 
