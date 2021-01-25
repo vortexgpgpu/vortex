@@ -25,26 +25,16 @@ module VX_fixed_arbiter #(
         assign grant_valid  = requests[0];
 
     end else begin
-    
-        reg [LOG_NUM_REQS-1:0] grant_index_r;
-        reg [NUM_REQS-1:0] grant_onehot_r;
 
-        always @(*) begin
-            grant_index_r  = 'x;
-            grant_onehot_r = 'x;
-            for (integer i = 0; i < NUM_REQS; ++i) begin            
-                if (requests[i]) begin
-                    grant_index_r  = LOG_NUM_REQS'(i);
-                    grant_onehot_r = NUM_REQS'(0);
-                    grant_onehot_r[i] = 1;
-                    break;
-                end
-            end
-        end      
+        VX_priority_encoder #(
+            .N (NUM_REQS)
+        ) tid_select (
+            .data_in   (requests),
+            .index     (grant_index),
+            .onehot    (grant_onehot),
+            .valid_out (grant_valid)
+        );
 
-        assign grant_index  = grant_index_r;
-        assign grant_onehot = grant_onehot_r;
-        assign grant_valid  = (| requests);
     end
     
 endmodule

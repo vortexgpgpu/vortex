@@ -37,12 +37,10 @@ module VX_cache_core_rsp_merge #(
         if (CORE_TAG_ID_BITS != 0) begin
 
             reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
-            reg core_rsp_valid_unaual_any;
             wire core_rsp_ready_unqual;
             
             always @(*) begin                
                 core_rsp_valid_unqual = 0;
-                core_rsp_valid_unaual_any = 0;
                 core_rsp_tag_unqual   = 'x;
                 core_rsp_data_unqual  = 'x;                
                 core_rsp_bank_select  = 0;
@@ -55,8 +53,7 @@ module VX_cache_core_rsp_merge #(
                 
                 for (integer i = 0; i < NUM_BANKS; i++) begin 
                     if (per_bank_core_rsp_valid[i]                
-                     && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == core_rsp_tag_unqual[CORE_TAG_ID_BITS-1:0])) begin     
-                        core_rsp_valid_unaual_any = 1;       
+                     && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == core_rsp_tag_unqual[CORE_TAG_ID_BITS-1:0])) begin
                         core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
                         core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
                         core_rsp_bank_select[i] = core_rsp_ready_unqual;
@@ -66,13 +63,16 @@ module VX_cache_core_rsp_merge #(
 
             wire core_rsp_valid_out;
             wire [NUM_REQS-1:0] core_rsp_valid_out_mask;
+
+            wire core_rsp_valid_any = (| per_bank_core_rsp_valid);
             
             VX_skid_buffer #(
-                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH))
+                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH)),
+                .BUFFERED (1)
             ) pipe_reg (
                 .clk       (clk),
                 .reset     (reset),
-                .valid_in  (core_rsp_valid_unaual_any),        
+                .valid_in  (core_rsp_valid_any),        
                 .data_in   ({core_rsp_valid_unqual, core_rsp_tag_unqual, core_rsp_data_unqual}),
                 .ready_in  (core_rsp_ready_unqual),      
                 .valid_out (core_rsp_valid_out),
@@ -106,7 +106,8 @@ module VX_cache_core_rsp_merge #(
 
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 VX_skid_buffer #(
-                    .DATAW (CORE_TAG_WIDTH + `WORD_WIDTH)
+                    .DATAW (CORE_TAG_WIDTH + `WORD_WIDTH),
+                    .BUFFERED (1)
                 ) pipe_reg (
                     .clk       (clk),
                     .reset     (reset),

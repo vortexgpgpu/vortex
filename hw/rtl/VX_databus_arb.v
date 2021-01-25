@@ -39,7 +39,8 @@ module VX_databus_arb (
                          && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] < (32-SMEM_ASHIFT)'(`SHARED_MEM_BASE_ADDR >> SMEM_ASHIFT));
 
         VX_skid_buffer #(
-            .DATAW (REQ_DATAW)
+            .DATAW    (REQ_DATAW),
+            .BUFFERED (1)
         ) cache_out_buffer (
             .clk       (clk),
             .reset     (reset),
@@ -52,7 +53,8 @@ module VX_databus_arb (
         );
 
         VX_skid_buffer #(
-            .DATAW (REQ_DATAW)
+            .DATAW    (REQ_DATAW),
+            .BUFFERED (1)
         ) smem_out_buffer (
             .clk       (clk),
             .reset     (reset),

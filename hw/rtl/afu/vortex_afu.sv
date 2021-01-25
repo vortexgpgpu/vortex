@@ -727,8 +727,7 @@ end
 
 VX_fifo_queue #(
   .DATAW   (CCI_RD_RQ_DATAW),
-  .SIZE    (CCI_RD_QUEUE_SIZE),
-  .FASTRAM (1)  
+  .SIZE    (CCI_RD_QUEUE_SIZE)
 ) cci_rd_req_queue (
   .clk      (clk),
   .reset    (reset),

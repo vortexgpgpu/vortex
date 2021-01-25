@@ -29,14 +29,13 @@ module VX_fp_div #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    wire _reset;   
-
+    wire _reset;
     VX_reset_relay reset_relay (
         .clk       (clk),
         .reset     (reset),
         .reset_out (_reset)
     );
-    
+
     for (genvar i = 0; i < LANES; i++) begin
     `ifdef VERILATOR
         reg [31:0] r;

@@ -55,7 +55,8 @@ module VX_rr_arbiter #(
 
         assign grant_index  = grant_table[state];
         assign grant_onehot = grant_onehot_r; 
-        assign grant_valid  = (| requests); 
+        assign grant_valid  = (| requests);
+
     end
     
 endmodule

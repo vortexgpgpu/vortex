@@ -73,7 +73,7 @@ module Vortex (
 
         wire cluster_reset;
         VX_reset_relay #(
-            .PASSTHRU (`NUM_CLUSTERS <= 2)
+            .DEPTH (`NUM_CLUSTERS > 1)
         ) reset_relay (
             .clk       (clk),
             .reset     (reset),

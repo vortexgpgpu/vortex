@@ -9,8 +9,11 @@ FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
 PROJECT = vortex_afu
 TOP_LEVEL_ENTITY = vortex_afu
 SRC_FILE = vortex_afu.sv
-FPU_INCLUDE = ../../../rtl/fp_cores;$(FPU_CORE_PATH);../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache;../../../rtl/afu;../../../rtl/afu/ccip
+
+RTL_DIR=../../../rtl
+FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;../../../rtl/afu;../../../rtl/afu/ccip;$(FPU_INCLUDE)
+
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration

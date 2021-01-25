@@ -17,11 +17,13 @@ module VX_instr_demux (
     VX_gpu_req_if   gpu_req_if    
 );
     wire [`NT_BITS-1:0] tid;
+
     VX_priority_encoder #(
-        .DATAW (`NUM_THREADS)
+        .N (`NUM_THREADS)
     ) tid_select (
-        .data_in  (execute_if.tmask),
-        .data_out (tid),
+        .data_in    (execute_if.tmask),
+        .index      (tid),
+        `UNUSED_PIN (onehot),
         `UNUSED_PIN (valid_out)
     );
 
@@ -36,7 +38,8 @@ module VX_instr_demux (
 
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `ALU_BR_BITS + 1 + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
-        .NOBACKPRESSURE (1) // ALU has no back pressure
+        .NOBACKPRESSURE (1), // ALU has no back pressure,
+        .BUFFERED (0)
     ) alu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -54,7 +57,8 @@ module VX_instr_demux (
     wire lsu_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `LSU_BITS + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `LSU_BITS + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
+        .BUFFERED (0)
     ) lsu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -72,7 +76,8 @@ module VX_instr_demux (
     wire csr_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NR_BITS + 32)
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NR_BITS + 32),
+        .BUFFERED (0)
     ) csr_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -91,7 +96,8 @@ module VX_instr_demux (
     wire mul_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `MUL_BITS + `NR_BITS + 1 + (2 * `NUM_THREADS * 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `MUL_BITS + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
+        .BUFFERED (0)
     ) mul_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -111,7 +117,8 @@ module VX_instr_demux (
     wire fpu_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `FPU_BITS + `MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `FPU_BITS + `MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32)),
+        .BUFFERED (0)
     ) fpu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -132,7 +139,8 @@ module VX_instr_demux (
     wire gpu_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `GPU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32 + 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `GPU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32 + 32)),
+        .BUFFERED (0)
     ) gpu_buffer (
         .clk       (clk),
         .reset     (reset),
