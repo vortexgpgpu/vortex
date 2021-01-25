@@ -47,7 +47,7 @@ module VX_lsu_unit #(
 `IGNORE_WARNINGS_END
 
     wire ready_in;
-    wire stall_in = ~ready_in & req_valid; 
+    wire stall_in = ~ready_in && req_valid; 
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -96,8 +96,7 @@ module VX_lsu_unit #(
 
     VX_index_buffer #(
         .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
-        .SIZE    (`LSUQ_SIZE),
-        .FASTRAM (1)
+        .SIZE    (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
         .reset        (reset),
@@ -171,7 +170,7 @@ module VX_lsu_unit #(
                 1:       mem_req_data[i][31:8]  = req_data[i][23:0];
                 2:       mem_req_data[i][31:16] = req_data[i][15:0];
                 3:       mem_req_data[i][31:24] = req_data[i][7:0];
-                default: mem_req_data[i] = req_data[i];
+                default: mem_req_data[i]        = req_data[i];
             endcase
 
             mem_req_addr[i] = req_addr[i][31:2];

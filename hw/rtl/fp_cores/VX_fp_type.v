@@ -21,7 +21,7 @@ module VX_fp_type (
     assign type_o.is_subnormal = is_subnormal;
     assign type_o.is_inf       = is_inf;
     assign type_o.is_nan       = is_nan;
-    assign type_o.is_signaling = is_signaling;
     assign type_o.is_quiet     = is_quiet;
+    assign type_o.is_signaling = is_signaling;
 
 endmodule
