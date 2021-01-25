@@ -1,5 +1,5 @@
 
-/tmp/pocl_vortex_kernel-1e-61-ae-14-72.elf:	file format ELF32-riscv
+/tmp/pocl_vortex_kernel-c8-d5-36-ec-11.elf:	file format ELF32-riscv
 
 
 Disassembly of section .init:
@@ -15,7 +15,7 @@ Disassembly of section .init:
 8000001c: 17 15 00 00                  	auipc	a0, 1
 80000020: 13 05 c5 41                  	addi	a0, a0, 1052
 80000024: 17 16 00 00                  	auipc	a2, 1
-80000028: 13 06 86 45                  	addi	a2, a2, 1112
+80000028: 13 06 86 49                  	addi	a2, a2, 1176
 8000002c: 33 06 a6 40                  	sub	a2, a2, a0
 80000030: 93 05 00 00                  	mv	a1, zero
 80000034: ef 00 90 3d                  	jal	3032
@@ -185,7 +185,7 @@ Disassembly of section .text:
 8000029c: ef 00 c0 67                  	jal	1660
 800002a0: 93 0a 05 00                  	mv	s5, a0
 800002a4: ef 00 c0 66                  	jal	1644
-800002a8: 93 05 f0 00                  	addi	a1, zero, 15
+800002a8: 93 05 f0 01                  	addi	a1, zero, 31
 800002ac: 63 cc a5 16                  	blt	a1, a0, 376
 800002b0: b3 05 74 03                  	mul	a1, s0, s7
 800002b4: 33 86 85 03                  	mul	a2, a1, s8
@@ -205,39 +205,39 @@ Disassembly of section .text:
 800002ec: 13 06 00 00                  	mv	a2, zero
 800002f0: b3 06 b6 00                  	add	a3, a2, a1
 800002f4: 33 c6 56 03                  	div	a2, a3, s5
-800002f8: 13 07 00 00                  	mv	a4, zero
+800002f8: 93 07 00 00                  	mv	a5, zero
 800002fc: 63 50 46 03                  	bge	a2, s4, 32
 80000300: 6f 00 00 02                  	j	32
 80000304: b3 86 d5 02                  	mul	a3, a1, a3
 80000308: 33 06 d6 40                  	sub	a2, a2, a3
 8000030c: b3 06 b6 00                  	add	a3, a2, a1
 80000310: 33 c6 56 03                  	div	a2, a3, s5
-80000314: 13 07 00 00                  	mv	a4, zero
+80000314: 93 07 00 00                  	mv	a5, zero
 80000318: 63 44 46 01                  	blt	a2, s4, 8
-8000031c: 33 47 46 03                  	div	a4, a2, s4
-80000320: 93 07 00 00                  	mv	a5, zero
+8000031c: b3 47 46 03                  	div	a5, a2, s4
+80000320: 13 07 00 00                  	mv	a4, zero
 80000324: b3 0a 56 03                  	mul	s5, a2, s5
-80000328: 13 04 10 00                  	addi	s0, zero, 1
-8000032c: 63 08 07 00                  	beqz	a4, 16
-80000330: b3 07 47 03                  	mul	a5, a4, s4
-80000334: b3 07 f6 40                  	sub	a5, a2, a5
-80000338: 13 04 07 00                  	mv	s0, a4
-8000033c: 33 8b 56 41                  	sub	s6, a3, s5
-80000340: 23 20 91 00                  	sw	s1, 0(sp)
-80000344: 23 22 31 01                  	sw	s3, 4(sp)
-80000348: 23 24 21 01                  	sw	s2, 8(sp)
-8000034c: b3 85 a5 02                  	mul	a1, a1, a0
-80000350: 23 26 b1 00                  	sw	a1, 12(sp)
-80000354: 23 28 81 00                  	sw	s0, 16(sp)
-80000358: 23 2a f1 00                  	sw	a5, 20(sp)
-8000035c: b7 15 00 80                  	lui	a1, 524289
-80000360: 93 85 c5 43                  	addi	a1, a1, 1084
-80000364: 13 15 25 00                  	slli	a0, a0, 2
-80000368: 33 05 b5 00                  	add	a0, a0, a1
-8000036c: 93 05 01 00                  	mv	a1, sp
-80000370: 93 06 20 00                  	addi	a3, zero, 2
+80000328: 13 08 10 00                  	addi	a6, zero, 1
+8000032c: 13 04 10 00                  	addi	s0, zero, 1
+80000330: 63 88 07 00                  	beqz	a5, 16
+80000334: 33 87 47 03                  	mul	a4, a5, s4
+80000338: 33 07 e6 40                  	sub	a4, a2, a4
+8000033c: 13 84 07 00                  	mv	s0, a5
+80000340: 33 8b 56 41                  	sub	s6, a3, s5
+80000344: 23 20 91 00                  	sw	s1, 0(sp)
+80000348: 23 22 31 01                  	sw	s3, 4(sp)
+8000034c: 23 24 21 01                  	sw	s2, 8(sp)
+80000350: b3 85 a5 02                  	mul	a1, a1, a0
+80000354: 23 26 b1 00                  	sw	a1, 12(sp)
+80000358: 23 28 81 00                  	sw	s0, 16(sp)
+8000035c: 23 2a e1 00                  	sw	a4, 20(sp)
+80000360: b7 15 00 80                  	lui	a1, 524289
+80000364: 93 85 c5 43                  	addi	a1, a1, 1084
+80000368: 13 15 25 00                  	slli	a0, a0, 2
+8000036c: 33 05 b5 00                  	add	a0, a0, a1
+80000370: 93 05 01 00                  	mv	a1, sp
 80000374: 23 20 b5 00                  	sw	a1, 0(a0)
-80000378: 63 40 d6 02                  	blt	a2, a3, 32
+80000378: 63 40 06 03                  	blt	a2, a6, 32
 8000037c: 63 44 46 01                  	blt	a2, s4, 8
 80000380: 13 06 0a 00                  	mv	a2, s4
 80000384: 37 05 00 80                  	lui	a0, 524288
@@ -649,11 +649,11 @@ Disassembly of section .text:
 8000092c: 67 80 00 00                  	ret
 
 80000930 vx_num_cycles:
-80000930: 73 25 00 b0                  	csrr	a0, mcycle
+80000930: 73 25 00 c0                  	rdcycle	a0
 80000934: 67 80 00 00                  	ret
 
 80000938 vx_num_instrs:
-80000938: 73 25 20 b0                  	csrr	a0, minstret
+80000938: 73 25 20 c0                  	rdinstret	a0
 8000093c: 67 80 00 00                  	ret
 
 80000940 sqrtf:
@@ -1379,7 +1379,7 @@ Disassembly of section .symtab:
      272: 00 00                        	<unknown>
      274: 3c 14                        	<unknown>
      276: 00 80                        	<unknown>
-     278: 40 00                        	<unknown>
+     278: 80 00                        	<unknown>
      27a: 00 00                        	<unknown>
      27c: 11 00                        	<unknown>
      27e: 07 00 72 01                  	<unknown>
@@ -1552,7 +1552,7 @@ Disassembly of section .symtab:
      3dc: 12 00                        	<unknown>
      3de: 02 00                        	<unknown>
      3e0: 8f 02 00 00                  	<unknown>
-     3e4: 7c 14                        	<unknown>
+     3e4: bc 14                        	<unknown>
      3e6: 00 80                        	<unknown>
      3e8: 00 00                        	<unknown>
      3ea: 00 00                        	<unknown>
@@ -1666,7 +1666,7 @@ Disassembly of section .symtab:
      4ce: 05 00                        	<unknown>
      4d0: c6 00                        	<unknown>
      4d2: 00 00                        	<unknown>
-     4d4: 7c 14                        	<unknown>
+     4d4: bc 14                        	<unknown>
      4d6: 00 80                        	<unknown>
      4d8: 00 00                        	<unknown>
      4da: 00 00                        	<unknown>
@@ -1752,13 +1752,13 @@ Disassembly of section .strtab:
       3e: 5f 6b 65 72                  	<unknown>
       42: 6e 65                        	<unknown>
       44: 6c 2d                        	<unknown>
-      46: 36 35                        	<unknown>
-      48: 2d 62                        	<unknown>
-      4a: 62 2d                        	<unknown>
-      4c: 30 66                        	<unknown>
-      4e: 2d 37                        	<unknown>
-      50: 34 2d                        	<unknown>
-      52: 62 31                        	<unknown>
+      46: 30 65                        	<unknown>
+      48: 2d 31                        	<unknown>
+      4a: 36 2d                        	<unknown>
+      4c: 65 36                        	<unknown>
+      4e: 2d 61                        	<unknown>
+      50: 66 2d                        	<unknown>
+      52: 66 63                        	<unknown>
       54: 2e 63                        	<unknown>
       56: 00 70                        	<unknown>
       58: 61 72                        	<unknown>

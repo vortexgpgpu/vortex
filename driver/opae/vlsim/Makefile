@@ -82,7 +82,7 @@ VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
 # use DPI FPU
-#VL_FLAGS += -DFPU_DPI
+VL_FLAGS += -DFPU_DPI
 
 PROJECT = libopae-c-vlsim.so
 
