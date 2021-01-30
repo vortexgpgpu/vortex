@@ -144,7 +144,6 @@ module VX_bank #(
     wire [`REQS_BITS-1:0]           mshr_tid;
     wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr;
     wire [`UP(`WORD_SELECT_BITS)-1:0] mshr_wsel;
-    wire [`WORD_WIDTH-1:0]          mshr_data;
     wire [CORE_TAG_WIDTH-1:0]       mshr_tag;
     wire                            mshr_rw;  
     wire [WORD_SIZE-1:0]            mshr_byteen;
@@ -232,7 +231,7 @@ module VX_bank #(
             mshr_pop_unqual ? mshr_wsel : creq_wsel,
             mshr_pop_unqual ? mshr_rw : creq_rw,
             mshr_pop_unqual ? mshr_byteen : creq_byteen,
-            mshr_pop_unqual ? {`WORDS_PER_LINE{mshr_data}} : (dram_rsp_valid ? dram_rsp_data : {`WORDS_PER_LINE{creq_data}}),
+            dram_rsp_valid ? dram_rsp_data : {`WORDS_PER_LINE{creq_data}},
             mshr_pop_unqual ? mshr_tid : creq_tid,
             mshr_pop_unqual ? mshr_tag : creq_tag,
             mshr_pending_sel,
@@ -394,7 +393,7 @@ module VX_bank #(
         // enqueue
         .enqueue            (mshr_push),        
         .enqueue_addr       (addr_st1),
-        .enqueue_data       ({data_st1[`WORD_WIDTH-1:0], req_tid_st1, tag_st1, mem_rw_st1, byteen_st1, wsel_st1}),
+        .enqueue_data       ({req_tid_st1, tag_st1, mem_rw_st1, byteen_st1, wsel_st1}),
         .enqueue_is_mshr    (is_mshr_st1),
         .enqueue_as_ready   (mshr_init_ready_state),                
         `UNUSED_PIN (enqueue_almfull),
@@ -409,7 +408,7 @@ module VX_bank #(
         .schedule           (mshr_pop),        
         .schedule_valid     (mshr_valid),
         .schedule_addr      (mshr_addr),
-        .schedule_data      ({mshr_data, mshr_tid, mshr_tag, mshr_rw, mshr_byteen, mshr_wsel}),
+        .schedule_data      ({mshr_tid, mshr_tag, mshr_rw, mshr_byteen, mshr_wsel}),
 
         // dequeue
         .dequeue            (mshr_dequeue)

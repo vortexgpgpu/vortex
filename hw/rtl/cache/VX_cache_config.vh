@@ -12,8 +12,8 @@
 //                               tag              rw   byteen      tid
 `define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
 
-//                                data         metadata               word_sel              
-`define MSHR_DATA_WIDTH         (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_BITS))
+//                               metadata               word_sel              
+`define MSHR_DATA_WIDTH         (`REQ_INST_META_WIDTH + `UP(`WORD_SELECT_BITS))
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
