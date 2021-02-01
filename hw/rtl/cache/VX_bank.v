@@ -403,18 +403,22 @@ module VX_bank #(
 
     // Enqueue core response
      
+    wire [`WORD_WIDTH-1:0] crsq_data;
+    wire [CORE_TAG_WIDTH-1:0] crsq_tag;
+    wire [`REQS_BITS-1:0] crsq_tid;
     wire crsq_empty;
 
     assign crsq_push = valid_st1 && crsq_push_st1;
-    assign crsq_pop  = core_rsp_valid && core_rsp_ready;
-
-    wire [`WORD_WIDTH-1:0] crsq_data;
+    assign crsq_pop  = core_rsp_valid && core_rsp_ready;    
     
     if (`WORD_SELECT_BITS != 0) begin
         assign crsq_data = readdata_st1[wsel_st1 * `WORD_WIDTH +: `WORD_WIDTH];
     end else begin
         assign crsq_data = readdata_st1;
     end
+
+    assign crsq_tag = tag_st1;
+    assign crsq_tid = req_tid_st1;
   
     VX_fifo_queue #(
         .DATAW    (`REQS_BITS + CORE_TAG_WIDTH + `WORD_WIDTH), 
@@ -426,8 +430,8 @@ module VX_bank #(
         .reset      (reset),
         .push       (crsq_push),
         .pop        (crsq_pop),
-        .data_in    ({req_tid_st1,  tag_st1,      crsq_data}),
-        .data_out   ({core_rsp_tid, core_rsp_tag, core_rsp_data}),
+        .data_in    ({crsq_data,     crsq_tag,     crsq_tid}),
+        .data_out   ({core_rsp_data, core_rsp_tag, core_rsp_tid}),
         .empty      (crsq_empty),
         .alm_full   (crsq_alm_full),    
         `UNUSED_PIN (full),    
@@ -439,15 +443,16 @@ module VX_bank #(
 
     // Enqueue DRAM request
 
-    wire dreq_empty;
+    wire [CACHE_LINE_SIZE-1:0] dreq_byteen, dreq_byteen_unqual;
+    wire [`LINE_ADDR_WIDTH-1:0] dreq_addr;
+    wire [`CACHE_LINE_WIDTH-1:0] dreq_data;
+    wire dreq_empty, writeback;
         
     assign dreq_push = valid_st1 && dreq_push_st1;
 
     assign dreq_pop = dram_req_valid && dram_req_ready;
 
-    wire writeback = WRITE_ENABLE && do_writeback_st1;
-
-     wire [CACHE_LINE_SIZE-1:0] dreq_byteen, dreq_byteen_unqual;
+    assign writeback = WRITE_ENABLE && do_writeback_st1;    
 
     if (`WORD_SELECT_BITS != 0) begin
         for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
@@ -458,6 +463,8 @@ module VX_bank #(
     end
 
     assign dreq_byteen = writeback ? dreq_byteen_unqual : {CACHE_LINE_SIZE{1'b1}};
+    assign dreq_addr   = addr_st1;
+    assign dreq_data   = data_st1;
 
     VX_fifo_queue #(
         .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
@@ -468,7 +475,7 @@ module VX_bank #(
         .reset      (reset),
         .push       (dreq_push),
         .pop        (dreq_pop),
-        .data_in    ({writeback,   dreq_byteen,     addr_st1,      data_st1}),        
+        .data_in    ({writeback,   dreq_byteen,     dreq_addr,     dreq_data}),
         .data_out   ({dram_req_rw, dram_req_byteen, dram_req_addr, dram_req_data}),
         .empty      (dreq_empty),        
         .alm_full   (dreq_alm_full),
@@ -524,7 +531,7 @@ module VX_bank #(
                 $display("%t: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID), creq_tag, creq_tid, creq_byteen, debug_wid_sel, debug_pc_sel);
         end
         if (crsq_push) begin
-            $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, tid=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag_st1, crsq_tid_st1, crsq_data_st1, debug_wid_st1, debug_pc_st1);
+            $display("%t: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, tid=%0d, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_tid, crsq_data, debug_wid_st1, debug_pc_st1);
         end
         if (dreq_push) begin
             if (do_writeback_st1)

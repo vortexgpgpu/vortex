@@ -126,6 +126,8 @@ module VX_cache_core_req_bank_sel #(
         
     end else begin
 
+        `UNUSED_VAR (core_req_bid)
+
         assign per_bank_core_req_valid     = core_req_valid[0];        
         assign per_bank_core_req_rw[0]     = core_req_rw[0];        
         assign per_bank_core_req_addr[0]   = core_req_line_addr[0];
