@@ -16,10 +16,10 @@ module VX_cache_core_rsp_merge #(
     input wire reset,
 
     // Per Bank WB
-    input  wire [NUM_BANKS-1:0]                     per_bank_core_rsp_valid,  
+    input  wire [NUM_BANKS-1:0]                     per_bank_core_rsp_valid,
+    input  wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]    per_bank_core_rsp_data,   
     input  wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_rsp_tag,   
     input  wire [NUM_BANKS-1:0][`REQS_BITS-1:0]     per_bank_core_rsp_tid,  
-    input  wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]    per_bank_core_rsp_data, 
     output wire [NUM_BANKS-1:0]                     per_bank_core_rsp_ready,
 
     // Core Response

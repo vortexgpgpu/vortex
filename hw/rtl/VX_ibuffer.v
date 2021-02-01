@@ -133,9 +133,9 @@ module VX_ibuffer #(
             deq_wid_n   = (!deq_fire || q_sizeMany[deq_wid]) ? deq_wid : ibuf_enq_if.wid;
             deq_instr_n = deq_fire ? (q_sizeMany[deq_wid] ? q_data_prev[deq_wid] : q_data_in) : q_data_out[deq_wid];
         end else begin
-            deq_valid_n = (| schedule_table_n);
+            deq_valid_n = (| schedule_table);
             for (integer i = 0; i < `NUM_WARPS; i++) begin
-                if (schedule_table_n[i]) begin
+                if (schedule_table[i]) begin
                     deq_wid_n   = `NW_BITS'(i);                
                     deq_instr_n = q_data_out[i];
                     schedule_table_n[i] = 0;
