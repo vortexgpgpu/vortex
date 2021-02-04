@@ -74,9 +74,9 @@ module VX_cluster #(
         VX_reset_relay #(
             .DEPTH (`NUM_CORES > 1)
         ) reset_relay (
-            .clk       (clk),
-            .reset     (reset),
-            .reset_out (core_reset)
+            .clk     (clk),
+            .reset   (reset),
+            .reset_o (core_reset)
         );
 
         VX_core #(
