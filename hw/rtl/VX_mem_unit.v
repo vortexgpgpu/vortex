@@ -86,9 +86,9 @@ module VX_mem_unit # (
     VX_reset_relay #(
         .NUM_NODES (2)
     ) reset_relay (
-        .clk       (clk),
-        .reset     (reset),
-        .reset_out ({dcache_reset, icache_reset})
+        .clk     (clk),
+        .reset   (reset),
+        .reset_o ({dcache_reset, icache_reset})
     );
 
     VX_cache #(
@@ -214,9 +214,9 @@ module VX_mem_unit # (
         wire scache_reset;   
 
         VX_reset_relay reset_relay (
-            .clk       (clk),
-            .reset     (reset),
-            .reset_out (scache_reset)
+            .clk     (clk),
+            .reset   (reset),
+            .reset_o (scache_reset)
         );        
 
         VX_shared_mem #(

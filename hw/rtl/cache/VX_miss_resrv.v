@@ -4,14 +4,15 @@ module VX_miss_resrv #(
     parameter CACHE_ID                      = 0,
     parameter BANK_ID                       = 0, 
     
+    // Number of Word requests per cycle
+    parameter NUM_REQS                      = 1, 
+    
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE               = 1, 
     // Number of banks
-    parameter NUM_BANKS                     = 1, 
+    parameter NUM_BANKS                     = 1,
     // Size of a word in bytes
     parameter WORD_SIZE                     = 1, 
-    // Number of Word requests per cycle
-    parameter NUM_REQS                      = 1, 
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 1, 
     parameter ALM_FULL                      = (MSHR_SIZE-1),
