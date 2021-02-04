@@ -8,12 +8,12 @@ _start:
   # execute stack initialization on all warps
   la a1, vx_set_sp
   csrr a0, CSR_NW  # get num warps
-  .word 0x00b5106b # wspawn a0, a1
+  .insn s 0x6b, 1, a1, 0(a0)  # wspawn a0, a1
   jal vx_set_sp
 
   # return back to single thread execution
   li a0, 1
-  .word 0x0005006b # tmc a0
+  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
   
   # Clear the bss segment
   la      a0, _edata
@@ -44,15 +44,15 @@ _start:
 _exit:
   # disable all threads in current warp
   li a0, 0
-  .word 0x0005006b    # tmc a0
+  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
 
 .section .text
 .type vx_set_sp, @function
 .global vx_set_sp
 vx_set_sp:
   # activate all threads
-  csrr a0, CSR_NT     # get num threads
-  .word 0x0005006b    # set thread mask
+  csrr a0, CSR_NT             # get num threads
+  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
   
   # set global pointer register
   .option push
@@ -76,7 +76,7 @@ vx_set_sp:
   csrr a3, CSR_LWID    # get local wid
   beqz a3, RETURN
   li a0, 0
-  .word 0x0005006b     # tmc a0
+  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
 RETURN:
   ret
 
