@@ -71,12 +71,21 @@ module VX_fpu_fpga #(
         endcase
     end
 
+    wire [NUM_FPC-1:0] fpu_reset;
+    VX_reset_relay #(
+        .NUM_NODES(NUM_FPC)
+    ) reset_relay (
+        .clk     (clk),
+        .reset   (reset),
+        .reset_o (fpu_reset)
+    );
+
     VX_fp_fma #(
         .TAGW (TAGW),
         .LANES(`NUM_THREADS)
     ) fp_fma (
         .clk        (clk), 
-        .reset      (reset),   
+        .reset      (fpu_reset[FPU_FMA]),   
         .valid_in   (valid_in && (core_select == FPU_FMA)),
         .ready_in   (per_core_ready_in[FPU_FMA]),    
         .tag_in     (tag_in),  
@@ -100,7 +109,7 @@ module VX_fpu_fpga #(
         .LANES(`NUM_THREADS)
     ) fp_div (
         .clk        (clk), 
-        .reset      (reset),   
+        .reset      (fpu_reset[FPU_DIV]),   
         .valid_in   (valid_in && (core_select == FPU_DIV)),
         .ready_in   (per_core_ready_in[FPU_DIV]),    
         .tag_in     (tag_in),
@@ -120,7 +129,7 @@ module VX_fpu_fpga #(
         .LANES(`NUM_THREADS)
     ) fp_sqrt (
         .clk        (clk), 
-        .reset      (reset),   
+        .reset      (fpu_reset[FPU_SQRT]),   
         .valid_in   (valid_in && (core_select == FPU_SQRT)),
         .ready_in   (per_core_ready_in[FPU_SQRT]),    
         .tag_in     (tag_in),
@@ -139,7 +148,7 @@ module VX_fpu_fpga #(
         .LANES(`NUM_THREADS)
     ) fp_cvt (
         .clk        (clk), 
-        .reset      (reset),   
+        .reset      (fpu_reset[FPU_CVT]),   
         .valid_in   (valid_in && (core_select == FPU_CVT)),
         .ready_in   (per_core_ready_in[FPU_CVT]),    
         .tag_in     (tag_in), 
@@ -160,7 +169,7 @@ module VX_fpu_fpga #(
         .LANES(`NUM_THREADS)
     ) fp_ncomp (
         .clk        (clk),
-        .reset      (reset),   
+        .reset      (fpu_reset[FPU_NCP]),   
         .valid_in   (valid_in && (core_select == FPU_NCP)),
         .ready_in   (per_core_ready_in[FPU_NCP]),        
         .tag_in     (tag_in),        

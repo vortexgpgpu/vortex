@@ -7,7 +7,7 @@ module VX_reset_relay #(
 ) (
     input wire  clk,
     input wire  reset,
-    output wire [NUM_NODES-1:0] reset_out
+    output wire [NUM_NODES-1:0] reset_o
 ); 
     
     if (DEPTH > 1) begin
@@ -25,7 +25,7 @@ module VX_reset_relay #(
                 reset_r[0] <= {NUM_NODES{reset}};
             end
         end       
-        assign reset_out = reset_r[DEPTH-1];
+        assign reset_o = reset_r[DEPTH-1];
     end else if (DEPTH == 1) begin
         reg [NUM_NODES-1:0] reset_r;
         if (ASYNC) begin
@@ -37,10 +37,10 @@ module VX_reset_relay #(
                 reset_r <= {NUM_NODES{reset}};
             end
         end
-        assign reset_out = reset_r;
+        assign reset_o = reset_r;
     end else begin
         `UNUSED_VAR (clk)
-        assign reset_out = {NUM_NODES{reset}};
+        assign reset_o = {NUM_NODES{reset}};
     end
   
 endmodule

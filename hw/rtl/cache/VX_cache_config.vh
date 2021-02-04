@@ -9,11 +9,11 @@
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
-//                               tag              rw   byteen      tid
-`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH + 1  + WORD_SIZE + `REQS_BITS)
+//                               tag               byteen      tid
+`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH  + WORD_SIZE + `REQS_BITS)
 
-//                                data         metadata               word_sel              
-`define MSHR_DATA_WIDTH         (`WORD_WIDTH + `REQ_INST_META_WIDTH + `UP(`WORD_SELECT_BITS))
+//                               metadata               word_sel              
+`define MSHR_DATA_WIDTH         (`REQ_INST_META_WIDTH + `WORD_SELECT_BITS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -23,7 +23,6 @@
 `define LINES_PER_BANK          (`BANK_SIZE / CACHE_LINE_SIZE)
 `define WORDS_PER_LINE          (CACHE_LINE_SIZE / WORD_SIZE)
 
-`define WORD_SELECT_BITS       `CLOG2(`WORDS_PER_LINE)
 `define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
 `define DRAM_ADDR_WIDTH         (32-`CLOG2(CACHE_LINE_SIZE))
 `define LINE_ADDR_WIDTH         (`DRAM_ADDR_WIDTH-`BANK_SELECT_BITS)

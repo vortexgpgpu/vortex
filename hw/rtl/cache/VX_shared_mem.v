@@ -38,8 +38,8 @@ module VX_shared_mem #(
     // Core request    
     input wire [NUM_REQS-1:0]                   core_req_valid,
     input wire [NUM_REQS-1:0]                   core_req_rw,
-    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]    core_req_byteen,
     input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr,
+    input wire [NUM_REQS-1:0][WORD_SIZE-1:0]    core_req_byteen,
     input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]  core_req_data,
     input wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
     output wire [NUM_REQS-1:0]                  core_req_ready,
@@ -63,12 +63,12 @@ module VX_shared_mem #(
 `endif
 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_valid_unqual; 
-    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid_unqual;
     wire [NUM_BANKS-1:0]                    per_bank_core_req_rw_unqual;  
+    wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0] per_bank_core_req_addr_unqual;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_core_req_byteen_unqual;
-    wire [NUM_BANKS-1:0][`WORD_ADDR_WIDTH-1:0] per_bank_core_req_addr_unqual;
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]   per_bank_core_req_data_unqual;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag_unqual;
+    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid_unqual;
     wire [NUM_BANKS-1:0]                    per_bank_core_req_ready_unqual;
     
     VX_cache_core_req_bank_sel #(
@@ -77,28 +77,26 @@ module VX_shared_mem #(
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),
-        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET),
-        .BUFFERED        (0)
+        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),
         .reset      (reset),
     `ifdef PERF_ENABLE        
         .bank_stalls(perf_cache_if.bank_stalls),
-    `else
-        `UNUSED_PIN (bank_stalls),
     `endif     
         .core_req_valid (core_req_valid),
-        .core_req_rw    (core_req_rw), 
-        .core_req_byteen(core_req_byteen),
+        .core_req_rw    (core_req_rw),
         .core_req_addr  (core_req_addr),
+        .core_req_byteen(core_req_byteen),
         .core_req_data  (core_req_data),
         .core_req_tag   (core_req_tag),
         .core_req_ready (core_req_ready),
-        .per_bank_core_req_valid (per_bank_core_req_valid_unqual), 
+        .per_bank_core_req_valid (per_bank_core_req_valid_unqual),
         .per_bank_core_req_tid   (per_bank_core_req_tid_unqual),
         .per_bank_core_req_rw    (per_bank_core_req_rw_unqual),
-        .per_bank_core_req_byteen(per_bank_core_req_byteen_unqual),
         .per_bank_core_req_addr  (per_bank_core_req_addr_unqual),
+        `UNUSED_PIN (per_bank_core_req_wsel),
+        .per_bank_core_req_byteen(per_bank_core_req_byteen_unqual),
         .per_bank_core_req_tag   (per_bank_core_req_tag_unqual),
         .per_bank_core_req_data  (per_bank_core_req_data_unqual),
         .per_bank_core_req_ready (per_bank_core_req_ready_unqual)
@@ -108,12 +106,12 @@ module VX_shared_mem #(
     `UNUSED_VAR (per_bank_core_req_rw_unqual)
 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_valid; 
-    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid;
-    wire [NUM_REQS-1:0]                     per_bank_core_req_rw;  
+    wire [NUM_BANKS-1:0]                    per_bank_core_req_rw;      
+    wire [NUM_BANKS-1:0][`LINE_SELECT_BITS-1:0] per_bank_core_req_addr;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_core_req_byteen;
-    wire [NUM_BANKS-1:0][`LINE_SELECT_BITS-1:0] per_bank_core_req_addr;    
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]   per_bank_core_req_data;
     wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag;
+    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid;
 
     wire creq_push, creq_pop, creq_empty, creq_full;
     wire crsq_full;
@@ -121,18 +119,16 @@ module VX_shared_mem #(
     assign creq_push = (| core_req_valid) && !creq_full;
     assign creq_pop = ~creq_empty && ~crsq_full;
     
-    assign per_bank_core_req_ready_unqual = {NUM_BANKS{~creq_full}}; 
+    assign per_bank_core_req_ready_unqual = {NUM_BANKS{~creq_full}};
 
     wire [NUM_REQS-1:0][`LINE_SELECT_BITS-1:0] per_bank_core_req_addr_qual;
     `UNUSED_VAR (per_bank_core_req_addr_unqual)
-    for (genvar i = 0; i < NUM_REQS; i++) begin        
-        wire [`LINE_ADDR_WIDTH-1:0] tmp = `LINE_SELECT_ADDRX(per_bank_core_req_addr_unqual[i]);
-        assign per_bank_core_req_addr_qual[i] = tmp[`LINE_SELECT_BITS-1:0];
-        `UNUSED_VAR (tmp)
+    for (genvar i = 0; i < NUM_REQS; i++) begin
+        assign per_bank_core_req_addr_qual[i] = per_bank_core_req_addr_unqual[i][`LINE_SELECT_BITS-1:0];
     end
 
     VX_fifo_queue #(
-        .DATAW    (NUM_BANKS * (1 + `REQS_BITS + 1 + WORD_SIZE + `LINE_SELECT_BITS + `WORD_WIDTH + CORE_TAG_WIDTH)), 
+        .DATAW    (NUM_BANKS * (1 + 1 + `LINE_SELECT_BITS + WORD_SIZE + `WORD_WIDTH + CORE_TAG_WIDTH + `REQS_BITS)), 
         .SIZE     (CREQ_SIZE),
         .BUFFERED (1)
     ) core_req_queue (
@@ -140,20 +136,20 @@ module VX_shared_mem #(
         .reset   (reset),
         .push    (creq_push),
         .pop     (creq_pop),
-        .data_in ({per_bank_core_req_valid_unqual, 
-                   per_bank_core_req_tid_unqual, 
+        .data_in ({per_bank_core_req_valid_unqual,
                    per_bank_core_req_rw_unqual, 
-                   per_bank_core_req_byteen_unqual, 
                    per_bank_core_req_addr_qual, 
+                   per_bank_core_req_byteen_unqual, 
                    per_bank_core_req_data_unqual, 
-                   per_bank_core_req_tag_unqual}),
-        .data_out({per_bank_core_req_valid, 
-                   per_bank_core_req_tid, 
+                   per_bank_core_req_tag_unqual,
+                   per_bank_core_req_tid_unqual}),
+        .data_out({per_bank_core_req_valid,
                    per_bank_core_req_rw, 
-                   per_bank_core_req_byteen, 
                    per_bank_core_req_addr, 
+                   per_bank_core_req_byteen, 
                    per_bank_core_req_data, 
-                   per_bank_core_req_tag}),
+                   per_bank_core_req_tag,
+                   per_bank_core_req_tid}),
         .empty   (creq_empty),
         .full    (creq_full),
         `UNUSED_PIN (alm_empty),
@@ -248,13 +244,41 @@ module VX_shared_mem #(
 `endif
 
 `ifdef PERF_ENABLE
-    assign perf_cache_if.reads        = '0;
-    assign perf_cache_if.writes       = '0;
+    // per cycle: core_reads, core_writes
+    reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle, perf_core_writes_per_cycle;
+    reg [($clog2(NUM_REQS+1)-1):0] perf_crsp_stall_per_cycle;
+
+    assign perf_core_reads_per_cycle  = $countones(core_req_valid & core_req_ready & ~core_req_rw);
+    assign perf_core_writes_per_cycle = $countones(core_req_valid & core_req_ready & core_req_rw);
+    
+    if (CORE_TAG_ID_BITS != 0) begin
+        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & {NUM_REQS{!core_rsp_ready}});
+    end else begin
+        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
+    end
+
+    reg [63:0] perf_core_reads;
+    reg [63:0] perf_core_writes;
+    reg [63:0] perf_crsp_stalls;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_core_reads   <= 0;
+            perf_core_writes  <= 0;
+            perf_crsp_stalls  <= 0;
+        end else begin
+            perf_core_reads   <= perf_core_reads  + 64'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes + 64'(perf_core_writes_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls + 64'(perf_crsp_stall_per_cycle);
+        end
+    end
+
+    assign perf_cache_if.reads        = perf_core_reads;
+    assign perf_cache_if.writes       = perf_core_writes;
     assign perf_cache_if.read_misses  = '0;
     assign perf_cache_if.write_misses = '0;
-    assign perf_cache_if.mshr_stalls  = '0;
     assign perf_cache_if.pipe_stalls  = '0;
-    assign perf_cache_if.crsp_stalls  = '0;
+    assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 
 endmodule
