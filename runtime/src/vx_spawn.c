@@ -38,10 +38,11 @@ inline char is_log2(int x) {
 }
 
 inline int fast_log2(int x) {
-  return (*(int*)(&x)>>23) - 127;
+  float f = x;
+  return (*(int*)(&f)>>23) - 127;
 }
 
-void spawn_tasks_callback() {  
+static void spawn_tasks_callback() {  
   vx_tmc(vx_num_threads());
 
   int core_id = vx_core_id();
@@ -130,7 +131,7 @@ void vx_spawn_tasks(int num_tasks, pfn_callback callback , const void * args) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void spawn_kernel_callback() {  
+static void spawn_kernel_callback() {  
   vx_tmc(vx_num_threads());
 
   int core_id = vx_core_id();
@@ -149,9 +150,9 @@ void spawn_kernel_callback() {
   int XY = X * Y;
 
   for (int wg_id = offset, N = wg_id + tK; wg_id < N; ++wg_id) {    
-    int k = p_wspawn_args->isXYpow2 ? (wg_id / XY) : (wg_id >> p_wspawn_args->log2XY);
+    int k = p_wspawn_args->isXYpow2 ? (wg_id >> p_wspawn_args->log2XY) : (wg_id / XY);
     int wg_2d = wg_id - k * XY;
-    int j = p_wspawn_args->isXpow2 ? (wg_2d / X) : (wg_2d >> p_wspawn_args->log2X);
+    int j = p_wspawn_args->isXpow2 ? (wg_2d >> p_wspawn_args->log2X) : (wg_2d / X);
     int i = wg_2d - j * X;
 
     int gid0 = p_wspawn_args->ctx->global_offset[0] + i;
@@ -164,7 +165,7 @@ void spawn_kernel_callback() {
   vx_tmc(0 == wid);
 }
 
-void spawn_kernel_remaining_callback(int nthreads) {    
+static void spawn_kernel_remaining_callback(int nthreads) {    
   vx_tmc(nthreads);
 
   int core_id = vx_core_id(); 
@@ -178,9 +179,9 @@ void spawn_kernel_remaining_callback(int nthreads) {
   int Y = p_wspawn_args->ctx->num_groups[1];
   int XY = X * Y;
   
-  int k = p_wspawn_args->isXYpow2 ? (wg_id / XY) : (wg_id >> p_wspawn_args->log2XY);
+  int k = p_wspawn_args->isXYpow2 ? (wg_id >> p_wspawn_args->log2XY) : (wg_id / XY);
   int wg_2d = wg_id - k * XY;
-  int j = p_wspawn_args->isXpow2 ? (wg_2d / X) : (wg_2d >> p_wspawn_args->log2X);
+  int j = p_wspawn_args->isXpow2 ? (wg_2d >> p_wspawn_args->log2X) : (wg_2d / X);
   int i = wg_2d - j * X;
 
   int gid0 = p_wspawn_args->ctx->global_offset[0] + i;

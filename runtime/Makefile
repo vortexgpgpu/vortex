@@ -5,11 +5,8 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-CFLAGS += -O3 -march=rv32imf -mabi=ilp32f
-CFLAFS += -nostartfiles -ffreestanding -fno-exceptions -Wl,--gc-sections
+CFLAGS += -O3 -march=rv32imf -mabi=ilp32f -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
-
-LDFLAGS += 
 
 PROJECT = libvortexrt
 
