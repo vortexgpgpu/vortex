@@ -57,7 +57,7 @@ module VX_bank #(
     input wire [`REQS_BITS-1:0]         core_req_tid,
     input wire                          core_req_rw,  
     input wire [`LINE_ADDR_WIDTH-1:0]   core_req_addr,
-    input wire [`WORD_SELECT_BITS-1:0]  core_req_wsel,
+    input wire [`UP(`WORD_SELECT_BITS)-1:0] core_req_wsel,
     input wire [WORD_SIZE-1:0]          core_req_byteen,
     input wire [`WORD_WIDTH-1:0]        core_req_data,
     input wire [CORE_TAG_WIDTH-1:0]     core_req_tag,
@@ -97,7 +97,7 @@ module VX_bank #(
     wire                        creq_full, creq_empty;
     wire                        creq_rw;  
     wire [`LINE_ADDR_WIDTH-1:0] creq_addr;
-    wire [`WORD_SELECT_BITS-1:0] creq_wsel;
+    wire [`UP(`WORD_SELECT_BITS)-1:0] creq_wsel;
     wire [WORD_SIZE-1:0]        creq_byteen;
     wire [`WORD_WIDTH-1:0]      creq_data;
     wire [CORE_TAG_WIDTH-1:0]   creq_tag;
@@ -107,7 +107,7 @@ module VX_bank #(
     assign core_req_ready = !creq_full;
 
     VX_fifo_queue #(
-        .DATAW    (CORE_TAG_WIDTH + `REQS_BITS + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_BITS  + WORD_SIZE + `WORD_WIDTH), 
+        .DATAW    (CORE_TAG_WIDTH + `REQS_BITS + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS)  + WORD_SIZE + `WORD_WIDTH), 
         .SIZE     (CREQ_SIZE),
         .BUFFERED (1)
     ) core_req_queue (
@@ -130,13 +130,13 @@ module VX_bank #(
     wire                            mshr_pending;
     wire                            mshr_valid;
     wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr;
-    wire [`WORD_SELECT_BITS-1:0]    mshr_wsel;
+    wire [`UP(`WORD_SELECT_BITS)-1:0] mshr_wsel;
     wire [WORD_SIZE-1:0]            mshr_byteen;
     wire [CORE_TAG_WIDTH-1:0]       mshr_tag;
     wire [`REQS_BITS-1:0]           mshr_tid;
 
     wire [`LINE_ADDR_WIDTH-1:0]     addr_st0, addr_st1;
-    wire [`WORD_SELECT_BITS-1:0]    wsel_st0, wsel_st1;    
+    wire [`UP(`WORD_SELECT_BITS)-1:0] wsel_st0, wsel_st1;    
     wire                            mem_rw_st0, mem_rw_st1;
     wire [WORD_SIZE-1:0]            byteen_st0, byteen_st1;
     wire [`CACHE_LINE_WIDTH-1:0]    data_st0, data_st1;
@@ -204,7 +204,7 @@ module VX_bank #(
 `endif
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_BITS + 1 + WORD_SIZE + `CACHE_LINE_WIDTH + `REQS_BITS + CORE_TAG_WIDTH + 1 + 1),
+        .DATAW  (1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + 1 + WORD_SIZE + `CACHE_LINE_WIDTH + `REQS_BITS + CORE_TAG_WIDTH + 1 + 1),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -278,7 +278,7 @@ module VX_bank #(
     assign incoming_fill_st0 = dram_rsp_valid && (addr_st0 == dram_rsp_addr);
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `WORD_SELECT_BITS + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + CORE_TAG_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `UP(`WORD_SELECT_BITS) + `CACHE_LINE_WIDTH + 1 + WORD_SIZE + `REQS_BITS + CORE_TAG_WIDTH),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),

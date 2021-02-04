@@ -39,7 +39,7 @@ module VX_data_access #(
     // writing
     input wire                          writeen,
     input wire                          is_fill,
-    input wire [`WORD_SELECT_BITS-1:0]  wsel,
+    input wire [`UP(`WORD_SELECT_BITS)-1:0] wsel,
     input wire [WORD_SIZE-1:0]          byteen,        
     input wire [`CACHE_LINE_WIDTH-1:0]  wrdata
 );
