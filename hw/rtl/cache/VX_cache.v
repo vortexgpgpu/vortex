@@ -90,7 +90,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_core_req_valid; 
     wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
     wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;
-    wire [NUM_BANKS-1:0][`WORD_SELECT_BITS-1:0] per_bank_core_req_wsel;
+    wire [NUM_BANKS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]         per_bank_core_req_byteen;
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]       per_bank_core_req_data;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]    per_bank_core_req_tag;
@@ -212,7 +212,7 @@ module VX_cache #(
         wire                        curr_bank_core_req_valid;     
         wire                        curr_bank_core_req_rw;  
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;
-        wire [`WORD_SELECT_BITS-1:0] curr_bank_core_req_wsel;
+        wire [`UP(`WORD_SELECT_BITS)-1:0] curr_bank_core_req_wsel;
         wire [WORD_SIZE-1:0]        curr_bank_core_req_byteen;
         wire [`WORD_WIDTH-1:0]      curr_bank_core_req_data;
         wire [CORE_TAG_WIDTH-1:0]   curr_bank_core_req_tag;  

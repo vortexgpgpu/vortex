@@ -13,7 +13,7 @@
 `define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH  + WORD_SIZE + `REQS_BITS)
 
 //                               metadata               word_sel              
-`define MSHR_DATA_WIDTH         (`REQ_INST_META_WIDTH + `WORD_SELECT_BITS)
+`define MSHR_DATA_WIDTH         (`REQ_INST_META_WIDTH + `UP(`WORD_SELECT_BITS))
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
