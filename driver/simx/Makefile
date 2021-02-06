@@ -1,53 +1,42 @@
-CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
-#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+PROJECT = libvortex.so
+#PROJECT = libvortex.dylib
 
-CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
+SIMX_DIR = ../../simX
 
-CFLAGS += -I../../include -I../../../simX/include -I../../../hw
+#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
+CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -fPIC
+CXXFLAGS += -fPIC -Wno-aligned-new -Wno-maybe-uninitialized
+CXXFLAGS += -I../include -I../../hw -I$(SIMX_DIR)
+CXXFLAGS += -DDUMP_PERF_STATS
 
-CFLAGS += -DUSE_SIMX
+#CONFIGS ?= -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
+#CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
+CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
+#CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
+
+CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += -shared -pthread
 #LDFLAGS += -dynamiclib -pthread
 
-TOP = cache_simX
-
-RTL_DIR = ../../hw/old_rtl
-
 SRCS = vortex.cpp ../common/vx_utils.cpp 
-SRCS += ../../simX/args.cpp ../../simX/mem.cpp ../../simX/core.cpp ../../simX/instruction.cpp ../../simX/enc.cpp ../../simX/util.cpp
-
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/shared_memory
-RTL_INCLUDE += -I../../simX 
-
-VL_FLAGS += -O2 --language 1800-2009 --assert
-VL_FLAGS += -Wno-DECLFILENAME
-VL_FLAGS += --x-initial unique --x-assign unique
-VL_FLAGS += -Wno-UNOPTFLAT -Wno-WIDTH
-
-# Enable Verilator multithreaded simulation
-#THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
-#VL_FLAGS += --threads $(THREADS)
+SRCS += $(SIMX_DIR)/util.cpp $(SIMX_DIR)/args.cpp $(SIMX_DIR)/mem.cpp $(SIMX_DIR)/core.cpp $(SIMX_DIR)/warp.cpp $(SIMX_DIR)/instr.cpp $(SIMX_DIR)/decode.cpp $(SIMX_DIR)/execute.cpp
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
-	CFLAGS   += -DVCD_OUTPUT $(DBG_FLAGS)
+	CXXFLAGS += -DVCD_OUTPUT $(DBG_FLAGS)
 else    
-	VL_FLAGS += -DNDEBUG
-	CFLAGS   += -DNDEBUG
+	CXXFLAGS += -DNDEBUG
 endif
-
-PROJECT = libvortex.so
-#PROJECT = libvortex.dylib
 
 all: $(PROJECT)
 
-$(PROJECT): $(SRCS) 
-	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
-	make -j -C obj_dir -f V$(TOP).mk
+$(PROJECT): $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+.depend: $(SRCS)
+	$(CXX) $(CXXFLAGS) -MM $^ > .depend;	
 
 clean:
-	rm -rf $(PROJECT) obj_dir
+	rm -rf $(PROJECT) *.o .depend

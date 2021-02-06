@@ -1,37 +1,34 @@
-CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
-#CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
+CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
+CXXFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
+CXXFLAGS += -I. -I../hw
+CXXFLAGS += -DDUMP_PERF_STATS
 
-CFLAGS += -I../../hw
+LDFLAGS +=
 
-TOP = cache_simX
+TOP = vx_cache_sim
 
-RTL_DIR = ../hw/old_rtl
+RTL_DIR = ../hw/rtl
 
-SRCS = simX.cpp args.cpp mem.cpp core.cpp instruction.cpp enc.cpp util.cpp
+PROJECT = simX
 
-RTL_INCLUDE=-I$(RTL_DIR) -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/shared_memory
-
-VL_FLAGS += -O2 --language 1800-2009 --assert
-VL_FLAGS += -Wno-DECLFILENAME
-VL_FLAGS += --x-initial unique --x-assign unique
-VL_FLAGS += -Wno-UNOPTFLAT -Wno-WIDTH
+SRCS = util.cpp args.cpp mem.cpp core.cpp warp.cpp instr.cpp decode.cpp execute.cpp simX.cpp
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
-	CFLAGS   += -DVCD_OUTPUT $(DBG_FLAGS)
+	CXXFLAGS += $(DBG_FLAGS)
 else    
-	VL_FLAGS += -DNDEBUG
-	CFLAGS   += -DNDEBUG
+	CXXFLAGS += -DNDEBUG
 endif
 
-all: simX
+all: $(PROJECT)
 
-simX:
-	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)'
-	make -j -C obj_dir -f V$(TOP).mk
+$(PROJECT): $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+.depend: $(SRCS)
+	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf obj_dir
+	rm -rf $(PROJECT) *.o .depend

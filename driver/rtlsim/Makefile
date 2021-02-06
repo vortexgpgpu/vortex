@@ -1,8 +1,7 @@
 CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
-
+CFLAGS += -fPIC -Wno-aligned-new -Wno-maybe-uninitialized
 CFLAGS += -I../../include -I../../../hw/simulate -I../../../hw
 
 # control RTL debug print states
@@ -26,9 +25,7 @@ DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 #CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
-CFLAGS += -fPIC
-
-CFLAGS += -DUSE_RTLSIM $(CONFIGS)
+CFLAGS += $(CONFIGS)
 
 CFLAGS += -DDUMP_PERF_STATS
 

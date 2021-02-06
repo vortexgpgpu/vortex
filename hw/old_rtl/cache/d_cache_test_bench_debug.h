@@ -1,1 +1,0 @@
-#define VCD_OUTPUT

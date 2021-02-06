@@ -6,7 +6,7 @@ set -e
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim] [--debug] [--scope] [--perf] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim|simx] [--debug] [--scope] [--perf] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
 }
 
 SCRIPT_DIR=$(dirname "$0")
@@ -104,6 +104,10 @@ case $DRIVER in
     fpga)
         DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=fpga
+        ;; 
+    simx)
+        DRIVER_PATH=$VORTEX_HOME/driver/simx
+        DRIVER_EXTRA=
         ;;
     *)
         echo "invalid driver: $DRIVER"

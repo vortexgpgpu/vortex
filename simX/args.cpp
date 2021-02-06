@@ -1,39 +1,34 @@
-/*******************************************************************************
- HARPtools by Chad D. Kersey, Summer 2011
-*******************************************************************************/
-#include "include/args.h"
-
 #include <iostream>
 #include <string>
+#include "args.h"
 
-using namespace HarpTools;
+using namespace vortex;
 using std::string;
 
-std::string CommandLineArg::helpString;
-std::map<string, CommandLineArg *> CommandLineArg::longArgs;
-std::map<string, CommandLineArg *> CommandLineArg::shortArgs;
+std::string CommandLineArg::helpString_;
+std::unordered_map<string, CommandLineArg *> CommandLineArg::longArgs_;
+std::unordered_map<string, CommandLineArg *> CommandLineArg::shortArgs_;
 
-CommandLineArg::CommandLineArg(string s, string l, const char *helpText)
-{
-  helpString += helpText;
-  longArgs[l] = this;
-  shortArgs[s] = this;
+CommandLineArg::CommandLineArg(string s, string l, const char *helpText) {
+  helpString_ += helpText;
+  longArgs_[l] = this;
+  shortArgs_[s] = this;
 }
 
 CommandLineArg::CommandLineArg(string l, const char *helpText) {
-  helpString += helpText;
-  longArgs[l] = this;
+  helpString_ += helpText;
+  longArgs_[l] = this;
 }
 
 void CommandLineArg::readArgs(int argc, char **argv) {
   for (int i = 0; i < argc; i++) {
-    std::map<string, CommandLineArg *>::iterator 
-      s = shortArgs.find(std::string(argv[i])), 
-      l = longArgs.find(std::string(argv[i]));
+    std::unordered_map<string, CommandLineArg *>::iterator 
+      s = shortArgs_.find(std::string(argv[i])), 
+      l = longArgs_.find(std::string(argv[i]));
 
-    if (s != shortArgs.end()) {
+    if (s != shortArgs_.end()) {
       i += s->second->read(argc - i, &argv[i]);
-    } else if (l != longArgs.end()) {
+    } else if (l != longArgs_.end()) {
       i += l->second->read(argc - i, &argv[i]);
     } else {
       throw BadArg(string(argv[i]));
@@ -42,11 +37,11 @@ void CommandLineArg::readArgs(int argc, char **argv) {
 }
 
 void CommandLineArg::clearArgs() {
-  shortArgs.clear();
-  longArgs.clear();
-  helpString = "";
+  shortArgs_.clear();
+  longArgs_.clear();
+  helpString_ = "";
 }
 
 void CommandLineArg::showHelp(std::ostream &os) {
-  os << helpString;
+  os << helpString_;
 }
