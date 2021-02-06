@@ -25,28 +25,6 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_
   // get buffer address
   auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
 
-#if defined(USE_SIMX)
-  // default startup routine
-  ((uint32_t*)buf_ptr)[0] = 0xf1401073;
-  ((uint32_t*)buf_ptr)[1] = 0xf1401073;      
-  ((uint32_t*)buf_ptr)[2] = 0x30101073;
-  ((uint32_t*)buf_ptr)[3] = 0x800000b7;
-  ((uint32_t*)buf_ptr)[4] = 0x000080e7;
-  err = vx_copy_to_dev(buffer, 0, 5 * 4, 0);
-  if (err != 0) {
-    vx_buf_release(buffer);
-    return err;
-  }
-
-  // newlib io simulator trap
-  ((uint32_t*)buf_ptr)[0] = 0x00008067;
-  err = vx_copy_to_dev(buffer, 0x70000000, 4, 0);
-  if (err != 0) {
-    vx_buf_release(buffer);
-    return err;
-  }
-#endif
-
   //
   // upload content
   //

@@ -142,16 +142,27 @@ public:
 private:
 
     void run() {        
-        Harp::ArchDef arch("rv32i", NUM_WARPS, NUM_THREADS);
-        Harp::WordDecoder dec(arch);
-        Harp::MemoryUnit mu(PAGE_SIZE, arch.getWordSize(), true);
-        Harp::Core core(arch, dec, mu);
+        vortex::ArchDef arch("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS);
+        vortex::Decoder decoder(arch);
+        vortex::MemoryUnit mu(PAGE_SIZE, arch.getWordSize(), true);        
         mu.attach(ram_, 0);  
 
-        while (core.running()) { 
-            core.step();
+        std::vector<std::shared_ptr<vortex::Core>> cores(NUM_CORES);
+        for (size_t i = 0; i < NUM_CORES; ++i) {
+            cores[i] = std::make_shared<vortex::Core>(arch, decoder, mu);
         }
-        core.printStats();
+
+        bool running;
+
+        do {
+            running = false;
+            for (size_t i = 0; i < NUM_CORES; ++i) {
+                if (!cores[i]->running())
+                    continue;
+                running = true;
+                cores[i]->step();
+            }
+        } while (running);
     }
 
     void thread_proc() {
@@ -190,7 +201,7 @@ private:
     bool is_running_;   
     size_t mem_allocation_; 
     std::thread thread_;   
-    Harp::RAM ram_;
+    vortex::RAM ram_;
     std::mutex mutex_;
 };
 
