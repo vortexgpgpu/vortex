@@ -85,22 +85,31 @@ module VX_cache_core_rsp_merge #(
         end else begin
 
             reg [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
+            reg [NUM_REQS-1:0][NUM_BANKS-1:0] bank_select_table;
+            
             wire [NUM_REQS-1:0] core_rsp_ready_unqual;
 
             always @(*) begin
                 core_rsp_valid_unqual = 0;                
                 core_rsp_tag_unqual   = 'x;
-                core_rsp_data_unqual  = 'x;                
-                core_rsp_bank_select  = 0;
+                core_rsp_data_unqual  = 'x;
+                bank_select_table     = 'x;
                 
-                for (integer i = 0; i < NUM_BANKS; i++) begin 
-                    if (per_bank_core_rsp_valid[i] 
-                     && !core_rsp_valid_unqual[per_bank_core_rsp_tid[i]]) begin
+                for (integer i = NUM_BANKS-1; i >= 0; --i) begin
+                    if (per_bank_core_rsp_valid[i]) begin
                         core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
                         core_rsp_tag_unqual[per_bank_core_rsp_tid[i]]   = per_bank_core_rsp_tag[i];
                         core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
-                        core_rsp_bank_select[i] = core_rsp_ready_unqual[per_bank_core_rsp_tid[i]];
+                        bank_select_table[per_bank_core_rsp_tid[i]]     = (1 << i);
                     end
+                end    
+            end
+
+            always @(*) begin
+                core_rsp_bank_select  = 0;
+                for (integer i = 0; i < NUM_BANKS; i++) begin 
+                    core_rsp_bank_select[i] = core_rsp_ready_unqual[per_bank_core_rsp_tid[i]] 
+                                           && bank_select_table[per_bank_core_rsp_tid[i]][i];
                 end    
             end
 
