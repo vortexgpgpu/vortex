@@ -74,6 +74,7 @@ module VX_shared_mem #(
     VX_cache_core_req_bank_sel #(
         .CACHE_LINE_SIZE (WORD_SIZE),
         .NUM_BANKS       (NUM_BANKS),
+        .NUM_PORTS       (1),
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),

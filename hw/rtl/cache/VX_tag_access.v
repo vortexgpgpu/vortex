@@ -11,8 +11,6 @@ module VX_tag_access #(
     parameter NUM_BANKS         = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,
-    // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS  = 0,
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET  = 0
 ) (
