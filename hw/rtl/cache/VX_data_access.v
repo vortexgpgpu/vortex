@@ -14,9 +14,7 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Enable write-through
-    parameter WRITE_THROUGH     = 1,
-    // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS  = 0
+    parameter WRITE_THROUGH     = 1
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -39,8 +37,7 @@ module VX_data_access #(
     // writing
     input wire                          writeen,
     input wire                          is_fill,
-    input wire [`UP(`WORD_SELECT_BITS)-1:0] wsel,
-    input wire [WORD_SIZE-1:0]          byteen,        
+    input wire [CACHE_LINE_SIZE-1:0]    byteen,        
     input wire [`CACHE_LINE_WIDTH-1:0]  wrdata
 );
     `UNUSED_VAR (reset)
@@ -63,19 +60,8 @@ module VX_data_access #(
         .din(wrdata),
         .dout(rddata)
     );
-
-    wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] byteen_qual;
-
-    if (`WORD_SELECT_BITS != 0) begin
-        for (genvar i = 0; i < `WORDS_PER_LINE; i++) begin
-            assign byteen_qual[i] = (wsel == `WORD_SELECT_BITS'(i)) ? byteen : {WORD_SIZE{1'b0}};
-        end
-    end else begin
-        `UNUSED_VAR (wsel)
-        assign byteen_qual = byteen;
-    end
     
-    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen_qual;
+    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen;
 
     `UNUSED_VAR (readen)
 
@@ -85,7 +71,7 @@ module VX_data_access #(
             if (is_fill) begin
                 $display("%t: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, wrdata);
             end else begin
-                $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, wsel=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, wsel, wrdata[`WORD_WIDTH-1:0]);
+                $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, wrdata);
             end
         end 
         if (readen) begin

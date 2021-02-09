@@ -296,6 +296,11 @@
 `define DNUM_BANKS `NUM_THREADS
 `endif
 
+// Number of bank ports
+`ifndef DNUM_PORTS
+`define DNUM_PORTS 1
+`endif
+
 // Core Request Queue Size
 `ifndef DCREQ_SIZE
 `define DCREQ_SIZE 4

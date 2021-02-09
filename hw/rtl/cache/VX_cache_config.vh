@@ -9,11 +9,8 @@
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
-//                               tag               byteen      tid
-`define REQ_INST_META_WIDTH     (CORE_TAG_WIDTH  + WORD_SIZE + `REQS_BITS)
-
-//                               metadata               word_sel              
-`define MSHR_DATA_WIDTH         (`REQ_INST_META_WIDTH + `UP(`WORD_SELECT_BITS))
+//                               tag               valid  byteen      tid          word_sel              
+`define MSHR_DATA_WIDTH         (CORE_TAG_WIDTH + (1 +    WORD_SIZE + `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 

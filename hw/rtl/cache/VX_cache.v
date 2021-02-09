@@ -12,6 +12,8 @@ module VX_cache #(
     parameter CACHE_LINE_SIZE               = 64, 
     // Number of banks
     parameter NUM_BANKS                     = NUM_REQS,
+    // Number of ports per banks
+    parameter NUM_PORTS                     = 1,
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
 
@@ -87,20 +89,21 @@ module VX_cache #(
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
 
-    wire [NUM_BANKS-1:0]                        per_bank_core_req_valid; 
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_valid; 
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_req_tid;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
     wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;
-    wire [NUM_BANKS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel;
-    wire [NUM_BANKS-1:0][WORD_SIZE-1:0]         per_bank_core_req_byteen;
-    wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]       per_bank_core_req_data;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]    per_bank_core_req_tag;
-    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_req_tid;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
     
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
-    wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]       per_bank_core_rsp_data;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_rsp_pmask;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_rsp_tid;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]    per_bank_core_rsp_tag;    
-    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]        per_bank_core_rsp_tid; 
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_dram_req_valid;    
@@ -178,6 +181,7 @@ module VX_cache #(
     VX_cache_core_req_bank_sel #(
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS       (NUM_BANKS),
+        .NUM_PORTS       (NUM_PORTS),
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),
@@ -209,19 +213,20 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-        wire                        curr_bank_core_req_valid;     
+        wire [NUM_PORTS-1:0]        curr_bank_core_req_valid;
+        wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] curr_bank_core_req_wsel;
+        wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
+        wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
+        wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_req_tid;     
         wire                        curr_bank_core_req_rw;  
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;
-        wire [`UP(`WORD_SELECT_BITS)-1:0] curr_bank_core_req_wsel;
-        wire [WORD_SIZE-1:0]        curr_bank_core_req_byteen;
-        wire [`WORD_WIDTH-1:0]      curr_bank_core_req_data;
         wire [CORE_TAG_WIDTH-1:0]   curr_bank_core_req_tag;  
-        wire [`REQS_BITS-1:0]       curr_bank_core_req_tid;   
         wire                        curr_bank_core_req_ready;
 
         wire                        curr_bank_core_rsp_valid;
-        wire [`REQS_BITS-1:0]       curr_bank_core_rsp_tid;
-        wire [`WORD_WIDTH-1:0]      curr_bank_core_rsp_data;
+        wire [NUM_PORTS-1:0]        curr_bank_core_rsp_pmask;        
+        wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_rsp_data;
+        wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_rsp_tid;
         wire [CORE_TAG_WIDTH-1:0]   curr_bank_core_rsp_tag;
         wire                        curr_bank_core_rsp_ready;
 
@@ -252,6 +257,7 @@ module VX_cache #(
         // Core WB
         assign curr_bank_core_rsp_ready   = per_bank_core_rsp_ready[i];
         assign per_bank_core_rsp_valid[i] = curr_bank_core_rsp_valid;
+        assign per_bank_core_rsp_pmask[i] = curr_bank_core_rsp_pmask;
         assign per_bank_core_rsp_tid  [i] = curr_bank_core_rsp_tid;
         assign per_bank_core_rsp_tag  [i] = curr_bank_core_rsp_tag;
         assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
@@ -286,6 +292,7 @@ module VX_cache #(
             .CACHE_SIZE         (CACHE_SIZE),
             .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
             .NUM_BANKS          (NUM_BANKS),
+            .NUM_PORTS          (NUM_PORTS),
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),
             .CREQ_SIZE          (CREQ_SIZE),
@@ -323,6 +330,7 @@ module VX_cache #(
 
             // Core response                
             .core_rsp_valid     (curr_bank_core_rsp_valid),
+            .core_rsp_pmask     (curr_bank_core_rsp_pmask),
             .core_rsp_tid       (curr_bank_core_rsp_tid),
             .core_rsp_data      (curr_bank_core_rsp_data),
             .core_rsp_tag       (curr_bank_core_rsp_tag),
@@ -347,6 +355,7 @@ module VX_cache #(
 
     VX_cache_core_rsp_merge #(
         .NUM_BANKS          (NUM_BANKS),
+        .NUM_PORTS          (NUM_PORTS),
         .WORD_SIZE          (WORD_SIZE),
         .NUM_REQS           (NUM_REQS),
         .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),        
@@ -355,6 +364,7 @@ module VX_cache #(
         .clk                     (clk),
         .reset                   (reset),                    
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
+        .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
         .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),   

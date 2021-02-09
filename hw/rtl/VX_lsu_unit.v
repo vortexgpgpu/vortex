@@ -234,8 +234,6 @@ module VX_lsu_unit #(
 
     // send load commit
 
-    wire is_load_rsp = (| dcache_rsp_if.valid);
-
     wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
     
     VX_pipe_register #(
@@ -245,8 +243,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!load_rsp_stall),
-        .data_in  ({is_load_rsp,        rsp_wid,          rsp_tmask,           rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
-        .data_out ({ld_commit_if.valid, ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
+        .data_in  ({(| dcache_rsp_if.valid), rsp_wid,          rsp_tmask,           rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
+        .data_out ({ld_commit_if.valid,      ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
     );
 
     // Can accept new cache response?

@@ -155,6 +155,7 @@ module VX_mem_unit # (
         .CACHE_SIZE         (`DCACHE_SIZE),
         .CACHE_LINE_SIZE    (`DCACHE_LINE_SIZE),
         .NUM_BANKS          (`DNUM_BANKS),
+        .NUM_PORTS          (`DNUM_PORTS),
         .WORD_SIZE          (`DWORD_SIZE),
         .NUM_REQS           (`DNUM_REQUESTS),
         .CREQ_SIZE          (`DCREQ_SIZE),
