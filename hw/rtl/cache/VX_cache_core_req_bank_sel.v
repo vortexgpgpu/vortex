@@ -14,7 +14,9 @@ module VX_cache_core_req_bank_sel #(
     // core request tag size
     parameter CORE_TAG_WIDTH    = 3,
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET  = 0
+    parameter BANK_ADDR_OFFSET  = 0,
+    // shared bank ready signal
+    parameter SHARED_BANK_READY = 0
 ) (
     input wire                                      clk,
     input wire                                      reset,
@@ -39,7 +41,7 @@ module VX_cache_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data,  
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0]  per_bank_core_req_tid,
     output wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag,
-    input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
+    input  wire [`BANK_READY_COUNT-1:0]             per_bank_core_req_ready
 );
     `STATIC_ASSERT (NUM_REQS >= NUM_BANKS, ("invalid number of banks"));
 
@@ -129,11 +131,21 @@ module VX_cache_core_req_bank_sel #(
                     end
                 end
 
-                always @(*) begin
-                    for (integer i = 0; i < NUM_REQS; ++i) begin
-                        core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]] 
-                                           && core_req_line_match[i]
-                                           && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
+                if (SHARED_BANK_READY == 0) begin
+                    always @(*) begin
+                        for (integer i = 0; i < NUM_REQS; ++i) begin
+                            core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
+                                               && core_req_line_match[i]
+                                               && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
+                        end
+                    end
+                end else begin
+                    always @(*) begin
+                        for (integer i = 0; i < NUM_REQS; ++i) begin
+                            core_req_ready_r[i] = per_bank_core_req_ready
+                                               && core_req_line_match[i]
+                                               && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
+                        end
                     end
                 end
 
@@ -148,7 +160,6 @@ module VX_cache_core_req_bank_sel #(
                     per_bank_core_req_data_r  = 'x;
                     per_bank_core_req_tag_r   = 'x;
                     per_bank_core_req_tid_r   = 'x;
-                    core_req_ready_r          = 'x;
 
                     for (integer i = NUM_REQS-1; i >= 0; --i) begin                        
                         if (core_req_valid[i]) begin                    
@@ -159,9 +170,29 @@ module VX_cache_core_req_bank_sel #(
                             per_bank_core_req_tid_r[core_req_bid[i]][i % NUM_PORTS]    = `REQS_BITS'(i);    
                             per_bank_core_req_rw_r[core_req_bid[i]]   = core_req_rw[i];
                             per_bank_core_req_addr_r[core_req_bid[i]] = core_req_line_addr[i];
-                            per_bank_core_req_tag_r[core_req_bid[i]]  = core_req_tag[i];      
-                            core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]] 
-                                               && core_req_line_match[i];
+                            per_bank_core_req_tag_r[core_req_bid[i]]  = core_req_tag[i];
+                        end
+                    end
+                end
+
+                if (SHARED_BANK_READY == 0) begin
+                    always @(*) begin
+                        core_req_ready_r = 'x;
+                        for (integer i = NUM_REQS-1; i >= 0; --i) begin                        
+                            if (core_req_valid[i]) begin
+                                core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
+                                                   && core_req_line_match[i];
+                            end
+                        end
+                    end
+                end else begin
+                    always @(*) begin
+                        core_req_ready_r = 'x;
+                        for (integer i = NUM_REQS-1; i >= 0; --i) begin                        
+                            if (core_req_valid[i]) begin
+                                core_req_ready_r[i] = per_bank_core_req_ready 
+                                                   && core_req_line_match[i];
+                            end
                         end
                     end
                 end
@@ -193,13 +224,27 @@ module VX_cache_core_req_bank_sel #(
                 end
             end
 
-            always @(*) begin
-                core_req_ready_r = 0;        
-                for (integer j = 0; j < NUM_BANKS; ++j) begin
-                    for (integer i = 0; i < NUM_REQS; ++i) begin
-                        if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                            core_req_ready_r[i] = per_bank_core_req_ready[j];
-                            break;
+            if (SHARED_BANK_READY == 0) begin
+                always @(*) begin
+                    core_req_ready_r = 0;    
+                    for (integer j = 0; j < NUM_BANKS; ++j) begin
+                        for (integer i = 0; i < NUM_REQS; ++i) begin
+                            if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
+                                core_req_ready_r[i] = per_bank_core_req_ready[j];
+                                break;
+                            end
+                        end
+                    end
+                end
+            end else begin
+                always @(*) begin
+                    core_req_ready_r = 0;        
+                    for (integer j = 0; j < NUM_BANKS; ++j) begin
+                        for (integer i = 0; i < NUM_REQS; ++i) begin
+                            if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
+                                core_req_ready_r[i] = per_bank_core_req_ready;
+                                break;
+                            end
                         end
                     end
                 end
@@ -234,12 +279,25 @@ module VX_cache_core_req_bank_sel #(
 `ifdef PERF_ENABLE
     reg [NUM_REQS-1:0] core_req_sel_r;
 
-    always @(*) begin
-        core_req_sel_r = 0;
-        for (integer j = 0; j < NUM_BANKS; ++j) begin
-            for (integer i = 0; i < NUM_REQS; ++i) begin
-                if (core_req_valid[i] && (core_req_bid[i] == `UP(`BANK_SELECT_BITS)'(j))) begin
-                    core_req_sel_r[i] = per_bank_core_req_ready[j];
+    if (SHARED_BANK_READY == 0) begin
+        always @(*) begin
+            core_req_sel_r = 0;
+            for (integer j = 0; j < NUM_BANKS; ++j) begin
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    if (core_req_valid[i] && (core_req_bid[i] == `UP(`BANK_SELECT_BITS)'(j))) begin
+                        core_req_sel_r[i] = per_bank_core_req_ready[j];
+                    end
+                end
+            end
+        end
+    end else begin
+        always @(*) begin
+            core_req_sel_r = 0;
+            for (integer j = 0; j < NUM_BANKS; ++j) begin
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    if (core_req_valid[i] && (core_req_bid[i] == `UP(`BANK_SELECT_BITS)'(j))) begin
+                        core_req_sel_r[i] = per_bank_core_req_ready;
+                    end
                 end
             end
         end

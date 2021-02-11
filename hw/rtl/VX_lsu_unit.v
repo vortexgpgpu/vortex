@@ -9,8 +9,8 @@ module VX_lsu_unit #(
     input wire reset,
 
    // Dcache interface
-    VX_cache_core_req_if dcache_req_if,
-    VX_cache_core_rsp_if dcache_rsp_if,
+    VX_dcache_core_req_if dcache_req_if,
+    VX_dcache_core_rsp_if dcache_rsp_if,
 
     // inputs
     VX_lsu_req_if   lsu_req_if,
@@ -36,14 +36,14 @@ module VX_lsu_unit #(
         assign full_address[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
     end
 
-    wire [`NUM_THREADS-2:0] addr_matches;
-    for (genvar i = 1; i < `NUM_THREADS; i++) begin
-        assign addr_matches[i-1] = (full_address[0][31:2] == full_address[i][31:2]) || ~lsu_req_if.tmask[i];
+    wire [`NUM_THREADS-1:0] addr_matches;
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        assign addr_matches[i] = (full_address[0][31:2] == full_address[i][31:2]) || ~lsu_req_if.tmask[i];
     end    
-    wire is_dup_load = lsu_req_if.wb && (& addr_matches);
+    wire is_dup_load = lsu_req_if.wb && lsu_req_if.tmask[0] && (& addr_matches);
     
 `IGNORE_WARNINGS_BEGIN
-    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH-1:0] pending_tags;
+    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_ID_BITS-1:0] pending_tags;
 `IGNORE_WARNINGS_END
 
     wire ready_in;
@@ -92,7 +92,7 @@ module VX_lsu_unit #(
 
     wire mbuf_pop = mbuf_pop_part && (rsp_rem_mask_n == 0 || rsp_is_dup);
     
-    assign mbuf_raddr = dcache_rsp_if.tag[0][`DCORE_TAG_ID_BITS-1:0];    
+    assign mbuf_raddr = dcache_rsp_if.tag[`DCORE_TAG_ID_BITS-1:0];    
 
     VX_index_buffer #(
         .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
@@ -136,7 +136,7 @@ module VX_lsu_unit #(
     always @(posedge clk) begin
         if (mbuf_push)  begin
             rsp_rem_mask[mbuf_waddr] <= req_tmask;
-            pending_tags[mbuf_waddr] <= dcache_req_if.tag[0];
+            pending_tags[mbuf_waddr] <= req_tag;
         end    
         if (mbuf_pop_part) begin
             rsp_rem_mask[mbuf_raddr] <= rsp_rem_mask_n;
@@ -266,16 +266,16 @@ module VX_lsu_unit #(
 `ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin        
         if ((| (dcache_req_if.valid & dcache_req_if.ready))) begin
-            if (dcache_req_if.rw[0])
+            if ((| dcache_req_if.rw))
                 $display("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, data=%0h", 
-                     $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_addr, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
+                    $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_addr, dcache_req_if.tag, dcache_req_if.byteen, dcache_req_if.data);
             else
                 $display("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, byteen=%0h, rd=%0d, is_dup=%b", 
-                     $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_addr, dcache_req_if.tag, dcache_req_if.byteen, req_rd, req_is_dup);
+                    $time, CORE_ID, req_wid, req_pc, (dcache_req_if.valid & dcache_req_if.ready), req_addr, dcache_req_if.tag, dcache_req_if.byteen, req_rd, req_is_dup);
         end
         if ((| dcache_rsp_if.valid) && dcache_rsp_if.ready) begin
             $display("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=%0h, is_dup=%b", 
-                     $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd, dcache_rsp_if.data, rsp_is_dup);
+                    $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd, dcache_rsp_if.data, rsp_is_dup);
         end
         if (mbuf_full) begin
             $write("%t: D$%0d queue-full:", $time, CORE_ID);

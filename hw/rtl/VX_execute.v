@@ -13,8 +13,8 @@ module VX_execute #(
     VX_csr_io_rsp_if    csr_io_rsp_if,    
 
     // Dcache interface
-    VX_cache_core_req_if dcache_req_if,
-    VX_cache_core_rsp_if dcache_rsp_if,
+    VX_dcache_core_req_if dcache_req_if,
+    VX_dcache_core_rsp_if dcache_rsp_if,
 
     // commit status
     VX_cmt_to_csr_if    cmt_to_csr_if,

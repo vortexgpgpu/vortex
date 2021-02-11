@@ -69,7 +69,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]   per_bank_core_req_data_unqual;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag_unqual;
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid_unqual;
-    wire [NUM_BANKS-1:0]                    per_bank_core_req_ready_unqual;
+    wire                                    per_bank_core_req_ready_unqual;
     
     VX_cache_core_req_bank_sel #(
         .CACHE_LINE_SIZE (WORD_SIZE),
@@ -78,7 +78,8 @@ module VX_shared_mem #(
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_WIDTH),
-        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
+        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET),
+        .SHARED_BANK_READY(1)
     ) core_req_bank_sel (        
         .clk        (clk),
         .reset      (reset),
@@ -103,9 +104,6 @@ module VX_shared_mem #(
         .per_bank_core_req_ready (per_bank_core_req_ready_unqual)
     );
 
-    `UNUSED_VAR (per_bank_core_req_tag_unqual)
-    `UNUSED_VAR (per_bank_core_req_rw_unqual)
-
     wire [NUM_BANKS-1:0]                    per_bank_core_req_valid; 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_rw;      
     wire [NUM_BANKS-1:0][`LINE_SELECT_BITS-1:0] per_bank_core_req_addr;
@@ -120,7 +118,7 @@ module VX_shared_mem #(
     assign creq_push = (| core_req_valid) && !creq_full;
     assign creq_pop = ~creq_empty && ~crsq_full;
     
-    assign per_bank_core_req_ready_unqual = {NUM_BANKS{~creq_full}};
+    assign per_bank_core_req_ready_unqual = ~creq_full;
 
     wire [NUM_REQS-1:0][`LINE_SELECT_BITS-1:0] per_bank_core_req_addr_qual;
     `UNUSED_VAR (per_bank_core_req_addr_unqual)

@@ -1,9 +1,9 @@
-`ifndef VX_CACHE_CORE_REQ_IF
-`define VX_CACHE_CORE_REQ_IF
+`ifndef VX_DCACHE_CORE_REQ_IF
+`define VX_DCACHE_CORE_REQ_IF
 
 `include "../cache/VX_cache_config.vh"
 
-interface VX_cache_core_req_if #(
+interface VX_dcache_core_req_if #(
     parameter NUM_REQS         = 1,
     parameter WORD_SIZE        = 1,
     parameter CORE_TAG_WIDTH   = 1,

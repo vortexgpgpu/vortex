@@ -70,33 +70,31 @@ module VX_core #(
 
     //--
 
-    VX_cache_core_req_if #(
+    VX_dcache_core_req_if #(
         .NUM_REQS(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_dcache_req_if();
+    ) dcache_core_req_if();
 
-    VX_cache_core_rsp_if #(
+    VX_dcache_core_rsp_if #(
         .NUM_REQS(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`DCORE_TAG_ID_BITS)
-    ) core_dcache_rsp_if();
+    ) dcache_core_rsp_if();
     
-    VX_cache_core_req_if #(
-        .NUM_REQS(`INUM_REQUESTS), 
+    VX_icache_core_req_if #(
         .WORD_SIZE(`IWORD_SIZE), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
-    ) core_icache_req_if();
+    ) icache_core_req_if();
 
-    VX_cache_core_rsp_if #(
-        .NUM_REQS(`INUM_REQUESTS), 
+    VX_icache_core_rsp_if #(
         .WORD_SIZE(`IWORD_SIZE), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS(`ICORE_TAG_ID_BITS)
-    ) core_icache_rsp_if();
+    ) icache_core_rsp_if();
     
     VX_pipeline #(
         .CORE_ID(CORE_ID)
@@ -110,34 +108,31 @@ module VX_core #(
         .reset(reset),
 
         // Dcache core request
-        .dcache_req_valid   (core_dcache_req_if.valid),
-        .dcache_req_rw      (core_dcache_req_if.rw),
-        .dcache_req_byteen  (core_dcache_req_if.byteen),
-        .dcache_req_addr    (core_dcache_req_if.addr),
-        .dcache_req_data    (core_dcache_req_if.data),
-        .dcache_req_tag     (core_dcache_req_if.tag),
-        .dcache_req_ready   (core_dcache_req_if.ready),
+        .dcache_req_valid   (dcache_core_req_if.valid),
+        .dcache_req_rw      (dcache_core_req_if.rw),
+        .dcache_req_byteen  (dcache_core_req_if.byteen),
+        .dcache_req_addr    (dcache_core_req_if.addr),
+        .dcache_req_data    (dcache_core_req_if.data),
+        .dcache_req_tag     (dcache_core_req_if.tag),
+        .dcache_req_ready   (dcache_core_req_if.ready),
 
         // Dcache core reponse    
-        .dcache_rsp_valid   (core_dcache_rsp_if.valid),
-        .dcache_rsp_data    (core_dcache_rsp_if.data),
-        .dcache_rsp_tag     (core_dcache_rsp_if.tag),
-        .dcache_rsp_ready   (core_dcache_rsp_if.ready),
+        .dcache_rsp_valid   (dcache_core_rsp_if.valid),
+        .dcache_rsp_data    (dcache_core_rsp_if.data),
+        .dcache_rsp_tag     (dcache_core_rsp_if.tag),
+        .dcache_rsp_ready   (dcache_core_rsp_if.ready),
 
-        // Dcache core request
-        .icache_req_valid   (core_icache_req_if.valid),
-        .icache_req_rw      (core_icache_req_if.rw),
-        .icache_req_byteen  (core_icache_req_if.byteen),
-        .icache_req_addr    (core_icache_req_if.addr),
-        .icache_req_data    (core_icache_req_if.data),
-        .icache_req_tag     (core_icache_req_if.tag),
-        .icache_req_ready   (core_icache_req_if.ready),
+        // Icache core request
+        .icache_req_valid   (icache_core_req_if.valid),
+        .icache_req_addr    (icache_core_req_if.addr),
+        .icache_req_tag     (icache_core_req_if.tag),
+        .icache_req_ready   (icache_core_req_if.ready),
 
-        // Dcache core reponse    
-        .icache_rsp_valid   (core_icache_rsp_if.valid),
-        .icache_rsp_data    (core_icache_rsp_if.data),
-        .icache_rsp_tag     (core_icache_rsp_if.tag),
-        .icache_rsp_ready   (core_icache_rsp_if.ready),     
+        // Icache core reponse    
+        .icache_rsp_valid   (icache_core_rsp_if.valid),
+        .icache_rsp_data    (icache_core_rsp_if.data),
+        .icache_rsp_tag     (icache_core_rsp_if.tag),
+        .icache_rsp_ready   (icache_core_rsp_if.ready),     
 
         // CSR request
         .csr_req_valid      (csr_req_valid),
@@ -170,12 +165,12 @@ module VX_core #(
         .reset              (reset),
 
         // Core <-> Dcache
-        .core_dcache_req_if (core_dcache_req_if),
-        .core_dcache_rsp_if (core_dcache_rsp_if),
+        .dcache_core_req_if (dcache_core_req_if),
+        .dcache_core_rsp_if (dcache_core_rsp_if),
         
         // Core <-> Icache
-        .core_icache_req_if (core_icache_req_if),
-        .core_icache_rsp_if (core_icache_rsp_if),
+        .icache_core_req_if (icache_core_req_if),
+        .icache_core_rsp_if (icache_core_rsp_if),
 
         // DRAM
         .dram_req_if        (dram_req_if),

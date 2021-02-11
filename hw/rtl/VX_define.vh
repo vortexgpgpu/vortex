@@ -259,9 +259,6 @@
 // DRAM byte enable bits
 `define IDRAM_BYTEEN_WIDTH      `ICACHE_LINE_SIZE
 
-// Core request size
-`define INUM_REQUESTS           1
-
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
 // Cache ID
