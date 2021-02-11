@@ -5,18 +5,18 @@ module VX_databus_arb (
     input wire              reset,
 
     // input request
-    VX_cache_core_req_if    core_req_if,
+    VX_dcache_core_req_if   core_req_if,
 
     // output requests
-    VX_cache_core_req_if    cache_req_if,
-    VX_cache_core_req_if    smem_req_if,
+    VX_dcache_core_req_if   cache_req_if,
+    VX_dcache_core_req_if   smem_req_if,
 
     // input responses
-    VX_cache_core_rsp_if    cache_rsp_if,
-    VX_cache_core_rsp_if    smem_rsp_if,
+    VX_dcache_core_rsp_if   cache_rsp_if,
+    VX_dcache_core_rsp_if   smem_rsp_if,
 
     // output response
-    VX_cache_core_rsp_if    core_rsp_if
+    VX_dcache_core_rsp_if   core_rsp_if
 );
     localparam SMEM_ASHIFT = `CLOG2(`SHARED_MEM_BASE_ADDR_ALIGN);    
     localparam REQ_ASHIFT  = `CLOG2(`DWORD_SIZE);
