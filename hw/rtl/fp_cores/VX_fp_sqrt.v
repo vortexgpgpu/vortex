@@ -28,7 +28,17 @@ module VX_fp_sqrt #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
     
-    for (genvar i = 0; i < LANES; i++) begin
+    for (genvar i = 0; i < LANES; i++) begin    
+
+        wire fsqrt_reset;
+        VX_reset_relay #(
+            .NUM_NODES(1)
+        ) reset_relay (
+            .clk     (clk),
+            .reset   (reset),
+            .reset_o (fsqrt_reset)
+        );
+
     `ifdef VERILATOR
         reg [31:0] r;
         fflags_t f;
@@ -44,7 +54,7 @@ module VX_fp_sqrt #(
             .RESETW (1)
         ) shift_req_dpi (
             .clk      (clk),
-            .reset    (reset),
+            .reset    (fsqrt_reset),
             .enable   (enable),
             .data_in  (r),
             .data_out (result[i])
@@ -52,7 +62,7 @@ module VX_fp_sqrt #(
     `else
         acl_fsqrt fsqrt (
             .clk    (clk),
-            .areset (reset),
+            .areset (fsqrt_reset),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result[i])
