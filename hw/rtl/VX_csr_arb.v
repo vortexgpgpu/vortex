@@ -66,7 +66,8 @@ module VX_csr_arb #(
     VX_stream_arbiter #(
         .NUM_REQS (NUM_REQS),
         .DATAW    (RSP_DATAW),
-        .BUFFERED (BUFFERED_RSP)
+        .BUFFERED (BUFFERED_RSP),
+        .TYPE     ("X") // fixed arbitration
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

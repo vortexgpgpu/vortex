@@ -16,7 +16,7 @@ module VX_stream_arbiter #(
     output wire             valid_out,
     output wire [DATAW-1:0] data_out,    
     input  wire             ready_out
-  );
+);
   
     localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 

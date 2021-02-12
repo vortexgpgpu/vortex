@@ -313,7 +313,7 @@
 
 // Miss Handling Register Size
 `ifndef DMSHR_SIZE
-`define DMSHR_SIZE `LSUQ_SIZE
+`define DMSHR_SIZE (`LSUQ_SIZE / 2)
 `endif
 
 // DRAM Request Queue Size

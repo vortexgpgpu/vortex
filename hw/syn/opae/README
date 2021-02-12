@@ -23,10 +23,10 @@ cd build_fpga && qsub-synth
 tail -n 10 ./build_fpga_1c/build.log
 
 # Check if the job is submitted to the queue and running. Status should be R 
-qstat | grep tinebp
+qstat | grep <user>
 
 # Constantly monitoring the job submitted to the queue. Stop this using Ctrl+C 
-watch ‘qstat | grep tinebp’
+watch ‘qstat | grep <user>’
 
 #
 ## Executing on FPGA
@@ -90,14 +90,6 @@ tar -cvjf trace.vcd.tar.bz2 trace.vcd run.log
 tar -zxvf vortex.vcd.tar.gz
 tar -xvf vortex.vcd.tar.bz2
 
-# launch Gtkwave
-gtkwave ./build_ase_1c/work/vortex.vcd &
-
-# kill process by Users
-ps -u tinebp
-kill -9 <pid>
-ps -u tinebp | grep "blackbox" | awk '{print $1}' | xargs kill -9
-
 # fixing device resource busy issue when deleting /build_ase_1c/
 lsof +D build_ase_1c
 
@@ -114,10 +106,3 @@ make -C top2 clean && make -C top2 > top2/build.log 2>&1 &
 make -C top8 clean && make -C top8 > top8/build.log 2>&1 &
 make -C top16 clean && make -C top16 > top16/build.log 2>&1 &
 make -C top32 clean && make -C top32 > top32/build.log 2>&1 &
-
-# How to calculate the maximum operating frequency?
-200  Mhz -> period = 1/200x10^6 = 5ns 
-if slack = +1.664 -> minimal period = 5-1.664 = 3.336 -> fmax = 1/3.336 = 300 Mhz
-
-# build rtlsim from driver tests
-make -C ../../rtlsim clean && reset && make -C ../../rtlsim
