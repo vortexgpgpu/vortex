@@ -21,7 +21,7 @@ install:
   - make -s
 
 script:     
-  - ./ci/regresion.sh
+  - ./ci/regression.sh
   
 after_success:
   # Gather code coverage
