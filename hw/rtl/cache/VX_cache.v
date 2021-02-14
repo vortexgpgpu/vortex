@@ -42,7 +42,10 @@ module VX_cache #(
     parameter DRAM_TAG_WIDTH                = (32 - $clog2(CACHE_LINE_SIZE)),
 
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET              = 0
+    parameter BANK_ADDR_OFFSET              = 0,
+
+    // in-order DRAN
+    parameter IN_ORDER_DRAM                 = 0
  ) (
     `SCOPE_IO_VX_cache
     
@@ -117,7 +120,7 @@ module VX_cache #(
 
     wire [`CACHE_LINE_WIDTH-1:0]                dram_rsp_data_qual;
     wire [DRAM_TAG_WIDTH-1:0]                   dram_rsp_tag_qual;
-    wire [`LINE_ADDR_WIDTH-1:0]                 flush_addr;
+    wire [`LINE_SELECT_BITS-1:0]                flush_addr;
     wire                                        flush_enable;
 
 `ifdef PERF_ENABLE
@@ -151,13 +154,13 @@ module VX_cache #(
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (size)
-    );    
+    );
     
     if (NUM_BANKS == 1) begin
         `UNUSED_VAR (dram_rsp_tag_qual)
-        assign drsq_pop = !drsq_empty && per_bank_dram_rsp_ready && !flush_enable;
+        assign drsq_pop = !drsq_empty && per_bank_dram_rsp_ready;
     end else begin
-        assign drsq_pop = !drsq_empty && per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag_qual)] && !flush_enable;
+        assign drsq_pop = !drsq_empty && per_bank_dram_rsp_ready[`DRAM_ADDR_BANK(dram_rsp_tag_qual)];
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -171,8 +174,7 @@ module VX_cache #(
         .clk       (clk),
         .reset     (reset),
         .flush     (flush),        
-        .addr      (flush_addr),
-        .ready_out ((& per_bank_dram_rsp_ready)),
+        .addr_out  (flush_addr),
         .valid_out (flush_enable)
     );
 
@@ -240,7 +242,6 @@ module VX_cache #(
         wire                        curr_bank_dram_rsp_valid;    
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_dram_rsp_addr;        
         wire [`CACHE_LINE_WIDTH-1:0] curr_bank_dram_rsp_data;
-        wire                        curr_bank_dram_rsp_flush;
         wire                        curr_bank_dram_rsp_ready;
 
         // Core Req
@@ -276,14 +277,13 @@ module VX_cache #(
 
         // DRAM response
         if (NUM_BANKS == 1) begin
-            assign curr_bank_dram_rsp_valid = !drsq_empty || flush_enable;
-            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : dram_rsp_tag_qual;
+            assign curr_bank_dram_rsp_valid = !drsq_empty;
+            assign curr_bank_dram_rsp_addr  = dram_rsp_tag_qual;
         end else begin
-            assign curr_bank_dram_rsp_valid = (!drsq_empty && (`DRAM_ADDR_BANK(dram_rsp_tag_qual) == i)) || flush_enable;
-            assign curr_bank_dram_rsp_addr  = flush_enable ? flush_addr : `DRAM_TO_LINE_ADDR(dram_rsp_tag_qual); 
+            assign curr_bank_dram_rsp_valid = !drsq_empty && (`DRAM_ADDR_BANK(dram_rsp_tag_qual) == i);
+            assign curr_bank_dram_rsp_addr  = `DRAM_TO_LINE_ADDR(dram_rsp_tag_qual); 
         end
         assign curr_bank_dram_rsp_data    = dram_rsp_data_qual;
-        assign curr_bank_dram_rsp_flush   = flush_enable;
         assign per_bank_dram_rsp_ready[i] = curr_bank_dram_rsp_ready;
         
         VX_bank #(                
@@ -303,7 +303,8 @@ module VX_cache #(
             .WRITE_ENABLE       (WRITE_ENABLE),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                
             .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
-            .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
+            .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET),
+            .IN_ORDER_DRAM      (IN_ORDER_DRAM)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
             
@@ -348,8 +349,11 @@ module VX_cache #(
             .dram_rsp_valid     (curr_bank_dram_rsp_valid),    
             .dram_rsp_addr      (curr_bank_dram_rsp_addr),            
             .dram_rsp_data      (curr_bank_dram_rsp_data),
-            .dram_rsp_flush     (curr_bank_dram_rsp_flush),
-            .dram_rsp_ready     (curr_bank_dram_rsp_ready)
+            .dram_rsp_ready     (curr_bank_dram_rsp_ready),
+
+            // flush    
+            .flush_enable       (flush_enable),
+            .flush_addr         (flush_addr)
         );
     end   
 

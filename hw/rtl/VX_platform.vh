@@ -46,7 +46,7 @@
         if (!(cond)) $error msg; \
     endgenerate
 
-`define SASSERT(cond, msg)            \
+`define RUNTIME_ASSERT(cond, msg)     \
     always @(posedge clk)             \
         assert(cond) else $error msg; \
 

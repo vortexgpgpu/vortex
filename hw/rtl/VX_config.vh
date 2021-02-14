@@ -244,7 +244,7 @@
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE (`NUM_WARPS * `NUM_THREADS)
+`define LSUQ_SIZE 8
 `endif
 
 // Size of FPU Request Queue
@@ -313,7 +313,7 @@
 
 // Miss Handling Register Size
 `ifndef DMSHR_SIZE
-`define DMSHR_SIZE (`LSUQ_SIZE / 2)
+`define DMSHR_SIZE `LSUQ_SIZE
 `endif
 
 // DRAM Request Queue Size
