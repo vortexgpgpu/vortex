@@ -79,7 +79,7 @@ module VX_decode  #(
             `INST_L, 
             `INST_FL: src2_imm = {{20{u_12[11]}}, u_12};
             `INST_B:  src2_imm = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};
-            default: src2_imm = 'x;
+            default:  src2_imm = 'x;
         endcase
     end     
 
@@ -208,10 +208,12 @@ module VX_decode  #(
     wire is_fpu    = (is_fl || is_fs || is_fci || is_fr4);   
 
     reg [2:0] frm;
+    reg if_fsqrt;
 
     always @(*) begin    
         fpu_op = `FPU_MISC;    
         frm = func3;
+        if_fsqrt = 0;
         if (is_fr4) begin
             case ({is_fmadd, is_fmsub, is_fnmsub, is_fnmadd})
                 4'b1000: fpu_op = `FPU_MADD;
@@ -220,8 +222,7 @@ module VX_decode  #(
                 4'b0001: fpu_op = `FPU_NMADD;
                 default:;
             endcase
-        end
-        else begin
+        end else begin
             case (func7)
                 7'h00: fpu_op = `FPU_ADD;
                 7'h04: fpu_op = `FPU_SUB;
@@ -229,19 +230,22 @@ module VX_decode  #(
                 7'h0C: fpu_op = `FPU_DIV;
                 7'h10: begin 
                     fpu_op = `FPU_MISC;
-                       frm = (func3[1]) ? 2 : ((func3[0]) ? 1 : 0);
+                       frm = func3[1] ? 2 : (func3[0] ? 1 : 0);
                 end
                 7'h14: begin
                     fpu_op = `FPU_MISC;
                        frm = (func3 == 3'h0) ? 3 : 4;
                 end
-                7'h2C: fpu_op = `FPU_SQRT;
+                7'h2C: begin
+                    fpu_op = `FPU_SQRT;
+                    if_fsqrt = 1;
+                end
                 7'h50: fpu_op = `FPU_CMP;   // wb to intReg
                 7'h60: fpu_op = (instr[20]) ? `FPU_CVTWUS : `FPU_CVTWS; // doesn't need rs2, and read rs1 from fpReg, WB to intReg
                 7'h68: fpu_op = (instr[20]) ? `FPU_CVTSWU : `FPU_CVTSW; // doesn't need rs2, and read rs1 from intReg
                 7'h70: begin 
                     fpu_op = (func3 == 3'h0) ? `FPU_MISC : `FPU_CLASS;
-                       frm = (func3 == 3'h0) ? 5 : func3; 
+                       frm = (func3 == 3'h0) ?         5 : func3; 
                 end 
                 7'h78: begin fpu_op = `FPU_MISC; frm = 6; end             
                 default:;
@@ -274,14 +278,24 @@ module VX_decode  #(
 
     // GPU
 
+    reg is_gpu_bar, is_qpu_spawn;
+
     always @(*) begin
         gpu_op = `GPU_OTHER;
+        is_gpu_bar   = 0;
+        is_qpu_spawn = 0;
         case (func3)
             3'h0: gpu_op = `GPU_TMC;
-            3'h1: gpu_op = `GPU_WSPAWN;
+            3'h1: begin
+                gpu_op = `GPU_WSPAWN;
+                is_qpu_spawn = 1;
+            end
             3'h2: gpu_op = `GPU_SPLIT;
             3'h3: gpu_op = `GPU_JOIN;
-            3'h4: gpu_op = `GPU_BAR;
+            3'h4: begin 
+                gpu_op = `GPU_BAR; 
+                is_gpu_bar = 1; 
+            end
             default:;
         endcase
     end
@@ -289,15 +303,15 @@ module VX_decode  #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire use_rd = (is_fl || is_fci || is_fr4) 
-               || ((rd != 0) && (is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype));
+               || ((is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype) && (rd != 0));
 
     wire use_rs1 = is_fpu 
                 || is_gpu
-                || ((is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || !is_csr_imm || is_gpu) && (rs1 != 0));
+                || (is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || !is_csr_imm || is_gpu);
 
-    wire use_rs2 = (is_fpu && ~(is_fl || (fpu_op == `FPU_SQRT) || is_fcvti || is_fcvtf || is_fmvw_clss || is_fmvx))
-                || (is_gpu && (gpu_op == `GPU_BAR || gpu_op == `GPU_WSPAWN))
-                || ((is_btype || is_stype || is_rtype) && (rs2 != 0));
+    wire use_rs2 = (is_fpu && ~(is_fl || if_fsqrt || is_fcvti || is_fcvtf || is_fmvw_clss || is_fmvx))
+                || (is_gpu_bar || is_qpu_spawn)
+                || (is_btype || is_stype || is_rtype);
 
     wire use_rs3 = is_fr4;
 
@@ -349,10 +363,11 @@ module VX_decode  #(
 
     wire is_nop = (decode_if.ex_type == `EX_NOP);
 
-    assign decode_if.used_regs = ((`NUM_REGS)'(use_rd  && !is_nop) << decode_if.rd) 
-                               | ((`NUM_REGS)'(use_rs1 && !is_nop) << decode_if.rs1) 
-                               | ((`NUM_REGS)'(use_rs2 && !is_nop) << decode_if.rs2)
-                               | ((`NUM_REGS)'(use_rs3 && !is_nop) << decode_if.rs3);
+    assign decode_if.used_regs = is_nop ? `NUM_REGS'(0) :
+                                 ((`NUM_REGS'(use_rd)  << decode_if.rd) 
+                                | (`NUM_REGS'(use_rs1) << decode_if.rs1) 
+                                | (`NUM_REGS'(use_rs2) << decode_if.rs2)
+                                | (`NUM_REGS'(use_rs3) << decode_if.rs3));
 
     assign decode_if.imm = (is_lui || is_auipc) ? {upper_imm, 12'(0)} : 
                                 (is_jal || is_jalr || is_jals) ? jalx_offset :
