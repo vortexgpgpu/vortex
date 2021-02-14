@@ -352,7 +352,7 @@ module VX_bank #(
                                || incoming_fill_st1;
 
     wire send_fill_req_st1 = !is_fill_st1 && !mem_rw_st1 && miss_st1 
-                          && (!force_miss_st1 || (is_mshr_st1 && !prev_miss_dep_st1))
+                          && (!force_miss_st1 || (!IN_ORDER_DRAM && is_mshr_st1 && !prev_miss_dep_st1))
                           && !incoming_fill_qual_st1;
 
     wire do_writeback_st1 = !is_fill_st1 && mem_rw_st1;    
