@@ -21,7 +21,7 @@ module VX_miss_resrv #(
     // core request tag size
     parameter CORE_TAG_WIDTH    = 1,
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS  = 0    
+    parameter CORE_TAG_ID_BITS  = 0
 ) (
     input wire clk,
     input wire reset,
