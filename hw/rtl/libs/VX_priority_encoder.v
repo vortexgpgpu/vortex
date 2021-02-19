@@ -40,7 +40,8 @@ module VX_priority_encoder #(
         end
 
         VX_onehot_encoder #(
-            .N (N)
+            .N (N),
+            .REVERSE (REVERSE)
         ) b (
             .data_in  (onehot),
             .data_out (index),        
@@ -51,15 +52,25 @@ module VX_priority_encoder #(
 
         reg [N-1:0] onehot_r;
         reg [LN-1:0] index_r;
-
+        
         always @(*) begin
             index_r  = 'x;
             onehot_r = 0;
-            for (integer i = 0; i < N; i++) begin
-                if (data_in[i]) begin
-                    index_r     = LN'(i);
-                    onehot_r[i] = 1'b1;
-                    break;
+            if (REVERSE) begin
+                for (integer i = N-1; i >= 0; i--) begin
+                    if (data_in[i]) begin
+                        index_r     = LN'(i);
+                        onehot_r[i] = 1'b1;
+                        break;
+                    end
+                end
+            end else begin
+                for (integer i = 0; i < N; i++) begin
+                    if (data_in[i]) begin
+                        index_r     = LN'(i);
+                        onehot_r[i] = 1'b1;
+                        break;
+                    end
                 end
             end
         end
