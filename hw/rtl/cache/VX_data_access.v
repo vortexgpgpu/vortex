@@ -27,7 +27,7 @@ module VX_data_access #(
 `endif
 
 `IGNORE_WARNINGS_BEGIN
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr,    
+    input wire[`LINE_ADDR_WIDTH-1:0]    addr,
 `IGNORE_WARNINGS_END
 
     // reading
@@ -41,10 +41,13 @@ module VX_data_access #(
     input wire [`CACHE_LINE_WIDTH-1:0]  wrdata
 );
     `UNUSED_VAR (reset)
+    `UNUSED_VAR (readen)
 
+    wire [`LINE_SELECT_BITS-1:0] line_addr;
     wire [CACHE_LINE_SIZE-1:0] byte_enable;
-
-    wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
+    
+    assign line_addr = addr[`LINE_SELECT_BITS-1:0];
+    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen;
 
     VX_sp_ram #(
         .DATAW(CACHE_LINE_SIZE * 8),
@@ -52,7 +55,7 @@ module VX_data_access #(
         .BYTEENW(CACHE_LINE_SIZE),
         .RWCHECK(1)
     ) data_store (
-        .clk(clk),
+        .clk(clk),        
         .addr(line_addr),             
         .wren(writeen),  
         .byteen(byte_enable),
@@ -60,10 +63,6 @@ module VX_data_access #(
         .din(wrdata),
         .dout(rddata)
     );
-    
-    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen;
-
-    `UNUSED_VAR (readen)
 
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin 
