@@ -12,6 +12,8 @@ set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
 
 set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
 set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
+set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
+set_global_assignment -name PLACEMENT_EFFORT_MULTIPLIER 2.0
 set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
 set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
 set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
