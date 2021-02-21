@@ -98,11 +98,11 @@ make -C unittest clean && make -C unittest > unittest/build.log 2>&1 &
 make -C pipeline clean && make -C pipeline > pipeline/build.log 2>&1 &
 make -C cache clean && make -C cache > cache/build.log 2>&1 &
 make -C core clean && make -C core > core/build.log 2>&1 &
-make -C core8 clean && make -C core8 > core8/build.log 2>&1 &
 make -C vortex clean && make -C vortex > vortex/build.log 2>&1 &
-make -C top clean && make -C top > top/build.log 2>&1 &
 make -C top1 clean && make -C top1 > top1/build.log 2>&1 &
 make -C top2 clean && make -C top2 > top2/build.log 2>&1 &
+make -C top4 clean && make -C top4 > top4/build.log 2>&1 &
 make -C top8 clean && make -C top8 > top8/build.log 2>&1 &
 make -C top16 clean && make -C top16 > top16/build.log 2>&1 &
 make -C top32 clean && make -C top32 > top32/build.log 2>&1 &
+make -C top64 clean && make -C top64 > top64/build.log 2>&1 &
