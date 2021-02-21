@@ -38,11 +38,9 @@ module VX_warp_sched #(
     
     // wspawn
     reg [31:0]              use_wspawn_pc;
-    reg [`NUM_WARPS-1:0]    use_wspawn;
-    
-    reg [31:0]              warp_pc;
-    reg [`NW_BITS-1:0]      warp_to_schedule;
-    wire                    scheduled_warp;
+    reg [`NUM_WARPS-1:0]    use_wspawn;   
+    reg [`NW_BITS-1:0]      scheduled_warp;
+    wire                    warp_scheduled;
 
     reg didnt_split;   
 
@@ -63,8 +61,8 @@ module VX_warp_sched #(
         if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
             schedule_table_n[warp_ctl_if.wid] = (warp_ctl_if.tmc.tmask != 0);
         end        
-        if (scheduled_warp) begin // remove scheduled warp (round-robin)
-            schedule_table_n[warp_to_schedule] = 0;
+        if (warp_scheduled) begin // remove scheduled warp (round-robin)
+            schedule_table_n[scheduled_warp] = 0;
         end
     end    
 
@@ -122,9 +120,9 @@ module VX_warp_sched #(
                 end
             end          
 
-            if (use_wspawn[warp_to_schedule] && scheduled_warp) begin
-                use_wspawn[warp_to_schedule]   <= 0;
-                thread_masks[warp_to_schedule] <= 1;
+            if (use_wspawn[scheduled_warp] && warp_scheduled) begin
+                use_wspawn[scheduled_warp]   <= 0;
+                thread_masks[scheduled_warp] <= 1;
             end
 
             // Stalling the scheduling of warps
@@ -141,8 +139,8 @@ module VX_warp_sched #(
             end
 
             // Lock warp until instruction decode to resolve branches
-            if (scheduled_warp) begin
-                fetch_lock[warp_to_schedule] <= 1;
+            if (warp_scheduled) begin
+                fetch_lock[scheduled_warp] <= 1;
             end
             if (ifetch_rsp_fire) begin
                 fetch_lock[ifetch_rsp_if.wid] <= 0;
@@ -207,8 +205,9 @@ module VX_warp_sched #(
 
     // calculate next warp schedule
 
-    reg schedule_valid;
     reg [`NUM_THREADS-1:0] thread_mask;
+    reg schedule_valid;
+    reg [31:0] warp_pc;
     
     wire [`NUM_WARPS-1:0] schedule_ready = schedule_table & ~(stalled_warps | total_barrier_stall | fetch_lock);
 
@@ -216,13 +215,13 @@ module VX_warp_sched #(
         schedule_valid   = 0;
         thread_mask      = 'x;
         warp_pc          = 'x;
-        warp_to_schedule = 'x;
+        scheduled_warp = 'x;
         for (integer i = 0; i < `NUM_WARPS; ++i) begin
             if (schedule_ready[i]) begin
                 schedule_valid = 1;
                 thread_mask = use_wspawn[i] ? `NUM_THREADS'(1) : thread_masks[i];
                 warp_pc = use_wspawn[i] ? use_wspawn_pc : warp_pcs[i];
-                warp_to_schedule = `NW_BITS'(i);
+                scheduled_warp = `NW_BITS'(i);
                 break;
             end
         end    
@@ -230,7 +229,7 @@ module VX_warp_sched #(
 
     wire stall_out = ~ifetch_req_if.ready && ifetch_req_if.valid;   
 
-    assign scheduled_warp = schedule_valid && ~stall_out;
+    assign warp_scheduled = schedule_valid && ~stall_out;
 
     VX_pipe_register #( 
         .DATAW  (1 + `NUM_THREADS + 32 + `NW_BITS),
@@ -239,17 +238,17 @@ module VX_warp_sched #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({scheduled_warp,      thread_mask,         warp_pc,          warp_to_schedule}),
+        .data_in  ({warp_scheduled,      thread_mask,         warp_pc,          scheduled_warp}),
         .data_out ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );
 
     assign busy = (active_warps != 0); 
 
-    `SCOPE_ASSIGN (wsched_scheduled_warp, scheduled_warp);
+    `SCOPE_ASSIGN (wsched_scheduled_warp, warp_scheduled);
     `SCOPE_ASSIGN (wsched_active_warps,   active_warps);
     `SCOPE_ASSIGN (wsched_schedule_table, schedule_table);
     `SCOPE_ASSIGN (wsched_schedule_ready, schedule_ready);
-    `SCOPE_ASSIGN (wsched_warp_to_schedule, warp_to_schedule);
+    `SCOPE_ASSIGN (wsched_warp_to_schedule, scheduled_warp);
     `SCOPE_ASSIGN (wsched_warp_pc, warp_pc);
 
 endmodule
