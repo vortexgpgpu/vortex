@@ -208,12 +208,12 @@ module VX_decode  #(
     wire is_fpu    = (is_fl || is_fs || is_fci || is_fr4);   
 
     reg [2:0] frm;
-    reg if_fsqrt;
+    reg is_fsqrt;
 
     always @(*) begin    
         fpu_op = `FPU_MISC;    
         frm = func3;
-        if_fsqrt = 0;
+        is_fsqrt = 0;
         if (is_fr4) begin
             case ({is_fmadd, is_fmsub, is_fnmsub, is_fnmadd})
                 4'b1000: fpu_op = `FPU_MADD;
@@ -238,7 +238,7 @@ module VX_decode  #(
                 end
                 7'h2C: begin
                     fpu_op = `FPU_SQRT;
-                    if_fsqrt = 1;
+                    is_fsqrt = 1;
                 end
                 7'h50: fpu_op = `FPU_CMP;   // wb to intReg
                 7'h60: fpu_op = (instr[20]) ? `FPU_CVTWUS : `FPU_CVTWS; // doesn't need rs2, and read rs1 from fpReg, WB to intReg
@@ -309,8 +309,8 @@ module VX_decode  #(
                 || is_gpu
                 || (is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || !is_csr_imm || is_gpu);
 
-    wire use_rs2 = (is_fpu && ~(is_fl || if_fsqrt || is_fcvti || is_fcvtf || is_fmvw_clss || is_fmvx))
-                || (is_gpu_bar || is_qpu_spawn)
+    wire use_rs2 = (is_fpu && ~(is_fl || is_fsqrt || is_fcvti || is_fcvtf || is_fmvw_clss || is_fmvx))
+                || (is_gpu && (is_gpu_bar || is_qpu_spawn))
                 || (is_btype || is_stype || is_rtype);
 
     wire use_rs3 = is_fr4;
