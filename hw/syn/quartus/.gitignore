@@ -4,9 +4,6 @@
 /cache/*
 !/cache/Makefile
 
-/top/*
-!/top/Makefile
-
 /vortex/*
 !/vortex/Makefile
 
@@ -21,6 +18,9 @@
 
 /top2/*
 !/top2/Makefile
+
+/top4/*
+!/top4/Makefile
 
 /top8/*
 !/top8/Makefile

@@ -1,10 +1,10 @@
-FAMILY = "Arria 10"
-DEVICE = 10AX115N3F40E2SG
-FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
+#FAMILY = "Arria 10"
+#DEVICE = 10AX115N3F40E2SG
+#FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
 
-#FAMILY = "Stratix 10"
-#DEVICE = 1SX280HN2F43E2VG
-#FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
+FAMILY = "Stratix 10"
+DEVICE = 1SX280HN2F43E2VG
+FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
 
 PROJECT = vortex_afu
 TOP_LEVEL_ENTITY = vortex_afu
@@ -58,7 +58,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=2"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=8" -set "NUM_CLUSTERS=8"
 	
 syn.chg:
 	$(STAMP) syn.chg

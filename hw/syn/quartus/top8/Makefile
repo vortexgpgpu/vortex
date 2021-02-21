@@ -17,7 +17,7 @@ RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
-SYN_ARGS = --parallel --read_settings_files=on --set=VERILOG_MACRO=NOPAE=1
+SYN_ARGS = --parallel --read_settings_files=on
 FIT_ARGS = --parallel --part=$(DEVICE) --read_settings_files=on
 ASM_ARGS =
 STA_ARGS = --parallel --do_report_timing
@@ -58,7 +58,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=8"
+	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=4" -set "NUM_CLUSTERS=2"
 	
 syn.chg:
 	$(STAMP) syn.chg

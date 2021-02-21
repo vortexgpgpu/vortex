@@ -17,7 +17,7 @@ RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
-SYN_ARGS = --parallel --read_settings_files=on --set=VERILOG_MACRO=NOPAE=1
+SYN_ARGS = --parallel --read_settings_files=on
 FIT_ARGS = --parallel --part=$(DEVICE) --read_settings_files=on
 ASM_ARGS =
 STA_ARGS = --parallel --do_report_timing
