@@ -154,14 +154,15 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen_st0, byteen_st1;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] req_tid_st0, req_tid_st1;
     wire [NUM_PORTS-1:0]            pmask_st0, pmask_st1;
-    wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;
-    wire [`CACHE_LINE_WIDTH-1:0]    rdata_st1;
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] rdata_st0, rdata_st1;
+    wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;    
     wire [CORE_TAG_WIDTH-1:0]       tag_st0, tag_st1;
     wire                            valid_st0, valid_st1;        
     wire                            is_fill_st0, is_fill_st1;
     wire                            is_mshr_st0, is_mshr_st1;        
     wire                            miss_st0, miss_st1; 
-    wire                            prev_miss_dep_st0, prev_miss_dep_st1;
+    wire                            prev_miss_dep_st0;
+    wire                            fill_req_unqual_st0, fill_req_unqual_st1;
     wire                            force_miss_st0, force_miss_st1;
     wire                            writeen_unqual_st0, writeen_unqual_st1;
     wire                            incoming_fill_st0, incoming_fill_st1;
@@ -218,7 +219,7 @@ module VX_bank #(
 
     wire [`CACHE_LINE_WIDTH-1:0] creq_line_data;
 
-    if (`WORD_SELECT_BITS != 0) begin
+    if (`WORDS_PER_LINE > 1) begin
         if (NUM_PORTS > 1) begin
             reg [`CACHE_LINE_WIDTH-1:0] creq_line_data_r;
             always @(*) begin
@@ -278,7 +279,7 @@ module VX_bank #(
     end
 `endif
 
-    wire tag_match;
+    wire tag_match_st0;
         
     VX_tag_access #(
         .BANK_ID          (BANK_ID),
@@ -289,49 +290,88 @@ module VX_bank #(
         .WORD_SIZE        (WORD_SIZE),   
         .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET)
     ) tag_access (
-        .clk            (clk),
-        .reset          (reset),
+        .clk        (clk),
+        .reset      (reset),
 
     `ifdef DBG_CACHE_REQ_INFO
-        .debug_pc       (debug_pc_st0),
-        .debug_wid      (debug_wid_st0),
+        .debug_pc   (debug_pc_st0),
+        .debug_wid  (debug_wid_st0),
     `endif    
 
         // read/Fill
-        .lookup         (valid_st0 && !is_fill_st0),
-        .addr           (addr_st0),        
-        .fill           (valid_st0 && is_fill_st0),
-        .is_flush       (is_flush_st0),
-        .tag_match      (tag_match)
+        .lookup     (valid_st0 && !is_fill_st0),
+        .addr       (addr_st0),        
+        .fill       (valid_st0 && is_fill_st0),
+        .is_flush   (is_flush_st0),
+        .tag_match  (tag_match_st0)
     );
 
     // redundant fills
-    wire is_redundant_fill = !IN_ORDER_DRAM && is_fill_st0 && tag_match;
+    wire is_redundant_fill_st0 = !IN_ORDER_DRAM && is_fill_st0 && tag_match_st0;
 
     // we had a miss with prior request for the current address
     assign prev_miss_dep_st0 = is_miss_st1 && (addr_st0 == addr_st1);
 
-    assign miss_st0 = !is_fill_st0 && !tag_match;
+    assign miss_st0 = !is_fill_st0 && !tag_match_st0;
 
     // force miss to ensure commit order when a new request has pending previous requests to same block
     // also force a miss for mshr requests when previous requests got a miss    
     assign force_miss_st0 = (!is_fill_st0 && !is_mshr_st0 && (mshr_pending_st0 || prev_miss_dep_st0))
-                         || (is_mshr_st0 && is_miss_st1 && is_mshr_st1);
+                         || (is_mshr_st0 && is_mshr_st1 && is_miss_st1);
 
-    assign writeen_unqual_st0 = (!is_fill_st0 && tag_match && mem_rw_st0) 
-                             || (is_fill_st0 && !is_redundant_fill);
+    assign writeen_unqual_st0 = (WRITE_ENABLE && !is_fill_st0 && tag_match_st0 && mem_rw_st0)
+                             || (is_fill_st0 && !is_redundant_fill_st0);
 
     assign incoming_fill_st0 = dram_rsp_valid && (addr_st0 == dram_rsp_addr_qual);
 
+    assign fill_req_unqual_st0 = !mem_rw_st0 && (!force_miss_st0 || (!IN_ORDER_DRAM && is_mshr_st0 && !prev_miss_dep_st0));
+
+    wire [`CACHE_LINE_WIDTH-1:0] rdata_unqual;
+
+    wire writeen_st1 = writeen_unqual_st1 && (is_fill_st1 || !force_miss_st1);
+
+    wire rw_hazard = valid_st1 && writeen_st1 && (addr_st0 == addr_st1)
+                  && ((`WORDS_PER_LINE == 1) || (is_fill_st1 || (wsel_st0 == wsel_st1)));
+
+    if (`WORDS_PER_LINE > 1) begin        
+        for (genvar p = 0; p < NUM_PORTS; p++) begin
+            reg [`WORD_WIDTH-1:0] read_data_r;
+            wire [`WORD_WIDTH-1:0] write_data = wdata_st1[wsel_st0 * `WORD_WIDTH +: `WORD_WIDTH];
+            always @(*) begin
+                read_data_r = rdata_unqual[wsel_st0[p] * `WORD_WIDTH +: `WORD_WIDTH];
+                for (integer i = 0; i < WORD_SIZE; i++) begin
+                    if (rw_hazard 
+                     && (is_fill_st1 || (WRITE_ENABLE && byteen_st1[p][i]))
+                     && ((NUM_PORTS == 1) || pmask_st1[p])) begin                        
+                        read_data_r[i * 8 +: 8] = write_data[i * 8 +: 8];
+                    end
+                end
+            end
+            assign rdata_st0[p] = read_data_r;
+        end        
+    end else begin
+        reg [`WORD_WIDTH-1:0] read_data_r;
+        always @(*) begin
+            read_data_r = rdata_unqual;
+            for (integer i = 0; i < WORD_SIZE; i++) begin
+                if (rw_hazard 
+                 && (is_fill_st1 || (WRITE_ENABLE && byteen_st1[0][i]))) begin                        
+                    read_data_r[i * 8 +: 8] = wdata_st1[i * 8 +: 8];
+                end
+            end
+        end
+        assign rdata_st0[0] = read_data_r;
+    end
+
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`WORD_WIDTH + `UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, prev_miss_dep_st0, incoming_fill_st0, miss_st0, force_miss_st0, mem_rw_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, prev_miss_dep_st1, incoming_fill_st1, miss_st1, force_miss_st1, mem_rw_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, fill_req_unqual_st0, incoming_fill_st0, miss_st0, force_miss_st0, mem_rw_st0, addr_st0, rdata_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, fill_req_unqual_st1, incoming_fill_st1, miss_st1, force_miss_st1, mem_rw_st1, addr_st1, rdata_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1})
     ); 
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -342,8 +382,6 @@ module VX_bank #(
     end
 `endif
 
-    wire writeen_st1 = writeen_unqual_st1 && (is_fill_st1 || !force_miss_st1);
-
     wire crsq_push_st1 = !is_fill_st1 && !mem_rw_st1 && !miss_st1 && !force_miss_st1;
 
     wire mshr_push_st1 = !is_fill_st1 && !mem_rw_st1 && (miss_st1 || force_miss_st1);
@@ -351,28 +389,21 @@ module VX_bank #(
     wire incoming_fill_qual_st1 = (dram_rsp_valid && (addr_st1 == dram_rsp_addr_qual)) 
                                || incoming_fill_st1;
 
-    wire send_fill_req_st1 = !is_fill_st1 && !mem_rw_st1 && miss_st1 
-                          && (!force_miss_st1 || (!IN_ORDER_DRAM && is_mshr_st1 && !prev_miss_dep_st1))
-                          && !incoming_fill_qual_st1;
-
     wire do_writeback_st1 = !is_fill_st1 && mem_rw_st1;    
 
-    wire dreq_push_st1 = send_fill_req_st1 || do_writeback_st1;   
+    wire dreq_push_st1 = (miss_st1 && fill_req_unqual_st1 && !incoming_fill_qual_st1)
+                      || do_writeback_st1;
 
     wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] line_byteen_st1;
 
-    if (`WORD_SELECT_BITS != 0) begin
+    if (`WORDS_PER_LINE > 1) begin
         reg [CACHE_LINE_SIZE-1:0] line_byteen_r;
         always @(*) begin
             line_byteen_r = 0;           
-            if (NUM_PORTS > 1) begin
-                for (integer p = 0; p < NUM_PORTS; p++) begin
-                    if (pmask_st1[p]) begin
-                        line_byteen_r[wsel_st1[p] * WORD_SIZE +: WORD_SIZE] = byteen_st1[p];
-                    end
+            for (integer p = 0; p < NUM_PORTS; p++) begin
+                if ((NUM_PORTS == 1) || pmask_st1[p]) begin
+                    line_byteen_r[wsel_st1[p] * WORD_SIZE +: WORD_SIZE] = byteen_st1[p];
                 end
-            end else begin                
-                line_byteen_r[wsel_st1[0] * WORD_SIZE +: WORD_SIZE] = byteen_st1[0];
             end
         end
         assign line_byteen_st1 = line_byteen_r;
@@ -393,21 +424,23 @@ module VX_bank #(
         .reset      (reset),
 
     `ifdef DBG_CACHE_REQ_INFO
-        .debug_pc   (debug_pc_st1),
-        .debug_wid  (debug_wid_st1),
+        .debug_pc_r  (debug_pc_st0),
+        .debug_wid_r (debug_wid_st0),
+        .debug_pc_w  (debug_pc_st1),
+        .debug_wid_w (debug_wid_st1),
     `endif
 
-        .addr       (addr_st1),
-
         // reading
-        .readen     (valid_st1 && !mem_rw_st1 && !is_fill_st1),        
-        .rddata     (rdata_st1),
+        .readen     (valid_st0 && !is_fill_st0 && !mem_rw_st0),
+        .raddr      (addr_st0),
+        .rdata      (rdata_unqual),
 
         // writing        
         .writeen    (valid_st1 && writeen_st1),
         .is_fill    (is_fill_st1),
         .byteen     (line_byteen_st1),
-        .wrdata     (wdata_st1)
+        .waddr      (addr_st1),
+        .wdata      (wdata_st1)
     );
 
     assign mshr_push  = valid_st1 && mshr_push_st1;
@@ -477,20 +510,12 @@ module VX_bank #(
     wire [CORE_TAG_WIDTH-1:0] crsq_tag;
     wire crsq_empty;
 
-    assign crsq_push = valid_st1 && crsq_push_st1;
-    assign crsq_pop  = core_rsp_valid && core_rsp_ready;    
-    
-    if (`WORD_SELECT_BITS != 0) begin
-        for (genvar p = 0; p < NUM_PORTS; ++p) begin
-            assign crsq_data[p] = rdata_st1[wsel_st1[p] * `WORD_WIDTH +: `WORD_WIDTH];
-        end
-    end else begin
-        assign crsq_data = rdata_st1;
-    end
-
+    assign crsq_push  = valid_st1 && crsq_push_st1;
+    assign crsq_pop   = core_rsp_valid && core_rsp_ready;    
+    assign crsq_data  = rdata_st1;    
     assign crsq_pmask = pmask_st1;
-    assign crsq_tid = req_tid_st1;
-    assign crsq_tag = tag_st1;
+    assign crsq_tid   = req_tid_st1;
+    assign crsq_tag   = tag_st1;
 
     VX_fifo_queue #(
         .DATAW    (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS), 
