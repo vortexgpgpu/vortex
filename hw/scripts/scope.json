@@ -212,7 +212,7 @@
             "miss_st0": 1,
             "force_miss_st0": 1, 
             "mshr_push": 1,
-            "?crsq_alm_full": 1,
+            "?crsq_in_stall": 1,
             "?dreq_alm_full": 1,
             "?mshr_alm_full": 1
         }

@@ -15,9 +15,6 @@ module VX_shared_mem #(
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 4,
 
-    // Core Response Queue Size
-    parameter CRSQ_SIZE                     = 4,
-
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
 
@@ -113,10 +110,10 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid;
 
     wire creq_push, creq_pop, creq_empty, creq_full;
-    wire crsq_full;
+    wire crsq_in_ready;
         
     assign creq_push = (| core_req_valid) && !creq_full;
-    assign creq_pop = ~creq_empty && ~crsq_full;
+    assign creq_pop = ~creq_empty && crsq_in_ready;
     
     assign per_bank_core_req_ready_unqual = ~creq_full;
 
@@ -167,7 +164,7 @@ module VX_shared_mem #(
         ) data (
             .clk    (clk),
             .addr   (per_bank_core_req_addr[i]),          
-            .wren   (per_bank_core_req_valid[i] && per_bank_core_req_rw[i] && ~crsq_full),  
+            .wren   (per_bank_core_req_valid[i] && per_bank_core_req_rw[i] && crsq_in_ready),  
             .byteen (per_bank_core_req_byteen[i]),
             .rden   (1'b1),
             .din    (per_bank_core_req_data[i]),
@@ -175,58 +172,53 @@ module VX_shared_mem #(
         );
     end  
     
-    reg [NUM_REQS-1:0] core_rsp_valid_unqual;
-    reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
-    reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
+    reg [NUM_REQS-1:0] core_rsp_valids_in;
+    reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_in;
+    reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_in;
     
     always @(*) begin              
-        core_rsp_valid_unqual = 0;
-        core_rsp_data_unqual  = 'x;        
-        core_rsp_tag_unqual   = 'x;
+        core_rsp_valids_in = 0;
+        core_rsp_data_in   = 'x;        
+        core_rsp_tag_in    = 'x;
         for (integer i = 0; i < NUM_BANKS; i++) begin 
             if (per_bank_core_req_valid[i]) begin
-                core_rsp_valid_unqual[per_bank_core_req_tid[i]] = 1;
-                core_rsp_data_unqual[per_bank_core_req_tid[i]]  = per_bank_core_rsp_data[i];
-                core_rsp_tag_unqual = per_bank_core_req_tag[i];
+                core_rsp_valids_in[per_bank_core_req_tid[i]] = 1;
+                core_rsp_data_in[per_bank_core_req_tid[i]] = per_bank_core_rsp_data[i];
+                core_rsp_tag_in = per_bank_core_req_tag[i];
             end
         end
     end    
     
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_st0, debug_wid_st0} = core_rsp_tag_unqual[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+        assign {debug_pc_st0, debug_wid_st0} = core_rsp_tag_in[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
     end else begin
         assign {debug_pc_st0, debug_wid_st0} = 0;
     end
 `endif
     
-    wire [NUM_REQS-1:0] core_rsp_valid_tmask;
-    wire crsq_push, crsq_pop, crsq_empty;
+    wire [NUM_REQS-1:0] core_rsp_valids_out;
+    wire core_rsp_valid_out;
 
     wire core_rsp_rw = | (per_bank_core_req_valid & per_bank_core_req_rw);
 
-    assign crsq_push = ~creq_empty && ~core_rsp_rw && ~crsq_full;    
-    assign crsq_pop = ~crsq_empty && core_rsp_ready;  
-    
-    VX_fifo_queue #(
-        .DATAW    (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH), 
-        .SIZE     (CRSQ_SIZE),
+    wire crsq_in_valid = ~creq_empty && ~core_rsp_rw;
+
+    VX_skid_buffer #(
+        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH), 
         .BUFFERED (1)
-    ) core_rsp_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (crsq_push),
-        .pop      (crsq_pop),
-        .data_in  ({core_rsp_valid_unqual, core_rsp_data_unqual, core_rsp_tag_unqual}),
-        .data_out ({core_rsp_valid_tmask,  core_rsp_data,        core_rsp_tag}),
-        .empty    (crsq_empty),
-        .full     (crsq_full),        
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
+    ) core_rsp_req (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (crsq_in_valid),        
+        .data_in   ({core_rsp_valids_in, core_rsp_data_in, core_rsp_tag_in}),
+        .ready_in  (crsq_in_ready),      
+        .valid_out (core_rsp_valid_out),
+        .data_out  ({core_rsp_valids_out, core_rsp_data, core_rsp_tag}),
+        .ready_out (core_rsp_ready)
     );
 
-    assign core_rsp_valid = core_rsp_valid_tmask & {NUM_REQS{~crsq_empty}};
+    assign core_rsp_valid = core_rsp_valids_out & {NUM_REQS{core_rsp_valid_out}};
 
 `ifdef DBG_PRINT_CACHE_BANK
     always @(posedge clk) begin        

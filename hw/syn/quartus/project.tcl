@@ -41,25 +41,25 @@ set_global_assignment -name VERILOG_MACRO NDEBUG
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
 
-set_global_assignment -name ALLOW_ANY_RAM_SIZE_FOR_RECOGNITION ON
-set_global_assignment -name USE_HIGH_SPEED_ADDER ON
-set_global_assignment -name MUX_RESTRUCTURE ON
+#set_global_assignment -name ALLOW_ANY_RAM_SIZE_FOR_RECOGNITION ON
+#set_global_assignment -name USE_HIGH_SPEED_ADDER ON
+#set_global_assignment -name MUX_RESTRUCTURE ON
 
-set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
-set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
-set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
-set_global_assignment -name PLACEMENT_EFFORT_MULTIPLIER 2.0
-set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
-set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
-set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
-set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
-set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
-set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
-set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
-set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
-set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
-set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
-set_global_assignment -name SEED 1
+#set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
+#set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
+#set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
+#set_global_assignment -name PLACEMENT_EFFORT_MULTIPLIER 2.0
+#set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+#set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
+#set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
+#set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
+#set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
+#set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
+#set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
+#set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
+#set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+#set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
+#set_global_assignment -name SEED 1
 
 switch $opts(family) {
     "Arria 10" {

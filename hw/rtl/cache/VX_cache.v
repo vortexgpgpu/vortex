@@ -23,9 +23,6 @@ module VX_cache #(
     parameter MSHR_SIZE                     = 16, 
     // DRAM Response Queue Size
     parameter DRSQ_SIZE                     = 4,
-
-    // Core Response Queue Size
-    parameter CRSQ_SIZE                     = 4, 
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 4,
 
@@ -298,7 +295,6 @@ module VX_cache #(
             .CREQ_SIZE          (CREQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
             .DRSQ_SIZE          (DRSQ_SIZE),
-            .CRSQ_SIZE          (CRSQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                

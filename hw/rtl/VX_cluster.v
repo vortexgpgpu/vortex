@@ -170,7 +170,6 @@ module VX_cluster #(
             .CREQ_SIZE          (`L2CREQ_SIZE),
             .MSHR_SIZE          (`L2MSHR_SIZE),
             .DRSQ_SIZE          (`L2DRSQ_SIZE),
-            .CRSQ_SIZE          (`L2CRSQ_SIZE),
             .DREQ_SIZE          (`L2DREQ_SIZE),
             .WRITE_ENABLE       (1),          
             .CORE_TAG_WIDTH     (`XDRAM_TAG_WIDTH),
