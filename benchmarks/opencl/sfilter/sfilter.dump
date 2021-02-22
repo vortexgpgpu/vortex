@@ -1,5 +1,5 @@
 
-/tmp/pocl_vortex_kernel-9f-b2-9e-1e-b6.elf:	file format ELF32-riscv
+/tmp/pocl_vortex_kernel-a9-15-33-2e-25.elf:	file format ELF32-riscv
 
 
 Disassembly of section .init:
@@ -1076,7 +1076,7 @@ Disassembly of section .comment:
        c: 6e 20                        	<unknown>
        e: 31 30                        	<unknown>
       10: 2e 30                        	<unknown>
-      12: 2e 30                        	<unknown>
+      12: 2e 31                        	<unknown>
       14: 20 28                        	<unknown>
       16: 68 74                        	<unknown>
       18: 74 70                        	<unknown>
@@ -1094,25 +1094,25 @@ Disassembly of section .comment:
       36: 6a 65                        	<unknown>
       38: 63 74 2e 67                  	bgeu	t3, s2, 1640
       3c: 69 74                        	<unknown>
-      3e: 20 37                        	<unknown>
-      40: 33 63 35 33                  	<unknown>
-      44: 65 36                        	<unknown>
-      46: 31 32                        	<unknown>
-      48: 61 61                        	<unknown>
-      4a: 31 32                        	<unknown>
-      4c: 35 61                        	<unknown>
-      4e: 32 34                        	<unknown>
-      50: 65 62                        	<unknown>
-      52: 32 63                        	<unknown>
-      54: 37 35 32 34                  	lui	a0, 213795
-      58: 31 62                        	<unknown>
-      5a: 32 65                        	<unknown>
-      5c: 62 62                        	<unknown>
-      5e: 64 35                        	<unknown>
-      60: 36 30                        	<unknown>
-      62: 62 38                        	<unknown>
-      64: 35 63                        	<unknown>
-      66: 37 29 00 47                  	lui	s2, 290818
+      3e: 20 65                        	<unknown>
+      40: 66 33                        	<unknown>
+      42: 32 63                        	<unknown>
+      44: 36 31                        	<unknown>
+      46: 31 61                        	<unknown>
+      48: 61 32                        	<unknown>
+      4a: 31 34                        	<unknown>
+      4c: 64 65                        	<unknown>
+      4e: 61 38                        	<unknown>
+      50: 35 35                        	<unknown>
+      52: 33 36 34 65                  	<unknown>
+      56: 66 64                        	<unknown>
+      58: 37 62 61 34                  	lui	tp, 214550
+      5c: 35 31                        	<unknown>
+      5e: 65 63                        	<unknown>
+      60: 35 65                        	<unknown>
+      62: 63 33 66 37                  	<unknown>
+      66: 34 29                        	<unknown>
+      68: 00 47                        	<unknown>
       6a: 43 43 3a 20                  	fmadd.s	ft6, fs4, ft3, ft4, rmm
       6e: 28 47                        	<unknown>
       70: 4e 55                        	<unknown>
@@ -1558,12 +1558,13 @@ Disassembly of section .strtab:
       3e: 5f 6b 65 72                  	<unknown>
       42: 6e 65                        	<unknown>
       44: 6c 2d                        	<unknown>
-      46: 37 35 2d 38                  	lui	a0, 230099
-      4a: 62 2d                        	<unknown>
-      4c: 32 61                        	<unknown>
-      4e: 2d 35                        	<unknown>
-      50: 34 2d                        	<unknown>
-      52: 35 38                        	<unknown>
+      46: 30 63                        	<unknown>
+      48: 2d 32                        	<unknown>
+      4a: 61 2d                        	<unknown>
+      4c: 64 30                        	<unknown>
+      4e: 2d 33                        	<unknown>
+      50: 39 2d                        	<unknown>
+      52: 36 61                        	<unknown>
       54: 2e 63                        	<unknown>
       56: 00 70                        	<unknown>
       58: 61 72                        	<unknown>
