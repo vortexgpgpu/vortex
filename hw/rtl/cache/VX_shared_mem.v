@@ -222,7 +222,7 @@ module VX_shared_mem #(
 
 `ifdef DBG_PRINT_CACHE_BANK
     always @(posedge clk) begin        
-        if (crsq_full) begin
+        if (!crsq_in_ready) begin
             $display("%t: cache%0d pipeline-stall", $time, CACHE_ID);
         end
         if (creq_pop) begin
