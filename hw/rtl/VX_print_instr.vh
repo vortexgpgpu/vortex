@@ -4,9 +4,9 @@
 `include "VX_define.vh"
 
 task print_ex_type (
-    input [`EX_BITS-1:0] ex
+    input [`EX_BITS-1:0] ex_type
 );
-    case (ex)
+    case (ex_type)
         `EX_ALU: $write("ALU");     
         `EX_LSU: $write("LSU");
         `EX_CSR: $write("CSR");
