@@ -172,7 +172,6 @@ module Vortex (
             .CREQ_SIZE          (`L3CREQ_SIZE),
             .MSHR_SIZE          (`L3MSHR_SIZE),
             .DRSQ_SIZE          (`L3DRSQ_SIZE),
-            .CRSQ_SIZE          (`L3CRSQ_SIZE),
             .DREQ_SIZE          (`L3DREQ_SIZE),
             .WRITE_ENABLE       (1),
             .CORE_TAG_WIDTH     (`L2DRAM_TAG_WIDTH),
