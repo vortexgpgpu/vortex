@@ -71,6 +71,7 @@ module VX_decode  #(
     wire alu_shift_i          = (func3 == 3'h1) || (func3 == 3'h5);
     wire [11:0] alu_shift_imm = {{7{1'b0}}, rs2};
     wire [11:0] alu_imm       = alu_shift_i ? alu_shift_imm : u_12;
+
     always @(*) begin
         case (opcode)
             `INST_I:  src2_imm = {{20{alu_imm[11]}}, alu_imm};
@@ -89,6 +90,7 @@ module VX_decode  #(
     wire [31:0] jal_offset  = {{11{jal_imm[20]}}, jal_imm};
     wire [11:0] jalr_imm    = {func7, rs2};
     wire [31:0] jalr_offset = {{20{jalr_imm[11]}}, jalr_imm};
+
     always @(*) begin        
         case (opcode)
             `INST_JAL:  jalx_offset = jal_offset;
@@ -118,11 +120,16 @@ module VX_decode  #(
             `INST_JAL:  br_op = `BR_JAL;
             `INST_JALR: br_op = `BR_JALR;
             `INST_SYS: begin
-                if (is_jals && u_12 == 12'h000) br_op = `BR_ECALL;
-                if (is_jals && u_12 == 12'h001) br_op = `BR_EBREAK;             
-                if (is_jals && u_12 == 12'h302) br_op = `BR_MRET;
-                if (is_jals && u_12 == 12'h102) br_op = `BR_SRET;
-                if (is_jals && u_12 == 12'h7B2) br_op = `BR_DRET;
+                if (is_jals) begin
+                    case (u_12)
+                        12'h000: br_op = `BR_ECALL;
+                        12'h001: br_op = `BR_EBREAK;             
+                        12'h302: br_op = `BR_MRET;
+                        12'h102: br_op = `BR_SRET;
+                        12'h7B2: br_op = `BR_DRET;
+                        default:;
+                    endcase                    
+                end
             end
             default:;
         endcase
@@ -205,9 +212,10 @@ module VX_decode  #(
     wire is_fmvw_clss = is_fci && (func7 == 7'h70); // move to int + class
     wire is_fmvx   = is_fci && (func7 == 7'h78); // move to float
     wire is_fr4    = is_fmadd || is_fmsub || is_fnmsub || is_fnmadd;
-    wire is_fpu    = (is_fl || is_fs || is_fci || is_fr4);   
-
-    reg [2:0] frm;
+    wire is_fpu_no_mem = is_fci || is_fr4;
+    wire is_fpu    = is_fl || is_fs || is_fci || is_fr4;
+    
+    reg [`MOD_BITS-1:0] frm;
     reg is_fsqrt;
 
     always @(*) begin    
@@ -262,6 +270,7 @@ module VX_decode  #(
     wire is_fmvx      = 0;
     wire is_fr4       = 0;
     wire is_fpu       = 0; 
+    wire is_fpu_no_mem= 0;
     wire [2:0] frm    = 0;  
 
     always @(*) begin
@@ -328,7 +337,7 @@ module VX_decode  #(
     assign decode_if.ex_type = is_lsu ? `EX_LSU :
                                 is_csr ? `EX_CSR :
                                     is_mul ? `EX_MUL :
-                                        is_fpu ? `EX_FPU :
+                                        is_fpu_no_mem ? `EX_FPU :
                                             is_gpu ? `EX_GPU :
                                                 is_br ? `EX_ALU :
                                                     (is_rtype || is_itype || is_lui || is_auipc) ? `EX_ALU :
@@ -337,7 +346,7 @@ module VX_decode  #(
     assign decode_if.op_type = is_lsu ? `OP_BITS'(lsu_op) :
                                 is_csr ? `OP_BITS'(csr_op) :
                                     is_mul ? `OP_BITS'(mul_op) :
-                                        is_fpu ? `OP_BITS'(fpu_op) :
+                                        is_fpu_no_mem ? `OP_BITS'(fpu_op) :
                                             is_gpu ? `OP_BITS'(gpu_op) :
                                                 is_br ? `OP_BITS'(br_op) :
                                                     (is_rtype || is_itype || is_lui || is_auipc) ? `OP_BITS'(alu_op) :
@@ -375,9 +384,10 @@ module VX_decode  #(
                                         src2_imm;
 
     assign decode_if.rs1_is_PC  = is_auipc || is_btype || is_jal || is_jals;
-    assign decode_if.rs2_is_imm = is_itype || is_lui || is_auipc || is_csr_imm || is_br; 
-    
-    assign decode_if.op_mod = is_fpu ? frm : (is_br ? 1 : 0);
+    assign decode_if.rs2_is_imm = is_itype || is_lui || is_auipc || is_csr_imm || is_br;
+
+    wire [`MOD_BITS-1:0] alu_mod = is_br ? 1 : 0;    
+    assign decode_if.op_mod = is_fpu_no_mem ? frm : alu_mod;
 
     ///////////////////////////////////////////////////////////////////////////
 

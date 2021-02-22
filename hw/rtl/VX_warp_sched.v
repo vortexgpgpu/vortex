@@ -212,9 +212,9 @@ module VX_warp_sched #(
     wire [`NUM_WARPS-1:0] schedule_ready = schedule_table & ~(stalled_warps | total_barrier_stall | fetch_lock);
 
     always @(*) begin
-        schedule_valid   = 0;
-        thread_mask      = 'x;
-        warp_pc          = 'x;
+        schedule_valid = 0;
+        thread_mask    = 'x;
+        warp_pc        = 'x;
         scheduled_warp = 'x;
         for (integer i = 0; i < `NUM_WARPS; ++i) begin
             if (schedule_ready[i]) begin
