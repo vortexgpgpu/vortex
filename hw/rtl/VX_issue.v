@@ -18,7 +18,6 @@ module VX_issue #(
     VX_alu_req_if   alu_req_if,
     VX_lsu_req_if   lsu_req_if,    
     VX_csr_req_if   csr_req_if,
-    VX_mul_req_if   mul_req_if,    
     VX_fpu_req_if   fpu_req_if,    
     VX_gpu_req_if   gpu_req_if
 );
@@ -86,7 +85,6 @@ module VX_issue #(
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
         .csr_req_if (csr_req_if),
-        .mul_req_if (mul_req_if),
         .fpu_req_if (fpu_req_if),
         .gpu_req_if (gpu_req_if)
     );     
@@ -129,9 +127,6 @@ module VX_issue #(
     reg [63:0] perf_lsu_stalls;
     reg [63:0] perf_csr_stalls;
     reg [63:0] perf_gpu_stalls;
-`ifdef EXT_M_ENABLE
-    reg [63:0] perf_mul_stalls;
-`endif
 `ifdef EXT_F_ENABLE
     reg [63:0] perf_fpu_stalls;
 `endif
@@ -144,9 +139,6 @@ module VX_issue #(
             perf_lsu_stalls <= 0;
             perf_csr_stalls <= 0;
             perf_gpu_stalls <= 0;
-        `ifdef EXT_M_ENABLE
-            perf_mul_stalls <= 0;
-        `endif
         `ifdef EXT_F_ENABLE
             perf_fpu_stalls <= 0;
         `endif
@@ -169,11 +161,6 @@ module VX_issue #(
             if (gpu_req_if.valid & !gpu_req_if.ready) begin
                 perf_gpu_stalls <= perf_gpu_stalls + 64'd1;
             end
-        `ifdef EXT_M_ENABLE
-            if (mul_req_if.valid & !mul_req_if.ready) begin
-                perf_mul_stalls <= perf_mul_stalls + 64'd1;
-            end
-        `endif
         `ifdef EXT_F_ENABLE
             if (fpu_req_if.valid & !fpu_req_if.ready) begin
                 perf_fpu_stalls <= perf_fpu_stalls + 64'd1;
@@ -188,9 +175,6 @@ module VX_issue #(
     assign perf_pipeline_if.lsu_stalls = perf_lsu_stalls;
     assign perf_pipeline_if.csr_stalls = perf_csr_stalls;
     assign perf_pipeline_if.gpu_stalls = perf_gpu_stalls;
-`ifdef EXT_M_ENABLE
-    assign perf_pipeline_if.mul_stalls = perf_mul_stalls;
-`endif
 `ifdef EXT_F_ENABLE
     assign perf_pipeline_if.fpu_stalls = perf_fpu_stalls;
 `endif
@@ -206,9 +190,6 @@ module VX_issue #(
         end
         if (csr_req_if.valid && csr_req_if.ready) begin
             $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, rs1_data=%0h", $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.csr_addr, csr_req_if.rs1_data);   
-        end
-        if (mul_req_if.valid && mul_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=MUL, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, mul_req_if.wid, mul_req_if.PC, mul_req_if.tmask, mul_req_if.rd, mul_req_if.rs1_data, mul_req_if.rs2_data);   
         end
         if (fpu_req_if.valid && fpu_req_if.ready) begin
             $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h, rs3_data=%0h", $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rd, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data);   

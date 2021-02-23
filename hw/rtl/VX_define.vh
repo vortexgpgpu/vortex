@@ -68,9 +68,8 @@
 `define EX_ALU          3'h1
 `define EX_LSU          3'h2
 `define EX_CSR          3'h3
-`define EX_MUL          3'h4
-`define EX_FPU          3'h5
-`define EX_GPU          3'h6
+`define EX_FPU          3'h4
+`define EX_GPU          3'h5
 `define EX_BITS         3
 
 `define NUM_EXS         6
@@ -118,9 +117,20 @@
 `define BR_NEG(x)       x[1]
 `define BR_LESS(x)      x[2]
 `define BR_STATIC(x)    x[3]
-`define ALU_BR_BITS     4
-`define ALU_BR_OP(x)    x[`ALU_BR_BITS-1:0]
 `define IS_BR_MOD(x)    x[0]
+
+`define MUL_MUL         3'h0
+`define MUL_MULH        3'h1
+`define MUL_MULHSU      3'h2
+`define MUL_MULHU       3'h3
+`define MUL_DIV         3'h4
+`define MUL_DIVU        3'h5
+`define MUL_REM         3'h6
+`define MUL_REMU        3'h7
+`define MUL_BITS        3
+`define MUL_OP(x)       x[`MUL_BITS-1:0]
+`define IS_DIV_OP(x)    x[2]
+`define IS_MUL_MOD(x)   x[1]
 
 `define LSU_SB          3'h0 
 `define LSU_SH          3'h1
@@ -137,18 +147,6 @@
 `define CSR_OTHER       2'h3
 `define CSR_BITS        2
 `define CSR_OP(x)       x[`CSR_BITS-1:0]
-
-`define MUL_MUL         3'h0
-`define MUL_MULH        3'h1
-`define MUL_MULHSU      3'h2
-`define MUL_MULHU       3'h3
-`define MUL_DIV         3'h4
-`define MUL_DIVU        3'h5
-`define MUL_REM         3'h6
-`define MUL_REMU        3'h7
-`define MUL_BITS        3
-`define MUL_OP(x)       x[`MUL_BITS-1:0]
-`define IS_DIV_OP(x)    x[2]
 
 `define FPU_ADD         4'h0 
 `define FPU_SUB         4'h1 

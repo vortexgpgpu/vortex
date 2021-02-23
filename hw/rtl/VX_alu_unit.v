@@ -13,13 +13,16 @@ module VX_alu_unit #(
     VX_branch_ctl_if    branch_ctl_if,
     VX_commit_if        alu_commit_if    
 );    
-    reg [`NUM_THREADS-1:0][31:0] alu_result;    
-    reg [`NUM_THREADS-1:0][31:0] add_result;   
-    reg [`NUM_THREADS-1:0][32:0] sub_result;
-    reg [`NUM_THREADS-1:0][31:0] shr_result;
-    reg [`NUM_THREADS-1:0][31:0] msc_result;    
+    reg [`NUM_THREADS-1:0][31:0]  alu_result;    
+    wire [`NUM_THREADS-1:0][31:0] add_result;   
+    wire [`NUM_THREADS-1:0][32:0] sub_result;
+    wire [`NUM_THREADS-1:0][31:0] shr_result;
+    reg [`NUM_THREADS-1:0][31:0]  msc_result;
 
-    wire               is_br_op = alu_req_if.is_br_op;
+    wire stall_in, stall_out;    
+
+    `UNUSED_VAR (alu_req_if.op_mod)
+    wire               is_br_op = `IS_BR_MOD(alu_req_if.op_mod);
     wire [`ALU_BITS-1:0] alu_op = `ALU_OP(alu_req_if.op_type);
     wire [`BR_BITS-1:0]   br_op = `BR_OP(alu_req_if.op_type);
     wire             alu_signed = `ALU_SIGNED(alu_op);   
@@ -34,17 +37,13 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][31:0] alu_in2_less = (alu_req_if.rs2_is_imm && !is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        always @(*) begin
-            add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];  
-        end
+        assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
     end
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [32:0] sub_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
         wire [32:0] sub_in2 = {alu_signed & alu_in2_less[i][31], alu_in2_less[i]};
-        always @(*) begin
-            sub_result[i] = $signed(sub_in1) - $signed(sub_in2);
-        end
+        assign sub_result[i] = $signed(sub_in1) - $signed(sub_in2);
     end
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin    
@@ -52,9 +51,7 @@ module VX_alu_unit #(
     `IGNORE_WARNINGS_BEGIN
         wire [32:0] shr_value = $signed(shr_in1) >>> alu_in2_imm[i][4:0]; 
     `IGNORE_WARNINGS_END
-        always @(*) begin
-            shr_result[i] = shr_value[31:0];
-        end
+        assign shr_result[i] = shr_value[31:0];
     end        
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin 
@@ -92,13 +89,94 @@ module VX_alu_unit #(
     wire br_neg    = `BR_NEG(br_op);    
     wire br_less   = `BR_LESS(br_op);
     wire br_static = `BR_STATIC(br_op);
-    wire br_taken  = ((br_less ? is_less : is_equal) ^ br_neg) | br_static;   
+    wire br_taken  = ((br_less ? is_less : is_equal) ^ br_neg) | br_static;
 
     // output
 
+    wire                          result_valid;
+    wire [`NW_BITS-1:0]           result_wid;
+    wire [`NUM_THREADS-1:0]       result_tmask;
+    wire [31:0]                   result_PC;
+    wire [`NR_BITS-1:0]           result_rd;   
+    wire                          result_wb; 
+    wire [`NUM_THREADS-1:0][31:0] result_data;
+    wire                          result_is_br;
+
+`ifdef EXT_M_ENABLE
+
+    wire                          mul_ready_in;
+    wire                          mul_valid_out;    
+    wire                          mul_ready_out;
+    wire [`NW_BITS-1:0]           mul_wid;
+    wire [`NUM_THREADS-1:0]       mul_tmask;
+    wire [31:0]                   mul_PC;
+    wire [`NR_BITS-1:0]           mul_rd;
+    wire                          mul_wb;
+    wire [`NUM_THREADS-1:0][31:0] mul_data;
+
+    wire is_mul_op = `IS_MUL_MOD(alu_req_if.op_mod);
+    
+    VX_muldiv muldiv (
+        .clk        (clk),
+        .reset      (reset),
+        
+        // Inputs
+        .alu_op     (`MUL_OP(alu_req_if.op_type)),
+        .wid_in     (alu_req_if.wid),
+        .tmask_in   (alu_req_if.tmask),
+        .PC_in      (alu_req_if.PC),
+        .rd_in      (alu_req_if.rd),
+        .wb_in      (alu_req_if.wb),
+        .alu_in1    (alu_req_if.rs1_data), 
+        .alu_in2    (alu_req_if.rs2_data),
+
+        // Outputs
+        .wid_out    (mul_wid),
+        .tmask_out  (mul_tmask),
+        .PC_out     (mul_PC),
+        .rd_out     (mul_rd),
+        .wb_out     (mul_wb),
+        .data_out   (mul_data),
+
+        // handshake
+        .valid_in   (alu_req_if.valid && is_mul_op),
+        .ready_in   (mul_ready_in),
+        .valid_out  (mul_valid_out),
+        .ready_out  (mul_ready_out)
+    );
+
+    assign stall_in = (is_mul_op && ~mul_ready_in) 
+                   || (~is_mul_op && (mul_valid_out || stall_out));
+    
+    assign mul_ready_out = !stall_out;
+
+    assign result_valid = mul_valid_out | (alu_req_if.valid && ~is_mul_op);
+    assign result_wid   = mul_valid_out ? mul_wid   : alu_req_if.wid;    
+    assign result_tmask = mul_valid_out ? mul_tmask : alu_req_if.tmask;    
+    assign result_PC    = mul_valid_out ? mul_PC    : alu_req_if.PC;    
+    assign result_rd    = mul_valid_out ? mul_rd    : alu_req_if.rd;    
+    assign result_wb    = mul_valid_out ? mul_wb    : alu_req_if.wb;    
+    assign result_data  = mul_valid_out ? mul_data  : alu_jal_result;
+    assign result_is_br = !mul_valid_out && is_br_op;
+
+`else 
+
+    assign stall_in = 0;
+
+    assign result_valid = alu_req_if.valid;
+    assign result_wid   = alu_req_if.wid;  
+    assign result_tmask = alu_req_if.tmask;    
+    assign result_PC    = alu_req_if.PC; 
+    assign result_rd    = alu_req_if.rd;    
+    assign result_wb    = alu_req_if.wb;   
+    assign result_data  = alu_jal_result;
+    assign result_is_br = is_br_op;
+
+`endif
+
     wire is_br_op_r;
 
-    wire stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
+    assign stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
 
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + 1 + 32),
@@ -107,8 +185,8 @@ module VX_alu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({alu_req_if.valid,    alu_req_if.wid,    alu_req_if.tmask,    alu_req_if.PC,    alu_req_if.rd,    alu_req_if.wb,    alu_jal_result,     is_br_op,   br_taken,            br_dest}),
-        .data_out ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r, branch_ctl_if.taken, branch_ctl_if.dest})
+        .data_in  ({result_valid,        result_wid,        result_tmask,        result_PC,        result_rd,        result_wb,        result_data,        result_is_br, br_taken,            br_dest}),
+        .data_out ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r,   branch_ctl_if.taken, branch_ctl_if.dest})
     );
 
     assign alu_commit_if.eop = 1'b1;
@@ -117,6 +195,6 @@ module VX_alu_unit #(
     assign branch_ctl_if.wid   = alu_commit_if.wid;
 
     // can accept new request?
-    assign alu_req_if.ready = ~stall_out;
+    assign alu_req_if.ready = ~stall_in;
 
 endmodule

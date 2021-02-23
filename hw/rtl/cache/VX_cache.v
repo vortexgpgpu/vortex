@@ -20,7 +20,7 @@ module VX_cache #(
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 4, 
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE                     = 16, 
+    parameter MSHR_SIZE                     = 8, 
     // DRAM Response Queue Size
     parameter DRSQ_SIZE                     = 4,
     // DRAM Request Queue Size

@@ -164,7 +164,7 @@ module VX_shared_mem #(
         ) data (
             .clk    (clk),
             .addr   (per_bank_core_req_addr[i]),          
-            .wren   (per_bank_core_req_valid[i] && per_bank_core_req_rw[i] && crsq_in_ready),  
+            .wren   (per_bank_core_req_valid[i] && per_bank_core_req_rw[i]),  
             .byteen (per_bank_core_req_byteen[i]),
             .rden   (1'b1),
             .din    (per_bank_core_req_data[i]),

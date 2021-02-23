@@ -301,7 +301,7 @@ module VX_bank #(
         // read/Fill
         .lookup     (valid_st0 && !is_fill_st0),
         .addr       (addr_st0),        
-        .fill       (valid_st0 && is_fill_st0),
+        .fill       (valid_st0 && is_fill_st0 && !crsq_in_stall),
         .is_flush   (is_flush_st0),
         .tag_match  (tag_match_st0)
     );

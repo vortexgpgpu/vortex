@@ -12,11 +12,15 @@ module VX_instr_demux (
     VX_alu_req_if   alu_req_if,
     VX_lsu_req_if   lsu_req_if,
     VX_csr_req_if   csr_req_if,
-    VX_mul_req_if   mul_req_if,
     VX_fpu_req_if   fpu_req_if,
     VX_gpu_req_if   gpu_req_if    
 );
     wire [`NT_BITS-1:0] tid;
+    wire alu_req_ready;
+    wire lsu_req_ready;
+    wire csr_req_ready;
+    wire fpu_req_ready;
+    wire gpu_req_ready;
 
     VX_priority_encoder #(
         .N (`NUM_THREADS)
@@ -32,20 +36,17 @@ module VX_instr_demux (
     // ALU unit
 
     wire alu_req_valid = execute_if.valid && (execute_if.ex_type == `EX_ALU);
-    wire alu_req_ready;
-
-    wire is_br_op = `IS_BR_MOD(execute_if.op_mod);
-
+    
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `ALU_BR_BITS + 1 + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
-        .NOBACKPRESSURE (1) // ALU has no back pressure
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `ALU_BITS + `MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
+        .BUFFERED (1)
     ) alu_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (alu_req_valid),
         .ready_in  (alu_req_ready),
-        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, next_PC,            `ALU_BR_OP(execute_if.op_type), is_br_op,            execute_if.imm, execute_if.rs1_is_PC, execute_if.rs2_is_imm, execute_if.rd, execute_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
-        .data_out  ({alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.next_PC, alu_req_if.op_type,             alu_req_if.is_br_op, alu_req_if.imm, alu_req_if.rs1_is_PC, alu_req_if.rs2_is_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
+        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, next_PC,            `ALU_OP(execute_if.op_type), execute_if.op_mod, execute_if.imm, execute_if.rs1_is_PC, execute_if.rs2_is_imm, execute_if.rd, execute_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
+        .data_out  ({alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.next_PC, alu_req_if.op_type,          alu_req_if.op_mod, alu_req_if.imm, alu_req_if.rs1_is_PC, alu_req_if.rs2_is_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
         .valid_out (alu_req_if.valid),
         .ready_out (alu_req_if.ready)
     );
@@ -53,7 +54,6 @@ module VX_instr_demux (
     // lsu unit
 
     wire lsu_req_valid = execute_if.valid && (execute_if.ex_type == `EX_LSU);
-    wire lsu_req_ready;
 
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + `LSU_BITS + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
@@ -72,7 +72,6 @@ module VX_instr_demux (
     // csr unit
 
     wire csr_req_valid = execute_if.valid && (execute_if.ex_type == `EX_CSR);
-    wire csr_req_ready;
 
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + `CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NR_BITS + 32),
@@ -88,33 +87,11 @@ module VX_instr_demux (
         .ready_out (csr_req_if.ready)
     );
 
-    // mul unit
-
-`ifdef EXT_M_ENABLE
-    wire mul_req_valid = execute_if.valid && (execute_if.ex_type == `EX_MUL);
-    wire mul_req_ready;
-
-    VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `MUL_BITS + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
-        .BUFFERED (1)
-    ) mul_buffer (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (mul_req_valid),
-        .ready_in  (mul_req_ready),
-        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, `MUL_OP(execute_if.op_type), execute_if.rd, execute_if.wb, gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
-        .data_out  ({mul_req_if.wid, mul_req_if.tmask, mul_req_if.PC, mul_req_if.op_type,          mul_req_if.rd, mul_req_if.wb, mul_req_if.rs1_data, mul_req_if.rs2_data}),
-        .valid_out (mul_req_if.valid),
-        .ready_out (mul_req_if.ready)
-    );   
-`endif
-
     // fpu unit
 
 `ifdef EXT_F_ENABLE
     wire fpu_req_valid = execute_if.valid && (execute_if.ex_type == `EX_FPU);
-    wire fpu_req_ready;
-
+    
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + `FPU_BITS + `MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32)),
         .BUFFERED (1)
@@ -130,12 +107,12 @@ module VX_instr_demux (
     );
 `else
     `UNUSED_VAR (gpr_rsp_if.rs3_data)
+    assign fpu_req_ready = 0;
 `endif
 
     // gpu unit
 
     wire gpu_req_valid = execute_if.valid && (execute_if.ex_type == `EX_GPU);
-    wire gpu_req_ready;
 
     VX_skid_buffer #(
         .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `GPU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32 + 32)),
@@ -158,7 +135,6 @@ module VX_instr_demux (
         `EX_ALU: ready_r = alu_req_ready;
         `EX_LSU: ready_r = lsu_req_ready;
         `EX_CSR: ready_r = csr_req_ready;
-        `EX_MUL: ready_r = mul_req_ready;
         `EX_FPU: ready_r = fpu_req_ready;
         `EX_GPU: ready_r = gpu_req_ready;
         default: ready_r = 1'b1; // ignore NOPs
