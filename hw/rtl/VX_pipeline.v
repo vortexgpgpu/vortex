@@ -150,8 +150,7 @@ module VX_pipeline #(
     VX_ifetch_rsp_if    ifetch_rsp_if();
     VX_alu_req_if       alu_req_if();
     VX_lsu_req_if       lsu_req_if();
-    VX_csr_req_if       csr_req_if();
-    VX_mul_req_if       mul_req_if();  
+    VX_csr_req_if       csr_req_if(); 
     VX_fpu_req_if       fpu_req_if(); 
     VX_gpu_req_if       gpu_req_if();
     VX_writeback_if     writeback_if();     
@@ -160,8 +159,7 @@ module VX_pipeline #(
     VX_commit_if        alu_commit_if();
     VX_commit_if        ld_commit_if();
     VX_commit_if        st_commit_if();
-    VX_commit_if        csr_commit_if();
-    VX_commit_if        mul_commit_if();     
+    VX_commit_if        csr_commit_if();  
     VX_commit_if        fpu_commit_if();     
     VX_commit_if        gpu_commit_if();     
 
@@ -214,7 +212,6 @@ module VX_pipeline #(
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
-        .mul_req_if     (mul_req_if),
         .fpu_req_if     (fpu_req_if),
         .gpu_req_if     (gpu_req_if)
     );
@@ -243,7 +240,6 @@ module VX_pipeline #(
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
-        .mul_req_if     (mul_req_if),
         .fpu_req_if     (fpu_req_if),
         .gpu_req_if     (gpu_req_if),
 
@@ -253,7 +249,6 @@ module VX_pipeline #(
         .ld_commit_if   (ld_commit_if),        
         .st_commit_if   (st_commit_if),       
         .csr_commit_if  (csr_commit_if),
-        .mul_commit_if  (mul_commit_if),
         .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),        
         
@@ -271,7 +266,6 @@ module VX_pipeline #(
         .ld_commit_if   (ld_commit_if),        
         .st_commit_if   (st_commit_if),
         .csr_commit_if  (csr_commit_if),
-        .mul_commit_if  (mul_commit_if),
         .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),
         

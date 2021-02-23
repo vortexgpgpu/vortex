@@ -167,54 +167,52 @@
 `define CSR_MPM_LSU_ST_H    12'hB86
 `define CSR_MPM_CSR_ST      12'hB07
 `define CSR_MPM_CSR_ST_H    12'hB87
-`define CSR_MPM_MUL_ST      12'hB08
-`define CSR_MPM_MUL_ST_H    12'hB88
-`define CSR_MPM_FPU_ST      12'hB09
-`define CSR_MPM_FPU_ST_H    12'hB89
-`define CSR_MPM_GPU_ST      12'hB0A
-`define CSR_MPM_GPU_ST_H    12'hB8A
+`define CSR_MPM_FPU_ST      12'hB08
+`define CSR_MPM_FPU_ST_H    12'hB88
+`define CSR_MPM_GPU_ST      12'hB09
+`define CSR_MPM_GPU_ST_H    12'hB89
 // PERF: icache
-`define CSR_MPM_ICACHE_READS        12'hB0B     // total reads
-`define CSR_MPM_ICACHE_READS_H      12'hB8B
-`define CSR_MPM_ICACHE_MISS_R       12'hB0C     // total misses
-`define CSR_MPM_ICACHE_MISS_R_H     12'hB8C
-`define CSR_MPM_ICACHE_PIPE_ST      12'hB0D     // pipeline stalls
-`define CSR_MPM_ICACHE_PIPE_ST_H    12'hB8D
-`define CSR_MPM_ICACHE_CRSP_ST      12'hB0E     // core response stalls
-`define CSR_MPM_ICACHE_CRSP_ST_H    12'hB8E
+`define CSR_MPM_ICACHE_READS        12'hB0A     // total reads
+`define CSR_MPM_ICACHE_READS_H      12'hB8A
+`define CSR_MPM_ICACHE_MISS_R       12'hB0B     // total misses
+`define CSR_MPM_ICACHE_MISS_R_H     12'hB8B
+`define CSR_MPM_ICACHE_PIPE_ST      12'hB0C     // pipeline stalls
+`define CSR_MPM_ICACHE_PIPE_ST_H    12'hB8C
+`define CSR_MPM_ICACHE_CRSP_ST      12'hB0D     // core response stalls
+`define CSR_MPM_ICACHE_CRSP_ST_H    12'hB8D
 // PERF: dcache
-`define CSR_MPM_DCACHE_READS        12'hB0F     // total reads
-`define CSR_MPM_DCACHE_READS_H      12'hB8F
-`define CSR_MPM_DCACHE_WRITES       12'hB10     // total writes
-`define CSR_MPM_DCACHE_WRITES_H     12'hB90 
-`define CSR_MPM_DCACHE_MISS_R       12'hB11     // read misses
-`define CSR_MPM_DCACHE_MISS_R_H     12'hB91
-`define CSR_MPM_DCACHE_MISS_W       12'hB12     // write misses
-`define CSR_MPM_DCACHE_MISS_W_H     12'hB92
-`define CSR_MPM_DCACHE_BANK_ST      12'hB13     // bank conflicts stalls
-`define CSR_MPM_DCACHE_BANK_ST_H    12'hB93
-`define CSR_MPM_DCACHE_MSHR_ST      12'hB14     // MSHR stalls
-`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB94
-`define CSR_MPM_DCACHE_PIPE_ST      12'hB15     // pipeline stalls
-`define CSR_MPM_DCACHE_PIPE_ST_H    12'hB95
-`define CSR_MPM_DCACHE_CRSP_ST      12'hB16     // core response stalls
-`define CSR_MPM_DCACHE_CRSP_ST_H    12'hB96
+`define CSR_MPM_DCACHE_READS        12'hB0E     // total reads
+`define CSR_MPM_DCACHE_READS_H      12'hB8E
+`define CSR_MPM_DCACHE_WRITES       12'hB0F     // total writes
+`define CSR_MPM_DCACHE_WRITES_H     12'hB8F 
+`define CSR_MPM_DCACHE_MISS_R       12'hB10     // read misses
+`define CSR_MPM_DCACHE_MISS_R_H     12'hB90
+`define CSR_MPM_DCACHE_MISS_W       12'hB11     // write misses
+`define CSR_MPM_DCACHE_MISS_W_H     12'hB91
+`define CSR_MPM_DCACHE_BANK_ST      12'hB12     // bank conflicts stalls
+`define CSR_MPM_DCACHE_BANK_ST_H    12'hB92
+`define CSR_MPM_DCACHE_MSHR_ST      12'hB13     // MSHR stalls
+`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB93
+`define CSR_MPM_DCACHE_PIPE_ST      12'hB14     // pipeline stalls
+`define CSR_MPM_DCACHE_PIPE_ST_H    12'hB94
+`define CSR_MPM_DCACHE_CRSP_ST      12'hB15     // core response stalls
+`define CSR_MPM_DCACHE_CRSP_ST_H    12'hB95
 // PERF: smem
-`define CSR_MPM_SMEM_READS      12'hB17     // total reads
-`define CSR_MPM_SMEM_READS_H    12'hB97
-`define CSR_MPM_SMEM_WRITES     12'hB18     // total writes
-`define CSR_MPM_SMEM_WRITES_H   12'hB98
-`define CSR_MPM_SMEM_BANK_ST    12'hB19     // bank conflicts stalls
-`define CSR_MPM_SMEM_BANK_ST_H  12'hB99
+`define CSR_MPM_SMEM_READS      12'hB16     // total reads
+`define CSR_MPM_SMEM_READS_H    12'hB96
+`define CSR_MPM_SMEM_WRITES     12'hB17     // total writes
+`define CSR_MPM_SMEM_WRITES_H   12'hB97
+`define CSR_MPM_SMEM_BANK_ST    12'hB18     // bank conflicts stalls
+`define CSR_MPM_SMEM_BANK_ST_H  12'hB98
 // PERF: memory
-`define CSR_MPM_DRAM_READS      12'hB1A     // dram reads
-`define CSR_MPM_DRAM_READS_H    12'hB9A
-`define CSR_MPM_DRAM_WRITES     12'hB1B     // dram writes
-`define CSR_MPM_DRAM_WRITES_H   12'hB9B
-`define CSR_MPM_DRAM_ST         12'hB1C     // dram request stalls
-`define CSR_MPM_DRAM_ST_H       12'hB9C
-`define CSR_MPM_DRAM_LAT        12'hB1D     // dram latency (total)
-`define CSR_MPM_DRAM_LAT_H      12'hB9D
+`define CSR_MPM_DRAM_READS      12'hB19     // dram reads
+`define CSR_MPM_DRAM_READS_H    12'hB99
+`define CSR_MPM_DRAM_WRITES     12'hB1A     // dram writes
+`define CSR_MPM_DRAM_WRITES_H   12'hB9A
+`define CSR_MPM_DRAM_ST         12'hB1B     // dram request stalls
+`define CSR_MPM_DRAM_ST_H       12'hB9B
+`define CSR_MPM_DRAM_LAT        12'hB1C     // dram latency (total)
+`define CSR_MPM_DRAM_LAT_H      12'hB9C
 
 // Machine Information Registers
 `define CSR_MVENDORID   12'hF11

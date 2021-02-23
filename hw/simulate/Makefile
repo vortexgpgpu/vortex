@@ -27,6 +27,9 @@ SINGLECORE += -DNUM_CLUSTERS=1 -DNUM_CORES=1 -DL2_ENABLE=0
 #MULTICORE ?= -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
 MULTICORE ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
 
+SINGLECORE += $(CONFIGS)
+MULTICORE += $(CONFIGS)
+
 TOP = Vortex
 
 RTL_DIR=../rtl
@@ -49,7 +52,7 @@ VL_FLAGS += --cc Vortex.v --top-module $(TOP)
 # Use FPNEW PFU core
 VL_FLAGS += -DFPU_FPNEW
 
-DBG_FLAGS += -DVCD_OUTPUT $(DBG_FLAGS)
+DBG_FLAGS += -DVCD_OUTPUT
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 

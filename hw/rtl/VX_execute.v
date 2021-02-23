@@ -27,8 +27,7 @@ module VX_execute #(
     // inputs    
     VX_alu_req_if       alu_req_if,
     VX_lsu_req_if       lsu_req_if,    
-    VX_csr_req_if       csr_req_if,
-    VX_mul_req_if       mul_req_if,    
+    VX_csr_req_if       csr_req_if,  
     VX_fpu_req_if       fpu_req_if,    
     VX_gpu_req_if       gpu_req_if,
     
@@ -39,7 +38,6 @@ module VX_execute #(
     VX_commit_if        ld_commit_if,
     VX_commit_if        st_commit_if,
     VX_commit_if        csr_commit_if,
-    VX_commit_if        mul_commit_if,
     VX_commit_if        fpu_commit_if,
     VX_commit_if        gpu_commit_if,
     
@@ -93,26 +91,6 @@ module VX_execute #(
         .busy           (busy)
     );
 
-`ifdef EXT_M_ENABLE
-    VX_mul_unit #(
-        .CORE_ID(CORE_ID)
-    ) mul_unit (
-        .clk            (clk),
-        .reset          (reset),
-        .mul_req_if     (mul_req_if),
-        .mul_commit_if  (mul_commit_if)    
-    );
-`else
-    assign mul_req_if.ready     = 0;
-    assign mul_commit_if.valid  = 0;
-    assign mul_commit_if.wid    = 0;
-    assign mul_commit_if.PC     = 0;
-    assign mul_commit_if.tmask  = 0;
-    assign mul_commit_if.wb     = 0;
-    assign mul_commit_if.rd     = 0;
-    assign mul_commit_if.data   = 0;
-`endif
-
 `ifdef EXT_F_ENABLE
     VX_fpu_unit #(
         .CORE_ID(CORE_ID)
@@ -155,7 +133,7 @@ module VX_execute #(
     );
 
     assign ebreak = alu_req_if.valid 
-                 && alu_req_if.is_br_op
+                 && `IS_BR_MOD(alu_req_if.op_mod)
                  && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
                   || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
 

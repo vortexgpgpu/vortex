@@ -10,7 +10,6 @@ task print_ex_type (
         `EX_ALU: $write("ALU");     
         `EX_LSU: $write("LSU");
         `EX_CSR: $write("CSR");
-        `EX_MUL: $write("MUL");
         `EX_FPU: $write("FPU");
         `EX_GPU: $write("GPU");
         default: $write("NOP");
@@ -41,6 +40,18 @@ task print_ex_op (
                 `BR_DRET:  $write("DRET");    
                 default:    $write("?");
             endcase                
+        end else if (`IS_MUL_MOD(op_mod)) begin
+            case (`MUL_BITS'(op_type))
+                `MUL_MUL:   $write("MUL");
+                `MUL_MULH:  $write("MULH");
+                `MUL_MULHSU:$write("MULHSU");
+                `MUL_MULHU: $write("MULHU");
+                `MUL_DIV:   $write("DIV");
+                `MUL_DIVU:  $write("DIVU");
+                `MUL_REM:   $write("REM");
+                `MUL_REMU:  $write("REMU");
+                default:    $write("?");
+            endcase
         end else begin
             case (`ALU_BITS'(op_type))
                 `ALU_ADD:   $write("ADD");
@@ -75,19 +86,6 @@ task print_ex_op (
             `CSR_RS: $write("CSRS");
             `CSR_RC: $write("CSRC");
             default: $write("?");
-        endcase
-    end
-    `EX_MUL: begin
-        case (`MUL_BITS'(op_type))
-            `MUL_MUL:   $write("MUL");
-            `MUL_MULH:  $write("MULH");
-            `MUL_MULHSU:$write("MULHSU");
-            `MUL_MULHU: $write("MULHU");
-            `MUL_DIV:   $write("DIV");
-            `MUL_DIVU:  $write("DIVU");
-            `MUL_REM:   $write("REM");
-            `MUL_REMU:  $write("REMU");
-            default:    $write("?");
         endcase
     end
     `EX_FPU: begin

@@ -105,33 +105,16 @@ module VX_fifo_queue #(
 
             if (0 == BUFFERED) begin 
 
-                if (FASTRAM) begin
-                    
-                    `USE_FAST_BRAM reg [DATAW-1:0] shift_reg [SIZE];
+                reg [1:0][DATAW-1:0] shift_reg;
 
-                    always @(posedge clk) begin
-                        if (push) begin
-                            shift_reg[1] <= shift_reg[0];
-                            shift_reg[0] <= data_in;
-                        end
+                always @(posedge clk) begin
+                    if (push) begin
+                        shift_reg[1] <= shift_reg[0];
+                        shift_reg[0] <= data_in;
                     end
-
-                    assign data_out = shift_reg[~used_r[0]];    
-
-                end else begin
-                    
-                    reg [DATAW-1:0] shift_reg [SIZE];
-
-                    always @(posedge clk) begin
-                        if (push) begin
-                            shift_reg[1] <= shift_reg[0];
-                            shift_reg[0] <= data_in;
-                        end
-                    end
-
-                    assign data_out = shift_reg[~used_r[0]];
-
                 end
+
+                assign data_out = shift_reg[!used_r[0]];    
                 
             end else begin
 
@@ -142,7 +125,7 @@ module VX_fifo_queue #(
                     if (push) begin
                         buffer <= data_in;
                     end
-                    if (push && (empty_r || ((used_r == ADDRW'(1)) && pop))) begin
+                    if (push && (empty_r || (used_r && pop))) begin
                         data_out_r <= data_in;
                     end else if (pop) begin
                         data_out_r <= buffer;

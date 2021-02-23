@@ -132,8 +132,6 @@ module VX_csr_data #(
             `CSR_MPM_LSU_ST_H   : read_data_r = perf_pipeline_if.lsu_stalls[63:32];
             `CSR_MPM_CSR_ST     : read_data_r = perf_pipeline_if.csr_stalls[31:0];
             `CSR_MPM_CSR_ST_H   : read_data_r = perf_pipeline_if.csr_stalls[63:32];
-            `CSR_MPM_MUL_ST     : read_data_r = perf_pipeline_if.mul_stalls[31:0];
-            `CSR_MPM_MUL_ST_H   : read_data_r = perf_pipeline_if.mul_stalls[63:32];
             `CSR_MPM_FPU_ST     : read_data_r = perf_pipeline_if.fpu_stalls[31:0];
             `CSR_MPM_FPU_ST_H   : read_data_r = perf_pipeline_if.fpu_stalls[63:32];
             `CSR_MPM_GPU_ST     : read_data_r = perf_pipeline_if.gpu_stalls[31:0];
