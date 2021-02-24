@@ -38,7 +38,14 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::GPGPU,      {"gpgpu" , false, InstType::R_TYPE}},
   {Opcode::VSET_ARITH, {"vsetvl", false, InstType::V_TYPE}}, 
   {Opcode::VL,         {"vl"    , false, InstType::V_TYPE}}, 
-  {Opcode::VS,         {"vs"    , false, InstType::V_TYPE}}  
+  {Opcode::VS,         {"vs"    , false, InstType::V_TYPE}},
+  {Opcode::FL,         {"fl"    , false, InstType::I_TYPE }},
+  {Opcode::FS,         {"fs"    , false, InstType::S_TYPE }},
+  {Opcode::FCI,        {"fci"   , false, InstType::R_TYPE }}, 
+  {Opcode::FMADD,      {"fma"   , false, InstType::R4_TYPE }},
+  {Opcode::FMSUB,      {"fms"   , false, InstType::R4_TYPE }},
+  {Opcode::FMNMADD,    {"fmnma" , false, InstType::R4_TYPE }},
+  {Opcode::FMNMSUB,    {"fmnms" , false, InstType::R4_TYPE }}   
 };
 
 std::ostream &vortex::operator<<(std::ostream &os, Instr &instr) {
@@ -50,6 +57,7 @@ Decoder::Decoder(const ArchDef &arch) {
   inst_s_   = arch.getWordSize() * 8;
   opcode_s_ = 7;
   reg_s_    = 5;
+  func2_s_  = 2;
   func3_s_  = 3;
   mop_s_    = 3;
   vmask_s_  = 1;
@@ -60,6 +68,8 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_rs1_ = opcode_s_ + reg_s_ + func3_s_;
   shift_rs2_ = opcode_s_ + reg_s_ + func3_s_ + reg_s_;
   shift_func7_ = opcode_s_ + reg_s_ + func3_s_ + reg_s_ + reg_s_;
+  shift_func2_ = opcode_s_ + reg_s_ + func3_s_ + reg_s_ + reg_s_;
+  shift_rs3_   = opcode_s_ + reg_s_ + func3_s_ + reg_s_ + reg_s_ + func2_s_;
   shift_j_u_immed_ = opcode_s_ + reg_s_;
   shift_s_b_immed_ = opcode_s_ + reg_s_ + func3_s_ + reg_s_ + reg_s_;
   shift_i_immed_ = opcode_s_ + reg_s_ + func3_s_ + reg_s_;
@@ -71,6 +81,7 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_vset_ = opcode_s_ + reg_s_ + func3_s_ + reg_s_ + reg_s_ + 6;
 
   reg_mask_    = 0x1f;
+  func2_mask_  = 0x2;
   func3_mask_  = 0x7;
   func6_mask_  = 0x3f;
   func7_mask_  = 0x7f;
@@ -96,13 +107,21 @@ std::shared_ptr<Instr> Decoder::decode(const std::vector<Byte> &v, Size &idx, tr
   Word imeed, dest_bits, imm_bits, bit_11, bits_4_1, bit_10_5,
       bit_12, bits_19_12, bits_10_1, bit_20, unordered, func3;
 
+  InstType curInstType = sc_instTable.at(op).iType; // get current inst type
+  if (op == Opcode::FL || op == Opcode::FS) { // need to find out whether it is vector or floating point inst
+    Word width_bits = (code >> shift_func3_)  & func3_mask_;
+    if ((width_bits == 0x1) || (width_bits == 0x2) 
+     || (width_bits == 0x3) || (width_bits == 0x4)) {
+      curInstType = (op == Opcode::FL)? InstType::I_TYPE : InstType::S_TYPE;
+    }
+  }
+
   // std::cout << "op: " << std::hex << op << " what " << sc_instTable[op].iType << "\n";
-  switch (sc_instTable.at(op).iType) {
+  switch (curInstType) {
   case InstType::N_TYPE:
     break;
 
   case InstType::R_TYPE:
-    instr->setPred((code >> shift_rs1_)   & reg_mask_);
     instr->setDestReg((code >> shift_rd_) & reg_mask_);
     instr->setSrcReg((code >> shift_rs1_) & reg_mask_);
     instr->setSrcReg((code >> shift_rs2_) & reg_mask_);
@@ -122,7 +141,7 @@ std::shared_ptr<Instr> Decoder::decode(const std::vector<Byte> &v, Size &idx, tr
     func3 = (code >> shift_func3_) & func3_mask_;
     instr->setFunc3(func3);
 
-    if ((func3 == 5) && (op != L_INST)) {
+    if ((func3 == 5) && (op != L_INST) && (op != FL)) {
       // std::cout << "func7: " << func7 << "\n";
       instr->setSrcImm(signExt(((code >> shift_rs2_) & reg_mask_), 5, reg_mask_));
     } else {
@@ -281,6 +300,20 @@ std::shared_ptr<Instr> Decoder::decode(const std::vector<Byte> &v, Size &idx, tr
       std::cout << "Inavlid opcode.\n";
       std::abort();
     }
+    break;
+  case R4_TYPE:
+    // RT: add R4_TYPE decoder    
+    instr->setDestReg((code >> shift_rd_) & reg_mask_);
+    instr->setSrcReg((code >> shift_rs1_) & reg_mask_);
+    instr->setSrcReg((code >> shift_rs2_) & reg_mask_);
+    instr->setSrcReg((code >> shift_rs3_) & reg_mask_);
+    instr->setFunc3((code >> shift_func3_) & func3_mask_);
+    
+    trace_inst->valid_inst = true;
+    trace_inst->rs1 = ((code >> shift_rs1_) & reg_mask_);
+    trace_inst->rs2 = ((code >> shift_rs2_) & reg_mask_);
+    trace_inst->rs3 = ((code >> shift_rs3_) & reg_mask_);
+    trace_inst->rd  = ((code >> shift_rd_) & reg_mask_);
     break;
   default:
     std::cout << "Unrecognized argument class in word decoder.\n";

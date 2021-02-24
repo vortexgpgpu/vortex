@@ -13,7 +13,7 @@ RTL_DIR = ../hw/rtl
 
 PROJECT = simX
 
-SRCS = util.cpp args.cpp mem.cpp core.cpp warp.cpp instr.cpp decode.cpp execute.cpp simX.cpp
+SRCS = util.cpp args.cpp mem.cpp core.cpp warp.cpp instr.cpp decode.cpp execute.cpp main.cpp
 
 # Debugigng
 ifdef DEBUG
@@ -26,6 +26,9 @@ all: $(PROJECT)
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+run: $(PROJECT)
+	./$(PROJECT) 
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;

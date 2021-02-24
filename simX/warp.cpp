@@ -16,12 +16,8 @@ Warp::Warp(Core *core, Word id)
     , shadowPc_(0)
     , activeThreads_(0)
     , shadowActiveThreads_(0)
-    , shadowReg_(core_->arch().getNumRegs())
+    , shadowIReg_(core_->arch().getNumRegs())
     , VLEN_(1024)
-    , interruptEnable_(true)
-    , shadowInterruptEnable_(false)
-    , supervisorMode_(true)
-    , shadowSupervisorMode_(false)
     , spawned_(false)
     , steps_(0)
     , insts_(0)
@@ -31,9 +27,9 @@ Warp::Warp(Core *core, Word id)
   /* Build the register file. */
   Word regNum(0);
   for (Word j = 0; j < core_->arch().getNumThreads(); ++j) {
-    regFile_.push_back(std::vector<Reg<Word>>(0));
+    iRegFile_.push_back(std::vector<Reg<Word>>(0));
     for (Word i = 0; i < core_->arch().getNumRegs(); ++i) {
-      regFile_[j].push_back(Reg<Word>(id, regNum++));
+      iRegFile_[j].push_back(Reg<Word>(id, regNum++));
     }
 
     bool act = false;
@@ -44,11 +40,11 @@ Warp::Warp(Core *core, Word id)
   }
 
   for (Word i = 0; i < (1 << 12); i++) {
-    csrs_.push_back(Reg<uint16_t>(id, regNum++));
+    csrs_.push_back(Reg<uint32_t>(id, regNum++));
   }
 
   /* Set initial register contents. */
-  regFile_[0][0] = (core_->arch().getNumThreads() << (core_->arch().getWordSize() * 8 / 2)) | id;
+  iRegFile_[0][0] = (core_->arch().getNumThreads() << (core_->arch().getWordSize() * 8 / 2)) | id;
 }
 
 void Warp::step(trace_inst_t *trace_inst) {
@@ -73,7 +69,7 @@ void Warp::step(trace_inst_t *trace_inst) {
     
   unsigned fetchSize = 4;
   fetchBuffer.resize(fetchSize);
-  Word fetched = core_->mem().fetch(pc_ + fetchPos, supervisorMode_);
+  Word fetched = core_->mem().fetch(pc_ + fetchPos, 0);
   writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
 
   decPos = 0;
@@ -87,42 +83,17 @@ void Warp::step(trace_inst_t *trace_inst) {
 
   // At Debug Level 3, print debug info after each instruction.
   D(3, "Register state:");
-  for (unsigned i = 0; i < regFile_[0].size(); ++i) {
+  for (unsigned i = 0; i < iRegFile_[0].size(); ++i) {
     D_RAW("  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     for (unsigned j = 0; j < (activeThreads_); ++j)
-      D_RAW(' ' << std::setfill('0') << std::setw(8) << std::hex << regFile_[j][i] << std::setfill(' ') << ' ');
-    D_RAW('(' << shadowReg_[i] << ')' << std::endl);
+      D_RAW(' ' << std::setfill('0') << std::setw(8) << std::hex << iRegFile_[j][i] << std::setfill(' ') << ' ');
+    D_RAW('(' << shadowIReg_[i] << ')' << std::endl);
   }
 
   DPH(3, "Thread mask:");
   for (unsigned i = 0; i < tmask_.size(); ++i)
     DPN(3, " " << tmask_[i]);
   DPN(3, "\n");
-}
-
-bool Warp::interrupt(Word r0) {
-  if (!interruptEnable_)
-    return false;
-
-  shadowActiveThreads_   = activeThreads_;
-  shadowTmask_           = tmask_;
-  shadowInterruptEnable_ = interruptEnable_; /* For traps. */
-  shadowSupervisorMode_  = supervisorMode_;
-
-  for (Word i = 0; i < regFile_[0].size(); ++i)
-    shadowReg_[i] = regFile_[0][i];
-
-  for (Word i = 0; i < regFile_.size(); ++i)
-    tmask_[i] = 1;
-
-  shadowPc_ = pc_;
-  activeThreads_ = 1;
-  interruptEnable_ = false;
-  supervisorMode_ = true;
-  regFile_[0][0] = r0;
-  pc_ = core_->interruptEntry();
-
-  return true;
 }
 
 void Warp::printStats() const {

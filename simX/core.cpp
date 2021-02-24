@@ -117,11 +117,6 @@ Core::Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
   warps_[0].setSpawned(true);
 }
 
-bool Core::interrupt(Word r0) {
-  warps_[0].interrupt(r0);
-  return false;
-}
-
 Core::~Core() {
   //--
 }
