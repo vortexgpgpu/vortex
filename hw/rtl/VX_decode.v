@@ -343,8 +343,7 @@ module VX_decode  #(
                                         is_fpu_no_mem ? `OP_BITS'(fpu_op) :                                                                                                                            
                                             is_lsu ? `OP_BITS'(lsu_op) :
                                                 is_br ? `OP_BITS'(br_op) :
-                                                    (is_rtype || is_itype || is_lui || is_auipc) ? `OP_BITS'(alu_op) :
-                                                        0;
+                                                    `OP_BITS'(alu_op);
 
     assign decode_if.wb = use_rd && (decode_if.ex_type != `EX_NOP);
 
