@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <math.h>
+#include <bitset>
+#include <climits>
+#include <cfenv>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -42,15 +45,111 @@ static bool checkUnanimous(unsigned p,
   return true;
 }
 
-void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
-  /* If I try to execute a privileged instruction in user mode, throw an
-     exception 3. */
-  if (instr.getPrivileged() && !supervisorMode_) {
-    D(3, "INTERRUPT SUPERVISOR\n");
-    this->interrupt(3);
-    return;
-  }
+// Convert 32-bit integer register file to IEEE-754 floating point number.
+float intregToFloat(uint32_t input) {
+  // 31th bit
+  bool sign = input & 0x80000000;
+  // Exponent: 23th ~ 30th bits -> 8 bits in total
+  int32_t exp  = ((input & 0x7F800000)>>23);
+  // printf("exp = %u\n", exp);
+  // 0th ~ 22th bits -> 23 bits fraction
+  uint32_t frac = input & 0x007FFFFF;
+  // Frac_value= 1 + sum{i = 1}{23}{b_{23-i}*2^{-i}}
+  double frac_value;
+  if (exp == 0) {  // subnormal
+    if (frac == 0) // zero
+      if (sign) return -0.0;
+      else return 0.0;
+    frac_value = 0.0;
+  } else
+    frac_value = 1.0;
 
+  for (int i = 0; i < 23; i++) {
+    int bi = frac & 0x1;
+    frac_value += static_cast<double>(bi * pow(2.0, i-23));
+    frac = (frac >> 1);
+  }
+  
+  return (float)((static_cast<double>(pow(-1.0, sign))) * (static_cast<double>(pow(2.0, exp - 127.0)))* frac_value);
+}
+
+// Convert a floating point number to IEEE-754 32-bit representation, 
+// so that it could be stored in a 32-bit integer register file
+// Reference: https://www.wikihow.com/Convert-a-Number-from-Decimal-to-IEEE-754-Floating-Point-Representation
+ //            https://www.technical-recipes.com/2012/converting-between-binary-and-decimal-representations-of-ieee-754-floating-point-numbers-in-c/
+uint32_t floatToBin(float in_value) {
+  union  {
+       float input;   // assumes sizeof(float) == sizeof(int)
+       int   output;
+  }    data;
+
+  data.input = in_value;
+
+  std::bitset<sizeof(float) * CHAR_BIT>   bits(data.output);
+  std::string mystring = bits.to_string<char, std::char_traits<char>, std::allocator<char> >();
+  // Convert binary to uint32_t
+  Word result = stoul(mystring, nullptr, 2);
+  return result;
+}
+
+// print out floating point exception after execution
+void show_fe_exceptions(void) {
+    printf("exceptions raised:");
+    if(fetestexcept(FE_DIVBYZERO)) printf(" FE_DIVBYZERO");
+    if(fetestexcept(FE_INEXACT))   printf(" FE_INEXACT");
+    if(fetestexcept(FE_INVALID))   printf(" FE_INVALID");
+    if(fetestexcept(FE_OVERFLOW))  printf(" FE_OVERFLOW");
+    if(fetestexcept(FE_UNDERFLOW)) printf(" FE_UNDERFLOW");
+    feclearexcept(FE_ALL_EXCEPT);
+    printf("\n");
+}
+
+// https://en.wikipedia.org/wiki/Single-precision_floating-point_format
+// check floating-point number in binary format is NaN
+uint8_t fpBinIsNan(uint32_t din) {
+  bool fsign = din & 0x80000000;
+  uint32_t expo = (din>>23) & 0x000000FF;
+  uint32_t fraction = din & 0x007FFFFF;
+  uint32_t bit_22 = din & 0x00400000;
+
+  if ((expo==0xFF) && (fraction!=0)) 
+    // if (!fsign && (fraction == 0x00400000)) 
+    if(!fsign && (bit_22))
+      return 1; // quiet NaN, return 1
+    else 
+      return 2; // signaling NaN, return 2
+  return 0;
+}
+
+// check floating-point number in binary format is zero
+uint8_t fpBinIsZero(uint32_t din) {
+  bool fsign = din & 0x80000000;
+  uint32_t expo = (din>>23) & 0x000000FF;
+  uint32_t fraction = din & 0x007FFFFF;
+
+  if ((expo==0) && (fraction==0))
+    if (fsign)
+      return 1; // negative 0
+    else
+      return 2; // positive 0
+  return 0;  // not zero
+}
+
+// check floating-point number in binary format is infinity
+uint8_t fpBinIsInf(uint32_t din) {
+  bool fsign = din & 0x80000000;
+  uint32_t expo = (din>>23) & 0x000000FF;
+  uint32_t fraction = din & 0x007FFFFF;
+
+  if ((expo==0xFF) && (fraction==0))
+    if (fsign)
+      return 1; // negative infinity
+    else
+      return 2; // positive infinity
+  return 0;  // not infinity
+}
+
+void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
   Size nextActiveThreads = activeThreads_;
   Size wordSz = core_->arch().getWordSize();
   Word nextPc = pc_;
@@ -68,12 +167,13 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
   RegNum rdest  = instr.getRDest();
   RegNum rsrc0  = instr.getRSrc(0);
   RegNum rsrc1  = instr.getRSrc(1);
-  RegNum pred   = instr.getPred();
+  RegNum rsrc2  = instr.getRSrc(2);
   Word immsrc   = instr.getImm();
   bool vmask    = instr.getVmask();
 
   for (Size t = 0; t < activeThreads_; t++) {
-    std::vector<Reg<Word>> &reg = regFile_[t];
+    std::vector<Reg<Word>> &iregs = iRegFile_[t];
+    std::vector<Reg<Word>> &fregs = fRegFile_[t];
 
     bool is_gpgpu = (opcode == GPGPU);
     bool is_tmc = is_gpgpu && (func3 == 0);
@@ -102,85 +202,85 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 0:
           // MUL
           D(3, "MUL: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          reg[rdest] = ((int)reg[rsrc0]) * ((int)reg[rsrc1]);
+          iregs[rdest] = ((int)iregs[rsrc0]) * ((int)iregs[rsrc1]);
           break;
         case 1:
           // MULH
           D(3, "MULH: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
           {
-            int64_t first = (int64_t)reg[rsrc0];
-            if (reg[rsrc0] & 0x80000000) {
+            int64_t first = (int64_t)iregs[rsrc0];
+            if (iregs[rsrc0] & 0x80000000) {
               first = first | 0xFFFFFFFF00000000;
             }
-            int64_t second = (int64_t)reg[rsrc1];
-            if (reg[rsrc1] & 0x80000000) {
+            int64_t second = (int64_t)iregs[rsrc1];
+            if (iregs[rsrc1] & 0x80000000) {
               second = second | 0xFFFFFFFF00000000;
             }
             // cout << "mulh: " << std::dec << first << " * " << second;
             uint64_t result = first * second;
-            reg[rdest] = (result >> 32) & 0xFFFFFFFF;
-            // cout << " = " << result << "   or  " <<  reg[rdest] << "\n";
+            iregs[rdest] = (result >> 32) & 0xFFFFFFFF;
+            // cout << " = " << result << "   or  " <<  iregs[rdest] << "\n";
           }
           break;
         case 2:
           // MULHSU
           D(3, "MULHSU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
           {
-            int64_t first = (int64_t)reg[rsrc0];
-            if (reg[rsrc0] & 0x80000000) {
+            int64_t first = (int64_t)iregs[rsrc0];
+            if (iregs[rsrc0] & 0x80000000) {
               first = first | 0xFFFFFFFF00000000;
             }
-            int64_t second = (int64_t)reg[rsrc1];
-            reg[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
+            int64_t second = (int64_t)iregs[rsrc1];
+            iregs[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
           }
           break;
         case 3:
           // MULHU
           D(3, "MULHU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
           {
-            uint64_t first = (uint64_t)reg[rsrc0];
-            uint64_t second = (uint64_t)reg[rsrc1];
+            uint64_t first = (uint64_t)iregs[rsrc0];
+            uint64_t second = (uint64_t)iregs[rsrc1];
             // cout << "MULHU\n";
-            reg[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
+            iregs[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
           }
           break;
         case 4:
           // DIV
           D(3, "DIV: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (reg[rsrc1] == 0) {
-            reg[rdest] = -1;
+          if (iregs[rsrc1] == 0) {
+            iregs[rdest] = -1;
             break;
           }
-          // cout << "dividing: " << std::dec << ((int) reg[rsrc0]) << " / " << ((int) reg[rsrc1]);
-          reg[rdest] = ((int)reg[rsrc0]) / ((int)reg[rsrc1]);
-          // cout << " = " << ((int) reg[rdest]) << "\n";
+          // cout << "dividing: " << std::dec << ((int) iregs[rsrc0]) << " / " << ((int) iregs[rsrc1]);
+          iregs[rdest] = ((int)iregs[rsrc0]) / ((int)iregs[rsrc1]);
+          // cout << " = " << ((int) iregs[rdest]) << "\n";
           break;
         case 5:
           // DIVU
           D(3, "DIVU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (reg[rsrc1] == 0) {
-            reg[rdest] = -1;
+          if (iregs[rsrc1] == 0) {
+            iregs[rdest] = -1;
             break;
           }
-          reg[rdest] = ((uint32_t)reg[rsrc0]) / ((uint32_t)reg[rsrc1]);
+          iregs[rdest] = ((uint32_t)iregs[rsrc0]) / ((uint32_t)iregs[rsrc1]);
           break;
         case 6:
           // REM
           D(3, "REM: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (reg[rsrc1] == 0) {
-            reg[rdest] = reg[rsrc0];
+          if (iregs[rsrc1] == 0) {
+            iregs[rdest] = iregs[rsrc0];
             break;
           }
-          reg[rdest] = ((int)reg[rsrc0]) % ((int)reg[rsrc1]);
+          iregs[rdest] = ((int)iregs[rsrc0]) % ((int)iregs[rsrc1]);
           break;
         case 7:
           // REMU
           D(3, "REMU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (reg[rsrc1] == 0) {
-            reg[rdest] = reg[rsrc0];
+          if (iregs[rsrc1] == 0) {
+            iregs[rdest] = iregs[rsrc0];
             break;
           }
-          reg[rdest] = ((uint32_t)reg[rsrc0]) % ((uint32_t)reg[rsrc1]);
+          iregs[rdest] = ((uint32_t)iregs[rsrc0]) % ((uint32_t)iregs[rsrc1]);
           break;
         default:
           std::cout << "unsupported MUL/DIV instr\n";
@@ -192,57 +292,57 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 0:
           if (func7) {
             D(3, "SUBI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-            reg[rdest] = reg[rsrc0] - reg[rsrc1];
-            reg[rdest].trunc(wordSz);
+            iregs[rdest] = iregs[rsrc0] - iregs[rsrc1];
+            iregs[rdest].trunc(wordSz);
           } else {
             D(3, "ADDI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-            reg[rdest] = reg[rsrc0] + reg[rsrc1];
-            reg[rdest].trunc(wordSz);
+            iregs[rdest] = iregs[rsrc0] + iregs[rsrc1];
+            iregs[rdest].trunc(wordSz);
           }
           break;
         case 1:
           D(3, "SLLI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          reg[rdest] = reg[rsrc0] << reg[rsrc1];
-          reg[rdest].trunc(wordSz);
+          iregs[rdest] = iregs[rsrc0] << iregs[rsrc1];
+          iregs[rdest].trunc(wordSz);
           break;
         case 2:
           D(3, "SLTI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (int(reg[rsrc0]) < int(reg[rsrc1])) {
-            reg[rdest] = 1;
+          if (int(iregs[rsrc0]) < int(iregs[rsrc1])) {
+            iregs[rdest] = 1;
           } else {
-            reg[rdest] = 0;
+            iregs[rdest] = 0;
           }
           break;
         case 3:
           D(3, "SLTU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (Word_u(reg[rsrc0]) < Word_u(reg[rsrc1])) {
-            reg[rdest] = 1;
+          if (Word_u(iregs[rsrc0]) < Word_u(iregs[rsrc1])) {
+            iregs[rdest] = 1;
           } else {
-            reg[rdest] = 0;
+            iregs[rdest] = 0;
           }
           break;
         case 4:
           D(3, "XORI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          reg[rdest] = reg[rsrc0] ^ reg[rsrc1];
+          iregs[rdest] = iregs[rsrc0] ^ iregs[rsrc1];
           break;
         case 5:
           if (func7) {
             D(3, "SRLI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-            reg[rdest] = int(reg[rsrc0]) >> int(reg[rsrc1]);
-            reg[rdest].trunc(wordSz);
+            iregs[rdest] = int(iregs[rsrc0]) >> int(iregs[rsrc1]);
+            iregs[rdest].trunc(wordSz);
           } else {
             D(3, "SRLU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-            reg[rdest] = Word_u(reg[rsrc0]) >> Word_u(reg[rsrc1]);
-            reg[rdest].trunc(wordSz);
+            iregs[rdest] = Word_u(iregs[rsrc0]) >> Word_u(iregs[rsrc1]);
+            iregs[rdest].trunc(wordSz);
           }
           break;
         case 6:
           D(3, "ORI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          reg[rdest] = reg[rsrc0] | reg[rsrc1];
+          iregs[rdest] = iregs[rsrc0] | iregs[rsrc1];
           break;
         case 7:
           D(3, "ANDI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          reg[rdest] = reg[rsrc0] & reg[rsrc1];
+          iregs[rdest] = iregs[rsrc0] & iregs[rsrc1];
           break;
         default:
           std::cout << "ERROR: UNSUPPORTED R INST\n";
@@ -251,44 +351,44 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       }
     } break;
     case L_INST: {
-      Word memAddr = ((reg[rsrc0] + immsrc) & 0xFFFFFFFC);
-      Word shift_by = ((reg[rsrc0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->mem().read(memAddr, supervisorMode_);
+      Word memAddr = ((iregs[rsrc0] + immsrc) & 0xFFFFFFFC);
+      Word shift_by = ((iregs[rsrc0] + immsrc) & 0x00000003) * 8;
+      Word data_read = core_->mem().read(memAddr, 0);
       trace_inst->is_lw = true;
       trace_inst->mem_addresses[t] = memAddr;
       switch (func3) {
       case 0:
         // LBI
         D(3, "LBI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
+        iregs[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
         break;
       case 1:
         // LWI
         D(3, "LWI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
+        iregs[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
         break;
       case 2:
         // LDI
         D(3, "LDI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = int(data_read & 0xFFFFFFFF);
+        iregs[rdest] = int(data_read & 0xFFFFFFFF);
         break;
       case 4:
         // LBU
         D(3, "LBU: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = unsigned((data_read >> shift_by) & 0xFF);
+        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFF);
         break;
       case 5:
         // LWU
         D(3, "LWU: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
+        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
         break;
       default:
         std::cout << "ERROR: UNSUPPORTED L INST\n";
-        std::abort();
-        memAccesses_.push_back(Warp::MemAccess(false, memAddr));
+        std::abort();        
       }
       D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
       D(3, "LOAD MEM DATA: " << std::hex << data_read);
+      memAccesses_.push_back(Warp::MemAccess(false, memAddr));
     } break;
     case I_INST:
       //std::cout << "I_INST\n";
@@ -296,62 +396,62 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 0:
         // ADDI
         D(3, "ADDI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
-        reg[rdest] = reg[rsrc0] + immsrc;
-        reg[rdest].trunc(wordSz);
+        iregs[rdest] = iregs[rsrc0] + immsrc;
+        iregs[rdest].trunc(wordSz);
         break;
       case 2:
         // SLTI
         D(3, "SLTI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
-        if (int(reg[rsrc0]) < int(immsrc)) {
-          reg[rdest] = 1;
+        if (int(iregs[rsrc0]) < int(immsrc)) {
+          iregs[rdest] = 1;
         } else {
-          reg[rdest] = 0;
+          iregs[rdest] = 0;
         }
         break;
       case 3: {
         // SLTIU
         D(3, "SLTIU: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
-        if (unsigned(reg[rsrc0]) < unsigned(immsrc)) {
-          reg[rdest] = 1;
+        if (unsigned(iregs[rsrc0]) < unsigned(immsrc)) {
+          iregs[rdest] = 1;
         } else {
-          reg[rdest] = 0;
+          iregs[rdest] = 0;
         }
       } break;
       case 4:
         // XORI
         D(3, "XORI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = reg[rsrc0] ^ immsrc;
+        iregs[rdest] = iregs[rsrc0] ^ immsrc;
         break;
       case 6:
         // ORI
         D(3, "ORI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = reg[rsrc0] | immsrc;
+        iregs[rdest] = iregs[rsrc0] | immsrc;
         break;
       case 7:
         // ANDI
         D(3, "ANDI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = reg[rsrc0] & immsrc;
+        iregs[rdest] = iregs[rsrc0] & immsrc;
         break;
       case 1:
         // SLLI
         D(3, "SLLI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        reg[rdest] = reg[rsrc0] << immsrc;
-        reg[rdest].trunc(wordSz);
+        iregs[rdest] = iregs[rsrc0] << immsrc;
+        iregs[rdest].trunc(wordSz);
         break;
       case 5:
         if ((func7 == 0)) {
           // SRLI
           D(3, "SRLI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
-          Word result = Word_u(reg[rsrc0]) >> Word_u(immsrc);
-          reg[rdest] = result;
-          reg[rdest].trunc(wordSz);
+          Word result = Word_u(iregs[rsrc0]) >> Word_u(immsrc);
+          iregs[rdest] = result;
+          iregs[rdest].trunc(wordSz);
         } else {
           // SRAI
           D(3, "SRAI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
-          Word op1 = reg[rsrc0];
+          Word op1 = iregs[rsrc0];
           Word op2 = immsrc;
-          reg[rdest] = op1 >> op2;
-          reg[rdest].trunc(wordSz);
+          iregs[rdest] = op1 >> op2;
+          iregs[rdest].trunc(wordSz);
         }
         break;
       default:
@@ -361,12 +461,12 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       break;
     case S_INST: {
       ++stores_;
-      Word memAddr = reg[rsrc0] + immsrc;
+      Word memAddr = iregs[rsrc0] + immsrc;
       trace_inst->is_sw = true;
       trace_inst->mem_addresses[t] = memAddr;
       // //std::cout << "FUNC3: " << func3 << "\n";
       if ((memAddr == 0x00010000) && (t == 0)) {
-        Word num = reg[rsrc1];
+        Word num = iregs[rsrc1];
         fprintf(stderr, "%c", (char)num);
         break;
       }
@@ -374,17 +474,17 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 0:
         // SB
         D(3, "SB: r" << rsrc1 << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        core_->mem().write(memAddr, reg[rsrc1] & 0x000000FF, supervisorMode_, 1);
+        core_->mem().write(memAddr, iregs[rsrc1] & 0x000000FF, 0, 1);
         break;
       case 1:
         // SH
         D(3, "SH: r" << rsrc1 << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        core_->mem().write(memAddr, reg[rsrc1], supervisorMode_, 2);
+        core_->mem().write(memAddr, iregs[rsrc1], 0, 2);
         break;
       case 2:
         // SD
         D(3, "SD: r" << rsrc1 << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        core_->mem().write(memAddr, reg[rsrc1], supervisorMode_, 4);
+        core_->mem().write(memAddr, iregs[rsrc1], 0, 4);
         break;
       default:
         std::cout << "ERROR: UNSUPPORTED S INST\n";
@@ -399,7 +499,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 0:
         // BEQ
         D(3, "BEQ: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (int(reg[rsrc0]) == int(reg[rsrc1])) {
+        if (int(iregs[rsrc0]) == int(iregs[rsrc1])) {
           if (!pcSet)
             nextPc = (pc_ - 4) + immsrc;
           pcSet = true;
@@ -408,7 +508,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 1:
         // BNE
         D(3, "BNE: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (int(reg[rsrc0]) != int(reg[rsrc1])) {
+        if (int(iregs[rsrc0]) != int(iregs[rsrc1])) {
           if (!pcSet)
             nextPc = (pc_ - 4) + immsrc;
           pcSet = true;
@@ -417,7 +517,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 4:
         // BLT
         D(3, "BLT: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (int(reg[rsrc0]) < int(reg[rsrc1])) {
+        if (int(iregs[rsrc0]) < int(iregs[rsrc1])) {
           if (!pcSet)
             nextPc = (pc_ - 4) + immsrc;
           pcSet = true;
@@ -426,7 +526,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 5:
         // BGE
         D(3, "BGE: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (int(reg[rsrc0]) >= int(reg[rsrc1])) {
+        if (int(iregs[rsrc0]) >= int(iregs[rsrc1])) {
           if (!pcSet)
             nextPc = (pc_ - 4) + immsrc;
           pcSet = true;
@@ -435,7 +535,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 6:
         // BLTU
         D(3, "BLTU: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (Word_u(reg[rsrc0]) < Word_u(reg[rsrc1])) {
+        if (Word_u(iregs[rsrc0]) < Word_u(iregs[rsrc1])) {
           if (!pcSet)
             nextPc = (pc_ - 4) + immsrc;
           pcSet = true;
@@ -444,7 +544,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 7:
         // BGEU
         D(3, "BGEU: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (Word_u(reg[rsrc0]) >= Word_u(reg[rsrc1])) {
+        if (Word_u(iregs[rsrc0]) >= Word_u(iregs[rsrc1])) {
           if (!pcSet)
             nextPc = (pc_ - 4) + immsrc;
           pcSet = true;
@@ -454,11 +554,11 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       break;
     case LUI_INST:
       D(3, "LUI: r" << rdest << " <- imm=0x" << std::hex << immsrc);
-      reg[rdest] = (immsrc << 12) & 0xfffff000;
+      iregs[rdest] = (immsrc << 12) & 0xfffff000;
       break;
     case AUIPC_INST:
       D(3, "AUIPC: r" << rdest << " <- imm=0x" << std::hex << immsrc);
-      reg[rdest] = ((immsrc << 12) & 0xfffff000) + (pc_ - 4);
+      iregs[rdest] = ((immsrc << 12) & 0xfffff000) + (pc_ - 4);
       break;
     case JAL_INST:
       D(3, "JAL: r" << rdest << " <- imm=0x" << std::hex << immsrc);
@@ -468,7 +568,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         //std::cout << "JAL... SETTING PC: " << nextPc << "\n";      
       }
       if (rdest != 0) {
-        reg[rdest] = pc_;
+        iregs[rdest] = pc_;
       }
       pcSet = true;
       break;
@@ -476,61 +576,61 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       D(3, "JALR: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
       trace_inst->stall_warp = true;
       if (!pcSet) {
-        nextPc = reg[rsrc0] + immsrc;
+        nextPc = iregs[rsrc0] + immsrc;
         //std::cout << "JALR... SETTING PC: " << nextPc << "\n";
       }
       if (rdest != 0) {
-        reg[rdest] = pc_;
+        iregs[rdest] = pc_;
       }
       pcSet = true;
       break;
     case SYS_INST: {
       D(3, "SYS_INST: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-      Word rs1 = reg[rsrc0];
+      Word rs1 = iregs[rsrc0];
       Word csr_addr = immsrc & 0x00000FFF;
       // GPGPU CSR extension
       if (csr_addr == CSR_WTID) {
         // Warp threadID
-        reg[rdest] = t;
+        iregs[rdest] = t;
       } else if (csr_addr == CSR_LTID) {
         // Core threadID
-        reg[rdest] = t + 
+        iregs[rdest] = t + 
                      id_ * core_->arch().getNumThreads();
       } else if (csr_addr == CSR_GTID) {
         // Processor threadID
-        reg[rdest] = t + 
+        iregs[rdest] = t + 
                      id_ * core_->arch().getNumThreads() + 
                      core_->arch().getNumThreads() * core_->arch().getNumWarps() * core_->id();
       } else if (csr_addr == CSR_LWID) {
         // Core warpID
-        reg[rdest] = id_;
+        iregs[rdest] = id_;
       } else if (csr_addr == CSR_GWID) {
         // Processor warpID        
-        reg[rdest] = id_ + core_->arch().getNumWarps() * core_->id();
+        iregs[rdest] = id_ + core_->arch().getNumWarps() * core_->id();
       } else if (csr_addr == CSR_GCID) {
         // Processor coreID
-        reg[rdest] = core_->id();
+        iregs[rdest] = core_->id();
       } else if (csr_addr == CSR_NT) {
         // Number of threads per warp
-        reg[rdest] = core_->arch().getNumThreads();
+        iregs[rdest] = core_->arch().getNumThreads();
       } else if (csr_addr == CSR_NW) {
         // Number of warps per core
-        reg[rdest] = core_->arch().getNumWarps();
+        iregs[rdest] = core_->arch().getNumWarps();
       } else if (csr_addr == CSR_NC) {
         // Number of cores
-        reg[rdest] = core_->arch().getNumCores();
+        iregs[rdest] = core_->arch().getNumCores();
       } else if (csr_addr == CSR_INSTRET) {
         // NumInsts
-        reg[rdest] = (Word)core_->num_instructions();
+        iregs[rdest] = (Word)core_->num_instructions();
       } else if (csr_addr == CSR_INSTRET_H) {
         // NumInsts
-        reg[rdest] = (Word)(core_->num_instructions() >> 32);
+        iregs[rdest] = (Word)(core_->num_instructions() >> 32);
       } else if (csr_addr == CSR_CYCLE) {
         // NumCycles
-        reg[rdest] = (Word)core_->num_steps();
+        iregs[rdest] = (Word)core_->num_steps();
       } else if (csr_addr == CSR_CYCLE_H) {
         // NumCycles
-        reg[rdest] = (Word)(core_->num_steps() >> 32);
+        iregs[rdest] = (Word)(core_->num_steps() >> 32);
       } else {
         switch (func3) {
         case 0:
@@ -543,42 +643,42 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 1:
           // CSRRW
           if (rdest != 0) {
-            reg[rdest] = csrs_[csr_addr];
+            iregs[rdest] = csrs_[csr_addr];
           }
           csrs_[csr_addr] = rs1;
           break;
         case 2:
           // CSRRS
           if (rdest != 0) {
-            reg[rdest] = csrs_[csr_addr];
+            iregs[rdest] = csrs_[csr_addr];
           }
           csrs_[csr_addr] = rs1 | csrs_[csr_addr];
           break;
         case 3:
           // CSRRC
           if (rdest != 0) {
-            reg[rdest] = csrs_[csr_addr];
+            iregs[rdest] = csrs_[csr_addr];
           }
           csrs_[csr_addr] = rs1 & (~csrs_[csr_addr]);
           break;
         case 5:
           // CSRRWI
           if (rdest != 0) {
-            reg[rdest] = csrs_[csr_addr];
+            iregs[rdest] = csrs_[csr_addr];
           }
           csrs_[csr_addr] = rsrc0;
           break;
         case 6:
           // CSRRSI
           if (rdest != 0) {
-            reg[rdest] = csrs_[csr_addr];
+            iregs[rdest] = csrs_[csr_addr];
           }
           csrs_[csr_addr] = rsrc0 | csrs_[csr_addr];
           break;
         case 7:
           // CSRRCI
           if (rdest != 0) {
-            reg[rdest] = csrs_[csr_addr];
+            iregs[rdest] = csrs_[csr_addr];
           }
           csrs_[csr_addr] = rsrc0 & (~csrs_[csr_addr]);
           break;
@@ -592,9 +692,9 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       break;
     case PJ_INST:
       D(3, "PJ_INST: r" << rsrc0 << ", r" << rsrc1);
-      if (reg[rsrc0]) {
+      if (iregs[rsrc0]) {
         if (!pcSet)
-          nextPc = reg[rsrc1];
+          nextPc = iregs[rsrc1];
         pcSet = true;
       }
       break;
@@ -606,12 +706,12 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         trace_inst->wspawn = true;
         if (sjOnce) {
           sjOnce = false;
-          unsigned num_to_wspawn = std::min<unsigned>(reg[rsrc0], core_->arch().getNumWarps());
-          D(0, "Spawning " << num_to_wspawn << " new warps at PC: " << std::hex << reg[rsrc1]);
+          unsigned num_to_wspawn = std::min<unsigned>(iregs[rsrc0], core_->arch().getNumWarps());
+          D(0, "Spawning " << num_to_wspawn << " new warps at PC: " << std::hex << iregs[rsrc1]);
           for (unsigned i = 1; i < num_to_wspawn; ++i) {
             Warp &newWarp(core_->warp(i));
             {
-              newWarp.set_pc(reg[rsrc1]);
+              newWarp.set_pc(iregs[rsrc1]);
               for (size_t kk = 0; kk < tmask_.size(); kk++) {
                 if (kk == 0) {
                   newWarp.setTmask(kk, true);
@@ -620,7 +720,6 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
                 }
               }
               newWarp.setActiveThreads(1);
-              newWarp.setSupervisorMode(false);
               newWarp.setSpawned(true);
             }
           }
@@ -629,12 +728,12 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         break;
       case 2: {
         // SPLIT
-        D(3, "SPLIT: r" << pred);
+        D(3, "SPLIT: r" << rsrc0);
         trace_inst->stall_warp = true;
         if (sjOnce) {
           sjOnce = false;
-          if (checkUnanimous(pred, regFile_, tmask_)) {
-            D(3, "Unanimous pred: " << pred << "  val: " << reg[pred] << "\n");
+          if (checkUnanimous(rsrc0, iRegFile_, tmask_)) {
+            D(3, "Unanimous pred: " << rsrc0 << "  val: " << iregs[rsrc0] << "\n");
             DomStackEntry e(tmask_);
             e.uni = true;
             domStack_.push(e);
@@ -643,7 +742,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           D(3, "Split: Original TM: ");
           DX( for (auto y : tmask_) D(3, y << " "); )
 
-          DomStackEntry e(pred, regFile_, tmask_, pc_);
+          DomStackEntry e(rsrc0, iRegFile_, tmask_, pc_);
           domStack_.push(tmask_);
           domStack_.push(e);
           for (unsigned i = 0; i < e.tmask.size(); ++i) {
@@ -696,7 +795,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         // TMC
         D(3, "TMC: r" << rsrc0);
         trace_inst->stall_warp = true;
-        nextActiveThreads = std::min<unsigned>(reg[rsrc0], core_->arch().getNumThreads());
+        nextActiveThreads = std::min<unsigned>(iregs[rsrc0], core_->arch().getNumThreads());
         {
           for (size_t ff = 0; ff < tmask_.size(); ff++) {
             if (ff < nextActiveThreads) {
@@ -1723,8 +1822,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             for (int i = 0; i < vl_; i++) {
               //uint8_t *first_ptr = (uint8_t *)vr1[i].value();
               uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (reg[rsrc0] + *second_ptr);
-              D(3, "Comparing " << reg[rsrc0] << " + " << *second_ptr << " = " << result);
+              uint8_t result = (iregs[rsrc0] + *second_ptr);
+              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
 
               result_ptr = (uint8_t *)vd[i].value();
               *result_ptr = result;
@@ -1738,8 +1837,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             for (int i = 0; i < vl_; i++) {
               //uint16_t *first_ptr = (uint16_t *)vr1[i].value();
               uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (reg[rsrc0] + *second_ptr);
-              D(3, "Comparing " << reg[rsrc0] << " + " << *second_ptr << " = " << result);
+              uint16_t result = (iregs[rsrc0] + *second_ptr);
+              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
 
               result_ptr = (uint16_t *)vd[i].value();
               *result_ptr = result;
@@ -1755,8 +1854,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             for (int i = 0; i < vl_; i++) {
               //uint32_t *first_ptr = (uint32_t *)vr1[i].value();
               uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (reg[rsrc0] + *second_ptr);
-              D(3, "Comparing " << reg[rsrc0] << " + " << *second_ptr << " = " << result);
+              uint32_t result = (iregs[rsrc0] + *second_ptr);
+              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
 
               result_ptr = (uint32_t *)vd[i].value();
               *result_ptr = result;
@@ -1779,8 +1878,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             for (int i = 0; i < vl_; i++) {
               //uint8_t *first_ptr = (uint8_t *)vr1[i].value();
               uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (reg[rsrc0] * *second_ptr);
-              D(3, "Comparing " << reg[rsrc0] << " + " << *second_ptr << " = " << result);
+              uint8_t result = (iregs[rsrc0] * *second_ptr);
+              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
 
               result_ptr = (uint8_t *)vd[i].value();
               *result_ptr = result;
@@ -1794,8 +1893,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             for (int i = 0; i < vl_; i++) {
               //uint16_t *first_ptr = (uint16_t *)vr1[i].value();
               uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (reg[rsrc0] * *second_ptr);
-              D(3, "Comparing " << reg[rsrc0] << " + " << *second_ptr << " = " << result);
+              uint16_t result = (iregs[rsrc0] * *second_ptr);
+              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
 
               result_ptr = (uint16_t *)vd[i].value();
               *result_ptr = result;
@@ -1811,8 +1910,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             for (int i = 0; i < vl_; i++) {
               //uint32_t *first_ptr = (uint32_t *)vr1[i].value();
               uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (reg[rsrc0] * *second_ptr);
-              D(3, "Comparing " << reg[rsrc0] << " + " << *second_ptr << " = " << result);
+              uint32_t result = (iregs[rsrc0] * *second_ptr);
+              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
 
               result_ptr = (uint32_t *)vd[i].value();
               *result_ptr = result;
@@ -1831,9 +1930,9 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         vtype_.vsew  = instr.getVsew();
         vtype_.vlmul = instr.getVlmul();
 
-        D(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << reg[rsrc0] << "VLMAX" << VLMAX);
+        D(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << iregs[rsrc0] << "VLMAX" << VLMAX);
 
-        int s0 = reg[rsrc0];
+        int s0 = iregs[rsrc0];
 
         if (s0 <= VLMAX) {
           vl_ = s0;
@@ -1844,8 +1943,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           vl_ = VLMAX;
         }
         
-        reg[rdest] = vl_;
-        D(3, "VL:" << reg[rdest]);
+        iregs[rdest] = vl_;
+        D(3, "VL:" << iregs[rdest]);
 
         Word regNum(0);
 
@@ -1865,67 +1964,548 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       }
       }
     } break;
-    case VL: {
-      D(3, "Executing vector load");
-      
-      D(3, "lmul: " << vtype_.vlmul << " VLEN:" << VLEN_ << "sew: " << vtype_.vsew);
-      D(3, "src: " << rsrc0 << " " << reg[rsrc0]);
-      D(3, "dest" << rdest);
-      D(3, "width" << instr.getVlsWidth());
-
-      std::vector<Reg<char *>> &vd = vregFile_[rdest];
-
-      switch (instr.getVlsWidth()) {
-      case 6: //load word and unit strided (not checking for unit stride)
-      {
-        for (int i = 0; i < vl_; i++) {
-          Word memAddr = ((reg[rsrc0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
-          Word data_read = core_->mem().read(memAddr, supervisorMode_);
-          D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
-          int *result_ptr = (int *)vd[i].value();
-          *result_ptr = data_read;
-
-          trace_inst->is_lw = true;
-          trace_inst->mem_addresses[i] = memAddr;
+    case (FL | VL):
+      if ( func3==0x2 ) {
+        //std::cout << "FL_INST\n"; 
+        // rs1 is integer is register!
+        Word memAddr = ((iregs[rsrc0] + immsrc) & 0xFFFFFFFC); // alignment
+        D(9,"something weird happen!");
+        Word data_read = core_->mem().read(memAddr, 0);
+        D(3, "Memaddr");
+        D_RAW(' ' << setw(8) << hex << memAddr << endl);
+        trace_inst->is_lw = true;
+        trace_inst->mem_addresses[t] = memAddr;
+        // //std::cout <<std::hex<< "EXECUTE: " << fregs[rsrc0] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
+        switch (func3) {
+        case 2: // FLW
+          fregs[rdest] = data_read & 0xFFFFFFFF;
+          D(3, "fpReg[rd]");
+          D_RAW(' ' << setw(8) << hex << fregs[rdest] << endl);              
+          break;
+        default:
+          std::cout << "ERROR: UNSUPPORTED FL INST\n";
+          exit(1);
         }
-        D(3, "Vector Register state ----:");
-        // cout << "Finished loop" << std::endl;
-      }
-      // cout << "aaaaaaaaaaaaaaaaaaaaaa" << std::endl;
-      break;
-      default: {
-        std::cout << "Serious default??\n" << std::flush;
-      } break;
-      }
-      break;
-    } break;
-    case VS:
-      for (int i = 0; i < vl_; i++) {
-        // cout << "iter" << std::endl;
-        ++stores_;
-        Word memAddr = reg[rsrc0] + (i * vtype_.vsew / 8);
-        // std::cout << "STORE MEM ADDRESS *** : " << std::hex << memAddr << "\n";
+        D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
+        D(3, "LOAD MEM DATA: " << std::hex << data_read);
+        memAccesses_.push_back(Warp::MemAccess(false, memAddr));  
+      } else {        
+        D(3, "Executing vector load");      
+        D(3, "lmul: " << vtype_.vlmul << " VLEN:" << VLEN_ << "sew: " << vtype_.vsew);
+        D(3, "src: " << rsrc0 << " " << iregs[rsrc0]);
+        D(3, "dest" << rdest);
+        D(3, "width" << instr.getVlsWidth());
 
-        trace_inst->is_sw = true;
-        trace_inst->mem_addresses[i] = memAddr;
+        std::vector<Reg<char *>> &vd = vregFile_[rdest];
 
         switch (instr.getVlsWidth()) {
-        case 6: //store word and unit strided (not checking for unit stride)
-        {
-          uint32_t *ptr_val = (uint32_t *)vregFile_[instr.getVs3()][i].value();
-          D(3, "value: " << std::flush << (*ptr_val) << std::flush);
-          core_->mem().write(memAddr, *ptr_val, supervisorMode_, 4);
-          D(3, "store: " << memAddr << " value:" << *ptr_val << std::flush);
+        case 6: { //load word and unit strided (not checking for unit stride)
+          for (int i = 0; i < vl_; i++) {
+            Word memAddr = ((iregs[rsrc0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+            Word data_read = core_->mem().read(memAddr, 0);
+            D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+            int *result_ptr = (int *)vd[i].value();
+            *result_ptr = data_read;
+
+            trace_inst->is_lw = true;
+            trace_inst->mem_addresses[i] = memAddr;
+          }
+          D(3, "Vector Register state ----:");
+          // cout << "Finished loop" << std::endl;
         } break;
         default:
-          std::cout << "ERROR: UNSUPPORTED S INST\n" << std::flush;
-          std::abort();
+          std::cout << "Serious default??\n" << std::flush;
         }
-        // cout << "Loop finished" << std::endl;
+        break;
+      } 
+      break;
+    case (FS | VS):
+      if ((func3 == 0x1) || (func3 == 0x2) 
+       || (func3 == 0x3) || (func3 == 0x4)) {
+        //std::cout << "FS_INST\n";
+        ++stores_;
+        // base is integer register!
+        Word memAddr = iregs[rsrc0] + immsrc;
+        D(3, "STORE MEM ADDRESS: " << std::hex << fregs[rsrc0] << " + " << immsrc << "\n");
+        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
+        trace_inst->is_sw = true;
+        trace_inst->mem_addresses[t] = memAddr;
+        // //std::cout << "FUNC3: " << func3 << "\n";
+        if ((memAddr == 0x00010000) && (t == 0)) { // ** Is this protected mem space?
+          unsigned num = fregs[rsrc1];
+          fprintf(stderr, "%c", (char) fregs[rsrc1]);
+          break;
+        }
+        switch (func3) {
+        case 1:
+          std::cout << "ERROR: UNSUPPORTED FS INST\n";
+          std::cout << "FSH\n";
+          exit(1);
+          // c.core->mem.write(memAddr, fregs[rsrc1], c.supervisorMode, 2);
+          break;
+        case 2:
+          // //std::cout << std::hex << "FSW: about to write: " << fregs[rsrc1] << " to " << memAddr << "\n"; 
+          core_->mem().write(memAddr, fregs[rsrc1], 0, 4);
+          break;
+        case 3:
+          std::cout << "ERROR: UNSUPPORTED FS INST\n";
+          std::cout << std::hex << "FSD (*not implemented*): about to write: " << fregs[rsrc1] << " to " << memAddr << "\n"; 
+          exit(1);
+          // c.core->mem.write(memAddr, reg[rsrc1], c.supervisorMode, 8);
+          break;  
+        case 4:
+          std::cout << "ERROR: UNSUPPORTED FS INST\n";
+          std::cout << std::hex << "FSQ (*not implemented*): about to write: " << fregs[rsrc1] << " to " << memAddr << "\n"; 
+          exit(1);
+          // c.core->mem.write(memAddr, reg[rsrc1], c.supervisorMode, 16);
+          break;                           
+        default:
+          std::cout << "ERROR: UNSUPPORTED FS INST\n";
+          exit(1);
+        }
+        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
+        memAccesses_.push_back(Warp::MemAccess(true, memAddr));
+      } else {
+        for (int i = 0; i < vl_; i++) {
+          // cout << "iter" << std::endl;
+          ++stores_;
+          Word memAddr = iregs[rsrc0] + (i * vtype_.vsew / 8);
+          // std::cout << "STORE MEM ADDRESS *** : " << std::hex << memAddr << "\n";
+
+          trace_inst->is_sw = true;
+          trace_inst->mem_addresses[i] = memAddr;
+
+          switch (instr.getVlsWidth()) {
+          case 6: //store word and unit strided (not checking for unit stride)
+          {
+            uint32_t *ptr_val = (uint32_t *)vregFile_[instr.getVs3()][i].value();
+            D(3, "value: " << std::flush << (*ptr_val) << std::flush);
+            core_->mem().write(memAddr, *ptr_val, 0, 4);
+            D(3, "store: " << memAddr << " value:" << *ptr_val << std::flush);
+          } break;
+          default:
+            std::cout << "ERROR: UNSUPPORTED S INST\n" << std::flush;
+            std::abort();
+          }
+          // cout << "Loop finished" << std::endl;
+        }
+      }
+      break;    
+    case FCI: // floating point computational instruction
+      switch (func7) {
+        case 0x00: //FADD
+        case 0x04: //FSUB
+        case 0x08: //FMUL
+        case 0x0c: //FDIV
+        case 0x2c: //FSQRT
+        {
+          if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1])) { // if one of op is NaN
+            D(3, "one or two rsrc is NaN!");
+            // one of them is not quiet NaN, them set FCSR
+            if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
+              csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit                
+              csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+            }
+            if (fpBinIsNan(fregs[rsrc0]) && fpBinIsNan(fregs[rsrc1])) 
+              fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
+            else if (fpBinIsNan(fregs[rsrc0]))
+              fregs[rdest] = fregs[rsrc1];
+            else
+              fregs[rdest] = fregs[rsrc0];
+          } else {
+            float fpsrc_0 = intregToFloat(fregs[rsrc0]);
+            float fpsrc_1 = intregToFloat(fregs[rsrc1]);
+            float fpOut;    
+                      
+            feclearexcept(FE_ALL_EXCEPT);
+
+            if (func7 == 0x00)    // FADD 
+              fpOut = fpsrc_0 + fpsrc_1;
+            else if (func7==0x04) // FSUB
+              fpOut = fpsrc_0 - fpsrc_1;
+            else if (func7==0x08) // FMUL
+              fpOut = fpsrc_0 * fpsrc_1;
+            else if (func7==0x0c) // FDIV
+              fpOut = fpsrc_0 / fpsrc_1;
+            else if (func7==0x2c) // FSQRT
+              fpOut = sqrt(fpsrc_0);  
+            else {
+              printf("#[ERROR]: bad thing happened in fadd/fsub/fmul...\n");                            
+              exit(1);
+            }
+            //show_fe_exceptions(); // once shown, it will clear corresponding bits, just for debug
+            
+            // fcsr defined in riscv
+            if (fetestexcept(FE_INEXACT)) {
+              csrs_[0x003] = csrs_[0x003] | 0x1; // set NX bit
+              csrs_[0x001] = csrs_[0x001] | 0x1; // set NX bit
+            }
+            
+            if (fetestexcept(FE_UNDERFLOW)) {
+              csrs_[0x003] = csrs_[0x003] | 0x2; // set UF bit
+              csrs_[0x001] = csrs_[0x001] | 0x2; // set UF bit
+            }
+
+            if (fetestexcept(FE_OVERFLOW)) {
+              csrs_[0x003] = csrs_[0x003] | 0x4; // set OF bit
+              csrs_[0x001] = csrs_[0x001] | 0x4; // set OF bit
+            }
+
+            if (fetestexcept(FE_DIVBYZERO)) {
+              csrs_[0x003] = csrs_[0x003] | 0x8; // set DZ bit
+              csrs_[0x001] = csrs_[0x001] | 0x8; // set DZ bit
+            } 
+
+            if (fetestexcept(FE_INVALID)) {
+              csrs_[0x003] = csrs_[0x003] | 0x10; // set NX bit
+              csrs_[0x001] = csrs_[0x001] | 0x10; // set NX bit
+            }
+
+            D(3, "fpOut: " << fpOut);
+            if (fpBinIsNan(floatToBin(fpOut)) == 0) {
+              fregs[rdest] = floatToBin(fpOut);
+            } else  {              
+              // According to risc-v spec p.64 section 11.3
+              // If the result is NaN, it is the canonical NaN
+              fregs[rdest] = 0x7fc00000;
+            }            
+          }
+        } break;
+
+        // FSGNJ.S, FSGNJN.S FSGJNX.S
+        case 0x10: {
+          bool       fsign1 = fregs[rsrc0] & 0x80000000;
+          uint32_t   fdata1 = fregs[rsrc0] & 0x7FFFFFFF;
+          bool       fsign2 = fregs[rsrc1] & 0x80000000;
+          uint32_t   fdata2 = fregs[rsrc1] & 0x7FFFFFFF;
+          
+          D(3, "fdata1 " << hex << fdata1 << endl);       
+          D(3, "fsign2 " << hex << fsign2 << endl);   
+
+          switch(func3) {            
+          case 0: // FSGNJ.S
+            fregs[rdest] = (fsign2 << 31) | fdata1;
+            break;          
+          case 1: // FSGNJN.S
+            fsign2 = !fsign2;
+            fregs[rdest] = (fsign2 << 31) | fdata1;
+            break;          
+          case 2: { // FSGJNX.S
+            bool sign = fsign1 ^ fsign2;
+            fregs[rdest] = (sign << 31) | fdata1;
+            } break;
+          }
+        } break;
+
+        // FMIN.S, FMAX.S
+        case 0x14: {
+          if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1])) { // if one of src is NaN
+            // one of them is not quiet NaN, them set FCSR
+            if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
+              csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+              csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+            }
+            if (fpBinIsNan(fregs[rsrc0]) && fpBinIsNan(fregs[rsrc1])) 
+              fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
+            else if (fpBinIsNan(fregs[rsrc0]))
+              fregs[rdest] = fregs[rsrc1];
+            else
+              fregs[rdest] = fregs[rsrc0];
+          } else {
+            uint8_t sr0IsZero = fpBinIsZero(fregs[rsrc0]);
+            uint8_t sr1IsZero = fpBinIsZero(fregs[rsrc1]);
+
+            if (sr0IsZero && sr1IsZero && (sr0IsZero != sr1IsZero)) { // both are zero and not equal
+              // handle corner case that compare +0 and -0              
+              if (func3) {
+                // FMAX.S
+                fregs[rdest] = (sr1IsZero==2)? fregs[rsrc1] : fregs[rsrc0];
+              } else {
+                // FMIM.S
+                fregs[rdest] = (sr1IsZero==2)? fregs[rsrc0] : fregs[rsrc1];
+              }
+            } else {
+              float rs1 = intregToFloat(fregs[rsrc0]);
+              float rs2 = intregToFloat(fregs[rsrc1]);              
+              if (func3) {
+                // FMAX.S
+                float fmax = std::max(rs1, rs2); 
+                fregs[rdest] = floatToBin(fmax);
+              } else {
+                // FMIN.S
+                float fmin = std::min(rs1, rs2);
+                fregs[rdest] = floatToBin(fmin);
+              }
+            }
+          }
+        } break;
+        
+        // FCVT.W.S FCVT.WU.S
+        case 0x60: {
+          // TODO: Need to clip result if rounded result is not representable in the destination format
+          // typedef uint32_t Word_u;
+          // typedef int32_t  Word_s;
+          // FCVT.W.S
+          // Convert floating point to 32-bit signed integer
+          float fpSrc = intregToFloat(fregs[rsrc0]);
+          Word result = 0x00000000;
+          bool outOfRange = false;
+          // FCVT.W.S
+          if (rsrc1 == 0) { // Not sure if need to change to floating point reg
+            if (fpSrc > pow(2.0, 31) - 1 || fpBinIsNan(fregs[rsrc0]) || fpBinIsInf(fregs[rsrc0]) == 2) {
+              feclearexcept(FE_ALL_EXCEPT);              
+              outOfRange = true;
+              // result = 2^31 - 1
+              result = 0x7FFFFFFF;
+            } else if (fpSrc < -1*pow(2.0, 31) || fpBinIsInf(fregs[rsrc0]) == 1) {
+              feclearexcept(FE_ALL_EXCEPT);              
+              outOfRange = true;
+              // result = -1*2^31
+              result = 0x80000000;
+            } else {
+              feclearexcept(FE_ALL_EXCEPT);              
+              result = (int32_t) fpSrc;
+            }
+          } else {
+            // FCVT.WU.S
+            // Convert floating point to 32-bit unsigned integer
+            if (fpSrc > pow(2.0, 32) - 1 || fpBinIsNan(fregs[rsrc0]) || fpBinIsInf(fregs[rsrc0]) == 2) {
+              feclearexcept(FE_ALL_EXCEPT);              
+              outOfRange = true;
+              // result = 2^32 - 1
+              result = 0xFFFFFFFF;
+            } else if (fpSrc <= -1.0 || fpBinIsInf(fregs[rsrc0]) == 1) {
+              feclearexcept(FE_ALL_EXCEPT);              
+              outOfRange = true;
+              // result = 0
+              result = 0x00000000;
+            } else {
+              feclearexcept(FE_ALL_EXCEPT);              
+              result = (uint32_t) fpSrc;
+            }
+          }
+
+          //show_fe_exceptions(); // once shown, it will clear corresponding bits, just for debug
+          
+          // fcsr defined in riscv
+          if (fetestexcept(FE_INEXACT)) {
+            csrs_[0x003] = csrs_[0x003] | 0x1; // set NX bit
+            csrs_[0x001] = csrs_[0x001] | 0x1; // set NX bit
+          }
+          
+          if (fetestexcept(FE_UNDERFLOW)) {
+            csrs_[0x003] = csrs_[0x003] | 0x2; // set UF bit
+            csrs_[0x001] = csrs_[0x001] | 0x2; // set UF bit
+          }
+
+          if (fetestexcept(FE_OVERFLOW)) {
+            csrs_[0x003] = csrs_[0x003] | 0x4; // set OF bit
+            csrs_[0x001] = csrs_[0x001] | 0x4; // set OF bit
+          }
+
+          if (fetestexcept(FE_DIVBYZERO)) {
+            csrs_[0x003] = csrs_[0x003] | 0x8; // set DZ bit
+            csrs_[0x001] = csrs_[0x001] | 0x8; // set DZ bit
+          } 
+
+          if (fetestexcept(FE_INVALID) || outOfRange) {
+            csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+            csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+          }
+
+          iregs[rdest] = result;
+        } break;
+        
+        // FMV.X.W FCLASS.S
+        case 0x70: {
+          // FCLASS.S
+          if (func3) {
+            // Examine the value in fpReg rs1 and write to integer rd
+            // a 10-bit mask to indicate the class of the fp number
+            iregs[rdest] = 0; // clear all bits
+
+            bool fsign = fregs[rsrc0] & 0x80000000;
+            uint32_t expo = (fregs[rsrc0]>>23) & 0x000000FF;
+            uint32_t fraction = fregs[rsrc0] & 0x007FFFFF;
+
+            if ((expo==0) && (fraction==0))
+              iregs[rdest] = fsign? (1<<3) : (1<<4); // +/- 0
+            else if ((expo==0) && (fraction!=0))
+              iregs[rdest] = fsign? (1<<2) : (1<<5); // +/- subnormal
+            else if ((expo==0xFF) && (fraction==0))
+              iregs[rdest] = fsign? (1<<0) : (1<<7); // +/- infinity
+            else if ((expo==0xFF) && (fraction!=0)) 
+              if (!fsign && (fraction == 0x00400000)) 
+                iregs[rdest] = (1<<9);               // quiet NaN
+              else 
+                iregs[rdest] = (1<<8);               // signaling NaN
+            else
+              iregs[rdest] = fsign? (1<<1) : (1<<6); // +/- normal
+          } else {          
+            // FMV.X.W
+            // Move bit values from floating-point register rs1 to integer register rd
+            // Since we are using integer register to represent floating point register, 
+            // just simply assign here.
+            iregs[rdest] = fregs[rsrc0];
+          } 
+        } break;
+        
+        // FEQ.S FLT.S FLE.S
+        // rdest is integer register
+        case 0x50: {
+          // TODO: FLT.S and FLE.S perform IEEE 754-2009, signaling comparisons, set
+          // TODO: the invalid operation exception flag if either input is NaN
+          if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1])) {
+            // FLE.S or FLT.S
+            if (func3 == 0 || func3 == 1) {
+              // If either input is NaN, set NV bit
+              csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+              csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+            } else { // FEQ.S
+              // Only set NV bit if it is signaling NaN
+              if (fpBinIsNan(fregs[rsrc0]) == 2 || fpBinIsNan(fregs[rsrc1]) == 2) {
+                // If either input is NaN, set NV bit
+                csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+                csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+              }
+            }
+            // The result is 0 if either operand is NaN
+            iregs[rdest] = 0;
+          } else {
+            switch(func3) {              
+              case 0: {
+                // FLE.S
+                if (intregToFloat(fregs[rsrc0]) <= intregToFloat(fregs[rsrc1])) {
+                  iregs[rdest] = 1;
+                } else {
+                  iregs[rdest] = 0;
+                }
+              } break;
+              
+              case 1: {
+                // FLT.S
+                if (intregToFloat(fregs[rsrc0]) < intregToFloat(fregs[rsrc1])) {
+                  iregs[rdest] = 1;
+                } else {
+                  iregs[rdest] = 0;
+                }
+              }
+              break;
+              
+              case 2: {
+                // FEQ.S
+                if (intregToFloat(fregs[rsrc0]) == intregToFloat(fregs[rsrc1])) {
+                  iregs[rdest] = 1;
+                } else {
+                  iregs[rdest] = 0;
+                }
+              }
+              break;
+            }
+          }
+        } break;
+        
+        case 0x68: {
+          // Cast integer to floating point
+          float data = iregs[rsrc0];          
+          if (rsrc1) {
+            // FCVT.S.WU
+            // Convert 32-bit unsigned integer to floating point
+            fregs[rdest] = floatToBin(data);
+          } else {
+            // FCVT.S.W
+            // Convert 32-bit signed integer to floating point
+            // iregs[rsrc0] is actually a unsigned number
+            data = (int) iregs[rsrc0];
+            D(3, "data" << data);
+            fregs[rdest] = floatToBin(data);
+          }
+        } break;
+
+        case 0x78: {
+          // FMV.W.X
+          // Move bit values from integer register rs1 to floating register rd
+          // Since we are using integer register to represent floating point register, 
+          // just simply assign here.
+          fregs[rdest] = iregs[rsrc0];
+        }
+        break;
+      }
+    break;
+
+    case FMADD:      
+    case FMSUB:      
+    case FMNMADD:
+    case FMNMSUB: {
+      // multiplicands are infinity and zero, them set FCSR
+      if (fpBinIsZero(fregs[rsrc0])|| fpBinIsZero(fregs[rsrc1])|| fpBinIsInf(fregs[rsrc0]) || fpBinIsInf(fregs[rsrc1])) {
+        csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+        csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
       }
 
-      // cout << "After for loop" << std::endl;
-      break;
+      if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1]) || fpBinIsNan(fregs[rsrc2])) { // if one of op is NaN
+        // if addend is not quiet NaN, them set FCSR
+        if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
+          csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+          csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit          
+        }
+
+        fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
+      } else {
+        float rs1 = intregToFloat(fregs[rsrc0]);
+        float rs2 = intregToFloat(fregs[rsrc1]);
+        float rs3 = intregToFloat(fregs[rsrc2]);
+        float fpOut(0.0);
+        feclearexcept(FE_ALL_EXCEPT);          
+        switch (opcode) {
+          case FMADD:    
+            // rd = (rs1*rs2)+rs3
+            fpOut = (rs1 * rs2) + rs3;  break;
+          case FMSUB:      
+            // rd = (rs1*rs2)-rs3
+            fpOut = (rs1 * rs2) - rs3; break;
+          case FMNMADD:
+            // rd = -(rs1*rs2)+rs3
+            fpOut = -1*(rs1 * rs2) - rs3; break;        
+          case FMNMSUB: 
+            // rd = -(rs1*rs2)-rs3
+            fpOut = -1*(rs1 * rs2) + rs3; break;
+          default:
+            printf("#[ERROR] FMADD/FMSUB... wrong\n");
+            std::abort();
+            break;                 
+        }  
+
+        // fcsr defined in riscv
+        if (fetestexcept(FE_INEXACT)) {
+          csrs_[0x003] = csrs_[0x003] | 0x1; // set NX bit
+          csrs_[0x001] = csrs_[0x001] | 0x1; // set NX bit
+        }
+        
+        if (fetestexcept(FE_UNDERFLOW)) {
+          csrs_[0x003] = csrs_[0x003] | 0x2; // set UF bit
+          csrs_[0x001] = csrs_[0x001] | 0x2; // set UF bit
+        }
+
+        if (fetestexcept(FE_OVERFLOW)) {
+          csrs_[0x003] = csrs_[0x003] | 0x4; // set OF bit
+          csrs_[0x001] = csrs_[0x001] | 0x4; // set OF bit
+        }
+
+        if (fetestexcept(FE_DIVBYZERO)) {
+          csrs_[0x003] = csrs_[0x003] | 0x8; // set DZ bit
+          csrs_[0x001] = csrs_[0x001] | 0x8; // set DZ bit
+        } 
+
+        if (fetestexcept(FE_INVALID)) {
+          csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
+          csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+        }
+
+        fregs[rdest] = floatToBin(fpOut);
+      }
+    }
+    break;
     default:
       D(3, "pc: " << std::hex << (pc_ - 4));
       D(3, "ERROR: Unsupported instruction: " << instr);
@@ -1942,9 +2522,9 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
     D(3, "Next PC: " << std::hex << nextPc << std::dec);
   }
 
-  if (nextActiveThreads > regFile_.size()) {
+  if (nextActiveThreads > iRegFile_.size()) {
     std::cerr << "Error: attempt to spawn " << nextActiveThreads << " threads. "
-              << regFile_.size() << " available.\n";
+              << iRegFile_.size() << " available.\n";
     abort();
   }
 }

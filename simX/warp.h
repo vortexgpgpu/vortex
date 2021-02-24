@@ -89,8 +89,6 @@ public:
 
   void step(trace_inst_t *);
   
-  bool interrupt(Word r0);
-  
   bool running() const {
     return (activeThreads_ != 0);
   }
@@ -125,14 +123,6 @@ public:
     spawned_ = spawned;
   }
 
-  void setSupervisorMode(bool supervisorMode) {
-    supervisorMode_ = supervisorMode;
-  }
-  
-  bool getSupervisorMode() const {
-    return supervisorMode_;  
-  }  
-
   void setTmask(size_t index, bool value) {
     tmask_[index] = value;
   }
@@ -156,14 +146,16 @@ private:
   Word shadowPc_;  
   Size activeThreads_;
   Size shadowActiveThreads_;
-  std::vector<std::vector<Reg<Word>>> regFile_;
-  std::vector<Reg<uint16_t>> csrs_;
+  std::vector<std::vector<Reg<Word>>> iRegFile_;
+  std::vector<std::vector<Reg<Word>>> fRegFile_;
+  std::vector<Reg<uint32_t>> csrs_;
 
   std::vector<bool> tmask_;
   std::vector<bool> shadowTmask_;
   std::stack<DomStackEntry> domStack_;
 
-  std::vector<Word> shadowReg_;
+  std::vector<Word> shadowIReg_;
+  std::vector<Word> shadowFReg_;
 
   struct vtype vtype_; // both of them are XLEN WIDE
   int vl_;             // both of them are XLEN WIDE
@@ -171,10 +163,6 @@ private:
 
   std::vector<std::vector<Reg<char *>>> vregFile_; // 32 vector registers
 
-  bool interruptEnable_;
-  bool shadowInterruptEnable_;
-  bool supervisorMode_;
-  bool shadowSupervisorMode_;
   bool spawned_;
 
   unsigned long steps_;

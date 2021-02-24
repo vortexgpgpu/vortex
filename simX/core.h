@@ -21,7 +21,6 @@ public:
   Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id = 0);
   ~Core();
 
-  bool interrupt(Word r0);
   bool running() const;
 
   void getCacheDelays(trace_inst_t *);

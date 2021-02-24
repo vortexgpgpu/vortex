@@ -14,6 +14,7 @@ namespace vortex {
     // Encoder
     int        rs1;
     int        rs2;
+    int        rs3;
     int        rd;
 
     //Encoder
