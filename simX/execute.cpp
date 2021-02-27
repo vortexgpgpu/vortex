@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <assert.h>
 #include "util.h"
 #include "warp.h"
 #include "instr.h"
@@ -18,8 +19,8 @@ using namespace vortex;
 struct DivergentBranchException {};
 
 static bool checkUnanimous(unsigned p, 
-                           const std::vector<std::vector<Reg<Word>>> &m,
-                           const std::vector<bool> &tm) {
+                           const std::vector<std::vector<Word>> &m,
+                           const ThreadMask &tm) {
   bool same;
   unsigned i;
   for (i = 0; i < m.size(); ++i) {
@@ -57,9 +58,13 @@ float intregToFloat(uint32_t input) {
   // Frac_value= 1 + sum{i = 1}{23}{b_{23-i}*2^{-i}}
   double frac_value;
   if (exp == 0) {  // subnormal
-    if (frac == 0) // zero
-      if (sign) return -0.0;
-      else return 0.0;
+    if (frac == 0) {
+      // zero
+      if (sign) 
+        return -0.0;
+      else 
+        return 0.0;
+    }
     frac_value = 0.0;
   } else
     frac_value = 1.0;
@@ -112,12 +117,13 @@ uint8_t fpBinIsNan(uint32_t din) {
   uint32_t fraction = din & 0x007FFFFF;
   uint32_t bit_22 = din & 0x00400000;
 
-  if ((expo==0xFF) && (fraction!=0)) 
+  if ((expo==0xFF) && (fraction!=0)) {
     // if (!fsign && (fraction == 0x00400000)) 
-    if(!fsign && (bit_22))
+    if (!fsign && (bit_22))
       return 1; // quiet NaN, return 1
     else 
       return 2; // signaling NaN, return 2
+  }
   return 0;
 }
 
@@ -127,11 +133,12 @@ uint8_t fpBinIsZero(uint32_t din) {
   uint32_t expo = (din>>23) & 0x000000FF;
   uint32_t fraction = din & 0x007FFFFF;
 
-  if ((expo==0) && (fraction==0))
+  if ((expo==0) && (fraction==0)) {
     if (fsign)
       return 1; // negative 0
     else
       return 2; // positive 0
+  }
   return 0;  // not zero
 }
 
@@ -141,50 +148,39 @@ uint8_t fpBinIsInf(uint32_t din) {
   uint32_t expo = (din>>23) & 0x000000FF;
   uint32_t fraction = din & 0x007FFFFF;
 
-  if ((expo==0xFF) && (fraction==0))
+  if ((expo==0xFF) && (fraction==0)) {
     if (fsign)
       return 1; // negative infinity
     else
       return 2; // positive infinity
+  }
   return 0;  // not infinity
 }
 
 void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
-  Size nextActiveThreads = activeThreads_;
-  Size wordSz = core_->arch().getWordSize();
-  Word nextPc = pc_;
-
-  memAccesses_.clear();
-
-  bool sjOnce(true);  // Has not yet split or joined once.
-  bool pcSet(false);  // PC has already been set
+  assert(tmask_.any());
+  Word nextPC = PC_;
+  bool updatePC = false;
+  bool runOnce = false;
   
   Word func3 = instr.getFunc3();
   Word func6 = instr.getFunc6();
   Word func7 = instr.getFunc7();
 
   Opcode opcode = instr.getOpcode();
-  RegNum rdest  = instr.getRDest();
-  RegNum rsrc0  = instr.getRSrc(0);
-  RegNum rsrc1  = instr.getRSrc(1);
-  RegNum rsrc2  = instr.getRSrc(2);
+  int rdest     = instr.getRDest();
+  int rsrc0     = instr.getRSrc(0);
+  int rsrc1     = instr.getRSrc(1);
+  int rsrc2     = instr.getRSrc(2);
   Word immsrc   = instr.getImm();
   bool vmask    = instr.getVmask();
 
-  for (Size t = 0; t < activeThreads_; t++) {
-    std::vector<Reg<Word>> &iregs = iRegFile_[t];
-    std::vector<Reg<Word>> &fregs = fRegFile_[t];
-
-    bool is_gpgpu = (opcode == GPGPU);
-    bool is_tmc = is_gpgpu && (func3 == 0);
-    bool is_wspawn = is_gpgpu && (func3 == 1);
-    bool is_barrier = is_gpgpu && (func3 == 4);
-
-    bool not_active = !tmask_[t];
-    bool gpgpu_zero = (is_tmc || is_barrier || is_wspawn) && (t != 0);    
-
-    if (not_active || gpgpu_zero)
+  for (std::size_t t = 0; t < tmask_.count(); t++) {
+    if (runOnce)
       continue;
+    
+    auto &iregs = iRegFile_[t];
+    auto &fregs = fRegFile_[t];
 
     ++insts_;
 
@@ -194,19 +190,18 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       break;
     case R_INST: {
       // std::cout << "R_INST\n";
-      Word m_exten = func7 & 0x1;
-      if (m_exten) {
+      Word is_mul_ext = func7 & 0x1;
+      if (is_mul_ext) {
         // std::cout << "FOUND A MUL/DIV\n";
-
         switch (func3) {
         case 0:
           // MUL
-          D(3, "MUL: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "MUL: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           iregs[rdest] = ((int)iregs[rsrc0]) * ((int)iregs[rsrc1]);
           break;
         case 1:
           // MULH
-          D(3, "MULH: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "MULH: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           {
             int64_t first = (int64_t)iregs[rsrc0];
             if (iregs[rsrc0] & 0x80000000) {
@@ -224,7 +219,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 2:
           // MULHSU
-          D(3, "MULHSU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "MULHSU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           {
             int64_t first = (int64_t)iregs[rsrc0];
             if (iregs[rsrc0] & 0x80000000) {
@@ -236,7 +231,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 3:
           // MULHU
-          D(3, "MULHU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "MULHU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           {
             uint64_t first = (uint64_t)iregs[rsrc0];
             uint64_t second = (uint64_t)iregs[rsrc1];
@@ -246,7 +241,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 4:
           // DIV
-          D(3, "DIV: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "DIV: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
             iregs[rdest] = -1;
             break;
@@ -257,7 +252,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 5:
           // DIVU
-          D(3, "DIVU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "DIVU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
             iregs[rdest] = -1;
             break;
@@ -266,7 +261,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 6:
           // REM
-          D(3, "REM: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "REM: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
             iregs[rdest] = iregs[rsrc0];
             break;
@@ -275,7 +270,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 7:
           // REMU
-          D(3, "REMU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "REMU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
             iregs[rdest] = iregs[rsrc0];
             break;
@@ -291,22 +286,19 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         switch (func3) {
         case 0:
           if (func7) {
-            D(3, "SUBI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+            D(3, "SUBI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
             iregs[rdest] = iregs[rsrc0] - iregs[rsrc1];
-            iregs[rdest].trunc(wordSz);
           } else {
-            D(3, "ADDI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+            D(3, "ADDI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
             iregs[rdest] = iregs[rsrc0] + iregs[rsrc1];
-            iregs[rdest].trunc(wordSz);
           }
           break;
         case 1:
-          D(3, "SLLI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "SLLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           iregs[rdest] = iregs[rsrc0] << iregs[rsrc1];
-          iregs[rdest].trunc(wordSz);
           break;
         case 2:
-          D(3, "SLTI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "SLTI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (int(iregs[rsrc0]) < int(iregs[rsrc1])) {
             iregs[rdest] = 1;
           } else {
@@ -314,34 +306,32 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           }
           break;
         case 3:
-          D(3, "SLTU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-          if (Word_u(iregs[rsrc0]) < Word_u(iregs[rsrc1])) {
+          D(3, "SLTU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
+          if (Word(iregs[rsrc0]) < Word(iregs[rsrc1])) {
             iregs[rdest] = 1;
           } else {
             iregs[rdest] = 0;
           }
           break;
         case 4:
-          D(3, "XORI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "XORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           iregs[rdest] = iregs[rsrc0] ^ iregs[rsrc1];
           break;
         case 5:
           if (func7) {
-            D(3, "SRLI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+            D(3, "SRLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
             iregs[rdest] = int(iregs[rsrc0]) >> int(iregs[rsrc1]);
-            iregs[rdest].trunc(wordSz);
           } else {
-            D(3, "SRLU: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
-            iregs[rdest] = Word_u(iregs[rsrc0]) >> Word_u(iregs[rsrc1]);
-            iregs[rdest].trunc(wordSz);
+            D(3, "SRLU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
+            iregs[rdest] = Word(iregs[rsrc0]) >> Word(iregs[rsrc1]);
           }
           break;
         case 6:
-          D(3, "ORI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "ORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           iregs[rdest] = iregs[rsrc0] | iregs[rsrc1];
           break;
         case 7:
-          D(3, "ANDI: r" << rdest << " <- r" << rsrc0 << ", r" << rsrc1);
+          D(3, "AND: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           iregs[rdest] = iregs[rsrc0] & iregs[rsrc1];
           break;
         default:
@@ -350,58 +340,17 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         }
       }
     } break;
-    case L_INST: {
-      Word memAddr = ((iregs[rsrc0] + immsrc) & 0xFFFFFFFC);
-      Word shift_by = ((iregs[rsrc0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->mem().read(memAddr, 0);
-      trace_inst->is_lw = true;
-      trace_inst->mem_addresses[t] = memAddr;
-      switch (func3) {
-      case 0:
-        // LBI
-        D(3, "LBI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
-        break;
-      case 1:
-        // LWI
-        D(3, "LWI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
-        break;
-      case 2:
-        // LDI
-        D(3, "LDI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = int(data_read & 0xFFFFFFFF);
-        break;
-      case 4:
-        // LBU
-        D(3, "LBU: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFF);
-        break;
-      case 5:
-        // LWU
-        D(3, "LWU: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
-        break;
-      default:
-        std::cout << "ERROR: UNSUPPORTED L INST\n";
-        std::abort();        
-      }
-      D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
-      D(3, "LOAD MEM DATA: " << std::hex << data_read);
-      memAccesses_.push_back(Warp::MemAccess(false, memAddr));
-    } break;
     case I_INST:
       //std::cout << "I_INST\n";
       switch (func3) {
       case 0:
         // ADDI
-        D(3, "ADDI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
+        D(3, "ADDI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
         iregs[rdest] = iregs[rsrc0] + immsrc;
-        iregs[rdest].trunc(wordSz);
         break;
       case 2:
         // SLTI
-        D(3, "SLTI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
+        D(3, "SLTI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
         if (int(iregs[rsrc0]) < int(immsrc)) {
           iregs[rdest] = 1;
         } else {
@@ -410,7 +359,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         break;
       case 3: {
         // SLTIU
-        D(3, "SLTIU: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
+        D(3, "SLTIU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
         if (unsigned(iregs[rsrc0]) < unsigned(immsrc)) {
           iregs[rdest] = 1;
         } else {
@@ -419,39 +368,36 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       } break;
       case 4:
         // XORI
-        D(3, "XORI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        D(3, "XORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         iregs[rdest] = iregs[rsrc0] ^ immsrc;
         break;
       case 6:
         // ORI
-        D(3, "ORI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        D(3, "ORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         iregs[rdest] = iregs[rsrc0] | immsrc;
         break;
       case 7:
         // ANDI
-        D(3, "ANDI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        D(3, "ANDI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         iregs[rdest] = iregs[rsrc0] & immsrc;
         break;
       case 1:
         // SLLI
-        D(3, "SLLI: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        D(3, "SLLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         iregs[rdest] = iregs[rsrc0] << immsrc;
-        iregs[rdest].trunc(wordSz);
         break;
       case 5:
         if ((func7 == 0)) {
           // SRLI
-          D(3, "SRLI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
-          Word result = Word_u(iregs[rsrc0]) >> Word_u(immsrc);
+          D(3, "SRLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
+          Word result = Word(iregs[rsrc0]) >> Word(immsrc);
           iregs[rdest] = result;
-          iregs[rdest].trunc(wordSz);
         } else {
           // SRAI
-          D(3, "SRAI: r" << rdest << " <- r" << rsrc0 << ", imm=" << immsrc);
+          D(3, "SRAI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
           Word op1 = iregs[rsrc0];
           Word op2 = immsrc;
           iregs[rdest] = op1 >> op2;
-          iregs[rdest].trunc(wordSz);
         }
         break;
       default:
@@ -459,31 +405,64 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         std::abort();
       }
       break;
+    case L_INST: {
+      ++loads_;
+      Word memAddr = ((iregs[rsrc0] + immsrc) & 0xFFFFFFFC);
+      Word shift_by = ((iregs[rsrc0] + immsrc) & 0x00000003) * 8;
+      Word data_read = core_->mem().read(memAddr, 0);
+      trace_inst->is_lw = true;
+      trace_inst->mem_addresses[t] = memAddr;
+      switch (func3) {
+      case 0:
+        // LBI
+        D(3, "LBI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
+        iregs[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
+        break;
+      case 1:
+        // LWI
+        D(3, "LHI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
+        iregs[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
+        break;
+      case 2:
+        // LDI
+        D(3, "LWI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
+        iregs[rdest] = int(data_read & 0xFFFFFFFF);
+        break;
+      case 4:
+        // LBU
+        D(3, "LBU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
+        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFF);
+        break;
+      case 5:
+        // LWU
+        D(3, "LHU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
+        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
+        break;
+      default:
+        std::cout << "ERROR: UNSUPPORTED L INST\n";
+        std::abort();        
+      }
+      D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
+    } break;
     case S_INST: {
       ++stores_;
       Word memAddr = iregs[rsrc0] + immsrc;
       trace_inst->is_sw = true;
       trace_inst->mem_addresses[t] = memAddr;
-      // //std::cout << "FUNC3: " << func3 << "\n";
-      if ((memAddr == 0x00010000) && (t == 0)) {
-        Word num = iregs[rsrc1];
-        fprintf(stderr, "%c", (char)num);
-        break;
-      }
       switch (func3) {
       case 0:
         // SB
-        D(3, "SB: r" << rsrc1 << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        D(3, "SB: r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         core_->mem().write(memAddr, iregs[rsrc1] & 0x000000FF, 0, 1);
         break;
       case 1:
         // SH
-        D(3, "SH: r" << rsrc1 << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        D(3, "SH: r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         core_->mem().write(memAddr, iregs[rsrc1], 0, 2);
         break;
       case 2:
-        // SD
-        D(3, "SD: r" << rsrc1 << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+        // SW
+        D(3, "SW: r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
         core_->mem().write(memAddr, iregs[rsrc1], 0, 4);
         break;
       default:
@@ -491,101 +470,100 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         std::abort();
       }
       D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
-      memAccesses_.push_back(Warp::MemAccess(true, memAddr));
     } break;
     case B_INST:
       trace_inst->stall_warp = true;
       switch (func3) {
       case 0:
         // BEQ
-        D(3, "BEQ: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
+        D(3, "BEQ: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << ", imm=0x" << std::hex << immsrc);
         if (int(iregs[rsrc0]) == int(iregs[rsrc1])) {
-          if (!pcSet)
-            nextPc = (pc_ - 4) + immsrc;
-          pcSet = true;
+          if (!updatePC)
+            nextPC = (PC_ - 4) + immsrc;
+          updatePC = true;
         }
         break;
       case 1:
         // BNE
-        D(3, "BNE: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
+        D(3, "BNE: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << ", imm=0x" << std::hex << immsrc);
         if (int(iregs[rsrc0]) != int(iregs[rsrc1])) {
-          if (!pcSet)
-            nextPc = (pc_ - 4) + immsrc;
-          pcSet = true;
+          if (!updatePC)
+            nextPC = (PC_ - 4) + immsrc;
+          updatePC = true;
         }
         break;
       case 4:
         // BLT
-        D(3, "BLT: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
+        D(3, "BLT: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << ", imm=0x" << std::hex << immsrc);
         if (int(iregs[rsrc0]) < int(iregs[rsrc1])) {
-          if (!pcSet)
-            nextPc = (pc_ - 4) + immsrc;
-          pcSet = true;
+          if (!updatePC)
+            nextPC = (PC_ - 4) + immsrc;
+          updatePC = true;
         }
         break;
       case 5:
         // BGE
-        D(3, "BGE: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
+        D(3, "BGE: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << ", imm=0x" << std::hex << immsrc);
         if (int(iregs[rsrc0]) >= int(iregs[rsrc1])) {
-          if (!pcSet)
-            nextPc = (pc_ - 4) + immsrc;
-          pcSet = true;
+          if (!updatePC)
+            nextPC = (PC_ - 4) + immsrc;
+          updatePC = true;
         }
         break;
       case 6:
         // BLTU
-        D(3, "BLTU: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (Word_u(iregs[rsrc0]) < Word_u(iregs[rsrc1])) {
-          if (!pcSet)
-            nextPc = (pc_ - 4) + immsrc;
-          pcSet = true;
+        D(3, "BLTU: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << ", imm=0x" << std::hex << immsrc);
+        if (Word(iregs[rsrc0]) < Word(iregs[rsrc1])) {
+          if (!updatePC)
+            nextPC = (PC_ - 4) + immsrc;
+          updatePC = true;
         }
         break;
       case 7:
         // BGEU
-        D(3, "BGEU: r" << rsrc0 << ", r" << rsrc1 << ", imm=0x" << std::hex << immsrc);
-        if (Word_u(iregs[rsrc0]) >= Word_u(iregs[rsrc1])) {
-          if (!pcSet)
-            nextPc = (pc_ - 4) + immsrc;
-          pcSet = true;
+        D(3, "BGEU: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << ", imm=0x" << std::hex << immsrc);
+        if (Word(iregs[rsrc0]) >= Word(iregs[rsrc1])) {
+          if (!updatePC)
+            nextPC = (PC_ - 4) + immsrc;
+          updatePC = true;
         }
         break;
       }
       break;
     case LUI_INST:
-      D(3, "LUI: r" << rdest << " <- imm=0x" << std::hex << immsrc);
+      D(3, "LUI: r" << std::dec << rdest << " <- imm=0x" << std::hex << immsrc);
       iregs[rdest] = (immsrc << 12) & 0xfffff000;
       break;
     case AUIPC_INST:
-      D(3, "AUIPC: r" << rdest << " <- imm=0x" << std::hex << immsrc);
-      iregs[rdest] = ((immsrc << 12) & 0xfffff000) + (pc_ - 4);
+      D(3, "AUIPC: r" << std::dec << rdest << " <- imm=0x" << std::hex << immsrc);
+      iregs[rdest] = ((immsrc << 12) & 0xfffff000) + (PC_ - 4);
       break;
     case JAL_INST:
-      D(3, "JAL: r" << rdest << " <- imm=0x" << std::hex << immsrc);
+      D(3, "JAL: r" << std::dec << rdest << " <- imm=0x" << std::hex << immsrc);
       trace_inst->stall_warp = true;
-      if (!pcSet) {
-        nextPc = (pc_ - 4) + immsrc;
-        //std::cout << "JAL... SETTING PC: " << nextPc << "\n";      
+      if (!updatePC) {
+        nextPC = (PC_ - 4) + immsrc;
+        //std::cout << "JAL... SETTING PC: " << nextPC << "\n";      
       }
       if (rdest != 0) {
-        iregs[rdest] = pc_;
+        iregs[rdest] = PC_;
       }
-      pcSet = true;
+      updatePC = true;
       break;
     case JALR_INST:
-      D(3, "JALR: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+      D(3, "JALR: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
       trace_inst->stall_warp = true;
-      if (!pcSet) {
-        nextPc = iregs[rsrc0] + immsrc;
-        //std::cout << "JALR... SETTING PC: " << nextPc << "\n";
+      if (!updatePC) {
+        nextPC = iregs[rsrc0] + immsrc;
+        //std::cout << "JALR... SETTING PC: " << nextPC << "\n";
       }
       if (rdest != 0) {
-        iregs[rdest] = pc_;
+        iregs[rdest] = PC_;
       }
-      pcSet = true;
+      updatePC = true;
       break;
     case SYS_INST: {
-      D(3, "SYS_INST: r" << rdest << " <- r" << rsrc0 << ", imm=0x" << std::hex << immsrc);
+      D(3, "SYS_INST: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
       Word rs1 = iregs[rsrc0];
       Word csr_addr = immsrc & 0x00000FFF;
       // GPGPU CSR extension
@@ -594,37 +572,35 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         iregs[rdest] = t;
       } else if (csr_addr == CSR_LTID) {
         // Core threadID
-        iregs[rdest] = t + 
-                     id_ * core_->arch().getNumThreads();
+        iregs[rdest] = t + (id_ * core_->arch().num_threads());
       } else if (csr_addr == CSR_GTID) {
         // Processor threadID
-        iregs[rdest] = t + 
-                     id_ * core_->arch().getNumThreads() + 
-                     core_->arch().getNumThreads() * core_->arch().getNumWarps() * core_->id();
+        iregs[rdest] = t + (id_ * core_->arch().num_threads()) + 
+                     (core_->arch().num_threads() * core_->arch().num_warps() * core_->id());
       } else if (csr_addr == CSR_LWID) {
         // Core warpID
         iregs[rdest] = id_;
       } else if (csr_addr == CSR_GWID) {
         // Processor warpID        
-        iregs[rdest] = id_ + core_->arch().getNumWarps() * core_->id();
+        iregs[rdest] = id_ + (core_->arch().num_warps() * core_->id());
       } else if (csr_addr == CSR_GCID) {
         // Processor coreID
         iregs[rdest] = core_->id();
       } else if (csr_addr == CSR_NT) {
         // Number of threads per warp
-        iregs[rdest] = core_->arch().getNumThreads();
+        iregs[rdest] = core_->arch().num_threads();
       } else if (csr_addr == CSR_NW) {
         // Number of warps per core
-        iregs[rdest] = core_->arch().getNumWarps();
+        iregs[rdest] = core_->arch().num_warps();
       } else if (csr_addr == CSR_NC) {
         // Number of cores
-        iregs[rdest] = core_->arch().getNumCores();
+        iregs[rdest] = core_->arch().num_cores();
       } else if (csr_addr == CSR_INSTRET) {
         // NumInsts
-        iregs[rdest] = (Word)core_->num_instructions();
+        iregs[rdest] = (Word)core_->num_insts();
       } else if (csr_addr == CSR_INSTRET_H) {
         // NumInsts
-        iregs[rdest] = (Word)(core_->num_instructions() >> 32);
+        iregs[rdest] = (Word)(core_->num_insts() >> 32);
       } else if (csr_addr == CSR_CYCLE) {
         // NumCycles
         iregs[rdest] = (Word)core_->num_steps();
@@ -636,8 +612,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 0:
           if (csr_addr < 2) {
             // ECALL/EBREAK
-            nextActiveThreads = 0;
-            spawned_ = false;
+            tmask_.reset();
           }
           break;
         case 1:
@@ -691,1119 +666,899 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       D(3, "FENCE");
       break;
     case PJ_INST:
-      D(3, "PJ_INST: r" << rsrc0 << ", r" << rsrc1);
+      D(3, "PJ_INST: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
       if (iregs[rsrc0]) {
-        if (!pcSet)
-          nextPc = iregs[rsrc1];
-        pcSet = true;
+        if (!updatePC)
+          nextPC = iregs[rsrc1];
+        updatePC = true;
       }
       break;
     case GPGPU:
       switch (func3) {
-      case 1:
-        // WSPAWN
-        D(3, "WSPAWN: r" << rsrc0 << ", r" << rsrc1);
-        trace_inst->wspawn = true;
-        if (sjOnce) {
-          sjOnce = false;
-          unsigned num_to_wspawn = std::min<unsigned>(iregs[rsrc0], core_->arch().getNumWarps());
-          D(0, "Spawning " << num_to_wspawn << " new warps at PC: " << std::hex << iregs[rsrc1]);
-          for (unsigned i = 1; i < num_to_wspawn; ++i) {
-            Warp &newWarp(core_->warp(i));
-            {
-              newWarp.set_pc(iregs[rsrc1]);
-              for (size_t kk = 0; kk < tmask_.size(); kk++) {
-                if (kk == 0) {
-                  newWarp.setTmask(kk, true);
-                } else {
-                  newWarp.setTmask(kk, false);
-                }
-              }
-              newWarp.setActiveThreads(1);
-              newWarp.setSpawned(true);
-            }
-          }
-          break;
+      case 0: {
+        // TMC
+        D(3, "TMC: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0]);
+        trace_inst->stall_warp = true;
+        int active_threads = std::min<int>(iregs[rsrc0], core_->arch().num_threads());          
+        tmask_.reset();
+        for (int i = 0; i < active_threads; ++i) {
+          tmask_[i] = true;
         }
-        break;
+        runOnce = true;
+      } break;
+      case 1: {
+        // WSPAWN
+        D(3, "WSPAWN: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
+        trace_inst->wspawn = true;        
+        int active_warps = std::min<int>(iregs[rsrc0], core_->arch().num_warps());
+        D(0, "Spawning " << (active_warps-1) << " warps at PC: " << std::hex << iregs[rsrc1]);
+
+        for (int i = 1; i < active_warps; ++i) {
+          Warp &newWarp = core_->warp(i);
+          newWarp.setPC(iregs[rsrc1]);
+          newWarp.setTmask(0, true);
+        }
+        runOnce = true;
+      } break;
       case 2: {
         // SPLIT
-        D(3, "SPLIT: r" << rsrc0);
+        D(3, "SPLIT: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0]);
         trace_inst->stall_warp = true;
-        if (sjOnce) {
-          sjOnce = false;
-          if (checkUnanimous(rsrc0, iRegFile_, tmask_)) {
-            D(3, "Unanimous pred: " << rsrc0 << "  val: " << iregs[rsrc0] << "\n");
-            DomStackEntry e(tmask_);
-            e.uni = true;
-            domStack_.push(e);
-            break;
-          }
-          D(3, "Split: Original TM: ");
-          DX( for (auto y : tmask_) D(3, y << " "); )
-
-          DomStackEntry e(rsrc0, iRegFile_, tmask_, pc_);
-          domStack_.push(tmask_);
+        if (checkUnanimous(rsrc0, iRegFile_, tmask_)) {
+          D(3, "Unanimous pred: " << rsrc0 << "  val: " << iregs[rsrc0] << "\n");
+          DomStackEntry e(tmask_);
+          e.unanimous = true;
           domStack_.push(e);
-          for (unsigned i = 0; i < e.tmask.size(); ++i) {
-            tmask_[i] = !e.tmask[i] && tmask_[i];
-          }
-
-          D(3, "Split: New TM");
-          DX( for (auto y : tmask_) D(3, y << " "); )
-          D(3, "Split: Pushed TM PC: " << std::hex << e.pc << std::dec << "\n");
-          DX( for (auto y : e.tmask) D(3, y << " "); )
+          break;
         }
-        break;
-      }
-      case 3:
+
+        D(3, "Split: Original TM: ");
+        DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
+
+        ThreadMask tmask;
+        for (int i = 0; i < core_->arch().num_threads(); ++i) {
+          tmask[i] = tmask_[i] && !iRegFile_[i][rsrc0];
+        }
+
+        DomStackEntry e(tmask, PC_);
+        domStack_.push(tmask_);
+        domStack_.push(e);
+        for (unsigned i = 0; i < e.tmask.size(); ++i) {
+          tmask_[i] = !e.tmask[i] && tmask_[i];
+        }
+
+        D(3, "Split: New TM");
+        DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
+        D(3, "Split: Pushed TM PC: " << std::hex << e.PC << std::dec << "\n");
+        DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, e.tmask[i] << " "); )
+
+        runOnce = true;
+      } break;
+      case 3: {
         // JOIN
         D(3, "JOIN");
-        if (sjOnce) {
-          sjOnce = false;
-          if (!domStack_.empty() && domStack_.top().uni) {
-            D(2, "Uni branch at join");
-            printf("NEW DOMESTACK: \n");
-            tmask_ = domStack_.top().tmask;
-            domStack_.pop();
-            break;
-          }
-          if (!domStack_.top().fallThrough) {
-            if (!pcSet) {
-              nextPc = domStack_.top().pc;
-              D(3, "join: NOT FALLTHROUGH PC: " << std::hex << nextPc << std::dec);
-            }
-            pcSet = true;
-          }
-
-          D(3, "Join: Old TM: ");
-          DX( for (auto y : tmask_) D(3, y << " "); )
-          std::cout << "\n";
+        if (!domStack_.empty() && domStack_.top().unanimous) {
+          D(2, "Uni branch at join");
+          printf("NEW DOMESTACK: \n");
           tmask_ = domStack_.top().tmask;
-
-          D(3, "Join: New TM: ");
-          DX( for (auto y : tmask_) D(3, y << " "); )
-
           domStack_.pop();
+          break;
         }
-        break;
-      case 4:
-        trace_inst->stall_warp = true;
-        // is_barrier
-        break;
-      case 0:
-        // TMC
-        D(3, "TMC: r" << rsrc0);
-        trace_inst->stall_warp = true;
-        nextActiveThreads = std::min<unsigned>(iregs[rsrc0], core_->arch().getNumThreads());
-        {
-          for (size_t ff = 0; ff < tmask_.size(); ff++) {
-            if (ff < nextActiveThreads) {
-              tmask_[ff] = true;
-            } else {
-              tmask_[ff] = false;
-            }
+
+        if (!domStack_.top().fallThrough) {
+          if (!updatePC) {
+            nextPC = domStack_.top().PC;
+            D(3, "join: NOT FALLTHROUGH PC: " << std::hex << nextPC << std::dec);
           }
+          updatePC = true;
         }
-        if (nextActiveThreads == 0) {
-          spawned_ = false;
-        }
-        break;
+
+        D(3, "Join: Old TM: ");
+        DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
+        std::cout << "\n";
+        tmask_ = domStack_.top().tmask;
+
+        D(3, "Join: New TM: ");
+        DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
+
+        domStack_.pop();
+        runOnce = true;
+      } break;
+      case 4: {
+        // is_barrier
+        trace_inst->stall_warp = true; 
+        runOnce = true;       
+      } break;
       default:
         std::cout << "ERROR: UNSUPPORTED GPGPU INSTRUCTION " << instr << "\n";
       }
       break;
     case VSET_ARITH: {
       D(3, "VSET_ARITH");
-      int VLMAX = (instr.getVlmul() * VLEN_) / instr.getVsew();
+      int VLEN = core_->arch().vsize() * 8;
+      int VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
       switch (func3) {
       case 0: // vector-vector
-        trace_inst->vs1 = rsrc0;
-        trace_inst->vs2 = rsrc1;
-        trace_inst->vd  = rdest;
         switch (func6) {
         case 0: {
-          D(3, "Addition " << rsrc0 << " " << rsrc1 << " Dest:" << rdest);
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
-          std::vector<Reg<char *>> &mask = vregFile_[0];
+          D(4, "Addition " << rsrc0 << " " << rsrc1 << " Dest:" << rdest);
+          auto& vr1 = vRegFile_[rsrc0];
+          auto& vr2 = vRegFile_[rsrc1];
+          auto& vd = vRegFile_[rdest];
+          auto& mask = vRegFile_[0];
 
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *mask_ptr = (uint8_t *)mask[i].value();
-              uint8_t value = (*mask_ptr & 0x1);
+              uint8_t emask = *(uint8_t *)(mask.data() + i);
+              uint8_t value = emask & 0x1;
               if (vmask || (!vmask && value)) {
-                uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-                uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-                uint8_t result = *first_ptr + *second_ptr;
-                D(3, "Adding " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-                uint8_t *result_ptr = (uint8_t *)vd[i].value();
-                *result_ptr = result;
+                uint8_t first = *(uint8_t *)(vr1.data() + i);
+                uint8_t second = *(uint8_t *)(vr2.data() + i);
+                uint8_t result = first + second;
+                D(4, "Adding " << first << " + " << second << " = " << result);
+                *(uint8_t *)(vd.data() + i) = result;
               }
             }
-
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *mask_ptr = (uint16_t *)mask[i].value();
-              uint16_t value = (*mask_ptr & 0x1);
+              uint16_t emask = *(uint16_t *)(mask.data() + i);
+              uint16_t value = emask & 0x1;
               if (vmask || (!vmask && value)) {
-                uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-                uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-                uint16_t result = *first_ptr + *second_ptr;
-                D(3, "Adding " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-                uint16_t *result_ptr = (uint16_t *)vd[i].value();
-                *result_ptr = result;
+                uint16_t first = *(uint16_t *)(vr1.data() + i);
+                uint16_t second = *(uint16_t *)(vr2.data() + i);
+                uint16_t result = first + second;
+                D(4, "Adding " << first << " + " << second << " = " << result);
+                *(uint16_t *)(vd.data() + i) = result;
               }
             }
           } else if (vtype_.vsew == 32) {
-            D(3, "Doing 32 bit vector addition");
+            D(4, "Doing 32 bit vector addition");
             for (int i = 0; i < vl_; i++) {
-              int *mask_ptr = (int *)mask[i].value();
-              int value = (*mask_ptr & 0x1);
+              uint32_t emask = *(uint32_t *)(mask.data() + i);
+              uint32_t value = emask & 0x1;
               if (vmask || (!vmask && value)) {
-                int *first_ptr = (int *)vr1[i].value();
-                int *second_ptr = (int *)vr2[i].value();
-                int result = *first_ptr + *second_ptr;
-                D(3, "Adding " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-                int *result_ptr = (int *)vd[i].value();
-                *result_ptr = result;
+                uint32_t first = *(uint32_t *)(vr1.data() + i);
+                uint32_t second = *(uint32_t *)(vr2.data() + i);
+                uint32_t result = first + second;
+                D(4, "Adding " << first << " + " << second << " = " << result);
+                *(uint32_t *)(vd.data() + i) = result;
               }
             }
-          }
-          
-          DX( 
-            D(3, "Vector Register state after addition:");
-            for (size_t i = 0; i < vregFile_.size(); i++) {
-              for (size_t j = 0; j < vregFile_[0].size(); j++) {
-                if (vtype_.vsew == 8) {
-                  uint8_t *ptr_val = (uint8_t *)vregFile_[i][j].value();
-                  D(3, "reg[" << i << "][" << j << "] = " << *ptr_val);
-                } else if (vtype_.vsew == 16) {
-                  uint16_t *ptr_val = (uint16_t *)vregFile_[i][j].value();
-                  D(3, "reg[" << i << "][" << j << "] = " << *ptr_val);
-                } else if (vtype_.vsew == 32) {
-                  uint32_t *ptr_val = (uint32_t *)vregFile_[i][j].value();
-                  D(3, "reg[" << i << "][" << j << "] = " << *ptr_val);
-                }
-              }
-            }
-            D(3, "After vector register state after addition");
-          )    
-                
+          }                
         } break;
         case 24: //vmseq
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr == *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first == second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr == *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first == second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr == *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first == second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
           }
 
         } break;
         case 25: //vmsne
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr != *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first != second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr != *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first != second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr != *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first != second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
           }
 
         } break;
         case 26: //vmsltu
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first < second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first < second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first < second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
           }
 
         } break;
         case 27: //vmslt
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              int8_t *first_ptr = (int8_t *)vr1[i].value();
-              int8_t *second_ptr = (int8_t *)vr2[i].value();
-              int8_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int8_t *result_ptr = (int8_t *)vd[i].value();
-              *result_ptr = result;
+              int8_t first = *(int8_t *)(vr1.data() + i);
+              int8_t second = *(int8_t *)(vr2.data() + i);
+              int8_t result = (first < second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
-
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              int16_t *first_ptr = (int16_t *)vr1[i].value();
-              int16_t *second_ptr = (int16_t *)vr2[i].value();
-              int16_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int16_t *result_ptr = (int16_t *)vd[i].value();
-              *result_ptr = result;
+              int16_t first = *(int16_t *)(vr1.data() + i);
+              int16_t second = *(int16_t *)(vr2.data() + i);
+              int16_t result = (first < second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(int16_t *)(vd.data() + i) = result;
             }
-
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              int32_t *first_ptr = (int32_t *)vr1[i].value();
-              int32_t *second_ptr = (int32_t *)vr2[i].value();
-              int32_t result = (*first_ptr < *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int32_t *result_ptr = (int32_t *)vd[i].value();
-              *result_ptr = result;
+              int32_t first = *(int32_t *)(vr1.data() + i);
+              int32_t second = *(int32_t *)(vr2.data() + i);
+              int32_t result = (first < second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(int32_t *)(vd.data() + i) = result;
             }
           }
         } break;
         case 28: //vmsleu
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first <= second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first <= second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first <= second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
           }
         } break;
         case 29: //vmsle
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              int8_t *first_ptr = (int8_t *)vr1[i].value();
-              int8_t *second_ptr = (int8_t *)vr2[i].value();
-              int8_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int8_t *result_ptr = (int8_t *)vd[i].value();
-              *result_ptr = result;
+              int8_t first = *(int8_t *)(vr1.data() + i);
+              int8_t second = *(int8_t *)(vr2.data() + i);
+              int8_t result = (first <= second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              int16_t *first_ptr = (int16_t *)vr1[i].value();
-              int16_t *second_ptr = (int16_t *)vr2[i].value();
-              int16_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int16_t *result_ptr = (int16_t *)vd[i].value();
-              *result_ptr = result;
+              int16_t first = *(int16_t *)(vr1.data() + i);
+              int16_t second = *(int16_t *)(vr2.data() + i);
+              int16_t result = (first <= second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(int16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              int32_t *first_ptr = (int32_t *)vr1[i].value();
-              int32_t *second_ptr = (int32_t *)vr2[i].value();
-              int32_t result = (*first_ptr <= *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int32_t *result_ptr = (int32_t *)vd[i].value();
-              *result_ptr = result;
+              int32_t first = *(int32_t *)(vr1.data() + i);
+              int32_t second = *(int32_t *)(vr2.data() + i);
+              int32_t result = (first <= second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(int32_t *)(vd.data() + i) = result;
             }
           }
         } break;
         case 30: //vmsgtu
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first > second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first > second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first > second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
           }
         } break;
         case 31: //vmsgt
         {
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              int8_t *first_ptr = (int8_t *)vr1[i].value();
-              int8_t *second_ptr = (int8_t *)vr2[i].value();
-              int8_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int8_t *result_ptr = (int8_t *)vd[i].value();
-              *result_ptr = result;
+              int8_t first = *(int8_t *)(vr1.data() + i);
+              int8_t second = *(int8_t *)(vr2.data() + i);
+              int8_t result = (first > second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              int16_t *first_ptr = (int16_t *)vr1[i].value();
-              int16_t *second_ptr = (int16_t *)vr2[i].value();
-              int16_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int16_t *result_ptr = (int16_t *)vd[i].value();
-              *result_ptr = result;
+              int16_t first = *(int16_t *)(vr1.data() + i);
+              int16_t second = *(int16_t *)(vr2.data() + i);
+              int16_t result = (first > second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(int16_t *)(vd.data() + i) = result;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              int32_t *first_ptr = (int32_t *)vr1[i].value();
-              int32_t *second_ptr = (int32_t *)vr2[i].value();
-              int32_t result = (*first_ptr > *second_ptr) ? 1 : 0;
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              int32_t *result_ptr = (int32_t *)vd[i].value();
-              *result_ptr = result;
+              int32_t first = *(int32_t *)(vr1.data() + i);
+              int32_t second = *(int32_t *)(vr2.data() + i);
+              int32_t result = (first > second) ? 1 : 0;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(int32_t *)(vd.data() + i) = result;
             }
           }
         } break;
         }
         break;
       case 2: {
-        trace_inst->vs1 = rsrc0;
-        trace_inst->vs2 = rsrc1;
-        trace_inst->vd = rdest;
-
         switch (func6) {
         case 24: //vmandnot
         {
           D(3, "vmandnot");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value & !second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
-            }
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
+            }            
             for (int i = vl_; i < VLMAX; i++) {
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
-
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value & !second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value & !second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 25: //vmand
         {
           D(3, "vmand");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value & second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value & second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
-
             for (int i = vl_; i < VLMAX; i++) {
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
-
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value & second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
-
             for (int i = vl_; i < VLMAX; i++) {
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 26: //vmor
         {
           D(3, "vmor");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value | second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value | second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value | second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
-            D(3, "VLMAX: " << VLMAX);
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 27: //vmxor
         {
           D(3, "vmxor");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
-            uint8_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value ^ second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value ^ second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value ^ second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 28: //vmornot
         {
           D(3, "vmornot");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value | !second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value | !second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value | !second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 29: //vmnand
         {
           D(3, "vmnand");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = !(first_value & second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint8_t *result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = !(first_value & second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
-
             for (int i = vl_; i < VLMAX; i++) {
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
-
           } else if (vtype_.vsew == 32) {
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = !(first_value & second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
-
             for (int i = vl_; i < VLMAX; i++) {
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 30: //vmnor
         {
           D(3, "vmnor");
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
-            uint8_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = !(first_value | second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = !(first_value | second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint16_t *result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
 
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = !(first_value | second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              uint32_t *result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 31: //vmxnor
         {
           D(3, "vmxnor");
-          uint8_t *result_ptr;
-
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t first_value = (*first_ptr & 0x1);
-              uint8_t second_value = (*second_ptr & 0x1);
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t first_value = (first & 0x1);
+              uint8_t second_value = (second & 0x1);
               uint8_t result = !(first_value ^ second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t first_value = (*first_ptr & 0x1);
-              uint16_t second_value = (*second_ptr & 0x1);
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first_value = (first & 0x1);
+              uint16_t second_value = (second & 0x1);
               uint16_t result = !(first_value ^ second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t first_value = (*first_ptr & 0x1);
-              uint32_t second_value = (*second_ptr & 0x1);
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t first_value = (first & 0x1);
+              uint32_t second_value = (second & 0x1);
               uint32_t result = !(first_value ^ second_value);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 37: //vmul
         {
           D(3, "vmul");
-          uint8_t *result_ptr;
-
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr * *second_ptr);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first * second);
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr * *second_ptr);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first * second);
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
-
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr * *second_ptr);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first * second);
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 45: //vmacc
         {
           D(3, "vmacc");
-          uint8_t *result_ptr;
-
-          std::vector<Reg<char *>> &vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          auto &vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (*first_ptr * *second_ptr);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr += result;
+              uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (first * second);
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) += result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (*first_ptr * *second_ptr);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr += result;
+              uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (first * second);
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) += result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
-
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (*first_ptr * *second_ptr);
-              D(3, "Comparing " << *first_ptr << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr += result;
+              uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (first * second);
+              D(4, "Comparing " << first << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) += result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
@@ -1813,112 +1568,84 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         switch (func6) {
         case 0: {
           D(3, "vmadd.vx");
-          uint8_t *result_ptr;
-
-          //vector<Reg<char *>> & vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          //vector<Word> & vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              //uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (iregs[rsrc0] + *second_ptr);
-              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              //uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (iregs[rsrc0] + second);
+              D(4, "Comparing " << iregs[rsrc0] << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              //uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (iregs[rsrc0] + *second_ptr);
-              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              //uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (iregs[rsrc0] + second);
+              D(4, "Comparing " << iregs[rsrc0] << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              //uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (iregs[rsrc0] + *second_ptr);
-              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              //uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (iregs[rsrc0] + second);
+              D(4, "Comparing " << iregs[rsrc0] << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
         case 37: //vmul.vx
         {
           D(3, "vmul.vx");
-          uint8_t *result_ptr;
-
-          //vector<Reg<char *>> & vr1 = vregFile_[rsrc0];
-          std::vector<Reg<char *>> &vr2 = vregFile_[rsrc1];
-          std::vector<Reg<char *>> &vd = vregFile_[rdest];
+          //vector<Word> & vr1 = vRegFile_[rsrc0];
+          auto &vr2 = vRegFile_[rsrc1];
+          auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
-              //uint8_t *first_ptr = (uint8_t *)vr1[i].value();
-              uint8_t *second_ptr = (uint8_t *)vr2[i].value();
-              uint8_t result = (iregs[rsrc0] * *second_ptr);
-              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = result;
+              //uint8_t first = *(uint8_t *)(vr1.data() + i);
+              uint8_t second = *(uint8_t *)(vr2.data() + i);
+              uint8_t result = (iregs[rsrc0] * second);
+              D(4, "Comparing " << iregs[rsrc0] << " + " << second << " = " << result);
+              *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint8_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint8_t *)(vd.data() + i) = 0;
             }
           } else if (vtype_.vsew == 16) {
-            uint16_t *result_ptr;
             for (int i = 0; i < vl_; i++) {
-              //uint16_t *first_ptr = (uint16_t *)vr1[i].value();
-              uint16_t *second_ptr = (uint16_t *)vr2[i].value();
-              uint16_t result = (iregs[rsrc0] * *second_ptr);
-              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = result;
+              //uint16_t first = *(uint16_t *)(vr1.data() + i);
+              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t result = (iregs[rsrc0] * second);
+              D(4, "Comparing " << iregs[rsrc0] << " + " << second << " = " << result);
+              *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint16_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint16_t *)(vd.data() + i) = 0;
             }
 
           } else if (vtype_.vsew == 32) {
-            uint32_t *result_ptr;
-
             for (int i = 0; i < vl_; i++) {
-              //uint32_t *first_ptr = (uint32_t *)vr1[i].value();
-              uint32_t *second_ptr = (uint32_t *)vr2[i].value();
-              uint32_t result = (iregs[rsrc0] * *second_ptr);
-              D(3, "Comparing " << iregs[rsrc0] << " + " << *second_ptr << " = " << result);
-
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = result;
+              //uint32_t first = *(uint32_t *)(vr1.data() + i);
+              uint32_t second = *(uint32_t *)(vr2.data() + i);
+              uint32_t result = (iregs[rsrc0] * second);
+              D(4, "Comparing " << iregs[rsrc0] << " + " << second << " = " << result);
+              *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
-              result_ptr = (uint32_t *)vd[i].value();
-              *result_ptr = 0;
+              *(uint32_t *)(vd.data() + i) = 0;
             }
           }
         } break;
@@ -1933,38 +1660,22 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         D(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << iregs[rsrc0] << "VLMAX" << VLMAX);
 
         int s0 = iregs[rsrc0];
-
         if (s0 <= VLMAX) {
           vl_ = s0;
         } else if (s0 < (2 * VLMAX)) {
           vl_ = (int)ceil((s0 * 1.0) / 2.0);
-          D(3, "Length:" << vl_ << ceil(s0 / 2));
         } else if (s0 >= (2 * VLMAX)) {
           vl_ = VLMAX;
-        }
-        
+        }        
         iregs[rdest] = vl_;
-        D(3, "VL:" << iregs[rdest]);
-
-        Word regNum(0);
-
-        vregFile_.clear();
-        for (int j = 0; j < 32; j++) {
-          vregFile_.push_back(std::vector<Reg<char *>>());
-          for (Word i = 0; i < (VLEN_ / instr.getVsew()); ++i) {
-            int *elem_ptr = (int *)malloc(instr.getVsew() / 8);
-            for (Word f = 0; f < (instr.getVsew() / 32); f++)
-              elem_ptr[f] = 0;
-            vregFile_[j].push_back(Reg<char *>(id_, regNum++, (char *)elem_ptr));
-          }
-        }
       } break;
       default: {
-        std::cout << "default???\n" << std::flush;
+        std::abort();
       }
       }
     } break;
     case (FL | VL):
+      ++loads_;
       if ( func3==0x2 ) {
         //std::cout << "FL_INST\n"; 
         // rs1 is integer is register!
@@ -1972,70 +1683,62 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         D(9,"something weird happen!");
         Word data_read = core_->mem().read(memAddr, 0);
         D(3, "Memaddr");
-        D_RAW(' ' << setw(8) << hex << memAddr << endl);
+        DPN(3, ' ' << std::setw(8) << std::hex << memAddr << std::endl);
         trace_inst->is_lw = true;
         trace_inst->mem_addresses[t] = memAddr;
         // //std::cout <<std::hex<< "EXECUTE: " << fregs[rsrc0] << " + " << immsrc << " = " << memAddr <<  " -> data_read: " << data_read << "\n";
         switch (func3) {
         case 2: // FLW
           fregs[rdest] = data_read & 0xFFFFFFFF;
-          D(3, "fpReg[rd]");
-          D_RAW(' ' << setw(8) << hex << fregs[rdest] << endl);              
+          D(4, "fpReg[rd] " << std::setw(8) << std::hex << fregs[rdest] << std::endl);
           break;
         default:
           std::cout << "ERROR: UNSUPPORTED FL INST\n";
           exit(1);
         }
         D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
-        D(3, "LOAD MEM DATA: " << std::hex << data_read);
-        memAccesses_.push_back(Warp::MemAccess(false, memAddr));  
-      } else {        
+      } else {  
+        int VLEN = core_->arch().vsize() * 8;      
         D(3, "Executing vector load");      
-        D(3, "lmul: " << vtype_.vlmul << " VLEN:" << VLEN_ << "sew: " << vtype_.vsew);
-        D(3, "src: " << rsrc0 << " " << iregs[rsrc0]);
-        D(3, "dest" << rdest);
-        D(3, "width" << instr.getVlsWidth());
+        D(4, "lmul: " << vtype_.vlmul << " VLEN:" << VLEN << "sew: " << vtype_.vsew);
+        D(4, "src: " << rsrc0 << " " << iregs[rsrc0]);
+        D(4, "dest" << rdest);
+        D(4, "width" << instr.getVlsWidth());
 
-        std::vector<Reg<char *>> &vd = vregFile_[rdest];
+        auto &vd = vRegFile_[rdest];
 
         switch (instr.getVlsWidth()) {
         case 6: { //load word and unit strided (not checking for unit stride)
           for (int i = 0; i < vl_; i++) {
             Word memAddr = ((iregs[rsrc0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
             Word data_read = core_->mem().read(memAddr, 0);
-            D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
-            int *result_ptr = (int *)vd[i].value();
+            D(4, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+            int *result_ptr = (int *)(vd.data() + i);
             *result_ptr = data_read;
 
             trace_inst->is_lw = true;
             trace_inst->mem_addresses[i] = memAddr;
+            
+            D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
           }
-          D(3, "Vector Register state ----:");
           // cout << "Finished loop" << std::endl;
         } break;
         default:
-          std::cout << "Serious default??\n" << std::flush;
+          std::abort();
         }
         break;
       } 
       break;
     case (FS | VS):
+      ++stores_;
       if ((func3 == 0x1) || (func3 == 0x2) 
        || (func3 == 0x3) || (func3 == 0x4)) {
         //std::cout << "FS_INST\n";
-        ++stores_;
         // base is integer register!
         Word memAddr = iregs[rsrc0] + immsrc;
-        D(3, "STORE MEM ADDRESS: " << std::hex << fregs[rsrc0] << " + " << immsrc << "\n");
-        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
         trace_inst->is_sw = true;
         trace_inst->mem_addresses[t] = memAddr;
-        // //std::cout << "FUNC3: " << func3 << "\n";
-        if ((memAddr == 0x00010000) && (t == 0)) { // ** Is this protected mem space?
-          unsigned num = fregs[rsrc1];
-          fprintf(stderr, "%c", (char) fregs[rsrc1]);
-          break;
-        }
+
         switch (func3) {
         case 1:
           std::cout << "ERROR: UNSUPPORTED FS INST\n";
@@ -2062,13 +1765,11 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         default:
           std::cout << "ERROR: UNSUPPORTED FS INST\n";
           exit(1);
-        }
+        }        
         D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
-        memAccesses_.push_back(Warp::MemAccess(true, memAddr));
       } else {
         for (int i = 0; i < vl_; i++) {
           // cout << "iter" << std::endl;
-          ++stores_;
           Word memAddr = iregs[rsrc0] + (i * vtype_.vsew / 8);
           // std::cout << "STORE MEM ADDRESS *** : " << std::hex << memAddr << "\n";
 
@@ -2078,16 +1779,14 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           switch (instr.getVlsWidth()) {
           case 6: //store word and unit strided (not checking for unit stride)
           {
-            uint32_t *ptr_val = (uint32_t *)vregFile_[instr.getVs3()][i].value();
-            D(3, "value: " << std::flush << (*ptr_val) << std::flush);
-            core_->mem().write(memAddr, *ptr_val, 0, 4);
-            D(3, "store: " << memAddr << " value:" << *ptr_val << std::flush);
+            uint32_t value = *(uint32_t *)(vRegFile_[instr.getVs3()].data() + i);
+            core_->mem().write(memAddr, value, 0, 4);
+            D(4, "store: " << memAddr << " value:" << value);
           } break;
           default:
-            std::cout << "ERROR: UNSUPPORTED S INST\n" << std::flush;
             std::abort();
-          }
-          // cout << "Loop finished" << std::endl;
+          }          
+          D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
         }
       }
       break;    
@@ -2161,28 +1860,24 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
               csrs_[0x001] = csrs_[0x001] | 0x10; // set NX bit
             }
 
-            D(3, "fpOut: " << fpOut);
+            D(4, "fpOut: " << fpOut);
             if (fpBinIsNan(floatToBin(fpOut)) == 0) {
               fregs[rdest] = floatToBin(fpOut);
             } else  {              
               // According to risc-v spec p.64 section 11.3
               // If the result is NaN, it is the canonical NaN
               fregs[rdest] = 0x7fc00000;
-            }            
+            }          
           }
         } break;
 
-        // FSGNJ.S, FSGNJN.S FSGJNX.S
+        // FSGNJ.S, FSGNJN.S FSGNJX.S
         case 0x10: {
-          bool       fsign1 = fregs[rsrc0] & 0x80000000;
-          uint32_t   fdata1 = fregs[rsrc0] & 0x7FFFFFFF;
-          bool       fsign2 = fregs[rsrc1] & 0x80000000;
-          uint32_t   fdata2 = fregs[rsrc1] & 0x7FFFFFFF;
-          
-          D(3, "fdata1 " << hex << fdata1 << endl);       
-          D(3, "fsign2 " << hex << fsign2 << endl);   
+          bool     fsign1 = fregs[rsrc0] & 0x80000000;
+          uint32_t fdata1 = fregs[rsrc0] & 0x7FFFFFFF;
+          bool     fsign2 = fregs[rsrc1] & 0x80000000;
 
-          switch(func3) {            
+          switch (func3) {            
           case 0: // FSGNJ.S
             fregs[rdest] = (fsign2 << 31) | fdata1;
             break;          
@@ -2190,7 +1885,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             fsign2 = !fsign2;
             fregs[rdest] = (fsign2 << 31) | fdata1;
             break;          
-          case 2: { // FSGJNX.S
+          case 2: { // FSGNJX.S
             bool sign = fsign1 ^ fsign2;
             fregs[rdest] = (sign << 31) | fdata1;
             } break;
@@ -2219,10 +1914,10 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
               // handle corner case that compare +0 and -0              
               if (func3) {
                 // FMAX.S
-                fregs[rdest] = (sr1IsZero==2)? fregs[rsrc1] : fregs[rsrc0];
+                fregs[rdest] = (sr1IsZero==2) ? fregs[rsrc1] : fregs[rsrc0];
               } else {
                 // FMIM.S
-                fregs[rdest] = (sr1IsZero==2)? fregs[rsrc0] : fregs[rsrc1];
+                fregs[rdest] = (sr1IsZero==2) ? fregs[rsrc0] : fregs[rsrc1];
               }
             } else {
               float rs1 = intregToFloat(fregs[rsrc0]);
@@ -2243,8 +1938,6 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         // FCVT.W.S FCVT.WU.S
         case 0x60: {
           // TODO: Need to clip result if rounded result is not representable in the destination format
-          // typedef uint32_t Word_u;
-          // typedef int32_t  Word_s;
           // FCVT.W.S
           // Convert floating point to 32-bit signed integer
           float fpSrc = intregToFloat(fregs[rsrc0]);
@@ -2285,7 +1978,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             }
           }
 
-          //show_fe_exceptions(); // once shown, it will clear corresponding bits, just for debug
+          //show_fe_exceptions();
           
           // fcsr defined in riscv
           if (fetestexcept(FE_INEXACT)) {
@@ -2416,8 +2109,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             // FCVT.S.W
             // Convert 32-bit signed integer to floating point
             // iregs[rsrc0] is actually a unsigned number
-            data = (int) iregs[rsrc0];
-            D(3, "data" << data);
+            data = (int)iregs[rsrc0];
             fregs[rdest] = floatToBin(data);
           }
         } break;
@@ -2443,13 +2135,13 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
       }
 
-      if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1]) || fpBinIsNan(fregs[rsrc2])) { // if one of op is NaN
+      if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1]) || fpBinIsNan(fregs[rsrc2])) { 
+        // if one of op is NaN
         // if addend is not quiet NaN, them set FCSR
         if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
           csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
           csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit          
         }
-
         fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
       } else {
         float rs1 = intregToFloat(fregs[rsrc0]);
@@ -2507,24 +2199,22 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
     }
     break;
     default:
-      D(3, "pc: " << std::hex << (pc_ - 4));
+      D(3, "PC: " << std::hex << (PC_ - 4));
       D(3, "ERROR: Unsupported instruction: " << instr);
       std::abort();
     }
+
+    if (instr.hasRDest()) {
+      if (instr.is_FpDest()) {
+        D(3, "r" << std::dec << rdest << "=0x" << std::hex << std::hex << fregs[rdest]);
+      } else {
+        D(3, "r" << std::dec << rdest << "=0x" << std::hex << std::hex << iregs[rdest]);
+      }
+    }
   }
 
-  activeThreads_ = nextActiveThreads;
-
-  // This way, if pc was set by a side effect (such as interrupt), it will
-  // retain its new value.
-  if (pcSet) {
-    pc_ = nextPc;
-    D(3, "Next PC: " << std::hex << nextPc << std::dec);
-  }
-
-  if (nextActiveThreads > iRegFile_.size()) {
-    std::cerr << "Error: attempt to spawn " << nextActiveThreads << " threads. "
-              << iRegFile_.size() << " available.\n";
-    abort();
+  if (updatePC) {
+    PC_ = nextPC;
+    D(3, "Next PC: " << std::hex << nextPC << std::dec);
   }
 }

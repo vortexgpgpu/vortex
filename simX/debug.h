@@ -1,6 +1,8 @@
 #pragma once
 
-//#define USE_DEBUG 9
+#define USE_DEBUG 3
+#define DEBUG_HEADER << "DEBUG "
+//#define DEBUG_HEADER << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": "
 
 #ifdef USE_DEBUG
 
@@ -11,13 +13,13 @@
 
 #define D(lvl, x) do { \
   if ((lvl) <= USE_DEBUG) { \
-    std::cout << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": " << x << std::endl; \
+    std::cout DEBUG_HEADER << x << std::endl; \
   } \
 } while(0)
 
 #define DPH(lvl, x) do { \
   if ((lvl) <= USE_DEBUG) { \
-    std::cout << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": " << x; \
+    std::cout DEBUG_HEADER << x; \
   } \
 } while(0)
 
@@ -26,10 +28,6 @@
     std::cout << x; \
   } \
 } while(0)
-
-#define D_RAW(x) do { \
-  std::cout << x; \
-} while (0)
 
 #else
 

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <math.h>
+#include <assert.h>
 
 #include "util.h"
 #include "instr.h"
@@ -11,87 +12,67 @@ using namespace vortex;
 
 Warp::Warp(Core *core, Word id)
     : id_(id)
+    , active_(false)
     , core_(core)
-    , pc_(0x80000000)
-    , shadowPc_(0)
-    , activeThreads_(0)
-    , shadowActiveThreads_(0)
-    , shadowIReg_(core_->arch().getNumRegs())
-    , VLEN_(1024)
-    , spawned_(false)
+    , PC_(0x80000000)
     , steps_(0)
     , insts_(0)
     , loads_(0)
     , stores_(0) {
-  D(3, "Creating a new thread with PC: " << std::hex << pc_);
-  /* Build the register file. */
-  Word regNum(0);
-  for (Word j = 0; j < core_->arch().getNumThreads(); ++j) {
-    iRegFile_.push_back(std::vector<Reg<Word>>(0));
-    for (Word i = 0; i < core_->arch().getNumRegs(); ++i) {
-      iRegFile_[j].push_back(Reg<Word>(id, regNum++));
-    }
 
-    bool act = false;
-    if (j == 0)
-      act = true;
-    tmask_.push_back(act);
-    shadowTmask_.push_back(act);
-  }
+  tmask_.reset();
 
-  for (Word i = 0; i < (1 << 12); i++) {
-    csrs_.push_back(Reg<uint32_t>(id, regNum++));
-  }
-
-  /* Set initial register contents. */
-  iRegFile_[0][0] = (core_->arch().getNumThreads() << (core_->arch().getWordSize() * 8 / 2)) | id;
+  iRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
+  fRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
+  vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));    
+  csrs_.resize(core_->arch().num_csrs());
 }
 
 void Warp::step(trace_inst_t *trace_inst) {
+  assert(tmask_.any());
+
   Size fetchPos(0);
   Size decPos;
-  Size wordSize(core_->arch().getWordSize());
+  Size wordSize(core_->arch().wsize());
   std::vector<Byte> fetchBuffer(wordSize);
-
-  if (activeThreads_ == 0)
-    return;
 
   ++steps_;
 
-  D(3, "current PC=0x" << std::hex << pc_);
+  D(3, "current PC=0x" << std::hex << PC_);
 
-  // std::cout << "pc: " << std::hex << pc << "\n";
-  trace_inst->pc = pc_;
+  // std::cout << "PC: " << std::hex << PC << "\n";
+  trace_inst->PC = PC_;
 
   /* Fetch and decode. */
-  if (wordSize < sizeof(pc_))
-    pc_ &= ((1ll << (wordSize * 8)) - 1);
+  if (wordSize < sizeof(PC_))
+    PC_ &= ((1ll << (wordSize * 8)) - 1);
     
   unsigned fetchSize = 4;
   fetchBuffer.resize(fetchSize);
-  Word fetched = core_->mem().fetch(pc_ + fetchPos, 0);
+  Word fetched = core_->mem().fetch(PC_ + fetchPos, 0);
   writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
 
   decPos = 0;
   std::shared_ptr<Instr> instr = core_->decoder().decode(fetchBuffer, decPos, trace_inst);
 
-  // Update pc
-  pc_ += decPos;
+  // Update PC
+  PC_ += decPos;
 
   // Execute
   this->execute(*instr, trace_inst);
 
   // At Debug Level 3, print debug info after each instruction.
-  D(3, "Register state:");
-  for (unsigned i = 0; i < iRegFile_[0].size(); ++i) {
-    D_RAW("  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
-    for (unsigned j = 0; j < (activeThreads_); ++j)
-      D_RAW(' ' << std::setfill('0') << std::setw(8) << std::hex << iRegFile_[j][i] << std::setfill(' ') << ' ');
-    D_RAW('(' << shadowIReg_[i] << ')' << std::endl);
+  D(4, "Register state:");
+  for (int i = 0; i < core_->arch().num_regs(); ++i) {
+    DPN(4, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
+    for (int j = 0; j < core_->arch().num_threads(); ++j) {
+      DPN(4, ' ' << std::setfill('0') << std::setw(8) << std::hex << iRegFile_[j][i] << std::setfill(' ') << ' ');
+    }
+    DPN(4, std::endl);
   }
 
   DPH(3, "Thread mask:");
-  for (unsigned i = 0; i < tmask_.size(); ++i)
+  for (int i = 0; i < core_->arch().num_threads(); ++i)
     DPN(3, " " << tmask_[i]);
   DPN(3, "\n");
 }

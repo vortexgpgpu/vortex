@@ -12,15 +12,15 @@ Word vortex::signExt(Word w, Size bit, Word mask) {
   return w;
 }
 
-void vortex::wordToBytes(Byte *b, Word_u w, Size wordSize) {
+void vortex::wordToBytes(Byte *b, Word w, Size wordSize) {
   while (wordSize--) {
     *(b++) = w & 0xff;
     w >>= 8;
   }
 }
 
-Word_u vortex::bytesToWord(const Byte *b, Size wordSize) {
-  Word_u w = 0;
+Word vortex::bytesToWord(const Byte *b, Size wordSize) {
+  Word w = 0;
   b += wordSize-1;
   while (wordSize--) {
     w <<= 8;
@@ -29,15 +29,15 @@ Word_u vortex::bytesToWord(const Byte *b, Size wordSize) {
   return w;
 }
 
-Word_u vortex::flagsToWord(bool r, bool w, bool x) {
-  Word_u word = 0;
+Word vortex::flagsToWord(bool r, bool w, bool x) {
+  Word word = 0;
   if (r) word |= RD_USR;
   if (w) word |= WR_USR;
   if (x) word |= EX_USR;
   return word; 
 }
 
-void vortex::wordToFlags(bool &r, bool &w, bool &x, Word_u f) {
+void vortex::wordToFlags(bool &r, bool &w, bool &x, Word f) {
   r = f & RD_USR;
   w = f & WR_USR;
   x = f & EX_USR;
@@ -49,10 +49,10 @@ Byte vortex::readByte(const std::vector<Byte> &b, Size &n) {
   return b[n++];
 }
 
-Word_u vortex::readWord(const std::vector<Byte> &b, Size &n, Size wordSize) {
+Word vortex::readWord(const std::vector<Byte> &b, Size &n, Size wordSize) {
   if (b.size() - n < wordSize) 
     throw std::out_of_range("out of range");
-  Word_u w(0);
+  Word w(0);
   n += wordSize;
   // std::cout << "wordSize: " << wordSize << "\n";
   for (Size i = 0; i < wordSize; i++) {

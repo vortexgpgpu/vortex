@@ -5,22 +5,27 @@ namespace vortex {
 
   struct trace_inst_t {
   	// Warp step
-    bool       valid_inst;
-    unsigned   pc;
+    bool       valid;
+    unsigned   PC;
 
     // Core scheduler
     int        wid;
 
     // Encoder
-    int        rs1;
-    int        rs2;
-    int        rs3;
-    int        rd;
+    int        irs1;
+    int        irs2;    
+    int        ird;
 
-    //Encoder
-    int        vs1;
-    int        vs2;
-    int        vd;
+    // Floating-point
+    int        frs1;
+    int        frs2;
+    int        frs3;
+    int        frd;
+
+    // Vector extension
+    int        vrs1;
+    int        vrs2;
+    int        vrd;
 
     // Instruction execute
     bool       is_lw;
