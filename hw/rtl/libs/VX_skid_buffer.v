@@ -94,33 +94,43 @@ module VX_skid_buffer #(
 
         end else begin
 
-            wire q_push = valid_in && ready_in;
-            wire q_pop = valid_out && ready_out;
+            reg [DATAW-1:0] shift_reg [1:0];
+            reg valid_out_r, ready_in_r, rd_ptr_r;
 
-            wire q_empty, q_full;
+            wire push = valid_in && ready_in;
+            wire pop = valid_out_r && ready_out;
 
-            VX_fifo_queue #(
-                .DATAW    (DATAW), 
-                .SIZE     (2),
-                .BUFFERED (BUFFERED),
-                .FASTRAM  (FASTRAM)
-            ) fifo (
-                .clk        (clk),
-                .reset      (reset),
-                .push       (q_push),
-                .pop        (q_pop),
-                .data_in    (data_in),        
-                .data_out   (data_out),
-                .empty      (q_empty),
-                .alm_full   (q_full),
-                `UNUSED_PIN (full),        
-                `UNUSED_PIN (alm_empty),
-                `UNUSED_PIN (size)
-            );
+            always @(posedge clk) begin
+                if (reset) begin
+                    valid_out_r <= 0;
+                    ready_in_r  <= 1;
+                    rd_ptr_r    <= 1;
+                end else begin
+                    if (push) begin
+                        if (!pop) begin                            
+                            ready_in_r  <= rd_ptr_r;
+                            valid_out_r <= 1;
+                        end
+                    end else if (pop) begin
+                        ready_in_r  <= 1;
+                        valid_out_r <= rd_ptr_r;
+                    end
+                `IGNORE_WARNINGS_BEGIN
+                    rd_ptr_r <= rd_ptr_r ^ (push ^ pop);
+                `IGNORE_WARNINGS_END   
+                end                   
+            end
 
-            assign ready_in  = !q_full;
-            assign valid_out = !q_empty;            
+            always @(posedge clk) begin
+                if (push) begin
+                    shift_reg[1] <= shift_reg[0];
+                    shift_reg[0] <= data_in;
+                end
+            end
 
+            assign ready_in  = ready_in_r;
+            assign valid_out = valid_out_r;
+            assign data_out  = shift_reg[rd_ptr_r];
         end
     end
 
