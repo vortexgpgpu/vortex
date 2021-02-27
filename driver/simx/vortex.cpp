@@ -144,19 +144,18 @@ private:
     void run() {        
         vortex::ArchDef arch("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS);
         vortex::Decoder decoder(arch);
-        vortex::MemoryUnit mu(PAGE_SIZE, arch.getWordSize(), true);        
+        vortex::MemoryUnit mu(PAGE_SIZE, arch.wsize(), true);
         mu.attach(ram_, 0);  
 
-        std::vector<std::shared_ptr<vortex::Core>> cores(NUM_CORES);
-        for (size_t i = 0; i < NUM_CORES; ++i) {
-            cores[i] = std::make_shared<vortex::Core>(arch, decoder, mu);
+        std::vector<std::shared_ptr<vortex::Core>> cores(arch.num_cores());
+        for (int i = 0; i < arch.num_cores(); ++i) {
+            cores[i] = std::make_shared<vortex::Core>(arch, decoder, mu, i);
         }
 
         bool running;
-
         do {
             running = false;
-            for (size_t i = 0; i < NUM_CORES; ++i) {
+            for (int i = 0; i < arch.num_cores(); ++i) {
                 if (!cores[i]->running())
                     continue;
                 running = true;
@@ -236,7 +235,7 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
         *value = IMPLEMENTATION_ID;
         break;
     case VX_CAPS_MAX_CORES:
-        *value = NUM_CORES;        
+        *value = NUM_CORES * NUM_CLUSTERS;        
         break;
     case VX_CAPS_MAX_WARPS:
         *value = NUM_WARPS;

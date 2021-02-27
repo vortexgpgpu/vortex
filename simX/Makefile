@@ -13,7 +13,7 @@ RTL_DIR = ../hw/rtl
 
 PROJECT = simX
 
-SRCS = util.cpp args.cpp mem.cpp core.cpp warp.cpp instr.cpp decode.cpp execute.cpp main.cpp
+SRCS = util.cpp args.cpp mem.cpp warp.cpp core.cpp decode.cpp execute.cpp main.cpp
 
 # Debugigng
 ifdef DEBUG
