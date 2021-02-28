@@ -399,7 +399,8 @@ module VX_cache #(
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes
-    reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle, perf_core_writes_per_cycle;
+    reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle;
+    reg [($clog2(NUM_REQS+1)-1):0] perf_core_writes_per_cycle;
     reg [($clog2(NUM_REQS+1)-1):0] perf_crsp_stall_per_cycle;
 
     assign perf_core_reads_per_cycle  = $countones(core_req_valid & core_req_ready & ~core_req_rw);
@@ -422,13 +423,13 @@ module VX_cache #(
     assign perf_mshr_stall_per_cycle = $countones(perf_mshr_stall_per_bank);
     assign perf_pipe_stall_per_cycle = $countones(perf_pipe_stall_per_bank);
 
-    reg [63:0] perf_core_reads;
-    reg [63:0] perf_core_writes;
-    reg [63:0] perf_read_misses;
-    reg [63:0] perf_write_misses;
-    reg [63:0] perf_mshr_stalls;
-    reg [63:0] perf_pipe_stalls;
-    reg [63:0] perf_crsp_stalls;
+    reg [43:0] perf_core_reads;
+    reg [43:0] perf_core_writes;
+    reg [43:0] perf_read_misses;
+    reg [43:0] perf_write_misses;
+    reg [43:0] perf_mshr_stalls;
+    reg [43:0] perf_pipe_stalls;
+    reg [43:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -440,13 +441,13 @@ module VX_cache #(
             perf_pipe_stalls  <= 0;
             perf_crsp_stalls  <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + 64'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + 64'(perf_core_writes_per_cycle);
-            perf_read_misses  <= perf_read_misses + 64'(perf_read_miss_per_cycle);
-            perf_write_misses <= perf_write_misses+ 64'(perf_write_miss_per_cycle);
-            perf_mshr_stalls  <= perf_mshr_stalls + 64'(perf_mshr_stall_per_cycle);
-            perf_pipe_stalls  <= perf_pipe_stalls + 64'(perf_pipe_stall_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + 64'(perf_crsp_stall_per_cycle);
+            perf_core_reads   <= perf_core_reads  + 44'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes + 44'(perf_core_writes_per_cycle);
+            perf_read_misses  <= perf_read_misses + 44'(perf_read_miss_per_cycle);
+            perf_write_misses <= perf_write_misses+ 44'(perf_write_miss_per_cycle);
+            perf_mshr_stalls  <= perf_mshr_stalls + 44'(perf_mshr_stall_per_cycle);
+            perf_pipe_stalls  <= perf_pipe_stalls + 44'(perf_pipe_stall_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls + 44'(perf_crsp_stall_per_cycle);
         end
     end
 
