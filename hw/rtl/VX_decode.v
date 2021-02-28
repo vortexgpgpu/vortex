@@ -209,7 +209,7 @@ module VX_decode  #(
         `endif
             `INST_L: begin 
                 ex_type = `EX_LSU;
-                op_type = `OP_BITS'(func3);
+                op_type = `OP_BITS'({1'b0, func3});
                 imm     = {{20{u_12[11]}}, u_12};
                 use_rd  = 1;
                 use_rs1 = 1;
@@ -222,7 +222,7 @@ module VX_decode  #(
         `endif
             `INST_S: begin 
                 ex_type = `EX_LSU;
-                op_type = `OP_BITS'(func3);
+                op_type = `OP_BITS'({1'b1, func3});
                 imm     = {{20{func7[6]}}, func7, rd};
                 use_rs1 = 1;
                 use_rs2 = 1;
@@ -291,6 +291,11 @@ module VX_decode  #(
                         // FSGNJ=0, FSGNJN=1, FSGNJX=2
                         op_type = `OP_BITS'(`FPU_MISC);
                         op_mod  = {1'b0, func3[1:0]};
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                        rd_fp   = 1;
+                        rs1_fp  = 1;
+                        rs2_fp  = 1;
                     end
                     7'h14: begin
                         // FMIN=3, FMAX=4
@@ -358,17 +363,20 @@ module VX_decode  #(
         endcase
     end
 
+    // disable write to integer register r0
+    wire use_rd_qual = use_rd && (rd_fp || (rd != 0));
+
     // EX_ALU needs rs1=0 for LUI operation
     wire [4:0] rs1_qual = (opcode == `INST_LUI) ? 5'h0 : rs1;
 
-    assign decode_if.valid  = ifetch_rsp_if.valid;
-    assign decode_if.wid    = ifetch_rsp_if.wid;
-    assign decode_if.tmask  = ifetch_rsp_if.tmask;
-    assign decode_if.PC     = ifetch_rsp_if.PC;
-    assign decode_if.ex_type= ex_type;
-    assign decode_if.op_type= op_type;
-    assign decode_if.op_mod = op_mod;
-    assign decode_if.wb     = use_rd;
+    assign decode_if.valid   = ifetch_rsp_if.valid;
+    assign decode_if.wid     = ifetch_rsp_if.wid;
+    assign decode_if.tmask   = ifetch_rsp_if.tmask;
+    assign decode_if.PC      = ifetch_rsp_if.PC;
+    assign decode_if.ex_type = ex_type;
+    assign decode_if.op_type = op_type;
+    assign decode_if.op_mod  = op_mod;
+    assign decode_if.wb      = use_rd_qual;
 
     `ifdef EXT_F_ENABLE
         assign decode_if.rd  = {rd_fp,  rd};
