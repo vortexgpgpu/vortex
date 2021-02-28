@@ -213,7 +213,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     uint64_t dcache_miss_w_per_core;
     ret |= vx_csr_get_l(device, core_id, CSR_MPM_DCACHE_MISS_W, CSR_MPM_DCACHE_MISS_W_H, &dcache_miss_w_per_core);    
     int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_miss_w_per_core) / double(dcache_writes_per_core))) * 100);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache wrire misses=%ld (hit ratio=%d%%)\n", core_id, dcache_miss_w_per_core, dcache_write_hit_ratio);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache write misses=%ld (hit ratio=%d%%)\n", core_id, dcache_miss_w_per_core, dcache_write_hit_ratio);
     dcache_write_misses += dcache_miss_w_per_core;
     // bank_stalls
     uint64_t dcache_bank_st_per_core;
