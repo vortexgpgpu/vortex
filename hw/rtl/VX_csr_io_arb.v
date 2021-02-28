@@ -45,8 +45,7 @@ module VX_csr_io_arb (
     // responses
     wire csr_io_rsp_ready;
     VX_skid_buffer #(
-        .DATAW    (32),
-        .BUFFERED (1)
+        .DATAW (32)
     ) csr_io_out_buffer (
         .clk       (clk),
         .reset     (reset),

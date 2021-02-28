@@ -14,8 +14,8 @@ module VX_ibuffer #(
     VX_decode_if  ibuf_deq_if
 );
     localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + `NUM_REGS;
-    localparam SIZE    = `IBUF_SIZE;
-    localparam ADDRW   = $clog2(SIZE+1);
+    localparam SIZE    = 3;
+    localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
     reg [`NUM_WARPS-1:0][ADDRW-1:0] used_r;
@@ -39,22 +39,17 @@ module VX_ibuffer #(
         wire push = writing && !is_slot0;
         wire pop = reading && !alm_empty_r[i];
 
-        VX_fifo_queue #(
-            .DATAW    (DATAW),
-            .SIZE     (SIZE),
-            .BUFFERED (1)
+        VX_skid_buffer #(
+            .DATAW (DATAW)
         ) queue (
             .clk      (clk),
             .reset    (reset),
-            .push     (push),
-            .pop      (pop),
-            .data_in  (q_data_in),
-            .data_out (q_data_prev[i]),
-            `UNUSED_PIN (empty),
-            `UNUSED_PIN (full),
-            `UNUSED_PIN (alm_empty),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
+            .valid_in (push),
+            .data_in  (q_data_in),            
+            .ready_out(pop),
+            .data_out (q_data_prev[i]),            
+            `UNUSED_PIN (ready_in),
+            `UNUSED_PIN (valid_out)
         );
 
         always @(posedge clk) begin
@@ -69,7 +64,7 @@ module VX_ibuffer #(
                         empty_r[i] <= 0;
                         if (used_r[i] == 1)
                             alm_empty_r[i] <= 0;
-                        if (used_r[i] == ADDRW'(SIZE))
+                        if (used_r[i] == ADDRW'(SIZE-1))
                             full_r[i] <= 1;
                     end
                 end else if (reading) begin
