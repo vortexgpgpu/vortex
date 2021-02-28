@@ -40,8 +40,7 @@ module VX_stream_demux #(
         for (genvar i = 0; i < NUM_REQS; i++) begin  
             VX_skid_buffer #(
                 .DATAW    (DATAW),
-                .PASSTHRU (!BUFFERED),
-                .BUFFERED (1)
+                .PASSTHRU (!BUFFERED)
             ) out_buffer (
                 .clk       (clk),
                 .reset     (reset),

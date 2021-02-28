@@ -205,8 +205,7 @@ module VX_shared_mem #(
     wire crsq_in_valid = ~creq_empty && ~core_rsp_rw;
 
     VX_skid_buffer #(
-        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH), 
-        .BUFFERED (1)
+        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),

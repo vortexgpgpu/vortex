@@ -8,7 +8,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 4
+`define NUM_CORES 1
 `endif
 
 `ifndef NUM_WARPS
@@ -234,11 +234,6 @@
 `define CSR_NC          12'hFC2
 
 // Pipeline Queues ////////////////////////////////////////////////////////////
-
-// Size of instruction queue
-`ifndef IBUF_SIZE
-`define IBUF_SIZE 4
-`endif
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
