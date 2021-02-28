@@ -303,6 +303,7 @@ module VX_decode  #(
                         op_mod  = func3[0] ? 4 : 3;
                         use_rs1 = 1;
                         use_rs2 = 1;
+                        rd_fp   = 1;
                         rs1_fp  = 1;
                         rs2_fp  = 1;
                     end
