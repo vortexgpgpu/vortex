@@ -18,20 +18,15 @@ module VX_decode  #(
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
+    reg [`EX_BITS-1:0]  ex_type;    
+    reg [`OP_BITS-1:0]  op_type; 
+    reg [`MOD_BITS-1:0] op_mod;
+    reg [31:0]          imm;
+    reg use_rd, use_rs1, use_rs2, use_rs3, use_PC, use_imm;
+    reg rd_fp, rs1_fp, rs2_fp;
+    reg is_join, is_wstall;
+
     wire [31:0] instr = ifetch_rsp_if.instr;
-
-    reg [`ALU_BITS-1:0] alu_op;
-    reg [`BR_BITS-1:0]  br_op;   
-    reg [`MUL_BITS-1:0] mul_op; 
-    reg [`LSU_BITS-1:0] lsu_op;
-    reg [`CSR_BITS-1:0] csr_op;
-    reg [`FPU_BITS-1:0] fpu_op;
-    reg [`GPU_BITS-1:0] gpu_op;
-
-    reg [19:0] upper_imm;
-    reg [31:0] jalx_offset;
-    reg [31:0] src2_imm;
-
     wire [6:0] opcode = instr[6:0];  
     wire [2:0] func3  = instr[14:12];
     wire [6:0] func7  = instr[31:25];
@@ -42,359 +37,369 @@ module VX_decode  #(
     wire [4:0] rs2 = instr[24:20];     
     wire [4:0] rs3 = instr[31:27];
 
-    // opcode types
-    wire is_rtype = (opcode == `INST_R);
-    wire is_ltype = (opcode == `INST_L);
-    wire is_itype = (opcode == `INST_I); 
-    wire is_stype = (opcode == `INST_S);
-    wire is_btype = (opcode == `INST_B);    
-    wire is_jal   = (opcode == `INST_JAL);
-    wire is_jalr  = (opcode == `INST_JALR);
-    wire is_lui   = (opcode == `INST_LUI);
-    wire is_auipc = (opcode == `INST_AUIPC);    
-    wire is_jals  = (opcode == `INST_SYS) && (func3 == 0);
-    wire is_csr   = (opcode == `INST_SYS) && (func3 != 0);
-    wire is_gpu   = (opcode == `INST_GPU);  
-        
-    // upper immediate
-
+    wire [19:0] upper_imm = {func7, rs2, rs1, func3};
+    wire [11:0] alu_imm   = ((func3 == 3'h1) || (func3 == 3'h5)) ? {{7{1'b0}}, rs2} : u_12;
+    wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
+    wire [11:0] jalr_imm  = {func7, rs2};
+    
     always @(*) begin
-        case (opcode)
-            `INST_LUI:   upper_imm = {func7, rs2, rs1, func3};
-            `INST_AUIPC: upper_imm = {func7, rs2, rs1, func3};
-            default:     upper_imm = 20'h0;
-        endcase
-    end  
 
-    // I-type immediate
+        ex_type   = `EX_NOP;
+        op_type   = 'x;
+        op_mod    = 'x;
+        imm       = 'x;
+        use_rd    = 0;
+        use_rs1   = 0;
+        use_rs2   = 0;
+        use_rs3   = 0;
+        use_PC    = 0;
+        use_imm   = 0;
+        rd_fp     = 0;  
+        rs1_fp    = 0;
+        rs2_fp    = 0;
+        is_join   = 0;
+        is_wstall = 0;    
 
-    wire alu_shift_i          = (func3 == 3'h1) || (func3 == 3'h5);
-    wire [11:0] alu_shift_imm = {{7{1'b0}}, rs2};
-    wire [11:0] alu_imm       = alu_shift_i ? alu_shift_imm : u_12;
-
-    always @(*) begin
-        case (opcode)
-            `INST_I:  src2_imm = {{20{alu_imm[11]}}, alu_imm};
-            `INST_S,
-            `INST_FS: src2_imm = {{20{func7[6]}}, func7, rd};
-            `INST_L, 
-            `INST_FL: src2_imm = {{20{u_12[11]}}, u_12};
-            `INST_B:  src2_imm = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};
-            default:  src2_imm = 'x;
-        endcase
-    end     
-
-    // JAL
-
-    wire [20:0] jal_imm     = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
-    wire [31:0] jal_offset  = {{11{jal_imm[20]}}, jal_imm};
-    wire [11:0] jalr_imm    = {func7, rs2};
-    wire [31:0] jalr_offset = {{20{jalr_imm[11]}}, jalr_imm};
-
-    always @(*) begin        
-        case (opcode)
-            `INST_JAL:  jalx_offset = jal_offset;
-            `INST_JALR: jalx_offset = jalr_offset;
-            default:    jalx_offset = 32'd4;
-        endcase
-    end 
-
-    // BRANCH
-
-    wire is_br = (is_btype || is_jal || is_jalr || is_jals);
-
-    always @(*) begin
-        br_op = `BR_OTHER;
-        case (opcode)
-            `INST_B: begin
+        case (opcode)            
+            `INST_I: begin
+                ex_type = `EX_ALU;
                 case (func3)
-                    3'h0: br_op = `BR_EQ;
-                    3'h1: br_op = `BR_NE;
-                    3'h4: br_op = `BR_LT;
-                    3'h5: br_op = `BR_GE;
-                    3'h6: br_op = `BR_LTU;
-                    3'h7: br_op = `BR_GEU;
-                    default:; 
+                    3'h0: op_type = `OP_BITS'(`ALU_ADD);
+                    3'h1: op_type = `OP_BITS'(`ALU_SLL);
+                    3'h2: op_type = `OP_BITS'(`ALU_SLT);
+                    3'h3: op_type = `OP_BITS'(`ALU_SLTU);
+                    3'h4: op_type = `OP_BITS'(`ALU_XOR);
+                    3'h5: op_type = (func7[5]) ? `OP_BITS'(`ALU_SRA) : `OP_BITS'(`ALU_SRL);
+                    3'h6: op_type = `OP_BITS'(`ALU_OR);
+                    3'h7: op_type = `OP_BITS'(`ALU_AND);
+                    default:;
+                endcase
+                op_mod  = 0;
+                imm     = {{20{alu_imm[11]}}, alu_imm};
+                use_rd  = 1;
+                use_rs1 = 1;
+                use_imm = 1;
+            end
+            `INST_R: begin 
+                ex_type = `EX_ALU;
+            `ifdef EXT_F_ENABLE
+                if (func7[0]) begin
+                    case (func3)
+                        3'h0: op_type = `OP_BITS'(`MUL_MUL);
+                        3'h1: op_type = `OP_BITS'(`MUL_MULH);
+                        3'h2: op_type = `OP_BITS'(`MUL_MULHSU);
+                        3'h3: op_type = `OP_BITS'(`MUL_MULHU);
+                        3'h4: op_type = `OP_BITS'(`MUL_DIV);
+                        3'h5: op_type = `OP_BITS'(`MUL_DIVU);
+                        3'h6: op_type = `OP_BITS'(`MUL_REM);
+                        3'h7: op_type = `OP_BITS'(`MUL_REMU);
+                        default:; 
+                    endcase
+                    op_mod = 2;
+                end else 
+            `endif
+                begin
+                    case (func3)
+                        3'h0: op_type = (func7[5]) ? `OP_BITS'(`ALU_SUB) : `OP_BITS'(`ALU_ADD);
+                        3'h1: op_type = `OP_BITS'(`ALU_SLL);
+                        3'h2: op_type = `OP_BITS'(`ALU_SLT);
+                        3'h3: op_type = `OP_BITS'(`ALU_SLTU);
+                        3'h4: op_type = `OP_BITS'(`ALU_XOR);
+                        3'h5: op_type = (func7[5]) ? `OP_BITS'(`ALU_SRA) : `OP_BITS'(`ALU_SRL);
+                        3'h6: op_type = `OP_BITS'(`ALU_OR);
+                        3'h7: op_type = `OP_BITS'(`ALU_AND);
+                        default:;
+                    endcase
+                    op_mod  = 0; 
+                end                
+                use_rd  = 1;
+                use_rs1 = 1;
+                use_rs2 = 1;
+            end
+            `INST_LUI: begin 
+                ex_type = `EX_ALU;
+                op_type = `OP_BITS'(`ALU_LUI);
+                op_mod  = 0;                
+                imm     = {upper_imm, 12'(0)};
+                use_rd  = 1;
+                use_rs1 = 1; 
+                use_imm = 1;
+            end
+            `INST_AUIPC: begin 
+                ex_type = `EX_ALU;
+                op_type = `OP_BITS'(`ALU_AUIPC);
+                op_mod  = 0;
+                imm     = {upper_imm, 12'(0)};
+                use_rd  = 1;
+                use_PC  = 1;
+                use_imm = 1;
+            end
+            `INST_JAL: begin 
+                ex_type = `EX_ALU;
+                op_type = `OP_BITS'(`BR_JAL);
+                op_mod  = 1;
+                imm     = {{11{jal_imm[20]}}, jal_imm};
+                use_rd  = 1;
+                use_PC  = 1;
+                use_imm = 1;
+                is_wstall = 1;
+            end
+            `INST_JALR: begin 
+                ex_type = `EX_ALU;
+                op_type = `OP_BITS'(`BR_JALR);
+                op_mod  = 1;
+                imm     = {{20{jalr_imm[11]}}, jalr_imm};
+                use_rd  = 1;
+                use_rs1 = 1;
+                use_imm = 1;
+                is_wstall = 1;
+            end
+            `INST_B: begin 
+                ex_type = `EX_ALU;
+                case (func3)
+                    3'h0: op_type = `OP_BITS'(`BR_EQ);
+                    3'h1: op_type = `OP_BITS'(`BR_NE);
+                    3'h4: op_type = `OP_BITS'(`BR_LT);
+                    3'h5: op_type = `OP_BITS'(`BR_GE);
+                    3'h6: op_type = `OP_BITS'(`BR_LTU);
+                    3'h7: op_type = `OP_BITS'(`BR_GEU);
+                    default:;
+                endcase
+                op_mod  = 1;
+                imm     = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};
+                use_rs1 = 1;
+                use_rs2 = 1;
+                use_PC  = 1;
+                use_imm = 1;
+                is_wstall = 1;
+            end
+            `INST_SYS : begin 
+                if (func3 == 0) begin                    
+                    ex_type = `EX_ALU;
+                    case (u_12)
+                        12'h000: op_type = `OP_BITS'(`BR_ECALL);
+                        12'h001: op_type = `OP_BITS'(`BR_EBREAK);             
+                        12'h302: op_type = `OP_BITS'(`BR_MRET);
+                        12'h102: op_type = `OP_BITS'(`BR_SRET);
+                        12'h7B2: op_type = `OP_BITS'(`BR_DRET);
+                        default:;
+                    endcase
+                    op_mod  = 1;
+                    imm     = 32'd4;
+                    use_rd  = 1;
+                    use_PC  = 1;
+                    use_imm = 1;
+                end else begin
+                    ex_type = `EX_CSR;
+                    case (func3[1:0])
+                        2'h0: op_type = `OP_BITS'(`CSR_RW);
+                        2'h1: op_type = `OP_BITS'(`CSR_RW);
+                        2'h2: op_type = `OP_BITS'(`CSR_RS);
+                        2'h3: op_type = `OP_BITS'(`CSR_RC);
+                        default:;
+                    endcase
+                    imm     = 32'(u_12);
+                    use_rd  = 1;
+                    use_rs1 = !func3[2];
+                    use_imm = func3[2];
+                end
+            end
+        `ifdef EXT_F_ENABLE
+            `INST_FL, 
+        `endif
+            `INST_L: begin 
+                ex_type = `EX_LSU;
+                op_type = `OP_BITS'(func3);
+                imm     = {{20{u_12[11]}}, u_12};
+                use_rd  = 1;
+                use_rs1 = 1;
+            `ifdef EXT_F_ENABLE
+                rd_fp   = (opcode == `INST_FL);
+            `endif
+            end
+        `ifdef EXT_F_ENABLE
+            `INST_FS, 
+        `endif
+            `INST_S: begin 
+                ex_type = `EX_LSU;
+                op_type = `OP_BITS'(func3);
+                imm     = {{20{func7[6]}}, func7, rd};
+                use_rs1 = 1;
+                use_rs2 = 1;
+            `ifdef EXT_F_ENABLE
+                rs2_fp = (opcode == `INST_FS);
+            `endif
+            end
+        `ifdef EXT_F_ENABLE
+            `INST_FMADD,
+            `INST_FMSUB,
+            `INST_FNMSUB,
+            `INST_FNMADD: begin 
+                ex_type = `EX_FPU;
+                op_type = `OP_BITS'(opcode[3:0]);
+                op_mod  = func3;
+                use_rd  = 1;
+                use_rs1 = 1;
+                use_rs2 = 1;
+                use_rs3 = 1;
+                rd_fp   = 1;
+                rs1_fp  = 1;
+                rs2_fp  = 1;                
+            end
+            `INST_FCI: begin 
+                ex_type = `EX_FPU;
+                op_mod = func3;
+                use_rd = 1;
+                case (func7)
+                    7'h00, // FADD
+                    7'h04, // FSUB
+                    7'h08, // FMUL
+                    7'h0C: // FDIV                        
+                        begin
+                        op_type = `OP_BITS'(func7[3:0]);
+                        use_rd  = 1;
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                        rd_fp   = 1;
+                        rs1_fp  = 1;
+                        rs2_fp  = 1;     
+                    end
+                    7'h2C: begin
+                        op_type = `OP_BITS'(`FPU_SQRT);
+                        use_rs1 = 1;
+                        rd_fp   = 1;
+                        rs1_fp  = 1;    
+                    end
+                    7'h50: begin
+                        op_type = `OP_BITS'(`FPU_CMP);
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                        rs1_fp  = 1;
+                        rs2_fp  = 1;     
+                    end
+                    7'h60: begin
+                        op_type = (instr[20]) ? `OP_BITS'(`FPU_CVTWUS) : `OP_BITS'(`FPU_CVTWS);
+                        use_rs1 = 1; 
+                        rs1_fp  = 1; 
+                    end
+                    7'h68: begin
+                        op_type = (instr[20]) ? `OP_BITS'(`FPU_CVTSWU) : `OP_BITS'(`FPU_CVTSW);
+                        use_rs1 = 1;
+                        rd_fp   = 1;
+                    end
+                    7'h10: begin
+                        // FSGNJ=0, FSGNJN=1, FSGNJX=2
+                        op_type = `OP_BITS'(`FPU_MISC);
+                        op_mod  = {1'b0, func3[1:0]};
+                    end
+                    7'h14: begin
+                        // FMIN=3, FMAX=4
+                        op_type = `OP_BITS'(`FPU_MISC);
+                        op_mod  = func3[0] ? 4 : 3;
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                        rs1_fp  = 1;
+                        rs2_fp  = 1;
+                    end
+                    7'h70: begin 
+                        if (func3[0]) begin
+                            // FCLASS
+                            op_type = `OP_BITS'(`FPU_CLASS);                                     
+                        end else begin
+                            // FMV.X.W=5
+                            op_type = `OP_BITS'(`FPU_MISC);
+                            op_mod  = 5;
+                        end
+                        use_rs1 = 1;                   
+                        rs1_fp  = 1;                                             
+                    end 
+                    7'h78: begin 
+                        // FMV.W.X=6
+                        op_type = `OP_BITS'(`FPU_MISC); 
+                        op_mod = 6;                         
+                        rd_fp  = 1;
+                    end
+                default:;
                 endcase
             end
-            `INST_JAL:  br_op = `BR_JAL;
-            `INST_JALR: br_op = `BR_JALR;
-            `INST_SYS: begin
-                if (is_jals && u_12 == 12'h000) br_op = `BR_ECALL;
-                if (is_jals && u_12 == 12'h001) br_op = `BR_EBREAK;             
-                if (is_jals && u_12 == 12'h302) br_op = `BR_MRET;
-                if (is_jals && u_12 == 12'h102) br_op = `BR_SRET;
-                if (is_jals && u_12 == 12'h7B2) br_op = `BR_DRET;
-            end
-            default:;
-        endcase
-    end
-    
-    // ALU    
-
-    always @(*) begin
-        alu_op = `ALU_OTHER;
-        if (is_lui) begin
-            alu_op = `ALU_LUI;
-        end else if (is_auipc) begin
-            alu_op = `ALU_AUIPC;
-        end else if (is_itype || is_rtype) begin
-            case (func3)
-                3'h0: alu_op = (is_rtype && func7 == 7'h20) ? `ALU_SUB : `ALU_ADD;
-                3'h1: alu_op = `ALU_SLL;
-                3'h2: alu_op = `ALU_SLT;
-                3'h3: alu_op = `ALU_SLTU;
-                3'h4: alu_op = `ALU_XOR;
-                3'h5: alu_op = (func7 == 7'h0) ? `ALU_SRL : `ALU_SRA;
-                3'h6: alu_op = `ALU_OR;
-                3'h7: alu_op = `ALU_AND;
-                default:;
-            endcase
-        end
-    end
-
-    // CSR  
-
-    wire is_csr_imm = is_csr && (func3[2] == 1);
-
-    always @(*) begin
-        csr_op = `CSR_OTHER;
-        case (func3[1:0])
-            2'h1: csr_op = `CSR_RW;
-            2'h2: csr_op = `CSR_RS;
-            2'h3: csr_op = `CSR_RC;
-            default:;
-        endcase
-    end
-
-    // MUL   
-`ifdef EXT_M_ENABLE
-    wire is_mul = is_rtype && (func7 == 7'h1);
-    always @(*) begin
-        mul_op = `MUL_MUL;
-        case (func3)
-            3'h0: mul_op = `MUL_MUL;
-            3'h1: mul_op = `MUL_MULH;
-            3'h2: mul_op = `MUL_MULHSU;
-            3'h3: mul_op = `MUL_MULHU;
-            3'h4: mul_op = `MUL_DIV;
-            3'h5: mul_op = `MUL_DIVU;
-            3'h6: mul_op = `MUL_REM;
-            3'h7: mul_op = `MUL_REMU;
-            default:; 
-        endcase
-    end
-`else
-    wire is_mul = 0;
-    always @(*) begin
-        mul_op = `MUL_MUL;
-    end
-`endif
-
-    // FPU
-`ifdef EXT_F_ENABLE
-    wire is_fl     = (opcode == `INST_FL) && ((func3 == 2));
-    wire is_fs     = (opcode == `INST_FS) && ((func3 == 2));
-    wire is_fci    = (opcode == `INST_FCI);
-    wire is_fmadd  = (opcode == `INST_FMADD);
-    wire is_fmsub  = (opcode == `INST_FMSUB);
-    wire is_fnmsub = (opcode == `INST_FNMSUB);
-    wire is_fnmadd = (opcode == `INST_FNMADD); 
-
-    wire is_fcmp   = is_fci && (func7 == 7'h50); // compare
-    wire is_fcvti  = is_fci && (func7 == 7'h60); // convert to int
-    wire is_fcvtf  = is_fci && (func7 == 7'h68); // convert to float
-    wire is_fmvw_clss = is_fci && (func7 == 7'h70); // move to int + class
-    wire is_fmvx   = is_fci && (func7 == 7'h78); // move to float
-    wire is_fr4    = is_fmadd || is_fmsub || is_fnmsub || is_fnmadd;
-    wire is_fpu_no_mem = is_fci || is_fr4;
-    wire is_fpu    = is_fl || is_fs || is_fci || is_fr4;
-    
-    reg [`MOD_BITS-1:0] frm;
-    reg is_fsqrt;
-
-    always @(*) begin    
-        fpu_op = `FPU_MISC;    
-        frm = func3;
-        is_fsqrt = 0;
-        if (is_fr4) begin
-            case ({is_fmadd, is_fmsub, is_fnmsub, is_fnmadd})
-                4'b1000: fpu_op = `FPU_MADD;
-                4'b0100: fpu_op = `FPU_MSUB;
-                4'b0010: fpu_op = `FPU_NMSUB;
-                4'b0001: fpu_op = `FPU_NMADD;
-                default:;
-            endcase
-        end else begin
-            case (func7)
-                7'h00: fpu_op = `FPU_ADD;
-                7'h04: fpu_op = `FPU_SUB;
-                7'h08: fpu_op = `FPU_MUL;
-                7'h0C: fpu_op = `FPU_DIV;
-                7'h10: begin 
-                    fpu_op = `FPU_MISC;
-                       frm = func3[1] ? 3'b010 : {2'b0, func3[0]};
-                end
-                7'h14: begin
-                    fpu_op = `FPU_MISC;
-                       frm = (func3 == 3'h0) ? 3'b011 : 3'b100;
-                end
-                7'h2C: begin
-                    fpu_op = `FPU_SQRT;
-                    is_fsqrt = 1;
-                end
-                7'h50: fpu_op = `FPU_CMP;   // wb to intReg
-                7'h60: fpu_op = (instr[20]) ? `FPU_CVTWUS : `FPU_CVTWS; // doesn't need rs2, and read rs1 from fpReg, WB to intReg
-                7'h68: fpu_op = (instr[20]) ? `FPU_CVTSWU : `FPU_CVTSW; // doesn't need rs2, and read rs1 from intReg
-                7'h70: begin 
-                    fpu_op = (func3 == 3'h0) ? `FPU_MISC : `FPU_CLASS;
-                       frm = (func3 == 3'h0) ?         5 : func3; 
-                end 
-                7'h78: begin fpu_op = `FPU_MISC; frm = 6; end             
-                default:;
-            endcase
-        end
-    end
-`else
-    wire is_fl        = 0;
-    wire is_fs        = 0;
-    wire is_fci       = 0;
-    wire is_fcvti     = 0;
-    wire is_fcvtf     = 0;
-    wire is_fmvw_clss = 0;
-    wire is_fmvx      = 0;
-    wire is_fr4       = 0;
-    wire is_fpu       = 0; 
-    wire is_fpu_no_mem= 0;
-    wire [2:0] frm    = 0;  
-    wire is_fsqrt     = 0;
-
-    always @(*) begin
-        fpu_op = `FPU_MISC;
-    end
-`endif
-
-    // LSU
-
-    wire is_lsu = (is_ltype || is_stype || is_fl || is_fs);
-    always @(*) begin
-        lsu_op = (is_fl || is_fs) ? `LSU_SW : func3;
-    end
-
-    // GPU
-
-    reg is_gpu_bar, is_qpu_spawn;
-
-    always @(*) begin
-        gpu_op = `GPU_OTHER;
-        is_gpu_bar   = 0;
-        is_qpu_spawn = 0;
-        case (func3)
-            3'h0: gpu_op = `GPU_TMC;
-            3'h1: begin
-                gpu_op = `GPU_WSPAWN;
-                is_qpu_spawn = 1;
-            end
-            3'h2: gpu_op = `GPU_SPLIT;
-            3'h3: gpu_op = `GPU_JOIN;
-            3'h4: begin 
-                gpu_op = `GPU_BAR; 
-                is_gpu_bar = 1; 
+        `endif
+            `INST_GPU: begin 
+                ex_type = `EX_GPU;
+                case (func3)
+                    3'h0: begin
+                        op_type = `OP_BITS'(`GPU_TMC);
+                        use_rs1 = 1;
+                        is_wstall = 1;
+                    end
+                    3'h1: begin
+                        op_type = `OP_BITS'(`GPU_WSPAWN);
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                    end
+                    3'h2: begin
+                        op_type = `OP_BITS'(`GPU_SPLIT);
+                        use_rs1 = 1;
+                        is_wstall = 1;
+                    end
+                    3'h3: begin 
+                        op_type = `OP_BITS'(`GPU_JOIN);
+                        is_join = 1;
+                    end
+                    3'h4: begin 
+                        op_type = `OP_BITS'(`GPU_BAR); 
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                        is_wstall = 1;
+                    end
+                    default:;
+                endcase
             end
             default:;
         endcase
     end
 
-    ///////////////////////////////////////////////////////////////////////////
+    // EX_ALU needs rs1=0 for LUI operation
+    wire [4:0] rs1_qual = (opcode == `INST_LUI) ? 5'h0 : rs1;
 
-    wire use_rd = (is_fl || is_fci || is_fr4) 
-               || ((is_itype || is_rtype || is_lui || is_auipc || is_csr || is_jal || is_jalr || is_jals || is_ltype) && (rd != 0));
-
-    wire use_rs1 = is_fpu 
-                || is_gpu
-                || (is_jalr || is_btype || is_ltype || is_stype || is_itype || is_rtype || !is_csr_imm || is_gpu);
-
-    wire use_rs2 = (is_fpu && ~(is_fl || is_fsqrt || is_fcvti || is_fcvtf || is_fmvw_clss || is_fmvx))
-                || (is_gpu && (is_gpu_bar || is_qpu_spawn))
-                || (is_btype || is_stype || is_rtype);
-
-    wire use_rs3 = is_fr4;
-
-    wire [4:0] rs1_qual = is_lui ? 5'h0 : rs1;
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    assign decode_if.valid = ifetch_rsp_if.valid;
-
-    assign decode_if.wid   = ifetch_rsp_if.wid;
-    assign decode_if.tmask = ifetch_rsp_if.tmask;
-    assign decode_if.PC    = ifetch_rsp_if.PC;
-
-    assign decode_if.ex_type = is_gpu ? `EX_GPU :
-                                is_csr ? `EX_CSR :
-                                    is_fpu_no_mem ? `EX_FPU :                                              
-                                        is_lsu ? `EX_LSU :   
-                                            (is_br || is_rtype || is_itype || is_lui || is_auipc) ? `EX_ALU :
-                                                `EX_NOP;
-
-    assign decode_if.op_type = is_gpu ? `OP_BITS'(gpu_op) :                                
-                                is_csr ? `OP_BITS'(csr_op) :
-                                    is_mul ? `OP_BITS'(mul_op) :
-                                        is_fpu_no_mem ? `OP_BITS'(fpu_op) :                                                                                                                            
-                                            is_lsu ? `OP_BITS'(lsu_op) :
-                                                is_br ? `OP_BITS'(br_op) :
-                                                    `OP_BITS'(alu_op);
-
-    assign decode_if.wb = use_rd && (decode_if.ex_type != `EX_NOP);
+    assign decode_if.valid  = ifetch_rsp_if.valid;
+    assign decode_if.wid    = ifetch_rsp_if.wid;
+    assign decode_if.tmask  = ifetch_rsp_if.tmask;
+    assign decode_if.PC     = ifetch_rsp_if.PC;
+    assign decode_if.ex_type= ex_type;
+    assign decode_if.op_type= op_type;
+    assign decode_if.op_mod = op_mod;
+    assign decode_if.wb     = use_rd;
 
     `ifdef EXT_F_ENABLE
-        wire rd_is_fp  = is_fpu && ~(is_fcmp || is_fcvti || is_fmvw_clss);
-        wire rs1_is_fp = is_fr4 || (is_fci && ~(is_fcvtf || is_fmvx));
-        wire rs2_is_fp = is_fs || is_fr4 || is_fci;
-
-        assign decode_if.rd  = {rd_is_fp,  rd};
-        assign decode_if.rs1 = {rs1_is_fp, rs1_qual};
-        assign decode_if.rs2 = {rs2_is_fp, rs2};
-        assign decode_if.rs3 = {1'b1,      rs3};
+        assign decode_if.rd  = {rd_fp,  rd};
+        assign decode_if.rs1 = {rs1_fp, rs1_qual};
+        assign decode_if.rs2 = {rs2_fp, rs2};
+        assign decode_if.rs3 = {1'b1,   rs3};
     `else
         assign decode_if.rd  = rd;
-        assign decode_if.rs1 = rs1_qual;
+        assign decode_if.rs1 = rs1;
         assign decode_if.rs2 = rs2;
         assign decode_if.rs3 = rs3;
     `endif
+
+    assign decode_if.imm = imm;
+    assign decode_if.rs1_is_PC  = use_PC;
+    assign decode_if.rs2_is_imm = use_imm;
 
     assign decode_if.used_regs = (`NUM_REGS'(use_rd)  << decode_if.rd) 
                                | (`NUM_REGS'(use_rs1) << decode_if.rs1) 
                                | (`NUM_REGS'(use_rs2) << decode_if.rs2)
                                | (`NUM_REGS'(use_rs3) << decode_if.rs3);
 
-    assign decode_if.imm = (is_lui || is_auipc) ? {upper_imm, 12'(0)} : 
-                                (is_jal || is_jalr || is_jals) ? jalx_offset :
-                                    is_csr ? 32'(u_12) :
-                                        src2_imm;
-
-    assign decode_if.rs1_is_PC  = is_auipc || is_btype || is_jal || is_jals;
-    assign decode_if.rs2_is_imm = is_itype || is_lui || is_auipc || is_csr_imm || is_br;
-
-    wire [`MOD_BITS-1:0] alu_mod = {1'b0, is_mul, is_br};
-    assign decode_if.op_mod = is_fpu_no_mem ? frm : alu_mod;
-
     ///////////////////////////////////////////////////////////////////////////
 
-    wire decode_fire_unqual = ifetch_rsp_if.valid && decode_if.ready;
+    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;
 
-    assign join_if.valid = decode_fire_unqual && is_gpu && (gpu_op == `GPU_JOIN);
+    assign join_if.valid = ifetch_rsp_fire && is_join;
     assign join_if.wid = ifetch_rsp_if.wid;
 
-    assign wstall_if.valid = decode_fire_unqual && (is_btype
-                                                 || is_jal 
-                                                 || is_jalr 
-                                                 || (is_gpu && (gpu_op == `GPU_TMC 
-                                                             || gpu_op == `GPU_SPLIT 
-                                                             || gpu_op == `GPU_BAR)));
+    assign wstall_if.valid = ifetch_rsp_fire && is_wstall;
     assign wstall_if.wid = ifetch_rsp_if.wid;
-
-    ///////////////////////////////////////////////////////////////////////////
 
     assign ifetch_rsp_if.ready = decode_if.ready;
 
@@ -405,7 +410,7 @@ module VX_decode  #(
             print_ex_type(decode_if.ex_type);
             $write(", op=");
             print_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            $write(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm);                        
+            $write(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_regs=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm, decode_if.used_regs);                        
         end
     end
 `endif
