@@ -132,12 +132,22 @@
 `define IS_DIV_OP(x)    x[2]
 `define IS_MUL_MOD(x)   x[1]
 
-`define LSU_SB          3'h0 
-`define LSU_SH          3'h1
-`define LSU_SW          3'h2
-`define LSU_UB          3'h4
-`define LSU_UH          3'h5
-`define LSU_BITS        3
+`define FMT_B           3'b000
+`define FMT_H           3'b001
+`define FMT_W           3'b010
+`define FMT_BU          3'b100
+`define FMT_HU          3'b101
+
+`define LSU_LB          4'b0000 
+`define LSU_LH          4'b0001
+`define LSU_LW          4'b0010
+`define LSU_LBU         4'b0100
+`define LSU_LHU         4'b0101
+`define LSU_SB          4'b1000 
+`define LSU_SH          4'b1001
+`define LSU_SW          4'b1010
+`define LSU_BITS        4
+`define LSU_FMT(x)      x[2:0]
 `define LSU_WSIZE(x)    x[1:0]
 `define LSU_OP(x)       x[`LSU_BITS-1:0]
 
