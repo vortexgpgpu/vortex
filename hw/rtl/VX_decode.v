@@ -391,9 +391,9 @@ module VX_decode  #(
         assign decode_if.rs3 = rs3;
     `endif
 
-    assign decode_if.imm = imm;
-    assign decode_if.rs1_is_PC  = use_PC;
-    assign decode_if.rs2_is_imm = use_imm;
+    assign decode_if.imm     = imm;
+    assign decode_if.use_PC  = use_PC;
+    assign decode_if.use_imm = use_imm;
 
     assign decode_if.used_regs = (`NUM_REGS'(use_rd)  << decode_if.rd) 
                                | (`NUM_REGS'(use_rs1) << decode_if.rs1) 
@@ -419,7 +419,7 @@ module VX_decode  #(
             print_ex_type(decode_if.ex_type);
             $write(", op=");
             print_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            $write(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_regs=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.rs1_is_PC, decode_if.rs2_is_imm, decode_if.used_regs);                        
+            $write(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_regs=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm, decode_if.used_regs);                        
         end
     end
 `endif

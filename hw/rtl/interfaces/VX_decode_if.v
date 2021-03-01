@@ -18,8 +18,8 @@ interface VX_decode_if ();
     wire [`NR_BITS-1:0]     rs2;
     wire [`NR_BITS-1:0]     rs3;
     wire [31:0]             imm; 
-    wire                    rs1_is_PC;
-    wire                    rs2_is_imm;
+    wire                    use_PC;
+    wire                    use_imm;
     wire [`NUM_REGS-1:0]    used_regs;      
     wire                    ready;
 

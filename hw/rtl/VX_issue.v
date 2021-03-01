@@ -74,8 +74,8 @@ module VX_issue #(
     assign execute_if.rd        = ibuf_deq_if.rd;
     assign execute_if.rs1       = ibuf_deq_if.rs1;
     assign execute_if.imm       = ibuf_deq_if.imm;        
-    assign execute_if.rs1_is_PC = ibuf_deq_if.rs1_is_PC;
-    assign execute_if.rs2_is_imm= ibuf_deq_if.rs2_is_imm;
+    assign execute_if.use_PC    = ibuf_deq_if.use_PC;
+    assign execute_if.use_imm   = ibuf_deq_if.use_imm;
 
     VX_instr_demux instr_demux (
         .clk        (clk),      
@@ -105,8 +105,8 @@ module VX_issue #(
     `SCOPE_ASSIGN (issue_rs2,         ibuf_deq_if.rs2);
     `SCOPE_ASSIGN (issue_rs3,         ibuf_deq_if.rs3);
     `SCOPE_ASSIGN (issue_imm,         ibuf_deq_if.imm);
-    `SCOPE_ASSIGN (issue_rs1_is_pc,   ibuf_deq_if.rs1_is_PC);
-    `SCOPE_ASSIGN (issue_rs2_is_imm,  ibuf_deq_if.rs2_is_imm);
+    `SCOPE_ASSIGN (issue_rs1_is_pc,   ibuf_deq_if.use_PC);
+    `SCOPE_ASSIGN (issue_use_imm,     ibuf_deq_if.use_imm);
     `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
     `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);    
     `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);

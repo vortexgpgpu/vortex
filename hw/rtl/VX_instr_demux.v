@@ -44,8 +44,8 @@ module VX_instr_demux (
         .reset     (reset),
         .valid_in  (alu_req_valid),
         .ready_in  (alu_req_ready),
-        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, next_PC,            `ALU_OP(execute_if.op_type), execute_if.op_mod, execute_if.imm, execute_if.rs1_is_PC, execute_if.rs2_is_imm, execute_if.rd, execute_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
-        .data_out  ({alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.next_PC, alu_req_if.op_type,          alu_req_if.op_mod, alu_req_if.imm, alu_req_if.rs1_is_PC, alu_req_if.rs2_is_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
+        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, next_PC,            `ALU_OP(execute_if.op_type), execute_if.op_mod, execute_if.imm, execute_if.use_PC, execute_if.use_imm, execute_if.rd, execute_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
+        .data_out  ({alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.next_PC, alu_req_if.op_type,          alu_req_if.op_mod, alu_req_if.imm, alu_req_if.use_PC, alu_req_if.use_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
         .valid_out (alu_req_if.valid),
         .ready_out (alu_req_if.ready)
     );
@@ -78,8 +78,8 @@ module VX_instr_demux (
         .reset     (reset),
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
-        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, `CSR_OP(execute_if.op_type), execute_if.imm[`CSR_ADDR_BITS-1:0], execute_if.rd, execute_if.wb, execute_if.rs2_is_imm, execute_if.rs1, gpr_rsp_if.rs1_data[0]}),
-        .data_out  ({csr_req_if.wid, csr_req_if.tmask, csr_req_if.PC, csr_req_if.op_type,          csr_req_if.csr_addr,                csr_req_if.rd, csr_req_if.wb, csr_req_if.rs2_is_imm, csr_req_if.rs1, csr_req_if.rs1_data}),
+        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, `CSR_OP(execute_if.op_type), execute_if.imm[`CSR_ADDR_BITS-1:0], execute_if.rd, execute_if.wb, execute_if.use_imm, execute_if.rs1, gpr_rsp_if.rs1_data[0]}),
+        .data_out  ({csr_req_if.wid, csr_req_if.tmask, csr_req_if.PC, csr_req_if.op_type,          csr_req_if.csr_addr,                csr_req_if.rd, csr_req_if.wb, csr_req_if.use_imm, csr_req_if.rs1, csr_req_if.rs1_data}),
         .valid_out (csr_req_if.valid),
         .ready_out (csr_req_if.ready)
     );
