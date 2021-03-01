@@ -205,8 +205,7 @@ module VX_shared_mem #(
     wire crsq_in_valid = ~creq_empty && ~core_rsp_rw;
 
     VX_skid_buffer #(
-        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH), 
-        .BUFFERED (1)
+        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
@@ -248,9 +247,9 @@ module VX_shared_mem #(
         assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
     end
 
-    reg [63:0] perf_core_reads;
-    reg [63:0] perf_core_writes;
-    reg [63:0] perf_crsp_stalls;
+    reg [43:0] perf_core_reads;
+    reg [43:0] perf_core_writes;
+    reg [43:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -258,9 +257,9 @@ module VX_shared_mem #(
             perf_core_writes  <= 0;
             perf_crsp_stalls  <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + 64'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + 64'(perf_core_writes_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + 64'(perf_crsp_stall_per_cycle);
+            perf_core_reads   <= perf_core_reads  + 44'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes + 44'(perf_core_writes_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls + 44'(perf_crsp_stall_per_cycle);
         end
     end
 

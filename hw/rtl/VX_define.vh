@@ -132,12 +132,22 @@
 `define IS_DIV_OP(x)    x[2]
 `define IS_MUL_MOD(x)   x[1]
 
-`define LSU_SB          3'h0 
-`define LSU_SH          3'h1
-`define LSU_SW          3'h2
-`define LSU_UB          3'h4
-`define LSU_UH          3'h5
-`define LSU_BITS        3
+`define FMT_B           3'b000
+`define FMT_H           3'b001
+`define FMT_W           3'b010
+`define FMT_BU          3'b100
+`define FMT_HU          3'b101
+
+`define LSU_LB          4'b0000 
+`define LSU_LH          4'b0001
+`define LSU_LW          4'b0010
+`define LSU_LBU         4'b0100
+`define LSU_LHU         4'b0101
+`define LSU_SB          4'b1000 
+`define LSU_SH          4'b1001
+`define LSU_SW          4'b1010
+`define LSU_BITS        4
+`define LSU_FMT(x)      x[2:0]
 `define LSU_WSIZE(x)    x[1:0]
 `define LSU_OP(x)       x[`LSU_BITS-1:0]
 
@@ -149,21 +159,21 @@
 `define CSR_OP(x)       x[`CSR_BITS-1:0]
 
 `define FPU_ADD         4'h0 
-`define FPU_SUB         4'h1 
-`define FPU_MUL         4'h2 
-`define FPU_DIV         4'h3 
-`define FPU_SQRT        4'h4 
-`define FPU_MADD        4'h5 
-`define FPU_MSUB        4'h6   
-`define FPU_NMSUB       4'h7   
-`define FPU_NMADD       4'h8 
-`define FPU_CVTWS       4'h9  // FCVT.W.S
-`define FPU_CVTWUS      4'hA  // FCVT.WU.S
-`define FPU_CVTSW       4'hB  // FCVT.S.W
-`define FPU_CVTSWU      4'hC  // FCVT.S.WU
-`define FPU_CLASS       4'hD  
-`define FPU_CMP         4'hE
-`define FPU_MISC        4'hF  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX
+`define FPU_SUB         4'h4 
+`define FPU_MUL         4'h8 
+`define FPU_DIV         4'hC
+`define FPU_CVTWS       4'h1  // FCVT.W.S
+`define FPU_CVTWUS      4'h5  // FCVT.WU.S
+`define FPU_CVTSW       4'h9  // FCVT.S.W
+`define FPU_CVTSWU      4'hD  // FCVT.S.WU
+`define FPU_SQRT        4'h2
+`define FPU_CLASS       4'h6  
+`define FPU_CMP         4'hA
+`define FPU_MISC        4'hE  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX 
+`define FPU_MADD        4'h3 
+`define FPU_MSUB        4'h7   
+`define FPU_NMSUB       4'hB   
+`define FPU_NMADD       4'hF
 `define FPU_BITS        4
 `define FPU_OP(x)       x[`FPU_BITS-1:0]
 

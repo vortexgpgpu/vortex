@@ -93,9 +93,10 @@ module VX_fifo_queue #(
                 end
                 if (SIZE > 2) begin        
                     used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
-                end else begin // (SIZE == 2);
+                end else begin 
+                    // (SIZE == 2);
                 `IGNORE_WARNINGS_BEGIN
-                    used_r <= used_r ^ (push ^ pop);   
+                    used_r <= used_r ^ (push ^ pop);
                 `IGNORE_WARNINGS_END
                 end                
             end                   
@@ -105,7 +106,7 @@ module VX_fifo_queue #(
 
             if (0 == BUFFERED) begin 
 
-                reg [1:0][DATAW-1:0] shift_reg;
+                reg [DATAW-1:0] shift_reg [1:0];
 
                 always @(posedge clk) begin
                     if (push) begin

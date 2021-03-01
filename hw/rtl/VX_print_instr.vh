@@ -72,11 +72,14 @@ task print_ex_op (
     end
     `EX_LSU: begin
         case (`LSU_BITS'(op_type))
+            `LSU_LB: $write("LB");
+            `LSU_LH: $write("LH");
+            `LSU_LW: $write("LW");
+            `LSU_LBU:$write("LBU");
+            `LSU_LHU:$write("LHU");
             `LSU_SB: $write("SB");
             `LSU_SH: $write("SH");
             `LSU_SW: $write("SW");
-            `LSU_UB: $write("UB");
-            `LSU_UH: $write("UH");
             default: $write("?");
         endcase
     end

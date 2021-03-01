@@ -21,7 +21,6 @@ public:
   Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id = 0);
   ~Core();
 
-  bool interrupt(Word r0);
   bool running() const;
 
   void getCacheDelays(trace_inst_t *);
@@ -61,8 +60,8 @@ public:
     return interruptEntry_;
   }
 
-  unsigned long num_instructions() const {
-    return num_instructions_;
+  unsigned long num_insts() const {
+    return num_insts_;
   }
 
   unsigned long num_steps() const {
@@ -71,9 +70,10 @@ public:
 
 private: 
 
-  bool renameTable_[32][32];
-  bool vecRenameTable_[32];
-  bool stalled_warps_[32];
+  std::vector<std::vector<bool>> iRenameTable_;
+  std::vector<std::vector<bool>> fRenameTable_;
+  std::vector<bool> vRenameTable_;
+  std::vector<bool> stalled_warps_;
   bool foundSchedule_;
 
   Word id_;
@@ -84,10 +84,8 @@ private:
   std::unordered_map<Word, std::set<Warp *>> barriers_;  
   int schedule_w_;
   uint64_t steps_;
-  uint64_t num_instructions_;
+  uint64_t num_insts_;
   Word interruptEntry_;
-  bool release_warp_;
-  int release_warp_num_;  
 
   trace_inst_t inst_in_fetch_;
   trace_inst_t inst_in_decode_;
