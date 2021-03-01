@@ -385,8 +385,11 @@ module VX_decode  #(
         assign decode_if.rs2 = {rs2_fp, rs2};
         assign decode_if.rs3 = {1'b1,   rs3};
     `else
+        `UNUSED_VAR (rd_fp)
+        `UNUSED_VAR (rs1_fp)
+        `UNUSED_VAR (rs2_fp)
         assign decode_if.rd  = rd;
-        assign decode_if.rs1 = rs1;
+        assign decode_if.rs1 = rs1_qual;
         assign decode_if.rs2 = rs2;
         assign decode_if.rs3 = rs3;
     `endif
