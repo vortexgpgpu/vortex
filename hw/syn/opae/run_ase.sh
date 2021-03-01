@@ -7,8 +7,7 @@ BUILD_DIR=$1
 PROGRAM=$(basename "$2")
 PROGRAM_DIR=`dirname $2`
 
-POCL_RT_PATH=$SCRIPT_DIR/../../../benchmarks/opencl/runtime/lib
-VORTEX_DRV_PATH=$SCRIPT_DIR/../../../driver/opae/ase
+VORTEX_DRV_PATH=$SCRIPT_DIR/../../../driver
 
 # Export ASE_WORKDIR variable
 export ASE_WORKDIR=$SCRIPT_DIR/$BUILD_DIR/work
@@ -36,5 +35,5 @@ done
 # run application
 pushd $PROGRAM_DIR
 echo "  [DBG]  running ./$PROGRAM $*"
-ASE_LOG=0 LD_LIBRARY_PATH=$POCL_RT_PATH:$VORTEX_DRV_PATH:$LD_LIBRARY_PATH ./$PROGRAM $*
+ASE_LOG=0 LD_LIBRARY_PATH=$POCL_RT_PATH/lib:$VORTEX_DRV_PATH/opae/ase:$LD_LIBRARY_PATH ./$PROGRAM $*
 popd
