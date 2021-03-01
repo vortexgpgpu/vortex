@@ -69,6 +69,8 @@ module VX_lsu_unit #(
     wire rsp_wb;
     wire [`LSU_BITS-1:0] rsp_type;
     wire rsp_is_dup;
+
+    `UNUSED_VAR (rsp_type)
     
     reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] rsp_rem_mask;         
     reg [`NUM_THREADS-1:0] rsp_rem_mask_n;
@@ -220,11 +222,11 @@ module VX_lsu_unit #(
         end
 
         always @(*) begin
-            case (rsp_type)
-            `LSU_SB: rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
-            `LSU_SH: rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
-            `LSU_UB: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
-            `LSU_UH: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
+            case (`LSU_FMT(rsp_type))
+            `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
+            `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
+            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
+            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
             default: rsp_data[i] = rsp_data_shifted;     
             endcase
         end        

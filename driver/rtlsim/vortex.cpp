@@ -185,7 +185,7 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
         *value = IMPLEMENTATION_ID;
         break;
     case VX_CAPS_MAX_CORES:
-        *value = NUM_CORES;        
+        *value = NUM_CORES * NUM_CLUSTERS;        
         break;
     case VX_CAPS_MAX_WARPS:
         *value = NUM_WARPS;

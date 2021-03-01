@@ -7,69 +7,25 @@
 
 namespace vortex {
 
-template <typename T>
-class Reg {
-public:
-  Reg()
-      : value_(0), cpuId_(0), regNum_(0) {}
-  Reg(Word c, Word n)
-      : value_(0), cpuId_(c), regNum_(n) {}
-  Reg(Word c, Word n, T v)
-      : value_(v), cpuId_(c), regNum_(n) {}
-
-  const T &value() const {
-    return value_;
-  }
-
-  Reg &operator=(T r) {
-    if (regNum_) {
-      value_ = r;
-      doWrite();
-    }
-    return *this;
-  }
-
-  operator T() const {
-    doRead();
-    return value_;
-  }
-
-  void trunc(Size s) {
-    Word mask((~0ull >> (sizeof(Word) - s) * 8));
-    value_ &= mask;
-  }
-
-private:
-  T value_;
-  Word cpuId_, regNum_;
-
-  void doWrite() const {}
-  void doRead() const {}
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 struct DomStackEntry {
-  DomStackEntry(
-      unsigned p, 
-      const std::vector<std::vector<Reg<Word>>> &m,
-      std::vector<bool> &tm, 
-      Word pc
-    ) : pc(pc)
-      , fallThrough(false)
-      , uni(false) {
-    for (unsigned i = 0; i < m.size(); ++i) {
-      tmask.push_back(!bool(m[i][p]) && tm[i]);
-    }
-  }
+  DomStackEntry(const ThreadMask &tmask, Word PC) 
+    : tmask(tmask)
+    , PC(PC)
+    , fallThrough(false)
+    , unanimous(false) 
+  {}
 
-  DomStackEntry(const std::vector<bool> &tmask)
-      : tmask(tmask), fallThrough(true), uni(false) {}
+  DomStackEntry(const ThreadMask &tmask)
+      : tmask(tmask)
+      , PC(0)
+      , fallThrough(true)
+      , unanimous(false) 
+  {}
 
-  std::vector<bool> tmask;
-  Word pc;
+  ThreadMask tmask;
+  Word PC;
   bool fallThrough;
-  bool uni;
+  bool unanimous;
 };
 
 struct vtype {
@@ -86,13 +42,13 @@ class trace_inst_t;
 class Warp {
 public:
   Warp(Core *core, Word id = 0);
+  
+  bool active() const {
+    return tmask_.any();
+  }
 
-  void step(trace_inst_t *);
-  
-  bool interrupt(Word r0);
-  
-  bool running() const {
-    return (activeThreads_ != 0);
+  std::size_t getActiveThreads() const {
+    return tmask_.count();
   }
 
   void printStats() const;
@@ -105,78 +61,40 @@ public:
     return id_;
   }
 
-  Word get_pc() const {
-    return pc_;
+  Word getPC() const {
+    return PC_;
   }
 
-  void set_pc(Word pc) {
-    pc_ = pc;
+  void setPC(Word PC) {
+    PC_ = PC;
   }
-
-  void setActiveThreads(Size activeThreads) {
-    activeThreads_ = activeThreads;
-  }
-
-  Size getActiveThreads() const {
-    return activeThreads_;
-  }
-
-  void setSpawned(bool spawned) {
-    spawned_ = spawned;
-  }
-
-  void setSupervisorMode(bool supervisorMode) {
-    supervisorMode_ = supervisorMode;
-  }
-  
-  bool getSupervisorMode() const {
-    return supervisorMode_;  
-  }  
 
   void setTmask(size_t index, bool value) {
     tmask_[index] = value;
   }
 
+  void step(trace_inst_t *);
+
 private:
 
   void execute(Instr &instr, trace_inst_t *);
-
-  struct MemAccess {
-    MemAccess(bool w, Word a)
-        : wr(w), addr(a) {}
-    bool wr;
-    Word addr;
-  };
   
-  std::vector<MemAccess> memAccesses_;
-
   Word id_;
+  bool active_;
   Core *core_;
-  Word pc_;
-  Word shadowPc_;  
-  Size activeThreads_;
-  Size shadowActiveThreads_;
-  std::vector<std::vector<Reg<Word>>> regFile_;
-  std::vector<Reg<uint16_t>> csrs_;
-
-  std::vector<bool> tmask_;
-  std::vector<bool> shadowTmask_;
+  
+  Word PC_;
+  ThreadMask tmask_;  
+  
+  std::vector<std::vector<Word>> iRegFile_;
+  std::vector<std::vector<Word>> fRegFile_;
+  std::vector<std::vector<Byte>> vRegFile_;
+  std::vector<Word> csrs_;  
   std::stack<DomStackEntry> domStack_;
 
-  std::vector<Word> shadowReg_;
-
-  struct vtype vtype_; // both of them are XLEN WIDE
-  int vl_;             // both of them are XLEN WIDE
-  Word VLEN_;          // total vector length
-
-  std::vector<std::vector<Reg<char *>>> vregFile_; // 32 vector registers
-
-  bool interruptEnable_;
-  bool shadowInterruptEnable_;
-  bool supervisorMode_;
-  bool shadowSupervisorMode_;
-  bool spawned_;
-
+  struct vtype vtype_;
+  int vl_;
+  
   unsigned long steps_;
   unsigned long insts_;
   unsigned long loads_;
