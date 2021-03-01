@@ -24,7 +24,7 @@ module VX_csr_io_arb (
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
-    wire [31:0] csr_core_req_mask = csr_core_req_if.rs2_is_imm ? 32'(csr_core_req_if.rs1) : csr_core_req_if.rs1_data;
+    wire [31:0] csr_core_req_mask = csr_core_req_if.use_imm ? 32'(csr_core_req_if.rs1) : csr_core_req_if.rs1_data;
 
     // requests
     assign csr_pipe_req_if.valid     = csr_core_req_if.valid || csr_io_req_if.valid;

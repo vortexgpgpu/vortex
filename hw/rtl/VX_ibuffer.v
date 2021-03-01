@@ -185,8 +185,8 @@ module VX_ibuffer #(
                         ibuf_enq_if.rs2, 
                         ibuf_enq_if.rs3, 
                         ibuf_enq_if.imm, 
-                        ibuf_enq_if.rs1_is_PC, 
-                        ibuf_enq_if.rs2_is_imm,
+                        ibuf_enq_if.use_PC, 
+                        ibuf_enq_if.use_imm,
                         ibuf_enq_if.used_regs};
 
     assign ibuf_deq_if.valid = deq_valid;
@@ -202,8 +202,8 @@ module VX_ibuffer #(
             ibuf_deq_if.rs2, 
             ibuf_deq_if.rs3, 
             ibuf_deq_if.imm, 
-            ibuf_deq_if.rs1_is_PC, 
-            ibuf_deq_if.rs2_is_imm, 
+            ibuf_deq_if.use_PC, 
+            ibuf_deq_if.use_imm, 
             ibuf_deq_if.used_regs} = deq_instr;
 
 endmodule
