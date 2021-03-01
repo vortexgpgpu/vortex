@@ -21,6 +21,7 @@ Within the /hw/syn/opae directory, there are source text files for each core-opt
 - NUM_CLUSTERS: the number of clusters alotted to the processor
 - L3_ENABLE: enable the use of the L3 cache
 - PERF_ENABLE: enable the use of all profile counters
+
 To enable L3 cache and profile counters for a build, simply uncomment the definition within the respective source file.
 
 OPAE build
@@ -78,4 +79,4 @@ FPGA sample test running OpenCL sgemm kernel
 Run the following from the Vortex root directory
 
     $ ./ci/blackbox.sh --driver=fpga --app=sgemm --args="-n64"
-    
+
