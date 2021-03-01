@@ -6,6 +6,11 @@
 
 typedef void (*PFN_Kernel)(int task_id, void* arg);
 
+inline float __ieee754_sqrtf (float x) {
+  asm ("fsqrt.s %0, %1" : "=f" (x) : "f" (x));
+  return x;
+}
+
 void kernel_iadd(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
 	uint32_t count    = _arg->task_size;
@@ -247,7 +252,7 @@ void kernel_fsqrt(int task_id, void* arg) {
 	for (uint32_t i = 0; i < count; ++i) {
 		float a = src0_ptr[offset+i];
 		float b = src1_ptr[offset+i];
-		float c = sqrtf(a * b);
+		float c = __ieee754_sqrtf(a * b);
 		dst_ptr[offset+i] = c;
 	}
 }
