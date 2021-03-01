@@ -92,22 +92,27 @@ case $DRIVER in
     rtlsim)
         DRIVER_PATH=$VORTEX_HOME/driver/rtlsim
         DRIVER_EXTRA=
+        CLEAN_TOKEN=clean
         ;;
     vlsim)
         DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=vlsim
+        CLEAN_TOKEN=clean-vlsim
         ;;
     asesim)
         DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=asesim
+        CLEAN_TOKEN=clean-asesim
         ;;
     fpga)
         DRIVER_PATH=$VORTEX_HOME/driver/opae
         DRIVER_EXTRA=fpga
+        CLEAN_TOKEN=clean-fpga
         ;; 
     simx)
         DRIVER_PATH=$VORTEX_HOME/driver/simx
         DRIVER_EXTRA=
+        CLEAN_TOKEN=clean
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -134,7 +139,7 @@ CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_TH
 
 echo "CONFIGS=$CONFIGS"
 
-make -C $DRIVER_PATH clean
+make -C $DRIVER_PATH $CLEAN_TOKEN
 
 if [ $DEBUG -eq 1 ]
 then    

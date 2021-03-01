@@ -100,9 +100,19 @@ $(ASE_DIR):
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $(SRCS) > .depend;
 
-clean:
-	rm -rf $(PROJECT) $(PROJECT_ASE) $(PROJECT_VLSIM) *.o .depend
+clean-fpga:
+	rm -rf $(PROJECT) *.o .depend
+
+clean-asesim:
+	rm -rf $(PROJECT_ASE) *.o .depend
+
+clean-vlsim:
 	$(MAKE) -C vlsim clean
+
+clean:
+	clean-fpga
+	clean-asesim
+	clean-vlsim
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
