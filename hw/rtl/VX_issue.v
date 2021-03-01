@@ -105,7 +105,7 @@ module VX_issue #(
     `SCOPE_ASSIGN (issue_rs2,         ibuf_deq_if.rs2);
     `SCOPE_ASSIGN (issue_rs3,         ibuf_deq_if.rs3);
     `SCOPE_ASSIGN (issue_imm,         ibuf_deq_if.imm);
-    `SCOPE_ASSIGN (issue_rs1_is_pc,   ibuf_deq_if.use_PC);
+    `SCOPE_ASSIGN (issue_use_pc,      ibuf_deq_if.use_PC);
     `SCOPE_ASSIGN (issue_use_imm,     ibuf_deq_if.use_imm);
     `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
     `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);    
