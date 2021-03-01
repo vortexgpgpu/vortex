@@ -212,7 +212,7 @@ module VX_fp_cvt #(
             // Default assignment
             final_exp[i]       = $unsigned(destination_exp_s1[i]); // take exponent as is, only look at lower bits
             preshift_mant[i]   = 65'b0;  // initialize mantissa container with zeroes
-            denorm_shamt[i]    = MAN_BITS - MAN_BITS; // right of mantissa
+            denorm_shamt[i]    = 0;      // right of mantissa
             of_before_round[i] = 1'b0;
 
             // Place mantissa to the left of the shifter
@@ -221,18 +221,17 @@ module VX_fp_cvt #(
             // Handle INT casts
             if (is_itof_s1) begin                
                 // Overflow or infinities (for proper rounding)
-                if ((destination_exp_s1[i] >= $signed(2**EXP_BITS-1))
-                 || (!is_itof_s1 && in_a_type_s1[i].is_inf)) begin
+                if ($signed(destination_exp_s1[i]) >= $signed(2**EXP_BITS-1)) begin
                     final_exp[i]       = (2**EXP_BITS-2); // largest normal value
                     preshift_mant[i]   = ~0;  // largest normal value and RS bits set
                     of_before_round[i] = 1'b1;
                 // Denormalize underflowing values
-                end else if ((destination_exp_s1[i] < 1) 
-                          && (destination_exp_s1[i] >= -$signed(MAN_BITS))) begin
+                end else if (($signed(destination_exp_s1[i]) < $signed(1)) 
+                          && ($signed(destination_exp_s1[i]) >= -$signed(MAN_BITS))) begin
                     final_exp[i]       = 0; // denormal result
                     denorm_shamt[i]    = $unsigned(denorm_shamt[i] + 1 - destination_exp_s1[i]); // adjust right shifting
                 // Limit the shift to retain sticky bits
-                end else if (destination_exp_s1[i] < -$signed(MAN_BITS)) begin
+                end else if ($signed(destination_exp_s1[i]) < -$signed(MAN_BITS)) begin
                     final_exp[i]       = 0; // denormal result
                     denorm_shamt[i]    = $unsigned(denorm_shamt[i] + (2 + MAN_BITS)); // to sticky
                 end
@@ -240,11 +239,11 @@ module VX_fp_cvt #(
                 // By default right shift mantissa to be an integer
                 denorm_shamt[i] = (MAX_INT_WIDTH-1) - input_exp_s1[i];
                 // overflow: when converting to unsigned the range is larger by one
-                if (input_exp_s1[i] >= $signed(MAX_INT_WIDTH -1 + unsigned_s1)) begin
+                if ($signed(input_exp_s1[i]) >= $signed(MAX_INT_WIDTH -1 + unsigned_s1)) begin
                     denorm_shamt[i]    = SHAMT_BITS'(0); // prevent shifting
                     of_before_round[i] = 1'b1;
                 // underflow
-                end else if (input_exp_s1[i] < -1) begin
+                end else if ($signed(input_exp_s1[i]) < $signed(-1)) begin
                     denorm_shamt[i]    = MAX_INT_WIDTH + 1; // all bits go to the sticky
                 end               
             end
