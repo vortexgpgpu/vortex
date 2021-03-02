@@ -15,9 +15,10 @@ module VX_decode  #(
     VX_wstall_if        wstall_if,
     VX_join_if          join_if
 );
+    `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
-
+    
     reg [`EX_BITS-1:0]  ex_type;    
     reg [`OP_BITS-1:0]  op_type; 
     reg [`MOD_BITS-1:0] op_mod;

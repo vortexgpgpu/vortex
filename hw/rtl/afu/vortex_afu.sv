@@ -1,5 +1,5 @@
+`include "VX_define.vh"
 `ifndef NOPAE
-`include "platform_if.vh"
 import local_mem_cfg_pkg::*;
 `include "afu_json_info.vh"
 `else
@@ -9,8 +9,6 @@ import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
 /* verilator lint_on IMPORTSTAR */ 
 `endif
-
-`include "VX_define.vh"
 
 module vortex_afu #(
   parameter NUM_LOCAL_MEM_BANKS = 2
@@ -993,6 +991,9 @@ VX_scope #(
   .bus_write(cmd_scope_write)
 );
 
+`else
+  `UNUSED_PARAM (MMIO_SCOPE_READ)
+  `UNUSED_PARAM (MMIO_SCOPE_WRITE)
 `endif
 
 endmodule

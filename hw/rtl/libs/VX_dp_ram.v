@@ -8,7 +8,6 @@ module VX_dp_ram #(
     parameter BUFFERED = 0,
     parameter RWCHECK  = 1,
     parameter ADDRW    = $clog2(SIZE),
-    parameter SIZEW    = $clog2(SIZE+1),
     parameter FASTRAM  = 0,
     parameter INITZERO = 0
 ) ( 

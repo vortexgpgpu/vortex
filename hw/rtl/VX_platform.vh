@@ -33,6 +33,10 @@
                               /* verilator lint_on DECLFILENAME */ \
                               /* verilator lint_on IMPLICIT */
 
+`define UNUSED_PARAM(x)  /* verilator lint_off UNUSED */ \
+                         localparam  __``x = x; \
+                         /* verilator lint_on UNUSED */
+
 `define UNUSED_VAR(x) always @(x) begin end
 
 `define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \

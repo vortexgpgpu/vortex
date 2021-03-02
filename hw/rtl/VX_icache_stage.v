@@ -18,6 +18,8 @@ module VX_icache_stage #(
     // reponse
     VX_ifetch_rsp_if        ifetch_rsp_if
 );
+
+    `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;

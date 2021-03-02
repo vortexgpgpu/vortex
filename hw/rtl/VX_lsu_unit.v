@@ -20,6 +20,8 @@ module VX_lsu_unit #(
     VX_commit_if    st_commit_if
 );
 
+    `UNUSED_PARAM (CORE_ID)
+    
     wire                          req_valid;
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire [`NUM_THREADS-1:0][31:0] req_addr;       

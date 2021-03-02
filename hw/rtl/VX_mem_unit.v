@@ -41,31 +41,27 @@ module VX_mem_unit # (
     ) dcache_dram_rsp_if(), icache_dram_rsp_if();
 
     VX_dcache_core_req_if #(
-        .NUM_REQS         (`DNUM_REQUESTS), 
-        .WORD_SIZE        (`DWORD_SIZE), 
-        .CORE_TAG_WIDTH   (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS (`DCORE_TAG_ID_BITS)
+        .NUM_REQS       (`DNUM_REQUESTS), 
+        .WORD_SIZE      (`DWORD_SIZE), 
+        .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_req_if();
 
     VX_dcache_core_rsp_if #(
-        .NUM_REQS         (`DNUM_REQUESTS), 
-        .WORD_SIZE        (`DWORD_SIZE), 
-        .CORE_TAG_WIDTH   (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS (`DCORE_TAG_ID_BITS)
+        .NUM_REQS       (`DNUM_REQUESTS), 
+        .WORD_SIZE      (`DWORD_SIZE), 
+        .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_rsp_if();
 
     VX_dcache_core_req_if #(
-        .NUM_REQS         (`DNUM_REQUESTS), 
-        .WORD_SIZE        (`DWORD_SIZE), 
-        .CORE_TAG_WIDTH   (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS (`DCORE_TAG_ID_BITS)
+        .NUM_REQS       (`DNUM_REQUESTS), 
+        .WORD_SIZE      (`DWORD_SIZE), 
+        .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) smem_req_if();
 
     VX_dcache_core_rsp_if #(
-        .NUM_REQS         (`DNUM_REQUESTS), 
-        .WORD_SIZE        (`DWORD_SIZE), 
-        .CORE_TAG_WIDTH   (`DCORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS (`DCORE_TAG_ID_BITS)
+        .NUM_REQS       (`DNUM_REQUESTS), 
+        .WORD_SIZE      (`DWORD_SIZE), 
+        .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) smem_rsp_if();
 
     VX_databus_arb databus_arb (   

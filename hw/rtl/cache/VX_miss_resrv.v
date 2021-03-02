@@ -19,9 +19,7 @@ module VX_miss_resrv #(
     parameter MSHR_SIZE         = 1, 
     parameter ALM_FULL          = (MSHR_SIZE-1),
     // core request tag size
-    parameter CORE_TAG_WIDTH    = 1,
-    // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS  = 0
+    parameter CORE_TAG_WIDTH    = 1
 ) (
     input wire clk,
     input wire reset,
@@ -58,6 +56,8 @@ module VX_miss_resrv #(
     // dequeue
     input wire                          dequeue
 );
+    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (BANK_ID)
     localparam ADDRW = $clog2(MSHR_SIZE);
 
     reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table;

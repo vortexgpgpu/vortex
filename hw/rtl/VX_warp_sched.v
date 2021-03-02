@@ -18,6 +18,9 @@ module VX_warp_sched #(
 
     output wire         busy
 );
+
+    `UNUSED_PARAM (CORE_ID)
+
     wire                    join_fall;
     wire [31:0]             join_pc;
     wire [`NUM_THREADS-1:0] join_tm;

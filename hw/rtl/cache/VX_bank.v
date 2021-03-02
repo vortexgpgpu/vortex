@@ -22,8 +22,6 @@ module VX_bank #(
     parameter CREQ_SIZE                     = 1, 
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 1, 
-    // DRAM Response Queue Size
-    parameter DRSQ_SIZE                     = 1, 
     // DRAM Request Queue Size
     parameter DREQ_SIZE                     = 1,
 
@@ -92,6 +90,8 @@ module VX_bank #(
     input wire [`LINE_SELECT_BITS-1:0]  flush_addr
 );
 
+    `UNUSED_PARAM (CORE_TAG_ID_BITS)
+    
 `ifdef DBG_CACHE_REQ_INFO
     /* verilator lint_off UNUSED */
     wire [31:0]         debug_pc_sel, debug_pc_st0,  debug_pc_st1;
@@ -420,8 +420,7 @@ module VX_bank #(
 
     VX_miss_resrv #(
         .BANK_ID            (BANK_ID),
-        .CACHE_ID           (CACHE_ID),      
-        .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
+        .CACHE_ID           (CACHE_ID),
         .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
         .NUM_BANKS          (NUM_BANKS),
         .NUM_PORTS          (NUM_PORTS),
