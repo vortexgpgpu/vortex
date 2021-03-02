@@ -14,6 +14,7 @@ module VX_fixed_arbiter #(
     output wire                     grant_valid
   );
 
+    `UNUSED_PARAM (LOCK_ENABLE)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (enable)

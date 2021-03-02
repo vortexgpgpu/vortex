@@ -31,6 +31,9 @@ module VX_tag_access #(
     input wire                          is_flush,
     output wire                         tag_match
 );
+
+    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (BANK_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
