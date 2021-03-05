@@ -44,11 +44,17 @@ public:
   Warp(Core *core, Word id = 0);
   
   bool active() const {
-    return tmask_.any();
+    return active_;
+  }
+
+  void activate() {
+    active_ = true;
   }
 
   std::size_t getActiveThreads() const {
-    return tmask_.count();
+    if (active_)
+      return tmask_.count();
+    return 0;
   }
 
   void printStats() const;
@@ -71,6 +77,7 @@ public:
 
   void setTmask(size_t index, bool value) {
     tmask_[index] = value;
+    active_ = tmask_.any();
   }
 
   void step(trace_inst_t *);
@@ -89,7 +96,6 @@ private:
   std::vector<std::vector<Word>> iRegFile_;
   std::vector<std::vector<Word>> fRegFile_;
   std::vector<std::vector<Byte>> vRegFile_;
-  std::vector<Word> csrs_;  
   std::stack<DomStackEntry> domStack_;
 
   struct vtype vtype_;

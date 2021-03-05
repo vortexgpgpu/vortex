@@ -54,6 +54,7 @@ public:
     , nRsrc_(0)
     , hasImmSrc_(false)
     , hasRDest_(false)
+    , is_iDest_(false)
     , is_FpDest_(false)
     , is_VDest_(false)
     , is_FpSrc_(0)
@@ -68,7 +69,7 @@ public:
 
   /* Setters used to "craft" the instruction. */
   void setOpcode(Opcode opcode)  { opcode_ = opcode; }
-  void setDestReg(int destReg) { hasRDest_ = true; rdest_ = destReg; }
+  void setDestReg(int destReg) { hasRDest_ = true; is_iDest_ = true; rdest_ = destReg; }
   void setSrcReg(int srcReg) { rsrc_[nRsrc_++] = srcReg; }
   void setDestFReg(int destReg) { hasRDest_ = true; is_FpDest_ = true; rdest_ = destReg; }
   void setSrcFReg(int srcReg) { is_FpSrc_ |= (1 << nRsrc_); rsrc_[nRsrc_++] = srcReg;  }
@@ -109,6 +110,7 @@ public:
   Word getVsew() const { return vsew_; }
   Word getVediv() const { return vediv_; }
 
+  bool is_iDest() const { return is_iDest_; }
   bool is_FpDest() const { return is_FpDest_; }
   bool is_FpSrc(int i) const { return (is_FpSrc_ >> i) & 0x1; }
 
@@ -125,6 +127,7 @@ private:
   int nRsrc_;
   bool hasImmSrc_;
   bool hasRDest_;  
+  bool is_iDest_;
   bool is_FpDest_;
   bool is_VDest_;
   int is_FpSrc_;  

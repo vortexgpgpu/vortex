@@ -48,11 +48,12 @@ int main(int argc, char **argv) {
   ArchDef arch(archString, num_cores, num_warps, num_threads);
 
   Decoder decoder(arch);
-  MemoryUnit mu(4096, arch.wsize(), true);
+  MemoryUnit mu(0, arch.wsize(), true);
   
-  RAM old_ram;
-  old_ram.loadHexImpl(imgFileName.c_str());
-  mu.attach(old_ram, 0);
+  RAM old_ram((1<<12), (1<<20));
+  old_ram.loadHexImage(imgFileName.c_str());
+
+  mu.attach(old_ram, 0, 0xFFFFFFFF);
 
   struct stat hello;
   fstat(0, &hello);

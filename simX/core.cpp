@@ -83,8 +83,10 @@ Core::Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
     , arch_(arch)
     , decoder_(decoder)
     , mem_(mem)
+    , shared_mem_(1, SMEM_SIZE)
     , steps_(0)
-    , num_insts_(0) {
+    , num_insts_(0) {  
+
   foundSchedule_ = true;
   schedule_w_ = 0;
 
@@ -105,6 +107,10 @@ Core::Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
   iRenameTable_.resize(arch.num_warps(), std::vector<bool>(arch.num_regs(), false));
   fRenameTable_.resize(arch.num_warps(), std::vector<bool>(arch.num_regs(), false));
   vRenameTable_.resize(arch.num_regs(), false);
+
+  csrs_.resize(arch_.num_csrs());
+
+  barriers_.resize(arch_.num_barriers(), 0);
 
   stalled_warps_.resize(arch.num_warps(), false);
 
@@ -147,9 +153,9 @@ void Core::warpScheduler() {
   for (size_t wid = 0; wid < warps_.size(); ++wid) {
     // round robin scheduling
     next_warp = (next_warp + 1) % warps_.size();
-    bool has_active_threads = warps_[next_warp].active();
+    bool is_active = warps_[next_warp].active();
     bool stalled = stalled_warps_[next_warp];
-    if (has_active_threads && !stalled) {
+    if (is_active && !stalled) {
       foundSchedule_ = true;
       break;
     }
@@ -365,6 +371,94 @@ void Core::writeback() {
       }
     }
   }
+}
+
+Word Core::get_csr(Addr addr, int tid, int wid) {
+  if (addr == CSR_WTID) {
+    // Warp threadID
+    return tid;
+  } else if (addr == CSR_LTID) {
+    // Core threadID
+    return tid + (wid * arch_.num_threads());
+  } else if (addr == CSR_GTID) {
+    // Processor threadID
+    return tid + (wid * arch_.num_threads()) + 
+              (arch_.num_threads() * arch_.num_warps() * id_);
+  } else if (addr == CSR_LWID) {
+    // Core warpID
+    return wid;
+  } else if (addr == CSR_GWID) {
+    // Processor warpID        
+    return wid + (arch_.num_warps() * id_);
+  } else if (addr == CSR_GCID) {
+    // Processor coreID
+    return id_;
+  } else if (addr == CSR_NT) {
+    // Number of threads per warp
+    return arch_.num_threads();
+  } else if (addr == CSR_NW) {
+    // Number of warps per core
+    return arch_.num_warps();
+  } else if (addr == CSR_NC) {
+    // Number of cores
+    return arch_.num_cores();
+  } else if (addr == CSR_INSTRET) {
+    // NumInsts
+    return num_insts_;
+  } else if (addr == CSR_INSTRET_H) {
+    // NumInsts
+    return (Word)(num_insts_ >> 32);
+  } else if (addr == CSR_CYCLE) {
+    // NumCycles
+    return (Word)steps_;
+  } else if (addr == CSR_CYCLE_H) {
+    // NumCycles
+    return (Word)(steps_ >> 32);
+  } else {
+    return csrs_.at(addr);
+  }
+}
+
+void Core::set_csr(Addr addr, Word value) {
+  csrs_.at(addr) = value;
+}
+
+void Core::barrier(int bar_id, int count, int warp_id) {
+  auto& barrier = barriers_.at(bar_id);
+  barrier.set(warp_id);
+  if (barrier.count() < (size_t)count)    
+    return;
+  for (int i = 0; i < arch_.num_warps(); ++i) {
+    if (barrier.test(i)) {
+      warps_.at(i).activate();
+    }
+  }
+  barrier.reset();
+}
+
+Word Core::icache_fetch(Addr addr, bool sup) {
+  return mem_.fetch(addr, sup);
+}
+
+Word Core::dcache_read(Addr addr, bool sup) {
+#ifdef SM_ENABLE
+  if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
+   && ((addr + 4) <= SHARED_MEM_BASE_ADDR)) {
+     return shared_mem_.read(addr & (SMEM_SIZE-1));
+  }
+#endif
+  return mem_.read(addr, sup);
+}
+
+void Core::dcache_write(Addr addr, Word data, bool sup, Size size) {
+#ifdef SM_ENABLE
+  if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
+   && ((addr + 4) <= SHARED_MEM_BASE_ADDR)) {
+     shared_mem_.write(addr & (SMEM_SIZE-1), data);
+     return;
+  }
+#endif
+  mem_.write(addr, data, sup, size);
 }
 
 void Core::getCacheDelays(trace_inst_t *trace_inst) {

@@ -54,7 +54,7 @@ void load_file(char * filename)
 	// printf("Inside load_file\n");
 
     fprintf(stderr, "\n\n\n\n**********************\n");
-	loadHexImpl(filename, &ram);
+	loadHexImage(filename, &ram);
 	// printf("Filename: %s\n", filename);
     refill = false;
     i_refill = false;
