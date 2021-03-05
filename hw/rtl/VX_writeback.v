@@ -15,6 +15,9 @@ module VX_writeback #(
     // outputs
     VX_writeback_if writeback_if
 );
+
+    `UNUSED_PARAM (CORE_ID)
+    
     wire ld_valid  = ld_commit_if.valid && ld_commit_if.wb;    
     wire fpu_valid = fpu_commit_if.valid && fpu_commit_if.wb;
     wire csr_valid = csr_commit_if.valid && csr_commit_if.wb;

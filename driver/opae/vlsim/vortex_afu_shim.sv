@@ -1,5 +1,5 @@
-`include "vortex_afu.vh"
 `include "VX_define.vh"
+`include "vortex_afu.vh"
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;

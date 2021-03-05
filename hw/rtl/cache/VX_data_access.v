@@ -38,6 +38,10 @@ module VX_data_access #(
     input wire [CACHE_LINE_SIZE-1:0]    byteen,
     input wire [`CACHE_LINE_WIDTH-1:0]  wdata
 );
+
+    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (BANK_ID)
+    `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (readen)
 

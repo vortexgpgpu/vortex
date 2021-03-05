@@ -13,6 +13,9 @@ module VX_ibuffer #(
     // outputs
     VX_decode_if  ibuf_deq_if
 );
+
+    `UNUSED_PARAM (CORE_ID)
+    
     localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + `NUM_REGS;
     localparam SIZE    = 3;
     localparam ADDRW   = $clog2(SIZE);

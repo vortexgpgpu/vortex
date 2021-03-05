@@ -49,6 +49,8 @@ module VX_shared_mem #(
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
+    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (CORE_TAG_ID_BITS)
 
     localparam CACHE_LINE_SIZE = WORD_SIZE;
 

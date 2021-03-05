@@ -13,6 +13,8 @@ module VX_gpr_stage #(
     // outputs
     VX_gpr_rsp_if   gpr_rsp_if
 );
+
+    `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)    
 
     // ensure r0 never gets written, which can happen before the reset

@@ -109,10 +109,7 @@ clean-asesim:
 clean-vlsim:
 	$(MAKE) -C vlsim clean
 
-clean:
-	clean-fpga
-	clean-asesim
-	clean-vlsim
+clean: clean-fpga clean-asesim clean-vlsim
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

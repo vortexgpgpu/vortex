@@ -6,9 +6,7 @@ module VX_flush_ctrl #(
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
-    parameter NUM_BANKS         = 1, 
-    // Size of a word in bytes
-    parameter WORD_SIZE         = 1
+    parameter NUM_BANKS         = 1
 ) (
     input wire  clk,
     input wire  reset,
