@@ -19,6 +19,7 @@ public:
     vsize_       = 16;
     num_regs_    = 32;
     num_csrs_    = 4096;
+    num_barriers_= NUM_BARRIERS;
     num_cores_   = num_cores;
     num_warps_   = num_warps;
     num_threads_ = num_threads;
@@ -40,6 +41,10 @@ public:
     return num_csrs_;
   }
 
+  int num_barriers() const {
+    return num_barriers_;
+  }
+
   int num_threads() const {
     return num_threads_;
   }
@@ -58,6 +63,7 @@ private:
   int vsize_;
   int num_regs_;
   int num_csrs_;
+  int num_barriers_;
   int num_threads_;
   int num_warps_;
   int num_cores_;

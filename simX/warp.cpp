@@ -24,8 +24,7 @@ Warp::Warp(Core *core, Word id)
 
   iRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
   fRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
-  vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));    
-  csrs_.resize(core_->arch().num_csrs());
+  vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));  
 }
 
 void Warp::step(trace_inst_t *trace_inst) {
@@ -49,7 +48,7 @@ void Warp::step(trace_inst_t *trace_inst) {
     
   unsigned fetchSize = 4;
   fetchBuffer.resize(fetchSize);
-  Word fetched = core_->mem().fetch(PC_ + fetchPos, 0);
+  Word fetched = core_->icache_fetch(PC_ + fetchPos, 0);
   writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
 
   decPos = 0;

@@ -159,6 +159,7 @@ uint8_t fpBinIsInf(uint32_t din) {
 
 void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
   assert(tmask_.any());
+
   Word nextPC = PC_;
   bool updatePC = false;
   bool runOnce = false;
@@ -167,20 +168,21 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
   Word func6 = instr.getFunc6();
   Word func7 = instr.getFunc7();
 
-  Opcode opcode = instr.getOpcode();
-  int rdest     = instr.getRDest();
-  int rsrc0     = instr.getRSrc(0);
-  int rsrc1     = instr.getRSrc(1);
-  int rsrc2     = instr.getRSrc(2);
-  Word immsrc   = instr.getImm();
-  bool vmask    = instr.getVmask();
+  auto opcode = instr.getOpcode();
+  int rdest  = instr.getRDest();
+  int rsrc0  = instr.getRSrc(0);
+  int rsrc1  = instr.getRSrc(1);
+  int rsrc2  = instr.getRSrc(2);
+  Word immsrc= instr.getImm();
+  bool vmask = instr.getVmask();
 
-  for (std::size_t t = 0; t < tmask_.count(); t++) {
-    if (runOnce)
+  int num_threads = core_->arch().num_threads();
+  for (int t = 0; t < num_threads; t++) {
+    if (!tmask_.test(t) || runOnce)
       continue;
     
-    auto &iregs = iRegFile_[t];
-    auto &fregs = fRegFile_[t];
+    auto &iregs = iRegFile_.at(t);
+    auto &fregs = fRegFile_.at(t);
 
     ++insts_;
 
@@ -197,7 +199,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 0:
           // MUL
           D(3, "MUL: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-          iregs[rdest] = ((int)iregs[rsrc0]) * ((int)iregs[rsrc1]);
+          if (rdest) iregs[rdest] = ((int)iregs[rsrc0]) * ((int)iregs[rsrc1]);
           break;
         case 1:
           // MULH
@@ -213,7 +215,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             }
             // cout << "mulh: " << std::dec << first << " * " << second;
             uint64_t result = first * second;
-            iregs[rdest] = (result >> 32) & 0xFFFFFFFF;
+            if (rdest) iregs[rdest] = (result >> 32) & 0xFFFFFFFF;
             // cout << " = " << result << "   or  " <<  iregs[rdest] << "\n";
           }
           break;
@@ -226,7 +228,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
               first = first | 0xFFFFFFFF00000000;
             }
             int64_t second = (int64_t)iregs[rsrc1];
-            iregs[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
+            if (rdest) iregs[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
           }
           break;
         case 3:
@@ -236,46 +238,46 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             uint64_t first = (uint64_t)iregs[rsrc0];
             uint64_t second = (uint64_t)iregs[rsrc1];
             // cout << "MULHU\n";
-            iregs[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
+            if (rdest) iregs[rdest] = ((first * second) >> 32) & 0xFFFFFFFF;
           }
           break;
         case 4:
           // DIV
           D(3, "DIV: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
-            iregs[rdest] = -1;
+            if (rdest) iregs[rdest] = -1;
             break;
           }
           // cout << "dividing: " << std::dec << ((int) iregs[rsrc0]) << " / " << ((int) iregs[rsrc1]);
-          iregs[rdest] = ((int)iregs[rsrc0]) / ((int)iregs[rsrc1]);
+          if (rdest) iregs[rdest] = ((int)iregs[rsrc0]) / ((int)iregs[rsrc1]);
           // cout << " = " << ((int) iregs[rdest]) << "\n";
           break;
         case 5:
           // DIVU
           D(3, "DIVU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
-            iregs[rdest] = -1;
+            if (rdest) iregs[rdest] = -1;
             break;
           }
-          iregs[rdest] = ((uint32_t)iregs[rsrc0]) / ((uint32_t)iregs[rsrc1]);
+          if (rdest) iregs[rdest] = ((uint32_t)iregs[rsrc0]) / ((uint32_t)iregs[rsrc1]);
           break;
         case 6:
           // REM
           D(3, "REM: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
-            iregs[rdest] = iregs[rsrc0];
+            if (rdest) iregs[rdest] = iregs[rsrc0];
             break;
           }
-          iregs[rdest] = ((int)iregs[rsrc0]) % ((int)iregs[rsrc1]);
+          if (rdest) iregs[rdest] = ((int)iregs[rsrc0]) % ((int)iregs[rsrc1]);
           break;
         case 7:
           // REMU
           D(3, "REMU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (iregs[rsrc1] == 0) {
-            iregs[rdest] = iregs[rsrc0];
+            if (rdest) iregs[rdest] = iregs[rsrc0];
             break;
           }
-          iregs[rdest] = ((uint32_t)iregs[rsrc0]) % ((uint32_t)iregs[rsrc1]);
+          if (rdest) iregs[rdest] = ((uint32_t)iregs[rsrc0]) % ((uint32_t)iregs[rsrc1]);
           break;
         default:
           std::cout << "unsupported MUL/DIV instr\n";
@@ -287,52 +289,52 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 0:
           if (func7) {
             D(3, "SUBI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-            iregs[rdest] = iregs[rsrc0] - iregs[rsrc1];
+            if (rdest) iregs[rdest] = iregs[rsrc0] - iregs[rsrc1];
           } else {
             D(3, "ADDI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-            iregs[rdest] = iregs[rsrc0] + iregs[rsrc1];
+            if (rdest) iregs[rdest] = iregs[rsrc0] + iregs[rsrc1];
           }
           break;
         case 1:
           D(3, "SLLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-          iregs[rdest] = iregs[rsrc0] << iregs[rsrc1];
+          if (rdest) iregs[rdest] = iregs[rsrc0] << iregs[rsrc1];
           break;
         case 2:
           D(3, "SLTI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (int(iregs[rsrc0]) < int(iregs[rsrc1])) {
-            iregs[rdest] = 1;
+            if (rdest) iregs[rdest] = 1;
           } else {
-            iregs[rdest] = 0;
+            if (rdest) iregs[rdest] = 0;
           }
           break;
         case 3:
           D(3, "SLTU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
           if (Word(iregs[rsrc0]) < Word(iregs[rsrc1])) {
-            iregs[rdest] = 1;
+            if (rdest) iregs[rdest] = 1;
           } else {
-            iregs[rdest] = 0;
+            if (rdest) iregs[rdest] = 0;
           }
           break;
         case 4:
           D(3, "XORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-          iregs[rdest] = iregs[rsrc0] ^ iregs[rsrc1];
+          if (rdest) iregs[rdest] = iregs[rsrc0] ^ iregs[rsrc1];
           break;
         case 5:
           if (func7) {
             D(3, "SRLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-            iregs[rdest] = int(iregs[rsrc0]) >> int(iregs[rsrc1]);
+            if (rdest) iregs[rdest] = int(iregs[rsrc0]) >> int(iregs[rsrc1]);
           } else {
             D(3, "SRLU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-            iregs[rdest] = Word(iregs[rsrc0]) >> Word(iregs[rsrc1]);
+            if (rdest) iregs[rdest] = Word(iregs[rsrc0]) >> Word(iregs[rsrc1]);
           }
           break;
         case 6:
           D(3, "ORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-          iregs[rdest] = iregs[rsrc0] | iregs[rsrc1];
+          if (rdest) iregs[rdest] = iregs[rsrc0] | iregs[rsrc1];
           break;
         case 7:
           D(3, "AND: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
-          iregs[rdest] = iregs[rsrc0] & iregs[rsrc1];
+          if (rdest) iregs[rdest] = iregs[rsrc0] & iregs[rsrc1];
           break;
         default:
           std::cout << "ERROR: UNSUPPORTED R INST\n";
@@ -346,58 +348,58 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 0:
         // ADDI
         D(3, "ADDI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
-        iregs[rdest] = iregs[rsrc0] + immsrc;
+        if (rdest) iregs[rdest] = iregs[rsrc0] + immsrc;
         break;
       case 2:
         // SLTI
         D(3, "SLTI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
         if (int(iregs[rsrc0]) < int(immsrc)) {
-          iregs[rdest] = 1;
+          if (rdest) iregs[rdest] = 1;
         } else {
-          iregs[rdest] = 0;
+          if (rdest) iregs[rdest] = 0;
         }
         break;
       case 3: {
         // SLTIU
         D(3, "SLTIU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
         if (unsigned(iregs[rsrc0]) < unsigned(immsrc)) {
-          iregs[rdest] = 1;
+          if (rdest) iregs[rdest] = 1;
         } else {
-          iregs[rdest] = 0;
+          if (rdest) iregs[rdest] = 0;
         }
       } break;
       case 4:
         // XORI
         D(3, "XORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = iregs[rsrc0] ^ immsrc;
+        if (rdest) iregs[rdest] = iregs[rsrc0] ^ immsrc;
         break;
       case 6:
         // ORI
         D(3, "ORI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = iregs[rsrc0] | immsrc;
+        if (rdest) iregs[rdest] = iregs[rsrc0] | immsrc;
         break;
       case 7:
         // ANDI
         D(3, "ANDI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = iregs[rsrc0] & immsrc;
+        if (rdest) iregs[rdest] = iregs[rsrc0] & immsrc;
         break;
       case 1:
         // SLLI
         D(3, "SLLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = iregs[rsrc0] << immsrc;
+        if (rdest) iregs[rdest] = iregs[rsrc0] << immsrc;
         break;
       case 5:
         if ((func7 == 0)) {
           // SRLI
           D(3, "SRLI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
           Word result = Word(iregs[rsrc0]) >> Word(immsrc);
-          iregs[rdest] = result;
+          if (rdest) iregs[rdest] = result;
         } else {
           // SRAI
           D(3, "SRAI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=" << immsrc);
           Word op1 = iregs[rsrc0];
           Word op2 = immsrc;
-          iregs[rdest] = op1 >> op2;
+          if (rdest) iregs[rdest] = op1 >> op2;
         }
         break;
       default:
@@ -409,34 +411,34 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       ++loads_;
       Word memAddr = ((iregs[rsrc0] + immsrc) & 0xFFFFFFFC);
       Word shift_by = ((iregs[rsrc0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->mem().read(memAddr, 0);
+      Word data_read = core_->dcache_read(memAddr, 0);
       trace_inst->is_lw = true;
       trace_inst->mem_addresses[t] = memAddr;
       switch (func3) {
       case 0:
         // LBI
         D(3, "LBI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
+        if (rdest) iregs[rdest] = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
         break;
       case 1:
         // LWI
         D(3, "LHI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
+        if (rdest) iregs[rdest] = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
         break;
       case 2:
         // LDI
         D(3, "LWI: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = int(data_read & 0xFFFFFFFF);
+        if (rdest) iregs[rdest] = int(data_read & 0xFFFFFFFF);
         break;
       case 4:
         // LBU
         D(3, "LBU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFF);
+        if (rdest) iregs[rdest] = unsigned((data_read >> shift_by) & 0xFF);
         break;
       case 5:
         // LWU
         D(3, "LHU: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        iregs[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
+        if (rdest) iregs[rdest] = unsigned((data_read >> shift_by) & 0xFFFF);
         break;
       default:
         std::cout << "ERROR: UNSUPPORTED L INST\n";
@@ -453,17 +455,17 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       case 0:
         // SB
         D(3, "SB: r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        core_->mem().write(memAddr, iregs[rsrc1] & 0x000000FF, 0, 1);
+        core_->dcache_write(memAddr, iregs[rsrc1] & 0x000000FF, 0, 1);
         break;
       case 1:
         // SH
         D(3, "SH: r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        core_->mem().write(memAddr, iregs[rsrc1], 0, 2);
+        core_->dcache_write(memAddr, iregs[rsrc1], 0, 2);
         break;
       case 2:
         // SW
         D(3, "SW: r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1] << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
-        core_->mem().write(memAddr, iregs[rsrc1], 0, 4);
+        core_->dcache_write(memAddr, iregs[rsrc1], 0, 4);
         break;
       default:
         std::cout << "ERROR: UNSUPPORTED S INST\n";
@@ -532,11 +534,11 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
       break;
     case LUI_INST:
       D(3, "LUI: r" << std::dec << rdest << " <- imm=0x" << std::hex << immsrc);
-      iregs[rdest] = (immsrc << 12) & 0xfffff000;
+      if (rdest) iregs[rdest] = (immsrc << 12) & 0xfffff000;
       break;
     case AUIPC_INST:
       D(3, "AUIPC: r" << std::dec << rdest << " <- imm=0x" << std::hex << immsrc);
-      iregs[rdest] = ((immsrc << 12) & 0xfffff000) + (PC_ - 4);
+      if (rdest) iregs[rdest] = ((immsrc << 12) & 0xfffff000) + (PC_ - 4);
       break;
     case JAL_INST:
       D(3, "JAL: r" << std::dec << rdest << " <- imm=0x" << std::hex << immsrc);
@@ -545,9 +547,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         nextPC = (PC_ - 4) + immsrc;
         //std::cout << "JAL... SETTING PC: " << nextPC << "\n";      
       }
-      if (rdest != 0) {
-        iregs[rdest] = PC_;
-      }
+      if (rdest) iregs[rdest] = PC_;
       updatePC = true;
       break;
     case JALR_INST:
@@ -557,109 +557,53 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         nextPC = iregs[rsrc0] + immsrc;
         //std::cout << "JALR... SETTING PC: " << nextPC << "\n";
       }
-      if (rdest != 0) {
-        iregs[rdest] = PC_;
-      }
+      if (rdest) iregs[rdest] = PC_;
       updatePC = true;
       break;
     case SYS_INST: {
       D(3, "SYS_INST: r" << std::dec << rdest << " <- r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", imm=0x" << std::hex << immsrc);
       Word rs1 = iregs[rsrc0];
       Word csr_addr = immsrc & 0x00000FFF;
-      // GPGPU CSR extension
-      if (csr_addr == CSR_WTID) {
-        // Warp threadID
-        iregs[rdest] = t;
-      } else if (csr_addr == CSR_LTID) {
-        // Core threadID
-        iregs[rdest] = t + (id_ * core_->arch().num_threads());
-      } else if (csr_addr == CSR_GTID) {
-        // Processor threadID
-        iregs[rdest] = t + (id_ * core_->arch().num_threads()) + 
-                     (core_->arch().num_threads() * core_->arch().num_warps() * core_->id());
-      } else if (csr_addr == CSR_LWID) {
-        // Core warpID
-        iregs[rdest] = id_;
-      } else if (csr_addr == CSR_GWID) {
-        // Processor warpID        
-        iregs[rdest] = id_ + (core_->arch().num_warps() * core_->id());
-      } else if (csr_addr == CSR_GCID) {
-        // Processor coreID
-        iregs[rdest] = core_->id();
-      } else if (csr_addr == CSR_NT) {
-        // Number of threads per warp
-        iregs[rdest] = core_->arch().num_threads();
-      } else if (csr_addr == CSR_NW) {
-        // Number of warps per core
-        iregs[rdest] = core_->arch().num_warps();
-      } else if (csr_addr == CSR_NC) {
-        // Number of cores
-        iregs[rdest] = core_->arch().num_cores();
-      } else if (csr_addr == CSR_INSTRET) {
-        // NumInsts
-        iregs[rdest] = (Word)core_->num_insts();
-      } else if (csr_addr == CSR_INSTRET_H) {
-        // NumInsts
-        iregs[rdest] = (Word)(core_->num_insts() >> 32);
-      } else if (csr_addr == CSR_CYCLE) {
-        // NumCycles
-        iregs[rdest] = (Word)core_->num_steps();
-      } else if (csr_addr == CSR_CYCLE_H) {
-        // NumCycles
-        iregs[rdest] = (Word)(core_->num_steps() >> 32);
-      } else {
-        switch (func3) {
-        case 0:
-          if (csr_addr < 2) {
-            // ECALL/EBREAK
-            tmask_.reset();
-          }
-          break;
-        case 1:
-          // CSRRW
-          if (rdest != 0) {
-            iregs[rdest] = csrs_[csr_addr];
-          }
-          csrs_[csr_addr] = rs1;
-          break;
-        case 2:
-          // CSRRS
-          if (rdest != 0) {
-            iregs[rdest] = csrs_[csr_addr];
-          }
-          csrs_[csr_addr] = rs1 | csrs_[csr_addr];
-          break;
-        case 3:
-          // CSRRC
-          if (rdest != 0) {
-            iregs[rdest] = csrs_[csr_addr];
-          }
-          csrs_[csr_addr] = rs1 & (~csrs_[csr_addr]);
-          break;
-        case 5:
-          // CSRRWI
-          if (rdest != 0) {
-            iregs[rdest] = csrs_[csr_addr];
-          }
-          csrs_[csr_addr] = rsrc0;
-          break;
-        case 6:
-          // CSRRSI
-          if (rdest != 0) {
-            iregs[rdest] = csrs_[csr_addr];
-          }
-          csrs_[csr_addr] = rsrc0 | csrs_[csr_addr];
-          break;
-        case 7:
-          // CSRRCI
-          if (rdest != 0) {
-            iregs[rdest] = csrs_[csr_addr];
-          }
-          csrs_[csr_addr] = rsrc0 & (~csrs_[csr_addr]);
-          break;
-        default:
-          break;
+      switch (func3) {
+      case 0:
+        if (csr_addr < 2) {
+          // ECALL/EBREAK
+          tmask_.reset();
+          active_ = tmask_.any();
         }
+        break;
+      case 1:
+        // CSRRW
+        if (rdest) iregs[rdest] = core_->get_csr(csr_addr, t, id_);
+        core_->set_csr(csr_addr, rs1);
+        break;
+      case 2:
+        // CSRRS
+        if (rdest) iregs[rdest] = core_->get_csr(csr_addr, t, id_);
+        core_->set_csr(csr_addr, rs1 | core_->get_csr(csr_addr, t, id_));
+        break;
+      case 3:
+        // CSRRC
+        if (rdest) iregs[rdest] = core_->get_csr(csr_addr, t, id_);
+        core_->set_csr(csr_addr, rs1 & ~core_->get_csr(csr_addr, t, id_));
+        break;
+      case 5:
+        // CSRRWI
+        if (rdest) iregs[rdest] = core_->get_csr(csr_addr, t, id_);
+        core_->set_csr(csr_addr, rsrc0);
+        break;
+      case 6:
+        // CSRRSI
+        if (rdest) iregs[rdest] = core_->get_csr(csr_addr, t, id_);
+        core_->set_csr(csr_addr, rsrc0 | core_->get_csr(csr_addr, t, id_));
+        break;
+      case 7:
+        // CSRRCI
+        if (rdest) iregs[rdest] = core_->get_csr(csr_addr, t, id_);
+        core_->set_csr(csr_addr, rsrc0 & ~core_->get_csr(csr_addr, t, id_));
+        break;
+      default:
+        break;
       }
     } break;
     case FENCE:
@@ -684,6 +628,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         for (int i = 0; i < active_threads; ++i) {
           tmask_[i] = true;
         }
+        active_ = tmask_.any();
         runOnce = true;
       } break;
       case 1: {
@@ -726,6 +671,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         for (unsigned i = 0; i < e.tmask.size(); ++i) {
           tmask_[i] = !e.tmask[i] && tmask_[i];
         }
+        active_ = tmask_.any();
 
         D(3, "Split: New TM");
         DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
@@ -741,6 +687,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           D(2, "Uni branch at join");
           printf("NEW DOMESTACK: \n");
           tmask_ = domStack_.top().tmask;
+          active_ = tmask_.any();
           domStack_.pop();
           break;
         }
@@ -757,6 +704,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
         std::cout << "\n";
         tmask_ = domStack_.top().tmask;
+        active_ = tmask_.any();
 
         D(3, "Join: New TM: ");
         DX( for (int i = 0; i < core_->arch().num_threads(); ++i) D(3, tmask_[i] << " "); )
@@ -765,7 +713,10 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         runOnce = true;
       } break;
       case 4: {
-        // is_barrier
+        // BAR
+        D(3, "BAR: r" << std::dec << rsrc0 << "=0x" << std::hex << iregs[rsrc0] << ", r" << std::dec << rsrc1 << "=0x" << std::hex << iregs[rsrc1]);
+        active_ = false;
+        core_->barrier(iregs[rsrc0], iregs[rsrc1], id_);
         trace_inst->stall_warp = true; 
         runOnce = true;       
       } break;
@@ -1667,7 +1618,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         } else if (s0 >= (2 * VLMAX)) {
           vl_ = VLMAX;
         }        
-        iregs[rdest] = vl_;
+        if (rdest) iregs[rdest] = vl_;
       } break;
       default: {
         std::abort();
@@ -1681,7 +1632,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         // rs1 is integer is register!
         Word memAddr = ((iregs[rsrc0] + immsrc) & 0xFFFFFFFC); // alignment
         D(9,"something weird happen!");
-        Word data_read = core_->mem().read(memAddr, 0);
+        Word data_read = core_->dcache_read(memAddr, 0);
         D(3, "Memaddr");
         DPN(3, ' ' << std::setw(8) << std::hex << memAddr << std::endl);
         trace_inst->is_lw = true;
@@ -1698,9 +1649,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         }
         D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr);
       } else {  
-        int VLEN = core_->arch().vsize() * 8;      
         D(3, "Executing vector load");      
-        D(4, "lmul: " << vtype_.vlmul << " VLEN:" << VLEN << "sew: " << vtype_.vsew);
+        D(4, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
         D(4, "src: " << rsrc0 << " " << iregs[rsrc0]);
         D(4, "dest" << rdest);
         D(4, "width" << instr.getVlsWidth());
@@ -1711,7 +1661,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
         case 6: { //load word and unit strided (not checking for unit stride)
           for (int i = 0; i < vl_; i++) {
             Word memAddr = ((iregs[rsrc0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
-            Word data_read = core_->mem().read(memAddr, 0);
+            Word data_read = core_->dcache_read(memAddr, 0);
             D(4, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
             int *result_ptr = (int *)(vd.data() + i);
             *result_ptr = data_read;
@@ -1748,7 +1698,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           break;
         case 2:
           // //std::cout << std::hex << "FSW: about to write: " << fregs[rsrc1] << " to " << memAddr << "\n"; 
-          core_->mem().write(memAddr, fregs[rsrc1], 0, 4);
+          core_->dcache_write(memAddr, fregs[rsrc1], 0, 4);
           break;
         case 3:
           std::cout << "ERROR: UNSUPPORTED FS INST\n";
@@ -1780,7 +1730,7 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           case 6: //store word and unit strided (not checking for unit stride)
           {
             uint32_t value = *(uint32_t *)(vRegFile_[instr.getVs3()].data() + i);
-            core_->mem().write(memAddr, value, 0, 4);
+            core_->dcache_write(memAddr, value, 0, 4);
             D(4, "store: " << memAddr << " value:" << value);
           } break;
           default:
@@ -1802,8 +1752,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             D(3, "one or two rsrc is NaN!");
             // one of them is not quiet NaN, them set FCSR
             if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
-              csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit                
-              csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit                
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
             }
             if (fpBinIsNan(fregs[rsrc0]) && fpBinIsNan(fregs[rsrc1])) 
               fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
@@ -1836,28 +1786,28 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             
             // fcsr defined in riscv
             if (fetestexcept(FE_INEXACT)) {
-              csrs_[0x003] = csrs_[0x003] | 0x1; // set NX bit
-              csrs_[0x001] = csrs_[0x001] | 0x1; // set NX bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x1); // set NX bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x1); // set NX bit
             }
             
             if (fetestexcept(FE_UNDERFLOW)) {
-              csrs_[0x003] = csrs_[0x003] | 0x2; // set UF bit
-              csrs_[0x001] = csrs_[0x001] | 0x2; // set UF bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x2); // set UF bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x2); // set UF bit
             }
 
             if (fetestexcept(FE_OVERFLOW)) {
-              csrs_[0x003] = csrs_[0x003] | 0x4; // set OF bit
-              csrs_[0x001] = csrs_[0x001] | 0x4; // set OF bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x4); // set OF bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x4); // set OF bit
             }
 
             if (fetestexcept(FE_DIVBYZERO)) {
-              csrs_[0x003] = csrs_[0x003] | 0x8; // set DZ bit
-              csrs_[0x001] = csrs_[0x001] | 0x8; // set DZ bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x8); // set DZ bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x8); // set DZ bit
             } 
 
             if (fetestexcept(FE_INVALID)) {
-              csrs_[0x003] = csrs_[0x003] | 0x10; // set NX bit
-              csrs_[0x001] = csrs_[0x001] | 0x10; // set NX bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NX bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NX bit
             }
 
             D(4, "fpOut: " << fpOut);
@@ -1897,8 +1847,8 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1])) { // if one of src is NaN
             // one of them is not quiet NaN, them set FCSR
             if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
-              csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-              csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
             }
             if (fpBinIsNan(fregs[rsrc0]) && fpBinIsNan(fregs[rsrc1])) 
               fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
@@ -1982,31 +1932,31 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           
           // fcsr defined in riscv
           if (fetestexcept(FE_INEXACT)) {
-            csrs_[0x003] = csrs_[0x003] | 0x1; // set NX bit
-            csrs_[0x001] = csrs_[0x001] | 0x1; // set NX bit
+            core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x1); // set NX bit
+            core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x1); // set NX bit
           }
           
           if (fetestexcept(FE_UNDERFLOW)) {
-            csrs_[0x003] = csrs_[0x003] | 0x2; // set UF bit
-            csrs_[0x001] = csrs_[0x001] | 0x2; // set UF bit
+            core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x2); // set UF bit
+            core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x2); // set UF bit
           }
 
           if (fetestexcept(FE_OVERFLOW)) {
-            csrs_[0x003] = csrs_[0x003] | 0x4; // set OF bit
-            csrs_[0x001] = csrs_[0x001] | 0x4; // set OF bit
+            core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x4); // set OF bit
+            core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x4); // set OF bit
           }
 
           if (fetestexcept(FE_DIVBYZERO)) {
-            csrs_[0x003] = csrs_[0x003] | 0x8; // set DZ bit
-            csrs_[0x001] = csrs_[0x001] | 0x8; // set DZ bit
+            core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x8); // set DZ bit
+            core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x8); // set DZ bit
           } 
 
           if (fetestexcept(FE_INVALID) || outOfRange) {
-            csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-            csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+            core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+            core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
           }
 
-          iregs[rdest] = result;
+          if (rdest) iregs[rdest] = result;
         } break;
         
         // FMV.X.W FCLASS.S
@@ -2015,31 +1965,33 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
           if (func3) {
             // Examine the value in fpReg rs1 and write to integer rd
             // a 10-bit mask to indicate the class of the fp number
-            iregs[rdest] = 0; // clear all bits
+            if (rdest) iregs[rdest] = 0; // clear all bits
 
             bool fsign = fregs[rsrc0] & 0x80000000;
             uint32_t expo = (fregs[rsrc0]>>23) & 0x000000FF;
             uint32_t fraction = fregs[rsrc0] & 0x007FFFFF;
 
-            if ((expo==0) && (fraction==0))
-              iregs[rdest] = fsign? (1<<3) : (1<<4); // +/- 0
-            else if ((expo==0) && (fraction!=0))
-              iregs[rdest] = fsign? (1<<2) : (1<<5); // +/- subnormal
-            else if ((expo==0xFF) && (fraction==0))
-              iregs[rdest] = fsign? (1<<0) : (1<<7); // +/- infinity
-            else if ((expo==0xFF) && (fraction!=0)) 
-              if (!fsign && (fraction == 0x00400000)) 
-                iregs[rdest] = (1<<9);               // quiet NaN
-              else 
-                iregs[rdest] = (1<<8);               // signaling NaN
-            else
-              iregs[rdest] = fsign? (1<<1) : (1<<6); // +/- normal
+            if ((expo==0) && (fraction==0)) {
+             if (rdest) iregs[rdest] = fsign? (1<<3) : (1<<4); // +/- 0
+            } else if ((expo==0) && (fraction!=0)) {
+              if (rdest) iregs[rdest] = fsign? (1<<2) : (1<<5); // +/- subnormal
+            } else if ((expo==0xFF) && (fraction==0)) {
+              if (rdest) iregs[rdest] = fsign? (1<<0) : (1<<7); // +/- infinity
+            } else if ((expo==0xFF) && (fraction!=0)) { 
+              if (!fsign && (fraction == 0x00400000)) {
+                if (rdest) iregs[rdest] = (1<<9);               // quiet NaN
+              } else { 
+                if (rdest) iregs[rdest] = (1<<8);               // signaling NaN
+              }
+            } else {
+              if (rdest) iregs[rdest] = fsign? (1<<1) : (1<<6); // +/- normal
+            }
           } else {          
             // FMV.X.W
             // Move bit values from floating-point register rs1 to integer register rd
             // Since we are using integer register to represent floating point register, 
             // just simply assign here.
-            iregs[rdest] = fregs[rsrc0];
+            if (rdest) iregs[rdest] = fregs[rsrc0];
           } 
         } break;
         
@@ -2052,35 +2004,35 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
             // FLE.S or FLT.S
             if (func3 == 0 || func3 == 1) {
               // If either input is NaN, set NV bit
-              csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-              csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+              core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+              core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
             } else { // FEQ.S
               // Only set NV bit if it is signaling NaN
               if (fpBinIsNan(fregs[rsrc0]) == 2 || fpBinIsNan(fregs[rsrc1]) == 2) {
                 // If either input is NaN, set NV bit
-                csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-                csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+                core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+                core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
               }
             }
             // The result is 0 if either operand is NaN
-            iregs[rdest] = 0;
+            if (rdest) iregs[rdest] = 0;
           } else {
             switch(func3) {              
               case 0: {
                 // FLE.S
                 if (intregToFloat(fregs[rsrc0]) <= intregToFloat(fregs[rsrc1])) {
-                  iregs[rdest] = 1;
+                  if (rdest) iregs[rdest] = 1;
                 } else {
-                  iregs[rdest] = 0;
+                  if (rdest) iregs[rdest] = 0;
                 }
               } break;
               
               case 1: {
                 // FLT.S
                 if (intregToFloat(fregs[rsrc0]) < intregToFloat(fregs[rsrc1])) {
-                  iregs[rdest] = 1;
+                  if (rdest) iregs[rdest] = 1;
                 } else {
-                  iregs[rdest] = 0;
+                  if (rdest) iregs[rdest] = 0;
                 }
               }
               break;
@@ -2088,9 +2040,9 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
               case 2: {
                 // FEQ.S
                 if (intregToFloat(fregs[rsrc0]) == intregToFloat(fregs[rsrc1])) {
-                  iregs[rdest] = 1;
+                  if (rdest) iregs[rdest] = 1;
                 } else {
-                  iregs[rdest] = 0;
+                  if (rdest) iregs[rdest] = 0;
                 }
               }
               break;
@@ -2131,16 +2083,16 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
     case FMNMSUB: {
       // multiplicands are infinity and zero, them set FCSR
       if (fpBinIsZero(fregs[rsrc0])|| fpBinIsZero(fregs[rsrc1])|| fpBinIsInf(fregs[rsrc0]) || fpBinIsInf(fregs[rsrc1])) {
-        csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-        csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+        core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+        core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
       }
 
       if (fpBinIsNan(fregs[rsrc0]) || fpBinIsNan(fregs[rsrc1]) || fpBinIsNan(fregs[rsrc2])) { 
         // if one of op is NaN
         // if addend is not quiet NaN, them set FCSR
         if ((fpBinIsNan(fregs[rsrc0])==2) | (fpBinIsNan(fregs[rsrc1])==2) | (fpBinIsNan(fregs[rsrc1])==2)) {
-          csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-          csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit          
+          core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+          core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit          
         }
         fregs[rdest] = 0x7fc00000;  // canonical(quiet) NaN 
       } else {
@@ -2170,28 +2122,28 @@ void Warp::execute(Instr &instr, trace_inst_t *trace_inst) {
 
         // fcsr defined in riscv
         if (fetestexcept(FE_INEXACT)) {
-          csrs_[0x003] = csrs_[0x003] | 0x1; // set NX bit
-          csrs_[0x001] = csrs_[0x001] | 0x1; // set NX bit
+          core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x1); // set NX bit
+          core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x1); // set NX bit
         }
         
         if (fetestexcept(FE_UNDERFLOW)) {
-          csrs_[0x003] = csrs_[0x003] | 0x2; // set UF bit
-          csrs_[0x001] = csrs_[0x001] | 0x2; // set UF bit
+          core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x2); // set UF bit
+          core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x2); // set UF bit
         }
 
         if (fetestexcept(FE_OVERFLOW)) {
-          csrs_[0x003] = csrs_[0x003] | 0x4; // set OF bit
-          csrs_[0x001] = csrs_[0x001] | 0x4; // set OF bit
+          core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x4); // set OF bit
+          core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x4); // set OF bit
         }
 
         if (fetestexcept(FE_DIVBYZERO)) {
-          csrs_[0x003] = csrs_[0x003] | 0x8; // set DZ bit
-          csrs_[0x001] = csrs_[0x001] | 0x8; // set DZ bit
+          core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x8); // set DZ bit
+          core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x8); // set DZ bit
         } 
 
         if (fetestexcept(FE_INVALID)) {
-          csrs_[0x003] = csrs_[0x003] | 0x10; // set NV bit
-          csrs_[0x001] = csrs_[0x001] | 0x10; // set NV bit
+          core_->set_csr(0x003, core_->get_csr(0x003, t, id_) | 0x10); // set NV bit
+          core_->set_csr(0x001, core_->get_csr(0x001, t, id_) | 0x10); // set NV bit
         }
 
         fregs[rdest] = floatToBin(fpOut);

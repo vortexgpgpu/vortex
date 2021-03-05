@@ -33,7 +33,7 @@ module VX_warp_sched #(
     reg [31:0] warp_pcs [`NUM_WARPS-1:0];
 
     // barriers
-    reg [`NUM_WARPS-1:0] barrier_stall_mask[`NUM_BARRIERS-1:0]; // warps waiting on barrier
+    reg [`NUM_WARPS-1:0] barrier_stall_mask [`NUM_BARRIERS-1:0]; // warps waiting on barrier
     wire reached_barrier_limit; // the expected number of warps reached the barrier
     
     // wspawn

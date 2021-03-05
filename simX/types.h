@@ -14,6 +14,8 @@ typedef uint32_t Size;
 
 typedef std::bitset<32> ThreadMask;
 
+typedef std::bitset<32> WarpMask;
+
 enum MemFlags {
   RD_USR = 1, 
   WR_USR = 2,  

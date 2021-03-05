@@ -62,10 +62,19 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : is_done_(false)
+        : arch_("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS)
+        , decoder_(arch_)
+        , mmu_(PAGE_SIZE, arch_.wsize(), true)
+        , cores_(arch_.num_cores())
+        , is_done_(false)
         , is_running_(false)
-        , thread_(__thread_proc__, this)  {
-        mem_allocation_ = ALLOC_BASE_ADDR;
+        , thread_(__thread_proc__, this)
+        , ram_((1<<12), (1<<20))  {
+        mem_allocation_ = ALLOC_BASE_ADDR;               
+        mmu_.attach(ram_, 0, 0xffffffff);  
+        for (int i = 0; i < arch_.num_cores(); ++i) {
+            cores_[i] = std::make_shared<vortex::Core>(arch_, decoder_, mmu_, i);
+        }
     }
 
     ~vx_device() {
@@ -139,33 +148,34 @@ public:
         return 0;
     }
 
+    int get_csr(int core_id, int addr, unsigned *value) {
+        *value = cores_.at(core_id)->get_csr(addr, 0, 0);
+        return 0;
+    }    
+
+    int set_csr(int core_id, int addr, unsigned value) {
+        cores_.at(core_id)->set_csr(addr, value);
+        return 0;
+    }
+
 private:
 
-    void run() {        
-        vortex::ArchDef arch("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS);
-        vortex::Decoder decoder(arch);
-        vortex::MemoryUnit mu(PAGE_SIZE, arch.wsize(), true);
-        mu.attach(ram_, 0);  
-
-        std::vector<std::shared_ptr<vortex::Core>> cores(arch.num_cores());
-        for (int i = 0; i < arch.num_cores(); ++i) {
-            cores[i] = std::make_shared<vortex::Core>(arch, decoder, mu, i);
-        }
-
+    void run() {
         bool running;
+        int num_cores = cores_.at(0)->arch().num_cores();
         do {
             running = false;
-            for (int i = 0; i < arch.num_cores(); ++i) {
-                if (!cores[i]->running())
+            for (int i = 0; i < num_cores; ++i) {
+                if (!cores_[i]->running())
                     continue;
                 running = true;
-                cores[i]->step();
+                cores_[i]->step();
             }
         } while (running);
     }
 
     void thread_proc() {
-        std::cout << "Device ready..." << std::endl;
+        std::cout << "Device ready..." << std::flush << std::endl;
 
         for (;;) {
             mutex_.lock();
@@ -177,7 +187,7 @@ private:
                 break;
 
             if (is_running) {                                
-                std::cout << "Device running..." << std::endl;
+                std::cout << "Device running..." << std::flush << std::endl;
                 
                 this->run();
 
@@ -185,17 +195,21 @@ private:
                 is_running_ = false;
                 mutex_.unlock();
 
-                std::cout << "Device ready..." << std::endl;
+                std::cout << "Device ready..." << std::flush << std::endl;
             }
         }
 
-        std::cout << "Device shutdown..." << std::endl;
+        std::cout << "Device shutdown..." << std::flush << std::endl;
     }
 
     static void __thread_proc__(vx_device* device) {
         device->thread_proc();
     }
 
+    vortex::ArchDef arch_;
+    vortex::Decoder decoder_;
+    vortex::MemoryUnit mmu_;
+    std::vector<std::shared_ptr<vortex::Core>> cores_;
     bool is_done_;
     bool is_running_;   
     size_t mem_allocation_; 
@@ -220,6 +234,10 @@ extern int vx_dev_close(vx_device_h hdevice) {
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
+
+#ifdef DUMP_PERF_STATS
+    vx_dump_perf(device, stdout);
+#endif
 
     delete device;
 
@@ -357,10 +375,20 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     return device->wait(timeout);
 }
 
-extern int vx_csr_set(vx_device_h /*hdevice*/, int /*core_id*/, int /*addr*/, unsigned /*value*/) {
-    return -1;
+extern int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+    
+    return device->set_csr(core_id, addr, value);
 }
 
-extern int vx_csr_get(vx_device_h /*hdevice*/, int /*core_id*/, int /*addr*/, unsigned* /*value*/) {
-    return -1;
+extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned *value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+    
+    return device->get_csr(core_id, addr, value);
 }

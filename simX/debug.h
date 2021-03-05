@@ -1,6 +1,7 @@
 #pragma once
 
-#define USE_DEBUG 3
+//#define USE_DEBUG 3
+
 #define DEBUG_HEADER << "DEBUG "
 //#define DEBUG_HEADER << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": "
 

@@ -121,7 +121,6 @@ std::shared_ptr<Instr> Decoder::decode(
     }
   }
 
-  // std::cout << "op: " << std::hex << op << " what " << sc_instTable[op].iType << "\n";
   switch (curInstType) {
   case InstType::N_TYPE:
     break;
@@ -311,7 +310,7 @@ std::shared_ptr<Instr> Decoder::decode(
     }
   }
 
-  D(2, "Decoded instr 0x" << std::hex << code << " into: " << instr << std::flush);
+  D(2, "Decoded instr 0x" << std::hex << code << " into: " << *instr << std::flush);
 
   return instr;
 }
