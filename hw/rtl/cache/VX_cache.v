@@ -163,10 +163,9 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
 
     VX_flush_ctrl #( 
-        .CACHE_SIZE      (CACHE_SIZE),
+        .CACHE_SIZE (CACHE_SIZE),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
-        .NUM_BANKS       (NUM_BANKS),
-        .WORD_SIZE       (WORD_SIZE)
+        .NUM_BANKS  (NUM_BANKS)
     ) flush_ctrl (
         .clk       (clk),
         .reset     (reset),
@@ -294,7 +293,6 @@ module VX_cache #(
             .NUM_REQS           (NUM_REQS),
             .CREQ_SIZE          (CREQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
-            .DRSQ_SIZE          (DRSQ_SIZE),
             .DREQ_SIZE          (DREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                

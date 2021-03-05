@@ -15,6 +15,8 @@ module VX_gpu_unit #(
     VX_warp_ctl_if  warp_ctl_if,
     VX_commit_if    gpu_commit_if
 );
+
+    `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
