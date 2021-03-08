@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
   std::string imgFileName;
   bool showHelp(false);
   bool showStats(false);
+  bool riscv_test(false);
 
   /* Read the command line arguments. */
   CommandLineArgFlag fh("-h", "--help", "", showHelp);
@@ -30,6 +31,7 @@ int main(int argc, char **argv) {
   CommandLineArgSetter<int> fc("-c", "--cores", "", num_cores);
   CommandLineArgSetter<int> fw("-w", "--warps", "", num_warps);
   CommandLineArgSetter<int> ft("-t", "--threads", "", num_threads);
+  CommandLineArgFlag fr("-r", "--riscv", "", riscv_test);
   CommandLineArgFlag fs("-s", "--stats", "", showStats);
 
   CommandLineArg::readArgs(argc - 1, argv + 1);
@@ -41,6 +43,7 @@ int main(int argc, char **argv) {
                  "  -w, --warps <num> Number of warps\n"
                  "  -t, --threads <num> Number of threads\n"
                  "  -a, --arch <arch string> Architecture string\n"
+                 "  -r, --riscv riscv test\n"
                  "  -s, --stats Print stats on exit.\n";
     return 0;
   }
@@ -64,16 +67,24 @@ int main(int argc, char **argv) {
   }
 
   bool running;
-
   do {
     running = false;
-    for (int i = 0; i < num_cores; ++i) {
-      if (!cores[i]->running())
-        continue;
-      running = true;
-      cores[i]->step();
+    for (auto& core : cores) {            
+      core->step();
+      if (core->running())
+          running = true;
     }
   } while (running);
+
+  if (riscv_test) {
+    bool status = (1 == cores[0]->getIRegValue(3));
+    if (status) {
+      std::cout << "Passed." << std::endl;
+    } else {
+      std::cout << "Failed." << std::endl;		
+      return -1;
+    }
+  }
 
   return 0;
 }

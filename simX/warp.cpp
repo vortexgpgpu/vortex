@@ -12,53 +12,72 @@ using namespace vortex;
 
 Warp::Warp(Core *core, Word id)
     : id_(id)
-    , active_(false)
-    , core_(core)
-    , PC_(0x80000000)
-    , steps_(0)
-    , insts_(0)
-    , loads_(0)
-    , stores_(0) {
-
-  tmask_.reset();
-
+    , core_(core) {
   iRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
   fRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
-  vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));  
+  vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));
+  this->clear();
 }
 
-void Warp::step(trace_inst_t *trace_inst) {
+void Warp::clear() {
+  PC_ = STARTUP_ADDR;
+  tmask_.reset();
+  active_ = false;
+}
+
+void Warp::step(Pipeline *pipeline) {
   assert(tmask_.any());
 
-  Size fetchPos(0);
-  Size decPos;
-  Size wordSize(core_->arch().wsize());
-  std::vector<Byte> fetchBuffer(wordSize);
+  D(3, "Step: wid=" << id_ << ", PC=0x" << std::hex << PC_);
 
-  ++steps_;
+  /* Fetch and decode. */    
 
-  D(3, "current PC=0x" << std::hex << PC_);
+  Word fetched = core_->icache_fetch(PC_, 0);
+  auto instr = core_->decoder().decode(fetched);
 
-  // std::cout << "PC: " << std::hex << PC << "\n";
-  trace_inst->PC = PC_;
+  // Update pipeline
+  pipeline->valid = true;
+  pipeline->PC = PC_;
+  pipeline->rdest = instr->getRDest();
+  pipeline->rdest_type = instr->getRDType();
+  pipeline->used_iregs.reset();
+  pipeline->used_fregs.reset();
+  pipeline->used_vregs.reset();
 
-  /* Fetch and decode. */
-  if (wordSize < sizeof(PC_))
-    PC_ &= ((1ll << (wordSize * 8)) - 1);
-    
-  unsigned fetchSize = 4;
-  fetchBuffer.resize(fetchSize);
-  Word fetched = core_->icache_fetch(PC_ + fetchPos, 0);
-  writeWord(fetchBuffer, fetchPos, fetchSize, fetched);
+  switch (pipeline->rdest_type) {
+  case 1:
+    pipeline->used_iregs[pipeline->rdest] = 1;
+    break;
+  case 2:
+    pipeline->used_fregs[pipeline->rdest] = 1;
+    break;
+  case 3:
+    pipeline->used_vregs[pipeline->rdest] = 1;
+    break;
+  default:
+    break;
+  }
 
-  decPos = 0;
-  std::shared_ptr<Instr> instr = core_->decoder().decode(fetchBuffer, decPos, trace_inst);
-
-  // Update PC
-  PC_ += decPos;
-
+  for (int i = 0; i < instr->getNRSrc(); ++i) {
+    int type = instr->getRSType(i);
+    int reg = instr->getRSrc(i);
+    switch (type) {
+    case 1:
+      pipeline->used_iregs[reg] = 1;
+      break;
+    case 2:
+      pipeline->used_fregs[reg] = 1;
+      break;
+    case 3:
+      pipeline->used_vregs[reg] = 1;
+      break;
+    default:
+      break;
+    }
+  }
+  
   // Execute
-  this->execute(*instr, trace_inst);
+  this->execute(*instr, pipeline);
 
   // At Debug Level 3, print debug info after each instruction.
   D(4, "Register state:");
@@ -74,11 +93,4 @@ void Warp::step(trace_inst_t *trace_inst) {
   for (int i = 0; i < core_->arch().num_threads(); ++i)
     DPN(3, " " << tmask_[i]);
   DPN(3, "\n");
-}
-
-void Warp::printStats() const {
-  std::cout << "Steps : " << steps_ << std::endl
-            << "Insts : " << insts_ << std::endl
-            << "Loads : " << loads_ << std::endl
-            << "Stores: " << stores_ << std::endl;
 }

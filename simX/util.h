@@ -30,4 +30,19 @@ Word readWord(const std::vector<Byte> &b, Size &n, Size wordSize);
 void writeByte(std::vector<Byte> &p, Size &n, Byte b);
 void writeWord(std::vector<Byte> &p, Size &n, Size wordSize, Word w);
 
+// Convert 32-bit integer register file to IEEE-754 floating point number.
+float intregToFloat(uint32_t input);
+
+// Convert a floating point number to IEEE-754 32-bit representation
+uint32_t floatToBin(float in_value);
+
+// check floating-point number in binary format is NaN
+uint8_t fpBinIsNan(uint32_t din);
+
+// check floating-point number in binary format is zero
+uint8_t fpBinIsZero(uint32_t din);
+
+// check floating-point number in binary format is infinity
+uint8_t fpBinIsInf(uint32_t din);
+
 }
