@@ -63,7 +63,7 @@ module VX_csr_unit #(
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .read_enable    (csr_pipe_req_if.valid),
-        .read_addr      (csr_pipe_req_if.csr_addr),
+        .read_addr      (csr_pipe_req_if.addr),
         .read_wid       (csr_pipe_req_if.wid),      
         .read_data      (csr_read_data),
         .write_enable   (write_enable),        
@@ -73,7 +73,7 @@ module VX_csr_unit #(
         .busy           (busy)
     );    
 
-    wire write_hazard = (csr_addr_s1 == csr_pipe_req_if.csr_addr)
+    wire write_hazard = (csr_addr_s1 == csr_pipe_req_if.addr)
                      && (csr_pipe_rsp_if.wid == csr_pipe_req_if.wid) 
                      && csr_pipe_rsp_if.valid;
 
@@ -87,16 +87,16 @@ module VX_csr_unit #(
         csr_we_s0_unqual = 0;
         case (csr_pipe_req_if.op_type)
             `CSR_RW: begin
-                csr_updated_data = csr_pipe_req_if.csr_mask;
+                csr_updated_data = csr_pipe_req_if.data;
                 csr_we_s0_unqual = 1;
             end
             `CSR_RS: begin
-                csr_updated_data = csr_read_data_qual | csr_pipe_req_if.csr_mask;
-                csr_we_s0_unqual = (csr_pipe_req_if.csr_mask != 0); 
+                csr_updated_data = csr_read_data_qual | csr_pipe_req_if.data;
+                csr_we_s0_unqual = (csr_pipe_req_if.data != 0); 
             end
             `CSR_RC: begin
-                csr_updated_data = csr_read_data_qual & (32'hFFFFFFFF - csr_pipe_req_if.csr_mask);
-                csr_we_s0_unqual = (csr_pipe_req_if.csr_mask != 0);
+                csr_updated_data = csr_read_data_qual & ~csr_pipe_req_if.data;
+                csr_we_s0_unqual = (csr_pipe_req_if.data != 0);
             end
             default: csr_updated_data = 'x;
         endcase
@@ -115,8 +115,8 @@ module VX_csr_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({pipe_req_valid_qual,   csr_pipe_req_if.wid, csr_pipe_req_if.tmask, csr_pipe_req_if.PC, csr_pipe_req_if.rd, csr_pipe_req_if.wb, csr_we_s0_unqual, csr_pipe_req_if.csr_addr, csr_pipe_req_if.is_io, csr_read_data_qual, csr_updated_data}),
-        .data_out ({csr_pipe_rsp_if.valid, csr_pipe_rsp_if.wid, csr_pipe_rsp_if.tmask, csr_pipe_rsp_if.PC, csr_pipe_rsp_if.rd, csr_pipe_rsp_if.wb, csr_we_s1,        csr_addr_s1,              select_io_rsp,         csr_read_data_s1,   csr_updated_data_s1})
+        .data_in  ({pipe_req_valid_qual,   csr_pipe_req_if.wid, csr_pipe_req_if.tmask, csr_pipe_req_if.PC, csr_pipe_req_if.rd, csr_pipe_req_if.wb, csr_we_s0_unqual, csr_pipe_req_if.addr, csr_pipe_req_if.is_io, csr_read_data_qual, csr_updated_data}),
+        .data_out ({csr_pipe_rsp_if.valid, csr_pipe_rsp_if.wid, csr_pipe_rsp_if.tmask, csr_pipe_rsp_if.PC, csr_pipe_rsp_if.rd, csr_pipe_rsp_if.wb, csr_we_s1,        csr_addr_s1,          select_io_rsp,         csr_read_data_s1,   csr_updated_data_s1})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin

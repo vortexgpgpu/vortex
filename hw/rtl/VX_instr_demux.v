@@ -79,7 +79,7 @@ module VX_instr_demux (
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
         .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, `CSR_OP(execute_if.op_type), execute_if.imm[`CSR_ADDR_BITS-1:0], execute_if.rd, execute_if.wb, execute_if.use_imm, execute_if.rs1, gpr_rsp_if.rs1_data[0]}),
-        .data_out  ({csr_req_if.wid, csr_req_if.tmask, csr_req_if.PC, csr_req_if.op_type,          csr_req_if.csr_addr,                csr_req_if.rd, csr_req_if.wb, csr_req_if.use_imm, csr_req_if.rs1, csr_req_if.rs1_data}),
+        .data_out  ({csr_req_if.wid, csr_req_if.tmask, csr_req_if.PC, csr_req_if.op_type,          csr_req_if.addr,                    csr_req_if.rd, csr_req_if.wb, csr_req_if.use_imm, csr_req_if.rs1, csr_req_if.rs1_data}),
         .valid_out (csr_req_if.valid),
         .ready_out (csr_req_if.ready)
     );

@@ -189,7 +189,7 @@ module VX_issue #(
             $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=LSU, tmask=%b, rd=%0d, baddr=%0h, offset=%0h, data=%0h", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, lsu_req_if.tmask, lsu_req_if.rd, lsu_req_if.base_addr, lsu_req_if.offset, lsu_req_if.store_data);   
         end
         if (csr_req_if.valid && csr_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, rs1_data=%0h", $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.csr_addr, csr_req_if.rs1_data);   
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, rs1_data=%0h", $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.addr, csr_req_if.rs1_data);   
         end
         if (fpu_req_if.valid && fpu_req_if.ready) begin
             $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h, rs3_data=%0h", $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rd, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data);   
