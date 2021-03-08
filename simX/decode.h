@@ -2,19 +2,18 @@
 
 #include <vector>
 #include <memory>
-#include "util.h"
 
 namespace vortex {
 
 class ArchDef;
 class Instr;
-class trace_inst_t;
+class Pipeline;
 
 class Decoder {
 public:
   Decoder(const ArchDef &);    
   
-  virtual std::shared_ptr<Instr> decode(const std::vector<Byte> &v, Size &n, trace_inst_t * trace_inst);
+  std::shared_ptr<Instr> decode(Word code);
 
 private:
 

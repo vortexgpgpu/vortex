@@ -70,6 +70,7 @@ public:
         , is_running_(false)
         , thread_(__thread_proc__, this)
         , ram_((1<<12), (1<<20))  {
+
         mem_allocation_ = ALLOC_BASE_ADDR;               
         mmu_.attach(ram_, 0, 0xffffffff);  
         for (int i = 0; i < arch_.num_cores(); ++i) {
@@ -100,12 +101,13 @@ public:
         if (dest_addr + asize > ram_.size())
             return -1;
 
+        ram_.write(dest_addr, asize, (uint8_t*)src + src_offset);
+        
         /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
         for (int i = 0; i < size; i += 4) {
             printf("mem-write: 0x%x <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
         }*/
         
-        ram_.write(dest_addr, asize, (uint8_t*)src + src_offset);
         return 0;
     }
 
@@ -127,7 +129,10 @@ public:
     int start() {  
 
         mutex_.lock();     
-        is_running_ = true;
+        for (int i = 0; i < arch_.num_cores(); ++i) {
+            cores_[i]->clear();
+        }
+        is_running_ = true;        
         mutex_.unlock();
 
         return 0;
@@ -162,14 +167,12 @@ private:
 
     void run() {
         bool running;
-        int num_cores = cores_.at(0)->arch().num_cores();
         do {
             running = false;
-            for (int i = 0; i < num_cores; ++i) {
-                if (!cores_[i]->running())
-                    continue;
-                running = true;
-                cores_[i]->step();
+            for (auto& core : cores_) {
+                core->step();
+                if (core->running())
+                    running = true;
             }
         } while (running);
     }

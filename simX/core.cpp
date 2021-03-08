@@ -10,73 +10,7 @@
 #include "core.h"
 #include "debug.h"
 
-#define INIT_TRACE(trace_inst)                                          \
-  trace_inst.valid = false;                                             \
-  trace_inst.PC = 0;                                                    \
-  trace_inst.wid = schedule_w_;                                         \
-  trace_inst.irs1 = -1;                                                 \
-  trace_inst.irs2 = -1;                                                 \
-  trace_inst.frs1 = -1;                                                 \
-  trace_inst.frs2 = -1;                                                 \
-  trace_inst.frs3 = -1;                                                 \
-  trace_inst.frd = -1;                                                  \
-  trace_inst.ird = -1;                                                  \
-  trace_inst.vrs1 = -1;                                                 \
-  trace_inst.vrs2 = -1;                                                 \
-  trace_inst.vrd = -1;                                                  \
-  trace_inst.is_lw = false;                                             \
-  trace_inst.is_sw = false;                                             \
-  if (trace_inst.mem_addresses != NULL)                                 \
-    free(trace_inst.mem_addresses);                                     \
-  trace_inst.mem_addresses = (unsigned *)malloc(32 * sizeof(unsigned)); \
-  for (int tid = 0; tid < arch_.num_threads(); tid++)                   \
-    trace_inst.mem_addresses[tid] = 0xdeadbeef;                         \
-  trace_inst.mem_stall_cycles = 0;                                      \
-  trace_inst.fetch_stall_cycles = 0;                                    \
-  trace_inst.stall_warp = false;                                        \
-  trace_inst.wspawn = false;                                            \
-  trace_inst.stalled = false;
-
-#define CPY_TRACE(drain, source)                          \
-  drain.valid = source.valid;                             \
-  drain.PC = source.PC;                                   \
-  drain.wid = source.wid;                                 \
-  drain.irs1 = source.irs1;                               \
-  drain.irs2 = source.irs2;                               \
-  drain.ird = source.ird;                                 \
-  drain.frs1 = source.frs1;                               \
-  drain.frs2 = source.frs2;                               \
-  drain.frs3 = source.frs3;                               \
-  drain.frd = source.frd;                                 \
-  drain.vrs1 = source.vrs1;                               \
-  drain.vrs2 = source.vrs2;                               \
-  drain.vrd = source.vrd;                                 \
-  drain.is_lw = source.is_lw;                             \
-  drain.is_sw = source.is_sw;                             \
-  for (int tid = 0; tid < arch_.num_threads(); tid++)     \
-    drain.mem_addresses[tid] = source.mem_addresses[tid]; \
-  drain.mem_stall_cycles = source.mem_stall_cycles;       \
-  drain.fetch_stall_cycles = source.fetch_stall_cycles;   \
-  drain.stall_warp = source.stall_warp;                   \
-  drain.wspawn = source.wspawn;                           \
-  drain.stalled = false;
-
 using namespace vortex;
-
-void printTrace(trace_inst_t *trace, const char *stage_name) {
-  __unused(trace, stage_name);
-  D(4, stage_name << ": valid=" << trace->valid);
-  D(4, stage_name << ": PC=" << std::hex << trace->PC << std::dec);
-  D(4, stage_name << ": wid=" << trace->wid);
-  D(4, stage_name << ": rd=" << trace->ird << ", rs1=" << trace->irs1 << ", trs2=" << trace->irs2);
-  D(4, stage_name << ": is_lw=" << trace->is_lw);
-  D(4, stage_name << ": is_sw=" << trace->is_sw);
-  D(4, stage_name << ": fetch_stall_cycles=" << trace->fetch_stall_cycles);
-  D(4, stage_name << ": mem_stall_cycles=" << trace->mem_stall_cycles);
-  D(4, stage_name << ": stall_warp=" << trace->stall_warp);
-  D(4, stage_name << ": wspawn=" << trace->wspawn);
-  D(4, stage_name << ": stalled=" << trace->stalled);
-}
 
 Core::Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
     : id_(id)
@@ -84,45 +18,69 @@ Core::Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
     , decoder_(decoder)
     , mem_(mem)
     , shared_mem_(1, SMEM_SIZE)
-    , steps_(0)
-    , num_insts_(0) {  
+    , inst_in_schedule_("schedule")
+    , inst_in_fetch_("fetch")
+    , inst_in_decode_("decode")
+    , inst_in_issue_("issue")
+    , inst_in_execute_("execute")
+    , inst_in_writeback_("writeback") {
+  in_use_iregs_.resize(arch.num_warps(), 0);
+  in_use_fregs_.resize(arch.num_warps(), 0);
+  in_use_vregs_.reset();
 
-  foundSchedule_ = true;
-  schedule_w_ = 0;
+  csrs_.resize(arch_.num_csrs(), 0);
 
-  memset(&inst_in_fetch_, 0, sizeof(inst_in_fetch_));
-  memset(&inst_in_decode_, 0, sizeof(inst_in_decode_));
-  memset(&inst_in_scheduler_, 0, sizeof(inst_in_scheduler_));
-  memset(&inst_in_exe_, 0, sizeof(inst_in_exe_));
-  memset(&inst_in_lsu_, 0, sizeof(inst_in_lsu_));
-  memset(&inst_in_wb_, 0, sizeof(inst_in_wb_));
-
-  INIT_TRACE(inst_in_fetch_);
-  INIT_TRACE(inst_in_decode_);
-  INIT_TRACE(inst_in_scheduler_);
-  INIT_TRACE(inst_in_exe_);
-  INIT_TRACE(inst_in_lsu_);
-  INIT_TRACE(inst_in_wb_);
-
-  iRenameTable_.resize(arch.num_warps(), std::vector<bool>(arch.num_regs(), false));
-  fRenameTable_.resize(arch.num_warps(), std::vector<bool>(arch.num_regs(), false));
-  vRenameTable_.resize(arch.num_regs(), false);
-
-  csrs_.resize(arch_.num_csrs());
+  fcsrs_.resize(arch_.num_warps(), 0);
 
   barriers_.resize(arch_.num_barriers(), 0);
 
-  stalled_warps_.resize(arch.num_warps(), false);
-
+  warps_.resize(arch_.num_warps());
   for (int i = 0; i < arch_.num_warps(); ++i) {
-    warps_.emplace_back(this, i);
+    warps_[i] = std::make_shared<Warp>(this, i);
   }
 
-  warps_[0].setTmask(0, true);
+  this->clear();
 }
 
-Core::~Core() {
-  //--
+void Core::clear() {
+  for (int w = 0; w < arch_.num_warps(); ++w) {    
+    in_use_iregs_[w].reset();
+    in_use_fregs_[w].reset();    
+  }
+  stalled_warps_.reset();
+
+  in_use_vregs_.reset();
+  
+  for (auto& csr : csrs_) {
+    csr = 0;
+  }
+
+  for (auto& fcsr : fcsrs_) {
+    fcsr = 0;
+  }
+
+  for (auto& barrier : barriers_) {
+    barrier.reset();
+  }
+  
+  for (auto warp : warps_) {
+    warp->clear();
+  }  
+
+  inst_in_schedule_.clear();
+  inst_in_fetch_.clear();
+  inst_in_decode_.clear();
+  inst_in_issue_.clear();
+  inst_in_execute_.clear();
+  inst_in_writeback_.clear();
+
+  steps_  = 0;
+  insts_  = 0;
+  loads_  = 0;
+  stores_ = 0;
+
+  inst_in_schedule_.valid = true;
+  warps_[0]->setTmask(0, true);
 }
 
 void Core::step() {
@@ -138,243 +96,152 @@ void Core::step() {
   DPN(3, "\n");
 
   this->writeback();
-  this->load_store();
-  this->execute_unit();
-  this->scheduler();
+  this->execute();
+  this->issue();
   this->decode();
   this->fetch();
+  this->schedule();
 
   DPN(3, std::flush);
 }
 
-void Core::warpScheduler() {
-  foundSchedule_ = false;
-  int next_warp = schedule_w_;
+void Core::schedule() {
+  if (!inst_in_schedule_.enter(&inst_in_fetch_))
+    return;
+
+  bool foundSchedule = false;
+  int scheduled_warp = inst_in_schedule_.wid;
+
   for (size_t wid = 0; wid < warps_.size(); ++wid) {
     // round robin scheduling
-    next_warp = (next_warp + 1) % warps_.size();
-    bool is_active = warps_[next_warp].active();
-    bool stalled = stalled_warps_[next_warp];
+    scheduled_warp = (scheduled_warp + 1) % warps_.size();
+    bool is_active = warps_[scheduled_warp]->active();
+    bool stalled = stalled_warps_[scheduled_warp];
     if (is_active && !stalled) {
-      foundSchedule_ = true;
+      foundSchedule = true;
       break;
     }
   }
-  schedule_w_ = next_warp;
+
+  if (!foundSchedule)
+    return;
+
+  D(3, "Schedule: wid=" << scheduled_warp);
+  inst_in_schedule_.wid = scheduled_warp;
+
+  // advance pipeline
+  inst_in_schedule_.next(&inst_in_fetch_);
 }
 
 void Core::fetch() {
-  if ((!inst_in_scheduler_.stalled) 
-   && (inst_in_fetch_.fetch_stall_cycles == 0)) {
-    INIT_TRACE(inst_in_fetch_);
+  if (!inst_in_fetch_.enter(&inst_in_issue_))
+    return;
 
-    if (foundSchedule_) {
-      auto active_threads_b = warps_[schedule_w_].getActiveThreads();
-      num_insts_ = num_insts_ + warps_[schedule_w_].getActiveThreads();
+  int wid = inst_in_fetch_.wid;
+  
+  auto active_threads_b = warps_[wid]->getActiveThreads();    
+  warps_[wid]->step(&inst_in_fetch_);
+  auto active_threads_a = warps_[wid]->getActiveThreads();   
 
-      warps_[schedule_w_].step(&inst_in_fetch_);
-
-      auto active_threads_a = warps_[schedule_w_].getActiveThreads();
-      if (active_threads_b != active_threads_a) {
-        D(3, "** warp #" << schedule_w_ << " active threads changed from " << active_threads_b << " to " << active_threads_a);
-      }
-
-      this->getCacheDelays(&inst_in_fetch_);
-
-      if (inst_in_fetch_.stall_warp) {
-        stalled_warps_[inst_in_fetch_.wid] = true;
-      }
-    }
-    this->warpScheduler();
-  } else {
-    inst_in_fetch_.stalled = false;
-    if (inst_in_fetch_.fetch_stall_cycles > 0)
-      --inst_in_fetch_.fetch_stall_cycles;
+  insts_ += active_threads_b;
+  if (active_threads_b != active_threads_a) {
+    D(3, "** warp #" << wid << " active threads changed from " << active_threads_b << " to " << active_threads_a);
   }
 
-  printTrace(&inst_in_fetch_, "Fetch");
+  if (inst_in_fetch_.stall_warp) {
+    D(3, "** warp #" << wid << " stalled");
+    stalled_warps_[wid] = true;
+  }
+  
+  D(4, inst_in_fetch_);
+
+  // advance pipeline
+  inst_in_fetch_.next(&inst_in_issue_);
 }
 
 void Core::decode() {
-  if ((inst_in_fetch_.fetch_stall_cycles == 0) 
-   && !inst_in_scheduler_.stalled) {
-    CPY_TRACE(inst_in_decode_, inst_in_fetch_);
-    INIT_TRACE(inst_in_fetch_);
-  }
-}
-
-void Core::scheduler() {
-  if (!inst_in_scheduler_.stalled) {
-    CPY_TRACE(inst_in_scheduler_, inst_in_decode_);
-    INIT_TRACE(inst_in_decode_);
-  }
-}
-
-void Core::load_store() {
-  if ((inst_in_lsu_.mem_stall_cycles > 0) || inst_in_lsu_.stalled) {
-    // LSU currently busy
-    if ((inst_in_scheduler_.is_lw || inst_in_scheduler_.is_sw)) {
-      inst_in_scheduler_.stalled = true;
-    }
-  } else {
-    if (!inst_in_scheduler_.is_lw && !inst_in_scheduler_.is_sw)
-      return;
-
-    // Scheduler has LSU inst
-    bool scheduler_srcs_busy = false;
-
-    if (inst_in_scheduler_.irs1 > 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || iRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.irs1];
-    }
-
-    if (inst_in_scheduler_.irs2 > 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || iRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.irs2];
-    }
-
-    if (inst_in_scheduler_.frs1 >= 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frs1];
-    }
-
-    if (inst_in_scheduler_.frs2 >= 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frs2];
-    }
-
-    if (inst_in_scheduler_.frs3 >= 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frs3];
-    }
-
-    if (inst_in_scheduler_.vrs1 >= 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || vRenameTable_[inst_in_scheduler_.vrs1];
-    }
-    if (inst_in_scheduler_.vrs2 >= 0) {
-      scheduler_srcs_busy = scheduler_srcs_busy || vRenameTable_[inst_in_scheduler_.vrs2];
-    }
-
-    if (scheduler_srcs_busy) {
-      inst_in_scheduler_.stalled = true;
-    } else {        
-      if (inst_in_scheduler_.ird > 0)
-        iRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.ird] = true;
-
-      if (inst_in_scheduler_.frd >= 0)
-        fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frd] = true;
-      
-      if (inst_in_scheduler_.vrd >= 0)
-        vRenameTable_[inst_in_scheduler_.vrd] = true;
-
-      CPY_TRACE(inst_in_lsu_, inst_in_scheduler_);
-      INIT_TRACE(inst_in_scheduler_);
-    }
-  }
-
-  if (inst_in_lsu_.mem_stall_cycles > 0)
-    inst_in_lsu_.mem_stall_cycles--;
-}
-
-void Core::execute_unit() {
-  if (inst_in_scheduler_.is_lw || inst_in_scheduler_.is_sw)
+  if (!inst_in_decode_.enter(&inst_in_issue_))
     return;
   
-  bool scheduler_srcs_busy = false;
+  // advance pipeline
+  inst_in_decode_.next(&inst_in_issue_);
+}
 
-  if (inst_in_scheduler_.irs1 > 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || iRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.irs1];
+void Core::issue() {
+  if (!inst_in_issue_.enter(&inst_in_execute_))
+    return;
+
+  bool in_use_regs = (inst_in_issue_.used_iregs & in_use_iregs_[inst_in_issue_.wid]) != 0 
+                  || (inst_in_issue_.used_fregs & in_use_fregs_[inst_in_issue_.wid]) != 0 
+                  || (inst_in_issue_.used_vregs & in_use_vregs_) != 0;
+  
+  if (in_use_regs) {      
+    D(3, "Issue: registers not ready!");
+    inst_in_issue_.stalled = true;
+    return;
+  } 
+
+  switch (inst_in_issue_.rdest_type) {
+  case 1:
+    if (inst_in_issue_.rdest)
+      in_use_iregs_[inst_in_issue_.wid][inst_in_issue_.rdest] = 1;
+    break;
+  case 2:
+    in_use_fregs_[inst_in_issue_.wid][inst_in_issue_.rdest] = 1;
+    break;
+  case 3:
+    in_use_vregs_[inst_in_issue_.rdest] = 1;
+    break;
+  default:  
+    break;
   }
 
-  if (inst_in_scheduler_.irs2 > 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || iRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.irs2];
-  }
+  // advance pipeline
+  inst_in_issue_.next(&inst_in_execute_);
+}
 
-  if (inst_in_scheduler_.frs1 >= 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frs1];
-  }
+void Core::execute() {  
+  if (!inst_in_execute_.enter(&inst_in_writeback_))
+    return;
 
-  if (inst_in_scheduler_.frs2 >= 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frs2];
-  }    
-
-  if (inst_in_scheduler_.frs3 >= 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frs3];
-  }
-
-  if (inst_in_scheduler_.vrs1 >= 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || vRenameTable_[inst_in_scheduler_.vrs1];
-  }
-
-  if (inst_in_scheduler_.vrs2 >= 0) {
-    scheduler_srcs_busy = scheduler_srcs_busy || vRenameTable_[inst_in_scheduler_.vrs2];
-  }
-
-  if (scheduler_srcs_busy) {      
-    D(3, "Execute: srcs not ready!");
-    inst_in_scheduler_.stalled = true;
-  } else {
-    if (inst_in_scheduler_.ird > 0) {
-      iRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.ird] = true;
-    }
-
-    if (inst_in_scheduler_.frd >= 0) {
-      fRenameTable_[inst_in_scheduler_.wid][inst_in_scheduler_.frd] = true;
-    }
-
-    if (inst_in_scheduler_.vrd >= 0) {
-      vRenameTable_[inst_in_scheduler_.vrd] = true;
-    }
-
-    CPY_TRACE(inst_in_exe_, inst_in_scheduler_);
-    INIT_TRACE(inst_in_scheduler_);
-  }
+  // advance pipeline
+  inst_in_execute_.next(&inst_in_writeback_);
 }
 
 void Core::writeback() {
-  if (inst_in_wb_.ird > 0) {
-    iRenameTable_[inst_in_wb_.wid][inst_in_wb_.ird] = false;
+  if (!inst_in_writeback_.enter(NULL))
+    return;
+
+  switch (inst_in_writeback_.rdest_type) {
+  case 1:
+    in_use_iregs_[inst_in_writeback_.wid][inst_in_writeback_.rdest] = 0;
+    break;
+  case 2:
+    in_use_fregs_[inst_in_writeback_.wid][inst_in_writeback_.rdest] = 0;
+    break;
+  case 3:
+    in_use_vregs_[inst_in_writeback_.rdest] = 0;
+    break;
+  default:  
+    break;
   }
 
-  if (inst_in_wb_.frd >= 0) {
-    fRenameTable_[inst_in_wb_.wid][inst_in_wb_.frd] = false;
+  if (inst_in_writeback_.stall_warp) {
+    stalled_warps_[inst_in_writeback_.wid] = 0;
   }
 
-  if (inst_in_wb_.vrd >= 0) {
-    vRenameTable_[inst_in_wb_.vrd] = false;
-  }
-
-  if (inst_in_wb_.stall_warp) {
-    stalled_warps_[inst_in_wb_.wid] = false;
-  }
-
-  INIT_TRACE(inst_in_wb_);
-
-  bool serviced_exe = false;
-  if ((inst_in_exe_.ird > 0) 
-   || (inst_in_exe_.frd >= 0) 
-   || (inst_in_exe_.vrd >= 0) 
-   || (inst_in_exe_.stall_warp)) {
-    CPY_TRACE(inst_in_wb_, inst_in_exe_);
-    INIT_TRACE(inst_in_exe_);
-    serviced_exe = true;
-  }
-
-  if (inst_in_lsu_.is_sw) {
-    INIT_TRACE(inst_in_lsu_);
-  } else {
-    if (((inst_in_lsu_.ird > 0) 
-      || (inst_in_lsu_.frd >= 0) 
-      || (inst_in_lsu_.vrd >= 0)) 
-     && (inst_in_lsu_.mem_stall_cycles == 0)) {
-      if (serviced_exe) {
-        // Stalling LSU because EXE is busy
-        inst_in_lsu_.stalled = true;
-      } else {
-        CPY_TRACE(inst_in_wb_, inst_in_lsu_);
-        INIT_TRACE(inst_in_lsu_);
-      }
-    }
-  }
+  // advance pipeline
+  inst_in_writeback_.next(NULL);
 }
 
 Word Core::get_csr(Addr addr, int tid, int wid) {
-  if (addr == CSR_WTID) {
+  if (addr == CSR_FFLAGS) {
+    return fcsrs_.at(wid) & 0x1F;
+  } else if (addr == CSR_FRM) {
+    return (fcsrs_.at(wid) >> 5);
+  } else if (addr == CSR_FCSR) {
+    return fcsrs_.at(wid);
+  } else if (addr == CSR_WTID) {
     // Warp threadID
     return tid;
   } else if (addr == CSR_LTID) {
@@ -404,10 +271,10 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
     return arch_.num_cores();
   } else if (addr == CSR_INSTRET) {
     // NumInsts
-    return num_insts_;
+    return insts_;
   } else if (addr == CSR_INSTRET_H) {
     // NumInsts
-    return (Word)(num_insts_ >> 32);
+    return (Word)(insts_ >> 32);
   } else if (addr == CSR_CYCLE) {
     // NumCycles
     return (Word)steps_;
@@ -419,8 +286,16 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
   }
 }
 
-void Core::set_csr(Addr addr, Word value) {
-  csrs_.at(addr) = value;
+void Core::set_csr(Addr addr, Word value, int /*tid*/, int wid) {
+  if (addr == CSR_FFLAGS) {
+    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
+  } else if (addr == CSR_FRM) {
+    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
+  } else if (addr == CSR_FCSR) {
+    fcsrs_.at(wid) = value & 0xff;
+  } else {
+    csrs_.at(addr) = value;
+  }
 }
 
 void Core::barrier(int bar_id, int count, int warp_id) {
@@ -430,7 +305,7 @@ void Core::barrier(int bar_id, int count, int warp_id) {
     return;
   for (int i = 0; i < arch_.num_warps(); ++i) {
     if (barrier.test(i)) {
-      warps_.at(i).activate();
+      warps_.at(i)->activate();
     }
   }
   barrier.reset();
@@ -441,6 +316,7 @@ Word Core::icache_fetch(Addr addr, bool sup) {
 }
 
 Word Core::dcache_read(Addr addr, bool sup) {
+  ++loads_;
 #ifdef SM_ENABLE
   if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
    && ((addr + 4) <= SHARED_MEM_BASE_ADDR)) {
@@ -451,6 +327,7 @@ Word Core::dcache_read(Addr addr, bool sup) {
 }
 
 void Core::dcache_write(Addr addr, Word data, bool sup, Size size) {
+  ++stores_;
 #ifdef SM_ENABLE
   if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
    && ((addr + 4) <= SHARED_MEM_BASE_ADDR)) {
@@ -461,36 +338,17 @@ void Core::dcache_write(Addr addr, Word data, bool sup, Size size) {
   mem_.write(addr, data, sup, size);
 }
 
-void Core::getCacheDelays(trace_inst_t *trace_inst) {
-  trace_inst->fetch_stall_cycles += 1;
-  if (trace_inst->is_sw || trace_inst->is_lw) {
-    trace_inst->mem_stall_cycles += 3;
-  }
-}
-
 bool Core::running() const {
-  bool stages_have_valid = inst_in_fetch_.valid 
-                        || inst_in_decode_.valid 
-                        || inst_in_scheduler_.valid 
-                        || inst_in_lsu_.valid 
-                        || inst_in_exe_.valid 
-                        || inst_in_wb_.valid;
-
-  if (stages_have_valid)
-    return true;
-
-  for (unsigned i = 0; i < warps_.size(); ++i) {
-    if (warps_[i].active()) {
-      return true;
-    }
-  }
-  return false;
+  return inst_in_fetch_.valid 
+      || inst_in_decode_.valid 
+      || inst_in_issue_.valid 
+      || inst_in_execute_.valid 
+      || inst_in_writeback_.valid;
 }
 
 void Core::printStats() const {
-  std::cout << "Total steps: " << steps_ << std::endl;
-  for (unsigned i = 0; i < warps_.size(); ++i) {
-    std::cout << "=== Warp " << i << " ===" << std::endl;
-    warps_[i].printStats();
-  }
+  std::cout << "Steps : " << steps_ << std::endl
+            << "Insts : " << insts_ << std::endl
+            << "Loads : " << loads_ << std::endl
+            << "Stores: " << stores_ << std::endl;
 }

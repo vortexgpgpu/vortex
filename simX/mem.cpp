@@ -90,11 +90,14 @@ void MemoryUnit::ADecoder::write(Addr a, Word w, bool /*sup*/, Size wordSize) {
     throw BadAddress();
   }
   RAM *ram = (RAM *)ma.md;
-  if (wordSize == 8) {
+  switch (wordSize) {
+  case 1:
     ram->writeByte(ma.addr, &w);
-  } else if (wordSize == 16) {
+    break;
+  case 2:
     ram->writeHalf(ma.addr, &w);
-  } else {
+    break;
+  default:
     ram->writeWord(ma.addr, &w);
   }
 }
@@ -247,7 +250,6 @@ void DiskControllerMemDevice::write(Addr a, Word w) {
 
 RAM::RAM(uint32_t num_pages, uint32_t page_size) 
   : page_bits_(log2ceil(page_size)) {    
-    assert(page_size >= 4);
     assert(ispow2(page_size));
   mem_.resize(num_pages, NULL);
   uint64_t sizel = uint64_t(mem_.size()) << page_bits_;
@@ -272,15 +274,16 @@ Size RAM::size() const {
 }
 
 uint8_t *RAM::get(uint32_t address) {
-  uint32_t page_size   = 14 << page_bits_;
+  uint32_t page_size   = 1 << page_bits_;
   uint32_t page_index  = address >> page_bits_;
   uint32_t byte_offset = address & ((1 << page_bits_) - 1);
 
   uint8_t* &page = mem_.at(page_index);
   if (page == NULL) {
     uint8_t *ptr = new uint8_t[page_size];
-    for (uint32_t i = 0; i < (page_size / 4); ++i) {
-      ((uint32_t*)ptr)[i] = 0xddccbbaa;
+    // set uninitialized data to "baadf00d"
+    for (uint32_t i = 0; i < page_size; ++i) {
+      ptr[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
     }
     page = ptr;
   }
