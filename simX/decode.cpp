@@ -78,7 +78,7 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::I_INST:
     switch (func3) {
-    case 0: return func7 ? "SUBI" : "ADDI";
+    case 0: return "ADDI";
     case 1: return "SLLI";
     case 2: return "SLTI";
     case 3: return "SLTIU";
@@ -163,10 +163,10 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    case 0x60: return rs2 ? "FCVT.WU" : "FCVT.W";
-    case 0x68: return rs2 ? "FCVT.S" : "FCVT.S";
+    case 0x60: return rs2 ? "FCVT.WU.S" : "FCVT.W.S";
+    case 0x68: return rs2 ? "FCVT.S.WU" : "FCVT.S.W";
     case 0x70: return func3 ? "FLASS" : "FMV.X.W";
-    case 0x78: return "FMV.W";
+    case 0x78: return "FMV.W.X";
     default:
       std::abort();
     }
@@ -283,11 +283,18 @@ std::shared_ptr<Instr> Decoder::decode(Word code) {
 
   case InstType::R_TYPE:
     if (op == Opcode::FCI) {      
-      instr->setSrcFReg(rs1);
+      switch (func7) {
+      case 0x68: // FCVT.S.W, FCVT.S.WU
+      case 0x78: // FMV.W.X
+        instr->setSrcReg(rs1);
+        break;
+      default:
+        instr->setSrcFReg(rs1);
+      }      
       instr->setSrcFReg(rs2);
       switch (func7) {
       case 0x50: // FLE, FLT, FEQ
-      case 0x60: // FCVT.WU, FCVT.W
+      case 0x60: // FCVT.WU.S, FCVT.W.S
       case 0x70: // FLASS, FMV.X.W
         instr->setDestReg(rd);
         break;
@@ -304,12 +311,11 @@ std::shared_ptr<Instr> Decoder::decode(Word code) {
     break;
 
   case InstType::I_TYPE: {
-    if (op == Opcode::FCI || op == Opcode::FL) {
-      instr->setDestFReg(rd);
-      instr->setSrcFReg(rs1);
+    instr->setSrcReg(rs1);
+    if (op == Opcode::FL) {
+      instr->setDestFReg(rd);      
     } else {
       instr->setDestReg(rd);
-      instr->setSrcReg(rs1);
     }    
     instr->setFunc3(func3);
     instr->setFunc7(func7);    
@@ -320,12 +326,11 @@ std::shared_ptr<Instr> Decoder::decode(Word code) {
     }
   } break;
 
-  case InstType::S_TYPE: {
+  case InstType::S_TYPE: {    
+    instr->setSrcReg(rs1);
     if (op == Opcode::FS) {
-      instr->setSrcFReg(rs1);
       instr->setSrcFReg(rs2);
     } else {
-      instr->setSrcReg(rs1);
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);

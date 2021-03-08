@@ -159,7 +159,7 @@ public:
     }    
 
     int set_csr(int core_id, int addr, unsigned value) {
-        cores_.at(core_id)->set_csr(addr, value);
+        cores_.at(core_id)->set_csr(addr, value, 0, 0);
         return 0;
     }
 
