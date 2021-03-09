@@ -3,8 +3,8 @@ PROJECT = libvortex.so
 
 SIMX_DIR = ../../simX
 
-#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
-CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
+#CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -fPIC -Wno-aligned-new -Wno-maybe-uninitialized
 CXXFLAGS += -I../include -I../../hw -I$(SIMX_DIR)
