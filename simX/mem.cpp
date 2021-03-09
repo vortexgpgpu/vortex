@@ -188,9 +188,7 @@ RAM::RAM(uint32_t num_pages, uint32_t page_size)
 }
 
 RAM::~RAM() {
-  for (auto& page : mem_) {
-    delete[] page;
-  }
+  this->clear();
 }
 
 void RAM::clear() {
