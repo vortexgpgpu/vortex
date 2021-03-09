@@ -8,6 +8,7 @@ set -e
 ./ci/test_riscv_isa.sh  
 ./ci/test_opencl.sh
 ./ci/test_driver.sh  
+./ci/test_simx.sh
 
 # Build tests disabling extensions
 CONFIGS=-DEXT_M_DISABLE make -C hw/simulate

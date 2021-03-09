@@ -20689,7 +20689,7 @@ Disassembly of section .rodata:
 80013654:	6c69                	lui	s8,0x1a
 80013656:	2065                	jal	800136fe <zeroes.4448+0xe2>
 80013658:	2522                	fld	fa0,8(sp)
-8001365a:	202c2273          	csrrs	tp,hedeleg,s8
+8001365a:	202c2273          	csrrs	tp,0x202,s8
 8001365e:	696c                	flw	fa1,84(a0)
 80013660:	656e                	flw	fa0,216(sp)
 80013662:	2520                	fld	fs0,72(a0)

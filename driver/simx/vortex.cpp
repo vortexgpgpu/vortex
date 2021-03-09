@@ -96,12 +96,12 @@ public:
         return 0;
     }
 
-    int upload(void* src, size_t dest_addr, size_t size, size_t src_offset) {
+    int upload(const void* src, size_t dest_addr, size_t size, size_t src_offset) {
         auto asize = align_size(size, CACHE_BLOCK_SIZE);
         if (dest_addr + asize > ram_.size())
             return -1;
 
-        ram_.write(dest_addr, asize, (uint8_t*)src + src_offset);
+        ram_.write(dest_addr, (const uint8_t*)src + src_offset, asize);
         
         /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
         for (int i = 0; i < size; i += 4) {
@@ -111,12 +111,12 @@ public:
         return 0;
     }
 
-    int download(const void* dest, size_t src_addr, size_t size, size_t dest_offset) {
+    int download(void* dest, size_t src_addr, size_t size, size_t dest_offset) {
         size_t asize = align_size(size, CACHE_BLOCK_SIZE);
         if (src_addr + asize > ram_.size())
             return -1;
 
-        ram_.read(src_addr, asize, (uint8_t*)dest + dest_offset);
+        ram_.read(src_addr, (uint8_t*)dest + dest_offset, asize);
         
         /*printf("VXDRV: download %d bytes from 0x%x\n", size, src_addr);
         for (int i = 0; i < size; i += 4) {

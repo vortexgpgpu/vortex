@@ -64,11 +64,11 @@ public:
 
   void barrier(int bar_id, int count, int warp_id);
 
-  Word icache_fetch(Addr, bool sup);
+  Word icache_fetch(Addr);
 
-  Word dcache_read(Addr, bool sup);
+  Word dcache_read(Addr, Size);
 
-  void dcache_write(Addr, Word, bool sup, Size);  
+  void dcache_write(Addr, Word, Size);  
 
 private: 
 
