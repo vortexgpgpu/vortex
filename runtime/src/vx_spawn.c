@@ -118,7 +118,7 @@ void vx_spawn_tasks(int num_tasks, pfn_callback callback , const void * args) {
   //--
 	if (nW >= 1)	{ 
     int nw = MIN(nW, NW);    
-	  vx_wspawn(nw, (unsigned)&spawn_tasks_callback);
+	  vx_wspawn(nw, spawn_tasks_callback);
     spawn_tasks_callback();
 	}  
 
@@ -247,7 +247,7 @@ void vx_spawn_kernel(struct context_t * ctx, pfn_workgroup_func wg_func, const v
   //--
 	if (nW >= 1)	{ 
     int nw = MIN(nW, NW);    
-	  vx_wspawn(nw, (unsigned)&spawn_kernel_callback);
+	  vx_wspawn(nw, spawn_kernel_callback);
     spawn_kernel_callback();
 	}  
 
