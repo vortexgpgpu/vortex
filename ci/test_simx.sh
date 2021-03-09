@@ -3,4 +3,4 @@
 # exit when any command fails
 set -e
 
-make -C simx run
+make -C simX run
