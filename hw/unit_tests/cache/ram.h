@@ -36,7 +36,7 @@ public:
   void clear() {
     for (uint32_t i = 0; i < (1 << 12); i++) {
       if (mem_[i]) {
-        delete mem_[i];
+        delete [] mem_[i];
         mem_[i] = NULL;
       }
     }
