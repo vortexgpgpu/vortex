@@ -311,31 +311,36 @@ void Core::barrier(int bar_id, int count, int warp_id) {
   barrier.reset();
 }
 
-Word Core::icache_fetch(Addr addr, bool sup) {
-  return mem_.fetch(addr, sup);
+Word Core::icache_fetch(Addr addr) {
+  Word data;
+  mem_.read(addr, &data, sizeof(Word), 0);
+  return data;
 }
 
-Word Core::dcache_read(Addr addr, bool sup) {
+Word Core::dcache_read(Addr addr, Size size) {
   ++loads_;
+  Word data = 0;
 #ifdef SM_ENABLE
   if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
-   && ((addr + 4) <= SHARED_MEM_BASE_ADDR)) {
-     return shared_mem_.read(addr & (SMEM_SIZE-1));
+   && ((addr + 3) < SHARED_MEM_BASE_ADDR)) {
+     shared_mem_.read(addr & (SMEM_SIZE-1), &data, size);
+     return data;
   }
 #endif
-  return mem_.read(addr, sup);
+  mem_.read(addr, &data, size, 0);
+  return data;
 }
 
-void Core::dcache_write(Addr addr, Word data, bool sup, Size size) {
+void Core::dcache_write(Addr addr, Word data, Size size) {
   ++stores_;
 #ifdef SM_ENABLE
   if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
-   && ((addr + 4) <= SHARED_MEM_BASE_ADDR)) {
-     shared_mem_.write(addr & (SMEM_SIZE-1), data);
+   && ((addr + 3) < SHARED_MEM_BASE_ADDR)) {
+     shared_mem_.write(addr & (SMEM_SIZE-1), &data, size);
      return;
   }
 #endif
-  mem_.write(addr, data, sup, size);
+  mem_.write(addr, &data, size, 0);
 }
 
 bool Core::running() const {

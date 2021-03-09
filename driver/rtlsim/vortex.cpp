@@ -79,7 +79,7 @@ public:
         return 0;
     }
 
-    int upload(void* src, size_t dest_addr, size_t size, size_t src_offset) {
+    int upload(const void* src, size_t dest_addr, size_t size, size_t src_offset) {
         size_t asize = align_size(size, CACHE_BLOCK_SIZE);
         if (dest_addr + asize > ram_.size())
             return -1;
@@ -93,11 +93,11 @@ public:
         }
         printf("\n");*/
         
-        ram_.write(dest_addr, asize, (uint8_t*)src + src_offset);
+        ram_.write(dest_addr, asize, (const uint8_t*)src + src_offset);
         return 0;
     }
 
-    int download(const void* dest, size_t src_addr, size_t size, size_t dest_offset) {
+    int download(void* dest, size_t src_addr, size_t size, size_t dest_offset) {
         size_t asize = align_size(size, CACHE_BLOCK_SIZE);
         if (src_addr + asize > ram_.size())
             return -1;

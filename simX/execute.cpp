@@ -351,8 +351,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case L_INST: {
       Word memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFFC); // word aligned
       Word shift_by  = ((rsdata[0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->dcache_read(memAddr, 0);
-      D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr << ", DATA=0x" << data_read);
+      Word data_read = core_->dcache_read(memAddr, 4);
+      D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
       switch (func3) {
       case 0:
         // LBI
@@ -380,23 +380,23 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     } break;
     case S_INST: {
       Word memAddr = rsdata[0] + immsrc;
+      D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       switch (func3) {
       case 0:
         // SB
-        core_->dcache_write(memAddr, rsdata[1] & 0x000000FF, 0, 1);
+        core_->dcache_write(memAddr, rsdata[1] & 0x000000FF, 1);
         break;
       case 1:
         // SH
-        core_->dcache_write(memAddr, rsdata[1], 0, 2);
+        core_->dcache_write(memAddr, rsdata[1], 2);
         break;
       case 2:
         // SW
-        core_->dcache_write(memAddr, rsdata[1], 0, 4);
+        core_->dcache_write(memAddr, rsdata[1], 4);
         break;
       default:
         std::abort();
       }
-      D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
     } break;
     case SYS_INST: {
       Word csr_addr = immsrc & 0x00000FFF;
@@ -452,8 +452,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case (FL | VL):
       if (func3 == 0x2) {
         Word memAddr = rsdata[0] + immsrc;
-        Word data_read = core_->dcache_read(memAddr, 0);        
-        D(3, "LOAD MEM ADDRESS: " << std::hex << memAddr << ", DATA=0x" << data_read);
+        Word data_read = core_->dcache_read(memAddr, 4);        
+        D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
         rddata = data_read;
       } else {  
         D(3, "Executing vector load");      
@@ -465,14 +465,15 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         auto &vd = vRegFile_[rdest];
 
         switch (instr.getVlsWidth()) {
-        case 6: { //load word and unit strided (not checking for unit stride)
+        case 6: { 
+          //load word and unit strided (not checking for unit stride)
           for (int i = 0; i < vl_; i++) {
             Word memAddr = ((rsdata[0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
-            Word data_read = core_->dcache_read(memAddr, 0);
+            D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+            Word data_read = core_->dcache_read(memAddr, 4);
             D(4, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
             int *result_ptr = (int *)(vd.data() + i);
             *result_ptr = data_read;            
-            D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
           }
         } break;
         default:
@@ -484,22 +485,22 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case (FS | VS):
       if (func3 == 0x2) {
         Word memAddr = rsdata[0] + immsrc;
-        core_->dcache_write(memAddr, rsdata[1], 0, 4);
-        D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
+        core_->dcache_write(memAddr, rsdata[1], 4);
+        D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       } else {
         for (int i = 0; i < vl_; i++) {
           Word memAddr = rsdata[0] + (i * vtype_.vsew / 8);
+          D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
           switch (instr.getVlsWidth()) {
           case 6: {
             //store word and unit strided (not checking for unit stride)          
             uint32_t value = *(uint32_t *)(vRegFile_[instr.getVs3()].data() + i);
-            core_->dcache_write(memAddr, value, 0, 4);
+            core_->dcache_write(memAddr, value, 4);
             D(4, "store: " << memAddr << " value:" << value);
           } break;
           default:
             std::abort();
           }          
-          D(3, "STORE MEM ADDRESS: " << std::hex << memAddr);
         }
       }
       break;    
