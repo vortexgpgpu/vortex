@@ -22,7 +22,7 @@ riscv()
 
 llvm()
 {
-    for x in {a..f} 
+    for x in {a..b} 
     do
         wget $REPOSITORY/llvm-riscv/ubuntu/bionic/llvm-riscv.tar.bz2.parta$x
     done
