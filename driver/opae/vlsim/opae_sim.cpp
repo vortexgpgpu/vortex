@@ -62,8 +62,23 @@ opae_sim::~opae_sim() {
   delete vortex_afu_;
 }
 
+static void *__aligned_malloc(size_t alignment, size_t size) {
+  // reserve margin for alignment and storing of unaligned address
+  size_t margin = (alignment-1) + sizeof(void*);
+  void *unaligned_addr = malloc(size + margin);
+  void **aligned_addr = (void**)((uintptr_t)(unaligned_addr + margin) & ~(alignment-1));
+  aligned_addr[-1] = unaligned_addr;
+  return aligned_addr;
+}
+
+static void __aligned_free(void *ptr) {
+  // retreive the stored unaligned address and use it to free the allocation
+  void* unaligned_addr = ((void**)ptr)[-1];
+  free(unaligned_addr);
+}
+
 int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {
-  auto alloc = aligned_alloc(CACHE_BLOCK_SIZE, len);
+  auto alloc = __aligned_malloc(CACHE_BLOCK_SIZE, len);
   if (alloc == NULL)
     return -1;
   host_buffer_t buffer;
@@ -80,7 +95,7 @@ int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int 
 void opae_sim::release_buffer(uint64_t wsid) {
   auto it = host_buffers_.find(wsid);
   if (it != host_buffers_.end()) {
-    free(it->second.data);
+    __aligned_free(it->second.data);
     host_buffers_.erase(it);
   }
 }
