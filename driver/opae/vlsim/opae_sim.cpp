@@ -66,7 +66,7 @@ static void *__aligned_malloc(size_t alignment, size_t size) {
   // reserve margin for alignment and storing of unaligned address
   size_t margin = (alignment-1) + sizeof(void*);
   void *unaligned_addr = malloc(size + margin);
-  void **aligned_addr = (void**)((uintptr_t)(unaligned_addr + margin) & ~(alignment-1));
+  void **aligned_addr = (void**)((uintptr_t)(((uint8_t*)unaligned_addr) + margin) & ~(alignment-1));
   aligned_addr[-1] = unaligned_addr;
   return aligned_addr;
 }
