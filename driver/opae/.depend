@@ -1,0 +1,4 @@
+vortex.o: vortex.cpp ../include/vortex.h ../../hw/VX_config.h \
+ vortex_afu.h
+vx_utils.o: ../common/vx_utils.cpp ../include/vortex.h \
+ ../../hw/VX_config.h

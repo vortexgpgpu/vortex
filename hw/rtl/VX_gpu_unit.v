@@ -23,10 +23,14 @@ module VX_gpu_unit #(
     gpu_barrier_t   barrier;
     gpu_split_t     split;
     
+    VX_tex_req_if   tex_req_if;
+    VX_tex_rsp_if   tex_rsp_if;
+    
     wire is_wspawn = (gpu_req_if.op_type == `GPU_WSPAWN);
     wire is_tmc    = (gpu_req_if.op_type == `GPU_TMC);
     wire is_split  = (gpu_req_if.op_type == `GPU_SPLIT);
     wire is_bar    = (gpu_req_if.op_type == `GPU_BAR);
+    wire is_tex    = (gpu_req_if.op_type == `GPU_TEX);
 
     // tmc
 
@@ -39,7 +43,7 @@ module VX_gpu_unit #(
 
     // wspawn
 
-    wire [31:0] wspawn_pc = gpu_req_if.rs2_data;
+    wire [31:0] wspawn_pc = gpu_req_if.rs2_data[0];
     wire [`NUM_WARPS-1:0] wspawn_wmask;
     for (genvar i = 0; i < `NUM_WARPS; i++) begin
         assign wspawn_wmask[i] = (i < gpu_req_if.rs1_data[0]);
@@ -69,21 +73,48 @@ module VX_gpu_unit #(
     
     assign barrier.valid   = is_bar;
     assign barrier.id      = gpu_req_if.rs1_data[0][`NB_BITS-1:0];
-    assign barrier.size_m1 = (`NW_BITS)'(gpu_req_if.rs2_data - 1);
+    assign barrier.size_m1 = (`NW_BITS)'(gpu_req_if.rs2_data[0] - 1);
+
+    // texture
+    assign tex_req_if.valid = is_tex;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        assign tex_req_if.u[i] = gpu_req_if.rs1_data[i];
+        assign tex_req_if.v[i] = gpu_req_if.rs2_data[i];
+        assign tex_req_if.lod_t[i] = gpu_req_if.rs3_data[i];
+    end
+
+    `UNUSED_VAR (tex_req_if.u)
+    `UNUSED_VAR (tex_req_if.v)
+    `UNUSED_VAR (tex_req_if.valid)
+    `UNUSED_VAR (tex_req_if.lod_t)
+    
+
+    VX_tex_unit #(
+        .CORE_ID(CORE_ID)
+    ) texture_unit (
+        .clk            (clk),
+        .reset          (reset),
+
+        .tex_req_if     (tex_req_if),
+        .tex_rsp_if     (tex_rsp_if)
+    );
+
+    assign gpu_req_if.valid = is_tex;
+    assign gpu_req_if.wb = tex_rsp_if.ready;
 
     // output
-    
     wire stall = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({gpu_req_if.valid,    gpu_req_if.wid,    gpu_req_if.tmask,    gpu_req_if.PC,    gpu_req_if.rd,    gpu_req_if.wb,    tmc,             wspawn,             split,             barrier}),
-        .data_out ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier})
+        .data_in  ({gpu_req_if.valid,    gpu_req_if.wid,    gpu_req_if.tmask,    gpu_req_if.PC, tex_rsp_if.data,  gpu_req_if.rd,    gpu_req_if.wb,    tmc,             wspawn,             split,             barrier}),
+        .data_out ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.data,  gpu_commit_if.rd, gpu_commit_if.wb, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier})
     );  
 
     assign gpu_commit_if.eop = 1'b1;
@@ -99,7 +130,7 @@ module VX_gpu_unit #(
     `SCOPE_ASSIGN (gpu_req_tmask, gpu_req_if.tmask);
     `SCOPE_ASSIGN (gpu_req_op_type, gpu_req_if.op_type);
     `SCOPE_ASSIGN (gpu_req_rs1, gpu_req_if.rs1_data[0]); 
-    `SCOPE_ASSIGN (gpu_req_rs2, gpu_req_if.rs2_data);
+    `SCOPE_ASSIGN (gpu_req_rs2, gpu_req_if.rs2_data[0]);
     `SCOPE_ASSIGN (gpu_rsp_valid, warp_ctl_if.valid);
     `SCOPE_ASSIGN (gpu_rsp_wid, warp_ctl_if.wid);
     `SCOPE_ASSIGN (gpu_rsp_tmc, warp_ctl_if.tmc);
