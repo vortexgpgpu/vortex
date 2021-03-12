@@ -10,7 +10,7 @@ CFLAGS += -I./include -I../hw
 
 PROJECT = libvortexrt
 
-SRCS = ./src/vx_start.S ./src/vx_print.S ./src/vx_print.c ./src/vx_spawn.c
+SRCS = ./src/vx_start.S ./src/vx_print.S ./src/vx_print.c ./src/vx_spawn.c ./src/vx_tex.c 
 
 OBJS := $(addsuffix .o, $(notdir $(SRCS)))
 

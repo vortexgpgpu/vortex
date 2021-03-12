@@ -52,6 +52,8 @@
 
 `define INST_GPU        7'b1101011
 
+`define INST_TEX       7'b0101011
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define FRM_RNE         3'b000  // round to nearest even
@@ -182,6 +184,7 @@
 `define GPU_SPLIT       3'h2
 `define GPU_JOIN        3'h3
 `define GPU_BAR         3'h4
+`define GPU_TEX         3'h5
 `define GPU_OTHER       3'h7
 `define GPU_BITS        3
 `define GPU_OP(x)       x[`GPU_BITS-1:0]
@@ -380,6 +383,17 @@
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 
 `define XDRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH+`CLOG2(2))
+
+////////////////////////// Texture Unit Configurable Knobs //////////////////////////////
+`define MADDRW      8           
+`define MAXWTW      8      
+`define MAXHTW      8      
+`define MAXFTW      8      
+`define MAXFMW      8      
+`define MAXAMW      8      
+`define TAGW        8
+`define DATAW       32
+////////////////////////////////////////////////////////////////////////////////////////
 
 `include "VX_types.vh"
 
