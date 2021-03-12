@@ -358,6 +358,13 @@ module VX_decode  #(
                         use_rs2 = 1;
                         is_wstall = 1;
                     end
+                    3'h5: begin
+                        op_type = `OP_BITS'(`GPU_TEX);
+                        use_rd = 1;
+                        use_rs1 = 1;
+                        use_rs2 = 1;
+                        use_rs3 = 1;
+                    end
                     default:;
                 endcase
             end

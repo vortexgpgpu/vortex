@@ -1,0 +1,1 @@
+demo.o: demo.cpp ../../include/vortex.h common.h

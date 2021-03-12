@@ -109,6 +109,14 @@ inline int vx_num_instrs() {
     return result; 
 }
 
+// Texture load instruction
+inline int vx_tex_ld(unsigned t, unsigned u, unsigned v, unsigned lod_t) {
+    lod_t = (lod_t << 8) | t;
+    int result;
+    asm volatile (".insn r4 0x6b, 5, 1, %0, %1, %2, %3" :: "r"(result), "r"(u), "r"(v), "r"(lod_t));
+    return result; 
+}
+
 #define __if(b) vx_split(b); \
                 if (b) 
 
