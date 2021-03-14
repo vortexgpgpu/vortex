@@ -233,6 +233,31 @@
 `define CSR_NW          12'hFC1
 `define CSR_NC          12'hFC2
 
+////////// Texture Unit CSRs /////////////
+`define CSR_TEX_BEGIN   12'hFD0
+// Unit 1
+`define CSR_TEX0_ADDR    `CSR_TEX_BEGIN
+`define CSR_TEX0_FORMAT  `CSR_TEX_BEGIN + 12'h1
+`define CSR_TEX0_WIDTH   `CSR_TEX_BEGIN + 12'h2
+`define CSR_TEX0_HEIGHT  `CSR_TEX_BEGIN + 12'h3
+`define CSR_TEX0_STRIDE  `CSR_TEX_BEGIN + 12'h4
+`define CSR_TEX0_WRAP_U  `CSR_TEX_BEGIN + 12'h5
+`define CSR_TEX0_WRAP_V  `CSR_TEX_BEGIN + 12'h6
+`define CSR_TEX0_MIN_FILTER  `CSR_TEX_BEGIN + 12'h7
+`define CSR_TEX0_MAX_FILTER  `CSR_TEX_BEGIN + 12'h8
+
+// Unit 2
+`define CSR_TEX1_ADDR    `CSR_TEX_BEGIN + 12'h9
+`define CSR_TEX1_FORMAT  `CSR_TEX_BEGIN + 12'hA
+`define CSR_TEX1_WIDTH   `CSR_TEX_BEGIN + 12'hB
+`define CSR_TEX1_HEIGHT  `CSR_TEX_BEGIN + 12'hC
+`define CSR_TEX1_STRIDE  `CSR_TEX_BEGIN + 12'hD
+`define CSR_TEX1_WRAP_U  `CSR_TEX_BEGIN + 12'hE
+`define CSR_TEX1_WRAP_V  `CSR_TEX_BEGIN + 12'hF
+`define CSR_TEX1_MIN_FILTER  `CSR_TEX_BEGIN + 12'h10
+`define CSR_TEX1_MAX_FILTER  `CSR_TEX_BEGIN + 12'h11
+
+`define CSR_TEX_END `CSR_TEX1_MAX_FILTER
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
 // Size of LSU Request Queue

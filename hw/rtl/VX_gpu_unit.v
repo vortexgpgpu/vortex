@@ -10,6 +10,7 @@ module VX_gpu_unit #(
 
     // Inputs
     VX_gpu_req_if   gpu_req_if,
+    VX_tex_csr_if   tex_csr_if,
 
     // Outputs
     VX_warp_ctl_if  warp_ctl_if,
@@ -97,6 +98,7 @@ module VX_gpu_unit #(
         .reset          (reset),
 
         .tex_req_if     (tex_req_if),
+        .tex_csr_if     (tex_csr_if),
         .tex_rsp_if     (tex_rsp_if)
     );
 

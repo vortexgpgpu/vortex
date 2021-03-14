@@ -45,6 +45,8 @@ module VX_execute #(
     output wire         ebreak
 );
     VX_fpu_to_csr_if     fpu_to_csr_if(); 
+    VX_tex_csr_if        tex_csr_if();
+
     wire[`NUM_WARPS-1:0] csr_pending;
     wire[`NUM_WARPS-1:0] fpu_pending;
     
@@ -82,6 +84,7 @@ module VX_execute #(
     `endif    
         .cmt_to_csr_if  (cmt_to_csr_if),    
         .fpu_to_csr_if  (fpu_to_csr_if), 
+        .tex_csr_if     (tex_csr_if),
         .csr_io_req_if  (csr_io_req_if),           
         .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
@@ -129,7 +132,8 @@ module VX_execute #(
         .reset          (reset),    
         .gpu_req_if     (gpu_req_if),
         .warp_ctl_if    (warp_ctl_if),
-        .gpu_commit_if  (gpu_commit_if)
+        .gpu_commit_if  (gpu_commit_if),
+        .tex_csr_if     (tex_csr_if)
     );
 
     assign ebreak = alu_req_if.valid 

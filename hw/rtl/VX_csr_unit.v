@@ -12,7 +12,8 @@ module VX_csr_unit #(
 `endif
 
     VX_cmt_to_csr_if    cmt_to_csr_if, 
-    VX_fpu_to_csr_if    fpu_to_csr_if,  
+    VX_fpu_to_csr_if    fpu_to_csr_if, 
+    VX_tex_csr_if       tex_csr_if, 
     
     VX_csr_io_req_if    csr_io_req_if,    
     VX_csr_io_rsp_if    csr_io_rsp_if,
@@ -62,6 +63,7 @@ module VX_csr_unit #(
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
+        .tex_csr_if     (tex_csr_if),
         .read_enable    (csr_pipe_req_if.valid),
         .read_addr      (csr_pipe_req_if.csr_addr),
         .read_wid       (csr_pipe_req_if.wid),      

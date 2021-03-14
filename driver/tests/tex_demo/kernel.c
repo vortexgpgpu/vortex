@@ -14,7 +14,9 @@ void kernel_body(int task_id, void* arg) {
 	unsigned u = 1;
 	unsigned v = 1;
 	unsigned t = 1;
-	
+
+	// vx_csr_set(_arg->device_ptr, 0, 0xfd0, 0xffd);
+
 	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
