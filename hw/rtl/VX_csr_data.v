@@ -13,6 +13,7 @@ module VX_csr_data #(
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
     VX_fpu_to_csr_if                fpu_to_csr_if,  
+    VX_tex_csr_if                   tex_csr_if,
 
     input wire                      read_enable,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
@@ -53,7 +54,7 @@ module VX_csr_data #(
                                                           | fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0];
         end
 
-        if (write_enable) begin
+        if (write_enable && (write_addr > `CSR_TEX_END || write_addr < `CSR_TEX_BEGIN)) begin
             case (write_addr)
                 `CSR_FFLAGS:   fcsr[write_wid][`FFG_BITS-1:0] <= write_data[`FFG_BITS-1:0];
                 `CSR_FRM:      fcsr[write_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS] <= write_data[`FRM_BITS-1:0];
@@ -78,6 +79,11 @@ module VX_csr_data #(
             endcase                
         end
     end
+
+    //write tex csrs
+    assign tex_csr_if.write_addr = write_addr;
+    assign tex_csr_if.write_data = write_data;
+    assign tex_csr_if.write_enable = write_enable;
 
     always @(posedge clk) begin
        if (reset) begin

@@ -385,6 +385,7 @@
 `define XDRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH+`CLOG2(2))
 
 ////////////////////////// Texture Unit Configurable Knobs //////////////////////////////
+`define NUM_TEX_UNITS 2 
 `define MADDRW      8           
 `define MAXWTW      8      
 `define MAXHTW      8      

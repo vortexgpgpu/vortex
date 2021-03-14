@@ -8,6 +8,7 @@ interface VX_tex_req_if ();
     wire [`NUM_THREADS-1:0][31:0]           u;
     wire [`NUM_THREADS-1:0][31:0]           v;
     wire [`NUM_THREADS-1:0][31:0]           lod_t;
+    // wire [`NUM_THREADS-1:0][7:0]           t;
     // wire [`MADDRW-1:0]                   addr;    
     // wire [`MAXWTW-1:0]                   width;
     // wire [`MAXHTW-1:0]                   height;
