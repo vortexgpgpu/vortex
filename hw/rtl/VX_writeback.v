@@ -79,10 +79,10 @@ module VX_writeback #(
         .data_out ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop})
     );
     
-    assign ld_commit_if.ready  = !stall;    
-    assign fpu_commit_if.ready = !stall && !ld_valid;       
-    assign csr_commit_if.ready = !stall && !ld_valid && !fpu_valid;
-    assign alu_commit_if.ready = !stall && !ld_valid && !fpu_valid && !csr_valid;  
+    assign ld_commit_if.ready  = !(ld_commit_if.wb  && (stall));
+    assign fpu_commit_if.ready = !(fpu_commit_if.wb && (stall || ld_valid));
+    assign csr_commit_if.ready = !(csr_commit_if.wb && (stall || ld_valid || fpu_valid));
+    assign alu_commit_if.ready = !(alu_commit_if.wb && (stall || ld_valid || fpu_valid || csr_valid));
     
     // special workaround to get RISC-V tests Pass/Fail status
     reg [31:0] last_wb_value [`NUM_REGS-1:0] /* verilator public */;
