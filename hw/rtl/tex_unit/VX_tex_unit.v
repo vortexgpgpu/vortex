@@ -44,8 +44,7 @@ module VX_tex_unit #(
     // output wire              cache_rsp_ready
 );
 
-    // `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
+    `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
     `UNUSED_VAR(tex_addr)

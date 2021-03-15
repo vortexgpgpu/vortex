@@ -1,3 +1,0 @@
-main.o: main.cc /opt/pocl/runtime/include/CL/cl.h \
- /opt/pocl/runtime/include/CL/cl_version.h \
- /opt/pocl/runtime/include/CL/cl_platform.h
