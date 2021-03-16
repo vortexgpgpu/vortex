@@ -120,20 +120,12 @@ case $DRIVER in
         ;;
 esac
 
-case $APP in
-    basic)
-        APP_PATH=$VORTEX_HOME/driver/tests/basic
-        ;;
-    demo)
-        APP_PATH=$VORTEX_HOME/driver/tests/demo
-        ;;
-    dogfood)
-        APP_PATH=$VORTEX_HOME/driver/tests/dogfood
-        ;;
-    *)
-        APP_PATH=$VORTEX_HOME/benchmarks/opencl/$APP
-        ;;
-esac
+if [ -d "$VORTEX_HOME/driver/tests/$APP" ]; 
+then
+    APP_PATH=$VORTEX_HOME/driver/tests/$APP
+else
+    APP_PATH=$VORTEX_HOME/benchmarks/opencl/$APP
+fi
 
 CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3 $PERF_FLAG"
 

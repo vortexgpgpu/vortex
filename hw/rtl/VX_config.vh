@@ -85,6 +85,10 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifndef EXT_TEX_DISABLE
+`define EXT_TEX_ENABLE
+`endif
+
 // Device identification
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0

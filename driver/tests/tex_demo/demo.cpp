@@ -141,7 +141,6 @@ int main(int argc, char *argv[]) {
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.task_size = count;
-  kernel_arg.device_ptr = device;
 
   std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::endl;
   std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::endl;

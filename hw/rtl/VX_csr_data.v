@@ -13,7 +13,10 @@ module VX_csr_data #(
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
     VX_fpu_to_csr_if                fpu_to_csr_if,  
+
+`ifdef EXT_TEX_ENABLE
     VX_tex_csr_if                   tex_csr_if,
+`endif
 
     input wire                      read_enable,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
@@ -80,10 +83,12 @@ module VX_csr_data #(
         end
     end
 
-    //write tex csrs
-    assign tex_csr_if.write_addr = write_addr;
-    assign tex_csr_if.write_data = write_data;
+    // TEX CSRs
+`ifdef EXT_TEX_ENABLE    
     assign tex_csr_if.write_enable = write_enable;
+    assign tex_csr_if.write_addr   = write_addr;
+    assign tex_csr_if.write_data   = write_data;    
+`endif
 
     always @(posedge clk) begin
        if (reset) begin
