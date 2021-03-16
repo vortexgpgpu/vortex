@@ -358,6 +358,7 @@ module VX_decode  #(
                         use_rs2 = 1;
                         is_wstall = 1;
                     end
+                `ifdef EXT_TEX_ENABLE
                     3'h5: begin
                         op_type = `OP_BITS'(`GPU_TEX);
                         use_rd = 1;
@@ -365,6 +366,7 @@ module VX_decode  #(
                         use_rs2 = 1;
                         use_rs3 = 1;
                     end
+                `endif
                     default:;
                 endcase
             end
@@ -373,7 +375,7 @@ module VX_decode  #(
     end
 
     // disable write to integer register r0
-    wire use_rd_qual = use_rd && (rd_fp || (rd != 0));
+    wire wb = use_rd && (rd_fp || (rd != 0));
 
     // EX_ALU needs rs1=0 for LUI operation
     wire [4:0] rs1_qual = (opcode == `INST_LUI) ? 5'h0 : rs1;
@@ -385,7 +387,7 @@ module VX_decode  #(
     assign decode_if.ex_type = ex_type;
     assign decode_if.op_type = op_type;
     assign decode_if.op_mod  = op_mod;
-    assign decode_if.wb      = use_rd_qual;
+    assign decode_if.wb      = wb;
 
     `ifdef EXT_F_ENABLE
         assign decode_if.rd  = {rd_fp,  rd};

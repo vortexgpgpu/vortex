@@ -156,7 +156,6 @@
 `define CSR_RW          2'h0
 `define CSR_RS          2'h1
 `define CSR_RC          2'h2
-`define CSR_OTHER       2'h3
 `define CSR_BITS        2
 `define CSR_OP(x)       x[`CSR_BITS-1:0]
 
@@ -185,7 +184,6 @@
 `define GPU_JOIN        3'h3
 `define GPU_BAR         3'h4
 `define GPU_TEX         3'h5
-`define GPU_OTHER       3'h7
 `define GPU_BITS        3
 `define GPU_OP(x)       x[`GPU_BITS-1:0]
 
