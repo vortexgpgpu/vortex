@@ -13,6 +13,11 @@ module VX_tex_unit #(
 
     // Outputs
     VX_tex_rsp_if   tex_rsp_if
+
+    // Texture unit <-> Memory Unit
+    VX_dcache_core_req_if dcache_req_if,
+    VX_dcache_core_rsp_if dcache_rsp_if
+
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -89,6 +94,40 @@ module VX_tex_unit #(
     assign rsp_rd    = tex_req_if.rd;
     assign rsp_wb    = tex_req_if.wb;
     assign rsp_data  = {`NUM_THREADS{32'hFF0000FF}}; // dummy blue value
+
+
+    //point sampling texel address computation
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        assign tex_req_if.u[i] = gpu_req_if.rs1_data[i];
+        assign tex_req_if.v[i] = gpu_req_if.rs2_data[i];
+        assign tex_req_if.lod[i] = gpu_req_if.rs3_data[i][31:8];
+        assign tex_req_if.t[i] = gpu_req_if.rs3_data[i][7:0];
+
+        VX_tex_pt_addr #(
+        ) tex_pt_addr (
+            .clk     (clk),
+            .reset   (reset),
+        );
+    end
+
+    // fifo/wait buffer for fragments and also to dcache
+
+    
+
+    // texture unit <-> dcache 
+    VX_lsu_req_if   lsu_req_if();
+    VX_commit_if    ld_commit_if();
+
+    VX_tex_memory #(
+        .CORE_ID(CORE_ID)
+    ) tex_memory (
+        .clk            (clk),
+        .reset          (reset),
+        .dcache_req_if  (dcache_req_if),
+        .dcache_rsp_if  (dcache_rsp_if),
+        .lsu_req_if     (lsu_req_if),
+        .ld_commit_if   (ld_commit_if)
+    );
 
     // output
     assign stall_out = ~tex_rsp_if.ready && tex_rsp_if.valid;
