@@ -55,7 +55,7 @@ module VX_tex_unit #(
                 `CSR_TEX0_FORMAT     : tex_format[0] <= tex_csr_if.write_data;
                 `CSR_TEX0_WIDTH      : tex_width[0] <= tex_csr_if.write_data;
                 `CSR_TEX0_HEIGHT     : tex_height[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_STRIDE     : tex_stride[0] <= tex_csr_if.write_data;
+                `CSR_TEX0_PITCH     : tex_stride[0] <= tex_csr_if.write_data;
                 `CSR_TEX0_WRAP_U     : tex_wrap_u[0] <= tex_csr_if.write_data;
                 `CSR_TEX0_WRAP_V     : tex_wrap_v[0] <= tex_csr_if.write_data;
                 `CSR_TEX0_MIN_FILTER : tex_min_filter[0] <= tex_csr_if.write_data;
@@ -65,7 +65,7 @@ module VX_tex_unit #(
                 `CSR_TEX1_FORMAT     : tex_format[1] <= tex_csr_if.write_data;
                 `CSR_TEX1_WIDTH      : tex_width[1] <= tex_csr_if.write_data;
                 `CSR_TEX1_HEIGHT     : tex_height[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_STRIDE     : tex_stride[1] <= tex_csr_if.write_data;
+                `CSR_TEX1_PITCH     : tex_stride[1] <= tex_csr_if.write_data;
                 `CSR_TEX1_WRAP_U     : tex_wrap_u[1] <= tex_csr_if.write_data;
                 `CSR_TEX1_WRAP_V     : tex_wrap_v[1] <= tex_csr_if.write_data;
                 `CSR_TEX1_MIN_FILTER : tex_min_filter[1] <= tex_csr_if.write_data;
@@ -88,7 +88,7 @@ module VX_tex_unit #(
     assign rsp_PC    = tex_req_if.PC;
     assign rsp_rd    = tex_req_if.rd;
     assign rsp_wb    = tex_req_if.wb;
-    assign rsp_data  = {`NUM_THREADS{32'hFAAF}}; // dummy color value
+    assign rsp_data  = {`NUM_THREADS{32'hFF0000FF}}; // dummy blue value
 
     // output
     assign stall_out = ~tex_rsp_if.ready && tex_rsp_if.valid;
@@ -116,7 +116,7 @@ module VX_tex_unit #(
             $display("%t: core%0d-tex_csr: csr_tex0_format, csr_data=%0h", $time, CORE_ID, tex_format[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_width, csr_data=%0h", $time, CORE_ID, tex_width[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_height, csr_data=%0h", $time, CORE_ID, tex_height[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_stride, csr_data=%0h", $time, CORE_ID, tex_stride[0]);
+            $display("%t: core%0d-tex_csr: CSR_TEX0_PITCH, csr_data=%0h", $time, CORE_ID, tex_stride[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_wrap_u, csr_data=%0h", $time, CORE_ID, tex_wrap_u[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_wrap_v, csr_data=%0h", $time, CORE_ID, tex_wrap_v[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_min_filter, csr_data=%0h", $time, CORE_ID, tex_min_filter[0]);
