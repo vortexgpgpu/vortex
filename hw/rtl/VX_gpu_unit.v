@@ -13,6 +13,9 @@ module VX_gpu_unit #(
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_csr_if   tex_csr_if,
+
+    VX_dcache_core_req_if dcache_req_if,
+    VX_dcache_core_rsp_if dcache_rsp_if,
 `endif
 
     // Outputs
@@ -112,7 +115,8 @@ module VX_gpu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign tex_req_if.u[i] = gpu_req_if.rs1_data[i];
         assign tex_req_if.v[i] = gpu_req_if.rs2_data[i];
-        assign tex_req_if.lod_t[i] = gpu_req_if.rs3_data[i];
+        assign tex_req_if.lod[i] = gpu_req_if.rs3_data[i][31:8];
+        assign tex_req_if.t[i] = gpu_req_if.rs3_data[i][7:0];
     end
 
     VX_tex_unit #(
@@ -122,7 +126,9 @@ module VX_gpu_unit #(
         .reset      (reset),
         .tex_req_if (tex_req_if),
         .tex_csr_if (tex_csr_if),
-        .tex_rsp_if (tex_rsp_if)
+        .tex_rsp_if (tex_rsp_if),
+        .dcache_req_if (dcache_req_if),
+        .dcache_rsp_if (dcache_rsp_if)
     );
 
     assign tex_rsp_if.ready = !stall_out;

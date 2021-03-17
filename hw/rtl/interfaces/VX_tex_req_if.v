@@ -13,7 +13,8 @@ interface VX_tex_req_if ();
     wire                            wb;
     wire [`NUM_THREADS-1:0][31:0]   u;
     wire [`NUM_THREADS-1:0][31:0]   v;
-    wire [`NUM_THREADS-1:0][31:0]   lod_t;
+    wire [`NUM_THREADS-1:0][23:0]   lod;
+    wire [`NUM_THREADS-1:0][7:0]    t;
     wire                            ready;
 
 endinterface
