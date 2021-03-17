@@ -389,9 +389,7 @@
 `define MAXHTW      8      
 `define MAXFTW      8      
 `define MAXFMW      8      
-`define MAXAMW      8      
-`define TAGW        8
-`define DATAW       32
+`define MAXAMW      8    
 ////////////////////////////////////////////////////////////////////////////////////////
 
 `include "VX_types.vh"
