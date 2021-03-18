@@ -61,7 +61,7 @@ module VX_pipeline #(
     //
 
     VX_dcache_core_req_if #(
-        .NUM_REQS(`NUM_THREADS), 
+        .LANES(`NUM_THREADS), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
     ) dcache_core_req_if();
@@ -79,7 +79,7 @@ module VX_pipeline #(
     //
 
     VX_dcache_core_rsp_if #(
-        .NUM_REQS(`NUM_THREADS), 
+        .LANES(`NUM_THREADS), 
         .WORD_SIZE(4), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
     ) dcache_core_rsp_if();

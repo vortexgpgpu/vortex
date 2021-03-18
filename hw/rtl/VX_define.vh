@@ -283,8 +283,13 @@
 `define DCORE_TAG_ID_BITS       `LOG2UP(`LSUQ_SIZE)
 
 // Core request tag bits
+`ifdef EXT_TEX_ENABLE
+`define LSU_TAG_WIDTH           (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
+`define DCORE_TAG_WIDTH         (`LSU_TAG_WIDTH+1)
+`else 
 `define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
- 
+`endif
+
 // DRAM request data bits
 `define DDRAM_LINE_WIDTH        (`DCACHE_LINE_SIZE * 8)
 
