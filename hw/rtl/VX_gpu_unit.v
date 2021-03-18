@@ -113,10 +113,10 @@ module VX_gpu_unit #(
     assign tex_req_if.wb    = gpu_req_if.wb;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign tex_req_if.u[i] = gpu_req_if.rs1_data[i];
-        assign tex_req_if.v[i] = gpu_req_if.rs2_data[i];
+        assign tex_req_if.u[i]   = gpu_req_if.rs1_data[i];
+        assign tex_req_if.v[i]   = gpu_req_if.rs2_data[i];
         assign tex_req_if.lod[i] = gpu_req_if.rs3_data[i][31:8];
-        assign tex_req_if.t[i] = gpu_req_if.rs3_data[i][7:0];
+        assign tex_req_if.t[i]   = gpu_req_if.rs3_data[i][7:0];
     end
 
     VX_tex_unit #(

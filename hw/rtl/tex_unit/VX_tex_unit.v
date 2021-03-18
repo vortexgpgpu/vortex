@@ -41,10 +41,7 @@ module VX_tex_unit #(
     reg [`CSR_WIDTH-1:0] tex_min_filter [`NUM_TEX_UNITS-1: 0];
     reg [`CSR_WIDTH-1:0] tex_max_filter [`NUM_TEX_UNITS-1: 0];
 
-    `UNUSED_VAR (tex_addr)
     `UNUSED_VAR (tex_format)
-    `UNUSED_VAR (tex_width)
-    `UNUSED_VAR (tex_height)
     `UNUSED_VAR (tex_stride)
     `UNUSED_VAR (tex_wrap_u)
     `UNUSED_VAR (tex_wrap_v)
@@ -80,39 +77,7 @@ module VX_tex_unit #(
     end
 
     // texture response
-    `UNUSED_VAR (tex_req_if.u)
-    `UNUSED_VAR (tex_req_if.v)
     `UNUSED_VAR (tex_req_if.lod)
-    `UNUSED_VAR (tex_req_if.t)
-
-    assign stall_in  = stall_out;
-
-    assign rsp_valid = tex_req_if.valid;
-    assign rsp_wid   = tex_req_if.wid;
-    assign rsp_tmask = tex_req_if.tmask;
-    assign rsp_PC    = tex_req_if.PC;
-    assign rsp_rd    = tex_req_if.rd;
-    assign rsp_wb    = tex_req_if.wb;
-    assign rsp_data  = {`NUM_THREADS{32'hFF0000FF}}; // dummy blue value
-
-
-    /*//point sampling texel address computation
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign tex_req_if.u[i] = gpu_req_if.rs1_data[i];
-        assign tex_req_if.v[i] = gpu_req_if.rs2_data[i];
-        assign tex_req_if.lod[i] = gpu_req_if.rs3_data[i][31:8];
-        assign tex_req_if.t[i] = gpu_req_if.rs3_data[i][7:0];
-
-        VX_tex_pt_addr #(
-        ) tex_pt_addr (
-            .clk     (clk),
-            .reset   (reset),
-        );
-    end*/
-
-    // fifo/wait buffer for fragments and also to dcache
-
-    
 
     // texture unit <-> dcache 
     VX_lsu_req_if   lsu_req_if();
@@ -129,8 +94,65 @@ module VX_tex_unit #(
         .ld_commit_if   (ld_commit_if)
     );
 
-    // output
-    assign stall_out = ~tex_rsp_if.ready && tex_rsp_if.valid;
+    //point sampling - texel address computation
+    wire [`NUM_THREADS-1:0] pt_addr_valid;
+    wire [`NUM_THREADS-1:0] pt_addr_ready;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        wire [`CSR_WIDTH-1:0] tex_addr_select;
+        wire [`CSR_WIDTH-1:0] tex_width_select;
+        wire [`CSR_WIDTH-1:0] tex_height_select;
+        
+        assign tex_addr_select = (tex_req_if.t[i] == 'b1) ? tex_addr[1] : tex_addr[0];
+        assign tex_width_select = (tex_req_if.t[i] == 'b1) ? tex_width[1] : tex_width[0];
+        assign tex_height_select = (tex_req_if.t[i] == 'b1) ? tex_height[1] : tex_height[0];
+        
+        VX_tex_pt_addr #(
+            .FRAC_BITS(28)
+        ) tex_pt_addr (
+            .clk                (clk),
+            .reset              (reset),
+
+            .valid_in           (tex_req_if.valid),
+            .ready_out          (pt_addr_ready[i]),   
+
+            .tex_addr           (tex_addr_select),
+            .tex_width          (tex_width_select),
+            .tex_height         (tex_height_select),
+
+            .tex_u              (tex_req_if.u[i]),
+            .tex_v              (tex_req_if.v[i]),
+
+            .pt_addr            (lsu_req_if.base_addr[i]),   
+
+            .valid_out          (pt_addr_valid[i]),
+            .ready_in           (lsu_req_if.ready)
+        );
+    end
+
+    assign tex_req_if.ready = (& pt_addr_ready);
+
+    assign lsu_req_if.valid = (& pt_addr_valid);
+
+    assign lsu_req_if.wid   = tex_req_if.wid;
+    assign lsu_req_if.tmask = tex_req_if.tmask;
+    assign lsu_req_if.PC    = tex_req_if.PC;
+    assign lsu_req_if.rd    = tex_req_if.rd;
+    assign lsu_req_if.wb    = tex_req_if.wb;
+    assign lsu_req_if.offset = 32'h0000;
+    assign lsu_req_if.op_type = `OP_BITS'({1'b0, 3'b000}); //func3 for word load??
+    assign lsu_req_if.store_data = {`NUM_THREADS{32'h0000}};
+
+    // wait buffer for fragments  / replace with cache/state fragment fifo for bilerp
+    // no filtering for point sampling -> directly from dcache to output response
+
+    assign rsp_valid = ld_commit_if.valid;
+    assign rsp_wid   = ld_commit_if.wid;
+    assign rsp_tmask = ld_commit_if.tmask;
+    assign rsp_PC    = ld_commit_if.PC;
+    assign rsp_rd    = ld_commit_if.rd;
+    assign rsp_wb    = ld_commit_if.wb;
+    assign rsp_data  = ld_commit_if.data; 
 
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -143,8 +165,13 @@ module VX_tex_unit #(
         .data_out ({tex_rsp_if.valid, tex_rsp_if.wid, tex_rsp_if.tmask, tex_rsp_if.PC, tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.data})
     );
 
+    // output
+    assign stall_out = ~tex_rsp_if.ready && tex_rsp_if.valid;
+
     // can accept new request?
-    assign tex_req_if.ready = ~stall_in;
+    assign stall_in  = stall_out;
+
+    assign ld_commit_if.ready = ~stall_in;
 
 `ifdef DBG_PRINT_TEX
     always @(posedge clk) begin
