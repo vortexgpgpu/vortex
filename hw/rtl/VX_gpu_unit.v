@@ -159,8 +159,10 @@ module VX_gpu_unit #(
     assign rsp_wb    = 0;
     assign rsp_data  = warp_ctl_data;   
 
-    `UNUSED_VAR (gpu_req_if.rd)
+    `UNUSED_VAR (gpu_req_if.rs2_data)
+    `UNUSED_VAR (gpu_req_if.rs3_data)
     `UNUSED_VAR (gpu_req_if.wb)
+    `UNUSED_VAR (gpu_req_if.rd)
 
 `endif
 
