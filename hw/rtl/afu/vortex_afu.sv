@@ -1,14 +1,13 @@
 `include "VX_define.vh"
 `ifndef NOPAE
-import local_mem_cfg_pkg::*;
 `include "afu_json_info.vh"
 `else
 `include "vortex_afu.vh"
+`endif
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
 /* verilator lint_on IMPORTSTAR */ 
-`endif
 
 module vortex_afu #(
   parameter NUM_LOCAL_MEM_BANKS = 2

@@ -1,5 +1,9 @@
 `include "VX_define.vh"
 
+`ifndef SYNTHESIS
+`include "float_dpi.vh"
+`endif
+
 module VX_fp_fma #( 
     parameter TAGW = 1,
     parameter LANES = 1
