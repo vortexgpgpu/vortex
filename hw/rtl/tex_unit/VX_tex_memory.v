@@ -198,7 +198,7 @@ module VX_tex_memory #(
 
     // send store commit
 
-    wire is_store_rsp = req_valid && ~req_wb && req_sent_all;
+    //wire is_store_rsp = req_valid && ~req_wb && req_sent_all;
 
     // assign st_commit_if.valid = is_store_rsp;
     // assign st_commit_if.wid   = req_wid;

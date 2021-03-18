@@ -47,7 +47,74 @@ module VX_execute #(
     VX_fpu_to_csr_if     fpu_to_csr_if(); 
 
 `ifdef EXT_TEX_ENABLE
+
+    VX_dcache_core_req_if #(
+        .LANES(`NUM_THREADS), 
+        .WORD_SIZE(4), 
+        .CORE_TAG_WIDTH(`LSU_TAG_WIDTH)
+    ) tex_dcache_req_if();
+
+    VX_dcache_core_rsp_if #(
+        .LANES(`NUM_THREADS), 
+        .WORD_SIZE(4), 
+        .CORE_TAG_WIDTH(`LSU_TAG_WIDTH)
+    ) tex_dcache_rsp_if();
+
+    VX_dcache_core_req_if #(
+        .LANES(`NUM_THREADS), 
+        .WORD_SIZE(4), 
+        .CORE_TAG_WIDTH(`LSU_TAG_WIDTH)
+    ) lsu_dcache_req_if();
+
+    VX_dcache_core_rsp_if #(
+        .LANES(`NUM_THREADS), 
+        .WORD_SIZE(4), 
+        .CORE_TAG_WIDTH(`LSU_TAG_WIDTH)
+    ) lsu_dcache_rsp_if();    
+
     VX_tex_csr_if        tex_csr_if();
+
+    VX_tex_lsu_arb #(
+        .NUM_REQS      (2),
+        .LANES         (`NUM_THREADS),
+        .WORD_SIZE     (4),            
+        .TAG_IN_WIDTH  (`LSU_TAG_WIDTH),
+        .TAG_OUT_WIDTH (`DCORE_TAG_WIDTH)
+    ) tex_lsu_arb (
+        .clk            (clk),
+        .reset          (reset),
+
+        // Tex/LSU request
+        .req_valid_in   ({tex_dcache_req_if.valid, lsu_dcache_req_if.valid}),
+        .req_rw_in      ({tex_dcache_req_if.rw, lsu_dcache_req_if.rw}),
+        .req_byteen_in  ({tex_dcache_req_if.byteen, lsu_dcache_req_if.byteen}),
+        .req_addr_in    ({tex_dcache_req_if.addr, lsu_dcache_req_if.addr}),
+        .req_data_in    ({tex_dcache_req_if.data, lsu_dcache_req_if.data}),  
+        .req_tag_in     ({tex_dcache_req_if.tag, lsu_dcache_req_if.tag}),  
+        .req_ready_in   ({tex_dcache_req_if.ready, lsu_dcache_req_if.ready}),
+
+        // Dcache request
+        .req_valid_out  (dcache_req_if.valid),
+        .req_rw_out     (dcache_req_if.rw),        
+        .req_byteen_out (dcache_req_if.byteen),        
+        .req_addr_out   (dcache_req_if.addr),
+        .req_data_out   (dcache_req_if.data),
+        .req_tag_out    (dcache_req_if.tag),
+        .req_ready_out  (dcache_req_if.ready),
+
+        // Tex/LSU response
+        .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
+        .rsp_data_out   ({tex_dcache_rsp_if.data, lsu_dcache_rsp_if.data}),
+        .rsp_tag_out    ({tex_dcache_rsp_if.tag, lsu_dcache_rsp_if.tag}),
+        .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready}),
+        
+        // Dcache response
+        .rsp_valid_in   (dcache_rsp_if.valid),
+        .rsp_tag_in     (dcache_rsp_if.tag),
+        .rsp_data_in    (dcache_rsp_if.data),
+        .rsp_ready_in   (dcache_rsp_if.ready)
+    );
+
 `endif
 
     wire[`NUM_WARPS-1:0] csr_pending;
@@ -63,104 +130,23 @@ module VX_execute #(
         .alu_commit_if  (alu_commit_if)
     );
 
-`ifdef EXT_TEX_ENABLE
-
-    VX_dcache_core_req_if #(
-        .NUM_REQS(`NUM_THREADS), 
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
-    ) tex_dcache_req_if();
-
-    VX_dcache_core_rsp_if #(
-        .NUM_REQS(`NUM_THREADS), 
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
-    ) tex_dcache_rsp_if();
-
-    VX_dcache_core_req_if #(
-        .NUM_REQS(`NUM_THREADS), 
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
-    ) lsu_dcache_req_if();
-
-    VX_dcache_core_rsp_if #(
-        .NUM_REQS(`NUM_THREADS), 
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
-    ) lsu_dcache_rsp_if();
-
-    VX_mem_arb #(
-            .NUM_REQS      (2),
-            .DATA_WIDTH    (`WORD_WIDTH),            
-            .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
-            .TAG_OUT_WIDTH (`DCORE_TAG_WIDTH),
-            .BUFFERED_REQ  (0),
-            .BUFFERED_RSP  (0)
-    ) dcache_arb (
-            .clk            (clk),
-            .reset          (reset),
-
-            // Tex/LSU request
-            .req_valid_in   ({tex_dcache_req_if.valid, lsu_dcache_req_if.valid}),
-            .req_rw_in      ({tex_dcache_req_if.rw, lsu_dcache_req_if.rw}),
-            .req_byteen_in  ({tex_dcache_req_if.byteen, lsu_dcache_req_if.byteen}),
-            .req_addr_in    ({tex_dcache_req_if.addr, lsu_dcache_req_if.addr}),
-            .req_data_in    ({tex_dcache_req_if.data, lsu_dcache_req_if.data}),  
-            .req_tag_in     ({tex_dcache_req_if.tag, lsu_dcache_req_if.tag}),  
-            .req_ready_in   ({tex_dcache_req_if.ready, lsu_dcache_req_if.ready}),
-
-            // Dcache request
-            .req_valid_out  (dcache_req_if.valid),
-            .req_rw_out     (dcache_req_if.rw),        
-            .req_byteen_out (dcache_req_if.byteen),        
-            .req_addr_out   (dcache_req_if.addr),
-            .req_data_out   (dcache_req_if.data),
-            .req_tag_out    (dcache_req_if.tag),
-            .req_ready_out  (dcache_req_if.ready),
-
-            // Tex/LSU response
-            .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
-            .rsp_data_out   ({tex_dcache_rsp_if.data, lsu_dcache_rsp_if.data}),
-            .rsp_tag_out    ({tex_dcache_rsp_if.tag, lsu_dcache_rsp_if.tag}),
-            .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready}),
-            
-            // Dcache response
-            .rsp_valid_in   (dcache_rsp_if.valid),
-            .rsp_tag_in     (dcache_rsp_if.tag),
-            .rsp_data_in    (dcache_rsp_if.data),
-            .rsp_ready_in   (dcache_rsp_if.ready)
-        );
-
-
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
     ) lsu_unit (
         `SCOPE_BIND_VX_execute_lsu_unit
         .clk            (clk),
         .reset          (reset),
+    `ifdef EXT_TEX_ENABLE
         .dcache_req_if  (lsu_dcache_req_if),
         .dcache_rsp_if  (lsu_dcache_rsp_if),
-        .lsu_req_if     (lsu_req_if),
-        .ld_commit_if   (ld_commit_if),
-        .st_commit_if   (st_commit_if)
-    );
-
-`else
-
-    VX_lsu_unit #(
-        .CORE_ID(CORE_ID)
-    ) lsu_unit (
-        `SCOPE_BIND_VX_execute_lsu_unit
-        .clk            (clk),
-        .reset          (reset),
+    `else 
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
+    `endif
         .lsu_req_if     (lsu_req_if),
         .ld_commit_if   (ld_commit_if),
         .st_commit_if   (st_commit_if)
     );
-
-`endif
 
     VX_csr_unit #(
         .CORE_ID(CORE_ID)

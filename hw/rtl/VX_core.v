@@ -71,13 +71,13 @@ module VX_core #(
     //--
 
     VX_dcache_core_req_if #(
-        .NUM_REQS(`DNUM_REQUESTS), 
+        .LANES(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
     ) dcache_core_req_if();
 
     VX_dcache_core_rsp_if #(
-        .NUM_REQS(`DNUM_REQUESTS), 
+        .LANES(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
     ) dcache_core_rsp_if();

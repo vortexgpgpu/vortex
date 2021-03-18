@@ -12,12 +12,11 @@ module VX_tex_unit #(
     VX_tex_csr_if   tex_csr_if,
 
     // Outputs
-    VX_tex_rsp_if   tex_rsp_if
+    VX_tex_rsp_if   tex_rsp_if,
 
     // Texture unit <-> Memory Unit
     VX_dcache_core_req_if dcache_req_if,
     VX_dcache_core_rsp_if dcache_rsp_if
-
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -83,7 +82,8 @@ module VX_tex_unit #(
     // texture response
     `UNUSED_VAR (tex_req_if.u)
     `UNUSED_VAR (tex_req_if.v)
-    `UNUSED_VAR (tex_req_if.lod_t)
+    `UNUSED_VAR (tex_req_if.lod)
+    `UNUSED_VAR (tex_req_if.t)
 
     assign stall_in  = stall_out;
 
@@ -96,7 +96,7 @@ module VX_tex_unit #(
     assign rsp_data  = {`NUM_THREADS{32'hFF0000FF}}; // dummy blue value
 
 
-    //point sampling texel address computation
+    /*//point sampling texel address computation
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign tex_req_if.u[i] = gpu_req_if.rs1_data[i];
         assign tex_req_if.v[i] = gpu_req_if.rs2_data[i];
@@ -108,7 +108,7 @@ module VX_tex_unit #(
             .clk     (clk),
             .reset   (reset),
         );
-    end
+    end*/
 
     // fifo/wait buffer for fragments and also to dcache
 
