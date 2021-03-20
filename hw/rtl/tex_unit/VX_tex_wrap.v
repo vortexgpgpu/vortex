@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_tex_wrap #(
-    parameter CORE_ID = 0,
+    parameter CORE_ID   = 0,
     parameter FRAC_BITS = 20,
     parameter INT_BITS  = 32 - FRAC_BITS
 ) (
@@ -10,7 +10,9 @@ module VX_tex_wrap #(
     input wire [31:0] coord_o
 )
     
-    always @(*) begin
+    `UNUSED_PARAM (CORE_ID)
+
+    /*always @(*) begin
         case (wrap_i)
             `ALU_AND:   msc_result[i] = alu_in1[i] & alu_in2_imm[i];
             `ALU_OR:    msc_result[i] = alu_in1[i] | alu_in2_imm[i];
@@ -18,6 +20,6 @@ module VX_tex_wrap #(
             //`ALU_SLL,
             default:    msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
         endcase
-    end
+    end*/
 
 endmodule

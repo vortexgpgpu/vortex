@@ -16,36 +16,43 @@ module VX_tex_addr_gen #(
 
     // inputs
 
-    output wire [REQ_TAG_WIDTH-1:0]   req_tag,
+    input wire [`NUM_THREADS-1:0]    req_tmask,
+    input wire [REQ_TAG_WIDTH-1:0]   req_tag,
+
     input wire [`TEX_FILTER_BITS-1:0] filter,
     input wire [`TEX_WRAP_BITS-1:0]   wrap_u,
     input wire [`TEX_WRAP_BITS-1:0]   wrap_v,
 
     input wire [`TEX_ADDR_BITS-1:0]   base_addr,
-    input wire [1:0]                  log2_stride,
+    input wire [`TEX_STRIDE_BITS-1:0] log2_stride,
     input wire [`TEX_WIDTH_BITS-1:0]  log2_width,
     input wire [`TEX_HEIGHT_BITS-1:0] log2_height,
-    input wire [3:0]                  lod,
-
-    input wire [31:0] coord_u,
-    input wire [31:0] coord_v,
+    
+    input wire [`NUM_THREADS-1:0][31:0] coord_u,
+    input wire [`NUM_THREADS-1:0][31:0] coord_v,
+    input wire [`NUM_THREADS-1:0][31:0] lod,
 
     // outputs
 
-    output wire [3:0] mem_req_valid,  
+    output wire mem_req_valid,  
+    output wire [`NUM_THREADS-1:0] mem_req_tmask,
+    output wire [`TEX_FILTER_BITS-1:0] mem_req_filter,
     output wire [REQ_TAG_WIDTH-1:0] mem_req_tag,  
-    output wire [3:0][31:0] mem_req_addr,
+    output wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr,
     input wire mem_req_ready
 );
 
-    `UNUSED_VAR (filter)
+    `UNUSED_PARAM (CORE_ID)
+
+    /*`UNUSED_VAR (filter)
     `UNUSED_VAR (lod)
 
     wire [31:0]  u, y;
     wire [31:0]  x_offset, y_offset;
     wire [31:0]  addr0;
 
-    // addressing mode    
+    // addressing mode
+
 
     assign x_offset = u >> (5'(FRAC_BITS) - log2_width); 
     assign y_offset = v >> (5'(FRAC_BITS) - log2_height); 
@@ -65,6 +72,6 @@ module VX_tex_addr_gen #(
         .data_out ({mem_req_valid, mem_req_addr, mem_req_tag})
     );
 
-    assign ready_in = ~stall_out;
+    assign ready_in = ~stall_out;*/
 
 endmodule

@@ -99,6 +99,8 @@ module VX_gpu_unit #(
     // texture
 
 `ifdef EXT_TEX_ENABLE
+
+    `UNUSED_VAR (gpu_req_if.op_mod)
     
     VX_tex_req_if   tex_req_if;
     VX_tex_rsp_if   tex_rsp_if;    
@@ -144,7 +146,13 @@ module VX_gpu_unit #(
     assign rsp_wb    = tex_rsp_if.valid && tex_rsp_if.wb;
     assign rsp_data  = tex_rsp_if.valid ? tex_rsp_if.data : warp_ctl_data;
     
-`else
+`else   
+
+    `UNUSED_VAR (gpu_req_if.op_mod)
+    `UNUSED_VAR (gpu_req_if.rs2_data)
+    `UNUSED_VAR (gpu_req_if.rs3_data)
+    `UNUSED_VAR (gpu_req_if.wb)
+    `UNUSED_VAR (gpu_req_if.rd)
 
     assign stall_in = stall_out;
     assign is_warp_ctl = 1;
@@ -155,13 +163,7 @@ module VX_gpu_unit #(
     assign rsp_PC    = gpu_req_if.PC;
     assign rsp_rd    = 0;
     assign rsp_wb    = 0;
-    assign rsp_data  = warp_ctl_data;   
-
-    `UNUSED_VAR (gpu_req_if.op_mod)
-    `UNUSED_VAR (gpu_req_if.rs2_data)
-    `UNUSED_VAR (gpu_req_if.rs3_data)
-    `UNUSED_VAR (gpu_req_if.wb)
-    `UNUSED_VAR (gpu_req_if.rd)
+    assign rsp_data  = warp_ctl_data;
 
 `endif
 

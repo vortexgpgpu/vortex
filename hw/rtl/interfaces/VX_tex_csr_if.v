@@ -5,15 +5,9 @@
 
 interface VX_tex_csr_if ();
 
-    // wire                      read_enable;
-    // wire[`CSR_ADDR_BITS-1:0]  read_addr;
-    // wire[`NW_BITS-1:0]        read_wid;
-    // wire[31:0]               read_data;
-
     wire                      write_enable; 
-    wire[`CSR_ADDR_BITS-1:0]  write_addr;
-    // wire[`NW_BITS-1:0]        write_wid;
-    wire[`CSR_WIDTH-1:0]      write_data;   
+    wire [`CSR_ADDR_BITS-1:0] write_addr;
+    wire [31:0]               write_data;   
 
 endinterface
 
