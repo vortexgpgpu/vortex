@@ -237,33 +237,21 @@
 `define CSR_NW          12'hFC1
 `define CSR_NC          12'hFC2
 
-////////// Texture Unit CSRs /////////////
+////////// Texture Units //////////////////////////////////////////////////////
 
-`define CSR_TEX_BEGIN   12'hFD0
+`define NUM_TEX_UNITS       2
 
-// Unit 1
-`define CSR_TEX0_ADDR       `CSR_TEX_BEGIN
-`define CSR_TEX0_FORMAT     `CSR_TEX_BEGIN + 12'h1
-`define CSR_TEX0_WIDTH      `CSR_TEX_BEGIN + 12'h2
-`define CSR_TEX0_HEIGHT     `CSR_TEX_BEGIN + 12'h3
-`define CSR_TEX0_PITCH      `CSR_TEX_BEGIN + 12'h4
-`define CSR_TEX0_WRAP_U     `CSR_TEX_BEGIN + 12'h5
-`define CSR_TEX0_WRAP_V     `CSR_TEX_BEGIN + 12'h6
-`define CSR_TEX0_MIN_FILTER `CSR_TEX_BEGIN + 12'h7
-`define CSR_TEX0_MAX_FILTER `CSR_TEX_BEGIN + 12'h8
+`define CSR_TEX_STATES      8
+`define CSR_TEX_BEGIN(x)    (12'hFD0 + (x) * `CSR_TEX_STATES)
 
-// Unit 2
-`define CSR_TEX1_ADDR       `CSR_TEX_BEGIN + 12'h9
-`define CSR_TEX1_FORMAT     `CSR_TEX_BEGIN + 12'hA
-`define CSR_TEX1_WIDTH      `CSR_TEX_BEGIN + 12'hB
-`define CSR_TEX1_HEIGHT     `CSR_TEX_BEGIN + 12'hC
-`define CSR_TEX1_PITCH      `CSR_TEX_BEGIN + 12'hD
-`define CSR_TEX1_WRAP_U     `CSR_TEX_BEGIN + 12'hE
-`define CSR_TEX1_WRAP_V     `CSR_TEX_BEGIN + 12'hF
-`define CSR_TEX1_MIN_FILTER `CSR_TEX_BEGIN + 12'h10
-`define CSR_TEX1_MAX_FILTER `CSR_TEX_BEGIN + 12'h11
-
-`define CSR_TEX_END `CSR_TEX1_MAX_FILTER
+`define CSR_TEX_ADDR(x)     (`CSR_TEX_BEGIN(x) + 12'h00)
+`define CSR_TEX_FORMAT(x)   (`CSR_TEX_BEGIN(x) + 12'h01)
+`define CSR_TEX_WIDTH(x)    (`CSR_TEX_BEGIN(x) + 12'h02)
+`define CSR_TEX_HEIGHT(x)   (`CSR_TEX_BEGIN(x) + 12'h03)
+`define CSR_TEX_STRIDE(x)   (`CSR_TEX_BEGIN(x) + 12'h04)
+`define CSR_TEX_WRAP_U(x)   (`CSR_TEX_BEGIN(x) + 12'h05)
+`define CSR_TEX_WRAP_V(x)   (`CSR_TEX_BEGIN(x) + 12'h06)
+`define CSR_TEX_FILTER(x)   (`CSR_TEX_BEGIN(x) + 12'h07)
 
 // Pipeline Queues ////////////////////////////////////////////////////////////
 

@@ -57,27 +57,26 @@ module VX_csr_data #(
                                                           | fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0];
         end
 
-        if (write_enable && (write_addr > `CSR_TEX_END || write_addr < `CSR_TEX_BEGIN)) begin
+        if (write_enable) begin
             case (write_addr)
                 `CSR_FFLAGS:   fcsr[write_wid][`FFG_BITS-1:0] <= write_data[`FFG_BITS-1:0];
                 `CSR_FRM:      fcsr[write_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS] <= write_data[`FRM_BITS-1:0];
                 `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFG_BITS+`FRM_BITS-1:0];
                 
-                `CSR_SATP:     csr_satp   <= write_data;
-                
-                `CSR_MSTATUS:  csr_mstatus <= write_data;
-                `CSR_MEDELEG:  csr_medeleg <= write_data;
-                `CSR_MIDELEG:  csr_mideleg <= write_data;
-                `CSR_MIE:      csr_mie     <= write_data;
-                `CSR_MTVEC:    csr_mtvec   <= write_data;
-
-                `CSR_MEPC:     csr_mepc    <= write_data;
-
+                `CSR_SATP:     csr_satp       <= write_data;                
+                `CSR_MSTATUS:  csr_mstatus    <= write_data;
+                `CSR_MEDELEG:  csr_medeleg    <= write_data;
+                `CSR_MIDELEG:  csr_mideleg    <= write_data;
+                `CSR_MIE:      csr_mie        <= write_data;
+                `CSR_MTVEC:    csr_mtvec      <= write_data;
+                `CSR_MEPC:     csr_mepc       <= write_data;
                 `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data;
                 `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data;
 
                 default: begin           
-                    assert(~write_enable) else $error("%t: invalid CSR write address: %0h", $time, write_addr);
+                    if (write_addr < `CSR_TEX_BEGIN(0) || write_addr > `CSR_TEX_BEGIN(`CSR_TEX_STATES)) begin
+                        $error("%t: invalid CSR write address: %0h", $time, write_addr);
+                    end
                 end
             endcase                
         end

@@ -361,7 +361,8 @@ module VX_decode  #(
                 `ifdef EXT_TEX_ENABLE
                     3'h5: begin
                         op_type = `OP_BITS'(`GPU_TEX);
-                        use_rd = 1;
+                        op_mod  = instr[26:25];
+                        use_rd  = 1;
                         use_rs1 = 1;
                         use_rs2 = 1;
                         use_rs3 = 1;

@@ -2,12 +2,16 @@
 #include <vx_intrinsics.h>
 #include <vx_tex.h>
 #include "common.h"
+
+uint32_t ilog2 (uint32_t value) {
+  	return (uint32_t)(sizeof(uint32_t) * 8UL) - (uint32_t)__builtin_clzl((value << 1) - 1UL) - 1;
+}
 struct tile_arg_t {
-  struct kernel_arg_t karg;	
-  uint32_t tile_width;
-  uint32_t tile_height;
-  float deltaX;
-  float deltaY;
+  	struct kernel_arg_t karg;	
+  	uint32_t tile_width;
+ 	uint32_t tile_height;
+  	float deltaX;
+  	float deltaY;
 };
 
 void kernel_body(int task_id, void* arg) {
@@ -36,15 +40,14 @@ int main() {
 	struct kernel_arg_t* arg = (struct kernel_arg_t*)0x0;
 
 	// configure texture unit
-	vx_csr_write(CSR_TEX0_ADDR,       arg->src_ptr);
-	vx_csr_write(CSR_TEX0_FORMAT,     0);
-	vx_csr_write(CSR_TEX0_WIDTH,      arg->src_width);
-	vx_csr_write(CSR_TEX0_HEIGHT,     arg->src_height);
-	vx_csr_write(CSR_TEX0_PITCH,      arg->src_pitch);
-	vx_csr_write(CSR_TEX0_WRAP_U,     0);
-	vx_csr_write(CSR_TEX0_WRAP_V,     0);
-	vx_csr_write(CSR_TEX0_MIN_FILTER, 0);
-	vx_csr_write(CSR_TEX0_MAX_FILTER, 0);
+	vx_csr_write(CSR_TEX_ADDR(0),   arg->src_ptr);
+	vx_csr_write(CSR_TEX_FORMAT(0), 0);
+	vx_csr_write(CSR_TEX_WIDTH(0),  ilog2(arg->src_width));
+	vx_csr_write(CSR_TEX_HEIGHT(0), ilog2(arg->src_height));
+	vx_csr_write(CSR_TEX_STRIDE(0), ilog2(arg->src_stride));
+	vx_csr_write(CSR_TEX_WRAP_U(0), 0);
+	vx_csr_write(CSR_TEX_WRAP_V(0), 0);	
+	vx_csr_write(CSR_TEX_FILTER(0), 0);
 
 	struct tile_arg_t targ;
 	targ.karg        = *arg;

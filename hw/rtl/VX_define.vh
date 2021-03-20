@@ -26,7 +26,7 @@
 
 `define CSR_ADDR_BITS   12
 
-`define CSR_WIDTH       32
+`define CSR_WIDTH       12
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -388,13 +388,17 @@
 `define XDRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH+`CLOG2(2))
 
 ////////////////////////// Texture Unit Configurable Knobs //////////////////////////////
-`define NUM_TEX_UNITS 2 
-`define MADDRW      8           
-`define MAXWTW      8      
-`define MAXHTW      8      
-`define MAXFTW      8      
-`define MAXFMW      8      
-`define MAXAMW      8    
+
+`define NTEX_BITS        `LOG2UP(`NUM_TEX_UNITS)
+
+`define TEX_ADDR_BITS    32
+`define TEX_FMT_BITS     3
+`define TEX_WRAP_BITS    2
+`define TEX_WIDTH_BITS   12
+`define TEX_HEIGHT_BITS  12
+`define TEX_STRIDE_BITS  12
+`define TEX_FILTER_BITS  1
+
 ////////////////////////////////////////////////////////////////////////////////////////
 
 `include "VX_types.vh"
