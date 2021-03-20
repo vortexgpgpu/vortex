@@ -6,6 +6,7 @@
 `define FIXED_FRAC      20
 `define FIXED_INT       (32 - `FIXED_FRAC)
 `define FIXED_ONE       (1 << `FIXED_FRAC)
+`define FIXED_HALF      (`FIXED_ONE >> 1)
 `define FIXED_MASK      (`FIXED_ONE - 1)
 
 `define CLAMP(x,lo,hi)  ((x < lo) ? lo : ((x > hi) ? hi : x))
@@ -13,8 +14,8 @@
 `define TEX_ADDR_BITS    32
 `define TEX_FORMAT_BITS  3
 `define TEX_WRAP_BITS    2
-`define TEX_WIDTH_BITS   12
-`define TEX_HEIGHT_BITS  12
+`define TEX_WIDTH_BITS   4
+`define TEX_HEIGHT_BITS  4
 `define TEX_STRIDE_BITS  2
 `define TEX_FILTER_BITS  1
 

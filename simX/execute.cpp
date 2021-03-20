@@ -776,46 +776,51 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case FMSUB:      
     case FMNMADD:
     case FMNMSUB: {
-      // multiplicands are infinity and zero, them set FCSR
-      if (fpBinIsZero(rsdata[0]) || fpBinIsZero(rsdata[1]) || fpBinIsInf(rsdata[0]) || fpBinIsInf(rsdata[1])) {
-        core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-        core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
-      }
-      if (fpBinIsNan(rsdata[0]) || fpBinIsNan(rsdata[1]) || fpBinIsNan(rsdata[2])) { 
-        // if one of op is NaN, if addend is not quiet NaN, them set FCSR
-        if ((fpBinIsNan(rsdata[0])==2) | (fpBinIsNan(rsdata[1])==2) | (fpBinIsNan(rsdata[1])==2)) {
-          core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-          core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit          
-        }
-        rddata = 0x7fc00000;  // canonical(quiet) NaN 
+      // select FP format
+      if (core_->get_csr(CSR_FPMODE, t, id_) == 1) {
+        // CODE
       } else {
-        float rs1 = intregToFloat(rsdata[0]);
-        float rs2 = intregToFloat(rsdata[1]);
-        float rs3 = intregToFloat(rsdata[2]);
-        float fpDest(0.0);
-        feclearexcept(FE_ALL_EXCEPT);          
-        switch (opcode) {
-          case FMADD:    
-            // rd = (rs1*rs2)+rs3
-            fpDest = (rs1 * rs2) + rs3;  break;
-          case FMSUB:      
-            // rd = (rs1*rs2)-rs3
-            fpDest = (rs1 * rs2) - rs3; break;
-          case FMNMADD:
-            // rd = -(rs1*rs2)+rs3
-            fpDest = -1*(rs1 * rs2) - rs3; break;        
-          case FMNMSUB: 
-            // rd = -(rs1*rs2)-rs3
-            fpDest = -1*(rs1 * rs2) + rs3; break;
-          default:
-            std::abort();
-            break;                 
-        }  
+        // multiplicands are infinity and zero, them set FCSR
+        if (fpBinIsZero(rsdata[0]) || fpBinIsZero(rsdata[1]) || fpBinIsInf(rsdata[0]) || fpBinIsInf(rsdata[1])) {
+          core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
+          core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
+        }
+        if (fpBinIsNan(rsdata[0]) || fpBinIsNan(rsdata[1]) || fpBinIsNan(rsdata[2])) { 
+          // if one of op is NaN, if addend is not quiet NaN, them set FCSR
+          if ((fpBinIsNan(rsdata[0])==2) | (fpBinIsNan(rsdata[1])==2) | (fpBinIsNan(rsdata[1])==2)) {
+            core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
+            core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit          
+          }
+          rddata = 0x7fc00000;  // canonical(quiet) NaN 
+        } else {
+          float rs1 = intregToFloat(rsdata[0]);
+          float rs2 = intregToFloat(rsdata[1]);
+          float rs3 = intregToFloat(rsdata[2]);
+          float fpDest(0.0);
+          feclearexcept(FE_ALL_EXCEPT);          
+          switch (opcode) {
+            case FMADD:    
+              // rd = (rs1*rs2)+rs3
+              fpDest = (rs1 * rs2) + rs3;  break;
+            case FMSUB:      
+              // rd = (rs1*rs2)-rs3
+              fpDest = (rs1 * rs2) - rs3; break;
+            case FMNMADD:
+              // rd = -(rs1*rs2)+rs3
+              fpDest = -1*(rs1 * rs2) - rs3; break;        
+            case FMNMSUB: 
+              // rd = -(rs1*rs2)-rs3
+              fpDest = -1*(rs1 * rs2) + rs3; break;
+            default:
+              std::abort();
+              break;                 
+          }  
 
-        // update fcsrs
-        update_fcrs(core_, t, id_);
+          // update fcsrs
+          update_fcrs(core_, t, id_);
 
-        rddata = floatToBin(fpDest);
+          rddata = floatToBin(fpDest);
+        }
       }
     }
     break;

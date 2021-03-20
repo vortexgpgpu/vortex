@@ -1,35 +1,16 @@
 `include "VX_tex_define.vh"
 
-/*
-switch(addressing_mode) {
-case undefined:       return is_undefined;
-case clamp_to_edge:   return intdowni(max(0, min(coord, coorddim - 1)));
-case clamp_to_border: return is_border;
-case repeat:
-    tile = intdowni(coord / coorddim);
-    return intdowni(coord - (tile * coorddim));
-case mirrored_repeat:
-    mirrored_coord = (coord < 0) ? (-coord - 1) : coord;
-    tile = intdowni(mirrored_coord / coorddim);
-    mirrored_coord = intdowni(mirrored_coord - (tile * coorddim));
-    if (tile & 1) {
-        mirrored_coord = (coorddim - 1) - mirrored_coord;
-    }
-    return mirrored_coord;
-}
-*/
-
 module VX_tex_wrap #(
     parameter CORE_ID = 0    
 ) (
     input wire [`TEX_WRAP_BITS-1:0] wrap_i,
     input wire [31:0] coord_i,
-    input wire [`FIXED_FRAC-1:0] coord_o
+    output wire [`FIXED_FRAC-1:0] coord_o
 );
     
     `UNUSED_PARAM (CORE_ID)
 
-    reg [31:0] coord_r;
+    reg [`FIXED_FRAC-1:0] coord_r;
 
     wire [31:0] clamp = `CLAMP(coord_i, 0, `FIXED_MASK);
 
