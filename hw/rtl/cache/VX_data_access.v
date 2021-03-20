@@ -1,4 +1,4 @@
-`include "VX_cache_config.vh"
+`include "VX_cache_define.vh"
 
 module VX_data_access #(
     parameter CACHE_ID          = 0,

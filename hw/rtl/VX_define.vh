@@ -16,6 +16,8 @@
 
 `define REQS_BITS       `LOG2UP(NUM_REQS)
 
+`define NTEX_BITS       `LOG2UP(`NUM_TEX_UNITS)
+
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        64
 `else
@@ -387,19 +389,7 @@
 
 `define XDRAM_TAG_WIDTH         (`DDRAM_TAG_WIDTH+`CLOG2(2))
 
-////////////////////////// Texture Unit Configurable Knobs //////////////////////////////
-
-`define NTEX_BITS        `LOG2UP(`NUM_TEX_UNITS)
-
-`define TEX_ADDR_BITS    32
-`define TEX_FORMAT_BITS  3
-`define TEX_WRAP_BITS    2
-`define TEX_WIDTH_BITS   12
-`define TEX_HEIGHT_BITS  12
-`define TEX_STRIDE_BITS  2
-`define TEX_FILTER_BITS  1
-
-////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 `include "VX_types.vh"
 

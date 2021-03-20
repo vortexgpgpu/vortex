@@ -1,5 +1,4 @@
-`include "VX_platform.vh"
-`include "VX_define.vh"
+`include "VX_tex_define.vh"
 
 module VX_tex_unit #(  
     parameter CORE_ID = 0
@@ -83,7 +82,6 @@ module VX_tex_unit #(
     wire mem_rsp_ready;
                 
     VX_tex_addr_gen #(
-        .FRAC_BITS     (20),
         .REQ_TAG_WIDTH (REQ_TAG_WIDTH)
     ) tex_addr_gen (
         .clk            (clk),

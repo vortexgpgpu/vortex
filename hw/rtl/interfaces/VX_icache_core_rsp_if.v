@@ -1,7 +1,7 @@
 `ifndef VX_ICACHE_CORE_RSP_IF
 `define VX_ICACHE_CORE_RSP_IF
 
-`include "../cache/VX_cache_config.vh"
+`include "../cache/VX_cache_define.vh"
 
 interface VX_icache_core_rsp_if #(
     parameter WORD_SIZE      = 1,

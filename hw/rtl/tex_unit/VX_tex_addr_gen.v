@@ -1,10 +1,8 @@
-`include "VX_define.vh"
+`include "VX_tex_define.vh"
 
 module VX_tex_addr_gen #(
-    parameter CORE_ID   = 0,
-    parameter REQ_TAG_WIDTH = 1,
-    parameter FRAC_BITS = 20,
-    parameter INT_BITS  = 32 - FRAC_BITS
+    parameter CORE_ID = 0,
+    parameter REQ_TAG_WIDTH = 1
 ) (
     input wire  clk,
     input wire  reset,
@@ -16,17 +14,17 @@ module VX_tex_addr_gen #(
 
     // inputs
 
-    input wire [`NUM_THREADS-1:0]    req_tmask,
-    input wire [REQ_TAG_WIDTH-1:0]   req_tag,
+    input wire [`NUM_THREADS-1:0]       req_tmask,
+    input wire [REQ_TAG_WIDTH-1:0]      req_tag,
 
-    input wire [`TEX_FILTER_BITS-1:0] filter,
-    input wire [`TEX_WRAP_BITS-1:0]   wrap_u,
-    input wire [`TEX_WRAP_BITS-1:0]   wrap_v,
+    input wire [`TEX_FILTER_BITS-1:0]   filter,
+    input wire [`TEX_WRAP_BITS-1:0]     wrap_u,
+    input wire [`TEX_WRAP_BITS-1:0]     wrap_v,
 
-    input wire [`TEX_ADDR_BITS-1:0]   base_addr,
-    input wire [`TEX_STRIDE_BITS-1:0] log2_stride,
-    input wire [`TEX_WIDTH_BITS-1:0]  log2_width,
-    input wire [`TEX_HEIGHT_BITS-1:0] log2_height,
+    input wire [`TEX_ADDR_BITS-1:0]     base_addr,
+    input wire [`TEX_STRIDE_BITS-1:0]   log2_stride,
+    input wire [`TEX_WIDTH_BITS-1:0]    log2_width,
+    input wire [`TEX_HEIGHT_BITS-1:0]   log2_height,
     
     input wire [`NUM_THREADS-1:0][31:0] coord_u,
     input wire [`NUM_THREADS-1:0][31:0] coord_v,
@@ -43,23 +41,44 @@ module VX_tex_addr_gen #(
 );
 
     `UNUSED_PARAM (CORE_ID)
-
-    /*`UNUSED_VAR (filter)
     `UNUSED_VAR (lod)
 
-    wire [31:0]  u, y;
-    wire [31:0]  x_offset, y_offset;
-    wire [31:0]  addr0;
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
 
-    // addressing mode
+        // addressing mode
+        
+        wire [31:0] u, v;
 
+        VX_tex_wrap #(
+            .CORE_ID (CORE_ID)
+        ) tex_wrap_u (
+            .wrap_i  (wrap_u),
+            .coord_i (coord_u[i]),
+            .coord_o (u)
+        );
 
-    assign x_offset = u >> (5'(FRAC_BITS) - log2_width); 
-    assign y_offset = v >> (5'(FRAC_BITS) - log2_height); 
-    assign addr0 = base_addr + (x_offset + (y_offset << log2_width)) << log2_stride;
+        VX_tex_wrap #(
+            .CORE_ID (CORE_ID)
+        ) tex_wrap_v (
+            .wrap_i  (wrap_v),
+            .coord_i (coord_v[i]),
+            .coord_o (v)
+        );
 
-    wire [3:0]       req_valids  = 4'(valid_in);
-    wire [3:0][31:0] req_address = {4{addr0}};
+        // texel addresses generation
+
+        wire [31:0]  x_offset, y_offset;
+        wire [31:0]  addr0;
+
+        assign x_offset = u >> (5'(`FIXED_FRAC) - log2_width); 
+        assign y_offset = v >> (5'(`FIXED_FRAC) - log2_height); 
+        assign addr0 = base_addr + (x_offset + (y_offset << log2_width)) << log2_stride;
+
+        wire [3:0]       req_valids  = 4'(valid_in);
+        wire [3:0][31:0] req_address = {4{addr0}};
+    end
+
+    wire stall_out = mem_req_valid && ~mem_req_ready;
 
     VX_pipe_register #(
         .DATAW  (1 + 4 + 4 * 32 + REQ_TAG_WIDTH),
@@ -72,6 +91,6 @@ module VX_tex_addr_gen #(
         .data_out ({mem_req_valid, mem_req_addr, mem_req_tag})
     );
 
-    assign ready_in = ~stall_out;*/
+    assign ready_in = ~stall_out;
 
 endmodule
