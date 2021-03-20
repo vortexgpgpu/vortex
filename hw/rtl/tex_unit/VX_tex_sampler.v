@@ -15,6 +15,8 @@ module VX_tex_sampler #(
     input wire                          req_wb,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,
+    input wire [3:0][`FIXED_FRAC-1:0]   req_ufrac,
+    input wire [3:0][`FIXED_FRAC-1:0]   req_vfrac,
     input wire [`NUM_THREADS-1:0][3:0][31:0] req_texels,
     output wire                         req_ready,
 
@@ -30,41 +32,48 @@ module VX_tex_sampler #(
 );
     
     `UNUSED_PARAM (CORE_ID)
+
+
+    if (req_filter == 0) begin // point sampling
     
-    /*
-    assign tex_req_if.ready = (& pt_addr_ready);
+        wire [31:0] req_data [`NUM_THREADS-1:0];
 
-    assign lsu_req_if.valid = (& pt_addr_valid);
+        for (genvar i = 0; i<`NUM_THREADS ;i++ ) begin
+            
+            VX_tex_format #(
+                .CORE_ID (CORE_ID)
+            ) tex_format_point (
+                .texel_data  (req_texels[i]),
+                .format (req_format),
 
-    assign lsu_req_if.wid   = tex_req_if.wid;
-    assign lsu_req_if.tmask = tex_req_if.tmask;
-    assign lsu_req_if.PC    = tex_req_if.PC;
-    assign lsu_req_if.rd    = tex_req_if.rd;
-    assign lsu_req_if.wb    = tex_req_if.wb;
-    assign lsu_req_if.offset = 32'h0000;
-    assign lsu_req_if.op_type = `OP_BITS'({1'b0, 3'b000}); //func3 for word load??
-    assign lsu_req_if.store_data = {`NUM_THREADS{32'h0000}};
+                .color_enable (),
+                .R(req_data[i][`RBEGIN +: 8]),
+                .G(req_data[i][`GBEGIN +: 8]),
+                .B(req_data[i][`BBEGIN +: 8]),
+                .A(req_data[i][`ABEGIN +: 8])
+            );       
 
-    // wait buffer for fragments  / replace with cache/state fragment fifo for bilerp
-    // no filtering for point sampling -> directly from dcache to output response
+        end
 
-    VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (~stall_out),
-        .data_in  ({rsp_valid,        rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb,        rsp_data}),
-        .data_out ({tex_rsp_if.valid, tex_rsp_if.wid, tex_rsp_if.tmask, tex_rsp_if.PC, tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.data})
-    );
+        VX_pipe_register #(
+            .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+            .RESETW (1)
+        ) pipe_reg (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall_out),
+            .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, req_data}),
+            .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
+        );
 
-    // output
-    assign stall_out = ~tex_rsp_if.ready && tex_rsp_if.valid;
+        // output
+        assign stall_out = ~rsp_ready;
+        assign req_ready = rsp_ready;
 
-    // can accept new request?
-    assign stall_in  = stall_out;
+    end else begin // bilinear sampling
+        // TO DO
+    end
 
-    assign ld_commit_if.ready = ~stall_in;*/
+
 
 endmodule
