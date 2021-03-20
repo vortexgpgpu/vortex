@@ -1,5 +1,5 @@
-`ifndef VX_CACHE_CONFIG
-`define VX_CACHE_CONFIG
+`ifndef VX_CACHE_DEFINE
+`define VX_CACHE_DEFINE
 
 `include "VX_platform.vh"
 

@@ -1,4 +1,4 @@
-`include "VX_cache_config.vh"
+`include "VX_cache_define.vh"
 
 module VX_flush_ctrl #(
     // Size of cache in bytes

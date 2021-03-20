@@ -1,4 +1,4 @@
-`include "VX_cache_config.vh"
+`include "VX_cache_define.vh"
 
 module VX_cache_core_rsp_merge #(
     // Number of Word requests per cycle
