@@ -76,7 +76,7 @@ module VX_csr_unit #(
         .write_enable   (write_enable),        
         .write_addr     (csr_addr_s1), 
         .write_wid      (csr_pipe_rsp_if.wid),
-        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0]),
+        .write_data     (csr_updated_data_s1),
         .busy           (busy)
     );    
 

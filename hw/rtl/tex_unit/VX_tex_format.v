@@ -3,6 +3,8 @@ module VX_tex_format #(
 ) (
     // TODO
 )   
+    `UNUSED_PARAM (CORE_ID)
+    
     // TODO
 
 endmodule

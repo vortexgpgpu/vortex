@@ -26,7 +26,7 @@ module VX_csr_data #(
     input wire                      write_enable, 
     input wire[`CSR_ADDR_BITS-1:0]  write_addr,
     input wire[`NW_BITS-1:0]        write_wid,
-    input wire[`CSR_WIDTH-1:0]      write_data,
+    input wire[31:0]                write_data,
     
     input wire                      busy
 );
@@ -63,15 +63,15 @@ module VX_csr_data #(
                 `CSR_FRM:      fcsr[write_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS] <= write_data[`FRM_BITS-1:0];
                 `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFG_BITS+`FRM_BITS-1:0];
                 
-                `CSR_SATP:     csr_satp       <= write_data;                
-                `CSR_MSTATUS:  csr_mstatus    <= write_data;
-                `CSR_MEDELEG:  csr_medeleg    <= write_data;
-                `CSR_MIDELEG:  csr_mideleg    <= write_data;
-                `CSR_MIE:      csr_mie        <= write_data;
-                `CSR_MTVEC:    csr_mtvec      <= write_data;
-                `CSR_MEPC:     csr_mepc       <= write_data;
-                `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data;
-                `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data;
+                `CSR_SATP:     csr_satp       <= write_data[`CSR_WIDTH-1:0];                
+                `CSR_MSTATUS:  csr_mstatus    <= write_data[`CSR_WIDTH-1:0];
+                `CSR_MEDELEG:  csr_medeleg    <= write_data[`CSR_WIDTH-1:0];
+                `CSR_MIDELEG:  csr_mideleg    <= write_data[`CSR_WIDTH-1:0];
+                `CSR_MIE:      csr_mie        <= write_data[`CSR_WIDTH-1:0];
+                `CSR_MTVEC:    csr_mtvec      <= write_data[`CSR_WIDTH-1:0];
+                `CSR_MEPC:     csr_mepc       <= write_data[`CSR_WIDTH-1:0];
+                `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data[`CSR_WIDTH-1:0];
+                `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
 
                 default: begin           
                     if (write_addr < `CSR_TEX_BEGIN(0) || write_addr > `CSR_TEX_BEGIN(`CSR_TEX_STATES)) begin

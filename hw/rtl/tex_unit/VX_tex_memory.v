@@ -1,8 +1,8 @@
 `include "VX_define.vh"
 
 module VX_tex_memory #(
-    parameter CORE_ID      = 0,
-    parameter TAG_IN_WIDTH = 1
+    parameter CORE_ID       = 0,
+    parameter REQ_TAG_WIDTH = 1
 ) (    
     `SCOPE_IO_VX_lsu_unit
 
@@ -14,21 +14,25 @@ module VX_tex_memory #(
     VX_dcache_core_rsp_if dcache_rsp_if,
 
     // inputs
-    input wire [3:0] req_valid,
-    input wire [3:0][31:0] req_addr,
-    input wire [TAG_IN_WIDTH-1:0] req_tag,
+    input wire req_valid,
+    input wire [`NUM_THREADS-1:0] req_tmask,
+    input wire [`TEX_FILTER_BITS-1:0] req_filter,
+    input wire [`NUM_THREADS-1:0][3:0][31:0] req_addr,
+    input wire [REQ_TAG_WIDTH-1:0] req_tag,
     output wire req_ready,
 
     // outputs
     output wire rsp_valid,
-    output wire [3:0][31:0] rsp_data,
-    output wire [TAG_IN_WIDTH-1:0] rsp_tag,
+    output wire [`NUM_THREADS-1:0] rsp_tmask,
+    output wire [`TEX_FILTER_BITS-1:0] rsp_filter,
+    output wire [`NUM_THREADS-1:0][3:0][31:0] rsp_data,
+    output wire [REQ_TAG_WIDTH-1:0] rsp_tag,
     input wire  rsp_ready    
 );
 
     `UNUSED_PARAM (CORE_ID)
     
-    wire                          req_valid;
+    /*wire                          req_valid;
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire [`NUM_THREADS-1:0][31:0] req_addr;       
     wire [`LSU_BITS-1:0]          req_type;
@@ -296,6 +300,6 @@ module VX_tex_memory #(
             $write("\n");
         end
     end
-`endif
+`endif*/
     
 endmodule
