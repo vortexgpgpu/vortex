@@ -156,9 +156,11 @@ int main(int argc, char *argv[]) {
     kernel_arg.num_tasks   = std::min<uint32_t>(num_tasks, dst_height);
     kernel_arg.src_width   = src_width;
     kernel_arg.src_height  = src_height;
+    kernel_arg.src_stride  = src_bpp;
     kernel_arg.src_pitch   = src_bpp * src_width * src_height;
     kernel_arg.dst_width   = dst_width;
     kernel_arg.dst_height  = dst_height;
+    kernel_arg.dst_stride  = dst_bpp;
     kernel_arg.dst_pitch   = dst_bpp * dst_width * dst_height;
     kernel_arg.src_ptr     = src_addr;
     kernel_arg.dst_ptr     = dst_addr;

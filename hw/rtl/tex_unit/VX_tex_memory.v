@@ -1,23 +1,29 @@
 `include "VX_define.vh"
 
 module VX_tex_memory #(
-    parameter CORE_ID = 0
+    parameter CORE_ID      = 0,
+    parameter TAG_IN_WIDTH = 1
 ) (    
     `SCOPE_IO_VX_lsu_unit
 
     input wire clk,
     input wire reset,
 
-   // Dcache interface
+   // memory interface
     VX_dcache_core_req_if dcache_req_if,
     VX_dcache_core_rsp_if dcache_rsp_if,
 
     // inputs
-    VX_lsu_req_if   lsu_req_if,
+    input wire [3:0] req_valid,
+    input wire [3:0][31:0] req_addr,
+    input wire [TAG_IN_WIDTH-1:0] req_tag,
+    output wire req_ready,
 
     // outputs
-    VX_commit_if    ld_commit_if
-    // VX_commit_if    st_commit_if
+    output wire rsp_valid,
+    output wire [3:0][31:0] rsp_data,
+    output wire [TAG_IN_WIDTH-1:0] rsp_tag,
+    input wire  rsp_ready    
 );
 
     `UNUSED_PARAM (CORE_ID)

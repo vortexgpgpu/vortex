@@ -14,41 +14,41 @@ extern "C" {
 #endif
 
 #define vx_csr_swap(csr, val)	({              \
-	unsigned long __v = (unsigned long)(val);	\
+	unsigned  __v = (unsigned )(val);	        \
 	__asm__ __volatile__ ("csrrw %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
 	__v;						                \
 })
 
 #define vx_csr_read(csr)	({                  \
-	register unsigned long __v;				    \
+	register unsigned  __v;				        \
 	__asm__ __volatile__ ("csrr %0, " __ASM_STR(csr) : "=r" (__v) :: "memory"); \
 	__v;							            \
 })
 
 #define vx_csr_write(csr, val)	({              \
-	unsigned long __v = (unsigned long)(val);	\
+	unsigned  __v = (unsigned )(val);	        \
 	__asm__ __volatile__ ("csrw " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory");  \
 })
 
 #define vx_csr_read_set(csr, val)	({          \
-	unsigned long __v = (unsigned long)(val);   \
+	unsigned  __v = (unsigned )(val);           \
 	__asm__ __volatile__ ("csrrs %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
 	__v;							            \
 })
 
 #define vx_csr_set(csr, val)	({              \
-	unsigned long __v = (unsigned long)(val);	\
+	unsigned  __v = (unsigned )(val);	        \
 	__asm__ __volatile__ ("csrs " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory");  \
 })
 
 #define vx_csr_read_clear(csr, val)	({          \
-	unsigned long __v = (unsigned long)(val);	\
+	unsigned  __v = (unsigned )(val);	        \
 	__asm__ __volatile__ ("csrrc %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
 	__v;							            \
 })
 
 #define vx_csr_clear(csr, val)	({              \
-	unsigned long __v = (unsigned long)(val);   \
+	unsigned  __v = (unsigned )(val);           \
 	__asm__ __volatile__ ("csrc " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory"); \
 })
 
@@ -76,6 +76,13 @@ inline void vx_join() {
 inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
     asm volatile (".insn s 0x6b, 4, %1, 0cd (%0)" :: "r"(barried_id), "r"(num_warps));
 }
+
+// Texture load
+#define vx_tex_ld(unit, u, v, lod)	({              \
+	register unsigned result;				    \
+    asm volatile (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" :: "r"(result), "r"(u), "r"(v), "r"(lod)); \
+	result;							            \
+})
 
 // Return active warp's thread id 
 inline int vx_thread_id() {
@@ -151,14 +158,6 @@ inline int vx_num_cycles() {
 inline int vx_num_instrs() {
     int result;
     asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_INSTRET));
-    return result; 
-}
-
-// Texture load instruction
-inline int vx_tex_ld(unsigned t, unsigned u, unsigned v, unsigned lod_t) {
-    lod_t = (lod_t << 8) | t;
-    int result;
-    asm volatile (".insn r4 0x6b, 5, 1, %0, %1, %2, %3" :: "r"(result), "r"(u), "r"(v), "r"(lod_t));
     return result; 
 }
 

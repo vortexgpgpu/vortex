@@ -29,7 +29,7 @@ Disassembly of section .init:
 Disassembly of section .text:
 
 80000050 <main>:
-80000050:	01c02783          	lw	a5,28(zero) # 1c <__stack_usage+0x1c>
+80000050:	01402783          	lw	a5,20(zero) # 14 <__stack_usage+0x14>
 80000054:	00100073          	ebreak
 
 80000058 <register_fini>:

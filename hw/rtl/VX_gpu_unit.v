@@ -111,13 +111,11 @@ module VX_gpu_unit #(
     assign tex_req_if.PC    = gpu_req_if.PC;
     assign tex_req_if.rd    = gpu_req_if.rd;
     assign tex_req_if.wb    = gpu_req_if.wb;
-
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign tex_req_if.u[i]   = gpu_req_if.rs1_data[i];
-        assign tex_req_if.v[i]   = gpu_req_if.rs2_data[i];
-        assign tex_req_if.lod[i] = gpu_req_if.rs3_data[i][31:8];
-        assign tex_req_if.t[i]   = gpu_req_if.rs3_data[i][7:0];
-    end
+    
+    assign tex_req_if.unit  = gpu_req_if.op_mod[`NTEX_BITS-1:0];
+    assign tex_req_if.u     = gpu_req_if.rs1_data;
+    assign tex_req_if.v     = gpu_req_if.rs2_data;
+    assign tex_req_if.lod   = gpu_req_if.rs3_data;        
 
     VX_tex_unit #(
         .CORE_ID(CORE_ID)
@@ -159,6 +157,7 @@ module VX_gpu_unit #(
     assign rsp_wb    = 0;
     assign rsp_data  = warp_ctl_data;   
 
+    `UNUSED_VAR (gpu_req_if.op_mod)
     `UNUSED_VAR (gpu_req_if.rs2_data)
     `UNUSED_VAR (gpu_req_if.rs3_data)
     `UNUSED_VAR (gpu_req_if.wb)

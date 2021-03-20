@@ -5,19 +5,21 @@ module VX_tex_unit #(
     parameter CORE_ID = 0
 ) (
     input wire  clk,
-    input wire  reset,
+    input wire  reset,    
+
+    // Texture unit <-> Memory Unit
+    VX_dcache_core_req_if dcache_req_if,
+    VX_dcache_core_rsp_if dcache_rsp_if,
 
     // Inputs
     VX_tex_req_if   tex_req_if,
     VX_tex_csr_if   tex_csr_if,
 
     // Outputs
-    VX_tex_rsp_if   tex_rsp_if,
-
-    // Texture unit <-> Memory Unit
-    VX_dcache_core_req_if dcache_req_if,
-    VX_dcache_core_rsp_if dcache_rsp_if
+    VX_tex_rsp_if   tex_rsp_if
 );
+
+    localparam MEM_REQ_TAGW = `NW_BITS + 32 + 1 + `NR_BITS + `NTEX_BITS;
 
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
@@ -31,104 +33,131 @@ module VX_tex_unit #(
     wire [`NUM_THREADS-1:0][31:0] rsp_data;    
     wire stall_in, stall_out;
 
-    reg [`CSR_WIDTH-1:0] tex_addr [`NUM_TEX_UNITS-1: 0]; 
-    reg [`CSR_WIDTH-1:0] tex_format [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_width [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_height [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_stride [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_wrap_u [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_wrap_v [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_min_filter [`NUM_TEX_UNITS-1: 0];
-    reg [`CSR_WIDTH-1:0] tex_max_filter [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_ADDR_BITS-1:0]   tex_addr   [`NUM_TEX_UNITS-1: 0]; 
+    reg [`TEX_FMT_BITS-1:0]    tex_format [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_WIDTH_BITS-1:0]  tex_width  [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_HEIGHT_BITS-1:0] tex_height [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_STRIDE_BITS-1:0] tex_stride [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_WRAP_BITS-1:0]   tex_wrap_u [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_WRAP_BITS-1:0]   tex_wrap_v [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_FILTER_BITS-1:0] tex_filter [`NUM_TEX_UNITS-1: 0];
 
-    `UNUSED_VAR (tex_format)
-    `UNUSED_VAR (tex_stride)
-    `UNUSED_VAR (tex_wrap_u)
-    `UNUSED_VAR (tex_wrap_v)
-    `UNUSED_VAR (tex_min_filter)
-    `UNUSED_VAR (tex_max_filter)
+    // CSRs programming
 
-    //tex csr programming, need to make make consistent with `NUM_TEX_UNITS
-    always @(posedge clk ) begin
-        if (tex_csr_if.write_enable) begin
-            case (tex_csr_if.write_addr)
-                `CSR_TEX0_ADDR       : tex_addr[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_FORMAT     : tex_format[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_WIDTH      : tex_width[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_HEIGHT     : tex_height[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_PITCH     : tex_stride[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_WRAP_U     : tex_wrap_u[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_WRAP_V     : tex_wrap_v[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_MIN_FILTER : tex_min_filter[0] <= tex_csr_if.write_data;
-                `CSR_TEX0_MAX_FILTER : tex_max_filter[0] <= tex_csr_if.write_data;
-
-                `CSR_TEX1_ADDR       : tex_addr[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_FORMAT     : tex_format[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_WIDTH      : tex_width[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_HEIGHT     : tex_height[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_PITCH     : tex_stride[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_WRAP_U     : tex_wrap_u[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_WRAP_V     : tex_wrap_v[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_MIN_FILTER : tex_min_filter[1] <= tex_csr_if.write_data;
-                `CSR_TEX1_MAX_FILTER : tex_max_filter[1] <= tex_csr_if.write_data;
-                default:;
-            endcase
+    for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin
+        always @(posedge clk ) begin        
+            if (reset) begin
+                tex_addr[i]   <= 0;
+                tex_format[i] <= 0;
+                tex_width[i]  <= 0;
+                tex_height[i] <= 0;
+                tex_stride[i] <= 0;
+                tex_wrap_u[i] <= 0;
+                tex_wrap_v[i] <= 0;
+                tex_filter[i] <= 0;
+            end begin
+                if (tex_csr_if.write_enable) begin            
+                    case (tex_csr_if.write_addr)
+                        `CSR_TEX_ADDR(i)   : tex_addr[i]   <= tex_csr_if.write_data;
+                        `CSR_TEX_FORMAT(i) : tex_format[i] <= tex_csr_if.write_data;
+                        `CSR_TEX_WIDTH(i)  : tex_width[i]  <= tex_csr_if.write_data;
+                        `CSR_TEX_HEIGHT(i) : tex_height[i] <= tex_csr_if.write_data;
+                        `CSR_TEX_STRIDE(i) : tex_stride[i] <= tex_csr_if.write_data;
+                        `CSR_TEX_WRAP_U(i) : tex_wrap_u[i] <= tex_csr_if.write_data;
+                        `CSR_TEX_WRAP_V(i) : tex_wrap_v[i] <= tex_csr_if.write_data;
+                        `CSR_TEX_FILTER(i) : tex_filter[i] <= tex_csr_if.write_data;
+                        default:
+                            assert(tex_csr_if.write_addr >= `CSR_TEX_BEGIN(0) 
+                                && tex_csr_if.write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES));
+                    endcase
+                end
+            end
         end
     end
 
-    // texture response
-    `UNUSED_VAR (tex_req_if.lod)
+    // address generation
 
-    // texture unit <-> dcache 
-    VX_lsu_req_if   lsu_req_if();
-    VX_commit_if    ld_commit_if();
+    wire [3:0] mem_req_valid;
+    wire [3:0][31:0] mem_req_addr;
+    wire [TAG_IN_WIDTH-1:0] mem_req_tag;
+    wire mem_req_ready;
 
-    VX_tex_memory #(
-        .CORE_ID(CORE_ID)
-    ) tex_memory (
+    wire mem_rsp_valid;
+    wire [3:0][31:0] mem_rsp_data;
+    wire [TAG_IN_WIDTH-1:0] mem_rsp_tag;
+    wire mem_rsp_ready;
+                
+    VX_tex_addr_gen #(
+        .FRAC_BITS(20)
+    ) tex_addr_gen (
         .clk            (clk),
         .reset          (reset),
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
-        .lsu_req_if     (lsu_req_if),
-        .ld_commit_if   (ld_commit_if)
+
+        .valid_in       (tex_req_if.valid),
+        .ready_in       (tex_req_if.ready),   
+
+        .req_tag        ({tex_req_if.wid, tex_req_if.PC, tex_req_if.rd, tex_req_if.wb}),
+        .filter         (tex_filter[tex_req_if.unit]),
+        .wrap_u         (tex_wrap_ufilter[tex_req_if.unit]),
+        .wrap_v         (tex_wrap_v[tex_req_if.unit]),
+
+        .base_addr      (tex_addr[tex_req_if.unit]),
+        .log2_stride    (tex_stride[tex_req_if.unit]),
+        .log2_width     (tex_width[tex_req_if.unit]),
+        .log2_height    (tex_height[tex_req_if.unit]),
+        
+        .coord_u        (tex_req_if.u),
+        .coord_v        (tex_req_if.v),
+        .lod            (tex_req_if.lod),
+
+        .mem_req_valid  (mem_req_valid),   
+        .mem_req_tag    (mem_req_tag),
+        .mem_req_addr   (mem_req_addr),
+        .mem_req_ready  (mem_req_ready)
     );
 
-    //point sampling - texel address computation
-    wire [`NUM_THREADS-1:0] pt_addr_valid;
-    wire [`NUM_THREADS-1:0] pt_addr_ready;
+    // retrieve texel values from memory
+    
+    VX_tex_memory #(
+        .CORE_ID       (CORE_ID),
+        .REQ_TAG_WIDTH (MEM_REQ_TAGW)
+    ) tex_memory (
+        .clk           (clk),
+        .reset         (reset),
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire [`CSR_WIDTH-1:0] tex_addr_select;
-        wire [`CSR_WIDTH-1:0] tex_width_select;
-        wire [`CSR_WIDTH-1:0] tex_height_select;
-        
-        assign tex_addr_select = (tex_req_if.t[i] == 'b1) ? tex_addr[1] : tex_addr[0];
-        assign tex_width_select = (tex_req_if.t[i] == 'b1) ? tex_width[1] : tex_width[0];
-        assign tex_height_select = (tex_req_if.t[i] == 'b1) ? tex_height[1] : tex_height[0];
-        
-        VX_tex_pt_addr #(
-            .FRAC_BITS(28)
-        ) tex_pt_addr (
-            .clk                (clk),
-            .reset              (reset),
+        // memory interface
+        .dcache_req_if (dcache_req_if),
+        .dcache_rsp_if (dcache_rsp_if),
 
-            .valid_in           (tex_req_if.valid),
-            .ready_out          (pt_addr_ready[i]),   
+        // inputs
+        req_valid (mem_req_valid),
+        req_addr  (mem_req_addr),
+        req_tag   (mem_req_tag),
+        req_ready (mem_req_ready),
 
-            .tex_addr           (tex_addr_select),
-            .tex_width          (tex_width_select),
-            .tex_height         (tex_height_select),
+        // outputs
+        rsp_valid (mem_rsp_valid),
+        rsp_texel (mem_rsp_data),
+        rsp_tag   (mem_rsp_tag),
+        rsp_ready (mem_rsp_ready)
+    );
 
-            .tex_u              (tex_req_if.u[i]),
-            .tex_v              (tex_req_if.v[i]),
+    // apply sampler
 
-            .pt_addr            (lsu_req_if.base_addr[i]),   
+     VX_tex_sampler #(
+        .CORE_ID (CORE_ID)
+     ) tex_sampler (
+        .clk        (clk),
+        .reset      (reset)
 
-            .valid_out          (pt_addr_valid[i]),
-            .ready_in           (lsu_req_if.ready)
-        );
-    end
+        // inputs
+        //.valid_in   (mem_rsp_valid),
+        //.texel      (mem_rsp_data),
+        //.req_wid    (mem_rsp_tag),
+        //.req_PC     (mem_rsp_tag),
+        //.format     (mem_rsp_tag),
+        //.ready_in   (mem_rsp_ready),           
+    );
 
     assign tex_req_if.ready = (& pt_addr_ready);
 
@@ -176,8 +205,8 @@ module VX_tex_unit #(
 `ifdef DBG_PRINT_TEX
     always @(posedge clk) begin
         if (tex_csr_if.write_enable 
-         && (tex_csr_if.write_addr <= `CSR_TEX_END 
-          || tex_csr_if.write_addr >= `CSR_TEX_BEGIN)) begin
+         && (tex_csr_if.write_addr >= `CSR_TEX_BEGIN(0) 
+          && tex_csr_if.write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES))) begin
             $display("%t: core%0d-tex_csr: csr_tex0_addr, csr_data=%0h", $time, CORE_ID, tex_addr[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_format, csr_data=%0h", $time, CORE_ID, tex_format[0]);
             $display("%t: core%0d-tex_csr: csr_tex0_width, csr_data=%0h", $time, CORE_ID, tex_width[0]);
