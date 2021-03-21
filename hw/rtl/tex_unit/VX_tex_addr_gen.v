@@ -45,8 +45,8 @@ module VX_tex_addr_gen #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (lod)
 
-    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] u;
-    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] v;
+    wire [1:0][`NUM_THREADS-1:0][`FIXED_FRAC-1:0] u;
+    wire [1:0][`NUM_THREADS-1:0][`FIXED_FRAC-1:0] v;
 
     // addressing mode
 
@@ -65,7 +65,7 @@ module VX_tex_addr_gen #(
         ) tex_wrap_u0 (
             .wrap_i  (wrap_u),
             .coord_i (fu[0]),
-            .coord_o (u[i][0])
+            .coord_o (u[0][i])
         );
 
         VX_tex_wrap #(
@@ -73,7 +73,7 @@ module VX_tex_addr_gen #(
         ) tex_wrap_v0 (
             .wrap_i  (wrap_v),
             .coord_i (fv[0]),
-            .coord_o (v[i][0])
+            .coord_o (v[0][i])
         );
 
         VX_tex_wrap #(
@@ -81,7 +81,7 @@ module VX_tex_addr_gen #(
         ) tex_wrap_u1 (
             .wrap_i  (wrap_u),
             .coord_i (fu[1]),
-            .coord_o (u[i][1])
+            .coord_o (u[1][i])
         );
 
         VX_tex_wrap #(
@@ -89,7 +89,7 @@ module VX_tex_addr_gen #(
         ) tex_wrap_v1 (
             .wrap_i  (wrap_v),
             .coord_i (fv[1]),
-            .coord_o (v[i][1])
+            .coord_o (v[1][i])
         );
     end
     
@@ -102,10 +102,10 @@ module VX_tex_addr_gen #(
         wire [`FIXED_FRAC-1:0] x [1:0];
         wire [`FIXED_FRAC-1:0] y [1:0];        
 
-        assign x[0] = u[i][0] >> ((`FIXED_FRAC) - log2_width); 
-        assign x[1] = u[i][1] >> ((`FIXED_FRAC) - log2_width); 
-        assign y[0] = v[i][0] >> ((`FIXED_FRAC) - log2_height);         
-        assign y[1] = v[i][1] >> ((`FIXED_FRAC) - log2_height); 
+        assign x[0] = u[0][i] >> ((`FIXED_FRAC) - log2_width); 
+        assign x[1] = u[1][i] >> ((`FIXED_FRAC) - log2_width); 
+        assign y[0] = v[0][i] >> ((`FIXED_FRAC) - log2_height);         
+        assign y[1] = v[1][i] >> ((`FIXED_FRAC) - log2_height); 
 
         assign addr[i][0] = base_addr + (32'(x[0]) + (32'(y[0]) << log2_width)) << log2_stride;
         assign addr[i][1] = base_addr + (32'(x[1]) + (32'(y[0]) << log2_width)) << log2_stride;
@@ -116,7 +116,7 @@ module VX_tex_addr_gen #(
     wire stall_out = mem_req_valid && ~mem_req_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NUM_THREADS + `TEX_FILTER_BITS + REQ_TAG_WIDTH + (`NUM_THREADS * 4 * 32) + (`NUM_THREADS  * `FIXED_FRAC)),
+        .DATAW  (1 + `NUM_THREADS + `TEX_FILTER_BITS + REQ_TAG_WIDTH + (`NUM_THREADS * 4 * 32) + (2*`NUM_THREADS  * `FIXED_FRAC)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

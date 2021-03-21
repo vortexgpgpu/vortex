@@ -51,6 +51,8 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
+`define CACHE_REQ_INFO_RNG      CORE_TAG_WIDTH-1:(CORE_TAG_WIDTH-`NW_BITS-32)
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define CORE_REQ_TAG_COUNT      ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
