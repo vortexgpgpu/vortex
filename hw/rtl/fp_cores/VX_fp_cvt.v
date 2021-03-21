@@ -182,7 +182,12 @@ module VX_fp_cvt #(
 
             // Handle INT casts
             if (is_itof_s0) begin                   
-                if ($signed(destination_exp[i]) < $signed(-MAN_BITS)) begin
+                if ($signed(destination_exp[i]) >= $signed(2**EXP_BITS-1)) begin
+                    // Overflow or infinities (for proper rounding)
+                    final_exp     = (2**EXP_BITS-2); // largest normal value
+                    preshift_mant = ~0;  // largest normal value and RS bits set
+                    of_before_round = 1'b1;
+                end else if ($signed(destination_exp[i]) < $signed(-MAN_BITS)) begin
                     // Limit the shift to retain sticky bits
                     final_exp     = 0; // denormal result
                     denorm_shamt  = denorm_shamt + (2 + MAN_BITS); // to sticky                
@@ -190,11 +195,6 @@ module VX_fp_cvt #(
                     // Denormalize underflowing values
                     final_exp     = 0; // denormal result
                     denorm_shamt  = denorm_shamt + 1 - destination_exp[i]; // adjust right shifting               
-                end else if ($signed(destination_exp[i]) >= $signed(2**EXP_BITS-1)) begin
-                    // Overflow or infinities (for proper rounding)
-                    final_exp     = (2**EXP_BITS-2); // largest normal value
-                    preshift_mant = ~0;  // largest normal value and RS bits set
-                    of_before_round = 1'b1;
                 end
             end else begin                                
                 if ($signed(input_exp[i]) >= $signed((MAX_INT_WIDTH-1) + unsigned_s0)) begin
