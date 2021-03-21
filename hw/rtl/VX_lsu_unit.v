@@ -75,7 +75,7 @@ module VX_lsu_unit #(
     `UNUSED_VAR (rsp_type)
     
     reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] rsp_rem_mask;         
-    reg [`NUM_THREADS-1:0] rsp_rem_mask_n;
+    wire [`NUM_THREADS-1:0] rsp_rem_mask_n;
 
     reg [`NUM_THREADS-1:0] req_sent_mask;
     wire req_sent_all;
