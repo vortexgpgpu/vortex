@@ -211,7 +211,7 @@ module VX_bank #(
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_sel, debug_wid_sel} = mshr_pop_unqual ? mshr_tag[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS] : creq_tag[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+        assign {debug_pc_sel, debug_wid_sel} = mshr_pop_unqual ? mshr_tag[`CACHE_REQ_INFO_RNG] : creq_tag[`CACHE_REQ_INFO_RNG];
     end else begin        
         assign {debug_pc_sel, debug_wid_sel} = 0;
     end
@@ -273,7 +273,7 @@ module VX_bank #(
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_st0, debug_wid_st0} = tag_st0[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+        assign {debug_pc_st0, debug_wid_st0} = tag_st0[`CACHE_REQ_INFO_RNG];
     end else begin
         assign {debug_pc_st0, debug_wid_st0} = 0;
     end
@@ -339,7 +339,7 @@ module VX_bank #(
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_st1, debug_wid_st1} = tag_st1[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+        assign {debug_pc_st1, debug_wid_st1} = tag_st1[`CACHE_REQ_INFO_RNG];
     end else begin        
         assign {debug_pc_st1, debug_wid_st1} = 0;
     end

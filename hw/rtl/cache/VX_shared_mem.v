@@ -193,7 +193,7 @@ module VX_shared_mem #(
     
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_pc_st0, debug_wid_st0} = core_rsp_tag_in[CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
+        assign {debug_pc_st0, debug_wid_st0} = core_rsp_tag_in[`CACHE_REQ_INFO_RNG];
     end else begin
         assign {debug_pc_st0, debug_wid_st0} = 0;
     end
