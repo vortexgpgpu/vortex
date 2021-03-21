@@ -33,8 +33,7 @@ module VX_tex_sampler #(
     
     `UNUSED_PARAM (CORE_ID)
 
-
-    if (req_filter == 0) begin // point sampling
+    /*if (req_filter == 0) begin // point sampling
     
         wire [31:0] req_data [`NUM_THREADS-1:0];
 
@@ -74,6 +73,6 @@ module VX_tex_sampler #(
         // TO DO
     end
 
-
+    */
 
 endmodule
