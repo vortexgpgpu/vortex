@@ -26,6 +26,8 @@
 `define MAX_COLOR_WIDTH   8
 `define NUM_COLOR_CHANNEL 4  
 
+`define TEX_COLOR_BITS    32
+
 `define R5G6B5            `TEX_FORMAT_BITS'h1
 `define R8G8B8            `TEX_FORMAT_BITS'h2
 `define R8G8B8A8          `TEX_FORMAT_BITS'h3

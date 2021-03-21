@@ -18,7 +18,8 @@ module VX_tex_unit #(
     VX_tex_rsp_if   tex_rsp_if
 );
 
-    localparam REQ_TAG_WIDTH = `TEX_FORMAT_BITS + `NW_BITS + 32 + `NR_BITS + 1;
+    localparam REQ_TAG_WIDTH_A = `TEX_FORMAT_BITS + `NW_BITS + 32 + `NR_BITS + 1;
+    localparam REQ_TAG_WIDTH_M = (2 * `NUM_THREADS * `FIXED_FRAC) + REQ_TAG_WIDTH_A;
 
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
@@ -70,19 +71,21 @@ module VX_tex_unit #(
     wire mem_req_valid;
     wire [`NUM_THREADS-1:0] mem_req_tmask;
     wire [`TEX_FILTER_BITS-1:0] mem_req_filter;
+    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_u;
+    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_v;
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr;
-    wire [REQ_TAG_WIDTH-1:0] mem_req_tag;
+    wire [REQ_TAG_WIDTH_A-1:0] mem_req_tag;
     wire mem_req_ready;
 
     wire mem_rsp_valid;
     wire [`NUM_THREADS-1:0] mem_rsp_tmask;
-    wire [`TEX_FILTER_BITS-1:0] mem_rsp_filter;
+    wire [`TEX_FILTER_BITS-1:0] mem_rsp_filter;    
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_rsp_data;
-    wire [REQ_TAG_WIDTH-1:0] mem_rsp_tag;
+    wire [REQ_TAG_WIDTH_M-1:0] mem_rsp_tag;
     wire mem_rsp_ready;
                 
     VX_tex_addr_gen #(
-        .REQ_TAG_WIDTH (REQ_TAG_WIDTH)
+        .REQ_TAG_WIDTH (REQ_TAG_WIDTH_A)
     ) tex_addr_gen (
         .clk            (clk),
         .reset          (reset),
@@ -108,6 +111,8 @@ module VX_tex_unit #(
         .mem_req_valid  (mem_req_valid),   
         .mem_req_tmask  (mem_req_tmask), 
         .mem_req_filter (mem_req_filter), 
+        .mem_req_u      (mem_req_u),
+        .mem_req_v      (mem_req_v),
         .mem_req_tag    (mem_req_tag),
         .mem_req_addr   (mem_req_addr),
         .mem_req_ready  (mem_req_ready)
@@ -117,7 +122,7 @@ module VX_tex_unit #(
     
     VX_tex_memory #(
         .CORE_ID       (CORE_ID),
-        .REQ_TAG_WIDTH (REQ_TAG_WIDTH)
+        .REQ_TAG_WIDTH (REQ_TAG_WIDTH_M)
     ) tex_memory (
         .clk           (clk),
         .reset         (reset),
@@ -131,7 +136,7 @@ module VX_tex_unit #(
         .req_tmask (mem_req_tmask), 
         .req_filter(mem_req_filter), 
         .req_addr  (mem_req_addr),
-        .req_tag   (mem_req_tag),
+        .req_tag   ({mem_req_u, mem_req_v, mem_req_tag}),
         .req_ready (mem_req_ready),
 
         // outputs
@@ -146,12 +151,14 @@ module VX_tex_unit #(
     // apply sampler
 
     wire [`TEX_FORMAT_BITS-1:0] rsp_format;
+    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] rsp_u;
+    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] rsp_v;
     wire [`NW_BITS-1:0]         rsp_wid;
     wire [31:0]                 rsp_PC;
     wire [`NR_BITS-1:0]         rsp_rd;   
     wire                        rsp_wb;
     
-    assign {rsp_format, rsp_wid, rsp_PC, rsp_rd, rsp_wb} = mem_rsp_tag;
+    assign {rsp_format, rsp_u, rsp_v, rsp_wid, rsp_PC, rsp_rd, rsp_wb} = mem_rsp_tag;
 
      VX_tex_sampler #(
         .CORE_ID (CORE_ID)
@@ -165,6 +172,8 @@ module VX_tex_unit #(
         .req_texels (mem_rsp_data),     
         .req_filter (mem_rsp_filter),     
         .req_format (rsp_format),  
+        .req_u      (rsp_u),
+        .req_v      (rsp_v),
         .req_wid    (rsp_wid),        
         .req_PC     (rsp_PC),
         .req_rd     (rsp_rd),
@@ -183,19 +192,20 @@ module VX_tex_unit #(
     );    
 
 `ifdef DBG_PRINT_TEX
-    always @(posedge clk) begin
-        if (tex_csr_if.write_enable 
-         && (tex_csr_if.write_addr >= `CSR_TEX_BEGIN(0) 
-          && tex_csr_if.write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES))) begin
-            $display("%t: core%0d-tex_csr: csr_tex0_addr, csr_data=%0h", $time, CORE_ID, tex_addr[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_format, csr_data=%0h", $time, CORE_ID, tex_format[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_width, csr_data=%0h", $time, CORE_ID, tex_width[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_height, csr_data=%0h", $time, CORE_ID, tex_height[0]);
-            $display("%t: core%0d-tex_csr: CSR_TEX0_PITCH, csr_data=%0h", $time, CORE_ID, tex_stride[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_wrap_u, csr_data=%0h", $time, CORE_ID, tex_wrap_u[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_wrap_v, csr_data=%0h", $time, CORE_ID, tex_wrap_v[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_min_filter, csr_data=%0h", $time, CORE_ID, tex_min_filter[0]);
-            $display("%t: core%0d-tex_csr: csr_tex0_max_filter, csr_data=%0h", $time, CORE_ID, tex_max_filter[0]);
+    for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin    
+        always @(posedge clk) begin        
+            if (tex_csr_if.write_enable 
+             && (tex_csr_if.write_addr >= `CSR_TEX_BEGIN(i) 
+              && tex_csr_if.write_addr < `CSR_TEX_BEGIN(i+1))) begin
+                $display("%t: core%0d-tex_csr: csr_tex%d_addr, csr_data=%0h", $time, CORE_ID, i, tex_addr[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_format, csr_data=%0h", $time, CORE_ID, i, tex_format[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_width, csr_data=%0h", $time, CORE_ID, i, tex_width[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_height, csr_data=%0h", $time, CORE_ID, i, tex_height[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_stride, csr_data=%0h", $time, CORE_ID, i, tex_stride[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_wrap_u, csr_data=%0h", $time, CORE_ID, i, tex_wrap_u[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_wrap_v, csr_data=%0h", $time, CORE_ID, i, tex_wrap_v[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_filter, csr_data=%0h", $time, CORE_ID, i, tex_filter[i]);
+            end
         end
     end
 `endif

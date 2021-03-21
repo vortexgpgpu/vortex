@@ -15,8 +15,8 @@ module VX_tex_sampler #(
     input wire                          req_wb,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,
-    input wire [3:0][`FIXED_FRAC-1:0]   req_ufrac,
-    input wire [3:0][`FIXED_FRAC-1:0]   req_vfrac,
+    input wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] req_u,
+    input wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] req_v,
     input wire [`NUM_THREADS-1:0][3:0][31:0] req_texels,
     output wire                         req_ready,
 
