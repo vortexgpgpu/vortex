@@ -89,9 +89,9 @@ module VX_tex_unit #(
     wire [REQ_INFO_WIDTH_M-1:0] mem_rsp_info;
     wire mem_rsp_ready;
                 
-    VX_tex_addr_gen #(
+    VX_tex_addr #(
         .REQ_INFO_WIDTH (REQ_INFO_WIDTH_A)
-    ) tex_addr_gen (
+    ) tex_addr (
         .clk            (clk),
         .reset          (reset),
 
