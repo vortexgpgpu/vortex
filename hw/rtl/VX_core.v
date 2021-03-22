@@ -82,6 +82,10 @@ module VX_core #(
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
     ) dcache_core_rsp_if();
     
+    
+    
+    
+    
     VX_icache_core_req_if #(
         .WORD_SIZE(`IWORD_SIZE), 
         .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH)
