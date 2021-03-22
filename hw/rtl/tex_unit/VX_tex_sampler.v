@@ -79,7 +79,6 @@ module VX_tex_sampler #(
             );    
 
         end
-
     end
 
     assign stall_out = ~rsp_ready;
@@ -95,9 +94,5 @@ module VX_tex_sampler #(
         .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, req_data}),
         .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
     );
-
-
-
-
 
 endmodule
