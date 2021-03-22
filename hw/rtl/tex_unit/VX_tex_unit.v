@@ -91,7 +91,7 @@ module VX_tex_unit #(
                 
     VX_tex_addr #(
         .REQ_INFO_WIDTH (REQ_INFO_WIDTH_A)
-    ) tex_addr (
+    ) _tex_addr (
         .clk            (clk),
         .reset          (reset),
 
@@ -174,9 +174,9 @@ module VX_tex_unit #(
     
     assign {rsp_format, rsp_u, rsp_v, rsp_rd, rsp_wb} = mem_rsp_info;
 
-     VX_tex_sampler #(
+    VX_tex_sampler #(
         .CORE_ID (CORE_ID)
-     ) tex_sampler (
+    ) tex_sampler (
         .clk        (clk),
         .reset      (reset),
 

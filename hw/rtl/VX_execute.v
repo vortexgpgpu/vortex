@@ -72,29 +72,38 @@ module VX_execute #(
         .CORE_TAG_WIDTH(`TEX_DACHE_TAG_BITS)
     ) tex_dcache_rsp_if();
 
-    VX_tex_csr_if        tex_csr_if();
+    VX_tex_csr_if  tex_csr_if();
 
-    wire [1:0] tmp;
-    `UNUSED_VAR (tmp)
+    wire [`NUM_THREADS-1:0][`LSU_TEX_DACHE_TAG_BITS-1:0] lsu_tag_in;
+    wire [`LSU_TEX_DACHE_TAG_BITS-1:0] lsu_tag_out;
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign lsu_tag_in[i][`LSUQ_ADDR_BITS-1:0] = lsu_dcache_req_if.tag[i][`LSUQ_ADDR_BITS-1:0];
+        assign lsu_tag_in[i][`LSUQ_ADDR_BITS+:2] = '0;
+        assign lsu_tag_in[i][(`LSUQ_ADDR_BITS+2)+:`DBG_CACHE_REQ_MDATAW] = lsu_dcache_req_if.tag[i][`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW];
+    end
+    assign lsu_dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0] = lsu_tag_out[`LSUQ_ADDR_BITS-1:0];
+    assign lsu_dcache_rsp_if.tag[`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW] = lsu_tag_out[(`LSUQ_ADDR_BITS+2)+:`DBG_CACHE_REQ_MDATAW];
+    `UNUSED_VAR (lsu_tag_out)
 
     VX_tex_lsu_arb #(
         .NUM_REQS      (2),
         .LANES         (`NUM_THREADS),
         .WORD_SIZE     (4),            
-        .TAG_IN_WIDTH  (`MAX(`LSU_DACHE_TAG_BITS, `TEX_DACHE_TAG_BITS)),
+        .TAG_IN_WIDTH  (`LSU_TEX_DACHE_TAG_BITS),
         .TAG_OUT_WIDTH (`DCORE_TAG_WIDTH)
     ) tex_lsu_arb (
         .clk            (clk),
         .reset          (reset),
 
         // Tex/LSU request
-        .req_valid_in   ({tex_dcache_req_if.valid, lsu_dcache_req_if.valid}),
-        .req_rw_in      ({tex_dcache_req_if.rw, lsu_dcache_req_if.rw}),
+        .req_valid_in   ({tex_dcache_req_if.valid,  lsu_dcache_req_if.valid}),
+        .req_rw_in      ({tex_dcache_req_if.rw,     lsu_dcache_req_if.rw}),
         .req_byteen_in  ({tex_dcache_req_if.byteen, lsu_dcache_req_if.byteen}),
-        .req_addr_in    ({tex_dcache_req_if.addr, lsu_dcache_req_if.addr}),
-        .req_data_in    ({tex_dcache_req_if.data, lsu_dcache_req_if.data}),  
-        .req_tag_in     ({tex_dcache_req_if.tag, {2'b0, lsu_dcache_req_if.tag}}),  
-        .req_ready_in   ({tex_dcache_req_if.ready, lsu_dcache_req_if.ready}),
+        .req_addr_in    ({tex_dcache_req_if.addr,   lsu_dcache_req_if.addr}),
+        .req_data_in    ({tex_dcache_req_if.data,   lsu_dcache_req_if.data}),  
+        .req_tag_in     ({tex_dcache_req_if.tag,    lsu_tag_in}),  
+        .req_ready_in   ({tex_dcache_req_if.ready,  lsu_dcache_req_if.ready}),
 
         // Dcache request
         .req_valid_out  (dcache_req_if.valid),
@@ -107,8 +116,8 @@ module VX_execute #(
 
         // Tex/LSU response
         .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
-        .rsp_data_out   ({tex_dcache_rsp_if.data, lsu_dcache_rsp_if.data}),
-        .rsp_tag_out    ({tex_dcache_rsp_if.tag, {tmp, lsu_dcache_rsp_if.tag}}),
+        .rsp_data_out   ({tex_dcache_rsp_if.data,  lsu_dcache_rsp_if.data}),
+        .rsp_tag_out    ({tex_dcache_rsp_if.tag,   lsu_tag_out}),
         .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready}),
         
         // Dcache response
