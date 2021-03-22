@@ -11,6 +11,9 @@
 
 `define CLAMP(x,lo,hi)  ((x < lo) ? lo : ((x > hi) ? hi : x))
 
+`define BLEND_FRAC_64    8
+`define LERP_64(x1,x2,frac) ((x2 + (((x1 - x2) * frac) >> `BLEND_FRAC_64)) & 64'h00ff00ff00ff00ff)
+
 `define TEX_ADDR_BITS    32
 `define TEX_FORMAT_BITS  3
 `define TEX_WRAP_BITS    2
@@ -26,7 +29,7 @@
 `define MAX_COLOR_WIDTH   8
 `define NUM_COLOR_CHANNEL 4  
 
-`define TEX_COLOR_BITS    32
+`define TEX_COLOR_BITS    8
 
 `define R5G6B5            `TEX_FORMAT_BITS'h1
 `define R8G8B8            `TEX_FORMAT_BITS'h2
