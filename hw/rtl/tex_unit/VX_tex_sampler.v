@@ -66,7 +66,7 @@ module VX_tex_sampler #(
             assign blendU = req_u[i][`BLEND_FRAC_64-1:0];
             assign blendV = req_v[i][`BLEND_FRAC_64-1:0];
 
-            VX_bilerp #(
+            VX_tex_bilerp #(
                 .CORE_ID (CORE_ID)
             ) tex_bilerp (
                 .blendU(blendU), //blendU
