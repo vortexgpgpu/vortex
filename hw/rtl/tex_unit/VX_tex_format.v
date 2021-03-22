@@ -13,7 +13,7 @@ module VX_tex_format #(
     `UNUSED_PARAM (CORE_ID)
 
     reg [`NUM_COLOR_CHANNEL-1:0] color_enable_r;
-    reg [NUM_TEXELS][63:0]       formatted_texel_r;    
+    reg [NUM_TEXELS-1:0][63:0]       formatted_texel_r;    
 
     always @(*) begin
         for (integer i = 0; i<NUM_TEXELS ;i++ ) begin
@@ -47,6 +47,9 @@ module VX_tex_format #(
     end
 
     assign color_enable    = color_enable_r;
-    assign formatted_texel = formatted_texel_r & 64'h00ff00ff00ff00ff;
+
+    for (genvar i = 0;i<NUM_TEXELS ;i++ ) begin
+        assign formatted_texel[i] = formatted_texel_r[i] & 64'h00ff00ff00ff00ff;
+    end
 
 endmodule
