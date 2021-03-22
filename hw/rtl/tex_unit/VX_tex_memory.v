@@ -62,6 +62,9 @@ module VX_tex_memory #(
 
     wire [`LSUQ_ADDR_BITS-1:0] mbuf_waddr, mbuf_raddr;
     wire mbuf_push, mbuf_pop, mbuf_full;
+    wire [`NW_BITS-1:0]     ib_req_wid;
+    wire [`NUM_THREADS-1:0] ib_req_tmask;
+    wire [31:0]             ib_req_PC;
     wire [REQ_INFO_WIDTH-1:0] ib_req_info;
     wire [`TEX_FILTER_BITS-1:0] ib_req_filter;
     wire [`TEX_STRIDE_BITS-1:0] ib_stride;
@@ -71,7 +74,7 @@ module VX_tex_memory #(
     assign mbuf_push = req_valid && req_ready;
         
     VX_index_buffer #(
-        .DATAW   (REQ_INFO_WIDTH + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * `NUM_THREADS * 2) + 4),
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + REQ_INFO_WIDTH + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * `NUM_THREADS * 2) + 4),
         .SIZE    (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -79,8 +82,8 @@ module VX_tex_memory #(
         .write_addr   (mbuf_waddr),  
         .acquire_slot (mbuf_push),       
         .read_addr    (mbuf_raddr),
-        .write_data   ({req_info,    req_filter,    req_stride, align_offs,    dup_reqs}),                    
-        .read_data    ({ib_req_info, ib_req_filter, ib_stride,  ib_align_offs, ib_dup_reqs}),
+        .write_data   ({req_wid,    req_tmask,    req_PC,    req_info,    req_filter,    req_stride, align_offs,    dup_reqs}),                    
+        .read_data    ({ib_req_wid, ib_req_tmask, ib_req_PC, ib_req_info, ib_req_filter, ib_stride,  ib_align_offs, ib_dup_reqs}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
         .full         (mbuf_full)
@@ -91,7 +94,7 @@ module VX_tex_memory #(
 
     // save request addresses into fifo 
     
-    wire reqq_empty, reqq_full;
+    wire reqq_empty;
     wire reqq_push, reqq_pop;
     wire [3:0][`NUM_THREADS-1:0][29:0] q_req_addr;
     wire [`LSUQ_ADDR_BITS-1:0] q_ib_waddr;
@@ -200,6 +203,17 @@ module VX_tex_memory #(
         end
     end
 
+    always @(posedge clk) begin
+        if (reset) begin
+            //--
+        end else begin
+            rsp_texels[rsp_texel_idx] <= dcache_rsp_if.data;
+        end
+    end
+
+    `UNUSED_VAR (ib_stride)
+    `UNUSED_VAR (ib_align_offs)
+
     assign mbuf_raddr = dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0];
 
     assign rsp_texel_idx = dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1+:2];
@@ -209,5 +223,36 @@ module VX_tex_memory #(
     assign rsp_tmask = rsp_is_dup ? rsp_rem_mask[mbuf_raddr][rsp_texel_idx]: dcache_rsp_if.valid;
 
     assign mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n || rsp_is_dup);
+
+    assign dcache_rsp_if.ready = 1'b0;
+
+    wire stall_out = rsp_valid && ~rsp_ready;
+    
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + (4 * `NUM_THREADS * 32) + REQ_INFO_WIDTH),
+        .RESETW (1)
+    ) rsp_pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_out),
+        .data_in  ({1'b1,      ib_req_wid, ib_req_tmask, ib_req_PC, ib_req_filter, rsp_texels, ib_req_info}),
+        .data_out ({rsp_valid, rsp_wid,    rsp_tmask,    rsp_PC,    rsp_filter,    rsp_data,   rsp_info})
+    );
+
+    // Can accept new cache response?
+    assign dcache_rsp_if.ready = ~stall_out;
+
+`ifdef DBG_PRINT_TEX
+   always @(posedge clk) begin        
+        if ((| dcache_req_fire)) begin
+            $display("%t: T$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, is_dup=%b", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, texel_addr, dcache_req_if.tag, texel_is_dup);
+        end
+        if (dcache_rsp_fire) begin
+            $display("%t: T$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, data=%0h, is_dup=%b", 
+                    $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_PC, dcache_rsp_if.tag, dcache_rsp_if.data, rsp_is_dup);
+        end
+    end
+`endif
 
 endmodule

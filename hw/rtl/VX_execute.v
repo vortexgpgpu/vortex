@@ -113,18 +113,18 @@ module VX_execute #(
         .req_data_out   (dcache_req_if.data),
         .req_tag_out    (dcache_req_if.tag),
         .req_ready_out  (dcache_req_if.ready),
-
-        // Tex/LSU response
-        .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
-        .rsp_data_out   ({tex_dcache_rsp_if.data,  lsu_dcache_rsp_if.data}),
-        .rsp_tag_out    ({tex_dcache_rsp_if.tag,   lsu_tag_out}),
-        .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready}),
         
         // Dcache response
         .rsp_valid_in   (dcache_rsp_if.valid),
         .rsp_tag_in     (dcache_rsp_if.tag),
         .rsp_data_in    (dcache_rsp_if.data),
-        .rsp_ready_in   (dcache_rsp_if.ready)
+        .rsp_ready_in   (dcache_rsp_if.ready),
+
+        // Tex/LSU response
+        .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
+        .rsp_data_out   ({tex_dcache_rsp_if.data,  lsu_dcache_rsp_if.data}),
+        .rsp_tag_out    ({tex_dcache_rsp_if.tag,   lsu_tag_out}),
+        .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready})
     );
 
 `endif
