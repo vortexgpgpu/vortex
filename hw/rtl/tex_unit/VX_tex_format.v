@@ -18,7 +18,7 @@ module VX_tex_format #(
     always @(*) begin
         for (integer i = 0; i<NUM_TEXELS ;i++ ) begin
             case (format)
-                `R5G6B5: begin
+                `TEX_FORMAT_R5G6B5: begin
                     formatted_texel_r[i][55:48] = `TEX_COLOR_BITS'(texel_data[i][15:11]);
                     formatted_texel_r[i][39:32] = `TEX_COLOR_BITS'(texel_data[i][10:5]);
                     formatted_texel_r[i][23:16] = `TEX_COLOR_BITS'(texel_data[i][4:0]);
@@ -26,7 +26,7 @@ module VX_tex_format #(
                     if (i == 0)
                         color_enable_r = 4'b1110;
                 end
-                `R8G8B8: begin
+                `TEX_FORMAT_R8G8B8: begin
                     formatted_texel_r[i][55:48] = `TEX_COLOR_BITS'(texel_data[i][23:16]);
                     formatted_texel_r[i][39:32] = `TEX_COLOR_BITS'(texel_data[i][15:8]);
                     formatted_texel_r[i][23:16] = `TEX_COLOR_BITS'(texel_data[i][7:0]);
@@ -34,7 +34,7 @@ module VX_tex_format #(
                     if (i == 0)
                         color_enable_r = 4'b1110;
                 end
-                default: begin // `R8G8B8A8:
+                default: begin // `TEX_FORMAT_R8G8B8A8:
                     formatted_texel_r[i][55:48] = `TEX_COLOR_BITS'(texel_data[i][31:24]);
                     formatted_texel_r[i][39:32] = `TEX_COLOR_BITS'(texel_data[i][23:16]);
                     formatted_texel_r[i][23:16] = `TEX_COLOR_BITS'(texel_data[i][15:8]);
@@ -46,56 +46,7 @@ module VX_tex_format #(
         end
     end
 
-    assign color_enable = color_enable_r;
+    assign color_enable    = color_enable_r;
     assign formatted_texel = formatted_texel_r & 64'h00ff00ff00ff00ff;
 
 endmodule
-
-// module VX_tex_format #(
-//     parameter CORE_ID = 0
-// ) (
-//     input wire [`TEX_FORMAT_BITS-1:0]   format,
-//     input wire [`NUM_COLOR_CHANNEL-1:0] color_enable,
-
-//     input wire [`TEX_COLOR_BITS-1:0]    R,
-//     input wire [`TEX_COLOR_BITS-1:0]    G,
-//     input wire [`TEX_COLOR_BITS-1:0]    B,
-//     input wire [`TEX_COLOR_BITS-1:0]    A,
-
-//     output wire [31:0]                  texel_sampled
-// );  
-//     `UNUSED_PARAM (CORE_ID)
-//     `UNUSED_VAR(color_enable)
-
-//     reg [63:0]  sampled_r;
-
-//     always @(*) begin
-//         case (format)
-//             `R5G6B5: begin
-//                 sampled_r[31:16] = 'd0;
-//                 sampled_r[15:11] = R[4:0];
-//                 sampled_r[10:5] = G[5:0];
-//                 sampled_r[4:0] = B[4:0];
-//             end
-
-//             `R8G8B8: begin
-//                 sampled_r[31:24] = 'd0;
-//                 sampled_r[23:16] = R;
-//                 sampled_r[15:8]  = G;
-//                 sampled_r[7:0]   = B;
-//             end
-            
-//             default: begin // `R8G8B8A8:
-//                 sampled_r[31:24] = R;
-//                 sampled_r[23:16] = R;
-//                 sampled_r[15:8]  = G;
-//                 sampled_r[7:0]   = A;
-//             end
-//         endcase
-//     end
-
-//     assign texel_sampled = sampled_r;
-
-// endmodule
-
-
