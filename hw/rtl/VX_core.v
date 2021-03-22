@@ -74,17 +74,13 @@ module VX_core #(
         .LANES(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
-    ) dcache_core_req_if();
-
+    ) dcache_core_req_if();   
+    
     VX_dcache_core_rsp_if #(
         .LANES(`DNUM_REQUESTS), 
         .WORD_SIZE(`DWORD_SIZE), 
         .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
-    ) dcache_core_rsp_if();
-    
-    
-    
-    
+    ) dcache_core_rsp_if();    
     
     VX_icache_core_req_if #(
         .WORD_SIZE(`IWORD_SIZE), 

@@ -33,7 +33,7 @@ module VX_tex_sampler #(
     
     `UNUSED_PARAM (CORE_ID)
 
-    /*wire [31:0] req_data [`NUM_THREADS-1:0];
+    wire [31:0] req_data [`NUM_THREADS-1:0];
 
     if (req_filter == 0) begin // point sampling
 
@@ -93,6 +93,6 @@ module VX_tex_sampler #(
         .enable   (~stall_out),
         .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, req_data}),
         .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
-    );*/
+    );
 
 endmodule
