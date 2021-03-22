@@ -12,29 +12,28 @@ module VX_tex_bilerp #(
     output wire [31:0]                sampled_data
 );  
     `UNUSED_PARAM (CORE_ID)
-    `UNUSED_VAR(color_enable)
 
     wire [63:0] UL_lerp;
     wire [63:0] UH_lerp;
     wire [63:0] V_lerp;
     reg [31:0] sampled_r;
 
-    VX_lerp_64 #(
-    ) UL_lerp (
+    VX_tex_lerp #(
+    ) tex_lerp_UL (
         .blend(blendU), 
         .in_texels({texels[1], texels[0]}),
         .lerp_texel(UL_lerp)
     );  
 
-    VX_lerp_64 #(
-    ) UH_lerp (
+    VX_tex_lerp #(
+    ) tex_lerp_UH (
         .blend(blendU), 
         .in_texels({texels[3], texels[2]}),
         .lerp_texel(UH_lerp)
     );  
 
-    VX_lerp_64 #(
-    ) V_lerp (
+    VX_tex_lerp #(
+    ) tex_lerp_V (
         .blend(blendV), 
         .in_texels({UH_lerp, UL_lerp}),
         .lerp_texel(V_lerp)
