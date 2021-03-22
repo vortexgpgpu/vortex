@@ -7,7 +7,7 @@ module VX_tex_bilerp #(
     input wire [`BLEND_FRAC_64-1:0]   blendV,
 
     input wire [3:0][63:0]            texels,
-    input wire [`TEX_FORMAT_BITS-1:0] color_enable,
+    input wire [`NUM_COLOR_CHANNEL-1:0] color_enable,
 
     output wire [31:0]                sampled_data
 );  
@@ -40,22 +40,22 @@ module VX_tex_bilerp #(
     );  
 
     always @(*) begin
-        if (color_enable[3]==1) //R
+        if (color_enable[3]==1'b1) //R
             sampled_r[31:24] = V_lerp[55:48];
         else
             sampled_r[31:24] = {`TEX_COLOR_BITS{1'b0}};
 
-        if (color_enable[2]==1) //G
+        if (color_enable[2]==1'b1) //G
             sampled_r[23:16] = V_lerp[39:32];
         else
             sampled_r[23:16] = {`TEX_COLOR_BITS{1'b0}};
 
-        if (color_enable[1]==1) //B
+        if (color_enable[1]==1'b1) //B
             sampled_r[15:8] = V_lerp[23:16];
         else
             sampled_r[15:8] = {`TEX_COLOR_BITS{1'b0}};
 
-        if (color_enable[0]==1) //A
+        if (color_enable[0]==1'b1) //A
             sampled_r[7:0] = V_lerp[7:0];
         else
             sampled_r[7:0] = {`TEX_COLOR_BITS{1'b1}};

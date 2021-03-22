@@ -130,7 +130,6 @@ module VX_tex_unit #(
     );
 
     // retrieve texel values from memory
-    
     VX_tex_memory #(
         .CORE_ID        (CORE_ID),
         .REQ_INFO_WIDTH (REQ_INFO_WIDTH_M)
