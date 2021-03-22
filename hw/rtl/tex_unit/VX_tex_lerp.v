@@ -8,6 +8,8 @@ module VX_tex_lerp #(
     output wire [63:0]                lerp_texel
 );  
 
+    `UNUSED_VAR (lerp_i1[55:48])
+
     wire [63:0] lerp_i1;
     wire [63:0] lerp_i2; // >> BLEND_FRAC_64 / >> 8
 
