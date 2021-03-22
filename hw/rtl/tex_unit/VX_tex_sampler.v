@@ -33,46 +33,70 @@ module VX_tex_sampler #(
     
     `UNUSED_PARAM (CORE_ID)
 
+    wire [31:0] req_data [`NUM_THREADS-1:0];
 
     if (req_filter == 0) begin // point sampling
-    
-        wire [31:0] req_data [`NUM_THREADS-1:0];
 
         for (genvar i = 0; i<`NUM_THREADS ;i++ ) begin
-            
+            req_data[i] = req_texels[i][0]
+        end
+
+    end else begin // bilinear sampling
+
+        for (genvar i = 0; i<`NUM_THREADS ;i++ ) begin
+
+            // wire [3:0][63:0]            formatted_data;
+            // wire [`TEX_FORMAT_BITS-1:0] color_enable;
+
             VX_tex_format #(
-                .CORE_ID (CORE_ID)
-            ) tex_format_point (
+                .CORE_ID (CORE_ID),
+                .NUM_TEXELS (4)
+            ) tex_format_texel (
                 .texel_data  (req_texels[i]),
                 .format (req_format),
 
-                .color_enable (),
-                .R(req_data[i][`RBEGIN +: 8]),
-                .G(req_data[i][`GBEGIN +: 8]),
-                .B(req_data[i][`BBEGIN +: 8]),
-                .A(req_data[i][`ABEGIN +: 8])
-            );       
+                .color_enable (color_enable),
+                .formatted_texel(formatted_data)
+            );  
+
+            //blendU/blendV calculation
+            wire [`BLEND_FRAC_64-1:0]      blendU;
+            wire [`BLEND_FRAC_64-1:0]      blendV;
+
+            assign blendU = req_u[i][`BLEND_FRAC_64-1:0];
+            assign blendV = req_v[i][`BLEND_FRAC_64-1:0];
+
+            VX_bilerp #(
+                .CORE_ID (CORE_ID)
+            ) tex_bilerp (
+                .blendU(blendU), //blendU
+                .blendV(blendV),  //blendV
+
+                .color_enable(color_enable),
+                .texels(formatted_data),
+
+                .sampled_data(req_data[i])
+            );    
 
         end
 
-        VX_pipe_register #(
-            .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
-            .RESETW (1)
-        ) pipe_reg (
-            .clk      (clk),
-            .reset    (reset),
-            .enable   (~stall_out),
-            .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, req_data}),
-            .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
-        );
-
-        // output
-        assign stall_out = ~rsp_ready;
-        assign req_ready = rsp_ready;
-
-    end else begin // bilinear sampling
-        // TO DO
     end
+
+    assign stall_out = ~rsp_ready;
+    assign req_ready = rsp_ready;     
+
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .RESETW (1)
+    ) pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_out),
+        .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, req_data}),
+        .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
+    );
+
+
 
 
 
