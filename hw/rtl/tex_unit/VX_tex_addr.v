@@ -1,6 +1,6 @@
 `include "VX_tex_define.vh"
 
-module VX_tex_addr_gen #(
+module VX_tex_addr #(
     parameter CORE_ID = 0,
     parameter REQ_INFO_WIDTH = 1
 ) (
