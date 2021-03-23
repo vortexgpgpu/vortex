@@ -179,7 +179,9 @@ module VX_tex_memory #(
 `ifdef DBG_CACHE_REQ_INFO
     assign dcache_req_if.tag = {`NUM_THREADS{q_req_PC, q_req_wid, texel_idx, q_ib_waddr}};
 `else
-    assign dcache_req_if.tag = {`NUM_THREADS{q_ib_waddr}};
+    assign dcache_req_if.tag = {`NUM_THREADS{texel_idx, q_ib_waddr}};
+    `UNUSED_VAR (q_req_wid)
+    `UNUSED_VAR (q_req_PC)
 `endif
 
     // Dcache Response
@@ -215,7 +217,7 @@ module VX_tex_memory #(
 
     assign mbuf_raddr = dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0];
 
-    assign rsp_texel_idx = dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1+:2];
+    assign rsp_texel_idx = dcache_rsp_if.tag[`LSUQ_ADDR_BITS+:2];
 
     assign rsp_is_dup = ib_dup_reqs[rsp_texel_idx];
 

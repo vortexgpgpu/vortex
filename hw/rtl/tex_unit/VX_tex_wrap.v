@@ -14,6 +14,8 @@ module VX_tex_wrap #(
 
     wire [31:0] clamp = `CLAMP(coord_i, 0, `FIXED_MASK);
 
+    `UNUSED_VAR (clamp)
+
     always @(*) begin
         case (wrap_i)
             `TEX_WRAP_CLAMP:   
