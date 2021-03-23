@@ -80,10 +80,14 @@ module VX_execute #(
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign lsu_tag_in[i][`LSUQ_ADDR_BITS-1:0] = lsu_dcache_req_if.tag[i][`LSUQ_ADDR_BITS-1:0];
         assign lsu_tag_in[i][`LSUQ_ADDR_BITS+:2] = '0;
+    `ifdef DBG_CACHE_REQ_INFO
         assign lsu_tag_in[i][(`LSUQ_ADDR_BITS+2)+:`DBG_CACHE_REQ_MDATAW] = lsu_dcache_req_if.tag[i][`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW];
+    `endif
     end
     assign lsu_dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0] = lsu_tag_out[`LSUQ_ADDR_BITS-1:0];
+`ifdef DBG_CACHE_REQ_INFO
     assign lsu_dcache_rsp_if.tag[`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW] = lsu_tag_out[(`LSUQ_ADDR_BITS+2)+:`DBG_CACHE_REQ_MDATAW];
+`endif
     `UNUSED_VAR (lsu_tag_out)
 
     VX_tex_lsu_arb #(
