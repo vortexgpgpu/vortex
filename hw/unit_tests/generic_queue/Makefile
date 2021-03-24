@@ -1,11 +1,30 @@
-all: testbench.iv
+TOP = VX_fifo_queue
 
-testbench.iv: testbench.v
-	iverilog testbench.v -o testbench.iv -I ../../rtl/
+PARAMS ?=
 
-run: testbench.iv
-	! vvp testbench.iv | grep 'ERROR' || false
+INCLUDE = -I../../rtl/ -I../../rtl/libs
+
+SRCS = main.cpp
+
+all: build
+
+CF += -std=c++11 -fms-extensions -I../..
+VF += $(PARAMS)
+
+VF += --language 1800-2009 --assert -Wall --trace
+VF += -Wno-DECLFILENAME
+VF += --x-initial unique
+VF += -exe $(SRCS) $(INCLUDE)
+VF += $(PARAMS)
+
+gen:
+	verilator $(VF) -cc $(TOP).v -CFLAGS '$(CF)' --exe $(SRCS) 
+	
+build: gen
+	(cd obj_dir && make -j -f V$(TOP).mk)
+
+run: build
+	(cd obj_dir && ./V$(TOP))
 
 clean:
-	rm testbench.iv
-	
+	rm -rf obj_dir
