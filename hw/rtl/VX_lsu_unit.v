@@ -116,8 +116,8 @@ module VX_lsu_unit #(
         .full         (mbuf_full)
     );
 
-    assign req_sent_all = (&(dcache_req_fire | req_sent_mask | ~req_tmask))
-                       || (req_is_dup & dcache_req_if.valid[0] & dcache_req_if.ready[0]);
+    assign req_sent_all = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
+                       || (req_is_dup & dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
         if (reset || req_sent_all) begin
@@ -227,8 +227,8 @@ module VX_lsu_unit #(
             case (`LSU_FMT(rsp_type))
             `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
             `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
-            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
-            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
+            `FMT_BU: rsp_data[i] = 32'(rsp_data_shifted[7:0]);
+            `FMT_HU: rsp_data[i] = 32'(rsp_data_shifted[15:0]);
             default: rsp_data[i] = rsp_data_shifted;     
             endcase
         end        
