@@ -74,21 +74,20 @@ module VX_execute #(
 
     VX_tex_csr_if  tex_csr_if();
 
-    wire [`NUM_THREADS-1:0][`LSU_TEX_DACHE_TAG_BITS-1:0] lsu_tag_in;
-    wire [`LSU_TEX_DACHE_TAG_BITS-1:0] lsu_tag_out;
+    wire [`NUM_THREADS-1:0][`LSU_TEX_DACHE_TAG_BITS-1:0] tex_tag_in;
+    wire [`LSU_TEX_DACHE_TAG_BITS-1:0] tex_tag_out;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign lsu_tag_in[i][`LSUQ_ADDR_BITS-1:0] = lsu_dcache_req_if.tag[i][`LSUQ_ADDR_BITS-1:0];
-        assign lsu_tag_in[i][`LSUQ_ADDR_BITS+:2] = '0;
+        assign tex_tag_in[i][`LSUQ_ADDR_BITS-1:0] = `LSUQ_ADDR_BITS'(tex_dcache_req_if.tag[i][1:0]);
     `ifdef DBG_CACHE_REQ_INFO
-        assign lsu_tag_in[i][(`LSUQ_ADDR_BITS+2)+:`DBG_CACHE_REQ_MDATAW] = lsu_dcache_req_if.tag[i][`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW];
+        assign tex_tag_in[i][`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW] = tex_dcache_req_if.tag[i][2+:`DBG_CACHE_REQ_MDATAW];
     `endif
     end
-    assign lsu_dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0] = lsu_tag_out[`LSUQ_ADDR_BITS-1:0];
+    assign tex_dcache_rsp_if.tag[1:0] = tex_tag_out[1:0];
 `ifdef DBG_CACHE_REQ_INFO
-    assign lsu_dcache_rsp_if.tag[`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW] = lsu_tag_out[(`LSUQ_ADDR_BITS+2)+:`DBG_CACHE_REQ_MDATAW];
+    assign tex_dcache_rsp_if.tag[2+:`DBG_CACHE_REQ_MDATAW] = tex_tag_out[`LSUQ_ADDR_BITS+:`DBG_CACHE_REQ_MDATAW];
 `endif
-    `UNUSED_VAR (lsu_tag_out)
+    `UNUSED_VAR (tex_tag_out)
 
     VX_tex_lsu_arb #(
         .NUM_REQS      (2),
@@ -106,7 +105,7 @@ module VX_execute #(
         .req_byteen_in  ({tex_dcache_req_if.byteen, lsu_dcache_req_if.byteen}),
         .req_addr_in    ({tex_dcache_req_if.addr,   lsu_dcache_req_if.addr}),
         .req_data_in    ({tex_dcache_req_if.data,   lsu_dcache_req_if.data}),  
-        .req_tag_in     ({tex_dcache_req_if.tag,    lsu_tag_in}),  
+        .req_tag_in     ({tex_tag_in,               lsu_dcache_req_if.tag}),  
         .req_ready_in   ({tex_dcache_req_if.ready,  lsu_dcache_req_if.ready}),
 
         // Dcache request
@@ -127,7 +126,7 @@ module VX_execute #(
         // Tex/LSU response
         .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
         .rsp_data_out   ({tex_dcache_rsp_if.data,  lsu_dcache_rsp_if.data}),
-        .rsp_tag_out    ({tex_dcache_rsp_if.tag,   lsu_tag_out}),
+        .rsp_tag_out    ({tex_tag_out,             lsu_dcache_rsp_if.tag}),
         .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready})
     );
 

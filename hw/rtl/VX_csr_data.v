@@ -74,9 +74,8 @@ module VX_csr_data #(
                 `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
 
                 default: begin           
-                    if (write_addr < `CSR_TEX_BEGIN(0) || write_addr > `CSR_TEX_BEGIN(`CSR_TEX_STATES)) begin
-                        $error("%t: invalid CSR write address: %0h", $time, write_addr);
-                    end
+                    assert (write_addr >= `CSR_TEX_BEGIN(0) && write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES))
+                    else $error("%t: invalid CSR write address: %0h", $time, write_addr);
                 end
             endcase                
         end
