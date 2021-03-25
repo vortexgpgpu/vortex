@@ -55,7 +55,7 @@ public:
     return ticks;
   }
 
-  auto operator->() {
+  T* operator->() {
     return &top_;
   }
 };
