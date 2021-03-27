@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include "verilated.h"
+#include <iostream>
 
 #ifdef VM_TRACE
 #include <verilated_vcd_c.h>	// Trace file format header
@@ -65,6 +66,40 @@ void vl_setw(uint32_t* sig, Args&&... args) {
   std::array<uint32_t, sizeof... (Args)> arr{static_cast<uint32_t>(std::forward<Args>(args))...};
   for (size_t i = 0; i < sizeof... (Args); ++i) {
     sig[i] = arr[i];
+  }
+}
+
+template <typename... Args>
+void vl_packsetw(uint32_t* sig, int in_width, Args&&... args) {
+  std::array<uint32_t, sizeof... (Args)> arr{static_cast<uint32_t>(std::forward<Args>(args))...};
+  std::array<uint32_t, sizeof... (Args)> packed_arr;
+
+  int rem = in_width;
+  size_t j = 0;
+  
+  for (size_t i = 0; i < (sizeof... (Args)*in_width)/32 + 1; ++i) {
+    packed_arr[i] = 0;
+    int bits = 0;
+    while (bits<32)
+    { 
+      if (32-bits>rem)
+      {
+        packed_arr[i] = (  ( (arr[j] & ( ((1<<rem)-1) << (in_width-rem) ) ) >> in_width-rem) << bits  ) | packed_arr[i];
+        bits += rem;
+        rem = in_width;
+        j++;
+      }
+      else
+      {
+        packed_arr[i] = (arr[j] & ((1<<rem)-1)) << bits | packed_arr[i];
+        rem -= (32-bits);
+        bits = 33;
+      }
+    }
+  }
+
+  for (size_t i = 0; i < (sizeof... (Args)*in_width)/32 + 1; ++i) {
+    sig[i] = packed_arr[i];
   }
 }
 
