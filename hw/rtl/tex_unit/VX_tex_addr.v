@@ -41,10 +41,10 @@ module VX_tex_addr #(
     output wire [31:0]              mem_req_PC,
     output wire [`TEX_FILTER_BITS-1:0] mem_req_filter,
     output wire [`TEX_STRIDE_BITS-1:0] mem_req_stride,
+    output wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr,
     output wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_u,
     output wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_v,
     output wire [REQ_INFO_WIDTH-1:0] mem_req_info,  
-    output wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr,
     input wire                      mem_req_ready
 );
 
@@ -131,14 +131,14 @@ module VX_tex_addr #(
     wire stall_out = mem_req_valid && ~mem_req_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + REQ_INFO_WIDTH + (`NUM_THREADS * 4 * 32) + (2*`NUM_THREADS  * `FIXED_FRAC)),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (`NUM_THREADS * 4 * 32) + (2*`NUM_THREADS * `FIXED_FRAC) + REQ_INFO_WIDTH),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_in,      req_wid,     req_tmask,     req_PC,     filter,         log_stride,     req_info,        addr,         u[0],      v[0]}),
-        .data_out ({mem_req_valid, mem_req_wid, mem_req_tmask, mem_req_PC, mem_req_filter, mem_req_stride, mem_req_info, mem_req_addr, mem_req_u, mem_req_v})
+        .data_in  ({valid_in,      req_wid,     req_tmask,     req_PC,     filter,         log_stride,     addr,         u[0],      v[0],      req_info}),
+        .data_out ({mem_req_valid, mem_req_wid, mem_req_tmask, mem_req_PC, mem_req_filter, mem_req_stride, mem_req_addr, mem_req_u, mem_req_v, mem_req_info})
     );
 
     assign ready_in = ~stall_out;
