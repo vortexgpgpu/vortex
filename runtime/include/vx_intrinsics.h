@@ -54,8 +54,11 @@ extern "C" {
 
 // Texture load
 #define vx_tex(unit, u, v, l)    ({             \
-	register unsigned __r;		                \
-    __asm__ __volatile__ (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r) : "r"(u), "r"(v), "r"(l)); \
+	unsigned __r;		                        \
+    unsigned __u = u;	                        \
+    unsigned __v = v;	                        \
+    unsigned __l = l;                           \
+    __asm__ __volatile__ (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r) : "r"(__u), "r"(__v), "r"(__l)); \
 	__r;							            \
 })
 

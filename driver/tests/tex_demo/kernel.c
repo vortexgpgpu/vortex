@@ -27,7 +27,7 @@ void kernel_body(int task_id, void* arg) {
 		for (uint32_t x = 0; x < _arg->tile_width; ++x) {
 			int32_t u = (int32_t)(fu * (1<<20));
 			int32_t v = (int32_t)(fv * (1<<20));
-			dst_ptr[x] = vx_tex(0, u, v, 0);
+			dst_ptr[x] = vx_tex(0, u, v, 0x0);
 			fu += _arg->deltaX;
 		}
 		dst_ptr += _arg->karg.dst_pitch;
