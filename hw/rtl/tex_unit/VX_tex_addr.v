@@ -50,8 +50,8 @@ module VX_tex_addr #(
 
     `UNUSED_PARAM (CORE_ID)
 
-    wire [1:0][`NUM_THREADS-1:0][`FIXED_FRAC-1:0] u;
-    wire [1:0][`NUM_THREADS-1:0][`FIXED_FRAC-1:0] v;
+    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] clamped_u;
+    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] clamped_v;
     wire [`TEX_STRIDE_BITS-1:0] log_stride;
 
     // stride   
@@ -70,9 +70,10 @@ module VX_tex_addr #(
         wire [31:0] fu[1:0];
         wire [31:0] fv[1:0];
 
-        assign fu[0] = coord_u[i] - (filter ? (`FIXED_HALF >> log_widths[i]) : 0);        
-        assign fv[0] = coord_v[i] - (filter ? (`FIXED_HALF >> log_heights[i]) : 0);
+        assign fu[0] = coord_u[i] - (filter ? (`FIXED_HALF >> log_widths[i]) : 0); 
         assign fu[1] = coord_u[i] + (filter ? (`FIXED_HALF >> log_widths[i]) : 0);
+
+        assign fv[0] = coord_v[i] - (filter ? (`FIXED_HALF >> log_heights[i]) : 0);        
         assign fv[1] = coord_v[i] + (filter ? (`FIXED_HALF >> log_heights[i]) : 0);        
 
         VX_tex_wrap #(
@@ -80,15 +81,7 @@ module VX_tex_addr #(
         ) tex_wrap_u0 (
             .wrap_i  (wrap_u),
             .coord_i (fu[0]),
-            .coord_o (u[0][i])
-        );
-
-        VX_tex_wrap #(
-            .CORE_ID (CORE_ID)
-        ) tex_wrap_v0 (
-            .wrap_i  (wrap_v),
-            .coord_i (fv[0]),
-            .coord_o (v[0][i])
+            .coord_o (clamped_u[i][0])
         );
 
         VX_tex_wrap #(
@@ -96,7 +89,15 @@ module VX_tex_addr #(
         ) tex_wrap_u1 (
             .wrap_i  (wrap_u),
             .coord_i (fu[1]),
-            .coord_o (u[1][i])
+            .coord_o (clamped_u[i][1])
+        );
+
+        VX_tex_wrap #(
+            .CORE_ID (CORE_ID)
+        ) tex_wrap_v0 (
+            .wrap_i  (wrap_v),
+            .coord_i (fv[0]),
+            .coord_o (clamped_v[i][0])
         );
 
         VX_tex_wrap #(
@@ -104,7 +105,7 @@ module VX_tex_addr #(
         ) tex_wrap_v1 (
             .wrap_i  (wrap_v),
             .coord_i (fv[1]),
-            .coord_o (v[1][i])
+            .coord_o (clamped_v[i][1])
         );
     end
     
@@ -117,15 +118,22 @@ module VX_tex_addr #(
         wire [`FIXED_FRAC-1:0] x [1:0];
         wire [`FIXED_FRAC-1:0] y [1:0];        
 
-        assign x[0] = u[0][i] >> ((`FIXED_FRAC) - log_widths[i]); 
-        assign x[1] = u[1][i] >> ((`FIXED_FRAC) - log_widths[i]); 
-        assign y[0] = v[0][i] >> ((`FIXED_FRAC) - log_heights[i]);         
-        assign y[1] = v[1][i] >> ((`FIXED_FRAC) - log_heights[i]); 
+        assign x[0] = clamped_u[i][0] >> ((`FIXED_FRAC) - log_widths[i]); 
+        assign x[1] = clamped_u[i][1] >> ((`FIXED_FRAC) - log_widths[i]); 
+
+        assign y[0] = clamped_v[i][0] >> ((`FIXED_FRAC) - log_heights[i]);         
+        assign y[1] = clamped_v[i][1] >> ((`FIXED_FRAC) - log_heights[i]); 
 
         assign addr[i][0] = base_addr + 32'(mip_offsets[i]) + (32'(x[0]) + (32'(y[0]) << log_widths[i])) << log_stride;
         assign addr[i][1] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[0]) << log_widths[i])) << log_stride;
         assign addr[i][2] = base_addr + 32'(mip_offsets[i]) + (32'(x[0]) + (32'(y[1]) << log_widths[i])) << log_stride;
         assign addr[i][3] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[1]) << log_widths[i])) << log_stride;
+    end
+
+    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] u0, v0;
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign u0[i] = clamped_u[i][0];
+        assign v0[i] = clamped_v[i][0];
     end
 
     wire stall_out = mem_req_valid && ~mem_req_ready;
@@ -137,7 +145,7 @@ module VX_tex_addr #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_in,      req_wid,     req_tmask,     req_PC,     filter,         log_stride,     addr,         u[0],      v[0],      req_info}),
+        .data_in  ({valid_in,      req_wid,     req_tmask,     req_PC,     filter,         log_stride,     addr,         u0,        v0,        req_info}),
         .data_out ({mem_req_valid, mem_req_wid, mem_req_tmask, mem_req_PC, mem_req_filter, mem_req_stride, mem_req_addr, mem_req_u, mem_req_v, mem_req_info})
     );
 

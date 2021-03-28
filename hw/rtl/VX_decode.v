@@ -24,7 +24,7 @@ module VX_decode  #(
     reg [`MOD_BITS-1:0] op_mod;
     reg [31:0]          imm;
     reg use_rd, use_rs1, use_rs2, use_rs3, use_PC, use_imm;
-    reg rd_fp, rs1_fp, rs2_fp;
+    reg rd_fp, rs1_fp, rs2_fp, rs3_fp;
     reg is_join, is_wstall;
 
     wire [31:0] instr = ifetch_rsp_if.instr;
@@ -59,6 +59,7 @@ module VX_decode  #(
         rd_fp     = 0;  
         rs1_fp    = 0;
         rs2_fp    = 0;
+        rs3_fp    = 1;
         is_join   = 0;
         is_wstall = 0;    
 
@@ -367,6 +368,7 @@ module VX_decode  #(
                         use_rs1 = 1;
                         use_rs2 = 1;
                         use_rs3 = 1;
+                        rs3_fp  = 0;
                     end
                 `endif
                     default:;
@@ -395,7 +397,7 @@ module VX_decode  #(
         assign decode_if.rd  = {rd_fp,  rd};
         assign decode_if.rs1 = {rs1_fp, rs1_qual};
         assign decode_if.rs2 = {rs2_fp, rs2};
-        assign decode_if.rs3 = {1'b1,   rs3};
+        assign decode_if.rs3 = {rs3_fp, rs3};
     `else
         `UNUSED_VAR (rd_fp)
         `UNUSED_VAR (rs1_fp)

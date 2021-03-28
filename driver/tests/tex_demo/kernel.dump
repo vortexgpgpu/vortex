@@ -36,23 +36,23 @@ Disassembly of section .text:
 80000060:	04912223          	sw	s1,68(sp)
 80000064:	01442783          	lw	a5,20(s0) # 7ffff014 <__stack_size+0x7fffec14>
 80000068:	fd079073          	csrw	0xfd0,a5
-8000006c:	fd105073          	csrwi	0xfd1,0
+8000006c:	fd405073          	csrwi	0xfd4,0
 80000070:	00442503          	lw	a0,4(s0)
 80000074:	01f00493          	li	s1,31
 80000078:	00151513          	slli	a0,a0,0x1
 8000007c:	fff50513          	addi	a0,a0,-1
 80000080:	400000ef          	jal	ra,80000480 <__clzsi2>
 80000084:	40a48533          	sub	a0,s1,a0
-80000088:	fd251073          	csrw	0xfd2,a0
+80000088:	fd551073          	csrw	0xfd5,a0
 8000008c:	00842503          	lw	a0,8(s0)
 80000090:	00151513          	slli	a0,a0,0x1
 80000094:	fff50513          	addi	a0,a0,-1
 80000098:	3e8000ef          	jal	ra,80000480 <__clzsi2>
 8000009c:	40a484b3          	sub	s1,s1,a0
-800000a0:	fd349073          	csrw	0xfd3,s1
-800000a4:	fd405073          	csrwi	0xfd4,0
-800000a8:	fd505073          	csrwi	0xfd5,0
-800000ac:	fd605073          	csrwi	0xfd6,0
+800000a0:	fd649073          	csrw	0xfd6,s1
+800000a4:	fd105073          	csrwi	0xfd1,0
+800000a8:	fd205073          	csrwi	0xfd2,0
+800000ac:	fd305073          	csrwi	0xfd3,0
 800000b0:	01442503          	lw	a0,20(s0)
 800000b4:	01842583          	lw	a1,24(s0)
 800000b8:	01c42603          	lw	a2,28(s0)

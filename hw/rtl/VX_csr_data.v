@@ -204,7 +204,7 @@ module VX_csr_data #(
             `CSR_MIMPID    : read_data_r = `IMPLEMENTATION_ID;
 
             default: begin    
-                assert (~read_enable || read_addr >= `CSR_TEX_BEGIN(0) && read_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES))                  
+                assert (~read_enable || (read_addr >= `CSR_TEX_BEGIN(0) && read_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES)))                  
                 else $error("%t: invalid CSR read address: %0h", $time, read_addr);
             end
         endcase
