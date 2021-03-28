@@ -121,7 +121,7 @@ module VX_gpu_unit #(
 
     VX_tex_unit #(
         .CORE_ID(CORE_ID)
-    ) texture_unit (
+    ) tex_unit (
         .clk        (clk),
         .reset      (reset),
         .tex_req_if (tex_req_if),
