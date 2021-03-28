@@ -74,15 +74,8 @@ inline void vx_join() {
 
 // Warp Barrier
 inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
-    asm volatile (".insn s 0x6b, 4, %1, 0cd (%0)" :: "r"(barried_id), "r"(num_warps));
+    asm volatile (".insn s 0x6b, 4, %1, 0(%0)" :: "r"(barried_id), "r"(num_warps));
 }
-
-// Texture load
-#define vx_tex_ld(unit, u, v, lod)	({              \
-	register unsigned result;				    \
-    asm volatile (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" :: "r"(result), "r"(u), "r"(v), "r"(lod)); \
-	result;							            \
-})
 
 // Return active warp's thread id 
 inline int vx_thread_id() {

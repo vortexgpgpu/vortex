@@ -19,18 +19,19 @@ module VX_tex_addr #(
     input wire [31:0]                   req_PC,
     input wire [REQ_INFO_WIDTH-1:0]     req_info,
 
+    input wire [`TEX_FORMAT_BITS-1:0]   format,
     input wire [`TEX_FILTER_BITS-1:0]   filter,
     input wire [`TEX_WRAP_BITS-1:0]     wrap_u,
     input wire [`TEX_WRAP_BITS-1:0]     wrap_v,
 
     input wire [`TEX_ADDR_BITS-1:0]     base_addr,
-    input wire [`TEX_STRIDE_BITS-1:0]   log_stride,
-    input wire [`TEX_WIDTH_BITS-1:0]    log_width,
-    input wire [`TEX_HEIGHT_BITS-1:0]   log_height,
+
+    input wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0] mip_offsets,    
+    input wire [`NUM_THREADS-1:0][`TEX_WIDTH_BITS-1:0]  log_widths,
+    input wire [`NUM_THREADS-1:0][`TEX_HEIGHT_BITS-1:0] log_heights,
     
     input wire [`NUM_THREADS-1:0][31:0] coord_u,
     input wire [`NUM_THREADS-1:0][31:0] coord_v,
-    input wire [`NUM_THREADS-1:0][31:0] lod,
 
     // outputs
 
@@ -48,10 +49,19 @@ module VX_tex_addr #(
 );
 
     `UNUSED_PARAM (CORE_ID)
-    `UNUSED_VAR (lod)
 
     wire [1:0][`NUM_THREADS-1:0][`FIXED_FRAC-1:0] u;
     wire [1:0][`NUM_THREADS-1:0][`FIXED_FRAC-1:0] v;
+    wire [`TEX_STRIDE_BITS-1:0] log_stride;
+
+    // stride   
+
+    VX_tex_stride #(
+        .CORE_ID (CORE_ID)
+    ) tex_stride (
+        .format (format),
+        .log_stride (log_stride)
+    );
 
     // addressing mode
 
@@ -60,10 +70,10 @@ module VX_tex_addr #(
         wire [31:0] fu[1:0];
         wire [31:0] fv[1:0];
 
-        assign fu[0] = coord_u[i] - (filter ? (`FIXED_HALF >> log_width) : 0);        
-        assign fv[0] = coord_v[i] - (filter ? (`FIXED_HALF >> log_height) : 0);
-        assign fu[1] = coord_u[i] + (filter ? (`FIXED_HALF >> log_width) : 0);
-        assign fv[1] = coord_v[i] + (filter ? (`FIXED_HALF >> log_height) : 0);        
+        assign fu[0] = coord_u[i] - (filter ? (`FIXED_HALF >> log_widths[i]) : 0);        
+        assign fv[0] = coord_v[i] - (filter ? (`FIXED_HALF >> log_heights[i]) : 0);
+        assign fu[1] = coord_u[i] + (filter ? (`FIXED_HALF >> log_widths[i]) : 0);
+        assign fv[1] = coord_v[i] + (filter ? (`FIXED_HALF >> log_heights[i]) : 0);        
 
         VX_tex_wrap #(
             .CORE_ID (CORE_ID)
@@ -107,15 +117,15 @@ module VX_tex_addr #(
         wire [`FIXED_FRAC-1:0] x [1:0];
         wire [`FIXED_FRAC-1:0] y [1:0];        
 
-        assign x[0] = u[0][i] >> ((`FIXED_FRAC) - log_width); 
-        assign x[1] = u[1][i] >> ((`FIXED_FRAC) - log_width); 
-        assign y[0] = v[0][i] >> ((`FIXED_FRAC) - log_height);         
-        assign y[1] = v[1][i] >> ((`FIXED_FRAC) - log_height); 
+        assign x[0] = u[0][i] >> ((`FIXED_FRAC) - log_widths[i]); 
+        assign x[1] = u[1][i] >> ((`FIXED_FRAC) - log_widths[i]); 
+        assign y[0] = v[0][i] >> ((`FIXED_FRAC) - log_heights[i]);         
+        assign y[1] = v[1][i] >> ((`FIXED_FRAC) - log_heights[i]); 
 
-        assign addr[i][0] = base_addr + (32'(x[0]) + (32'(y[0]) << log_width)) << log_stride;
-        assign addr[i][1] = base_addr + (32'(x[1]) + (32'(y[0]) << log_width)) << log_stride;
-        assign addr[i][2] = base_addr + (32'(x[0]) + (32'(y[1]) << log_width)) << log_stride;
-        assign addr[i][3] = base_addr + (32'(x[1]) + (32'(y[1]) << log_width)) << log_stride;
+        assign addr[i][0] = base_addr + 32'(mip_offsets[i]) + (32'(x[0]) + (32'(y[0]) << log_widths[i])) << log_stride;
+        assign addr[i][1] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[0]) << log_widths[i])) << log_stride;
+        assign addr[i][2] = base_addr + 32'(mip_offsets[i]) + (32'(x[0]) + (32'(y[1]) << log_widths[i])) << log_stride;
+        assign addr[i][3] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[1]) << log_widths[i])) << log_stride;
     end
 
     wire stall_out = mem_req_valid && ~mem_req_ready;

@@ -13,6 +13,8 @@ VX_CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
+VX_LDFLAGS += -lm
+
 VX_SRCS = kernel.c
 
 #CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
@@ -22,7 +24,7 @@ CXXFLAGS += -I../../include
 
 PROJECT = demo
 
-SRCS = demo.cpp utils.cpp
+SRCS = main.cpp utils.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
  

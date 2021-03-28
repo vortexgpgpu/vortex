@@ -22,7 +22,7 @@ CXXFLAGS += -I../../include
 
 PROJECT = demo
 
-SRCS = demo.cpp
+SRCS = main.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
  

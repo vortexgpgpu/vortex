@@ -1,2 +1,2 @@
-demo.o: demo.cpp ../../include/vortex.h common.h utils.h
+main.o: main.cpp ../../include/vortex.h common.h utils.h
 utils.o: utils.cpp utils.h
