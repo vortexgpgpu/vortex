@@ -15,25 +15,33 @@
 
 `define LERP_64(x1,x2,frac) ((x2 + (((x1 - x2) * frac) >> `BLEND_FRAC_64)) & 64'h00ff00ff00ff00ff)
 
-`define TEX_ADDR_BITS    32
-`define TEX_FORMAT_BITS  3
-`define TEX_WRAP_BITS    2
-`define TEX_WIDTH_BITS   4
-`define TEX_HEIGHT_BITS  4
-`define TEX_STRIDE_BITS  2
-`define TEX_FILTER_BITS  1
+`define TEX_ADDR_BITS       32
+`define TEX_FORMAT_BITS     3
+`define TEX_WRAP_BITS       2
+`define TEX_WIDTH_BITS      4
+`define TEX_HEIGHT_BITS     4
+`define TEX_FILTER_BITS     1
 
-`define TEX_WRAP_REPEAT  0
-`define TEX_WRAP_CLAMP   1
-`define TEX_WRAP_MIRROR  2
+`define TEX_MIPOFF_BITS     (2*12+1)
+`define TEX_STRIDE_BITS     2
 
-`define MAX_COLOR_WIDTH   8
-`define NUM_COLOR_CHANNEL 4  
+`define TEX_LOD_BITS        4
+`define TEX_MIP_BITS        (`NTEX_BITS + `TEX_LOD_BITS)
 
-`define TEX_COLOR_BITS    8
+`define TEX_WRAP_REPEAT     0
+`define TEX_WRAP_CLAMP      1
+`define TEX_WRAP_MIRROR     2
 
-`define TEX_FORMAT_R5G6B5       `TEX_FORMAT_BITS'(1)
-`define TEX_FORMAT_R8G8B8       `TEX_FORMAT_BITS'(2)
-`define TEX_FORMAT_R8G8B8A8     `TEX_FORMAT_BITS'(3)
+`define MAX_COLOR_WIDTH     8
+`define NUM_COLOR_CHANNEL   4  
+
+`define TEX_COLOR_BITS      8
+
+`define TEX_FORMAT_R8G8B8A8 `TEX_FORMAT_BITS'(0)
+`define TEX_FORMAT_R5G6B5   `TEX_FORMAT_BITS'(1)
+`define TEX_FORMAT_R4G4B4A4 `TEX_FORMAT_BITS'(2)
+`define TEX_FORMAT_L8A8     `TEX_FORMAT_BITS'(3)
+`define TEX_FORMAT_L8       `TEX_FORMAT_BITS'(4)
+`define TEX_FORMAT_A8       `TEX_FORMAT_BITS'(5)
 
 `endif

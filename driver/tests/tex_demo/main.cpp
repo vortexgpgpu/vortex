@@ -134,14 +134,10 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
-  size_t arg_addr, src_addr, dst_addr;
-  RT_CHECK(vx_alloc_dev_mem(device, sizeof(kernel_arg_t), &arg_addr));
+  size_t src_addr, dst_addr;
   RT_CHECK(vx_alloc_dev_mem(device, src_bufsize, &src_addr));
   RT_CHECK(vx_alloc_dev_mem(device, dst_bufsize, &dst_addr));
 
-  assert(arg_addr == ALLOC_BASE_ADDR);
-
-  std::cout << "arg_addr=" << std::hex << arg_addr << std::endl;
   std::cout << "src_addr=" << std::hex << src_addr << std::endl;
   std::cout << "dst_addr=" << std::hex << dst_addr << std::endl;
 
@@ -154,20 +150,22 @@ int main(int argc, char *argv[]) {
   std::cout << "upload kernel argument" << std::endl;
   {
     kernel_arg.num_tasks   = std::min<uint32_t>(num_tasks, dst_height);
+    
     kernel_arg.src_width   = src_width;
     kernel_arg.src_height  = src_height;
     kernel_arg.src_stride  = src_bpp;
     kernel_arg.src_pitch   = src_bpp * src_width * src_height;
+    kernel_arg.src_ptr     = src_addr;
+
     kernel_arg.dst_width   = dst_width;
     kernel_arg.dst_height  = dst_height;
     kernel_arg.dst_stride  = dst_bpp;
-    kernel_arg.dst_pitch   = dst_bpp * dst_width * dst_height;
-    kernel_arg.src_ptr     = src_addr;
+    kernel_arg.dst_pitch   = dst_bpp * dst_width * dst_height;    
     kernel_arg.dst_ptr     = dst_addr;
 
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(buffer, arg_addr, sizeof(kernel_arg_t), 0));
+    RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // upload source buffer0

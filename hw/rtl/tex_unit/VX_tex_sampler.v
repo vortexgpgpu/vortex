@@ -33,8 +33,8 @@ module VX_tex_sampler #(
     
     `UNUSED_PARAM (CORE_ID)
 
-    wire [`NUM_THREADS-1:0][31:0] req_data ;
-    wire [`NUM_THREADS-1:0][31:0] req_data_bilerp ;
+    wire [`NUM_THREADS-1:0][31:0] req_data;
+    wire [`NUM_THREADS-1:0][31:0] req_data_bilerp;
 
     wire stall_out;
 

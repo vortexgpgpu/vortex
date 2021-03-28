@@ -37,16 +37,15 @@ void kernel_body(int task_id, void* arg) {
 }
 
 int main() {
-	struct kernel_arg_t* arg = (struct kernel_arg_t*)0x0;
+	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	// configure texture unit
 	vx_csr_write(CSR_TEX_ADDR(0),   arg->src_ptr);
-	vx_csr_write(CSR_TEX_FORMAT(0), 0);
+	vx_csr_write(CSR_TEX_MIPOFF(0), 0);	
 	vx_csr_write(CSR_TEX_WIDTH(0),  ilog2(arg->src_width));
 	vx_csr_write(CSR_TEX_HEIGHT(0), ilog2(arg->src_height));
-	vx_csr_write(CSR_TEX_STRIDE(0), ilog2(arg->src_stride));
-	vx_csr_write(CSR_TEX_WRAP_U(0), 0);
-	vx_csr_write(CSR_TEX_WRAP_V(0), 0);	
+	vx_csr_write(CSR_TEX_FORMAT(0), 0);
+	vx_csr_write(CSR_TEX_WRAP(0),   0);
 	vx_csr_write(CSR_TEX_FILTER(0), 0);
 
 	struct tile_arg_t targ;
@@ -56,5 +55,5 @@ int main() {
 	targ.deltaX      = 1.0f / arg->dst_width;
 	targ.deltaY      = 1.0f / arg->dst_height;
 	
-	vx_spawn_tasks(arg->num_tasks, kernel_body, targ);
+	vx_spawn_tasks(arg->num_tasks, kernel_body, &targ);
 }

@@ -31,6 +31,7 @@ module VX_decode  #(
     wire [6:0] opcode = instr[6:0];  
     wire [2:0] func3  = instr[14:12];
     wire [6:0] func7  = instr[31:25];
+    wire [1:0] func2  = instr[26:25];
     wire [11:0] u_12  = instr[31:20]; 
 
     wire [4:0] rd  = instr[11:7];
@@ -361,7 +362,7 @@ module VX_decode  #(
                 `ifdef EXT_TEX_ENABLE
                     3'h5: begin
                         op_type = `OP_BITS'(`GPU_TEX);
-                        op_mod  = `MOD_BITS'(instr[26:25]);
+                        op_mod  = `MOD_BITS'(func2);
                         use_rd  = 1;
                         use_rs1 = 1;
                         use_rs2 = 1;

@@ -24,25 +24,24 @@ module VX_tex_unit #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
-    reg [`TEX_ADDR_BITS-1:0]   tex_addr   [`NUM_TEX_UNITS-1: 0]; 
-    reg [`TEX_FORMAT_BITS-1:0] tex_format [`NUM_TEX_UNITS-1: 0];
-    reg [`TEX_WIDTH_BITS-1:0]  tex_width  [`NUM_TEX_UNITS-1: 0];
-    reg [`TEX_HEIGHT_BITS-1:0] tex_height [`NUM_TEX_UNITS-1: 0];
-    reg [`TEX_STRIDE_BITS-1:0] tex_stride [`NUM_TEX_UNITS-1: 0];
-    reg [`TEX_WRAP_BITS-1:0]   tex_wrap_u [`NUM_TEX_UNITS-1: 0];
-    reg [`TEX_WRAP_BITS-1:0]   tex_wrap_v [`NUM_TEX_UNITS-1: 0];
-    reg [`TEX_FILTER_BITS-1:0] tex_filter [`NUM_TEX_UNITS-1: 0];
+    reg [`TEX_MIPOFF_BITS-1:0] tex_mipoff [(1 << `TEX_MIP_BITS)-1:0];
+    reg [`TEX_WIDTH_BITS-1:0]  tex_width  [(1 << `TEX_MIP_BITS)-1:0];
+    reg [`TEX_HEIGHT_BITS-1:0] tex_height [(1 << `TEX_MIP_BITS)-1:0];
 
-    // CSRs programming
+    reg [`TEX_ADDR_BITS-1:0]   tex_addr   [`NUM_TEX_UNITS-1:0];     
+    reg [`TEX_FORMAT_BITS-1:0] tex_format [`NUM_TEX_UNITS-1:0];
+    reg [`TEX_WRAP_BITS-1:0]   tex_wrap_u [`NUM_TEX_UNITS-1:0];
+    reg [`TEX_WRAP_BITS-1:0]   tex_wrap_v [`NUM_TEX_UNITS-1:0];
+    reg [`TEX_FILTER_BITS-1:0] tex_filter [`NUM_TEX_UNITS-1:0];
+
+    // CSRs programming    
 
     for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin
+        wire [`TEX_MIP_BITS-1:0] mip_waddr = tex_csr_if.write_data[24 +: `TEX_MIP_BITS];
         always @(posedge clk ) begin        
-            if (reset) begin
+            if (reset) begin                                       
                 tex_addr[i]   <= 0;
                 tex_format[i] <= 0;
-                tex_width[i]  <= 0;
-                tex_height[i] <= 0;
-                tex_stride[i] <= 0;
                 tex_wrap_u[i] <= 0;
                 tex_wrap_v[i] <= 0;
                 tex_filter[i] <= 0;
@@ -51,12 +50,20 @@ module VX_tex_unit #(
                     case (tex_csr_if.write_addr)
                         `CSR_TEX_ADDR(i)   : tex_addr[i]   <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
                         `CSR_TEX_FORMAT(i) : tex_format[i] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
-                        `CSR_TEX_WIDTH(i)  : tex_width[i]  <= tex_csr_if.write_data[`TEX_WIDTH_BITS-1:0];
-                        `CSR_TEX_HEIGHT(i) : tex_height[i] <= tex_csr_if.write_data[`TEX_HEIGHT_BITS-1:0];
-                        `CSR_TEX_STRIDE(i) : tex_stride[i] <= tex_csr_if.write_data[`TEX_STRIDE_BITS-1:0];
-                        `CSR_TEX_WRAP_U(i) : tex_wrap_u[i] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                        `CSR_TEX_WRAP_V(i) : tex_wrap_v[i] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                        `CSR_TEX_FILTER(i) : tex_filter[i] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];
+                        `CSR_TEX_WRAP(i)   : begin
+                            tex_wrap_u[i] <= tex_csr_if.write_data[0 +: `TEX_WRAP_BITS];
+                            tex_wrap_v[i] <= tex_csr_if.write_data[`TEX_WRAP_BITS +: `TEX_WRAP_BITS];
+                        end
+                        `CSR_TEX_FILTER(i) : tex_filter[i] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];                        
+                        `CSR_TEX_MIPOFF(i) : begin
+                            tex_mipoff[mip_waddr] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];
+                        end
+                        `CSR_TEX_WIDTH(i)  : begin
+                            tex_width[mip_waddr] <= tex_csr_if.write_data[`TEX_WIDTH_BITS-1:0];
+                        end
+                        `CSR_TEX_HEIGHT(i) : begin
+                            tex_height[mip_waddr] <= tex_csr_if.write_data[`TEX_HEIGHT_BITS-1:0];
+                        end
                         default:
                             assert(tex_csr_if.write_addr >= `CSR_TEX_BEGIN(0) 
                                 && tex_csr_if.write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES));
@@ -64,6 +71,19 @@ module VX_tex_unit #(
                 end
             end
         end
+    end
+
+    // mipmap attributes
+
+    wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0] tex_mipoffs;    
+    wire [`NUM_THREADS-1:0][`TEX_WIDTH_BITS-1:0]  tex_widths;
+    wire [`NUM_THREADS-1:0][`TEX_HEIGHT_BITS-1:0] tex_heights;
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        wire [`TEX_MIP_BITS-1:0] mip_raddr = {tex_req_if.unit[`NTEX_BITS-1:0], tex_req_if.lod[i][`TEX_LOD_BITS-1:0]};
+        assign tex_mipoffs[i] = tex_mipoff[mip_raddr];
+        assign tex_widths[i]  = tex_width[mip_raddr];
+        assign tex_heights[i] = tex_height[mip_raddr];
     end
 
     // address generation
@@ -87,7 +107,7 @@ module VX_tex_unit #(
     wire [`TEX_FILTER_BITS-1:0] mem_rsp_filter;    
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_rsp_data;
     wire [REQ_INFO_WIDTH_M-1:0] mem_rsp_info;
-    wire mem_rsp_ready;
+    wire mem_rsp_ready;        
                 
     VX_tex_addr #(
         .REQ_INFO_WIDTH (REQ_INFO_WIDTH_A)
@@ -103,18 +123,18 @@ module VX_tex_unit #(
         .req_PC         (tex_req_if.PC), 
         .req_info       ({tex_format[tex_req_if.unit], tex_req_if.rd, tex_req_if.wb}),
 
+        .format         (tex_format[tex_req_if.unit]),
         .filter         (tex_filter[tex_req_if.unit]),
         .wrap_u         (tex_wrap_u[tex_req_if.unit]),
         .wrap_v         (tex_wrap_v[tex_req_if.unit]),        
         
-        .base_addr      (tex_addr[tex_req_if.unit]),
-        .log_stride     (tex_stride[tex_req_if.unit]),
-        .log_width      (tex_width[tex_req_if.unit]),
-        .log_height     (tex_height[tex_req_if.unit]),
+        .base_addr      (tex_addr[tex_req_if.unit]),    
+        .mip_offsets    (tex_mipoffs),
+        .log_widths     (tex_widths),
+        .log_heights    (tex_heights),
         
         .coord_u        (tex_req_if.u),
         .coord_v        (tex_req_if.v),
-        .lod            (tex_req_if.lod),
 
         .mem_req_valid  (mem_req_valid), 
         .mem_req_wid    (mem_req_wid),   
@@ -211,10 +231,9 @@ module VX_tex_unit #(
              && (tex_csr_if.write_addr >= `CSR_TEX_BEGIN(i) 
               && tex_csr_if.write_addr < `CSR_TEX_BEGIN(i+1))) begin
                 $display("%t: core%0d-tex_csr: csr_tex%d_addr, csr_data=%0h", $time, CORE_ID, i, tex_addr[i]);
-                $display("%t: core%0d-tex_csr: csr_tex%d_format, csr_data=%0h", $time, CORE_ID, i, tex_format[i]);
                 $display("%t: core%0d-tex_csr: csr_tex%d_width, csr_data=%0h", $time, CORE_ID, i, tex_width[i]);
                 $display("%t: core%0d-tex_csr: csr_tex%d_height, csr_data=%0h", $time, CORE_ID, i, tex_height[i]);
-                $display("%t: core%0d-tex_csr: csr_tex%d_stride, csr_data=%0h", $time, CORE_ID, i, tex_stride[i]);
+                $display("%t: core%0d-tex_csr: csr_tex%d_format, csr_data=%0h", $time, CORE_ID, i, tex_format[i]);
                 $display("%t: core%0d-tex_csr: csr_tex%d_wrap_u, csr_data=%0h", $time, CORE_ID, i, tex_wrap_u[i]);
                 $display("%t: core%0d-tex_csr: csr_tex%d_wrap_v, csr_data=%0h", $time, CORE_ID, i, tex_wrap_v[i]);
                 $display("%t: core%0d-tex_csr: csr_tex%d_filter, csr_data=%0h", $time, CORE_ID, i, tex_filter[i]);

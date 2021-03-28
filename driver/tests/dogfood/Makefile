@@ -24,7 +24,7 @@ CXXFLAGS += -I../../include -I../../../hw
 
 PROJECT = dogfood
 
-SRCS = dogfood.cpp
+SRCS = main.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
  
