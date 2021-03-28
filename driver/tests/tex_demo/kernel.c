@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <vx_intrinsics.h>
-#include <vx_tex.h>
 #include "common.h"
 
 uint32_t ilog2 (uint32_t value) {
