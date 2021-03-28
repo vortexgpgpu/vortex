@@ -52,6 +52,13 @@ extern "C" {
 	__asm__ __volatile__ ("csrc " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory"); \
 })
 
+// Texture load
+#define vx_tex(unit, u, v, l)    ({             \
+	register unsigned __r;		                \
+    __asm__ __volatile__ (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r) : "r"(u), "r"(v), "r"(l)); \
+	__r;							            \
+})
+
 // Set thread mask
 inline void vx_tmc(unsigned num_threads) {
     asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(num_threads));
