@@ -54,18 +54,11 @@ module VX_tex_sampler #(
             .formatted_texel(formatted_data)
         );  
 
-        //blendU/blendV calculation
-        wire [`BLEND_FRAC_64-1:0]      blendU;
-        wire [`BLEND_FRAC_64-1:0]      blendV;
-
-        assign blendU = req_u[i][`BLEND_FRAC_64-1:0];
-        assign blendV = req_v[i][`BLEND_FRAC_64-1:0];
-
         VX_tex_bilerp #(
             .CORE_ID (CORE_ID)
         ) tex_bilerp (
-            .blendU(blendU), //blendU
-            .blendV(blendV),  //blendV
+            .blendU(req_u[i][`BLEND_FRAC_64-1:0]), //blendU
+            .blendV(req_v[i][`BLEND_FRAC_64-1:0]),  //blendV
 
             .color_enable(color_enable),
             .texels(formatted_data),
@@ -76,7 +69,7 @@ module VX_tex_sampler #(
     end
 
     for (genvar i = 0;i<`NUM_THREADS ;i++ ) begin
-        assign req_data[i] = (req_filter == `TEX_FILTER_BITS'h0) ? req_texels[i][0] : req_data_bilerp[i];
+        assign req_data[i] = (req_filter == `TEX_FILTER_BITS'(0)) ? req_texels[i][0] : req_data_bilerp[i];
     end
 
     assign stall_out = ~rsp_ready;
