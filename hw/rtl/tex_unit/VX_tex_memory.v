@@ -98,57 +98,67 @@ module VX_tex_memory #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [`NUM_THREADS-1:0][29:0] texel_addr;
-    wire texel_valid, texel_sent, last_texel_sent;
-    wire texel_is_dup;
-    reg [1:0] texel_idx;
+    wire req_texel_valid;
+    wire req_texel_sent, last_texel_sent;
+    wire req_texel_dup;
+    wire [`NUM_THREADS-1:0][29:0] req_texel_addr;
+    reg [1:0] req_texel_idx;
+    reg req_texels_done;
 
     always @(posedge clk) begin
         if (reset || last_texel_sent) begin
-            texel_idx <= 0;
-        end else if (texel_sent) begin
-            texel_idx <= texel_idx + 1;
+            req_texel_idx <= 0;
+        end else if (req_texel_sent) begin
+            req_texel_idx <= req_texel_idx + 1;
         end
     end
 
-    assign texel_valid  = ~reqq_empty;
-    assign texel_addr   = q_req_addr[texel_idx];
-    assign texel_is_dup = q_dup_reqs[texel_idx];
+    always @(posedge clk) begin
+        if (reset || reqq_pop) begin
+            req_texels_done <= 0;
+        end else if (last_texel_sent) begin
+            req_texels_done <= 1;
+        end
+    end
 
-    wire is_last_texel = (texel_idx == (q_req_filter ? 3 : 0));
-    assign last_texel_sent = texel_sent && is_last_texel;
+    assign req_texel_valid = ~reqq_empty && ~req_texels_done;
+    assign req_texel_addr  = q_req_addr[req_texel_idx];
+    assign req_texel_dup   = q_dup_reqs[req_texel_idx];
+
+    wire is_last_texel = (req_texel_idx == (q_req_filter ? 3 : 0));
+    assign last_texel_sent = req_texel_sent && is_last_texel;
 
     // DCache Request
 
     reg [`NUM_THREADS-1:0] texel_sent_mask;
     wire [`NUM_THREADS-1:0] dcache_req_fire; 
-    wire [`NUM_THREADS-1:0] dup_mask;   
+    wire [`NUM_THREADS-1:0] req_dup_mask;   
 
     assign dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;    
 
-    assign texel_sent = (&(dcache_req_if.ready | texel_sent_mask | ~q_req_tmask))
-                     || (texel_is_dup & dcache_req_if.ready[0]);
+    assign req_texel_sent = (&(dcache_req_if.ready | texel_sent_mask | ~q_req_tmask))
+                     || (req_texel_dup & dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
-        if (reset || texel_sent) begin
+        if (reset || req_texel_sent) begin
             texel_sent_mask <= 0;
         end else begin
             texel_sent_mask <= texel_sent_mask | dcache_req_fire;            
         end
     end
 
-    assign dup_mask = {{(`NUM_THREADS-1){~texel_is_dup}}, 1'b1};
+    assign req_dup_mask = {{(`NUM_THREADS-1){~req_texel_dup}}, 1'b1};
 
-    assign dcache_req_if.valid  = {`NUM_THREADS{texel_valid}} & q_req_tmask & dup_mask & ~texel_sent_mask;
+    assign dcache_req_if.valid  = {`NUM_THREADS{req_texel_valid}} & q_req_tmask & req_dup_mask & ~texel_sent_mask;
     assign dcache_req_if.rw     = {`NUM_THREADS{1'b0}};
-    assign dcache_req_if.addr   = texel_addr;
+    assign dcache_req_if.addr   = req_texel_addr;
     assign dcache_req_if.byteen = {`NUM_THREADS{4'b1111}};
     assign dcache_req_if.data   = 'x;
 
 `ifdef DBG_CACHE_REQ_INFO
-    assign dcache_req_if.tag = {`NUM_THREADS{q_req_PC, q_req_wid, texel_idx}};
+    assign dcache_req_if.tag = {`NUM_THREADS{q_req_PC, q_req_wid, req_texel_idx}};
 `else
-    assign dcache_req_if.tag = {`NUM_THREADS{texel_idx}};
+    assign dcache_req_if.tag = {`NUM_THREADS{req_texel_idx}};
     `UNUSED_VAR (q_req_wid)
     `UNUSED_VAR (q_req_PC)
 `endif
@@ -163,22 +173,22 @@ module VX_tex_memory #(
     wire [$clog2(`NUM_THREADS + 1)-1:0] rsp_cur_cnt;
     wire dcache_rsp_fire;
     wire [1:0] rsp_texel_idx;
-    wire rsp_is_dup;
+    wire rsp_texel_dup;
 
     assign rsp_texel_idx = dcache_rsp_if.tag[1:0];   
 
-    assign rsp_is_dup = q_dup_reqs[rsp_texel_idx];
+    assign rsp_texel_dup = q_dup_reqs[rsp_texel_idx];
 
     assign dcache_rsp_fire = (| dcache_rsp_if.valid) && dcache_rsp_if.ready;
 
-    assign rsp_cur_tmask = rsp_is_dup ? q_req_tmask : dcache_rsp_if.valid;
+    assign rsp_cur_tmask = rsp_texel_dup ? q_req_tmask : dcache_rsp_if.valid;
 
     assign rsp_cur_cnt = $countones(rsp_cur_tmask);
 
     assign rsp_max_cnt = $countones(q_req_tmask) * (q_req_filter ? 4 : 1);
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin     
-        wire [31:0] src_data = (i == 0 || rsp_is_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
+        wire [31:0] src_data = (i == 0 || rsp_texel_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
 
         reg [31:0] rsp_data_shifted;
         always @(*) begin
@@ -210,18 +220,22 @@ module VX_tex_memory #(
     end
 
     always @(posedge clk) begin
-        if ((| dcache_req_fire) && ~(| rsp_rem_ctr)) begin
-            rsp_rem_ctr <= rsp_max_cnt;
-        end else if (dcache_rsp_fire) begin
-            rsp_rem_ctr <= rsp_rem_ctr - RSP_CTR_W'(rsp_cur_cnt);
+        if (reset) begin
+            rsp_rem_ctr <= 0;
+        end else begin
+            if ((| dcache_req_fire) && 0 == rsp_rem_ctr) begin
+                rsp_rem_ctr <= rsp_max_cnt;
+            end else if (dcache_rsp_fire) begin
+                rsp_rem_ctr <= rsp_rem_ctr - RSP_CTR_W'(rsp_cur_cnt);
+            end
         end
     end
 
     wire stall_out = rsp_valid && ~rsp_ready;
 
-    wire texel_done = dcache_rsp_fire && (rsp_rem_ctr == RSP_CTR_W'(rsp_cur_cnt));
+    wire rsp_texels_done = dcache_rsp_fire && (rsp_rem_ctr == RSP_CTR_W'(rsp_cur_cnt));
 
-    assign reqq_pop = texel_done && ~stall_out;
+    assign reqq_pop = rsp_texels_done && ~stall_out;
     
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + (4 * `NUM_THREADS * 32) + REQ_INFO_WIDTH),
@@ -230,8 +244,8 @@ module VX_tex_memory #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({texel_done, q_req_wid, q_req_tmask, q_req_PC, q_req_filter, rsp_texels_n, q_req_info}),
-        .data_out ({rsp_valid,  rsp_wid,   rsp_tmask,   rsp_PC,   rsp_filter,   rsp_data,     rsp_info})
+        .data_in  ({rsp_texels_done, q_req_wid, q_req_tmask, q_req_PC, q_req_filter, rsp_texels_n, q_req_info}),
+        .data_out ({rsp_valid,       rsp_wid,   rsp_tmask,   rsp_PC,   rsp_filter,   rsp_data,     rsp_info})
     );
 
     // Can accept new cache response?
@@ -241,11 +255,11 @@ module VX_tex_memory #(
    always @(posedge clk) begin        
         if ((| dcache_req_fire)) begin
             $display("%t: T$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, is_dup=%b", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, texel_addr, dcache_req_if.tag, texel_is_dup);
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_addr, dcache_req_if.tag, req_texel_dup);
         end
         if (dcache_rsp_fire) begin
             $display("%t: T$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, data=%0h, is_dup=%b", 
-                    $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_PC, dcache_rsp_if.tag, dcache_rsp_if.data, rsp_is_dup);
+                    $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_PC, dcache_rsp_if.tag, dcache_rsp_if.data, rsp_texel_dup);
         end
     end
 `endif
