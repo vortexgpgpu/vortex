@@ -1,5 +1,6 @@
 #include "utils.h"
 #include <fstream>
+#include <assert.h>
 
 struct __attribute__((__packed__)) tga_header_t {
   int8_t idlength;
@@ -108,8 +109,35 @@ int SaveTGA(const char *filename,
   header.bitsperpixel = bpp * 8;
   header.imagedescriptor = 0;
 
-  ofs.write(reinterpret_cast<char *>(&header), sizeof(tga_header_t));  
-  ofs.write((const char*)pixels.data(), pixels.size());
+  ofs.write(reinterpret_cast<char *>(&header), sizeof(tga_header_t));
+
+  uint32_t pitch = bpp * width;
+  const uint8_t* pixel_bytes = pixels.data() + (height - 1) * pitch;
+  for (uint32_t y = 0; y < height; ++y) {
+    const uint8_t* pixel_row = pixel_bytes;
+    for (uint32_t x = 0; x < width; ++x) {
+      ofs.write((const char*)pixel_row, bpp);
+      pixel_row += bpp;
+    }
+    pixel_bytes -= pitch;
+  }
 
   return 0;
+}
+
+void dump_image(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t height, uint32_t bpp) {
+  assert(width * height * bpp == pixels.size());
+  const uint8_t* pixel_bytes = pixels.data();
+  for (uint32_t y = 0; y < height; ++y) {
+    for (uint32_t x = 0; x < width; ++x) {
+      uint32_t pixel32 = 0;
+      for (uint32_t b = 0; b < bpp; ++b) {
+        uint32_t pixel8 = *pixel_bytes++;
+        pixel32 |= pixel8 << (b * 8);
+      }
+      if (x) std::cout << ", ";
+      std::cout << std::hex << pixel32;
+    }
+    std::cout << std::endl;
+  }
 }

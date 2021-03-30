@@ -41,7 +41,6 @@ module VX_tex_bilerp #(
 
     `UNUSED_VAR (V_lerp[63:56])
 
-
     always @(*) begin
         if (color_enable[3]==1'b1) //R
             sampled_r[31:24] = V_lerp[55:48];

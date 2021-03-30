@@ -151,4 +151,15 @@ module VX_tex_addr #(
 
     assign ready_in = ~stall_out;
 
+ `ifdef DBG_PRINT_TEX   
+    always @(posedge clk) begin
+        if (mem_req_valid && mem_req_ready) begin
+            $write("%t: core%0d-tex-addr: wid=%0d, PC=%0h, tmask=%b, filter=%0d, tride=%0d, addr=", 
+                    $time, CORE_ID, mem_req_wid, mem_req_PC, mem_req_tmask, mem_req_filter, mem_req_stride);
+            `PRINT_ARRAY2D(mem_req_addr, 4, `NUM_THREADS);
+            $write("\n");
+        end
+    end
+`endif
+
 endmodule

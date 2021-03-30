@@ -16,18 +16,19 @@ struct tile_arg_t {
 void kernel_body(int task_id, void* arg) {
 	struct tile_arg_t* _arg = (struct tile_arg_t*)(arg);
 	
-	uint32_t xoffset = task_id * _arg->tile_width;
+	uint32_t xoffset = 0;
 	uint32_t yoffset = task_id * _arg->tile_height;	
-	uint32_t* dst_ptr = (uint32_t*)_arg->karg.dst_ptr + xoffset + yoffset * _arg->karg.dst_pitch;
+	uint8_t* dst_ptr = (uint8_t*)(_arg->karg.dst_ptr + xoffset * _arg->karg.dst_stride + yoffset * _arg->karg.dst_pitch);
 
 	float fu = xoffset * _arg->deltaX;
 	float fv = yoffset * _arg->deltaY;
 
 	for (uint32_t y = 0; y < _arg->tile_height; ++y) {
+		uint32_t* dst_row = (uint32_t*)dst_ptr;
 		for (uint32_t x = 0; x < _arg->tile_width; ++x) {
 			int32_t u = (int32_t)(fu * (1<<20));
 			int32_t v = (int32_t)(fv * (1<<20));
-			dst_ptr[x] = vx_tex(0, u, v, 0x0);
+			dst_row[x] = vx_tex(0, u, v, 0x0);
 			fu += _arg->deltaX;
 		}
 		dst_ptr += _arg->karg.dst_pitch;
