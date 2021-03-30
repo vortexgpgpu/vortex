@@ -166,7 +166,8 @@ module VX_tex_memory #(
     // Dcache Response
 
     reg [3:0][`NUM_THREADS-1:0][31:0] rsp_texels, rsp_texels_n;
-    reg [`NUM_THREADS-1:0][31:0] rsp_cur_data;
+    wire [`NUM_THREADS-1:0][3:0][31:0] rsp_texels_qual;
+    reg [`NUM_THREADS-1:0][31:0] rsp_data_qual;
     reg [RSP_CTR_W-1:0] rsp_rem_ctr; 
     wire [`NUM_THREADS-1:0] rsp_cur_tmask;    
     wire [RSP_CTR_W-1:0] rsp_max_cnt;
@@ -187,8 +188,9 @@ module VX_tex_memory #(
 
     assign rsp_max_cnt = $countones(q_req_tmask) * (q_req_filter ? 4 : 1);
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin     
-        wire [31:0] src_data = (i == 0 || rsp_texel_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin             
+        wire [31:0] src_mask = {32{dcache_rsp_if.valid[i]}};
+        wire [31:0] src_data = ((i == 0 || rsp_texel_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i]) & src_mask;
 
         reg [31:0] rsp_data_shifted;
         always @(*) begin
@@ -199,16 +201,16 @@ module VX_tex_memory #(
 
         always @(*) begin
             case (q_req_stride)
-            0: rsp_cur_data[i] = 32'(rsp_data_shifted[7:0]);
-            1: rsp_cur_data[i] = 32'(rsp_data_shifted[15:0]);
-            default: rsp_cur_data[i] = rsp_data_shifted;     
+            0: rsp_data_qual[i] = 32'(rsp_data_shifted[7:0]);
+            1: rsp_data_qual[i] = 32'(rsp_data_shifted[15:0]);
+            default: rsp_data_qual[i] = rsp_data_shifted;     
             endcase
         end        
     end
 
     always @(*) begin
         rsp_texels_n = rsp_texels;
-        rsp_texels_n[rsp_texel_idx] |= rsp_cur_data;
+        rsp_texels_n[rsp_texel_idx] |= rsp_data_qual;
     end
 
     always @(posedge clk) begin
@@ -231,6 +233,12 @@ module VX_tex_memory #(
         end
     end
 
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        for (genvar j = 0; j < 4; ++j) begin
+            assign rsp_texels_qual[i][j] = rsp_texels_n[j][i];
+        end
+    end
+
     wire stall_out = rsp_valid && ~rsp_ready;
 
     wire rsp_texels_done = dcache_rsp_fire && (rsp_rem_ctr == RSP_CTR_W'(rsp_cur_cnt));
@@ -244,8 +252,8 @@ module VX_tex_memory #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({rsp_texels_done, q_req_wid, q_req_tmask, q_req_PC, q_req_filter, rsp_texels_n, q_req_info}),
-        .data_out ({rsp_valid,       rsp_wid,   rsp_tmask,   rsp_PC,   rsp_filter,   rsp_data,     rsp_info})
+        .data_in  ({rsp_texels_done, q_req_wid, q_req_tmask, q_req_PC, q_req_filter, rsp_texels_qual, q_req_info}),
+        .data_out ({rsp_valid,       rsp_wid,   rsp_tmask,   rsp_PC,   rsp_filter,   rsp_data,        rsp_info})
     );
 
     // Can accept new cache response?
@@ -254,12 +262,22 @@ module VX_tex_memory #(
 `ifdef DBG_PRINT_TEX
    always @(posedge clk) begin        
         if ((| dcache_req_fire)) begin
-            $display("%t: T$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=%0h, tag=%0h, is_dup=%b", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_addr, dcache_req_if.tag, req_texel_dup);
+            $write("%t: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, dcache_req_if.tag);
+            `PRINT_ARRAY1D(req_texel_addr, `NUM_THREADS);
+            $write(", is_dup=%b\n", req_texel_dup);
         end
         if (dcache_rsp_fire) begin
-            $display("%t: T$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, data=%0h, is_dup=%b", 
-                    $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_PC, dcache_rsp_if.tag, dcache_rsp_if.data, rsp_texel_dup);
+            $write("%t: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, data=", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.valid, dcache_rsp_if.tag);
+            `PRINT_ARRAY1D(rsp_data_qual, `NUM_THREADS);
+            $write("\n");
+        end
+        if (rsp_valid && rsp_ready) begin
+            $write("%t: core%0d-tex-mem-rsp: wid=%0d, PC=%0h, filter=%0d, data=", 
+                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_filter);
+            `PRINT_ARRAY2D(rsp_data, 4, `NUM_THREADS);
+            $write("\n");
         end
     end
 `endif

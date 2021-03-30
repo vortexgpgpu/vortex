@@ -20,7 +20,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-const char* input_file  = "sample.tga";
+const char* input_file  = "palette.tga";
 const char* output_file = "output.tga";
 float scale = 1.0f;
 
@@ -69,7 +69,7 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, uint32_t height, uint32_t dst_bpp) {
+int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, uint32_t height, uint32_t bpp) {
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));
@@ -83,14 +83,15 @@ int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, 
   RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
 
   std::vector<uint8_t> dst_pixels(buf_size);
-  auto buf_ptr = (int8_t*)vx_host_ptr(buffer);
+  auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
   for (uint32_t i = 0; i < buf_size; ++i) {
     dst_pixels[i] = buf_ptr[i];
   } 
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  RT_CHECK(SaveTGA(output_file, dst_pixels, width, height, dst_bpp));
+  dump_image(dst_pixels, width, height, bpp);
+  RT_CHECK(SaveTGA(output_file, dst_pixels, width, height, bpp));
 
   return 0;
 }
@@ -106,6 +107,7 @@ int main(int argc, char *argv[]) {
   parse_args(argc, argv);
 
   RT_CHECK(LoadTGA(input_file, src_pixels, &src_width, &src_height, &src_bpp));
+  dump_image(src_pixels, src_width, src_height, src_bpp);
   uint32_t src_bufsize = src_bpp * src_width * src_height;
 
   uint32_t dst_width   = (uint32_t)(src_width * scale);
@@ -122,9 +124,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
-  uint32_t num_tasks = max_cores * max_warps * max_threads;
+  uint32_t num_tasks = max_cores * max_warps * max_threads / 4;
 
-  std::cout << "number of tasks: " << num_tasks << std::endl;
+  std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
   std::cout << "source buffer: width=" << src_width << ", heigth=" << src_height << ", size=" << src_bufsize << " bytes" << std::endl;
   std::cout << "destination buffer: width=" << dst_width << ", heigth=" << dst_height << ", size=" << dst_bufsize << " bytes" << std::endl;
 
@@ -138,8 +140,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_alloc_dev_mem(device, src_bufsize, &src_addr));
   RT_CHECK(vx_alloc_dev_mem(device, dst_bufsize, &dst_addr));
 
-  std::cout << "src_addr=" << std::hex << src_addr << std::endl;
-  std::cout << "dst_addr=" << std::hex << dst_addr << std::endl;
+  std::cout << "src_addr=0x" << std::hex << src_addr << std::endl;
+  std::cout << "dst_addr=0x" << std::hex << dst_addr << std::endl;
 
   // allocate staging shared memory  
   std::cout << "allocate shared memory" << std::endl;    
@@ -154,13 +156,13 @@ int main(int argc, char *argv[]) {
     kernel_arg.src_width   = src_width;
     kernel_arg.src_height  = src_height;
     kernel_arg.src_stride  = src_bpp;
-    kernel_arg.src_pitch   = src_bpp * src_width * src_height;
+    kernel_arg.src_pitch   = src_bpp * src_width;
     kernel_arg.src_ptr     = src_addr;
 
     kernel_arg.dst_width   = dst_width;
     kernel_arg.dst_height  = dst_height;
     kernel_arg.dst_stride  = dst_bpp;
-    kernel_arg.dst_pitch   = dst_bpp * dst_width * dst_height;    
+    kernel_arg.dst_pitch   = dst_bpp * dst_width;    
     kernel_arg.dst_ptr     = dst_addr;
 
     auto buf_ptr = (int*)vx_host_ptr(buffer);

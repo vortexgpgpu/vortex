@@ -13,3 +13,5 @@ int SaveTGA(const char *filename,
             uint32_t width,
             uint32_t height, 
             uint32_t bpp);
+
+void dump_image(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t height, uint32_t bpp);

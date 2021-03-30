@@ -41,16 +41,28 @@ module VX_tex_unit #(
         always @(posedge clk) begin                    
             if (tex_csr_if.write_enable) begin            
                 case (tex_csr_if.write_addr)
-                    `CSR_TEX_ADDR(i)   : tex_baddr[i]  <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
-                    `CSR_TEX_FORMAT(i) : tex_format[i] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
-                    `CSR_TEX_WRAP(i)   : begin
+                    `CSR_TEX_ADDR(i) : begin 
+                        tex_baddr[i]  <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
+                    end
+                    `CSR_TEX_FORMAT(i) : begin 
+                        tex_format[i] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
+                    end
+                    `CSR_TEX_WRAP(i) : begin
                         tex_wrap_u[i] <= tex_csr_if.write_data[0 +: `TEX_WRAP_BITS];
                         tex_wrap_v[i] <= tex_csr_if.write_data[`TEX_WRAP_BITS +: `TEX_WRAP_BITS];
                     end
-                    `CSR_TEX_FILTER(i) : tex_filter[i] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];                        
-                    `CSR_TEX_MIPOFF(i) : tex_mipoff[i][mip_level] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];
-                    `CSR_TEX_WIDTH(i)  : tex_width[i][mip_level]  <= tex_csr_if.write_data[`TEX_WIDTH_BITS-1:0];
-                    `CSR_TEX_HEIGHT(i) : tex_height[i][mip_level] <= tex_csr_if.write_data[`TEX_HEIGHT_BITS-1:0];
+                    `CSR_TEX_FILTER(i) : begin 
+                        tex_filter[i] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];                        
+                    end
+                    `CSR_TEX_MIPOFF(i) : begin 
+                        tex_mipoff[i][mip_level] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];
+                    end
+                    `CSR_TEX_WIDTH(i) : begin 
+                        tex_width[i][mip_level]  <= tex_csr_if.write_data[`TEX_WIDTH_BITS-1:0];
+                    end
+                    `CSR_TEX_HEIGHT(i) : begin 
+                        tex_height[i][mip_level] <= tex_csr_if.write_data[`TEX_HEIGHT_BITS-1:0];
+                    end
                     default:
                         assert(tex_csr_if.write_addr >= `CSR_TEX_BEGIN(0) 
                             && tex_csr_if.write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES));
@@ -212,20 +224,32 @@ module VX_tex_unit #(
     );    
 
 `ifdef DBG_PRINT_TEX
-    for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin    
-        always @(posedge clk) begin        
+    for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin
+        always @(posedge clk) begin
             if (tex_csr_if.write_enable 
              && (tex_csr_if.write_addr >= `CSR_TEX_BEGIN(i) 
               && tex_csr_if.write_addr < `CSR_TEX_BEGIN(i+1))) begin
-                $display("%t: core%0d-tex_unit: tex%0d_addr=%0h", $time, CORE_ID, i, tex_baddr[i]);
-                $display("%t: core%0d-tex_unit: tex%0d_format=%0h", $time, CORE_ID, i, tex_format[i]);
-                $display("%t: core%0d-tex_unit: tex%0d_wrap_u=%0h", $time, CORE_ID, i, tex_wrap_u[i]);
-                $display("%t: core%0d-tex_unit: tex%0d_wrap_v=%0h", $time, CORE_ID, i, tex_wrap_v[i]);
-                $display("%t: core%0d-tex_unit: tex%0d_filter=%0h", $time, CORE_ID, i, tex_filter[i]);
-                $display("%t: core%0d-tex_unit: tex%0d_mipoff[0]=%0h", $time, CORE_ID, i, tex_mipoff[i][0]);
-                $display("%t: core%0d-tex_unit: tex%0d_width[0]=%0h", $time, CORE_ID, i, tex_width[i][0]);
-                $display("%t: core%0d-tex_unit: tex%0d_height[0]=%0h", $time, CORE_ID, i, tex_height[i][0]);
+                $display("%t: core%0d-tex-csr: tex%0d_addr=%0h", $time, CORE_ID, i, tex_baddr[i]);
+                $display("%t: core%0d-tex-csr: tex%0d_format=%0h", $time, CORE_ID, i, tex_format[i]);
+                $display("%t: core%0d-tex-csr: tex%0d_wrap_u=%0h", $time, CORE_ID, i, tex_wrap_u[i]);
+                $display("%t: core%0d-tex-csr: tex%0d_wrap_v=%0h", $time, CORE_ID, i, tex_wrap_v[i]);
+                $display("%t: core%0d-tex-csr: tex%0d_filter=%0h", $time, CORE_ID, i, tex_filter[i]);
+                $display("%t: core%0d-tex-csr: tex%0d_mipoff[0]=%0h", $time, CORE_ID, i, tex_mipoff[i][0]);
+                $display("%t: core%0d-tex-csr: tex%0d_width[0]=%0h", $time, CORE_ID, i, tex_width[i][0]);
+                $display("%t: core%0d-tex-csr: tex%0d_height[0]=%0h", $time, CORE_ID, i, tex_height[i][0]);
             end
+        end
+    end
+    always @(posedge clk) begin
+        if (tex_req_if.valid && tex_req_if.ready) begin
+             $display("%t: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, u=%0h, v=%0h, lod=%0h", 
+                    $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.u, tex_req_if.v, tex_req_if.lod);
+        end
+        if (tex_rsp_if.valid && tex_rsp_if.ready) begin
+             $write("%t: core%0d-tex-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+                    $time, CORE_ID, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.tmask);
+            `PRINT_ARRAY1D(tex_rsp_if.data, `NUM_THREADS);
+            $write("\n");
         end
     end
 `endif

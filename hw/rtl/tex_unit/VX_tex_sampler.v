@@ -38,7 +38,7 @@ module VX_tex_sampler #(
 
     wire stall_out;
 
-    for (genvar i = 0; i<`NUM_THREADS ;i++ ) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
         wire [3:0][63:0]            formatted_data;
         wire [`NUM_COLOR_CHANNEL-1:0] color_enable;
@@ -57,24 +57,23 @@ module VX_tex_sampler #(
         VX_tex_bilerp #(
             .CORE_ID (CORE_ID)
         ) tex_bilerp (
-            .blendU(req_u[i][`BLEND_FRAC_64-1:0]), //blendU
-            .blendV(req_v[i][`BLEND_FRAC_64-1:0]),  //blendV
+            .blendU (req_u[i][`BLEND_FRAC_64-1:0]),
+            .blendV (req_v[i][`BLEND_FRAC_64-1:0]),
 
-            .color_enable(color_enable),
-            .texels(formatted_data),
-
-            .sampled_data(req_data_bilerp[i])
+            .color_enable (color_enable),
+            .texels (formatted_data),
+            
+            .sampled_data (req_data_bilerp[i])
         );    
 
     end
 
-    for (genvar i = 0;i<`NUM_THREADS ;i++ ) begin
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign req_data[i] = (req_filter == `TEX_FILTER_BITS'(0)) ? req_texels[i][0] : req_data_bilerp[i];
     end
 
-    assign stall_out = ~rsp_ready;
-    assign req_ready = rsp_ready;     
-
+    assign stall_out = rsp_valid && ~rsp_ready;
+    
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
@@ -85,5 +84,8 @@ module VX_tex_sampler #(
         .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, req_data}),
         .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
     );
+
+    // can accept new request?
+    assign req_ready = ~stall_out;     
 
 endmodule
