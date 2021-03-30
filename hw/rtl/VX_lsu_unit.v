@@ -113,7 +113,8 @@ module VX_lsu_unit #(
         .read_data    ({rsp_wid, rsp_pc, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
-        .full         (mbuf_full)
+        .full         (mbuf_full),
+        `UNUSED_PIN (empty)
     );
 
     assign req_sent_all = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
