@@ -21,7 +21,7 @@ module VX_databus_arb (
     localparam SMEM_ASHIFT = `CLOG2(`SHARED_MEM_BASE_ADDR_ALIGN);    
     localparam REQ_ASHIFT  = `CLOG2(`DWORD_SIZE);
     localparam REQ_ADDRW   = 32 - REQ_ASHIFT;
-    localparam REQ_DATAW   = REQ_ADDRW + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
+    localparam REQ_DATAW   = 1 + REQ_ADDRW + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
     localparam RSP_DATAW   = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
 
     //
@@ -30,41 +30,42 @@ module VX_databus_arb (
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
 
-        wire cache_req_ready_in;
-        wire smem_req_ready_in;
+        wire cache_req_valid_out, cache_req_ready_out;
+        wire is_smem_addr_in, is_smem_addr_out;
 
         // select shared memory bus
-        wire is_smem_addr = core_req_if.valid[i] && `SM_ENABLE
-                         && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] >= (32-SMEM_ASHIFT)'((`SHARED_MEM_BASE_ADDR - `SMEM_SIZE) >> SMEM_ASHIFT))
-                         && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] < (32-SMEM_ASHIFT)'(`SHARED_MEM_BASE_ADDR >> SMEM_ASHIFT));
+        assign is_smem_addr_in = core_req_if.valid[i] && `SM_ENABLE
+                             && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] >= (32-SMEM_ASHIFT)'((`SHARED_MEM_BASE_ADDR - `SMEM_SIZE) >> SMEM_ASHIFT))
+                             && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] < (32-SMEM_ASHIFT)'(`SHARED_MEM_BASE_ADDR >> SMEM_ASHIFT));
 
         VX_skid_buffer #(
             .DATAW (REQ_DATAW)
-        ) cache_out_buffer (
+        ) out_buffer (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (core_req_if.valid[i] && !is_smem_addr),        
-            .data_in   ({core_req_if.addr[i], core_req_if.rw[i], core_req_if.byteen[i], core_req_if.data[i], core_req_if.tag[i]}),
-            .ready_in  (cache_req_ready_in),      
-            .valid_out (cache_req_if.valid[i]),
-            .data_out  ({cache_req_if.addr[i], cache_req_if.rw[i], cache_req_if.byteen[i], cache_req_if.data[i], cache_req_if.tag[i]}),
-            .ready_out (cache_req_if.ready[i])
+            .valid_in  (core_req_if.valid[i]),        
+            .data_in   ({is_smem_addr_in, core_req_if.addr[i], core_req_if.rw[i], core_req_if.byteen[i], core_req_if.data[i], core_req_if.tag[i]}),
+            .ready_in  (core_req_if.ready[i]),      
+            .valid_out (cache_req_valid_out),
+            .data_out  ({is_smem_addr_out, cache_req_if.addr[i], cache_req_if.rw[i], cache_req_if.byteen[i], cache_req_if.data[i], cache_req_if.tag[i]}),
+            .ready_out (cache_req_ready_out)
         );
 
-        VX_skid_buffer #(
-            .DATAW (REQ_DATAW)
-        ) smem_out_buffer (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (core_req_if.valid[i] && is_smem_addr),        
-            .data_in   ({core_req_if.addr[i], core_req_if.rw[i], core_req_if.byteen[i], core_req_if.data[i], core_req_if.tag[i]}),
-            .ready_in  (smem_req_ready_in),      
-            .valid_out (smem_req_if.valid[i]),
-            .data_out  ({smem_req_if.addr[i], smem_req_if.rw[i], smem_req_if.byteen[i], smem_req_if.data[i], smem_req_if.tag[i]}),
-            .ready_out (smem_req_if.ready[i])
-        );
-
-        assign core_req_if.ready[i] = is_smem_addr ? smem_req_ready_in : cache_req_ready_in;
+        if (`SM_ENABLE ) begin
+            assign cache_req_if.valid[i] = cache_req_valid_out && ~is_smem_addr_out;
+            assign smem_req_if.valid[i]  = cache_req_valid_out && is_smem_addr_out;
+            assign cache_req_ready_out   = is_smem_addr_out ? smem_req_if.ready[i] : cache_req_if.ready[i];
+            
+            assign smem_req_if.addr[i]   = cache_req_if.addr[i];
+            assign smem_req_if.rw[i]     =  cache_req_if.rw[i];
+            assign smem_req_if.byteen[i] = cache_req_if.byteen[i];
+            assign smem_req_if.data[i]   = cache_req_if.data[i];
+            assign smem_req_if.tag[i]    = cache_req_if.tag[i];
+        end else begin
+            `UNUSED_VAR (is_smem_addr_out)
+            assign cache_req_if.valid[i] = cache_req_valid_out;
+            assign cache_req_ready_out   = cache_req_if.ready[i];
+        end    
     end
 
     //
