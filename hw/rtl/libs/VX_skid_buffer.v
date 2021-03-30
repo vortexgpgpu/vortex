@@ -67,8 +67,7 @@ module VX_skid_buffer #(
                 end else begin             
                     if (ready_out) begin
                         use_buffer <= 0;
-                    end
-                    if (push && !pop) begin
+                    end else if (push && valid_out_r) begin
                         assert(!use_buffer);
                         use_buffer <= 1;
                     end
