@@ -35,7 +35,7 @@ module VX_tex_format #(
                     formatted_texel_r[i][39:32] = `TEX_COLOR_BITS'(texel_data[i][11:8]);
                     formatted_texel_r[i][55:48] = `TEX_COLOR_BITS'(texel_data[i][15:12]);
                     if (i == 0)
-                        color_enable_r = 4'b0111;
+                        color_enable_r = 4'b1111;
                 end
                 `TEX_FORMAT_L8A8: begin
                     formatted_texel_r[i][07:00] = `TEX_COLOR_BITS'(texel_data[i][7:0]);
