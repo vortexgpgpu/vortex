@@ -123,7 +123,7 @@ module VX_lsu_unit #(
     always @(posedge clk) begin
         if (reset || req_sent_all) begin
             req_sent_mask <= 0;
-        end else if (!req_sent_all) begin
+        end else begin
             req_sent_mask <= req_sent_mask | dcache_req_fire;            
         end
     end
