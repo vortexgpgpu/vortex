@@ -5,48 +5,6 @@
 #define MAX_TICKS 20
 #define NUM_THREADS
 
-
-
-    // // outputs
-    // bool          req_ready;
-    // bool          rsp_valid;
-    // unsigned int  rsp_wid;
-    // unsigned int  rsp_tmask;
-    // unsigned int  rsp_PC;
-    // unsigned int  rsp_rd;   
-    // bool          rsp_wb;
-    // unsigned int  rsp_data[NUM_THREADS];
-
-
-    // if (input != input_map.end()){
-    //   sim->req_valid = input->req_valid;
-    //   sim->req_wid = input->req_wid;
-    //   sim->req_tmask = input->req_tmask;
-    //   sim->req_PC = input->req_PC;
-    //   sim->req_rd = input->req_rd;   
-    //   sim->req_wb = input->req_wb;
-    //   sim->req_filter = input->req_filter;
-    //   sim->req_format = input->req_format;
-    //   // sim->req_u = input->req_u[NUM_THREADS];
-    //   // sim->req_v = input->req_v[NUM_THREADS];
-    //   vl_setw(sim->req_texels, input->req_texels)
-    //   // sim->req_texels = input->req_texels[NUM_THREADS][4];
-    //   sim->rsp_ready = input->rsp_ready;
-    // } else{
-    //   std::cout << "Warning! No Input on Cycle " << cycle << std::endl;       
-    // }
-
-    // if(output != output_map.end()){
-    //   CHECK(sim->req_ready == output->req_ready);
-    //   CHECK(sim->rsp_valid == output->rsp_valid);
-    //   CHECK(sim->rsp_wid == output->rsp_wid);
-    //   CHECK(sim->rsp_tmask == output->rsp_tmask);
-    //   CHECK(sim->rsp_PC == output->rsp_PC);
-    //   CHECK(sim->rsp_rd == output->rsp_rd);   
-    //   CHECK(sim->rsp_wb == output->rsp_wb);
-    //   CHECK(vl_cmpw(sim->rsp_data, output->rsp_data));
-    // }
-
 #define CHECK(x)                                  \
    do {                                           \
      if (x)                                       \
@@ -95,11 +53,11 @@ int main(int argc, char **argv) {
       sim->req_PC = 0x0515;
       sim->req_wb = 1;
       sim->req_filter = 0;
-      sim->req_format = 3;
-      vl_setw(sim->req_texels, 0xffff, 0xfffa, 0xfffb, 0xfffc,
-                               0xfffd, 0xafff, 0xbfff, 0xcfff, 
-                               0xdfff, 0xabcd, 0xdfdd, 0xeabf, 
-                               0xaaaa, 0xbbbb, 0xcccc, 0xdddd);
+      sim->req_format = 2; //rgba4
+      vl_setw(sim->req_texels, 0x1234abcd, 0x1234abcd, 0x1234abcd, 0x1234abcd,
+                               0xabcd1234, 0xabcd1234, 0xabcd1234, 0xabcd1234, 
+                               0xfaafbaab, 0xfaafbaab, 0xfaafbaab, 0xfaafbaab, 
+                               0xdeadbeef, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef);
       sim->rsp_ready = 1;
 
       break;
@@ -115,7 +73,7 @@ int main(int argc, char **argv) {
       // sim->req_rd = req_rd;   
       sim->req_wb = 1;
       sim->req_filter = 1;
-      sim->req_format = 3;
+      sim->req_format = 0;
       /*
       1u ------- 0u              1v ------- 1v          tex0 ------- tex1
       |         |                |          |            |            |
@@ -133,7 +91,7 @@ int main(int argc, char **argv) {
                                0xffffffff, 0x00000000, 0xffffffff, 0x00000000);
 
       // point sampling output check
-      CHECK(!vl_cmpw(sim->rsp_data, 0xffff, 0xfffd, 0xdfff, 0xaaaa));
+      CHECK(!vl_cmpw(sim->rsp_data, 0x0a0b0c0d, 0x01020304, 0x0b0a0a0b, 0x0b0e0e0f));
       
       break;
 
@@ -142,6 +100,7 @@ int main(int argc, char **argv) {
       sim->req_valid = 1;
       sim->rsp_ready = 1;
       // bilerp sampling output check
+
 
       std::cout << "cycle 4: bilerp r8g8b8a8 check" << std::endl;
       CHECK(!vl_cmpw(sim->rsp_data, 0x7f7f7f7f, 0x7f7f7f7f, 0x7f7f7f7f, 0x3f3f3f3f));
