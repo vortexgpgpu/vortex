@@ -46,7 +46,7 @@ module VX_tex_sampler #(
         VX_tex_format #(
             .CORE_ID (CORE_ID),
             .NUM_TEXELS (4)
-        ) tex_format_texel (
+        ) tex_format (
             .texel_data  (req_texels[i]),
             .format (req_format),
 

@@ -52,8 +52,8 @@ int main() {
 	targ.karg        = *arg;
 	targ.tile_width  = arg->dst_width;
 	targ.tile_height = (arg->dst_height + arg->num_tasks - 1) / arg->num_tasks;    
-	targ.deltaX      = 1.0f / (((float)arg->src_width) / arg->dst_width);
-	targ.deltaY      = 1.0f / (((float)arg->src_height) / arg->dst_height);
+	targ.deltaX      = 1.0f / arg->dst_width;
+	targ.deltaY      = 1.0f / arg->dst_height;
 	
 	vx_spawn_tasks(arg->num_tasks, kernel_body, &targ);
 }
