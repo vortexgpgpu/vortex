@@ -63,11 +63,13 @@ int LoadTGA(const char *filename,
         return -1;
       }
 
-      // Because the TGA is BGR instead of RGB, we must swap RG components
-      for (int i = 0; i < pitch; i += stride) {
-        auto tmp = line[i];
-        line[i] = line[i + 2];
-        line[i + 2] = tmp;
+      // TGA uses BGR instead of RGB, we must swap RG components
+      if (stride >= 3) {
+        for (int i = 0; i < pitch; i += stride) {
+          auto tmp = line[i];
+          line[i] = line[i + 2];
+          line[i + 2] = tmp;
+        }
       }
     }
     break;
@@ -116,7 +118,19 @@ int SaveTGA(const char *filename,
   for (uint32_t y = 0; y < height; ++y) {
     const uint8_t* pixel_row = pixel_bytes;
     for (uint32_t x = 0; x < width; ++x) {
-      ofs.write((const char*)pixel_row, bpp);
+      // TGA uses BGR instead of RGB, we must swap RG components
+      if (bpp == 4) {
+        ofs.write((const char*)pixel_row + 2, 1);
+        ofs.write((const char*)pixel_row + 1, 1);
+        ofs.write((const char*)pixel_row + 0, 1);
+        ofs.write((const char*)pixel_row + 3, 1);
+      } else if (bpp == 3) {
+        ofs.write((const char*)pixel_row + 2, 1);
+        ofs.write((const char*)pixel_row + 1, 1);
+        ofs.write((const char*)pixel_row + 0, 1);
+      } else{
+        ofs.write((const char*)pixel_row, bpp);
+      }
       pixel_row += bpp;
     }
     pixel_bytes -= pitch;

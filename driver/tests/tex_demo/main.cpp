@@ -20,7 +20,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-const char* input_file  = "palette.tga";
+const char* input_file  = "toad.tga";
 const char* output_file = "output.tga";
 float scale = 1.0f;
 
