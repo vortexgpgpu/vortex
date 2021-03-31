@@ -34,13 +34,14 @@ module VX_tex_sampler #(
     `UNUSED_PARAM (CORE_ID)
 
     wire [`NUM_THREADS-1:0][31:0] req_data;
-    wire [`NUM_THREADS-1:0][31:0] req_data_bilerp;
 
     wire stall_out;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
+        wire [31:0]                 req_data_bilerp;
         wire [3:0][63:0]            formatted_data;
+        wire [31:0]                 formatted_pt_data;
         wire [`NUM_COLOR_CHANNEL-1:0] color_enable;
 
         VX_tex_format #(
@@ -51,7 +52,8 @@ module VX_tex_sampler #(
             .format (req_format),
 
             .color_enable (color_enable),
-            .formatted_texel(formatted_data)
+            .formatted_lerp_texel(formatted_data),
+            .formatted_pt_texel(formatted_pt_data)
         );  
 
         VX_tex_bilerp #(
@@ -63,13 +65,11 @@ module VX_tex_sampler #(
             .color_enable (color_enable),
             .texels (formatted_data),
             
-            .sampled_data (req_data_bilerp[i])
+            .sampled_data (req_data_bilerp)
         );    
 
-    end
+        assign req_data[i] = (req_filter == `TEX_FILTER_BITS'(0)) ? formatted_pt_data : req_data_bilerp;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign req_data[i] = (req_filter == `TEX_FILTER_BITS'(0)) ? req_texels[i][0] : req_data_bilerp[i];
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
