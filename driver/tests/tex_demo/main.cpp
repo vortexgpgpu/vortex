@@ -22,6 +22,8 @@
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "toad.tga";
 const char* output_file = "output.tga";
+int wrap = 0;
+int filter = 0;
 float scale = 1.0f;
 
 vx_device_h device = nullptr;
@@ -29,12 +31,12 @@ vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f filter] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:h?")) != -1) {
     switch (c) {
     case 'i':
        input_file = optarg;
@@ -44,6 +46,12 @@ static void parse_args(int argc, char **argv) {
       break;
     case 's':
       scale = std::stof(optarg, NULL);
+      break;
+    case 'w':
+      wrap = std::atoi(optarg);
+      break;
+    case 'f':
+      filter = std::atoi(optarg);
       break;
     case 'k':
       kernel_file = optarg;
@@ -151,19 +159,22 @@ int main(int argc, char *argv[]) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    kernel_arg.num_tasks   = std::min<uint32_t>(num_tasks, dst_height);
+    kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);
+    kernel_arg.format     = (src_bpp == 1) ? 5 : (src_bpp == 2) ? 1 : 0;
+    kernel_arg.filter     = filter;
+    kernel_arg.wrap       = wrap;
     
-    kernel_arg.src_width   = src_width;
-    kernel_arg.src_height  = src_height;
-    kernel_arg.src_stride  = src_bpp;
-    kernel_arg.src_pitch   = src_bpp * src_width;
-    kernel_arg.src_ptr     = src_addr;
+    kernel_arg.src_width  = src_width;
+    kernel_arg.src_height = src_height;
+    kernel_arg.src_stride = src_bpp;
+    kernel_arg.src_pitch  = src_bpp * src_width;
+    kernel_arg.src_ptr    = src_addr;
 
-    kernel_arg.dst_width   = dst_width;
-    kernel_arg.dst_height  = dst_height;
-    kernel_arg.dst_stride  = dst_bpp;
-    kernel_arg.dst_pitch   = dst_bpp * dst_width;    
-    kernel_arg.dst_ptr     = dst_addr;
+    kernel_arg.dst_width  = dst_width;
+    kernel_arg.dst_height = dst_height;
+    kernel_arg.dst_stride = dst_bpp;
+    kernel_arg.dst_pitch  = dst_bpp * dst_width;    
+    kernel_arg.dst_ptr    = dst_addr;
 
     auto buf_ptr = (int*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));

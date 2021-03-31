@@ -5,6 +5,9 @@
 
 struct kernel_arg_t {
   uint32_t num_tasks;
+  uint32_t format;
+  uint32_t filter;
+  uint32_t wrap;
   uint32_t src_width;
   uint32_t src_height;
   uint32_t src_stride;
