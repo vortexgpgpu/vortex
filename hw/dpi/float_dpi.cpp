@@ -26,9 +26,9 @@ extern "C" {
   void dpi_utof(int a, int frm, int* result, int* fflags);
 
   void dpi_fclss(int a, int* result);
-  void dpi_fsgnj(int a, int* result);
-  void dpi_fsgnjn(int a, int* result);
-  void dpi_fsgnjx(int a, int* result);
+  void dpi_fsgnj(int a, int b, int* result);
+  void dpi_fsgnjn(int a, int b, int* result);
+  void dpi_fsgnjx(int a, int b, int* result);
 
   void dpi_flt(int a, int b, int* result, int* fflags);
   void dpi_fle(int a, int b, int* result, int* fflags);
@@ -244,21 +244,53 @@ void dpi_fmax(int a, int b, int* result, int* fflags) {
 }
 
 void dpi_fclss(int a, int* result) {
-  // TODO
-  *result = 0;
+
+  int r = 0; // clear all bits
+
+  bool fsign = (a >> 31);
+  uint32_t expo = (a >> 23) & 0xFF;
+  uint32_t fraction = a & 0x7FFFFF;
+
+  if ((expo == 0) && (fraction == 0)) {
+    r = fsign ? (1 << 3) : (1 << 4); // +/- 0
+  } else if ((expo == 0) && (fraction != 0)) {
+    r = fsign ? (1 << 2) : (1 << 5); // +/- subnormal
+  } else if ((expo == 0xFF) && (fraction == 0)) {
+    r = fsign ? (1<<0) : (1<<7); // +/- infinity
+  } else if ((expo == 0xFF ) && (fraction != 0)) { 
+    if (!fsign && (fraction == 0x00400000)) {
+      r = (1 << 9);               // quiet NaN
+    } else { 
+      r = (1 << 8);               // signaling NaN
+    }
+  } else {
+    r = fsign ? (1 << 1) : (1 << 6); // +/- normal
+  }
+
+  *result = r;
 }
 
-void dpi_fsgnj(int a, int* result) {
-  // TODO
-  *result = 0;
+void dpi_fsgnj(int a, int b, int* result) {
+  
+  int sign = b & 0x80000000;
+  int r = sign | (a & 0x7FFFFFFF);
+
+  *result = r;
 }
 
-void dpi_fsgnjn(int a, int* result) {
-  // TODO
-  *result = 0;
+void dpi_fsgnjn(int a, int b, int* result) {
+  
+  int sign = ~b & 0x80000000;
+  int r = sign | (a & 0x7FFFFFFF);
+
+  *result = r;
 }
 
-void dpi_fsgnjx(int a, int* result) {
-  // TODO
-  *result = 0;
+void dpi_fsgnjx(int a, int b, int* result) {
+  
+  int sign1 = a & 0x80000000;
+  int sign2 = b & 0x80000000;
+  int r = (sign1 ^ sign2) | (a & 0x7FFFFFFF);
+
+  *result = r;
 }
