@@ -78,7 +78,7 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0] rsp_rem_mask_n;
 
     reg [`NUM_THREADS-1:0] req_sent_mask;
-    wire req_sent_all;
+    wire sent_all_ready;
 
     wire [`DCORE_TAG_ID_BITS-1:0] mbuf_waddr, mbuf_raddr;
     wire mbuf_full;
@@ -117,11 +117,11 @@ module VX_lsu_unit #(
         `UNUSED_PIN (empty)
     );
 
-    assign req_sent_all = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
-                       || (req_is_dup & dcache_req_if.ready[0]);
+    assign sent_all_ready = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
+                         || (req_is_dup & dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
-        if (reset || req_sent_all) begin
+        if (reset || sent_all_ready) begin
             req_sent_mask <= 0;
         end else begin
             req_sent_mask <= req_sent_mask | dcache_req_fire;            
@@ -194,11 +194,11 @@ module VX_lsu_unit #(
     assign dcache_req_if.tag = {`NUM_THREADS{req_tag}};
 `endif
     
-    assign ready_in = req_ready_dep && req_sent_all;
+    assign ready_in = req_ready_dep && sent_all_ready;
 
     // send store commit
 
-    wire is_store_rsp = req_valid && ~req_wb && req_sent_all;
+    wire is_store_rsp = req_valid && ~req_wb && sent_all_ready;
 
     assign st_commit_if.valid = is_store_rsp;
     assign st_commit_if.wid   = req_wid;
