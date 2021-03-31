@@ -28,8 +28,8 @@
 `define TEX_LOD_BITS        4
 `define TEX_MIP_BITS        (`NTEX_BITS + `TEX_LOD_BITS)
 
-`define TEX_WRAP_REPEAT     0
-`define TEX_WRAP_CLAMP      1
+`define TEX_WRAP_CLAMP      0
+`define TEX_WRAP_REPEAT     1
 `define TEX_WRAP_MIRROR     2
 
 `define MAX_COLOR_WIDTH     8

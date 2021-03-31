@@ -131,6 +131,7 @@ module VX_tex_addr #(
     end
 
     wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] u0, v0;
+    
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign u0[i] = clamped_u[i][0];
         assign v0[i] = clamped_v[i][0];
