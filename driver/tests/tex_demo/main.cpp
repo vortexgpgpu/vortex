@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
-  uint32_t num_tasks = max_cores * max_warps * max_threads / 4;
+  uint32_t num_tasks = max_cores * max_warps * max_threads;
 
   std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
   std::cout << "source buffer: width=" << src_width << ", heigth=" << src_height << ", size=" << src_bufsize << " bytes" << std::endl;
@@ -170,8 +170,8 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
-  // upload source buffer0
-  std::cout << "upload source buffer0" << std::endl;      
+  // upload source buffer
+  std::cout << "upload source buffer" << std::endl;      
   {    
     auto buf_ptr = (int8_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < src_bufsize; ++i) {

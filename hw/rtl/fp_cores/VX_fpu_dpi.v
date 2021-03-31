@@ -330,9 +330,9 @@ module VX_fpu_dpi #(
                 dpi_feq    (dataa[i], datab[i], result_feq[i], fflags_feq[i]);
                 dpi_fmin   (dataa[i], datab[i], result_fmin[i], fflags_fmin[i]);
                 dpi_fmax   (dataa[i], datab[i], result_fmax[i], fflags_fmax[i]);            
-                dpi_fsgnj  (dataa[i], result_fsgnj[i]);
-                dpi_fsgnjn (dataa[i], result_fsgnjn[i]);
-                dpi_fsgnjx (dataa[i], result_fsgnjx[i]);
+                dpi_fsgnj  (dataa[i], datab[i], result_fsgnj[i]);
+                dpi_fsgnjn (dataa[i], datab[i], result_fsgnjn[i]);
+                dpi_fsgnjx (dataa[i], datab[i], result_fsgnjx[i]);
                 result_fmv[i] = dataa[i];
             end
         end
