@@ -99,7 +99,7 @@ module VX_tex_memory #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire req_texel_valid;
-    wire req_texel_sent, last_texel_sent;
+    wire sent_all_ready, last_texel_sent;
     wire req_texel_dup;
     wire [`NUM_THREADS-1:0][29:0] req_texel_addr;
     reg [1:0] req_texel_idx;
@@ -108,7 +108,7 @@ module VX_tex_memory #(
     always @(posedge clk) begin
         if (reset || last_texel_sent) begin
             req_texel_idx <= 0;
-        end else if (req_texel_sent) begin
+        end else if (req_texel_valid && sent_all_ready) begin
             req_texel_idx <= req_texel_idx + 1;
         end
     end
@@ -126,7 +126,7 @@ module VX_tex_memory #(
     assign req_texel_dup   = q_dup_reqs[req_texel_idx];
 
     wire is_last_texel = (req_texel_idx == (q_req_filter ? 3 : 0));
-    assign last_texel_sent = req_texel_sent && is_last_texel;
+    assign last_texel_sent = req_texel_valid && sent_all_ready && is_last_texel;
 
     // DCache Request
 
@@ -136,11 +136,11 @@ module VX_tex_memory #(
 
     assign dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;    
 
-    assign req_texel_sent = (&(dcache_req_if.ready | texel_sent_mask | ~q_req_tmask))
-                     || (req_texel_dup & dcache_req_if.ready[0]);
+    assign sent_all_ready = (&(dcache_req_if.ready | texel_sent_mask | ~q_req_tmask))
+                         || (req_texel_dup & dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
-        if (reset || req_texel_sent) begin
+        if (reset || sent_all_ready) begin
             texel_sent_mask <= 0;
         end else begin
             texel_sent_mask <= texel_sent_mask | dcache_req_fire;            
