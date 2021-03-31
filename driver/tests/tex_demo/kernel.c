@@ -44,9 +44,9 @@ int main() {
 	vx_csr_write(CSR_TEX_MIPOFF(0), 0);	
 	vx_csr_write(CSR_TEX_WIDTH(0),  ilog2(arg->src_width));
 	vx_csr_write(CSR_TEX_HEIGHT(0), ilog2(arg->src_height));
-	vx_csr_write(CSR_TEX_FORMAT(0), 0);
-	vx_csr_write(CSR_TEX_WRAP(0),   0);
-	vx_csr_write(CSR_TEX_FILTER(0), 0);
+	vx_csr_write(CSR_TEX_FORMAT(0), arg->format);
+	vx_csr_write(CSR_TEX_WRAP(0),   (arg->wrap << 2) | arg->wrap);
+	vx_csr_write(CSR_TEX_FILTER(0), arg->filter);
 
 	struct tile_arg_t targ;
 	targ.karg        = *arg;
