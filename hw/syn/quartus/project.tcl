@@ -41,10 +41,6 @@ set_global_assignment -name VERILOG_MACRO NDEBUG
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
 
-#set_global_assignment -name ALLOW_ANY_RAM_SIZE_FOR_RECOGNITION ON
-#set_global_assignment -name USE_HIGH_SPEED_ADDER ON
-#set_global_assignment -name MUX_RESTRUCTURE ON
-
 #set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
 #set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
 #set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
