@@ -9,8 +9,7 @@ module VX_flush_ctrl #(
     parameter NUM_BANKS         = 1
 ) (
     input wire  clk,
-    input wire  reset,
-    input wire  flush,    
+    input wire  reset,    
     output wire [`LINE_SELECT_BITS-1:0] addr_out,
     output wire valid_out
 );
@@ -18,7 +17,7 @@ module VX_flush_ctrl #(
     reg [`LINE_SELECT_BITS-1:0] flush_ctr;
 
     always @(posedge clk) begin
-        if (reset || flush) begin
+        if (reset) begin
             flush_enable <= 1;
             flush_ctr    <= 0;
         end else begin
