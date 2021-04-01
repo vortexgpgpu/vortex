@@ -15,6 +15,9 @@ set -e
 CONFIGS=-DEXT_M_DISABLE make -C hw/simulate
 CONFIGS=-DEXT_F_DISABLE make -C hw/simulate
 
+# disable shared memory
+CONFIGS=-DSM_ENABLE=0 make -C hw/simulate
+
 # Blackbox tests
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --perf --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --debug --app=demo --args="-n1"
