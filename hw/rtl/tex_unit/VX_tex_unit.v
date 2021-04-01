@@ -19,7 +19,7 @@ module VX_tex_unit #(
 );
 
     localparam REQ_INFO_WIDTH_A = `TEX_FORMAT_BITS + `NR_BITS + 1;
-    localparam REQ_INFO_WIDTH_M = (2 * `NUM_THREADS * `FIXED_FRAC) + REQ_INFO_WIDTH_A;
+    localparam REQ_INFO_WIDTH_M = (2 * `NUM_THREADS * `BLEND_FRAC) + REQ_INFO_WIDTH_A;
 
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
@@ -93,8 +93,8 @@ module VX_tex_unit #(
     wire [31:0]             mem_req_PC;
     wire [`TEX_FILTER_BITS-1:0] mem_req_filter;
     wire [`TEX_STRIDE_BITS-1:0] mem_req_stride;
-    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_u;
-    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_v;
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] mem_req_blend_u;
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] mem_req_blend_v;
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr;
     wire [REQ_INFO_WIDTH_A-1:0] mem_req_info;
     wire mem_req_ready;
@@ -111,41 +111,41 @@ module VX_tex_unit #(
     VX_tex_addr #(
         .REQ_INFO_WIDTH (REQ_INFO_WIDTH_A)
     ) tex_addr (
-        .clk            (clk),
-        .reset          (reset),
+        .clk        (clk),
+        .reset      (reset),
 
-        .valid_in       (tex_req_if.valid),
-        .ready_in       (tex_req_if.ready),   
+        .valid_in   (tex_req_if.valid),
+        .ready_in   (tex_req_if.ready),   
 
-        .req_wid        (tex_req_if.wid), 
-        .req_tmask      (tex_req_if.tmask),
-        .req_PC         (tex_req_if.PC), 
-        .req_info       ({tex_format[tex_req_if.unit], tex_req_if.rd, tex_req_if.wb}),
+        .req_wid    (tex_req_if.wid), 
+        .req_tmask  (tex_req_if.tmask),
+        .req_PC     (tex_req_if.PC), 
+        .req_info   ({tex_format[tex_req_if.unit], tex_req_if.rd, tex_req_if.wb}),
 
-        .format         (tex_format[tex_req_if.unit]),
-        .filter         (tex_filter[tex_req_if.unit]),
-        .wrap_u         (tex_wrap_u[tex_req_if.unit]),
-        .wrap_v         (tex_wrap_v[tex_req_if.unit]),        
+        .format     (tex_format[tex_req_if.unit]),
+        .filter     (tex_filter[tex_req_if.unit]),
+        .wrap_u     (tex_wrap_u[tex_req_if.unit]),
+        .wrap_v     (tex_wrap_v[tex_req_if.unit]),        
         
-        .base_addr      (tex_baddr[tex_req_if.unit]),    
-        .mip_offsets    (tex_mipoffs),
-        .log_widths     (tex_widths),
-        .log_heights    (tex_heights),
+        .base_addr  (tex_baddr[tex_req_if.unit]),    
+        .mip_offsets(tex_mipoffs),
+        .log_widths (tex_widths),
+        .log_heights(tex_heights),
         
-        .coord_u        (tex_req_if.u),
-        .coord_v        (tex_req_if.v),
+        .coord_u    (tex_req_if.u),
+        .coord_v    (tex_req_if.v),
 
-        .mem_req_valid  (mem_req_valid), 
-        .mem_req_wid    (mem_req_wid),   
-        .mem_req_tmask  (mem_req_tmask),         
-        .mem_req_PC     (mem_req_PC), 
-        .mem_req_filter (mem_req_filter), 
-        .mem_req_stride (mem_req_stride),
-        .mem_req_addr   (mem_req_addr),
-        .mem_req_u      (mem_req_u),
-        .mem_req_v      (mem_req_v),
-        .mem_req_info   (mem_req_info),
-        .mem_req_ready  (mem_req_ready)
+        .rsp_valid  (mem_req_valid), 
+        .rsp_wid    (mem_req_wid),   
+        .rsp_tmask  (mem_req_tmask),         
+        .rsp_PC     (mem_req_PC), 
+        .rsp_filter (mem_req_filter), 
+        .rsp_stride (mem_req_stride),
+        .rsp_addr   (mem_req_addr),
+        .rsp_blend_u(mem_req_blend_u),
+        .rsp_blend_v(mem_req_blend_v),
+        .rsp_info   (mem_req_info),
+        .rsp_ready  (mem_req_ready)
     );
 
     // retrieve texel values from memory
@@ -168,7 +168,7 @@ module VX_tex_unit #(
         .req_filter(mem_req_filter), 
         .req_stride(mem_req_stride),
         .req_addr  (mem_req_addr),
-        .req_info  ({mem_req_u, mem_req_v, mem_req_info}),
+        .req_info  ({mem_req_blend_u, mem_req_blend_v, mem_req_info}),
         .req_ready (mem_req_ready),
 
         // outputs
@@ -184,13 +184,12 @@ module VX_tex_unit #(
 
     // apply sampler
 
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] rsp_blend_u, rsp_blend_v;
     wire [`TEX_FORMAT_BITS-1:0] rsp_format;
-    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] rsp_u;
-    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] rsp_v;
     wire [`NR_BITS-1:0]         rsp_rd;   
     wire                        rsp_wb;
     
-    assign {rsp_u, rsp_v, rsp_format, rsp_rd, rsp_wb} = mem_rsp_info;
+    assign {rsp_blend_u, rsp_blend_v, rsp_format, rsp_rd, rsp_wb} = mem_rsp_info;
 
     VX_tex_sampler #(
         .CORE_ID (CORE_ID)
@@ -203,11 +202,11 @@ module VX_tex_unit #(
         .req_wid    (mem_rsp_wid), 
         .req_tmask  (mem_rsp_tmask),         
         .req_PC     (mem_rsp_PC),
-        .req_texels (mem_rsp_data),     
+        .req_data   (mem_rsp_data),     
         .req_filter (mem_rsp_filter),     
         .req_format (rsp_format),  
-        .req_u      (rsp_u),
-        .req_v      (rsp_v),               
+        .req_blend_u(rsp_blend_u),
+        .req_blend_v(rsp_blend_v),               
         .req_rd     (rsp_rd),
         .req_wb     (rsp_wb), 
         .req_ready  (mem_rsp_ready),
