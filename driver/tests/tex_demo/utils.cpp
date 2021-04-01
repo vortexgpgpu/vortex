@@ -47,41 +47,52 @@ int LoadTGA(const char *filename,
   }
 
   switch (header.bitsperpixel) {
+  case 16:
   case 24:
   case 32: {
     auto stride = header.bitsperpixel / 8;
-    auto pitch = header.width * stride;
-    pixels.resize(header.height * pitch);
+    std::vector<uint8_t> staging(stride * header.width * header.height);
 
-    // we are going to load the pixel data line by line
-    for (int y = 0; y < header.height; ++y) {
-      // Read current line of pixels
-      auto line = pixels.data() + y * pitch;
-      ifs.read(reinterpret_cast<char *>(line), pitch);
-      if (ifs.fail()) {
-        std::cerr << "invalid TGA file!" << std::endl;
-        return -1;
-      }
+    // Read pixels data
+    ifs.read((char*)staging.data(), staging.size());
+    if (ifs.fail()) {
+      std::cerr << "invalid TGA file!" << std::endl;
+      return -1;
+    }
 
-      // TGA uses BGR instead of RGB, we must swap RG components
-      if (stride >= 3) {
-        for (int i = 0; i < pitch; i += stride) {
-          auto tmp = line[i];
-          line[i] = line[i + 2];
-          line[i + 2] = tmp;
-        }
+    // format conversion to RGBA
+    pixels.resize(4 * header.width * header.height);
+    const uint8_t* src_bytes = staging.data();
+    uint32_t* dst_bytes = (uint32_t*)pixels.data();
+    for (const uint8_t* const src_end = src_bytes + staging.size(); 
+         src_bytes != src_end; 
+         src_bytes += stride) {
+      ColorARGB color;        
+      switch (stride) {
+      case 2: 
+        color = Format::ConvertFrom<FORMAT_A1R5G5B5, true>(src_bytes); 
+        break;
+      case 3: 
+        color = Format::ConvertFrom<FORMAT_R8G8B8, true>(src_bytes); 
+        break;
+      case 4: 
+        color = Format::ConvertFrom<FORMAT_A8R8G8B8, true>(src_bytes); 
+        break;
+      default:
+        std::abort();            
       }
+      *dst_bytes++ = color.toRGBA();
     }
     break;
   }
   default:
     std::cerr << "unsupported TGA bitsperpixel!" << std::endl;
     return -1;
-  }
+  } 
 
   *width = header.width;
   *height = header.height;
-  *bpp = header.bitsperpixel / 8;
+  *bpp = 4;
 
   return 0;
 }
@@ -111,14 +122,16 @@ int SaveTGA(const char *filename,
   header.bitsperpixel = bpp * 8;
   header.imagedescriptor = 0;
 
+  // write header
   ofs.write(reinterpret_cast<char *>(&header), sizeof(tga_header_t));
 
+  // write pixel data
   uint32_t pitch = bpp * width;
   const uint8_t* pixel_bytes = pixels.data() + (height - 1) * pitch;
   for (uint32_t y = 0; y < height; ++y) {
     const uint8_t* pixel_row = pixel_bytes;
     for (uint32_t x = 0; x < width; ++x) {
-      // TGA uses BGR instead of RGB, we must swap RG components
+      // swap R/B color channels
       if (bpp == 4) {
         ofs.write((const char*)pixel_row + 2, 1);
         ofs.write((const char*)pixel_row + 1, 1);
@@ -129,7 +142,8 @@ int SaveTGA(const char *filename,
         ofs.write((const char*)pixel_row + 1, 1);
         ofs.write((const char*)pixel_row + 0, 1);
       } else{
-        ofs.write((const char*)pixel_row, bpp);
+        std::cerr << "unsupported TGA bitsperpixel!" << std::endl;
+        return -1;
       }
       pixel_row += bpp;
     }
@@ -154,4 +168,43 @@ void dump_image(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t hei
     }
     std::cout << std::endl;
   }
+}
+
+int CopyBuffers(const GLSurfaceDesc &dstDesc, 
+                int32_t dstOffsetX,
+                int32_t dstOffsetY, 
+                int32_t copyWidth, 
+                int32_t copyHeight,
+                const GLSurfaceDesc &srcDesc, 
+                int32_t srcOffsetX,                
+                int32_t srcOffsetY) {
+
+  static const BlitTable s_blitTable;
+
+  if ((srcOffsetX >= srcDesc.Width) || (srcOffsetY >= srcDesc.Height) ||
+      (dstOffsetX >= dstDesc.Width) || (dstOffsetY >= dstDesc.Height)) {
+    return -1;
+  }
+
+  if (copyWidth > dstDesc.Width) {
+    copyWidth = dstDesc.Width;
+  }
+
+  if (copyWidth > srcDesc.Width) {
+    copyWidth = srcDesc.Width;
+  }
+
+  if (copyHeight > dstDesc.Height) {
+    copyHeight = dstDesc.Height;
+  }
+
+  if (copyHeight > srcDesc.Height) {
+    copyHeight = srcDesc.Height;
+  }
+
+  s_blitTable.get(srcDesc.Format, dstDesc.Format)(
+      dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
+      srcOffsetX, srcOffsetY);
+
+  return 0;
 }
