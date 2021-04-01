@@ -1,2 +1,3 @@
-main.o: main.cpp ../../include/vortex.h common.h utils.h
-utils.o: utils.cpp utils.h
+main.o: main.cpp ../../include/vortex.h common.h utils.h blitter.h \
+ format.h int24.h color.h
+utils.o: utils.cpp utils.h blitter.h format.h int24.h color.h

@@ -61,4 +61,11 @@ struct ColorARGB {
   void operator=(const ColorARGB &rhs) {
     this->value = rhs.value;
   }
+
+  uint32_t toRGBA() const {
+    // swap B/R channels
+    return (this->value & 0xff00ff00)
+         | ((this->value >> 16) & 0xff) 
+         | ((this->value & 0xff) << 16);
+  }
 };
