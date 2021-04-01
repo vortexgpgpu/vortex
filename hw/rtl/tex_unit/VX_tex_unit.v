@@ -190,7 +190,7 @@ module VX_tex_unit #(
     wire [`NR_BITS-1:0]         rsp_rd;   
     wire                        rsp_wb;
     
-    assign {rsp_format, rsp_u, rsp_v, rsp_rd, rsp_wb} = mem_rsp_info;
+    assign {rsp_u, rsp_v, rsp_format, rsp_rd, rsp_wb} = mem_rsp_info;
 
     VX_tex_sampler #(
         .CORE_ID (CORE_ID)

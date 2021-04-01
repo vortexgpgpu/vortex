@@ -39,37 +39,47 @@ module VX_tex_sampler #(
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
-        wire [31:0]                 req_data_bilerp;
-        wire [3:0][63:0]            formatted_data;
-        wire [31:0]                 formatted_pt_data;
-        wire [`NUM_COLOR_CHANNEL-1:0] color_enable;
+        wire [3:0][31:0] fmt_texels;
+        wire [31:0] texel_ul, texel_uh, texel_v;
 
-        VX_tex_format #(
-            .CORE_ID (CORE_ID),
-            .NUM_TEXELS (4)
-        ) tex_format (
-            .texel_data  (req_texels[i]),
-            .format (req_format),
+        wire [`BLEND_FRAC-1:0] blend_u = req_u[i][`BLEND_FRAC-1:0];
+        wire [`BLEND_FRAC-1:0] blend_v = req_v[i][`BLEND_FRAC-1:0];
 
-            .color_enable (color_enable),
-            .formatted_lerp_texel(formatted_data),
-            .formatted_pt_texel(formatted_pt_data)
+        for (genvar j = 0; j < 4; j++) begin
+            VX_tex_format #(
+                .CORE_ID (CORE_ID)
+            ) tex_format (
+                .format    (req_format),
+                .texel_in  (req_texels[i][j]),            
+                .texel_out (fmt_texels[j])
+            );
+        end 
+
+        VX_tex_lerp #(
+        ) tex_lerp_ul (
+            .blend (blend_u), 
+            .in1 (fmt_texels[0]),
+            .in2 (fmt_texels[1]),
+            .out (texel_ul)
         );  
 
-        VX_tex_bilerp #(
-            .CORE_ID (CORE_ID)
-        ) tex_bilerp (
-            .blendU (req_u[i][`BLEND_FRAC_64-1:0]),
-            .blendV (req_v[i][`BLEND_FRAC_64-1:0]),
+        VX_tex_lerp #(
+        ) tex_lerp_uh (
+            .blend (blend_u), 
+            .in1 (fmt_texels[2]),
+            .in2 (fmt_texels[3]),
+            .out (texel_uh)
+        );  
 
-            .color_enable (color_enable),
-            .texels (formatted_data),
-            
-            .sampled_data (req_data_bilerp)
-        );    
+        VX_tex_lerp #(
+        ) tex_lerp_v (
+            .blend (blend_v), 
+            .in1 (texel_ul),
+            .in2 (texel_uh),
+            .out (texel_v)
+        );
 
-        assign req_data[i] = (req_filter == `TEX_FILTER_BITS'(0)) ? formatted_pt_data : req_data_bilerp;
-
+        assign req_data[i] = req_filter ? texel_v : fmt_texels[0];
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
