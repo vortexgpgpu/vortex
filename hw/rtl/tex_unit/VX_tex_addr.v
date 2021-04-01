@@ -35,17 +35,17 @@ module VX_tex_addr #(
 
     // outputs
 
-    output wire                     mem_req_valid,  
-    output wire [`NW_BITS-1:0]      mem_req_wid,
-    output wire [`NUM_THREADS-1:0]  mem_req_tmask,
-    output wire [31:0]              mem_req_PC,
-    output wire [`TEX_FILTER_BITS-1:0] mem_req_filter,
-    output wire [`TEX_STRIDE_BITS-1:0] mem_req_stride,
-    output wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr,
-    output wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_u,
-    output wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] mem_req_v,
-    output wire [REQ_INFO_WIDTH-1:0] mem_req_info,  
-    input wire                      mem_req_ready
+    output wire                     rsp_valid,  
+    output wire [`NW_BITS-1:0]      rsp_wid,
+    output wire [`NUM_THREADS-1:0]  rsp_tmask,
+    output wire [31:0]              rsp_PC,
+    output wire [`TEX_FILTER_BITS-1:0] rsp_filter,
+    output wire [`TEX_STRIDE_BITS-1:0] rsp_stride,
+    output wire [`NUM_THREADS-1:0][3:0][31:0] rsp_addr,
+    output wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] rsp_blend_u,
+    output wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] rsp_blend_v,
+    output wire [REQ_INFO_WIDTH-1:0] rsp_info,  
+    input wire                      rsp_ready
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -130,34 +130,34 @@ module VX_tex_addr #(
         assign addr[i][3] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[1]) << log_widths[i])) << log_stride;
     end
 
-    wire [`NUM_THREADS-1:0][`FIXED_FRAC-1:0] u0, v0;
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_u, blend_v;
     
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign u0[i] = clamped_u[i][0];
-        assign v0[i] = clamped_v[i][0];
+        assign blend_u[i] = clamped_u[i][0][`BLEND_FRAC-1:0];
+        assign blend_v[i] = clamped_v[i][0][`BLEND_FRAC-1:0];
     end
 
-    wire stall_out = mem_req_valid && ~mem_req_ready;
+    wire stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (`NUM_THREADS * 4 * 32) + (2*`NUM_THREADS * `FIXED_FRAC) + REQ_INFO_WIDTH),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (`NUM_THREADS * 4 * 32) + (2*`NUM_THREADS * `BLEND_FRAC) + REQ_INFO_WIDTH),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_in,      req_wid,     req_tmask,     req_PC,     filter,         log_stride,     addr,         u0,        v0,        req_info}),
-        .data_out ({mem_req_valid, mem_req_wid, mem_req_tmask, mem_req_PC, mem_req_filter, mem_req_stride, mem_req_addr, mem_req_u, mem_req_v, mem_req_info})
+        .data_in  ({valid_in,  req_wid, req_tmask, req_PC, filter,     log_stride,     addr, blend_u,     blend_v,     req_info}),
+        .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_filter, rsp_stride, rsp_addr, rsp_blend_u, rsp_blend_v, rsp_info})
     );
 
     assign ready_in = ~stall_out;
 
  `ifdef DBG_PRINT_TEX   
     always @(posedge clk) begin
-        if (mem_req_valid && mem_req_ready) begin
+        if (rsp_valid && rsp_ready) begin
             $write("%t: core%0d-tex-addr: wid=%0d, PC=%0h, tmask=%b, filter=%0d, tride=%0d, addr=", 
-                    $time, CORE_ID, mem_req_wid, mem_req_PC, mem_req_tmask, mem_req_filter, mem_req_stride);
-            `PRINT_ARRAY2D(mem_req_addr, 4, `NUM_THREADS);
+                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask, rsp_filter, rsp_stride);
+            `PRINT_ARRAY2D(rsp_addr, 4, `NUM_THREADS);
             $write("\n");
         end
     end
