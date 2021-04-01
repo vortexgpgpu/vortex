@@ -11,10 +11,6 @@
 
 `define CLAMP(x,lo,hi)  (($signed(x) < $signed(lo)) ? lo : ((x > hi) ? hi : x))
 
-`define BLEND_FRAC_64    8
-
-`define LERP_64(x1,x2,frac) ((x2 + (((x1 - x2) * frac) >> `BLEND_FRAC_64)) & 64'h00ff00ff00ff00ff)
-
 `define TEX_ADDR_BITS       32
 `define TEX_FORMAT_BITS     3
 `define TEX_WRAP_BITS       2
@@ -32,10 +28,8 @@
 `define TEX_WRAP_REPEAT     1
 `define TEX_WRAP_MIRROR     2
 
-`define MAX_COLOR_WIDTH     8
-`define NUM_COLOR_CHANNEL   4  
-
 `define TEX_COLOR_BITS      8
+`define BLEND_FRAC          8
 
 `define TEX_FORMAT_R8G8B8A8 `TEX_FORMAT_BITS'(0)
 `define TEX_FORMAT_R5G6B5   `TEX_FORMAT_BITS'(1)

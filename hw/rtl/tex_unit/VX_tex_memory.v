@@ -278,7 +278,7 @@ module VX_tex_memory #(
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_filter);
             `PRINT_ARRAY2D(rsp_data, 4, `NUM_THREADS);
             $write("\n");
-        end
+        end        
     end
 `endif
 
