@@ -121,10 +121,13 @@ module VX_lsu_unit #(
                          || (req_is_dup & dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
-        if (reset || sent_all_ready) begin
+        if (reset) begin
             req_sent_mask <= 0;
         end else begin
-            req_sent_mask <= req_sent_mask | dcache_req_fire;            
+            if (sent_all_ready)
+                req_sent_mask <= 0;
+            else
+                req_sent_mask <= req_sent_mask | dcache_req_fire;            
         end
     end
 
@@ -228,8 +231,8 @@ module VX_lsu_unit #(
             case (`LSU_FMT(rsp_type))
             `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
             `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
-            `FMT_BU: rsp_data[i] = 32'(rsp_data_shifted[7:0]);
-            `FMT_HU: rsp_data[i] = 32'(rsp_data_shifted[15:0]);
+            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
+            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
             default: rsp_data[i] = rsp_data_shifted;     
             endcase
         end        
