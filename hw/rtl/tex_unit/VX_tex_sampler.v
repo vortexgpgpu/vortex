@@ -101,9 +101,9 @@ module VX_tex_sampler #(
             $write("%t: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, format=%0d, data=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_format);
             `PRINT_ARRAY2D(req_data, 4, `NUM_THREADS);
-            $write("u0=");
+            $write(", u0=");
             `PRINT_ARRAY1D(req_blend_u, `NUM_THREADS);
-            $write("v0=");
+            $write(", v0=");
             `PRINT_ARRAY1D(req_blend_v, `NUM_THREADS);
             $write("\n");
         end

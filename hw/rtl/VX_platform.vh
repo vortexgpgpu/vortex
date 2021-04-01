@@ -92,6 +92,7 @@
 `define PRINT_ARRAY2D(a, m, n)                  \
     $write("{");                                \
     for (integer i = n-1; i >= 0; --i) begin    \
+        if (i != (n-1)) $write(", ");           \
         $write("{");                            \
         for (integer j = (m-1); j >= 0; --j) begin \
             if (j != (m-1)) $write(", ");       \
