@@ -20,11 +20,10 @@ void kernel_body(int task_id, void* arg) {
 	uint32_t yoffset = task_id * _arg->tile_height;	
 	uint8_t* dst_ptr = (uint8_t*)(_arg->karg.dst_ptr + xoffset * _arg->karg.dst_stride + yoffset * _arg->karg.dst_pitch);
 
-	float fu = xoffset * _arg->deltaX;
 	float fv = yoffset * _arg->deltaY;
-
 	for (uint32_t y = 0; y < _arg->tile_height; ++y) {
 		uint32_t* dst_row = (uint32_t*)dst_ptr;
+		float fu = xoffset * _arg->deltaX;
 		for (uint32_t x = 0; x < _arg->tile_width; ++x) {
 			int32_t u = (int32_t)(fu * (1<<20));
 			int32_t v = (int32_t)(fv * (1<<20));
