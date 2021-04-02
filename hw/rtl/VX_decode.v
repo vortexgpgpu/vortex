@@ -242,10 +242,12 @@ module VX_decode  #(
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b1, func3});
                 imm     = {{20{func7[6]}}, func7, rd};
-                used_regs[{1'b0, rs1}] = 1;
-                used_regs[{1'b0, rs2}] = 1;
+                used_regs[{1'b0, rs1}] = 1;                
             `ifdef EXT_F_ENABLE
                 rs2_fp = (opcode == `INST_FS);
+                used_regs[{(opcode == `INST_FS), rs2}] = 1;
+            `else
+                used_regs[{1'b0, rs2}] = 1;
             `endif
             end
         `ifdef EXT_F_ENABLE
@@ -343,7 +345,7 @@ module VX_decode  #(
                         end             
                         rs1_fp  = 1;  
                         used_regs[{1'b0, rd}]  = 1;
-                        used_regs[{1'b0, rs1}] = 1;                                           
+                        used_regs[{1'b1, rs1}] = 1;                                           
                     end 
                     7'h78: begin 
                         // FMV.W.X=6
