@@ -16,7 +16,7 @@ OPAE Environment Setup
 OPAE Build Configuration
 ------------------------
 
-Within the /hw/syn/opae directory, there are source text files for each core-option for the fpga build (the 32 and 64 core options are not currently implemented) which have the following parameters that can be configured:
+Within the `/hw/syn/opae` directory, there are source text files for each core-option for the fpga build (the 32 and 64 core options are not currently implemented) which have the following parameters that can be configured:
 - NUM_CORES: the number of cores per cluster
 - NUM_CLUSTERS: the number of clusters alotted to the processor
 - L3_ENABLE: enable the use of the L3 cache
@@ -35,35 +35,33 @@ The Flubber FPGA has to following configuration options:
 - 16 cores fpga (fpga-16c)
 
     $ cd hw/syn/opae
-    $ make fpga-*# of cores*c
+    $ make fpga- *# of cores* c
 
 Example: `make fpga-4c`
 
-A new folder `build_fpga_*# of cores*c` will be created and the build will start and take ~30-45 min to complete.
+A new folder (ex: `build_fpga_4c`) will be created and the build will start and take ~30-45 min to complete.
 
 OPAE Build Progress
 -------------------
 
 You could check the last 10 lines in the build log for possible errors until build completion.
 
-    $ tail -n 10 ./build_fpga_*# of cores*c/build.log
-
-Example: `tail -n 10 ./build_fpga_4c/build.log`
+    $ tail -n 10 ./build_fpga_4c/build.log
 
 Check if the build is still running by looking for quartus_sh, quartus_syn, or quartus_fit programs.
 
-    $ ps -u `username`
+    $ ps -u *username*
 
 
 If the build fails and you need to restart it, clean up the build folder using the following command:
 
-    $ make clean-fpga-*# of cores*c
+    $ make clean-fpga- *# of cores* c
 
 Example: `make clean-fpga-4c`
 
 The file `vortex_afu.gbs` should exist when the build is done:
 
-    $ ls -lsa ./build_fpga_*# of cores*c/vortex_afu.gbs
+    $ ls -lsa ./build_fpga_ *# of cores* c/vortex_afu.gbs
 
 
 Signing the bitstream and Programming the FPGA
