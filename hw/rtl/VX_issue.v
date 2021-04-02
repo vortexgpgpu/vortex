@@ -183,19 +183,44 @@ module VX_issue #(
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (alu_req_if.valid && alu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=ALU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, alu_req_if.wid, alu_req_if.PC, alu_req_if.tmask, alu_req_if.rd, alu_req_if.rs1_data, alu_req_if.rs2_data);   
+            $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=ALU, tmask=%b, rd=%0d, rs1_data=", 
+                $time, CORE_ID, alu_req_if.wid, alu_req_if.PC, alu_req_if.tmask, alu_req_if.rd);
+            `PRINT_ARRAY1D(alu_req_if.rs1_data, `NUM_THREADS);
+            $write(", rs2_data=");
+            `PRINT_ARRAY1D(alu_req_if.rs2_data, `NUM_THREADS);
+            $write("\n");
         end
         if (lsu_req_if.valid && lsu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=LSU, tmask=%b, rd=%0d, baddr=%0h, offset=%0h, data=%0h", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, lsu_req_if.tmask, lsu_req_if.rd, lsu_req_if.base_addr, lsu_req_if.offset, lsu_req_if.store_data);   
+            $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=LSU, tmask=%b, rd=%0d, offset=%0h, addr=", 
+                $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, lsu_req_if.tmask, lsu_req_if.rd, lsu_req_if.offset); 
+            `PRINT_ARRAY1D(lsu_req_if.base_addr, `NUM_THREADS);
+            $write(", data=");
+            `PRINT_ARRAY1D(lsu_req_if.store_data, `NUM_THREADS);
+            $write("\n");
         end
         if (csr_req_if.valid && csr_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, rs1_data=%0h", $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.addr, csr_req_if.rs1_data);   
+            $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, rs1_data=", 
+                $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.addr);   
+            `PRINT_ARRAY1D(csr_req_if.rs1_data, `NUM_THREADS);
+            $write("\n");
         end
         if (fpu_req_if.valid && fpu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h, rs3_data=%0h", $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rd, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data);   
+            $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rd=%0d, rs1_data=", 
+                $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rd);   
+            `PRINT_ARRAY1D(fpu_req_if.rs1_data, `NUM_THREADS);
+            $write(", rs2_data=");
+            `PRINT_ARRAY1D(fpu_req_if.rs2_data, `NUM_THREADS);
+            $write(", rs3_data=");
+            `PRINT_ARRAY1D(fpu_req_if.rs3_data, `NUM_THREADS);
+            $write("\n");
         end
         if (gpu_req_if.valid && gpu_req_if.ready) begin
-            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=GPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, gpu_req_if.wid, gpu_req_if.PC, gpu_req_if.tmask, gpu_req_if.rd, gpu_req_if.rs1_data, gpu_req_if.rs2_data);   
+            $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=GPU, tmask=%b, rd=%0d, rs1_data=", 
+                $time, CORE_ID, gpu_req_if.wid, gpu_req_if.PC, gpu_req_if.tmask, gpu_req_if.rd);   
+            `PRINT_ARRAY1D(gpu_req_if.rs1_data, `NUM_THREADS);
+            $write(", rs2_data=");
+            `PRINT_ARRAY1D(gpu_req_if.rs2_data, `NUM_THREADS);
+            $write("\n");   
         end
     end
 `endif
