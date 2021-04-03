@@ -241,8 +241,12 @@ module VX_tex_unit #(
     end
     always @(posedge clk) begin
         if (tex_req_if.valid && tex_req_if.ready) begin
-             $display("%t: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, u=%0h, v=%0h, lod=%0h", 
-                    $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.u, tex_req_if.v, tex_req_if.lod);
+             $display("%t: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, lod=%0h, u=", 
+                    $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.lod);
+            `PRINT_ARRAY1D(tex_req_if.u, `NUM_THREADS);
+            $write(", v=");
+            `PRINT_ARRAY1D(tex_req_if.v, `NUM_THREADS);
+            $write("\n");
         end
         if (tex_rsp_if.valid && tex_rsp_if.ready) begin
              $write("%t: core%0d-tex-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
