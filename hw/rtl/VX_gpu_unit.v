@@ -102,8 +102,8 @@ module VX_gpu_unit #(
 
     `UNUSED_VAR (gpu_req_if.op_mod)
     
-    VX_tex_req_if   tex_req_if;
-    VX_tex_rsp_if   tex_rsp_if;    
+    VX_tex_req_if   tex_req_if();
+    VX_tex_rsp_if   tex_rsp_if();    
 
     wire is_tex = (gpu_req_if.op_type == `GPU_TEX);
 

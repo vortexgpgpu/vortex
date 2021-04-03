@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "../cache/VX_cache_define.vh"
 
 module VX_tex_lsu_arb #(    
     parameter NUM_REQS      = 1, 

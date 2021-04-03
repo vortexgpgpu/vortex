@@ -43,7 +43,8 @@ module VX_tex_format #(
             texel_out_r[23:16] = `TEX_COLOR_BITS'(texel_in[7:0]);
             texel_out_r[31:24] = {`TEX_COLOR_BITS{1'b1}};
         end
-        default: begin // `TEX_FORMAT_R8G8B8A8:
+        // `TEX_FORMAT_R8G8B8A8
+        default: begin 
             texel_out_r[07:00] = `TEX_COLOR_BITS'(texel_in[7:0]);
             texel_out_r[15:08] = `TEX_COLOR_BITS'(texel_in[15:8]);
             texel_out_r[23:16] = `TEX_COLOR_BITS'(texel_in[23:16]);
