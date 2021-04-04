@@ -1,13 +1,20 @@
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG
+FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
+
+#FAMILY = "Stratix 10"
+#DEVICE = 1SX280HN2F43E2VG
+#FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
+
 PROJECT = Vortex
 TOP_LEVEL_ENTITY = Vortex
-SRC_FILE = Vortex.v
-FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera/arria10;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache
-PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
+SRC_FILE = Vortex.sv
 
-# Part, Family
-FAMILY = "Arria 10"
-DEVICE = 10AX115N3F40E2SG   
+RTL_DIR=../../../rtl
+FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE)
+
+PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on
