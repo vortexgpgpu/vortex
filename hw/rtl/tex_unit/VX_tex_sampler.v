@@ -32,15 +32,25 @@ module VX_tex_sampler #(
 );
     
     `UNUSED_PARAM (CORE_ID)
-
-    wire [`NUM_THREADS-1:0][31:0] result;
+   
+    wire [`NUM_THREADS-1:0][31:0] texel_ul, texel_uh;
+    wire [`NUM_THREADS-1:0][31:0] texel_ul_s0, texel_uh_s0;
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_v_qual, blend_v_s0;
+    wire [`NUM_THREADS-1:0][31:0] texel_v;
+    
+    wire                          req_valid_s0;
+    wire [`NW_BITS-1:0]           req_wid_s0;
+    wire [`NUM_THREADS-1:0]       req_tmask_s0;
+    wire [31:0]                   req_PC_s0;
+    wire [`NR_BITS-1:0]           req_rd_s0; 
+    wire                          req_wb_s0;
 
     wire stall_out;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
-        wire [3:0][31:0] fmt_texels;
-        wire [31:0] texel_ul, texel_uh, texel_v;
+        wire [3:0][31:0] fmt_texels;  
+        wire [31:0] texel_ul_unqual;
 
         for (genvar j = 0; j < 4; j++) begin
             VX_tex_format #(
@@ -57,7 +67,7 @@ module VX_tex_sampler #(
             .blend (req_blend_u[i]), 
             .in1 (fmt_texels[0]),
             .in2 (fmt_texels[1]),
-            .out (texel_ul)
+            .out (texel_ul_unqual)
         );  
 
         VX_tex_lerp #(
@@ -65,18 +75,32 @@ module VX_tex_sampler #(
             .blend (req_blend_u[i]), 
             .in1 (fmt_texels[2]),
             .in2 (fmt_texels[3]),
-            .out (texel_uh)
+            .out (texel_uh[i])
         );  
 
+        assign blend_v_qual[i] = req_filter ? `BLEND_FRAC'(0) : req_blend_v[i];
+        assign texel_ul[i]     = req_filter ? fmt_texels[0] : texel_ul_unqual;
+    end
+
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `BLEND_FRAC) + (2 * `NUM_THREADS * 32)),
+        .RESETW (1)
+    ) pipe_reg0 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_out),
+        .data_in  ({req_valid,    req_wid,    req_tmask,    req_PC,    req_rd,    req_wb,    blend_v_qual, texel_ul,    texel_uh}),
+        .data_out ({req_valid_s0, req_wid_s0, req_tmask_s0, req_PC_s0, req_rd_s0, req_wb_s0, blend_v_s0,   texel_ul_s0, texel_uh_s0})
+    );
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         VX_tex_lerp #(
         ) tex_lerp_v (
-            .blend (req_blend_v[i]), 
-            .in1 (texel_ul),
-            .in2 (texel_uh),
-            .out (texel_v)
+            .blend (blend_v_s0[i]), 
+            .in1 (texel_ul_s0[i]),
+            .in2 (texel_uh_s0[i]),
+            .out (texel_v[i])
         );
-
-        assign result[i] = req_filter ? texel_v : fmt_texels[0];
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
@@ -84,12 +108,12 @@ module VX_tex_sampler #(
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
-    ) pipe_reg (
+    ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_wid, req_tmask, req_PC, req_rd, req_wb, result}),
-        .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data})
+        .data_in  ({req_valid_s0, req_wid_s0, req_tmask_s0, req_PC_s0, req_rd_s0, req_wb_s0, texel_v}),
+        .data_out ({rsp_valid,    rsp_wid,    rsp_tmask,    rsp_PC,    rsp_rd,    rsp_wb,    rsp_data})
     );
 
     // can accept new request?
