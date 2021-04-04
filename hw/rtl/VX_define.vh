@@ -283,16 +283,17 @@
 
 // TAG sharing enable  
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)     
-`define DCORE_TAG_ID_BITS       `LSUQ_ADDR_BITS
 
 // Core request tag bits
 `ifdef EXT_TEX_ENABLE
 `define LSU_DACHE_TAG_BITS      (`DBG_CACHE_REQ_MDATAW + `LSUQ_ADDR_BITS)
 `define TEX_DACHE_TAG_BITS      (`DBG_CACHE_REQ_MDATAW + 2)
 `define LSU_TEX_DACHE_TAG_BITS  `MAX(`LSU_DACHE_TAG_BITS, `TEX_DACHE_TAG_BITS)
+`define DCORE_TAG_ID_BITS       (`LSUQ_ADDR_BITS + 1)
 `define DCORE_TAG_WIDTH         (`LSU_TEX_DACHE_TAG_BITS + 1)
 `else 
-`define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
+`define DCORE_TAG_ID_BITS       `LSUQ_ADDR_BITS
+`define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `LSUQ_ADDR_BITS)
 `endif
 
 // DRAM request data bits

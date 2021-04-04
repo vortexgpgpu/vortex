@@ -18,11 +18,12 @@ module VX_index_buffer #(
     input  wire [ADDRW-1:0] release_addr,
     input  wire release_slot,
     
-    output wire full
+    output wire empty,
+    output wire full    
 );
     reg [SIZE-1:0] free_slots, free_slots_n;
     reg [ADDRW-1:0] write_addr_r;
-    reg full_r;
+    reg empty_r, full_r;
         
     wire free_valid;
     wire [ADDRW-1:0] free_index;
@@ -51,6 +52,7 @@ module VX_index_buffer #(
         if (reset) begin
             write_addr_r <= ADDRW'(1'b0);
             free_slots   <= {SIZE{1'b1}};
+            empty_r      <= 1'b1;
             full_r       <= 1'b0;            
         end else begin
             if (release_slot) begin
@@ -60,6 +62,7 @@ module VX_index_buffer #(
                  write_addr_r <= free_index;
             end
             free_slots <= free_slots_n;           
+            empty_r    <= (& free_slots_n);
             full_r     <= ~free_valid;
         end        
     end
@@ -81,6 +84,7 @@ module VX_index_buffer #(
     );       
         
     assign write_addr = write_addr_r;
+    assign empty      = empty_r;
     assign full       = full_r;
-
+    
 endmodule
