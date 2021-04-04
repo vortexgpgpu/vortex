@@ -27,8 +27,8 @@ module VX_tex_addr #(
     input wire [`TEX_ADDR_BITS-1:0]     base_addr,
 
     input wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0] mip_offsets,    
-    input wire [`NUM_THREADS-1:0][`TEX_WIDTH_BITS-1:0]  log_widths,
-    input wire [`NUM_THREADS-1:0][`TEX_HEIGHT_BITS-1:0] log_heights,
+    input wire [`NUM_THREADS-1:0][`TEX_DIM_BITS-1:0] log_widths,
+    input wire [`NUM_THREADS-1:0][`TEX_DIM_BITS-1:0] log_heights,
     
     input wire [`NUM_THREADS-1:0][31:0] coord_u,
     input wire [`NUM_THREADS-1:0][31:0] coord_v,
@@ -50,9 +50,20 @@ module VX_tex_addr #(
 
     `UNUSED_PARAM (CORE_ID)
 
-    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] clamped_u;
-    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] clamped_v;
-    wire [`TEX_STRIDE_BITS-1:0] log_stride;
+    wire [`NUM_THREADS-1:0][1:0][`FIXED_FRAC-1:0] clamped_u, clamped_v, clamped_u_s0, clamped_v_s0;
+    wire [`TEX_STRIDE_BITS-1:0] log_stride, log_stride_s0;
+    wire [`NUM_THREADS-1:0][31:0] mip_addr, mip_addr_s0;
+
+    wire                        valid_in_s0;
+    wire [`NW_BITS-1:0]         req_wid_s0;
+    wire [`NUM_THREADS-1:0]     req_tmask_s0;
+    wire [31:0]                 req_PC_s0;
+    wire [REQ_INFO_WIDTH-1:0]   req_info_s0;
+    wire [`TEX_FILTER_BITS-1:0] filter_s0;
+    wire [`NUM_THREADS-1:0][`TEX_DIM_BITS-1:0] log_widths_s0;
+    wire [`NUM_THREADS-1:0][`TEX_DIM_BITS-1:0] log_heights_s0;
+
+    wire stall_out;
 
     // stride   
 
@@ -66,9 +77,7 @@ module VX_tex_addr #(
     // addressing mode
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-
-        wire [31:0] fu[1:0];
-        wire [31:0] fv[1:0];
+        wire [1:0][31:0] fu, fv;
 
         assign fu[0] = coord_u[i] - (filter ? (`FIXED_HALF >> log_widths[i]) : 0); 
         assign fu[1] = coord_u[i] + (filter ? (`FIXED_HALF >> log_widths[i]) : 0);
@@ -107,47 +116,56 @@ module VX_tex_addr #(
             .coord_i (fv[1]),
             .coord_o (clamped_v[i][1])
         );
+
+        assign mip_addr[i] = base_addr + 32'(mip_offsets[i]);
     end
+
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + REQ_INFO_WIDTH + `NUM_THREADS * (2 * `TEX_DIM_BITS + 32 + 2 * 2 * `FIXED_FRAC)),
+        .RESETW (1)
+    ) pipe_reg0 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_out),
+        .data_in  ({valid_in,    req_wid,    req_tmask,    req_PC,    filter,    log_stride,    req_info,    log_widths,    log_heights,    mip_addr,    clamped_u,    clamped_v}),
+        .data_out ({valid_in_s0, req_wid_s0, req_tmask_s0, req_PC_s0, filter_s0, log_stride_s0, req_info_s0, log_widths_s0, log_heights_s0, mip_addr_s0, clamped_u_s0, clamped_v_s0})
+    );
     
     // addresses generation
 
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_u, blend_v;
     wire [`NUM_THREADS-1:0][3:0][31:0] addr;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        wire [1:0][`FIXED_INT-1:0] x, y;
 
-        wire [`FIXED_FRAC-1:0] x [1:0];
-        wire [`FIXED_FRAC-1:0] y [1:0];        
+        assign x[0] = `FIXED_INT'(clamped_u_s0[i][0] >> ((`FIXED_FRAC) - log_widths_s0[i])); 
+        assign x[1] = `FIXED_INT'(clamped_u_s0[i][1] >> ((`FIXED_FRAC) - log_widths_s0[i])); 
+        assign y[0] = `FIXED_INT'(clamped_v_s0[i][0] >> ((`FIXED_FRAC) - log_heights_s0[i]));         
+        assign y[1] = `FIXED_INT'(clamped_v_s0[i][1] >> ((`FIXED_FRAC) - log_heights_s0[i])); 
 
-        assign x[0] = clamped_u[i][0] >> ((`FIXED_FRAC) - log_widths[i]); 
-        assign x[1] = clamped_u[i][1] >> ((`FIXED_FRAC) - log_widths[i]); 
-
-        assign y[0] = clamped_v[i][0] >> ((`FIXED_FRAC) - log_heights[i]);         
-        assign y[1] = clamped_v[i][1] >> ((`FIXED_FRAC) - log_heights[i]); 
-
-        assign addr[i][0] = base_addr + 32'(mip_offsets[i]) + (32'(x[0]) + (32'(y[0]) << log_widths[i])) << log_stride;
-        assign addr[i][1] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[0]) << log_widths[i])) << log_stride;
-        assign addr[i][2] = base_addr + 32'(mip_offsets[i]) + (32'(x[0]) + (32'(y[1]) << log_widths[i])) << log_stride;
-        assign addr[i][3] = base_addr + 32'(mip_offsets[i]) + (32'(x[1]) + (32'(y[1]) << log_widths[i])) << log_stride;
+        assign addr[i][0] = mip_addr_s0[i] + (32'(x[0]) + (32'(y[0]) << log_widths_s0[i])) << log_stride_s0;
+        assign addr[i][1] = mip_addr_s0[i] + (32'(x[1]) + (32'(y[0]) << log_widths_s0[i])) << log_stride_s0;
+        assign addr[i][2] = mip_addr_s0[i] + (32'(x[0]) + (32'(y[1]) << log_widths_s0[i])) << log_stride_s0;
+        assign addr[i][3] = mip_addr_s0[i] + (32'(x[1]) + (32'(y[1]) << log_widths_s0[i])) << log_stride_s0;
     end
 
-    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_u, blend_v;
-    
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign blend_u[i] = clamped_u[i][0][`BLEND_FRAC-1:0];
-        assign blend_v[i] = clamped_v[i][0][`BLEND_FRAC-1:0];
+        assign blend_u[i] = clamped_u_s0[i][0][`BLEND_FRAC-1:0];
+        assign blend_v[i] = clamped_v_s0[i][0][`BLEND_FRAC-1:0];
     end
 
-    wire stall_out = rsp_valid && ~rsp_ready;
+    assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (`NUM_THREADS * 4 * 32) + (2*`NUM_THREADS * `BLEND_FRAC) + REQ_INFO_WIDTH),
         .RESETW (1)
-    ) pipe_reg (
+    ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_in,  req_wid, req_tmask, req_PC, filter,     log_stride,     addr, blend_u,     blend_v,     req_info}),
-        .data_out ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_filter, rsp_stride, rsp_addr, rsp_blend_u, rsp_blend_v, rsp_info})
+        .data_in  ({valid_in_s0, req_wid_s0, req_tmask_s0, req_PC_s0, filter_s0,  log_stride_s0, addr,     blend_u,     blend_v,     req_info_s0}),
+        .data_out ({rsp_valid,   rsp_wid,    rsp_tmask,    rsp_PC,    rsp_filter, rsp_stride,    rsp_addr, rsp_blend_u, rsp_blend_v, rsp_info})
     );
 
     assign ready_in = ~stall_out;

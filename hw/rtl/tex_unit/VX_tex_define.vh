@@ -14,8 +14,7 @@
 `define TEX_ADDR_BITS       32
 `define TEX_FORMAT_BITS     3
 `define TEX_WRAP_BITS       2
-`define TEX_WIDTH_BITS      4
-`define TEX_HEIGHT_BITS     4
+`define TEX_DIM_BITS        4
 `define TEX_FILTER_BITS     1
 
 `define TEX_MIPOFF_BITS     (2*12+1)

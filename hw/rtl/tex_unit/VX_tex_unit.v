@@ -25,8 +25,8 @@ module VX_tex_unit #(
     `UNUSED_VAR (reset)
 
     reg [`TEX_MIPOFF_BITS-1:0] tex_mipoff [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
-    reg [`TEX_WIDTH_BITS-1:0]  tex_width  [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
-    reg [`TEX_HEIGHT_BITS-1:0] tex_height [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
+    reg [`TEX_DIM_BITS-1:0]    tex_width  [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
+    reg [`TEX_DIM_BITS-1:0]    tex_height [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
 
     reg [`TEX_ADDR_BITS-1:0]   tex_baddr  [`NUM_TEX_UNITS-1:0];     
     reg [`TEX_FORMAT_BITS-1:0] tex_format [`NUM_TEX_UNITS-1:0];
@@ -58,10 +58,10 @@ module VX_tex_unit #(
                         tex_mipoff[i][mip_level] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];
                     end
                     `CSR_TEX_WIDTH(i) : begin 
-                        tex_width[i][mip_level]  <= tex_csr_if.write_data[`TEX_WIDTH_BITS-1:0];
+                        tex_width[i][mip_level]  <= tex_csr_if.write_data[`TEX_DIM_BITS-1:0];
                     end
                     `CSR_TEX_HEIGHT(i) : begin 
-                        tex_height[i][mip_level] <= tex_csr_if.write_data[`TEX_HEIGHT_BITS-1:0];
+                        tex_height[i][mip_level] <= tex_csr_if.write_data[`TEX_DIM_BITS-1:0];
                     end
                     default:
                         assert(tex_csr_if.write_addr >= `CSR_TEX_BEGIN(0) 
@@ -74,8 +74,8 @@ module VX_tex_unit #(
     // mipmap attributes
 
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0] tex_mipoffs;    
-    wire [`NUM_THREADS-1:0][`TEX_WIDTH_BITS-1:0]  tex_widths;
-    wire [`NUM_THREADS-1:0][`TEX_HEIGHT_BITS-1:0] tex_heights;
+    wire [`NUM_THREADS-1:0][`TEX_DIM_BITS-1:0]  tex_widths;
+    wire [`NUM_THREADS-1:0][`TEX_DIM_BITS-1:0] tex_heights;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`NTEX_BITS-1:0] unit = tex_req_if.unit[`NTEX_BITS-1:0];
