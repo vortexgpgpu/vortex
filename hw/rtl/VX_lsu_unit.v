@@ -76,6 +76,7 @@ module VX_lsu_unit #(
     
     reg [`LSUQ_SIZE-1:0][`NUM_THREADS-1:0] rsp_rem_mask;         
     wire [`NUM_THREADS-1:0] rsp_rem_mask_n;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
 
     reg [`NUM_THREADS-1:0] req_sent_mask;
     wire sent_all_ready;
@@ -96,12 +97,12 @@ module VX_lsu_unit #(
                   && (0 == req_sent_mask)  // first submission only
                   && req_wb;               // loads only
 
-    wire mbuf_pop = dcache_rsp_fire && (rsp_rem_mask_n == 0 || rsp_is_dup);
+    wire mbuf_pop = dcache_rsp_fire && ~(|rsp_rem_mask_n);
     
     assign mbuf_raddr = dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0];    
 
     VX_index_buffer #(
-        .DATAW   (`NW_BITS + 32 + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
+        .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
         .SIZE    (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -109,23 +110,33 @@ module VX_lsu_unit #(
         .write_addr   (mbuf_waddr),  
         .acquire_slot (mbuf_push),       
         .read_addr    (mbuf_raddr),
-        .write_data   ({req_wid, req_pc, req_rd, req_wb, req_type, req_offset, req_is_dup}),                    
-        .read_data    ({rsp_wid, rsp_pc, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup}),
+        .write_data   ({req_wid, req_pc, req_tmask, req_rd, req_wb, req_type, req_offset, req_is_dup}),                    
+        .read_data    ({rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
-        .full         (mbuf_full)
+        .full         (mbuf_full),
+        `UNUSED_PIN (empty)
     );
 
+    always @(posedge clk) begin
+        if (mbuf_push)  begin
+            pending_tags[mbuf_waddr] <= req_tag;
+        end    
+    end
+
     assign sent_all_ready = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
-                      || (req_is_dup & dcache_req_if.ready[0]);
+                         || (req_is_dup & dcache_req_if.ready[0]);
 
     always @(posedge clk) begin
-        if (reset || sent_all_ready) begin
+        if (reset) begin
             req_sent_mask <= 0;
         end else begin
-            req_sent_mask <= req_sent_mask | dcache_req_fire;            
+            if (sent_all_ready)
+                req_sent_mask <= 0;
+            else
+                req_sent_mask <= req_sent_mask | dcache_req_fire;            
         end
-    end      
+    end
 
     // need to hold the acquired tag index until the full request is submitted
     reg [`LSUQ_ADDR_BITS-1:0] req_tag_hold;
@@ -138,8 +149,7 @@ module VX_lsu_unit #(
     assign rsp_rem_mask_n = rsp_rem_mask[mbuf_raddr] & ~dcache_rsp_if.valid;
     always @(posedge clk) begin
         if (mbuf_push)  begin
-            rsp_rem_mask[mbuf_waddr] <= req_tmask;
-            pending_tags[mbuf_waddr] <= req_tag;
+            rsp_rem_mask[mbuf_waddr] <= req_is_dup ? (`NUM_THREADS)'(1) : req_tmask;
         end    
         if (dcache_rsp_fire) begin
             rsp_rem_mask[mbuf_raddr] <= rsp_rem_mask_n;
@@ -211,7 +221,7 @@ module VX_lsu_unit #(
     // load response formatting
 
     reg [`NUM_THREADS-1:0][31:0] rsp_data;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [`NUM_THREADS-1:0] rsp_tmask_qual;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin     
         wire [31:0] src_data = (i == 0 || rsp_is_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
@@ -227,14 +237,14 @@ module VX_lsu_unit #(
             case (`LSU_FMT(rsp_type))
             `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
             `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
-            `FMT_BU: rsp_data[i] = 32'(rsp_data_shifted[7:0]);
-            `FMT_HU: rsp_data[i] = 32'(rsp_data_shifted[15:0]);
+            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
+            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
             default: rsp_data[i] = rsp_data_shifted;     
             endcase
         end        
     end   
 
-    assign rsp_tmask = rsp_is_dup ? rsp_rem_mask[mbuf_raddr] : dcache_rsp_if.valid;
+    assign rsp_tmask_qual = rsp_is_dup ? rsp_tmask : dcache_rsp_if.valid;
 
     // send load commit
 
@@ -247,7 +257,7 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!load_rsp_stall),
-        .data_in  ({(| dcache_rsp_if.valid), rsp_wid,          rsp_tmask,           rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
+        .data_in  ({(| dcache_rsp_if.valid), rsp_wid,          rsp_tmask_qual,      rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
         .data_out ({ld_commit_if.valid,      ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
     );
 
