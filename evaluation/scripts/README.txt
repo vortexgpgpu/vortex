@@ -5,15 +5,18 @@ Description: Makes the build in the opae directory with the specified core
 	     exists, a make clean command is ran before the build. Script waits
              until the inteldev script or quartus program is finished running.
 
-Usage: ./build.sh -c [1|2|4|8|16] [-p [y|n]]
+Usage: ./build.sh -c [1|2|4|8|16] [-p perf] [-w wait]
 
 Options:
 	-c
 	  Core count (1, 2, 4, 8, or 16).
 
 	-p
-	  Performance profiling enable (y or n). Changes the source file in the
+	  Performance profiling enable. Changes the source file in the
 	  opae directory to include/exclude "+define+PERF_ENABLE".
+
+	-w
+	  Wait for the build to complete
 
 _______________________________________________________________________________
 
