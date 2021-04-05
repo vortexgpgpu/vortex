@@ -151,8 +151,8 @@ module VX_tex_addr #(
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign blend_u[i] = clamped_u_s0[i][0][`BLEND_FRAC-1:0];
-        assign blend_v[i] = clamped_v_s0[i][0][`BLEND_FRAC-1:0];
+        assign blend_u[i] = filter_s0 ? clamped_u_s0[i][0][`BLEND_FRAC-1:0] : `BLEND_FRAC'(0);
+        assign blend_v[i] = filter_s0 ? clamped_v_s0[i][0][`BLEND_FRAC-1:0] : `BLEND_FRAC'(0);
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
