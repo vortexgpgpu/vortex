@@ -2,8 +2,8 @@
    "version": 1,
    "afu-image": {
       "power": 0,
-      "clock-frequency-high": "auto-210",
-      "clock-frequency-low":  "auto-210",
+      "clock-frequency-high": "auto-200",
+      "clock-frequency-low":  "auto-200",
       
       "cmd-mem-read":     1,
       "cmd-mem-write":    2,
